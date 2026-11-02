@@ -60,6 +60,7 @@ for (const isWorktree of [false, true]) {
             <ChatFileLinkProvider
               owner={{
                 kind: "workspace",
+                workspaceId: "workspace-1",
                 repoPath: "/repo",
                 workingDirectory,
                 ownerKey: "session",

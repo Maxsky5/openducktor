@@ -41,7 +41,7 @@ export function useSessionPreparation(
       runtimeKind: identity.runtimeKind,
       externalSessionId: identity.externalSessionId,
       workingDirectory: identity.workingDirectory,
-      sessionScope: { kind: "workflow", taskId, role },
+      sessionScope: { kind: "workflow", workspaceId, taskId, role },
       resumeMode: "reattach",
     });
   }, [chatId, host, identity, queryClient, repoPath, role, store, taskId, workspaceId]);

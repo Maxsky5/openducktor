@@ -22,7 +22,7 @@ import type { WorkspaceSessionServiceDependencies } from "./workspace-session-se
 import type { WorkspaceSessionUpdatedPublisher } from "./workspace-session-persistence-callbacks";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
-import { createOtherWorkspaceOwnersReader, ownerKey } from "./workspace-session-import-owners";
+import { resolveRuntimeOwnershipScope } from "./workspace-session-import-owners";
 import { invalidImport, readWorkspaceSessionImportTarget } from "./workspace-session-import-target";
 import { createSerialLane, type SerialLane } from "../../effect/serial-gate";
 
@@ -129,12 +129,6 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
         );
       }),
     );
-  const otherWorkspaceOwners = createOtherWorkspaceOwnersReader({
-    settings,
-    git,
-    candidateDirectory,
-    listRuntimeOwners: store.listRuntimeOwners,
-  });
   const collect = (
     entry: Catalog,
     adapter: Parameters<AgentSessionLiveAdapterRegistryPort["register"]>[0],
@@ -144,16 +138,14 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
     Effect.gen(function* () {
       if (entry.failure) return yield* entry.failure;
       if (!entry.discovery) {
+        const scope = { workspaceId: entry.workspaceId, repoPath: entry.repoPath };
+        // One read lists the owners of every workspace of the same Git repository.
         const owners = yield* store.listRuntimeOwners({
-          workspaceId: entry.workspaceId,
-          repoPath: entry.repoPath,
-        });
-        const foreign = yield* otherWorkspaceOwners({
-          workspaceId: entry.workspaceId,
-          repoPath: entry.repoPath,
+          ...scope,
+          ownershipScope: yield* resolveRuntimeOwnershipScope({ settings, git }, scope),
         });
         const owned = new Set(
-          [...owners, ...[...foreign.values()].map(({ owner }) => owner)]
+          owners
             .filter((owner) => owner.runtimeKind === entry.runtimeKind)
             .map((owner) => owner.externalSessionId),
         );
@@ -331,11 +323,12 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
       return importGate.run(
         Effect.gen(function* () {
           const { scope, defaultTargetBranch } = yield* repoFor(input.workspaceId);
-          const existing = yield* store.findByRuntimeSession({
-            ...scope,
+          const [match] = yield* store.findByRuntimeSession({
+            workspaces: [scope],
             runtimeKind: input.runtimeKind,
             externalSessionId: input.externalSessionId,
           });
+          const existing = match?.session;
           if (existing) {
             if (existing.archivedAt !== null)
               return yield* invalidImport(
@@ -343,18 +336,26 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
               );
             return { session: existing, created: false, openError: null };
           }
-          const owners = yield* store.listRuntimeOwners(scope);
+          const ownershipScope = yield* resolveRuntimeOwnershipScope({ settings, git }, scope);
+          const owners = yield* store.listRuntimeOwners({
+            ...scope,
+            ownershipScope,
+            filter: {
+              runtimeKind: input.runtimeKind,
+              externalSessionIds: [input.externalSessionId],
+            },
+          });
           const task = owners.find(
-            (owner) =>
-              owner.runtimeKind === input.runtimeKind &&
-              owner.externalSessionId === input.externalSessionId,
+            (owner) => owner.workspaceId === scope.workspaceId && owner.kind === "task",
           );
           if (task?.kind === "task")
             return yield* invalidImport(
               `This conversation belongs to task ${task.taskId} (${task.role}).`,
             );
-          const foreign = (yield* otherWorkspaceOwners(scope)).get(
-            ownerKey(input.runtimeKind, input.externalSessionId),
+          const foreign = ownershipScope.workspaces.find(
+            (workspace) =>
+              workspace.workspaceId !== scope.workspaceId &&
+              owners.some((owner) => owner.workspaceId === workspace.workspaceId),
           );
           if (foreign)
             return yield* invalidImport(
@@ -407,8 +408,10 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
                     input.workingDirectory,
                   );
                   const now = yield* Clock.currentTimeMillis;
+                  // The claim checks that the catalog revision of this scope is still current.
                   const saved = yield* store.importSession({
                     ...scope,
+                    ownershipScope,
                     session: {
                       id: crypto.randomUUID(),
                       runtimeKind: input.runtimeKind,

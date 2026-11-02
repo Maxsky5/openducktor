@@ -25,6 +25,7 @@ import { TaskExecutionCiPanelState } from "./task-execution-ci-panel-state";
 import { isBotCommentAuthor } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 
 const queryInput = {
+  workspaceId: "workspace-1",
   repoPath: "/repo",
   taskId: "task-12",
 } satisfies PullRequestReviewContextQueryInput;

@@ -1,3 +1,4 @@
+import { withSettingsConfigMutationTestMethods } from "../../test-support/settings-config-mutations";
 import { describe, expect, mock, test } from "bun:test";
 import { Effect } from "effect";
 import {
@@ -14,6 +15,7 @@ import { HostOperationError, type HostError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorkspaceProviderSetupCredentialsPort } from "../../ports/workspace-provider-setup-credentials-port";
 import { createWorkspaceSettingsService } from "./workspace-settings-service";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createWorkspaceProviderSetupService } from "./workspace-provider-setup-service";
 
 const azureSelection = {
@@ -65,19 +67,22 @@ function harness() {
     Effect.suspend(() => {
       if (failWrite) return Effect.fail(failure());
       config = structuredClone(next);
-      return Effect.void;
+      return Effect.succeed(config);
     }),
   );
-  const port: SettingsConfigPort = {
+  const port: SettingsConfigPort = withSettingsConfigMutationTestMethods({
     readConfig: () => Effect.sync(() => structuredClone(config)),
-    writeConfig: write,
+    updateConfig: (change) =>
+      Effect.suspend(() =>
+        write(change(structuredClone(config), Object.values(structuredClone(config).workspaces))),
+      ),
     canonicalizePath: (value) => Effect.succeed(value),
     pathExists: () => Effect.succeed(true),
     defaultWorktreeBasePath: (id) => `/worktrees/${id}`,
     defaultRepoWorktreeBasePath: () => "/worktrees/repo",
     resolveConfiguredPath: (value) => value,
     join: (...parts) => parts.join("/"),
-  };
+  });
   let health: GitProviderHealth = { ...healthy };
   const checkHealth = mock((): Effect.Effect<GitProviderHealth, HostError> =>
     Effect.sync(() => health),
@@ -131,7 +136,7 @@ function harness() {
     },
     newSetupId: () => crypto.randomUUID(),
     detectRepositories: () => Effect.succeed({ outcome: "none", candidates: [] }),
-    settings: createWorkspaceSettingsService(port),
+    settings: createWorkspaceSettingsService(port, builtinTaskWorkflows),
     credentials,
     github: { health: () => ({ getStatus: checkHealth }) },
     azure: { health: () => ({ getStatus: checkHealth }) },

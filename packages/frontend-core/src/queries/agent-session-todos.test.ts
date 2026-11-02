@@ -81,7 +81,12 @@ describe("agent session todos queries", () => {
     expect(
       agentSessionTodosQueryKeys.todos({
         ...sessionRefFixture,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
       }),
     ).toEqual([
       "agent-session-todos",
@@ -114,7 +119,12 @@ describe("agent session todos queries", () => {
       { ...sessionRefFixture, sessionScope: { kind: "repository" } },
       {
         ...sessionRefFixture,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
       },
     ];
     for (const ref of refs) {

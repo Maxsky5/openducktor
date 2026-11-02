@@ -1,3 +1,5 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
+import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import type {
   AgentSessionRecord,
@@ -22,6 +24,7 @@ const event = (
   repoPath = "/repo",
 ): ExternalTaskSyncEvent => ({
   kind: "tasks_updated",
+  workspaceId: "workspace-1",
   boardChanges: null,
   eventId: `event-${taskIds.join("-")}`,
   repoPath,
@@ -41,11 +44,11 @@ const session = (externalSessionId: string): AgentSessionRecord => ({
   selectedModel: null,
 });
 
-type BatchRead = (repoPath: string, taskIds: string[]) => Promise<TaskAgentSessions[]>;
+type BatchRead = (scope: WorkspaceRef, taskIds: string[]) => Promise<TaskAgentSessions[]>;
 
 const createReadPort = (agentSessionsListForTasks: BatchRead, existingTaskIds: string[] = []) => ({
   agentSessionsListForTasks: mock(agentSessionsListForTasks),
-  taskIdsList: mock(async (_repoPath: string) => existingTaskIds),
+  taskIdsList: mock(async (_repoPath: WorkspaceRef) => existingTaskIds),
 });
 
 const recordsFrom =
@@ -73,9 +76,9 @@ const createHarness = (
   }: { sessionTaskIds?: string[]; closedRepoPaths?: Set<string>; activeRepoPath?: string } = {},
 ) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const listSessionTaskIds = mock((_repoPath: string) => sessionTaskIds);
-  const removeTaskSessions = mock((_repoPath: string, _taskIds: string[]) => {});
-  const refreshLiveSessions = mock(async (_repoPath: string) => undefined);
+  const listSessionTaskIds = mock((_repoPath: WorkspaceRef) => sessionTaskIds);
+  const removeTaskSessions = mock((_repoPath: WorkspaceRef, _taskIds: string[]) => {});
+  const refreshLiveSessions = mock(async (_repoPath: WorkspaceRef) => undefined);
   const subscriptions: (() => void)[] = [];
   const sync = createAgentSessionViewSync({
     queryClient,
@@ -83,8 +86,8 @@ const createHarness = (
     listSessionTaskIds,
     removeTaskSessions,
     refreshLiveSessions,
-    isWorkspaceOpen: (repoPath) => !closedRepoPaths.has(repoPath),
-    isWorkspaceActive: (repoPath) => repoPath === activeRepoPath,
+    isWorkspaceOpen: (repoPath) => !closedRepoPaths.has(repoPath.repoPath),
+    isWorkspaceActive: (scope) => scope.repoPath === activeRepoPath,
   });
   return {
     queryClient,
@@ -98,17 +101,28 @@ const createHarness = (
         () => true,
       ),
     /** Mount a view of a task list, like a session list hook. Without records, the view reads. */
-    observe: (taskId: string, records: AgentSessionRecord[] | null = [], repoPath = "/repo") => {
-      if (records) queryClient.setQueryData(agentSessionQueryKeys.list(repoPath, taskId), records);
+    observe: (
+      taskId: string,
+      records: AgentSessionRecord[] | null = [],
+      repoPath = "/repo",
+      workspaceId = "workspace-1",
+    ) => {
+      if (records)
+        queryClient.setQueryData(
+          agentSessionQueryKeys.list(workspaceRefFixture(repoPath, workspaceId), taskId),
+          records,
+        );
       const observer = new QueryObserver(
         queryClient,
-        agentSessionListQueryOptions(repoPath, taskId, readPort),
+        agentSessionListQueryOptions(workspaceRefFixture(repoPath, workspaceId), taskId, readPort),
       );
       subscriptions.push(observer.subscribe(() => {}));
       return observer;
     },
     records: (taskId: string, repoPath = "/repo") =>
-      queryClient.getQueryData<AgentSessionRecord[]>(agentSessionQueryKeys.list(repoPath, taskId)),
+      queryClient.getQueryData<AgentSessionRecord[]>(
+        agentSessionQueryKeys.list(workspaceRefFixture(repoPath), taskId),
+      ),
     dispose: () => {
       for (const unsubscribe of subscriptions) unsubscribe();
       queryClient.clear();
@@ -119,7 +133,7 @@ const createHarness = (
 const holdFirstLiveRefresh = (harness: ReturnType<typeof createHarness>) => {
   const pending = Promise.withResolvers<void>();
   const started = Promise.withResolvers<void>();
-  harness.refreshLiveSessions.mockImplementation(async (repoPath: string) => {
+  harness.refreshLiveSessions.mockImplementation(async ({ repoPath }: WorkspaceRef) => {
     if (repoPath !== "/repo-a") return;
     started.resolve();
     await pending.promise;
@@ -128,6 +142,29 @@ const holdFirstLiveRefresh = (harness: ReturnType<typeof createHarness>) => {
 };
 
 describe("AgentSessionViewSync", () => {
+  test("an event refreshes only its workspace when task IDs and repository paths match", async () => {
+    const first = workspaceRefFixture("/repo", "first");
+    const second = workspaceRefFixture("/repo", "second");
+    const readPort = createReadPort(async (scope, taskIds) =>
+      taskIds.map((taskId) => ({ taskId, agentSessions: [session(`${scope.workspaceId}-new`)] })),
+    );
+    const harness = createHarness(readPort);
+    harness.observe("task-1", [session("first-old")], first.repoPath, first.workspaceId);
+    harness.observe("task-1", [session("second-old")], second.repoPath, second.workspaceId);
+    try {
+      await harness.reconcile([{ ...event(["task-1"]), workspaceId: first.workspaceId }]);
+      expect(harness.queryClient.getQueryData(agentSessionQueryKeys.list(first, "task-1"))).toEqual(
+        [session("first-new")],
+      );
+      expect(
+        harness.queryClient.getQueryData(agentSessionQueryKeys.list(second, "task-1")),
+      ).toEqual([session("second-old")]);
+      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([[first, ["task-1"]]]);
+    } finally {
+      harness.dispose();
+    }
+  });
+
   for (const size of [1, 100]) {
     test(`refreshes ${size} observed task lists with one host request`, async () => {
       const taskIds = Array.from({ length: size }, (_, index) => `task-${index}`);
@@ -142,10 +179,10 @@ describe("AgentSessionViewSync", () => {
         await harness.reconcile([event(taskIds)]);
 
         expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
-          ["/repo", [...taskIds].sort()],
+          [workspaceRefFixture("/repo"), [...taskIds].sort()],
         ]);
         for (const taskId of taskIds) expect(harness.records(taskId)).toEqual(freshRecords[taskId]);
-        expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo"]]);
+        expect(harness.refreshLiveSessions.mock.calls).toEqual([[workspaceRefFixture("/repo")]]);
       } finally {
         harness.dispose();
       }
@@ -168,12 +205,12 @@ describe("AgentSessionViewSync", () => {
       ]);
 
       expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
-        ["/repo", ["task-1", "task-2"]],
-        ["/other-repo", ["other-task"]],
+        [workspaceRefFixture("/repo"), ["task-1", "task-2"]],
+        [workspaceRefFixture("/other-repo"), ["other-task"]],
       ]);
       expect(harness.records("task-1")).toEqual([session("moved")]);
       expect(harness.records("task-2")).toEqual([]);
-      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo"]]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([[workspaceRefFixture("/repo")]]);
     } finally {
       harness.dispose();
     }
@@ -188,9 +225,13 @@ describe("AgentSessionViewSync", () => {
 
       await harness.reconcile([event(["task-1", "task-2"]), event(["task-1"], ["task-1"])]);
 
-      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([["/repo", ["task-2"]]]);
+      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
+        [workspaceRefFixture("/repo"), ["task-2"]],
+      ]);
       expect(harness.records("task-1")).toEqual([]);
-      expect(harness.removeTaskSessions).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(harness.removeTaskSessions).toHaveBeenCalledWith(workspaceRefFixture("/repo"), [
+        "task-1",
+      ]);
       expect(harness.refreshLiveSessions).not.toHaveBeenCalled();
     } finally {
       harness.dispose();
@@ -243,15 +284,18 @@ describe("AgentSessionViewSync", () => {
       );
       await readStarted.promise;
       if (committed) {
-        updateAgentSessionListQuery(harness.queryClient, "/repo", {
+        updateAgentSessionListQuery(harness.queryClient, workspaceRefFixture("/repo"), {
           taskId: "task-1",
           agentSessions: [session("committed")],
         });
         expect(await result).toEqual({ ok: true });
-        expect(harness.refreshLiveSessions).toHaveBeenCalledWith("/repo");
+        expect(harness.refreshLiveSessions).toHaveBeenCalledWith(workspaceRefFixture("/repo"));
       } else {
         await harness.queryClient.cancelQueries(
-          { queryKey: agentSessionQueryKeys.list("/repo", "task-1"), exact: true },
+          {
+            queryKey: agentSessionQueryKeys.list(workspaceRefFixture("/repo"), "task-1"),
+            exact: true,
+          },
           { revert: false },
         );
         expect(await result).toEqual({ ok: false, error: expect.any(CancelledError) });
@@ -272,14 +316,18 @@ describe("AgentSessionViewSync", () => {
     const readPort = createReadPort(recordsFrom({}));
     const harness = createHarness(readPort);
     try {
-      harness.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
+      harness.queryClient.setQueryData(
+        agentSessionQueryKeys.list(workspaceRefFixture("/repo"), "task-1"),
+        [],
+      );
 
       await harness.reconcile([event(["task-1"])]);
 
       expect(readPort.agentSessionsListForTasks).not.toHaveBeenCalled();
       expect(
-        harness.queryClient.getQueryState(agentSessionQueryKeys.list("/repo", "task-1"))
-          ?.isInvalidated,
+        harness.queryClient.getQueryState(
+          agentSessionQueryKeys.list(workspaceRefFixture("/repo"), "task-1"),
+        )?.isInvalidated,
       ).toBe(true);
     } finally {
       harness.dispose();
@@ -314,7 +362,7 @@ describe("AgentSessionViewSync", () => {
       );
 
       const state = harness.queryClient.getQueryState(
-        agentSessionQueryKeys.list("/repo", "task-1"),
+        agentSessionQueryKeys.list(workspaceRefFixture("/repo"), "task-1"),
       );
       expect(state?.status).toBe("error");
       expect(state?.data).toEqual([session("loaded")]);
@@ -349,7 +397,9 @@ describe("AgentSessionViewSync", () => {
 
       expect(harness.records("task-1")).toEqual([]);
       expect(readPort.agentSessionsListForTasks).not.toHaveBeenCalled();
-      expect(harness.removeTaskSessions).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(harness.removeTaskSessions).toHaveBeenCalledWith(workspaceRefFixture("/repo"), [
+        "task-1",
+      ]);
       expect(harness.refreshLiveSessions).not.toHaveBeenCalled();
     } finally {
       harness.dispose();
@@ -366,9 +416,13 @@ describe("AgentSessionViewSync", () => {
       await harness.reconcile([event([], ["task-1"])]);
       await Promise.resolve();
 
-      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([["/repo", ["task-2"]]]);
+      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
+        [workspaceRefFixture("/repo"), ["task-2"]],
+      ]);
       expect(harness.records("task-1")).toEqual([]);
-      expect(harness.removeTaskSessions).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(harness.removeTaskSessions).toHaveBeenCalledWith(workspaceRefFixture("/repo"), [
+        "task-1",
+      ]);
     } finally {
       harness.dispose();
     }
@@ -378,12 +432,17 @@ describe("AgentSessionViewSync", () => {
     const readPort = createReadPort(recordsFrom({ "task-1": [session("current")] }));
     const harness = createHarness(readPort);
     try {
-      await harness.sync.reconcileStreamSnapshot(new Map([["/repo", ["task-1"]]]), () => true);
+      await harness.sync.reconcileStreamSnapshot(
+        new Map([[workspaceRefFixture("/repo"), ["task-1"]]]),
+        () => true,
+      );
 
-      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([["/repo", ["task-1"]]]);
+      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
+        [workspaceRefFixture("/repo"), ["task-1"]],
+      ]);
       expect(readPort.taskIdsList).not.toHaveBeenCalled();
       expect(harness.records("task-1")).toEqual([session("current")]);
-      expect(harness.refreshLiveSessions).toHaveBeenCalledWith("/repo");
+      expect(harness.refreshLiveSessions).toHaveBeenCalledWith(workspaceRefFixture("/repo"));
     } finally {
       harness.dispose();
     }
@@ -394,26 +453,32 @@ describe("AgentSessionViewSync", () => {
     const harness = createHarness(readPort);
     try {
       for (const taskId of ["deleted-task", "hidden-done-task"]) {
-        harness.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", taskId), [
-          session(taskId),
-        ]);
+        harness.queryClient.setQueryData(
+          agentSessionQueryKeys.list(workspaceRefFixture("/repo"), taskId),
+          [session(taskId)],
+        );
       }
-      harness.queryClient.setQueryData(agentSessionQueryKeys.list("/other-repo", "other-task"), [
-        session("other-task"),
-      ]);
+      harness.queryClient.setQueryData(
+        agentSessionQueryKeys.list(workspaceRefFixture("/other-repo"), "other-task"),
+        [session("other-task")],
+      );
 
       // The Kanban list omits done tasks after the visible period.
       await harness.sync.reconcileStreamSnapshot(
-        new Map([["/repo", ["current-task"]]]),
+        new Map([[workspaceRefFixture("/repo"), ["current-task"]]]),
         () => true,
       );
 
-      expect(readPort.taskIdsList.mock.calls).toEqual([["/repo"]]);
-      expect(harness.removeTaskSessions.mock.calls).toEqual([["/repo", ["deleted-task"]]]);
+      expect(readPort.taskIdsList.mock.calls).toEqual([[workspaceRefFixture("/repo")]]);
+      expect(harness.removeTaskSessions.mock.calls).toEqual([
+        [workspaceRefFixture("/repo"), ["deleted-task"]],
+      ]);
       expect(harness.records("deleted-task")).toBeUndefined();
       expect(harness.records("other-task", "/other-repo")).toBeUndefined();
       expect(harness.records("current-task")).toEqual([]);
-      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([["/repo", ["current-task"]]]);
+      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
+        [workspaceRefFixture("/repo"), ["current-task"]],
+      ]);
     } finally {
       harness.dispose();
     }
@@ -426,12 +491,14 @@ describe("AgentSessionViewSync", () => {
     });
     try {
       await harness.sync.reconcileStreamSnapshot(
-        new Map([["/repo", ["current-task"]]]),
+        new Map([[workspaceRefFixture("/repo"), ["current-task"]]]),
         () => true,
       );
 
-      expect(readPort.taskIdsList.mock.calls).toEqual([["/repo"]]);
-      expect(harness.removeTaskSessions.mock.calls).toEqual([["/repo", ["deleted-task"]]]);
+      expect(readPort.taskIdsList.mock.calls).toEqual([[workspaceRefFixture("/repo")]]);
+      expect(harness.removeTaskSessions.mock.calls).toEqual([
+        [workspaceRefFixture("/repo"), ["deleted-task"]],
+      ]);
     } finally {
       harness.dispose();
     }
@@ -439,32 +506,38 @@ describe("AgentSessionViewSync", () => {
 
   test("a stream snapshot removes the sessions of tasks deleted in every open workspace", async () => {
     const readPort = createReadPort(recordsFrom({ "task-b": [session("b")] }));
-    readPort.taskIdsList = mock(async (repoPath: string) =>
+    readPort.taskIdsList = mock(async ({ repoPath }: WorkspaceRef) =>
       repoPath === "/repo-b" ? ["task-b"] : ["task-a"],
     );
     const harness = createHarness(readPort, { activeRepoPath: "/repo-a" });
     try {
-      harness.queryClient.setQueryData(agentSessionQueryKeys.list("/repo-b", "deleted-b"), [
-        session("orphan"),
-      ]);
+      harness.queryClient.setQueryData(
+        agentSessionQueryKeys.list(workspaceRefFixture("/repo-b"), "deleted-b"),
+        [session("orphan")],
+      );
       harness.observe("task-b", [], "/repo-b");
 
       await harness.sync.reconcileStreamSnapshot(
         new Map([
-          ["/repo-a", ["task-a"]],
-          ["/repo-b", ["task-b"]],
+          [workspaceRefFixture("/repo-a"), ["task-a"]],
+          [workspaceRefFixture("/repo-b"), ["task-b"]],
         ]),
         () => true,
       );
 
-      expect(readPort.taskIdsList.mock.calls).toEqual([["/repo-b"]]);
-      expect(harness.removeTaskSessions).toHaveBeenCalledWith("/repo-b", ["deleted-b"]);
+      expect(readPort.taskIdsList.mock.calls).toEqual([[workspaceRefFixture("/repo-b")]]);
+      expect(harness.removeTaskSessions).toHaveBeenCalledWith(workspaceRefFixture("/repo-b"), [
+        "deleted-b",
+      ]);
       expect(harness.removeTaskSessions.mock.calls.flatMap(([, taskIds]) => taskIds)).toEqual([
         "deleted-b",
       ]);
       expect(harness.records("deleted-b", "/repo-b")).toBeUndefined();
       expect(harness.records("task-b", "/repo-b")).toEqual([session("b")]);
-      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([
+        [workspaceRefFixture("/repo-a")],
+        [workspaceRefFixture("/repo-b")],
+      ]);
     } finally {
       harness.dispose();
     }
@@ -478,19 +551,19 @@ describe("AgentSessionViewSync", () => {
 
       await harness.sync.reconcileStreamSnapshot(
         new Map([
-          ["/repo-a", ["unobserved-a"]],
-          ["/repo-b", ["observed-b", "unobserved-b"]],
+          [workspaceRefFixture("/repo-a"), ["unobserved-a"]],
+          [workspaceRefFixture("/repo-b"), ["observed-b", "unobserved-b"]],
         ]),
         () => true,
       );
 
       expect(
         readPort.agentSessionsListForTasks.mock.calls.toSorted(([left], [right]) =>
-          left.localeCompare(right),
+          left.repoPath.localeCompare(right.repoPath),
         ),
       ).toEqual([
-        ["/repo-a", ["unobserved-a"]],
-        ["/repo-b", ["observed-b"]],
+        [workspaceRefFixture("/repo-a"), ["unobserved-a"]],
+        [workspaceRefFixture("/repo-b"), ["observed-b"]],
       ]);
       expect(harness.records("unobserved-b", "/repo-b")).toBeUndefined();
     } finally {
@@ -502,21 +575,24 @@ describe("AgentSessionViewSync", () => {
     const liveFailure = new Error("live refresh failed");
     const readPort = createReadPort(recordsFrom({ "task-a": [session("a")] }));
     const harness = createHarness(readPort, { activeRepoPath: "/repo-a" });
-    harness.refreshLiveSessions.mockImplementation(async (repoPath: string) => {
+    harness.refreshLiveSessions.mockImplementation(async ({ repoPath }: WorkspaceRef) => {
       if (repoPath === "/repo-b") throw liveFailure;
     });
     try {
       const failures = await harness.sync.reconcileStreamSnapshot(
         new Map([
-          ["/repo-a", ["task-a"]],
-          ["/repo-b", ["task-b"]],
+          [workspaceRefFixture("/repo-a"), ["task-a"]],
+          [workspaceRefFixture("/repo-b"), ["task-b"]],
         ]),
         () => true,
       );
 
-      expect(failures).toEqual(new Map([["/repo-b", liveFailure]]));
+      expect(failures).toEqual(new Map([[workspaceRefFixture("/repo-b"), liveFailure]]));
       expect(harness.records("task-a", "/repo-a")).toEqual([session("a")]);
-      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([
+        [workspaceRefFixture("/repo-a")],
+        [workspaceRefFixture("/repo-b")],
+      ]);
     } finally {
       harness.dispose();
     }
@@ -529,24 +605,27 @@ describe("AgentSessionViewSync", () => {
     try {
       const snapshot = harness.sync.reconcileStreamSnapshot(
         new Map([
-          ["/repo-a", []],
-          ["/repo-b", []],
+          [workspaceRefFixture("/repo-a"), []],
+          [workspaceRefFixture("/repo-b"), []],
         ]),
         () => true,
       );
       await firstStarted;
 
       const taskIds = await harness.queryClient.fetchQuery(
-        repoTaskIdsQueryOptions("/foreground", readPort),
+        repoTaskIdsQueryOptions(workspaceRefFixture("/foreground"), readPort),
       );
 
       expect(taskIds).toEqual(["foreground-task"]);
-      expect(readPort.taskIdsList.mock.calls).toEqual([["/foreground"]]);
-      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+      expect(readPort.taskIdsList.mock.calls).toEqual([[workspaceRefFixture("/foreground")]]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([[workspaceRefFixture("/repo-a")]]);
 
       firstRefresh.resolve();
       expect(await snapshot).toEqual(new Map());
-      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([
+        [workspaceRefFixture("/repo-a")],
+        [workspaceRefFixture("/repo-b")],
+      ]);
     } finally {
       firstRefresh.resolve();
       harness.dispose();
@@ -567,16 +646,25 @@ describe("AgentSessionViewSync", () => {
       isWorkspaceActive: () => false,
     });
     try {
-      const first = harness.sync.reconcileStreamSnapshot(new Map([["/repo-a", []]]), () => true);
+      const first = harness.sync.reconcileStreamSnapshot(
+        new Map([[workspaceRefFixture("/repo-a"), []]]),
+        () => true,
+      );
       await firstStarted;
 
-      const second = replacement.reconcileStreamSnapshot(new Map([["/repo-b", []]]), () => true);
+      const second = replacement.reconcileStreamSnapshot(
+        new Map([[workspaceRefFixture("/repo-b"), []]]),
+        () => true,
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([[workspaceRefFixture("/repo-a")]]);
 
       firstRefresh.resolve();
       await Promise.all([first, second]);
-      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([
+        [workspaceRefFixture("/repo-a")],
+        [workspaceRefFixture("/repo-b")],
+      ]);
     } finally {
       firstRefresh.resolve();
       harness.dispose();
@@ -601,12 +689,15 @@ describe("AgentSessionViewSync", () => {
       const second = harness.reconcile([event(["task-b"], [], "/repo-b")]);
       await waitForReads(readPort, 2);
       await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([[workspaceRefFixture("/repo-a")]]);
 
       firstRefresh.reject(failure);
       expect(await first).toBe(failure);
       await second;
-      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([
+        [workspaceRefFixture("/repo-a")],
+        [workspaceRefFixture("/repo-b")],
+      ]);
     } finally {
       firstRefresh.resolve();
       harness.dispose();
@@ -623,20 +714,20 @@ describe("AgentSessionViewSync", () => {
       try {
         const snapshot = harness.sync.reconcileStreamSnapshot(
           new Map([
-            ["/repo-a", []],
-            ["/repo-b", []],
+            [workspaceRefFixture("/repo-a"), []],
+            [workspaceRefFixture("/repo-b"), []],
           ]),
           () => true,
         );
         await firstStarted;
 
         closedRepoPaths.add("/repo-b");
-        await harness.sync.releaseWorkspace("/repo-b");
+        await harness.sync.releaseWorkspace(workspaceRefFixture("/repo-b"));
         if (reopened) closedRepoPaths.delete("/repo-b");
         firstRefresh.resolve();
         expect(await snapshot).toEqual(new Map());
 
-        expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+        expect(harness.refreshLiveSessions.mock.calls).toEqual([[workspaceRefFixture("/repo-a")]]);
       } finally {
         firstRefresh.resolve();
         harness.dispose();
@@ -654,8 +745,8 @@ describe("AgentSessionViewSync", () => {
       try {
         const snapshot = harness.sync.reconcileStreamSnapshot(
           new Map([
-            ["/repo-a", []],
-            ["/repo-b", []],
+            [workspaceRefFixture("/repo-a"), []],
+            [workspaceRefFixture("/repo-b"), []],
           ]),
           () => currentOwner,
         );
@@ -666,7 +757,7 @@ describe("AgentSessionViewSync", () => {
         firstRefresh.resolve();
         await snapshot;
 
-        expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+        expect(harness.refreshLiveSessions.mock.calls).toEqual([[workspaceRefFixture("/repo-a")]]);
       } finally {
         firstRefresh.resolve();
         harness.dispose();
@@ -683,14 +774,16 @@ describe("AgentSessionViewSync", () => {
     try {
       await harness.sync.reconcileStreamSnapshot(
         new Map([
-          ["/repo-a", ["task-a"]],
-          ["/closed", ["task-closed"]],
+          [workspaceRefFixture("/repo-a"), ["task-a"]],
+          [workspaceRefFixture("/closed"), ["task-closed"]],
         ]),
         () => true,
       );
 
-      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([["/repo-a", ["task-a"]]]);
-      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
+        [workspaceRefFixture("/repo-a"), ["task-a"]],
+      ]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([[workspaceRefFixture("/repo-a")]]);
       expect(harness.records("task-closed", "/closed")).toBeUndefined();
     } finally {
       harness.dispose();
@@ -700,7 +793,7 @@ describe("AgentSessionViewSync", () => {
   test("an event batch starts no live refresh for a workspace that closed while it waited", async () => {
     const pendingRead = Promise.withResolvers<TaskAgentSessions[]>();
     const readPort = createReadPort(async (repoPath, taskIds) =>
-      repoPath === "/repo-a"
+      repoPath.repoPath === "/repo-a"
         ? pendingRead.promise
         : taskIds.map((taskId) => ({ taskId, agentSessions: [session("b-new")] })),
     );
@@ -718,11 +811,11 @@ describe("AgentSessionViewSync", () => {
       expect(harness.records("task-b", "/repo-b")).toEqual([session("b-new")]);
 
       closedRepoPaths.add("/repo-b");
-      await harness.sync.releaseWorkspace("/repo-b");
+      await harness.sync.releaseWorkspace(workspaceRefFixture("/repo-b"));
       pendingRead.resolve([{ taskId: "task-a", agentSessions: [session("a-new")] }]);
       await completion;
 
-      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([[workspaceRefFixture("/repo-a")]]);
       expect(harness.records("task-b", "/repo-b")).toBeUndefined();
     } finally {
       harness.dispose();
@@ -740,7 +833,7 @@ describe("AgentSessionViewSync", () => {
       await waitForReads(readPort, 1);
 
       closedRepoPaths.add("/repo-b");
-      await harness.sync.releaseWorkspace("/repo-b");
+      await harness.sync.releaseWorkspace(workspaceRefFixture("/repo-b"));
       await completion;
 
       expect(harness.refreshLiveSessions).not.toHaveBeenCalled();
@@ -755,14 +848,16 @@ describe("AgentSessionViewSync", () => {
     const readPort = createReadPort(recordsFrom({}));
     const harness = createHarness(readPort);
     try {
-      harness.queryClient.setQueryData(agentSessionQueryKeys.list("/closed", "task-1"), [
-        session("closed"),
-      ]);
-      harness.queryClient.setQueryData(agentSessionQueryKeys.list("/open", "task-1"), [
-        session("open"),
-      ]);
+      harness.queryClient.setQueryData(
+        agentSessionQueryKeys.list(workspaceRefFixture("/closed"), "task-1"),
+        [session("closed")],
+      );
+      harness.queryClient.setQueryData(
+        agentSessionQueryKeys.list(workspaceRefFixture("/open"), "task-1"),
+        [session("open")],
+      );
 
-      await harness.sync.releaseWorkspace("/closed");
+      await harness.sync.releaseWorkspace(workspaceRefFixture("/closed"));
       await harness.reconcile([event(["task-1"], [], "/closed")]);
 
       expect(harness.records("task-1", "/closed")).toBeUndefined();
@@ -783,11 +878,14 @@ describe("AgentSessionViewSync", () => {
       harness.observe("observed-task", [session("loaded")], "/other-repo");
 
       await expect(
-        harness.sync.reconcileStreamSnapshot(new Map([["/repo", []]]), () => true),
+        harness.sync.reconcileStreamSnapshot(
+          new Map([[workspaceRefFixture("/repo"), []]]),
+          () => true,
+        ),
       ).rejects.toThrow("inactive read failed");
 
       const state = harness.queryClient.getQueryState(
-        agentSessionQueryKeys.list("/other-repo", "observed-task"),
+        agentSessionQueryKeys.list(workspaceRefFixture("/other-repo"), "observed-task"),
       );
       expect(state?.status).toBe("error");
       expect(state?.data).toEqual([session("loaded")]);
@@ -805,11 +903,18 @@ describe("AgentSessionViewSync", () => {
       const survivor = harness.observe("survivor", [session("old-survivor")]);
       const deleted = harness.observe("deleted", [session("orphan")]);
 
-      await harness.sync.reconcileStreamSnapshot(new Map([["/repo", ["survivor"]]]), () => true);
+      await harness.sync.reconcileStreamSnapshot(
+        new Map([[workspaceRefFixture("/repo"), ["survivor"]]]),
+        () => true,
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([["/repo", ["survivor"]]]);
-      expect(harness.removeTaskSessions.mock.calls).toEqual([["/repo", ["deleted"]]]);
+      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
+        [workspaceRefFixture("/repo"), ["survivor"]],
+      ]);
+      expect(harness.removeTaskSessions.mock.calls).toEqual([
+        [workspaceRefFixture("/repo"), ["deleted"]],
+      ]);
       expect(survivor.getCurrentResult().data).toEqual([session("fresh-survivor")]);
       expect(harness.records("survivor")).toEqual([session("fresh-survivor")]);
       expect(deleted.getCurrentResult()).toMatchObject({ status: "success", data: [] });
@@ -830,7 +935,10 @@ describe("AgentSessionViewSync", () => {
       await waitForReads(readPort, 1);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      await harness.sync.reconcileStreamSnapshot(new Map([["/repo", ["task-1"]]]), () => true);
+      await harness.sync.reconcileStreamSnapshot(
+        new Map([[workspaceRefFixture("/repo"), ["task-1"]]]),
+        () => true,
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(readPort.agentSessionsListForTasks).toHaveBeenCalledTimes(2);
@@ -852,13 +960,16 @@ describe("AgentSessionViewSync", () => {
     try {
       const hidden = harness.observe("hidden", [session("old-hidden")]);
 
-      await harness.sync.reconcileStreamSnapshot(new Map([["/repo", ["current"]]]), () => true);
+      await harness.sync.reconcileStreamSnapshot(
+        new Map([[workspaceRefFixture("/repo"), ["current"]]]),
+        () => true,
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
-        ["/repo", ["current", "hidden"]],
+        [workspaceRefFixture("/repo"), ["current", "hidden"]],
       ]);
-      expect(harness.removeTaskSessions.mock.calls).toEqual([["/repo", []]]);
+      expect(harness.removeTaskSessions.mock.calls).toEqual([[workspaceRefFixture("/repo"), []]]);
       expect(hidden.getCurrentResult().data).toEqual([session("fresh-hidden")]);
     } finally {
       harness.dispose();
@@ -885,8 +996,8 @@ describe("AgentSessionViewSync", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
-        ["/repo", ["task-a", "task-b"]],
-        ["/repo", ["task-b"]],
+        [workspaceRefFixture("/repo"), ["task-a", "task-b"]],
+        [workspaceRefFixture("/repo"), ["task-b"]],
       ]);
       expect(survivor.getCurrentResult()).toMatchObject({
         status: "success",
@@ -914,8 +1025,8 @@ describe("AgentSessionViewSync", () => {
       await harness.reconcile([event([], ["task-a"])]);
 
       expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
-        ["/repo", ["task-a", "task-b"]],
-        ["/repo", ["task-b"]],
+        [workspaceRefFixture("/repo"), ["task-a", "task-b"]],
+        [workspaceRefFixture("/repo"), ["task-b"]],
       ]);
       expect(survivor.getCurrentResult()).toMatchObject({
         status: "success",
@@ -932,14 +1043,18 @@ describe("AgentSessionViewSync", () => {
     const harness = createHarness(readPort);
     try {
       harness.observe("observed-task", [], "/other-repo");
-      harness.queryClient.setQueryData(agentSessionQueryKeys.list("/other-repo", "unobserved"), [
-        session("unobserved"),
-      ]);
+      harness.queryClient.setQueryData(
+        agentSessionQueryKeys.list(workspaceRefFixture("/other-repo"), "unobserved"),
+        [session("unobserved")],
+      );
 
-      await harness.sync.reconcileStreamSnapshot(new Map([["/repo", []]]), () => true);
+      await harness.sync.reconcileStreamSnapshot(
+        new Map([[workspaceRefFixture("/repo"), []]]),
+        () => true,
+      );
 
       expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
-        ["/other-repo", ["observed-task"]],
+        [workspaceRefFixture("/other-repo"), ["observed-task"]],
       ]);
       expect(harness.records("observed-task", "/other-repo")).toEqual([session("fresh")]);
       expect(harness.records("unobserved", "/other-repo")).toBeUndefined();

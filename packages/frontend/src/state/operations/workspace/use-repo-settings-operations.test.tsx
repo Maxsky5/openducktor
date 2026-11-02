@@ -1,6 +1,9 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
+  diffSettingsSnapshot,
+  workspaceRefSchema,
   type RepositoryGitProviderContext,
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
@@ -24,7 +27,6 @@ import {
   createSettingsSnapshotFixture,
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "@openducktor/frontend-core/queries/checks";
 import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
 import { runtimeQueryKeys } from "@openducktor/frontend-core/queries/runtime";
@@ -34,6 +36,7 @@ import {
   taskQueryKeys,
 } from "@openducktor/frontend-core/queries/tasks";
 import {
+  loadSettingsSnapshotFromQuery,
   repoConfigQueryOptions,
   settingsSnapshotQueryOptions,
   workspaceQueryKeys,
@@ -51,6 +54,8 @@ const host = testHost.client;
 
 const savedResult = (workspaces: WorkspaceRecord[]): SettingsSnapshotSaveResult => ({
   type: "saved",
+  shared: "saved",
+  preferences: "saved",
   workspaces,
   runtimeApplications: [],
 });
@@ -137,10 +142,15 @@ const createSettingsSnapshot = (): SettingsSnapshot => createSettingsSnapshotFix
 const isRepositoryGitProviderContextRepoFilter = (
   filters: { queryKey?: unknown } | undefined,
   repoPath: string,
-): boolean =>
-  Array.isArray(filters?.queryKey) &&
-  filters.queryKey[0] === repositoryGitProviderContextQueryKeys.all[0] &&
-  filters.queryKey[1] === repoPath;
+): boolean => {
+  if (!Array.isArray(filters?.queryKey)) return false;
+  const scope = workspaceRefSchema.safeParse(filters.queryKey[1]);
+  return (
+    filters.queryKey[0] === repositoryGitProviderContextQueryKeys.all[0] &&
+    scope.success &&
+    scope.data.repoPath === repoPath
+  );
+};
 
 const startSettingsSave = async ({
   previousSnapshot,
@@ -170,7 +180,6 @@ const startSettingsSave = async ({
   const harness = createHookHarness({
     activeWorkspace: createWorkspaceRecord(),
     applyWorkspaceRecords,
-    applyWorkspaceRecord: mock(() => {}),
   });
   const providerRefresh = createDeferred<void>();
   const providerRefreshStarted = createDeferred<void>();
@@ -200,7 +209,7 @@ const startSettingsSave = async ({
   queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), previousSnapshot);
   for (const repoPath of seedProviderContextRepoPaths ?? []) {
     queryClient.setQueryData(
-      repositoryGitProviderContextQueryKeys.repo(repoPath),
+      repositoryGitProviderContextQueryKeys.repo(createWorkspaceRecord(repoPath)),
       createGitProviderContextFixture(),
     );
   }
@@ -210,7 +219,9 @@ const startSettingsSave = async ({
     invalidateQueries,
     resetQueries,
     applyWorkspaceRecords,
-    save: harness.getLatest().saveSettingsSnapshot(normalizedSnapshot),
+    save: harness
+      .getLatest()
+      .saveSettingsSnapshot(diffSettingsSnapshot(previousSnapshot, normalizedSnapshot)),
     providerRefreshStarted,
     cleanup: async (): Promise<void> => {
       providerRefresh.resolve();
@@ -264,76 +275,15 @@ const createRepoConfig = (): Awaited<ReturnType<typeof host.workspaceGetRepoConf
   },
 });
 
-const inputFixture: RepoSettingsInput = {
-  worktreeBasePath: "  /tmp/worktrees  ",
-  branchPrefix: "  codex/  ",
-  defaultModel: null,
-  defaultTargetBranch: { remote: "origin", branch: "  develop  " },
-  postCompleteHooks: ["echo post"],
-  actions: createRepoActions(),
-  worktreeCopyPaths: ["  .env  ", "  .env.local  "],
-  agentDefaults: {
-    spec: {
-      runtimeKind: "opencode",
-      providerId: " openai ",
-      modelId: " gpt-5 ",
-      variant: "  mini ",
-      profileId: " spec ",
-    },
-    planner: null,
-    build: { providerId: "", modelId: "", variant: "", profileId: "" },
-    qa: {
-      runtimeKind: "opencode",
-      providerId: "anthropic",
-      modelId: "claude-4",
-      variant: "",
-      profileId: "",
-    },
-  },
-};
-
 describe("use-repo-settings-operations", () => {
-  test("caches settings snapshot reads across repeated calls", async () => {
+  test("saves agent model favorites without loading a settings snapshot", async () => {
     const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
-    const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
-
-    const original = {
-      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
-    };
-    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
-
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
-    });
-
-    try {
-      await harness.mount();
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(
-        createSettingsSnapshot(),
-      );
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(
-        createSettingsSnapshot(),
-      );
-      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.unmount();
-      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
-    }
-  });
-
-  test("saves agent model favorites and replaces the cached snapshot with the host result", async () => {
-    const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
     const initialSnapshot = createSettingsSnapshot();
     const favorites = [
       { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" },
     ];
-    const canonicalSnapshot = { ...initialSnapshot, agentModelFavorites: favorites };
     const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
-    const workspaceUpdateAgentModelFavorites = mock(async () => canonicalSnapshot);
+    const workspaceUpdateAgentModelFavorites = mock(async () => favorites);
     const original = {
       workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
       workspaceUpdateAgentModelFavorites: host.workspaceUpdateAgentModelFavorites,
@@ -343,16 +293,17 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
-      applyWorkspaceRecord,
     });
 
     try {
       await harness.mount();
-      await harness.getLatest().loadSettingsSnapshot();
+      await loadSettingsSnapshotFromQuery(harness.getQueryClient());
       await expect(harness.getLatest().saveAgentModelFavorites(favorites)).resolves.toEqual(
-        canonicalSnapshot,
+        favorites,
       );
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(canonicalSnapshot);
+      await expect(loadSettingsSnapshotFromQuery(harness.getQueryClient())).resolves.toEqual(
+        initialSnapshot,
+      );
       expect(workspaceUpdateAgentModelFavorites).toHaveBeenCalledWith(favorites);
       expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
     } finally {
@@ -364,7 +315,6 @@ describe("use-repo-settings-operations", () => {
 
   test("keeps the last cached favorites when the host write fails", async () => {
     const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
     const initialSnapshot = createSettingsSnapshotFixture({
       agentModelFavorites: [
         { runtimeKind: "claude", providerId: "anthropic", modelId: "claude-opus" },
@@ -383,12 +333,11 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
-      applyWorkspaceRecord,
     });
 
     try {
       await harness.mount();
-      await harness.getLatest().loadSettingsSnapshot();
+      await loadSettingsSnapshotFromQuery(harness.getQueryClient());
       await expect(
         harness
           .getLatest()
@@ -396,7 +345,9 @@ describe("use-repo-settings-operations", () => {
             { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
           ]),
       ).rejects.toThrow("Could not save favorites");
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(initialSnapshot);
+      await expect(loadSettingsSnapshotFromQuery(harness.getQueryClient())).resolves.toEqual(
+        initialSnapshot,
+      );
     } finally {
       await harness.unmount();
       host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
@@ -406,11 +357,9 @@ describe("use-repo-settings-operations", () => {
 
   test("throws when loading without an active workspace", async () => {
     const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
     const harness = createHookHarness({
       activeWorkspace: null,
       applyWorkspaceRecords,
-      applyWorkspaceRecord,
     });
 
     try {
@@ -423,28 +372,8 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("throws when saving without an active workspace", async () => {
-    const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
-    const harness = createHookHarness({
-      activeWorkspace: null,
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
-    });
-
-    try {
-      await harness.mount();
-      await expect(harness.getLatest().saveRepoSettings(inputFixture)).rejects.toThrow(
-        "Select a workspace first.",
-      );
-    } finally {
-      await harness.unmount();
-    }
-  });
-
   test("loads repo settings into normalized form values", async () => {
     const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
     const workspaceGetRepoConfig = mock(async () => createRepoConfig());
 
     const original = {
@@ -455,7 +384,6 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
-      applyWorkspaceRecord,
     });
 
     try {
@@ -502,387 +430,18 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("saveRepoSettings trims values, omits blank defaults, and updates the saved workspace", async () => {
-    const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
-    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
-
-    const original = {
-      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
-    };
-    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
-
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
-    });
-
-    try {
-      await harness.mount();
-      const specDefault = inputFixture.agentDefaults.spec;
-      if (!specDefault) {
-        throw new Error("Expected spec default fixture");
-      }
-      const input: RepoSettingsInput = {
-        ...inputFixture,
-        agentDefaults: {
-          ...inputFixture.agentDefaults,
-          spec: {
-            ...specDefault,
-            runtimeKind: "opencode",
-          },
-        },
-      };
-      await harness.getLatest().saveRepoSettings(input);
-
-      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("repo-a", {
-        worktreeBasePath: "/tmp/worktrees",
-        branchPrefix: "codex/",
-        defaultTargetBranch: { remote: "origin", branch: "develop" },
-        hooks: {
-          postComplete: ["echo post"],
-        },
-        actions: createRepoActions(),
-        worktreeCopyPaths: [".env", ".env.local"],
-        agentDefaults: {
-          spec: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "mini",
-            profileId: "spec",
-          },
-          qa: {
-            runtimeKind: "opencode",
-            providerId: "anthropic",
-            modelId: "claude-4",
-          },
-        },
-      });
-      expect(applyWorkspaceRecord).toHaveBeenCalledWith(createWorkspaceRecord());
-      expect(applyWorkspaceRecords).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
-    }
-  });
-
-  test("saveRepoSettings invalidates cached settings snapshots", async () => {
-    const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
-    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
-    const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
-
-    const original = {
-      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
-      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
-    };
-    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
-    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
-
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
-    });
-
-    try {
-      await harness.mount();
-      await harness.getLatest().loadSettingsSnapshot();
-      await harness.getLatest().saveRepoSettings(inputFixture);
-      await harness.getLatest().loadSettingsSnapshot();
-
-      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
-    } finally {
-      await harness.unmount();
-      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
-      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
-    }
-  });
-
-  test("saveRepoSettings refreshes a mounted repository config", async () => {
-    const savedConfig = createRepoConfig();
-    const original = {
-      save: host.workspaceSaveRepoSettings,
-      getRepoConfig: host.workspaceGetRepoConfig,
-    };
-    host.workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
-    host.workspaceGetRepoConfig = mock(async () => savedConfig);
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords: mock(() => {}),
-      applyWorkspaceRecord: mock(() => {}),
-    });
-    const options = repoConfigQueryOptions("repo-a");
-    let unsubscribe = () => {};
-
-    try {
-      await harness.mount();
-      const queryClient = harness.getQueryClient();
-      queryClient.setQueryData(options.queryKey, {
-        ...savedConfig,
-        actions: { items: [], defaultActionId: null },
-      });
-      const observer = new QueryObserver(queryClient, options);
-      unsubscribe = observer.subscribe(() => {});
-      expect(observer.getCurrentResult().data?.actions.items).toEqual([]);
-
-      await harness.run((operations) => operations.saveRepoSettings(inputFixture));
-
-      expect(observer.getCurrentResult().data?.actions).toEqual(createRepoActions());
-      expect(host.workspaceGetRepoConfig).toHaveBeenCalledWith("repo-a");
-    } finally {
-      unsubscribe();
-      await harness.unmount();
-      host.workspaceSaveRepoSettings = original.save;
-      host.workspaceGetRepoConfig = original.getRepoConfig;
-    }
-  });
-
-  test("saves only chosen model defaults for a newly created workspace", async () => {
-    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord("/new-repo"));
-    const original = host.workspaceSaveRepoSettings;
-    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
-    const applyWorkspaceRecord = mock(() => {});
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords: () => {},
-      applyWorkspaceRecord,
-    });
-
-    try {
-      await harness.mount();
-      await harness.getLatest().saveWorkspaceModelDefaults("new-repo", {
-        defaultModel: {
-          runtimeKind: "codex",
-          providerId: "openai",
-          modelId: "o3",
-          variant: "high",
-        },
-        agentDefaults: {
-          qa: {
-            runtimeKind: "opencode",
-            providerId: "anthropic",
-            modelId: "claude",
-          },
-        },
-      });
-      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("new-repo", {
-        defaultModel: {
-          runtimeKind: "codex",
-          providerId: "openai",
-          modelId: "o3",
-          variant: "high",
-        },
-        agentDefaults: {
-          qa: {
-            runtimeKind: "opencode",
-            providerId: "anthropic",
-            modelId: "claude",
-          },
-        },
-      });
-      expect(applyWorkspaceRecord).toHaveBeenCalledWith(createWorkspaceRecord("/new-repo"));
-      await expect(
-        harness.getLatest().saveWorkspaceModelDefaults("new-repo", {
-          agentDefaults: { spec: { runtimeKind: "codex", providerId: "", modelId: "o3" } },
-        }),
-      ).rejects.toThrow("spec default needs a runtime and model");
-      expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.unmount();
-      host.workspaceSaveRepoSettings = original;
-    }
-  });
-
-  test("saveRepoSettings sends normalized cleanup hooks and the repository actions", async () => {
-    const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
-    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
-
-    const original = {
-      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
-    };
-    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
-
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
-    });
-
-    try {
-      await harness.mount();
-      await harness.getLatest().saveRepoSettings({
-        ...inputFixture,
-        postCompleteHooks: ["\t", " echo post "],
-      });
-
-      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("repo-a", {
-        worktreeBasePath: "/tmp/worktrees",
-        branchPrefix: "codex/",
-        defaultTargetBranch: { remote: "origin", branch: "develop" },
-        hooks: {
-          postComplete: ["echo post"],
-        },
-        actions: createRepoActions(),
-        worktreeCopyPaths: [".env", ".env.local"],
-        agentDefaults: {
-          spec: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "mini",
-            profileId: "spec",
-          },
-          qa: {
-            runtimeKind: "opencode",
-            providerId: "anthropic",
-            modelId: "claude-4",
-          },
-        },
-      });
-    } finally {
-      await harness.unmount();
-      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
-    }
-  });
-
-  test("supports retry after update failure and preserves refresh invariant", async () => {
-    const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
-    let shouldFail = true;
-    const workspaceSaveRepoSettings = mock(async () => {
-      if (shouldFail) {
-        shouldFail = false;
-        throw new Error("write failed");
-      }
-      return createWorkspaceRecord();
-    });
-
-    const original = {
-      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
-    };
-    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
-
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
-    });
-
-    try {
-      await harness.mount();
-      await expect(harness.getLatest().saveRepoSettings(inputFixture)).rejects.toThrow(
-        "write failed",
-      );
-      expect(applyWorkspaceRecord).not.toHaveBeenCalled();
-
-      await harness.getLatest().saveRepoSettings(inputFixture);
-      expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(2);
-      expect(applyWorkspaceRecord).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.unmount();
-      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
-    }
-  });
-
-  test("saveRepoSettings rejects configured agent defaults without runtime kind", async () => {
-    const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
-    const workspaceSaveRepoSettings = mock(async () => createWorkspaceRecord());
-
-    const original = {
-      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
-    };
-    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
-
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
-    });
-
-    try {
-      await harness.mount();
-      await expect(
-        harness.getLatest().saveRepoSettings({
-          ...inputFixture,
-          agentDefaults: {
-            ...inputFixture.agentDefaults,
-            spec: {
-              providerId: "openai",
-              modelId: "gpt-5",
-              variant: "",
-              profileId: "",
-            } satisfies NonNullable<RepoSettingsInput["agentDefaults"]["spec"]>,
-          },
-        }),
-      ).rejects.toThrow(
-        "Specification agent default runtime kind is required when provider and model are configured.",
-      );
-      expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(0);
-    } finally {
-      await harness.unmount();
-      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
-    }
-  });
-
-  test("loads settings snapshot through atomic IPC route", async () => {
-    const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
-    const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
-
-    const original = {
-      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
-    };
-    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
-
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
-    });
-
-    try {
-      await harness.mount();
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(
-        createSettingsSnapshot(),
-      );
-      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.unmount();
-      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
-    }
-  });
-
-  test.each([
-    {
-      name: "publishes a full-save preference change to mounted settings observers",
-      save: (operations: HookResult, snapshot: SettingsSnapshot) =>
-        operations.saveSettingsSnapshot(snapshot),
-    },
-    {
-      name: "keeps settings observers attached after a Git-only save",
-      save: (operations: HookResult, snapshot: SettingsSnapshot) =>
-        operations.saveGlobalGitConfig(snapshot.git),
-    },
-  ])("$name", async ({ save }) => {
+  test("publishes a full-save preference change to mounted settings observers", async () => {
     const initial = createSettingsSnapshot();
     const saved = { ...initial, system: { preferredOpenInToolId: "zed" as const } };
     const original = {
       get: host.workspaceGetSettingsSnapshot,
       save: host.workspaceSaveSettingsSnapshot,
-      saveGit: host.workspaceUpdateGlobalGitConfig,
     };
     host.workspaceGetSettingsSnapshot = async () => saved;
     host.workspaceSaveSettingsSnapshot = async () => savedResult([]);
-    host.workspaceUpdateGlobalGitConfig = async () => {};
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords: () => {},
-      applyWorkspaceRecord: () => {},
     });
     let unsubscribe = () => {};
     try {
@@ -895,7 +454,7 @@ describe("use-repo-settings-operations", () => {
         if (result.data) observed = result.data;
       });
       await harness.run(async (operations) => {
-        await save(operations, saved);
+        await operations.saveSettingsSnapshot(diffSettingsSnapshot(initial, saved));
       });
       expect(observed.system).toEqual(saved.system);
     } finally {
@@ -903,13 +462,11 @@ describe("use-repo-settings-operations", () => {
       await harness.unmount();
       host.workspaceGetSettingsSnapshot = original.get;
       host.workspaceSaveSettingsSnapshot = original.save;
-      host.workspaceUpdateGlobalGitConfig = original.saveGit;
     }
   });
 
   test("saves settings snapshot atomically and refreshes normalized snapshot from the host", async () => {
     const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
     const workspaceSaveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) =>
       savedResult([createWorkspaceRecord()]),
     );
@@ -959,7 +516,6 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
-      applyWorkspaceRecord,
     });
     const snapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),
@@ -985,15 +541,26 @@ describe("use-repo-settings-operations", () => {
       harness
         .getQueryClient()
         .setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
-      harness.getQueryClient().setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [] });
-      await harness.getLatest().saveSettingsSnapshot(snapshot);
-      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith({ ...snapshot }, undefined);
-      expect(workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.chat).toEqual(explicitChatSettings);
+      harness
+        .getQueryClient()
+        .setQueryData(taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")), { tasks: [] });
+      await harness
+        .getLatest()
+        .saveSettingsSnapshot(diffSettingsSnapshot(createSettingsSnapshot(), snapshot));
+      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(
+        diffSettingsSnapshot(createSettingsSnapshot(), snapshot),
+        undefined,
+      );
+      expect(workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.global?.chat).toEqual(
+        explicitChatSettings,
+      );
       expect(
         workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.autopilot?.alwaysStartQaReviewsFresh,
       ).toBe(true);
       expect(applyWorkspaceRecords).toHaveBeenCalledWith([createWorkspaceRecord()]);
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(normalizedSnapshot);
+      await expect(loadSettingsSnapshotFromQuery(harness.getQueryClient())).resolves.toEqual(
+        normalizedSnapshot,
+      );
       expect(
         harness
           .getQueryClient()
@@ -1001,9 +568,11 @@ describe("use-repo-settings-operations", () => {
           .alwaysStartQaReviewsFresh,
       ).toBe(true);
       expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
-      expect(tasksList).toHaveBeenCalledWith("/repo-a");
+      expect(tasksList).toHaveBeenCalledWith({ workspaceId: "repo-a", repoPath: "/repo-a" });
       expect(
-        harness.getQueryClient().getQueryState(taskQueryKeys.repoData("/repo-a")),
+        harness
+          .getQueryClient()
+          .getQueryState(taskQueryKeys.repoData(createWorkspaceRecord("/repo-a"))),
       ).toMatchObject({
         isInvalidated: false,
         status: "success",
@@ -1041,31 +610,45 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords: mock(() => {}),
-      applyWorkspaceRecord: mock(() => {}),
     });
 
     try {
       await harness.mount();
       const queryClient = harness.getQueryClient();
       queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: [] });
-      const pendingTaskRead = queryClient.fetchQuery(repoTaskDataQueryOptions("/repo-a"));
+      queryClient.setQueryData(taskQueryKeys.repoData(createWorkspaceRecord("/repo-b")), {
+        tasks: [],
+      });
+      const pendingTaskRead = queryClient.fetchQuery(
+        repoTaskDataQueryOptions(createWorkspaceRecord("/repo-a")),
+      );
       void pendingTaskRead.catch(() => {});
       await firstTaskReadStarted.promise;
 
-      await harness.getLatest().saveSettingsSnapshot(normalizedSnapshot);
+      await harness
+        .getLatest()
+        .saveSettingsSnapshot(diffSettingsSnapshot(createSettingsSnapshot(), normalizedSnapshot));
 
       expect(tasksList).toHaveBeenCalledTimes(2);
-      expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo-a"))).toEqual({
+      expect(
+        queryClient.getQueryData<RepoTaskData>(
+          taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")),
+        ),
+      ).toEqual({
         tasks: refreshedTasks,
       });
-      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-b"))?.isInvalidated).toBe(
-        true,
-      );
+      expect(
+        queryClient.getQueryState(taskQueryKeys.repoData(createWorkspaceRecord("/repo-b")))
+          ?.isInvalidated,
+      ).toBe(true);
 
       firstTaskRead.resolve([createTaskCardFixture({ title: "Old retention" })]);
       await Promise.allSettled([pendingTaskRead]);
-      expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo-a"))).toEqual({
+      expect(
+        queryClient.getQueryData<RepoTaskData>(
+          taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")),
+        ),
+      ).toEqual({
         tasks: refreshedTasks,
       });
     } finally {
@@ -1096,17 +679,20 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords: mock(() => {}),
-      applyWorkspaceRecord: mock(() => {}),
     });
 
     try {
       await harness.mount();
       const queryClient = harness.getQueryClient();
       queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [] });
+      queryClient.setQueryData(taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")), {
+        tasks: [],
+      });
 
       await expect(
-        harness.getLatest().saveSettingsSnapshot(normalizedSnapshot),
+        harness
+          .getLatest()
+          .saveSettingsSnapshot(diffSettingsSnapshot(createSettingsSnapshot(), normalizedSnapshot)),
       ).resolves.toMatchObject({ type: "saved" });
 
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledTimes(1);
@@ -1114,7 +700,9 @@ describe("use-repo-settings-operations", () => {
         queryClient.getQueryData<SettingsSnapshot>(workspaceQueryKeys.settingsSnapshot())?.kanban
           .doneVisibleDays,
       ).toBe(7);
-      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a"))).toMatchObject({
+      expect(
+        queryClient.getQueryState(taskQueryKeys.repoData(createWorkspaceRecord("/repo-a"))),
+      ).toMatchObject({
         error: taskRefreshFailure,
         status: "error",
       });
@@ -1127,11 +715,13 @@ describe("use-repo-settings-operations", () => {
   });
 
   test.each([false, true])(
-    "keeps confirmed Chat settings after refresh failure with cached snapshot %s",
+    "marks the cached settings stale after a refresh failure, with cached snapshot %s",
     async (hasSnapshot) => {
       const workspaces = [createWorkspaceRecord()];
       const workspaceSaveSettingsSnapshot = mock(async (): Promise<SettingsSnapshotSaveResult> => ({
         type: "saved",
+        shared: "saved",
+        preferences: "saved",
         workspaces,
         runtimeApplications: [
           { kind: "opencode", effect: "replace", outcome: "failed", message: "missing binary" },
@@ -1150,7 +740,6 @@ describe("use-repo-settings-operations", () => {
       const harness = createHookHarness({
         activeWorkspace: createWorkspaceRecord(),
         applyWorkspaceRecords,
-        applyWorkspaceRecord: mock(() => {}),
       });
 
       try {
@@ -1160,7 +749,9 @@ describe("use-repo-settings-operations", () => {
         const queryClient = harness.getQueryClient();
         const key = workspaceQueryKeys.settingsSnapshot();
         if (hasSnapshot) queryClient.setQueryData(key, initial);
-        const outcome = await harness.getLatest().saveSettingsSnapshot(saved);
+        const outcome = await harness
+          .getLatest()
+          .saveSettingsSnapshot(diffSettingsSnapshot(createSettingsSnapshot(), saved));
 
         expect(outcome).toMatchObject({
           type: "saved",
@@ -1172,9 +763,12 @@ describe("use-repo-settings-operations", () => {
           harness.getQueryClient().getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list()),
         ).toEqual(workspaces);
         expect(queryClient.getQueryData<SettingsSnapshot>(key)).toEqual(
-          hasSnapshot ? saved : undefined,
+          hasSnapshot ? initial : undefined,
         );
-        expect(queryClient.getQueryState(key)?.error?.message).toBe("settings read failed");
+        expect(queryClient.getQueryState(key)).toMatchObject({
+          error: { message: "settings read failed" },
+          isInvalidated: true,
+        });
       } finally {
         await harness.unmount();
         host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
@@ -1183,7 +777,46 @@ describe("use-repo-settings-operations", () => {
     },
   );
 
-  test("publishes confirmed Chat settings before refresh and cancels an older read", async () => {
+  test("a partial save returns its result and marks the cached settings stale after reload failure", async () => {
+    const initial = createSettingsSnapshot();
+    const original = {
+      save: host.workspaceSaveSettingsSnapshot,
+      get: host.workspaceGetSettingsSnapshot,
+    };
+    host.workspaceSaveSettingsSnapshot = async () => ({
+      type: "partial",
+      shared: "saved",
+      preferences: { message: "Preferences could not be written." },
+      workspaces: [],
+      runtimeApplications: [],
+    });
+    host.workspaceGetSettingsSnapshot = async () => {
+      throw new Error("Settings could not reload.");
+    };
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords: () => {},
+    });
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      const key = workspaceQueryKeys.settingsSnapshot();
+      queryClient.setQueryData(key, initial);
+      const result = await harness.getLatest().saveSettingsSnapshot({
+        global: { git: { defaultMergeMethod: "squash" }, chat: { steerMessagesByDefault: true } },
+      });
+      expect(result.type).toBe("partial");
+      expect(result).toHaveProperty("refreshError", "Settings could not reload.");
+      expect(queryClient.getQueryData<SettingsSnapshot>(key)).toBe(initial);
+      expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+    } finally {
+      await harness.unmount();
+      host.workspaceSaveSettingsSnapshot = original.save;
+      host.workspaceGetSettingsSnapshot = original.get;
+    }
+  });
+
+  test("cancels an older settings read and publishes the refreshed snapshot after a save", async () => {
     const initial = createSettingsSnapshot();
     const saved = { ...initial, chat: { ...initial.chat, steerMessagesByDefault: true } };
     const oldRead = createDeferred<SettingsSnapshot>();
@@ -1203,7 +836,6 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords: () => {},
-      applyWorkspaceRecord: () => {},
     });
     let unsubscribe = () => {};
     try {
@@ -1219,15 +851,17 @@ describe("use-repo-settings-operations", () => {
       const pendingRead = client
         .fetchQuery({ ...settingsSnapshotQueryOptions(), staleTime: 0 })
         .catch(() => undefined);
-      const save = harness.getLatest().saveSettingsSnapshot(saved);
+      const save = harness
+        .getLatest()
+        .saveSettingsSnapshot(diffSettingsSnapshot(createSettingsSnapshot(), saved));
       await refreshStarted.promise;
-      expect(observed.chat.steerMessagesByDefault).toBe(true);
-      expect(observed.workspaces).toEqual(initial.workspaces);
-      oldRead.resolve(initial);
+      oldRead.resolve({ ...initial, theme: "dark" });
       await pendingRead;
-      expect(client.getQueryData<SettingsSnapshot>(key)?.chat.steerMessagesByDefault).toBe(true);
+      expect(client.getQueryData<SettingsSnapshot>(key)).toBe(initial);
       refresh.resolve(saved);
       await save;
+      expect(observed.chat.steerMessagesByDefault).toBe(true);
+      expect(client.getQueryData<SettingsSnapshot>(key)).toEqual(saved);
     } finally {
       oldRead.resolve(initial);
       refresh.resolve(saved);
@@ -1249,14 +883,15 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords: () => {},
-      applyWorkspaceRecord: () => {},
     });
     try {
       await harness.mount();
       const client = harness.getQueryClient();
       const key = workspaceQueryKeys.settingsSnapshot();
       client.setQueryData(key, initial);
-      const result = await harness.getLatest().saveSettingsSnapshot(saved);
+      const result = await harness
+        .getLatest()
+        .saveSettingsSnapshot(diffSettingsSnapshot(createSettingsSnapshot(), saved));
       expect(result.type).toBe("runtime_impact_changed");
       expect(client.getQueryData<SettingsSnapshot>(key)).toBe(initial);
     } finally {
@@ -1273,7 +908,7 @@ describe("use-repo-settings-operations", () => {
     const normalizedSnapshot = createSettingsSnapshotFixture({ kanban: { doneVisibleDays: 7 } });
     const workspaceSaveSettingsSnapshot = mock(async () => savedResult(openWorkspaces));
     const workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
-    const tasksList = mock(async (_repoPath: string) => []);
+    const tasksList = mock(async (_scope: WorkspaceRef) => []);
     const original = {
       tasksList: host.tasksList,
       workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
@@ -1285,21 +920,29 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords: mock(() => {}),
-      applyWorkspaceRecord: mock(() => {}),
     });
 
     try {
       await harness.mount();
       const queryClient = harness.getQueryClient();
       queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: [] });
+      queryClient.setQueryData(taskQueryKeys.repoData(createWorkspaceRecord("/repo-b")), {
+        tasks: [],
+      });
 
       await expect(
-        harness.getLatest().saveSettingsSnapshot(normalizedSnapshot),
+        harness
+          .getLatest()
+          .saveSettingsSnapshot(diffSettingsSnapshot(createSettingsSnapshot(), normalizedSnapshot)),
       ).resolves.toMatchObject({ type: "saved" });
 
-      expect(tasksList.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
-      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-b"))).toMatchObject({
+      expect(tasksList.mock.calls).toEqual([
+        [{ workspaceId: "repo-a", repoPath: "/repo-a" }],
+        [{ workspaceId: "repo-b", repoPath: "/repo-b" }],
+      ]);
+      expect(
+        queryClient.getQueryState(taskQueryKeys.repoData(createWorkspaceRecord("/repo-b"))),
+      ).toMatchObject({
         isInvalidated: false,
         status: "success",
       });
@@ -1343,22 +986,25 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords: mock(() => {}),
-      applyWorkspaceRecord: mock(() => {}),
     });
 
     try {
       await harness.mount();
       const queryClient = harness.getQueryClient();
       queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [] });
+      queryClient.setQueryData(taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")), {
+        tasks: [],
+      });
 
       await expect(
-        harness.getLatest().saveSettingsSnapshot(normalizedSnapshot),
+        harness
+          .getLatest()
+          .saveSettingsSnapshot(diffSettingsSnapshot(createSettingsSnapshot(), normalizedSnapshot)),
       ).resolves.toMatchObject({ type: "saved" });
 
       expect(tasksList).toHaveBeenCalledTimes(1);
-      expect(tasksList).toHaveBeenCalledWith("/repo-b");
-      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-b"))).toMatchObject({
+      expect(tasksList).toHaveBeenCalledWith({ workspaceId: "repo-a", repoPath: "/repo-b" });
+      expect(queryClient.getQueryState(taskQueryKeys.repoData(reboundWorkspace))).toMatchObject({
         error: taskRefreshFailure,
         status: "error",
       });
@@ -1456,7 +1102,6 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords: mock(() => {}),
-      applyWorkspaceRecord: mock(() => {}),
     });
     const options = repoConfigQueryOptions("repo-a");
     let unsubscribe = () => {};
@@ -1474,7 +1119,9 @@ describe("use-repo-settings-operations", () => {
       expect(observer.getCurrentResult().data?.actions.items).toEqual([]);
 
       await harness.run(async (operations) => {
-        await operations.saveSettingsSnapshot(normalizedSnapshot);
+        await operations.saveSettingsSnapshot(
+          diffSettingsSnapshot(createSettingsSnapshot(), normalizedSnapshot),
+        );
       });
 
       expect(observer.getCurrentResult().data?.actions).toEqual(createRepoActions());
@@ -1519,21 +1166,23 @@ describe("use-repo-settings-operations", () => {
       await run.save;
 
       expect(run.resetQueries).toHaveBeenCalledWith({
-        queryKey: repositoryGitProviderContextQueryKeys.repo("/repo-b"),
+        queryKey: repositoryGitProviderContextQueryKeys.repo(createWorkspaceRecord("/repo-b")),
       });
       expect(run.resetQueries).not.toHaveBeenCalledWith({
-        queryKey: repositoryGitProviderContextQueryKeys.repo("/repo-a"),
+        queryKey: repositoryGitProviderContextQueryKeys.repo(createWorkspaceRecord("/repo-a")),
       });
       expect(run.invalidateQueries).toHaveBeenCalledWith({
         queryKey: [...workspaceQueryKeys.all, "repo-config"],
       });
       expect(run.invalidateQueries).not.toHaveBeenCalledWith({ queryKey: checksQueryKeys.all });
       expect(
-        run.queryClient.getQueryData(repositoryGitProviderContextQueryKeys.repo("/repo-b")),
+        run.queryClient.getQueryData(
+          repositoryGitProviderContextQueryKeys.repo(createWorkspaceRecord("/repo-b")),
+        ),
       ).toBeUndefined();
       expect(
         run.queryClient.getQueryData<RepositoryGitProviderContext>(
-          repositoryGitProviderContextQueryKeys.repo("/repo-a"),
+          repositoryGitProviderContextQueryKeys.repo(createWorkspaceRecord("/repo-a")),
         ),
       ).toEqual(createGitProviderContextFixture());
     } finally {
@@ -1596,7 +1245,7 @@ describe("use-repo-settings-operations", () => {
       await run.save;
 
       expect(run.resetQueries).toHaveBeenCalledWith({
-        queryKey: repositoryGitProviderContextQueryKeys.repo("/repo-b"),
+        queryKey: repositoryGitProviderContextQueryKeys.repo(createWorkspaceRecord("/repo-b")),
       });
     } finally {
       await run.cleanup();
@@ -1628,7 +1277,6 @@ describe("use-repo-settings-operations", () => {
 
   test("forwards every prompt override key when saving snapshot", async () => {
     const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
     const workspaceSaveSettingsSnapshot = mock(
       async (_snapshotArg: Parameters<typeof host.workspaceSaveSettingsSnapshot>[0]) =>
         savedResult([]),
@@ -1645,7 +1293,6 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
-      applyWorkspaceRecord,
     });
     const globalPromptOverrides = Object.fromEntries(
       BUILTIN_PROMPT_TEMPLATE_IDS.map((templateId) => [
@@ -1687,20 +1334,26 @@ describe("use-repo-settings-operations", () => {
       globalPromptOverrides,
     });
 
+    const baseline = createSettingsSnapshotFixture({
+      workspaces: { "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a") },
+    });
     try {
       await harness.mount();
-      await harness.getLatest().saveSettingsSnapshot(snapshot);
-      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith({ ...snapshot }, undefined);
+      await harness.getLatest().saveSettingsSnapshot(diffSettingsSnapshot(baseline, snapshot));
+      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(
+        diffSettingsSnapshot(baseline, snapshot),
+        undefined,
+      );
       const savedSnapshot = workspaceSaveSettingsSnapshot.mock.calls[0]?.[0];
       if (savedSnapshot === undefined) {
         throw new Error("Expected settings snapshot to be forwarded.");
       }
-      expect(Object.keys(savedSnapshot.globalPromptOverrides).sort()).toEqual(
+      expect(Object.keys(savedSnapshot.global?.globalPromptOverrides?.create ?? {}).sort()).toEqual(
         BUILTIN_PROMPT_TEMPLATE_IDS.toSorted(),
       );
-      expect(Object.keys(savedSnapshot.workspaces["repo-a"]?.promptOverrides ?? {}).sort()).toEqual(
-        BUILTIN_PROMPT_TEMPLATE_IDS.toSorted(),
-      );
+      expect(
+        Object.keys(savedSnapshot.workspaces?.["repo-a"]?.promptOverrides?.create ?? {}).sort(),
+      ).toEqual(BUILTIN_PROMPT_TEMPLATE_IDS.toSorted());
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
@@ -1708,61 +1361,8 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("saveGlobalGitConfig refreshes the authoritative snapshot without mutating workspace state", async () => {
-    const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
-    const workspaceUpdateGlobalGitConfig = mock(async () => {});
-    const optimisticSnapshot = { ...createSettingsSnapshot(), theme: "dark" as const };
-    const authoritativeSnapshot = {
-      ...createSettingsSnapshot(),
-      git: { defaultMergeMethod: "squash" as const, removeWorktreeOnClose: false },
-    };
-    const workspaceGetSettingsSnapshot = mock(async () => {
-      return workspaceGetSettingsSnapshot.mock.calls.length === 1
-        ? optimisticSnapshot
-        : authoritativeSnapshot;
-    });
-
-    const original = {
-      workspaceUpdateGlobalGitConfig: host.workspaceUpdateGlobalGitConfig,
-      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
-    };
-    host.workspaceUpdateGlobalGitConfig = workspaceUpdateGlobalGitConfig;
-    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
-
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
-    });
-
-    try {
-      await harness.mount();
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(optimisticSnapshot);
-      await harness.getLatest().saveGlobalGitConfig({
-        defaultMergeMethod: "squash",
-        removeWorktreeOnClose: false,
-      });
-      expect(workspaceUpdateGlobalGitConfig).toHaveBeenCalledWith({
-        defaultMergeMethod: "squash",
-        removeWorktreeOnClose: false,
-      });
-      expect(applyWorkspaceRecords).not.toHaveBeenCalled();
-      expect(applyWorkspaceRecord).not.toHaveBeenCalled();
-      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(
-        authoritativeSnapshot,
-      );
-      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
-    } finally {
-      await harness.unmount();
-      host.workspaceUpdateGlobalGitConfig = original.workspaceUpdateGlobalGitConfig;
-      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
-    }
-  });
-
   test("detectGithubRepository forwards detection to the host", async () => {
     const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
     const workspaceDetectGithubRepository = mock(async () => ({
       host: "github.com",
       owner: "openai",
@@ -1777,17 +1377,21 @@ describe("use-repo-settings-operations", () => {
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
       applyWorkspaceRecords,
-      applyWorkspaceRecord,
     });
 
     try {
       await harness.mount();
-      await expect(harness.getLatest().detectGithubRepository("/repo-a")).resolves.toEqual({
+      await expect(
+        harness.getLatest().detectGithubRepository({ workspaceId: "repo-a", repoPath: "/repo-a" }),
+      ).resolves.toEqual({
         host: "github.com",
         owner: "openai",
         name: "openducktor",
       });
-      expect(workspaceDetectGithubRepository).toHaveBeenCalledWith("/repo-a");
+      expect(workspaceDetectGithubRepository).toHaveBeenCalledWith({
+        workspaceId: "repo-a",
+        repoPath: "/repo-a",
+      });
     } finally {
       await harness.unmount();
       host.workspaceDetectGithubRepository = original.workspaceDetectGithubRepository;

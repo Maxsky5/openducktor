@@ -37,7 +37,6 @@ const controllerMock: ReturnType<
   isFormDisabled: false,
   isRecoveryBlocked: false,
   isSaveOrRecoveryLocked: false,
-  hasExternalTaskConflict: false,
   step: "details",
   setStep: (_step: "type" | "details") => {},
   editSection: "spec",
@@ -242,6 +241,7 @@ describe("TaskCreateModal", () => {
         expect(await screen.findByTestId("task-details-form")).toBeTruthy();
         expect(formSpy.mock.calls[0]?.[0].disabled).toBe(false);
         expect(formSpy.mock.calls[0]?.[0].issueImageContext).toEqual({
+          workspaceId: "workspace-1",
           repoPath: "/workspace/repo",
           sourceId: "132",
           providerId: "github",
@@ -342,35 +342,6 @@ describe("TaskCreateModal", () => {
       controllerMock.isEditingDocument = true;
       controllerMock.editSection = "spec";
       controllerMock.activeDocumentSection = "spec";
-      controllerMock.footerError = null;
-    }
-  });
-
-  test("blocks task save but keeps the local draft available after an external change", async () => {
-    controllerMock.hasExternalTaskConflict = true;
-    controllerMock.isEditingDocument = false;
-    controllerMock.footerError =
-      "This task changed while you were editing. Close and reopen it to load the latest version before saving.";
-    const task = createTaskCardFixture({ id: "TASK-123" });
-
-    try {
-      const rendered = render(
-        createElement(TaskCreateModal, {
-          open: true,
-          onOpenChange: () => {},
-          tasks: [task],
-          task,
-        }),
-      );
-
-      expect(await screen.findByText(/changed while you were editing/)).toBeTruthy();
-      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save changes" }).disabled).toBe(
-        true,
-      );
-      await act(async () => rendered.unmount());
-    } finally {
-      controllerMock.hasExternalTaskConflict = false;
-      controllerMock.isEditingDocument = true;
       controllerMock.footerError = null;
     }
   });

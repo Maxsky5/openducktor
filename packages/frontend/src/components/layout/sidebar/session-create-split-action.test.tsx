@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
@@ -28,7 +29,11 @@ import {
 import { MemoryRouter } from "react-router";
 import { toast } from "sonner";
 import type { ChecksStateContextValue } from "@/types/state-slices";
+import { issueImportListQueryOptions } from "@openducktor/frontend-core/tasks/issue-import/issue-import-model";
 import { SessionCreateSplitAction } from "./session-create-split-action";
+
+// The import dialog is a lazy module. Load it with the file, not inside a timed test.
+await import("@/pages/kanban/issue-import-dialog");
 
 const workspace = createWorkspaceRecordFixture({
   workspaceId: "alpha",
@@ -57,7 +62,7 @@ const renderSplitAction = ({
   onCreateTask?: () => void;
   listArchived?: (workspaceId: string) => Promise<never[]>;
   client?: Partial<HostClient>;
-  refreshTaskData?: (repoPath: string) => Promise<void>;
+  refreshTaskData?: ({ repoPath }: WorkspaceRef) => Promise<void>;
   taskStoreCheck?: ChecksStateContextValue["taskStoreCheck"];
 }) => {
   const connection = createTestClientConnection({
@@ -73,7 +78,7 @@ const renderSplitAction = ({
       ...client,
     },
   });
-  return render(
+  const view = render(
     <MemoryRouter>
       <QueryProvider connection={connection}>
         <ActiveWorkspaceContext.Provider
@@ -104,6 +109,7 @@ const renderSplitAction = ({
       </QueryProvider>
     </MemoryRouter>,
   );
+  return { ...view, connection };
 };
 
 describe("SessionCreateSplitAction", () => {
@@ -255,11 +261,11 @@ describe("SessionCreateSplitAction", () => {
     });
     const success = spyOn(toast, "success").mockImplementation(() => "toast-id");
     const error = spyOn(toast, "error").mockImplementation(() => "toast-id");
-    const refreshTaskData = mock(async (_repoPath: string) => {
+    const refreshTaskData = mock(async (_scope: WorkspaceRef) => {
       throw new Error("The task store is locked.");
     });
     try {
-      renderSplitAction({
+      const { connection } = renderSplitAction({
         provider: issueProvider(),
         client: {
           issueItemsList: async () => ({
@@ -289,6 +295,16 @@ describe("SessionCreateSplitAction", () => {
         refreshTaskData,
       });
 
+      // A cached list opens with no minimum loader. This test checks the import, not the loader.
+      await connection.queryClient.prefetchQuery(
+        issueImportListQueryOptions({
+          workspaceId: workspace.workspaceId,
+          repoPath: workspace.repoPath,
+          provider: issueProvider(),
+          search: "",
+          cursor: undefined,
+        }),
+      );
       fireEvent.click(screen.getByRole("button", { name: "More actions for openducktor" }));
       fireEvent.click(
         await screen.findByRole("button", { name: /Import tasks from GitHub Issues/ }),

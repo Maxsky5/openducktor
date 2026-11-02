@@ -1,4 +1,5 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
+import { createTaskEventStream } from "../../events/task-event-stream";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { noMergeDetection } from "./sync/task-sync-service.test-support";
 import { describe, expect, test } from "bun:test";
@@ -88,13 +89,17 @@ describe("createEventPublishingTaskService", () => {
           }),
       },
     });
-    const input = { repoPath: "/repo", expectedWorkspaceId: "workspace-1" };
+    const input = {
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      expectedWorkspaceId: "workspace-1",
+    };
     expect(await Effect.runPromise(service.repoPullRequestSync(input))).toEqual({
       ok: false,
       reason: "workspace_closed",
       message: "Reopen the workspace.",
     });
-    expect(calls).toEqual([input]);
+    expect(calls).toEqual([{ repoPath: "/repo", expectedWorkspaceId: "workspace-1" }]);
   });
 
   test("publishes a successful workflow artifact save once with its result changes", async () => {
@@ -121,6 +126,7 @@ describe("createEventPublishingTaskService", () => {
       service.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         markdown: "# Plan",
@@ -172,6 +178,7 @@ describe("createEventPublishingTaskService", () => {
     const mutation = service.workflowArtifactSave({
       sourceTool: "workflow_artifact_save",
       updatedBy: "user",
+      workspaceId: "repo",
       repoPath: "/repo",
       taskId: "task-1",
       markdown: "# Plan",
@@ -188,6 +195,7 @@ describe("createEventPublishingTaskService", () => {
   test("separates a model save from publication and keeps the same publication rules", async () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     let saves = 0;
+    let publications = 0;
     const service = createEventPublishingTaskService({
       taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
@@ -197,9 +205,17 @@ describe("createEventPublishingTaskService", () => {
             return true;
           }),
       }),
-      taskSyncService: sync(events),
+      taskSyncService: {
+        ...sync(events),
+        publishTasksUpdated: () =>
+          Effect.sync(() => ({
+            epoch: "11111111-1111-4111-8111-111111111111",
+            sequence: ++publications,
+          })),
+      },
     });
     const input = {
+      workspaceId: "repo",
       repoPath: "/repo",
       taskId: "task-1",
       identity: {
@@ -214,13 +230,12 @@ describe("createEventPublishingTaskService", () => {
     );
     expect(saved.updated).toBe(true);
     expect(saves).toBe(1);
-    expect(events).toEqual([]);
+    expect(publications).toBe(0);
     await Effect.runPromise(saved.publish);
-    expect(events).toEqual([{ changes: { taskIds: ["task-1"], removedTaskIds: [] } }]);
+    expect(publications).toBe(1);
     await Effect.runPromise(service.agentSessionUpdateModel(input));
     expect(saves).toBe(2);
-    expect(events).toHaveLength(2);
-    expect(events[1]).toEqual(events[0]);
+    expect(publications).toBe(2);
   });
 
   test("does not publish a failed model save", async () => {
@@ -234,6 +249,7 @@ describe("createEventPublishingTaskService", () => {
     const result = await Effect.runPromise(
       service
         .agentSessionUpdateModelDeferredPublication({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           identity: {
@@ -271,25 +287,25 @@ describe("createEventPublishingTaskService", () => {
         workflowArtifactSave: () => Effect.fail(progress),
         listTasks: () => Effect.fail(snapshotFailure),
       });
+      const stream = createTaskEventStream({ reporter: { report: () => {} } });
       const taskSyncService = createTaskSyncService({
         taskService: base,
         mergeDetection: noMergeDetection,
-        taskEventStream: {
-          publish: () => {
-            throw new Error("Unexpected event");
-          },
-          subscribe: () => {
-            throw new Error("Unexpected subscription");
-          },
-          acknowledge: () => {},
-        },
+        taskEventStream: stream,
         publicationReporter: { report: () => Effect.void },
         onBackgroundFailure: () => Effect.void,
+        settingsConfig: {
+          readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()),
+        },
         workspaceSettingsService: {
           getWorkspaceCatalog: () =>
-            Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
+            Effect.succeed({
+              catalogRevision: 0,
+              openWorkspaces: [],
+              closedWorkspaces: [],
+              incompleteRemovals: [],
+            }),
           listWorkspaces: () => Effect.succeed([]),
-          getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
         },
       });
       const service = createEventPublishingTaskService({
@@ -299,10 +315,11 @@ describe("createEventPublishingTaskService", () => {
       });
       const calls = {
         updateTask: service
-          .updateTask({ repoPath: "/repo", taskId: "task-1", patch: {} })
+          .updateTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1", patch: {} })
           .pipe(Effect.asVoid),
         directMerge: service
           .directMerge({
+            workspaceId: "repo",
             repoPath: "/repo",
             taskId: "task-1",
             input: {
@@ -320,6 +337,7 @@ describe("createEventPublishingTaskService", () => {
           .workflowArtifactSave({
             sourceTool: "workflow_artifact_save",
             updatedBy: "user",
+            workspaceId: "repo",
             repoPath: "/repo",
             taskId: "task-1",
             code: "plan",
@@ -368,13 +386,16 @@ describe("createEventPublishingTaskService", () => {
     await expect(
       Effect.runPromise(
         service.createTask({
+          workspaceId: "repo",
           repoPath: "/repo",
           task: { title: "Task", issueType: "task", priority: 2 },
         }),
       ),
     ).resolves.toEqual(taskCard());
     await expect(
-      Effect.runPromise(service.updateTask({ repoPath: "/repo", taskId: "task-1", patch: {} })),
+      Effect.runPromise(
+        service.updateTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1", patch: {} }),
+      ),
     ).resolves.toEqual(taskCard());
     expect(reports).toEqual(["acceptance failure reported"]);
   });
@@ -412,6 +433,7 @@ describe("createEventPublishingTaskService", () => {
       Effect.runPromise(
         service
           .createTask({
+            workspaceId: "repo",
             repoPath: "/repo",
             task: { title: "Task", issueType: "task", priority: 2 },
           })
@@ -445,6 +467,7 @@ describe("createEventPublishingTaskService", () => {
       Effect.runPromise(
         service
           .linkMergedPullRequest({
+            workspaceId: "repo",
             repoPath: "/repo",
             taskId: "task-1",
             removeWorktree: true,
@@ -487,6 +510,7 @@ describe("createEventPublishingTaskService", () => {
       Effect.runPromise(
         service
           .directMerge({
+            workspaceId: "repo",
             repoPath: "/repo",
             taskId: "task-1",
             input: {
@@ -520,7 +544,9 @@ describe("createEventPublishingTaskService", () => {
 
     await expect(
       Effect.runPromise(
-        service.updateTask({ repoPath: "/repo", taskId: "task-1", patch: {} }).pipe(Effect.flip),
+        service
+          .updateTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1", patch: {} })
+          .pipe(Effect.flip),
       ),
     ).resolves.toBe(failure);
     expect(events).toEqual([]);
@@ -541,7 +567,9 @@ describe("createEventPublishingTaskService", () => {
 
     await expect(
       Effect.runPromise(
-        service.deleteTask({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.flip),
+        service
+          .deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" })
+          .pipe(Effect.flip),
       ),
     ).resolves.toBe(failure);
     expect(events).toEqual([]);
@@ -562,7 +590,9 @@ describe("createEventPublishingTaskService", () => {
 
     await expect(
       Effect.runPromise(
-        service.detectPullRequest({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.flip),
+        service
+          .detectPullRequest({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" })
+          .pipe(Effect.flip),
       ),
     ).resolves.toBe(failure);
     expect(events).toEqual([]);
@@ -587,6 +617,7 @@ describe("createEventPublishingTaskService", () => {
           .workflowArtifactSave({
             sourceTool: "workflow_artifact_save",
             updatedBy: "user",
+            workspaceId: "repo",
             repoPath: "/repo",
             taskId: "task-1",
             markdown: "# Plan",
@@ -611,7 +642,9 @@ describe("createEventPublishingTaskService", () => {
       }),
       taskSyncService: sync(events),
     });
-    await Effect.runPromise(service.deleteTask({ repoPath: "/repo", taskId: "task-1" }));
+    await Effect.runPromise(
+      service.deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+    );
     expect(events).toEqual([{ changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } }]);
   });
 });

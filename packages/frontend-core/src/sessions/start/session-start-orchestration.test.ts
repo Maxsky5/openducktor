@@ -27,13 +27,23 @@ describe("session-start-orchestration", () => {
   test("prefers the preferred reusable session and task defaults when building a modal request", () => {
     const latestSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-2",
-      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "TASK-1",
+        role: "build",
+      },
 
       startedAt: "2026-03-20T12:00:00.000Z",
     });
     const preferredSourceSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-1",
-      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "TASK-1",
+        role: "build",
+      },
 
       startedAt: "2026-03-19T12:00:00.000Z",
     });
@@ -75,13 +85,23 @@ describe("session-start-orchestration", () => {
   test("falls back to the latest reusable session when no preferred source session matches", () => {
     const latestSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-2",
-      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "TASK-1",
+        role: "build",
+      },
 
       startedAt: "2026-03-20T12:00:00.000Z",
     });
     const olderSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-1",
-      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "TASK-1",
+        role: "build",
+      },
 
       startedAt: "2026-03-19T12:00:00.000Z",
     });
@@ -116,7 +136,12 @@ describe("session-start-orchestration", () => {
       taskSessions: [
         createAgentSessionSummaryFixture({
           externalSessionId: "spec-session-1",
-          sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "spec" },
+          sessionAssociation: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "TASK-1",
+            role: "spec",
+          },
         }),
       ],
     });
@@ -130,13 +155,23 @@ describe("session-start-orchestration", () => {
   test("keeps an explicit initial source session override even when another preferred source session matches", () => {
     const latestSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-2",
-      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "TASK-1",
+        role: "build",
+      },
 
       startedAt: "2026-03-20T12:00:00.000Z",
     });
     const preferredSourceSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-1",
-      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "TASK-1",
+        role: "build",
+      },
 
       startedAt: "2026-03-19T12:00:00.000Z",
     });

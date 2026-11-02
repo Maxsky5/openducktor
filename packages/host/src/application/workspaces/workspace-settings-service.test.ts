@@ -1,3 +1,4 @@
+import { withSettingsConfigMutationTestMethods } from "../../test-support/settings-config-mutations";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { withTaskWorkflowSettings } from "./task-workflow-settings";
 import { saveSettingsSnapshot } from "../../test-support/save-settings-snapshot";
@@ -7,23 +8,48 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
-  createDefaultNotificationSettings,
   DEFAULT_APPEARANCE_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_CODEX_RUNTIME_POLICY,
   type GlobalConfig,
   type RepoConfig,
+  type SettingsSnapshotSaveInput,
+  settingsSnapshotSaveInputSchema,
+  workflowDefinitionSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
+import { createSharedSettingsFixture } from "../../test-support/shared-settings-fixture";
 import { HostOperationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { createWorkspaceSettingsService as createEffectWorkspaceSettingsService } from "./workspace-settings-service";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import type {
+  SettingsWriteResult,
+  WorkspaceSettingsError,
+  WorkspaceSettingsService,
+} from "./workspace-settings-model";
+import {
+  builtinTaskWorkflow,
+  createBuiltinNotificationSettings,
+  createTaskWorkflow,
+} from "@openducktor/workflows";
 
 const createWorkspaceSettingsService = (
-  ...args: Parameters<typeof createEffectWorkspaceSettingsService>
-) => createEffectWorkspaceSettingsService(...args);
+  settingsConfig: SettingsConfigPort,
+  taskWorkflows: TaskWorkflowResolver = builtinTaskWorkflows,
+) => createEffectWorkspaceSettingsService(settingsConfig, taskWorkflows);
+const saveWith = <A, E>(
+  service: WorkspaceSettingsService,
+  edits: SettingsSnapshotSaveInput,
+  commit: (
+    write: Effect.Effect<SettingsWriteResult, WorkspaceSettingsError>,
+  ) => Effect.Effect<A, E>,
+) =>
+  service
+    .prepareSettingsSnapshot(edits)
+    .pipe(Effect.flatMap((prepared) => service.saveSettingsSnapshotWith(prepared, commit)));
 type FakeSettingsConfigPort = SettingsConfigPort & {
   writtenConfigs: GlobalConfig[];
 };
@@ -55,11 +81,11 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   autopilot: {
     alwaysStartQaReviewsFresh: false,
     rules: [
-      { eventId: "taskProgressedToSpecReady", actionIds: [] },
-      { eventId: "taskProgressedToReadyForDev", actionIds: [] },
-      { eventId: "taskProgressedToAiReview", actionIds: [] },
-      { eventId: "taskRejectedByQa", actionIds: [] },
-      { eventId: "taskProgressedToHumanReview", actionIds: [] },
+      { workflowId: "openducktor", eventId: "taskProgressedToSpecReady", actionIds: [] },
+      { workflowId: "openducktor", eventId: "taskProgressedToReadyForDev", actionIds: [] },
+      { workflowId: "openducktor", eventId: "taskProgressedToAiReview", actionIds: [] },
+      { workflowId: "openducktor", eventId: "taskRejectedByQa", actionIds: [] },
+      { workflowId: "openducktor", eventId: "taskProgressedToHumanReview", actionIds: [] },
     ],
   },
   notifications: createBuiltinNotificationSettings(),
@@ -87,12 +113,12 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   ...overrides,
 });
 const createFakeSettingsConfig = ({
-  config = null,
+  config = createDefaultGlobalConfig(),
   existingPaths = new Set<string>(),
   canonicalPaths = {},
   beforeWrite,
 }: {
-  config?: GlobalConfig | null;
+  config?: GlobalConfig;
   existingPaths?: Set<string>;
   canonicalPaths?: Record<string, string>;
   beforeWrite?: (nextConfig: GlobalConfig) => Promise<void>;
@@ -101,7 +127,7 @@ const createFakeSettingsConfig = ({
   let currentConfig = config;
   const port: SettingsConfigPort & {
     writtenConfigs: GlobalConfig[];
-  } = {
+  } = withSettingsConfigMutationTestMethods({
     writtenConfigs,
     readConfig() {
       return Effect.tryPromise({
@@ -116,12 +142,17 @@ const createFakeSettingsConfig = ({
           }),
       });
     },
-    writeConfig(nextConfig: GlobalConfig) {
+    updateConfig(change) {
       return Effect.tryPromise({
         try: async () => {
+          const nextConfig = change(
+            structuredClone(currentConfig),
+            Object.values(structuredClone(currentConfig).workspaces),
+          );
           await beforeWrite?.(nextConfig);
           writtenConfigs.push(nextConfig);
           currentConfig = nextConfig;
+          return nextConfig;
         },
         catch: (cause) =>
           new HostOperationError({
@@ -159,10 +190,251 @@ const createFakeSettingsConfig = ({
     join(...paths: string[]) {
       return paths.join("/").replaceAll(/\/+/g, "/");
     },
-  };
+  });
+
   return port;
 };
 describe("createWorkspaceSettingsService", () => {
+  test("rejects unknown workflow roles before settings runtime review and writes", async () => {
+    const port = createFakeSettingsConfig({ config: globalConfig() });
+    const service = createWorkspaceSettingsService(port);
+    let reviewed = false;
+    await expect(
+      Effect.runPromise(
+        saveWith(
+          service,
+          settingsSnapshotSaveInputSchema.parse({
+            global: {
+              agentRuntimes: {
+                codex: {
+                  enabled: true,
+                  roleOverrides: { create: { unknown: { sandboxMode: "workspace-write" } } },
+                },
+              },
+            },
+          }),
+          (write) => {
+            reviewed = true;
+            return write;
+          },
+        ),
+      ),
+    ).rejects.toThrow('Unknown role "unknown"');
+    expect(reviewed).toBe(false);
+    expect(port.writtenConfigs).toEqual([]);
+  });
+  test("legacy registrations with one repository path require an explicit workspace ID", async () => {
+    const service = createWorkspaceSettingsService(
+      createFakeSettingsConfig({
+        config: globalConfig({
+          workspaces: { alpha: repoConfig("alpha", "/same"), beta: repoConfig("beta", "/same") },
+        }),
+      }),
+    );
+    await expect(Effect.runPromise(service.getRepoConfigByRepoPath("/same"))).rejects.toThrow(
+      "Use a workspace ID",
+    );
+    expect((await Effect.runPromise(service.getRepoConfig("beta"))).workspaceId).toBe("beta");
+    await Effect.runPromise(
+      saveSettingsSnapshot(service, { global: { chat: { showThinkingMessages: true } } }),
+    );
+    expect(
+      Object.keys((await Effect.runPromise(service.getSettingsSnapshot())).workspaces),
+    ).toEqual(["alpha", "beta"]);
+  });
+  test("validates a changed repository path before writing and keeps its canonical path", async () => {
+    const port = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaces: { alpha: repoConfig("alpha", "/old"), beta: repoConfig("beta", "/beta") },
+      }),
+      existingPaths: new Set(["/new", "/new/.git"]),
+      canonicalPaths: { "/new": "/canonical/new" },
+    });
+    const service = createWorkspaceSettingsService(port);
+    await expect(
+      Effect.runPromise(
+        saveSettingsSnapshot(service, {
+          global: { chat: { showThinkingMessages: true } },
+          workspaces: { alpha: { expectedRepoPath: "/old", repoPath: "/missing" } },
+        }),
+      ),
+    ).rejects.toThrow("Workspace path does not exist");
+    expect(port.writtenConfigs).toHaveLength(0);
+    await Effect.runPromise(
+      saveSettingsSnapshot(service, {
+        workspaces: {
+          alpha: {
+            expectedRepoPath: "/old",
+            repoPath: "/new",
+            workspaceName: "Renamed",
+            abbreviation: { type: "set", value: "NEW" },
+          },
+        },
+      }),
+    );
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+    expect(snapshot.workspaces.alpha).toMatchObject({
+      repoPath: "/canonical/new",
+      workspaceName: "Renamed",
+      abbreviation: "NEW",
+    });
+    expect(snapshot.workspaces.beta?.repoPath).toBe("/beta");
+    expect(snapshot.chat.showThinkingMessages).toBe(false);
+  });
+
+  test("a workspace path change during a save rejects the old expected path without a write", async () => {
+    const port = createFakeSettingsConfig({
+      config: globalConfig({ workspaces: { alpha: repoConfig("alpha", "/old") } }),
+    });
+    const service = createWorkspaceSettingsService(port);
+    await expect(
+      Effect.runPromise(
+        saveWith(
+          service,
+          {
+            workspaces: { alpha: { expectedRepoPath: "/old", branchPrefix: "new-prefix" } },
+          },
+          (write) =>
+            Effect.gen(function* () {
+              yield* port.updateConfig((current) => ({
+                ...current,
+                workspaces: {
+                  ...current.workspaces,
+                  alpha: { ...current.workspaces.alpha!, repoPath: "/another-host" },
+                },
+              }));
+              return yield* write;
+            }),
+        ),
+      ),
+    ).rejects.toThrow("repository path changed");
+    expect(port.writtenConfigs).toHaveLength(1);
+    expect(port.writtenConfigs[0]?.workspaces.alpha).toMatchObject({
+      repoPath: "/another-host",
+      branchPrefix: "odt",
+    });
+  });
+
+  test("rebases edited fields and keyed records without replacing another host's changes", async () => {
+    const initial = globalConfig({
+      workspaces: {
+        alpha: { ...repoConfig("alpha", "/repos/alpha"), worktreeBasePath: "/old/worktrees" },
+        beta: repoConfig("beta", "/repos/beta"),
+      },
+      customAgentRoles: [{ id: "reviewer", name: "Reviewer", systemPrompt: "Old prompt" }],
+      autopilot: {
+        alwaysStartQaReviewsFresh: false,
+        rules: [
+          {
+            workflowId: "openducktor",
+            eventId: "taskProgressedToAiReview",
+            actionIds: ["startBuilder"],
+          },
+          {
+            workflowId: "other",
+            eventId: "taskProgressedToAiReview",
+            actionIds: ["startReviewQaFeedbacks"],
+          },
+        ],
+      },
+    });
+    const port = createFakeSettingsConfig({ config: initial });
+    const otherWorkflow = createTaskWorkflow(
+      workflowDefinitionSchema.parse({ ...builtinTaskWorkflow.definition, id: "other" }),
+      builtinTaskWorkflow.prompts.templates,
+    );
+    const service = createWorkspaceSettingsService(port, {
+      ...builtinTaskWorkflows,
+      workflows: [builtinTaskWorkflow, otherWorkflow],
+    });
+    await Effect.runPromise(
+      saveWith(
+        service,
+        {
+          global: { git: { defaultMergeMethod: "squash" } },
+          workspaces: {
+            alpha: {
+              expectedRepoPath: "/repos/alpha",
+              worktreeBasePath: { type: "clear" },
+              defaultTargetBranch: { remote: { type: "clear" } },
+            },
+          },
+          customAgentRoles: { update: { reviewer: { name: "Code reviewer" } } },
+          autopilot: {
+            rules: [
+              {
+                workflowId: "openducktor",
+                eventId: "taskProgressedToAiReview",
+                actionIds: ["startQa"],
+              },
+            ],
+          },
+        },
+        (write) =>
+          Effect.gen(function* () {
+            yield* port.updateConfig((current) => ({
+              ...current,
+              git: { ...current.git, removeWorktreeOnClose: false },
+              customAgentRoles: [
+                { ...current.customAgentRoles[0]!, systemPrompt: "Another host's prompt" },
+              ],
+              workspaces: {
+                ...current.workspaces,
+                beta: { ...current.workspaces.beta!, branchPrefix: "beta-new" },
+              },
+            }));
+            return yield* write;
+          }),
+      ),
+    );
+    const saved = await Effect.runPromise(service.getSettingsSnapshot());
+    expect(saved.git).toEqual({ defaultMergeMethod: "squash", removeWorktreeOnClose: false });
+    expect(saved.customAgentRoles).toEqual([
+      { id: "reviewer", name: "Code reviewer", systemPrompt: "Another host's prompt" },
+    ]);
+    expect(saved.workspaces.alpha?.worktreeBasePath).toBeUndefined();
+    expect(saved.workspaces.alpha?.defaultTargetBranch).toEqual({ branch: "main" });
+    expect(saved.workspaces.beta?.branchPrefix).toBe("beta-new");
+    expect(
+      saved.autopilot.rules.filter((rule) => rule.eventId === "taskProgressedToAiReview"),
+    ).toEqual([
+      { workflowId: "openducktor", eventId: "taskProgressedToAiReview", actionIds: ["startQa"] },
+      {
+        workflowId: "other",
+        eventId: "taskProgressedToAiReview",
+        actionIds: ["startReviewQaFeedbacks"],
+      },
+    ]);
+  });
+
+  test("a changed runtime settings base rejects the reviewed save before it writes", async () => {
+    const port = createFakeSettingsConfig({ config: globalConfig() });
+    const service = createWorkspaceSettingsService(port);
+    const edits = settingsSnapshotSaveInputSchema.parse({
+      global: { agentRuntimes: { codex: { enabled: true } } },
+    });
+    await expect(
+      Effect.runPromise(
+        saveWith(service, edits, (write) =>
+          Effect.gen(function* () {
+            yield* port.updateConfig((current) => ({
+              ...current,
+              agentRuntimes: {
+                ...current.agentRuntimes,
+                codex: { ...current.agentRuntimes.codex, executablePath: "/another/codex" },
+              },
+            }));
+            return yield* write;
+          }),
+        ),
+      ),
+    ).rejects.toThrow("Preview and save settings again");
+    expect(port.writtenConfigs).toHaveLength(1);
+    expect(port.writtenConfigs[0]?.agentRuntimes.codex).toMatchObject({
+      enabled: false,
+      executablePath: "/another/codex",
+    });
+  });
   test("saves role additions, edits, and deletions with the settings snapshot", async () => {
     const existing = { id: "review", name: "Reviewer", systemPrompt: "Review code." };
     const settingsConfig = createFakeSettingsConfig({
@@ -234,6 +506,23 @@ describe("createWorkspaceSettingsService", () => {
     expect(settingsConfig.writtenConfigs).toEqual([]);
   });
 
+  test("reports a settings schema failure as a readable validation message", async () => {
+    const role = { id: "one", name: "Reviewer", systemPrompt: "Review." };
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({ customAgentRoles: [role] }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        saveSettingsSnapshot(service, { customAgentRoles: { create: [{ ...role, id: "two" }] } }),
+      ),
+    );
+
+    expect(error).toMatchObject({ _tag: "HostValidationError" });
+    expect(error.message).toBe("1: Custom Agent Role IDs and names must be unique.");
+  });
+
   test("a failed settings write leaves saved roles unchanged", async () => {
     const role = { id: "one", name: "Reviewer", systemPrompt: "Review." };
     const settingsConfig = createFakeSettingsConfig({
@@ -280,9 +569,10 @@ describe("createWorkspaceSettingsService", () => {
   });
   test("Claude tool choices survive a restart and failed writes keep the prior launch policy", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "odt-claude-tool-settings-"));
+    const configPath = path.join(tempDir, "config.json");
+    const fixture = await createSharedSettingsFixture({ configPath });
     try {
-      const configPath = path.join(tempDir, "config.json");
-      const port = createSettingsConfigAdapter({ configPath });
+      const port = fixture.settingsConfig;
       const service = createWorkspaceSettingsService(port);
       const draft = await Effect.runPromise(service.getSettingsSnapshot());
       draft.agentRuntimes.claude.defaults.toolAvailability = { Artifact: true, RetiredTool: false };
@@ -291,12 +581,14 @@ describe("createWorkspaceSettingsService", () => {
         sandbox: { enabled: true },
       };
       await Effect.runPromise(saveSettingsSnapshot(service, draft));
-      const restarted = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
+      const restarted = createWorkspaceSettingsService(
+        createSettingsConfigAdapter({ configPath, sharedSettings: fixture.database }),
+      );
       const saved = await Effect.runPromise(restarted.getSettingsSnapshot());
       expect(saved.agentRuntimes.claude).toEqual(draft.agentRuntimes.claude);
       const failingPort: SettingsConfigPort = {
         ...port,
-        writeConfig: () =>
+        applyConfigChange: () =>
           Effect.fail(
             new HostOperationError({
               operation: "config.write",
@@ -318,31 +610,9 @@ describe("createWorkspaceSettingsService", () => {
           .toolAvailability,
       ).toEqual({});
     } finally {
+      await fixture.cleanup();
       await rm(tempDir, { recursive: true, force: true });
     }
-  });
-  test("returns default settings snapshot when config is missing", async () => {
-    const service = createWorkspaceSettingsService(
-      withTaskWorkflowSettings(createFakeSettingsConfig(), builtinTaskWorkflows),
-    );
-    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
-    expect(snapshot.theme).toBe("system");
-    expect(snapshot.agentRuntimes?.opencode).toEqual({
-      enabled: false,
-      executablePath: "",
-      defaults: { rules: [] },
-      roleOverrides: {},
-    });
-    expect(snapshot.agentRuntimes?.codex?.enabled).toBe(false);
-    expect(snapshot.agentRuntimes?.codex?.executablePath).toBe("");
-    expect(snapshot.agentRuntimes?.codex?.defaults).toEqual(DEFAULT_CODEX_RUNTIME_POLICY);
-    expect(snapshot.agentRuntimes?.codex?.roleOverrides).toEqual({});
-    expect(snapshot.appearance).toEqual(DEFAULT_APPEARANCE_SETTINGS);
-    expect(snapshot.autopilot.alwaysStartQaReviewsFresh).toBe(false);
-    // A missing config stays missing in the workflow settings, so the snapshot has no workflow kinds.
-    expect(snapshot.notifications).toEqual(createDefaultNotificationSettings());
-    expect(snapshot.agentModelFavorites).toEqual([]);
-    expect(snapshot.workspaces).toEqual({});
   });
   test("persists the Autopilot fresh QA setting through a new settings read", async () => {
     const settingsConfig = createFakeSettingsConfig({ config: globalConfig() });
@@ -384,7 +654,8 @@ describe("createWorkspaceSettingsService", () => {
     });
     const failingService = createWorkspaceSettingsService({
       ...settingsConfig,
-      writeConfig: () => Effect.fail(failure),
+      updateConfig: () => Effect.fail(failure),
+      applyConfigChange: () => Effect.fail(failure),
     });
     const failedWrite = await Effect.runPromise(
       Effect.result(
@@ -454,13 +725,16 @@ describe("createWorkspaceSettingsService", () => {
   test("persists the preference across host restarts and omits it when cleared", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-open-in-"));
     const configPath = path.join(tempDir, "config.json");
+    const fixture = await createSharedSettingsFixture({ configPath });
     try {
-      const service = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
+      const service = createWorkspaceSettingsService(fixture.settingsConfig);
       const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
       await Effect.runPromise(
         saveSettingsSnapshot(service, { ...snapshot, system: { preferredOpenInToolId: "zed" } }),
       );
-      const restarted = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
+      const restarted = createWorkspaceSettingsService(
+        createSettingsConfigAdapter({ configPath, sharedSettings: fixture.database }),
+      );
       expect((await Effect.runPromise(restarted.getSettingsSnapshot())).system).toEqual({
         preferredOpenInToolId: "zed",
       });
@@ -468,6 +742,7 @@ describe("createWorkspaceSettingsService", () => {
       await Effect.runPromise(saveSettingsSnapshot(restarted, { ...loaded, system: {} }));
       expect(JSON.parse(await readFile(configPath, "utf8")).system).toEqual({});
     } finally {
+      await fixture.cleanup();
       await rm(tempDir, { recursive: true, force: true });
     }
   });
@@ -492,7 +767,7 @@ describe("createWorkspaceSettingsService", () => {
       ]),
     );
 
-    expect(snapshot.agentModelFavorites).toEqual([
+    expect(snapshot).toEqual([
       { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
       { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
     ]);
@@ -500,41 +775,47 @@ describe("createWorkspaceSettingsService", () => {
     expect(settingsConfig.writtenConfigs[0]).toMatchObject({
       theme: "dark",
       recentWorkspaces: ["repo"],
-      agentModelFavorites: snapshot.agentModelFavorites,
+      agentModelFavorites: snapshot,
     });
   });
 
   test("persists sidebar grouping across host restarts without changing other preferences", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-session-grouping-"));
     const configPath = path.join(tempDir, "config.json");
+    const fixture = await createSharedSettingsFixture({ configPath });
     try {
-      const service = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
+      const service = createWorkspaceSettingsService(fixture.settingsConfig);
       const initial = await Effect.runPromise(service.getSettingsSnapshot());
       expect(initial.appearance.sidebarSessionGrouping).toBe("task");
       await Effect.runPromise(
         saveSettingsSnapshot(service, {
           ...initial,
           appearance: { ...initial.appearance, horizontalScrollbarVisibility: "hide" },
+          chat: { ...initial.chat, steerMessagesByDefault: true },
         }),
       );
       await Effect.runPromise(service.setTheme("dark"));
       const saved = await Effect.runPromise(service.updateSidebarSessionGrouping("none"));
-      expect(saved.appearance).toEqual({
+      expect(saved).toBe("none");
+      const updated = await Effect.runPromise(service.getSettingsSnapshot());
+      expect(updated.appearance).toEqual({
         horizontalScrollbarVisibility: "hide",
         sidebarSessionGrouping: "none",
       });
-      expect(saved.theme).toBe("dark");
-      const restarted = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
-      expect(
-        (await Effect.runPromise(restarted.getSettingsSnapshot())).appearance
-          .sidebarSessionGrouping,
-      ).toBe("none");
+      expect(updated.theme).toBe("dark");
+      const restarted = createWorkspaceSettingsService(
+        createSettingsConfigAdapter({ configPath, sharedSettings: fixture.database }),
+      );
+      const reloaded = await Effect.runPromise(restarted.getSettingsSnapshot());
+      expect(reloaded.appearance.sidebarSessionGrouping).toBe("none");
+      expect(reloaded.chat.steerMessagesByDefault).toBe(true);
       await Effect.runPromise(restarted.updateSidebarSessionGrouping("task"));
       expect(JSON.parse(await readFile(configPath, "utf8")).appearance).toEqual({
         horizontalScrollbarVisibility: "hide",
         sidebarSessionGrouping: "task",
       });
     } finally {
+      await fixture.cleanup();
       await rm(tempDir, { recursive: true, force: true });
     }
   });
@@ -547,7 +828,8 @@ describe("createWorkspaceSettingsService", () => {
     });
     const service = createWorkspaceSettingsService({
       ...settingsConfig,
-      writeConfig: () => Effect.fail(failure),
+      updatePreferences: () => Effect.fail(failure),
+      applyConfigChange: () => Effect.fail(failure),
     });
     const result = await Effect.runPromise(
       Effect.result(service.updateSidebarSessionGrouping("none")),
@@ -567,16 +849,12 @@ describe("createWorkspaceSettingsService", () => {
 
     const snapshot = await Effect.runPromise(service.updateKanbanTaskCardView("compact"));
 
-    expect(snapshot.kanban).toEqual({
-      doneVisibleDays: 1,
-      emptyColumnDisplay: "show",
-      taskCardView: "compact",
-    });
+    expect(snapshot).toBe("compact");
     expect(settingsConfig.writtenConfigs).toHaveLength(1);
     expect(settingsConfig.writtenConfigs[0]).toMatchObject({
       theme: "dark",
       recentWorkspaces: ["repo"],
-      kanban: snapshot.kanban,
+      kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "compact" },
     });
   });
 
@@ -588,7 +866,8 @@ describe("createWorkspaceSettingsService", () => {
     });
     const service = createWorkspaceSettingsService({
       ...settingsConfig,
-      writeConfig: () => Effect.fail(failure),
+      updatePreferences: () => Effect.fail(failure),
+      applyConfigChange: () => Effect.fail(failure),
     });
 
     const result = await Effect.runPromise(
@@ -604,6 +883,7 @@ describe("createWorkspaceSettingsService", () => {
   test("reloads exact agent model favorites through a fresh disk adapter and service", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-settings-restart-"));
     const configPath = path.join(tempDir, "config.json");
+    const fixture = await createSharedSettingsFixture({ configPath });
     const favorite = {
       runtimeKind: "opencode" as const,
       providerId: "openai",
@@ -611,18 +891,17 @@ describe("createWorkspaceSettingsService", () => {
     };
 
     try {
-      const firstService = createWorkspaceSettingsService(
-        createSettingsConfigAdapter({ configPath }),
-      );
+      const firstService = createWorkspaceSettingsService(fixture.settingsConfig);
       await Effect.runPromise(firstService.updateAgentModelFavorites([favorite]));
 
       const restartedService = createWorkspaceSettingsService(
-        createSettingsConfigAdapter({ configPath }),
+        createSettingsConfigAdapter({ configPath, sharedSettings: fixture.database }),
       );
       const restartedSnapshot = await Effect.runPromise(restartedService.getSettingsSnapshot());
 
       expect(restartedSnapshot.agentModelFavorites).toEqual([favorite]);
     } finally {
+      await fixture.cleanup();
       await rm(tempDir, { recursive: true, force: true });
     }
   });
@@ -823,41 +1102,24 @@ describe("createWorkspaceSettingsService", () => {
       ),
     ).rejects.toThrow("Repository path is already registered to workspace repo-a: /repos/a");
   });
-  test("updates repo config and saves repo settings", async () => {
+  test("replaces the workspace git settings and keeps the other repository settings", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({
-        activeWorkspace: "repo",
         workspaces: {
-          repo: {
-            ...repoConfig("repo", "/repos/repo"),
-            hooks: { postComplete: ["bun lint"] },
-            worktreeBasePath: "/old-worktrees",
-          },
+          repo: { ...repoConfig("repo", "/repos/repo"), hooks: { postComplete: ["bun lint"] } },
         },
         workspaceOrder: ["repo"],
       }),
-      existingPaths: new Set(["/repos/repo", "/repos/repo/.git"]),
     });
     const service = createWorkspaceSettingsService(settingsConfig);
-    const updated = await Effect.runPromise(
-      service.updateRepoConfig("repo", {
-        branchPrefix: " feature ",
-        worktreeCopyPaths: [" .env ", "  "],
-      }),
-    );
-    const saved = await Effect.runPromise(
-      service.saveRepoSettings("repo", {
-        worktreeBasePath: "   ",
-        hooks: { postComplete: [" bun test ", ""] },
-      }),
-    );
+    const git = { provider: { id: "github", enabled: true, autoDetected: false } };
+
+    const updated = await Effect.runPromise(service.updateRepoGitConfig("repo", git));
+
     const repo = await Effect.runPromise(service.getRepoConfig("repo"));
     expect(updated).toMatchObject({ workspaceId: "repo" });
-    expect(saved).toMatchObject({ workspaceId: "repo" });
-    expect(repo.branchPrefix).toBe("feature");
-    expect(repo.worktreeBasePath).toBeUndefined();
-    expect(repo.worktreeCopyPaths).toEqual([".env"]);
-    expect(repo.hooks).toEqual({ postComplete: ["bun test"] });
+    expect(repo.git).toEqual(git);
+    expect(repo.hooks).toEqual({ postComplete: ["bun lint"] });
   });
   test("saves repository actions and keeps them when a later save omits them", async () => {
     const actions: RepoConfig["actions"] = {
@@ -890,10 +1152,18 @@ describe("createWorkspaceSettingsService", () => {
     });
     const service = createWorkspaceSettingsService(settingsConfig);
 
-    await Effect.runPromise(service.saveRepoSettings("repo", { actions }));
+    await Effect.runPromise(
+      saveSettingsSnapshot(service, {
+        workspaces: { repo: { expectedRepoPath: "/repos/repo", actions } },
+      }),
+    );
     expect((await Effect.runPromise(service.getRepoConfig("repo"))).actions).toEqual(actions);
 
-    await Effect.runPromise(service.saveRepoSettings("repo", { branchPrefix: "feature" }));
+    await Effect.runPromise(
+      saveSettingsSnapshot(service, {
+        workspaces: { repo: { expectedRepoPath: "/repos/repo", branchPrefix: "feature" } },
+      }),
+    );
     const repo = await Effect.runPromise(service.getRepoConfig("repo"));
     expect(repo.branchPrefix).toBe("feature");
     expect(repo.actions).toEqual(actions);
@@ -972,7 +1242,11 @@ describe("createWorkspaceSettingsService", () => {
       const service = createWorkspaceSettingsService(settingsConfig);
 
       await expect(
-        Effect.runPromise(service.saveRepoSettings("repo", { actions })),
+        Effect.runPromise(
+          saveSettingsSnapshot(service, {
+            workspaces: { repo: { expectedRepoPath: "/repos/repo", actions } },
+          }),
+        ),
       ).rejects.toThrow(message);
       expect(settingsConfig.writtenConfigs).toEqual([]);
       expect((await Effect.runPromise(service.getRepoConfig("repo"))).actions).toEqual({
@@ -1389,7 +1663,7 @@ describe("createWorkspaceSettingsService", () => {
       }),
       existingPaths: new Set(["/repos/repo", "/repos/repo/.git"]),
       canonicalPaths: {
-        "/repos/repo": "/canonical/repo",
+        "/repos/repo": "/repos/repo",
       },
     });
     const service = createWorkspaceSettingsService(settingsConfig);
@@ -1457,7 +1731,7 @@ describe("createWorkspaceSettingsService", () => {
       }),
     );
     expect(records).toHaveLength(1);
-    expect(records[0]?.repoPath).toBe("/canonical/repo");
+    expect(records[0]?.repoPath).toBe("/repos/repo");
     expect(settingsConfig.writtenConfigs[0]).toMatchObject({
       version: 4,
       system: {},
@@ -1466,7 +1740,7 @@ describe("createWorkspaceSettingsService", () => {
       workspaceOrder: ["repo"],
       workspaces: {
         repo: {
-          repoPath: "/canonical/repo",
+          repoPath: "/repos/repo",
         },
       },
     });
@@ -1852,7 +2126,7 @@ describe("createWorkspaceSettingsService", () => {
     expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
     expect(persisted.agentModelFavorites).toEqual([newFavorite]);
   });
-  test("rejects a stale full settings save after a favorite update completes", async () => {
+  test("keeps a concurrent favorite update when saving edited settings fields", async () => {
     let markFavoriteWriteStarted: (() => void) | undefined;
     let releaseFavoriteWrite: (() => void) | undefined;
     const favoriteWriteStarted = new Promise<void>((resolve) => {
@@ -1894,11 +2168,9 @@ describe("createWorkspaceSettingsService", () => {
     releaseFavoriteWrite?.();
 
     await favoriteWrite;
-    await expect(settingsWrite).rejects.toThrow(
-      "Model favorites changed since settings were loaded. Reload settings and retry.",
-    );
+    await settingsWrite;
     const persisted = await Effect.runPromise(service.getSettingsSnapshot());
-    expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(true);
+    expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
     expect(persisted.agentModelFavorites).toEqual([newFavorite]);
   });
   test("rejects invalid Codex snapshot settings without writing config", async () => {
@@ -1928,40 +2200,30 @@ describe("createWorkspaceSettingsService", () => {
     ).rejects.toThrow("Codex build role sandboxMode cannot be read-only");
     expect(settingsConfig.writtenConfigs).toHaveLength(0);
   });
-  test("rejects unknown snapshot workspaces", async () => {
+  test("rejects edits for an unknown workspace", async () => {
     const service = createWorkspaceSettingsService(
       createFakeSettingsConfig({
         config: globalConfig(),
       }),
     );
-    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
     await expect(
       Effect.runPromise(
         saveSettingsSnapshot(service, {
-          ...snapshot,
-          workspaces: {
-            repo: repoConfig("repo", "/repos/repo"),
-          },
+          workspaces: { repo: { expectedRepoPath: "/repos/repo", branchPrefix: "new" } },
         }),
       ),
-    ).rejects.toThrow(
-      "Workspace not found in config: repo. Add/select the workspace before updating configuration.",
-    );
+    ).rejects.toThrow("Workspace repo is no longer open");
   });
-  test("rejects snapshot repo paths that are not git repositories", async () => {
-    const service = createWorkspaceSettingsService(
-      createFakeSettingsConfig({
-        config: globalConfig({
-          workspaces: {
-            repo: repoConfig("repo", "/repos/repo"),
-          },
-        }),
-        existingPaths: new Set(["/repos/repo"]),
-      }),
+  test("does not repeat repository readiness checks for an unrelated settings edit", async () => {
+    const config = createFakeSettingsConfig({
+      config: globalConfig({ workspaces: { repo: repoConfig("repo", "/repos/repo") } }),
+    });
+    const service = createWorkspaceSettingsService(config);
+    await Effect.runPromise(
+      saveSettingsSnapshot(service, { global: { chat: { showThinkingMessages: true } } }),
     );
-    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
-    await expect(Effect.runPromise(saveSettingsSnapshot(service, snapshot))).rejects.toThrow(
-      "Workspace is not a git repository: /repos/repo",
+    expect((await Effect.runPromise(service.getSettingsSnapshot())).chat.showThinkingMessages).toBe(
+      true,
     );
   });
 });

@@ -101,6 +101,7 @@ describe("getTaskStopImpact", () => {
 
     const result = await Effect.runPromise(
       service.getTaskStopImpact({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: ["task-1"],
         operation: "delete",
@@ -132,6 +133,7 @@ describe("getTaskStopImpact", () => {
 
     const result = await Effect.runPromise(
       service.getTaskStopImpact({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: ["task-1"],
         operation: "reset_task",
@@ -170,6 +172,7 @@ describe("getTaskStopImpact", () => {
 
     const result = await Effect.runPromise(
       service.getTaskStopImpact({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: ["task-1"],
         operation: "reset_implementation",
@@ -208,6 +211,7 @@ describe("getTaskStopImpact", () => {
 
     const result = await Effect.runPromise(
       service.getTaskStopImpact({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: ["task-1"],
         operation: "reset_implementation",
@@ -230,6 +234,7 @@ describe("getTaskStopImpact", () => {
 
     const result = await Effect.runPromise(
       service.getTaskStopImpact({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: ["task-1", "task-1"],
         operation: "delete",
@@ -262,6 +267,7 @@ describe("getTaskStopImpact", () => {
 
     const result = await Effect.runPromise(
       service.getTaskStopImpact({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: ["task-1"],
         operation: "close",
@@ -298,7 +304,12 @@ describe("getTaskStopImpact", () => {
     );
 
     const result = await Effect.runPromise(
-      service.getTaskStopImpact({ repoPath: "/repo", taskIds: ["task-1"], operation: "delete" }),
+      service.getTaskStopImpact({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        taskIds: ["task-1"],
+        operation: "delete",
+      }),
     );
 
     expect(result).toEqual({ stoppableSessionCount: 0, removedWorktreeCount: 1 });
@@ -312,7 +323,12 @@ describe("getTaskStopImpact", () => {
     );
 
     const result = await Effect.runPromise(
-      service.getTaskStopImpact({ repoPath: "/repo", taskIds: ["task-1"], operation: "close" }),
+      service.getTaskStopImpact({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        taskIds: ["task-1"],
+        operation: "close",
+      }),
     );
 
     expect(result).toEqual({ stoppableSessionCount: 0, removedWorktreeCount: 0 });
@@ -326,6 +342,7 @@ describe("getTaskStopImpact", () => {
     await expect(
       Effect.runPromise(
         service.getTaskStopImpact({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskIds: ["task-1"],
           operation: "delete",
@@ -347,6 +364,7 @@ describe("getTaskStopImpact", () => {
 
     const result = await Effect.runPromise(
       service.getTaskStopImpact({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskIds: ["task-1"],
         operation: "reset_implementation",

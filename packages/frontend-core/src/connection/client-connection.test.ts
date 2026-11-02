@@ -99,7 +99,7 @@ test.each(["stream", "command result", "command failure"])(
     const taskTerminal = {
       ...terminal,
       terminalId: "task-action-terminal",
-      context: { repoPath: "/repo", taskId: "task" },
+      context: { workspaceId: "workspace", repoPath: "/repo", taskId: "task" },
     };
     const cases: { filter: TerminalListFilter; data?: TerminalListResponse; updated: boolean }[] = [
       {
@@ -108,7 +108,7 @@ test.each(["stream", "command result", "command failure"])(
         updated: true,
       },
       {
-        filter: { kind: "task", repoPath: "/repo", taskId: "task" },
+        filter: { kind: "task", workspaceId: "workspace", repoPath: "/repo", taskId: "task" },
         data: { hostInstanceId: "host", revision: 1, terminals: [taskTerminal] },
         updated: true,
       },
@@ -118,12 +118,17 @@ test.each(["stream", "command result", "command failure"])(
         updated: true,
       },
       {
-        filter: { kind: "task", repoPath: "/repo", taskId: "other-host" },
+        filter: { kind: "task", workspaceId: "workspace", repoPath: "/repo", taskId: "other-host" },
         data: { hostInstanceId: "other-host", revision: 1, terminals: [terminal] },
         updated: false,
       },
       {
-        filter: { kind: "task", repoPath: "/repo", taskId: "other-terminal" },
+        filter: {
+          kind: "task",
+          workspaceId: "workspace",
+          repoPath: "/repo",
+          taskId: "other-terminal",
+        },
         data: {
           hostInstanceId: "host",
           revision: 1,

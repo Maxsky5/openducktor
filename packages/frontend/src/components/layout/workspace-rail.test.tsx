@@ -86,9 +86,6 @@ describe("WorkspaceRail", () => {
       addWorkspace: async () => {
         throw new Error("Not used");
       },
-      saveWorkspaceModelDefaults: async () => {
-        throw new Error("Not used");
-      },
       selectWorkspace: selectWorkspaceMock,
       reorderWorkspaces: reorderWorkspacesMock,
       refreshBranches: async () => {},
@@ -96,15 +93,12 @@ describe("WorkspaceRail", () => {
       loadRepoSettings: async () => {
         throw new Error("loadRepoSettings is not used in this test");
       },
-      saveRepoSettings: async () => {},
-      loadSettingsSnapshot: async () => {
-        throw new Error("loadSettingsSnapshot is not used in this test");
-      },
       detectGithubRepository: async () => null,
-      saveGlobalGitConfig: async () => {},
       previewSettingsSnapshotRuntime: async () => ({ impact: null }),
       saveSettingsSnapshot: async () => ({
         type: "saved" as const,
+        shared: "saved" as const,
+        preferences: "saved" as const,
         workspaces: [],
         runtimeApplications: [],
         refreshError: null,

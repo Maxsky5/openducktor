@@ -9,11 +9,11 @@ const createHarness = (scope: AgentSessionScope | null | undefined) =>
 
 describe("useStableAgentSessionScope", () => {
   test("returns repository scope", async () => {
-    const harness = createHarness({ kind: "repository" });
+    const harness = createHarness({ kind: "repository", workspaceId: "workspace-1" });
 
     try {
       await harness.mount();
-      expect(harness.getLatest()).toEqual({ kind: "repository" });
+      expect(harness.getLatest()).toEqual({ kind: "repository", workspaceId: "workspace-1" });
     } finally {
       await harness.unmount();
     }
@@ -22,6 +22,7 @@ describe("useStableAgentSessionScope", () => {
   test("returns workflow scope", async () => {
     const harness = createHarness({
       kind: "workflow",
+      workspaceId: "workspace-1",
       taskId: "task-1",
       role: "build",
     });
@@ -30,6 +31,7 @@ describe("useStableAgentSessionScope", () => {
       await harness.mount();
       expect(harness.getLatest()).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
@@ -69,6 +71,7 @@ describe("useStableAgentSessionScope", () => {
   test("preserves workflow scope identity across equal-value rerenders", async () => {
     const harness = createHarness({
       kind: "workflow",
+      workspaceId: "workspace-1",
       taskId: "task-1",
       role: "build",
     });
@@ -79,6 +82,7 @@ describe("useStableAgentSessionScope", () => {
 
       await harness.update({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "build",
       });
@@ -91,6 +95,7 @@ describe("useStableAgentSessionScope", () => {
   test("updates scope identity when a discriminated value changes", async () => {
     const harness = createHarness({
       kind: "workflow",
+      workspaceId: "workspace-1",
       taskId: "task-1",
       role: "build",
     });
@@ -101,6 +106,7 @@ describe("useStableAgentSessionScope", () => {
 
       await harness.update({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "qa",
       });
@@ -108,6 +114,7 @@ describe("useStableAgentSessionScope", () => {
       expect(changedWorkflowScope).not.toBe(initialScope);
       expect(changedWorkflowScope).toEqual({
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "qa",
       });

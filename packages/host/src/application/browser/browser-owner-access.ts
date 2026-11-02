@@ -51,7 +51,11 @@ export const createBrowserOwnerAccess = ({
         });
       if (owner.kind === "task") {
         yield* tasks
-          .getTask({ repoPath: config.repoPath, taskId: owner.taskId })
+          .getTask({
+            workspaceId: owner.workspaceId,
+            repoPath: config.repoPath,
+            taskId: owner.taskId,
+          })
           .pipe(Effect.mapError(readFailure));
         return;
       }

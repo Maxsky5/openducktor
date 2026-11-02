@@ -391,7 +391,7 @@ describe("consumeClaudeSession lifecycle", () => {
         workingDirectory: "/repo",
         runtimePolicy: { kind: "claude" },
         delivery: "new_turn",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         parts: [{ kind: "text", text: "Hi" }],
       },
     });
@@ -544,7 +544,7 @@ describe("consumeClaudeSession lifecycle", () => {
           workingDirectory: "/repo",
           runtimePolicy: { kind: "claude" },
           delivery: "new_turn",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           parts: [{ kind: "text", text: "retry" }],
         },
       }),

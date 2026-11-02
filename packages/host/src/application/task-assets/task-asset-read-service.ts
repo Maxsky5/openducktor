@@ -164,6 +164,7 @@ export const createTaskAssetReadService = (input: {
   const getRegisteredAsset = (repoPath: string, context: TaskAssetRenderContext) =>
     input.registry
       .getAsset({
+        workspaceId: context.workspaceId,
         repoPath,
         taskId: context.taskId,
         scope: context.scope,

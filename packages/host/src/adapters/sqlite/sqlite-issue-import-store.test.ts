@@ -24,7 +24,7 @@ describe("SQLite Issue imports", () => {
     cleanups.add(harness.cleanup);
     const store = createSqliteIssueImportStore({ contextProvider: harness.contextProvider });
     const input = {
-      repoPath: harness.repoPath,
+      ...harness.scope,
       sourceIssue,
       status: "open",
       task: {
@@ -47,19 +47,15 @@ describe("SQLite Issue imports", () => {
       labels: ["bug"],
     });
     expect(
-      await Effect.runPromise(
-        store.getSourceIssue({ repoPath: harness.repoPath, taskId: first.task.id }),
-      ),
+      await Effect.runPromise(store.getSourceIssue({ ...harness.scope, taskId: first.task.id })),
     ).toEqual({ ...sourceIssue, description: "Issue body" });
     expect(
-      await Effect.runPromise(
-        store.getSourceIssue({ repoPath: harness.repoPath, taskId: "missing" }),
-      ),
+      await Effect.runPromise(store.getSourceIssue({ ...harness.scope, taskId: "missing" })),
     ).toBeUndefined();
     expect(
       await Effect.runPromise(
         store.findLinkedTaskIds({
-          repoPath: harness.repoPath,
+          ...harness.scope,
           providerId: sourceIssue.providerId,
           scope: sourceIssue.scope,
           sourceIds: [sourceIssue.sourceId],
@@ -70,14 +66,12 @@ describe("SQLite Issue imports", () => {
     const duplicate = await Effect.runPromise(store.createImportedTask(input));
     expect(duplicate).toEqual({ outcome: "duplicate", taskId: first.task.id });
     expect(
-      (await Effect.runPromise(harness.store.listTasks({ repoPath: harness.repoPath }))).map(
-        (task) => task.id,
-      ),
+      (await Effect.runPromise(harness.store.listTasks(harness.scope))).map((task) => task.id),
     ).toEqual([first.task.id]);
 
     const edited = await Effect.runPromise(
       harness.store.updateTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         taskId: first.task.id,
         patch: { title: "Local title" },
       }),
@@ -91,7 +85,7 @@ describe("SQLite Issue imports", () => {
     const store = createSqliteIssueImportStore({ contextProvider: harness.contextProvider });
     const created = await Effect.runPromise(
       store.createImportedTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         sourceIssue,
         status: "open",
         task: {
@@ -106,7 +100,7 @@ describe("SQLite Issue imports", () => {
     if (created.outcome !== "created") throw new Error("Expected an imported Task.");
     const scope = "github.com/@repository/123";
     const lookup = {
-      repoPath: harness.repoPath,
+      ...harness.scope,
       providerId: "github",
       scope,
       sourceIds: ["42"],
@@ -120,7 +114,7 @@ describe("SQLite Issue imports", () => {
     });
     const other = await Effect.runPromise(
       store.createImportedTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         sourceIssue: {
           ...sourceIssue,
           scope: "github.com/@repository/456",
@@ -138,9 +132,7 @@ describe("SQLite Issue imports", () => {
     );
     expect(other.outcome).toBe("created");
     expect(
-      await Effect.runPromise(
-        store.getSourceIssue({ repoPath: harness.repoPath, taskId: created.task.id }),
-      ),
+      await Effect.runPromise(store.getSourceIssue({ ...harness.scope, taskId: created.task.id })),
     ).toMatchObject({ scope, url: sourceIssue.url });
   });
 

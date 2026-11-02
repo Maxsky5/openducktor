@@ -36,13 +36,14 @@ describe("createTaskWorktreeCommandHandlers", () => {
     });
     await expect(
       router.invoke("task_worktree_get", {
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
       }),
     ).resolves.toEqual({
       workingDirectory: "/worktrees/task-1",
     });
-    expect(calls).toEqual([{ repoPath: "/repo", taskId: "task-1" }]);
+    expect(calls).toEqual([{ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }]);
   });
   test("rejects malformed command inputs before calling the service", async () => {
     const calls: unknown[] = [];
@@ -65,9 +66,9 @@ describe("createTaskWorktreeCommandHandlers", () => {
     const router = createHostCommandRouter({
       handlers: createTaskWorktreeCommandHandlers(service),
     });
-    await expect(router.invoke("task_worktree_get", { repoPath: "/repo" })).rejects.toThrow(
-      "taskId is required.",
-    );
+    await expect(
+      router.invoke("task_worktree_get", { workspaceId: "repo", repoPath: "/repo" }),
+    ).rejects.toThrow("taskId is required.");
     await expect(router.invoke("task_worktree_get")).rejects.toThrow(
       "task_worktree_get input must be an object.",
     );

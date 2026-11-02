@@ -1,3 +1,5 @@
+import { workspaceSessionCatalog } from "../../test-support/workspace-session-ownership";
+import { workspaceSessionOwnership } from "../../test-support/workspace-session-ownership";
 import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { commandPreparationFixture } from "../agent-sessions/test-support/command-preparation-fixture";
@@ -7,7 +9,7 @@ import type {
   AgentSessionControlUpdateTitleInput,
   AgentSessionLiveRef,
 } from "@openducktor/contracts";
-import { repoConfigSchema, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createTestOpenCodeLiveSessionAdapterPreparer as createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter.test-support";
@@ -49,6 +51,10 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       repoPath: database.repoPath,
       workspaceId: "fairnest",
       sessionId: "session-1",
+      ownershipScope: workspaceSessionOwnership({
+        workspaceId: "fairnest",
+        repoPath: database.repoPath,
+      }),
     };
     const store = createSqliteWorkspaceSessionStore(database);
     await Effect.runPromise(
@@ -83,11 +89,10 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
     const persistence = createWorkspaceSessionRuntimePersistence({
       store,
       settings: {
-        getRepoConfigByRepoPath: () =>
+        getWorkspaceCatalog: () =>
           Effect.succeed(
-            repoConfigSchema.parse({
+            workspaceSessionCatalog({
               workspaceId: "fairnest",
-              workspaceName: "Fairnest",
               repoPath: database.repoPath,
             }),
           ),
@@ -146,7 +151,12 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       taskWorkflows: builtinTaskWorkflows,
       turnPreparation: commandPreparationFixture,
       readSessionRootRefs: () =>
-        Effect.succeed([{ ...ref, sessionScope: { kind: "repository" as const } }]),
+        Effect.succeed([
+          {
+            ...ref,
+            sessionScope: { kind: "repository" as const, workspaceId: storeRef.workspaceId },
+          },
+        ]),
       approvalPolicy: { reply: live.replyApproval },
       pauseForStop: () => Effect.void,
       runtime: live,

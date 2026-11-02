@@ -41,7 +41,10 @@ describe("TerminalService", () => {
       );
     const { service } = await makeService(pty);
     const fiber = Effect.runFork(
-      service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+      service.create({
+        workingDir: "/repo",
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task" },
+      }),
     );
     try {
       await Effect.runPromise(Deferred.await(started));
@@ -70,7 +73,10 @@ describe("TerminalService", () => {
       );
     const { service } = await makeService(pty);
     const creating = Effect.runFork(
-      service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+      service.create({
+        workingDir: "/repo",
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task" },
+      }),
     );
     try {
       await Effect.runPromise(Deferred.await(started));
@@ -99,7 +105,7 @@ describe("TerminalService", () => {
     const other: string[] = [];
     const stop = await Effect.runPromise(
       service.observeList(
-        { kind: "task", repoPath: "/repo", taskId: "task" },
+        { kind: "task", workspaceId: "repo", repoPath: "/repo", taskId: "task" },
         {
           snapshot: (list) => {
             expect(list.hostInstanceId).toBe("host-1");
@@ -130,7 +136,10 @@ describe("TerminalService", () => {
     );
     try {
       const terminal = await Effect.runPromise(
-        service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+        service.create({
+          workingDir: "/repo",
+          context: { workspaceId: "repo", repoPath: "/repo", taskId: "task" },
+        }),
       );
       expect([...summaries.keys()]).toEqual([terminal.ref.terminalId]);
       expect(summaries.get(terminal.ref.terminalId)?.lifecycle).toBe("running");
@@ -147,7 +156,10 @@ describe("TerminalService", () => {
       expect([...summaries.keys()]).toEqual([]);
       stop();
       await Effect.runPromise(
-        service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+        service.create({
+          workingDir: "/repo",
+          context: { workspaceId: "repo", repoPath: "/repo", taskId: "task" },
+        }),
       );
       expect([...summaries.keys()]).toEqual([]);
       expect(other).toEqual([]);
@@ -161,7 +173,10 @@ describe("TerminalService", () => {
   test("counts a command only between shell execution and completion, without process inspection", async () => {
     const { service, pty } = await makeService();
     const terminal = await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+      service.create({
+        workingDir: "/repo",
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task" },
+      }),
     );
     const messages: TerminalActivityMessage[] = [];
     const stop = await Effect.runPromise(
@@ -219,7 +234,10 @@ describe("TerminalService", () => {
   test("observes live metadata and settled titles without attaching output or inspecting processes", async () => {
     const { service, pty, settleTitles } = await makeService();
     const terminal = await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+      service.create({
+        workingDir: "/repo",
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task" },
+      }),
     );
     const messages: TerminalActivityMessage[] = [];
     const stop = await Effect.runPromise(
@@ -388,7 +406,10 @@ describe("TerminalService", () => {
       service.create({ workingDir: "/repo-worktree", context: owner("worktree") }),
     );
     await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+      service.create({
+        workingDir: "/repo",
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task" },
+      }),
     );
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     expect(pty.startDirectories).toEqual(["/repo", "/repo-worktree", "/repo", "/repo"]);
@@ -492,7 +513,7 @@ describe("TerminalService", () => {
           Effect.succeed(worktree === null ? null : { workingDirectory: worktree }),
       },
     );
-    const context = { repoPath: "/repo", taskId: "task-1" };
+    const context = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" };
 
     await expect(
       Effect.runPromise(service.create({ workingDir: "/other", context })),
@@ -534,7 +555,7 @@ describe("TerminalService", () => {
       Effect.runPromise(
         service.create({
           workingDir: "/task-worktree",
-          context: { repoPath: "/repo", taskId: "task-1" },
+          context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
         }),
       );
 
@@ -797,7 +818,7 @@ describe("TerminalService", () => {
       Effect.runPromise(
         service.create({
           workingDir: "/repo",
-          context: { repoPath: "/repo", taskId: "task-1" },
+          context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
         }),
       ),
     ).rejects.toThrow("Workspace is closed");
@@ -807,7 +828,7 @@ describe("TerminalService", () => {
     const created = await Effect.runPromise(
       service.create({
         workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task-1" },
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       }),
     );
     blocked = true;
@@ -850,7 +871,10 @@ describe("TerminalService", () => {
       });
       try {
         await Effect.runPromise(
-          service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task-1" } }),
+          service.create({
+            workingDir: "/repo",
+            context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
+          }),
         );
         accessible = false;
 
@@ -1009,7 +1033,7 @@ describe("TerminalService", () => {
     await Effect.runPromise(
       service.create({
         workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task-1" },
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       }),
     );
     const events: Array<{ type: string; start?: number; end?: number }> = [];
@@ -1493,7 +1517,7 @@ describe("TerminalService", () => {
       await Effect.runPromise(
         service.create({
           workingDir: "/repo",
-          context: { repoPath: "/repo", taskId: `replacement-${index}` },
+          context: { workspaceId: "repo", repoPath: "/repo", taskId: `replacement-${index}` },
         }),
       );
     }
@@ -1526,12 +1550,15 @@ describe("TerminalService", () => {
           const taskId = taskIdFor(index);
           if (index % 2 === 0) {
             await Effect.runPromise(
-              service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId } }),
+              service.create({
+                workingDir: "/repo",
+                context: { workspaceId: "repo", repoPath: "/repo", taskId },
+              }),
             );
           } else {
             await Effect.runPromise(
               service.startCommand({
-                context: { repoPath: "/repo", taskId },
+                context: { workspaceId: "repo", repoPath: "/repo", taskId },
                 workingDir: "/repo",
                 label: "Dev",
                 commandLines: ["bun run dev"],
@@ -1546,7 +1573,7 @@ describe("TerminalService", () => {
         const create = () =>
           service.create({
             workingDir: "/repo",
-            context: { repoPath: "/repo", taskId: taskIdFor(limit) },
+            context: { workspaceId: "repo", repoPath: "/repo", taskId: taskIdFor(limit) },
           });
         const rejected = await Effect.runPromise(Effect.result(create()));
         expect(rejected._tag).toBe("Failure");
@@ -1575,19 +1602,19 @@ describe("TerminalService", () => {
     expect(pty.operations).toEqual(["inspect-children", "terminate"]);
   });
 
-  test("scopes task cleanup by repository and forgets attached terminals", async () => {
+  test("scopes task listing and cleanup by workspace with identical repository and task IDs", async () => {
     let terminalId = 0;
     const { service } = await makeService(makePty(true, false), () => `terminal-${++terminalId}`);
     await Effect.runPromise(
       service.create({
-        workingDir: "/repo-a",
-        context: { repoPath: "/repo-a", taskId: "shared-task" },
+        workingDir: "/repo",
+        context: { workspaceId: "workspace-a", repoPath: "/repo", taskId: "shared-task" },
       }),
     );
     await Effect.runPromise(
       service.create({
-        workingDir: "/repo-b",
-        context: { repoPath: "/repo-b", taskId: "shared-task" },
+        workingDir: "/repo",
+        context: { workspaceId: "workspace-b", repoPath: "/repo", taskId: "shared-task" },
       }),
     );
     const events: string[] = [];
@@ -1603,7 +1630,8 @@ describe("TerminalService", () => {
     await Effect.runPromise(
       Effect.scoped(
         service.acquireTaskCleanup({
-          repoPath: "/repo-a",
+          workspaceId: "workspace-a",
+          repoPath: "/repo",
           taskIds: ["shared-task"],
         }),
       ),
@@ -1615,7 +1643,8 @@ describe("TerminalService", () => {
         await Effect.runPromise(
           service.list({
             kind: "task",
-            repoPath: "/repo-a",
+            workspaceId: "workspace-a",
+            repoPath: "/repo",
             taskId: "shared-task",
           }),
         )
@@ -1626,7 +1655,8 @@ describe("TerminalService", () => {
         await Effect.runPromise(
           service.list({
             kind: "task",
-            repoPath: "/repo-b",
+            workspaceId: "workspace-b",
+            repoPath: "/repo",
             taskId: "shared-task",
           }),
         )
@@ -1648,23 +1678,27 @@ describe("TerminalService", () => {
     const created = await Effect.runPromise(
       service.create({
         workingDir: "/repo-link",
-        context: { repoPath: "/repo-link", taskId: "task-1" },
+        context: { workspaceId: "repo", repoPath: "/repo-link", taskId: "task-1" },
       }),
     );
 
     expect(created.summary.context).toEqual({
+      workspaceId: "repo",
       repoPath: "/repo",
       taskId: "task-1",
     });
     expect(
       (
-        await Effect.runPromise(service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" }))
+        await Effect.runPromise(
+          service.list({ kind: "task", workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+        )
       ).terminals.map((terminal) => terminal.terminalId),
     ).toEqual(["terminal-1"]);
 
     await Effect.runPromise(
       Effect.scoped(
         service.acquireTaskCleanup({
+          workspaceId: "repo",
           repoPath: "/repo-link",
           taskIds: ["task-1"],
         }),
@@ -1672,8 +1706,11 @@ describe("TerminalService", () => {
     );
 
     expect(
-      (await Effect.runPromise(service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" })))
-        .terminals,
+      (
+        await Effect.runPromise(
+          service.list({ kind: "task", workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+        )
+      ).terminals,
     ).toEqual([]);
   });
 
@@ -1776,7 +1813,7 @@ describe("TerminalService", () => {
     const creating = Effect.runPromise(
       service.create({
         workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task-1" },
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       }),
     );
     await canonicalizeStarted;
@@ -1827,7 +1864,7 @@ describe("TerminalService", () => {
         Effect.result(
           service.create({
             workingDir: "/repo",
-            context: { repoPath: "/repo", taskId: "task-1" },
+            context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
           }),
         ),
       ),
@@ -1875,7 +1912,7 @@ describe("TerminalService", () => {
     const creating = Effect.runPromise(
       service.create({
         workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task-1" },
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       }),
     );
     await canonicalizeStarted;
@@ -1891,6 +1928,7 @@ describe("TerminalService", () => {
       Effect.scoped(
         Effect.gen(function* () {
           yield* service.acquireTaskCleanup({
+            workspaceId: "repo",
             repoPath: "/repo",
             taskIds: ["task-1"],
           });
@@ -1905,7 +1943,7 @@ describe("TerminalService", () => {
       Effect.result(
         service.create({
           workingDir: "/repo",
-          context: { repoPath: "/repo", taskId: "task-1" },
+          context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
         }),
       ),
     );
@@ -1916,8 +1954,11 @@ describe("TerminalService", () => {
     await creating;
     await cleanupAcquired;
     expect(
-      (await Effect.runPromise(service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" })))
-        .terminals,
+      (
+        await Effect.runPromise(
+          service.list({ kind: "task", workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+        )
+      ).terminals,
     ).toEqual([]);
 
     shouldDelayCanonicalize = false;
@@ -1926,10 +1967,11 @@ describe("TerminalService", () => {
     const createdAfterCleanup = await Effect.runPromise(
       service.create({
         workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task-1" },
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       }),
     );
     expect(createdAfterCleanup.summary.context).toEqual({
+      workspaceId: "repo",
       repoPath: "/canonical/repo",
       taskId: "task-1",
     });
@@ -1974,11 +2016,16 @@ describe("TerminalService", () => {
       workspaceTerminalDependencies(records),
     );
     const taskStart = Effect.runPromise(
-      service.create({ workingDir: "/repo", context: { repoPath: "/repo", taskId: "task" } }),
+      service.create({
+        workingDir: "/repo",
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task" },
+      }),
     );
     await repoRead;
     const cleanup = Effect.runPromise(
-      Effect.scoped(service.acquireTaskCleanup({ repoPath: "/repo", taskIds: ["task"] })),
+      Effect.scoped(
+        service.acquireTaskCleanup({ workspaceId: "repo", repoPath: "/repo", taskIds: ["task"] }),
+      ),
     );
     await Bun.sleep(0);
 

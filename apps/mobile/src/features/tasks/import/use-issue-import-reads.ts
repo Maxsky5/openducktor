@@ -1,4 +1,8 @@
-import type { IssueItemsListResult, RepositoryGitProviderContext } from "@openducktor/contracts";
+import type {
+  IssueItemsListResult,
+  RepositoryGitProviderContext,
+  WorkspaceRef,
+} from "@openducktor/contracts";
 import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
 import {
@@ -22,14 +26,18 @@ export type IssueImportReads = {
 };
 
 /** Keeps one loader running while the provider and first issue page load. */
-export function useIssueImportReads(repoPath: string): IssueImportReads {
-  const providerQuery = useQuery(repositoryGitProviderContextQueryOptions(repoPath));
+export function useIssueImportReads(workspace: WorkspaceRef): IssueImportReads {
+  const { workspaceId, repoPath } = workspace;
+  const providerQuery = useQuery(
+    repositoryGitProviderContextQueryOptions({ workspaceId, repoPath }),
+  );
   const state = toIssueImportState(providerQuery.data, providerQuery.error);
   const provider = state.kind === "ready" ? state.provider : null;
   const canList = provider !== null && issueImportUnavailableReason(provider) === null;
   const search = useIssueImportSearch();
   const query = useQuery({
     ...issueImportListQueryOptions({
+      workspaceId,
       repoPath,
       provider,
       search: search.search,

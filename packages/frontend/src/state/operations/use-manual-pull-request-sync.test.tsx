@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoPullRequestSyncResponse } from "@openducktor/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -11,7 +12,7 @@ describe("manual pull request sync", () => {
   test("keeps its chosen scope across rerenders and blocks duplicate calls until sync ends", async () => {
     const first = createDeferred<RepoPullRequestSyncResponse>();
     const syncHost = mock(
-      async (path: string, _workspaceId?: string): Promise<RepoPullRequestSyncResponse> =>
+      async ({ repoPath: path }: WorkspaceRef): Promise<RepoPullRequestSyncResponse> =>
         path === "/Alpha" ? first.promise : { ok: true },
     );
     const client = { repoPullRequestSync: syncHost };
@@ -43,8 +44,8 @@ describe("manual pull request sync", () => {
         await running;
       });
       expect(syncHost.mock.calls).toEqual([
-        ["/Alpha", "Alpha"],
-        ["/Beta", "Beta"],
+        [{ workspaceId: "Alpha", repoPath: "/Alpha" }],
+        [{ workspaceId: "Beta", repoPath: "/Beta" }],
       ]);
       expect(harness.getLatest().pendingScope).toBeNull();
       const feedback = latestToast("captured scope");
@@ -57,7 +58,7 @@ describe("manual pull request sync", () => {
       await harness.run((operation) =>
         operation.sync({ kind: "workspace", label: "new run", targets: [target("Other")] }),
       );
-      expect(syncHost).toHaveBeenLastCalledWith("/Other", "Other");
+      expect(syncHost).toHaveBeenLastCalledWith({ workspaceId: "Other", repoPath: "/Other" });
     } finally {
       first.resolve({ ok: true });
       try {
@@ -79,7 +80,7 @@ describe("manual pull request sync", () => {
         "Task changes were saved, but their update event could not be sent. Reload the workspace before continuing. Do not repeat the change.";
       const skipMessage = "The workspace closed. Reopen it before syncing pull requests.";
       const syncHost = mock(
-        async (path: string, _workspaceId?: string): Promise<RepoPullRequestSyncResponse> => {
+        async ({ repoPath: path }: WorkspaceRef): Promise<RepoPullRequestSyncResponse> => {
           if (partial && path === "/Alpha") return { ok: true };
           if (failed) throw new Error(recovery);
           return { ok: false, reason: "workspace_closed", message: skipMessage };
@@ -94,8 +95,8 @@ describe("manual pull request sync", () => {
           operation.sync({ kind: "all", label: scope, targets: [target("Alpha"), target("Beta")] }),
         );
         expect(syncHost.mock.calls).toEqual([
-          ["/Alpha", "Alpha"],
-          ["/Beta", "Beta"],
+          [{ workspaceId: "Alpha", repoPath: "/Alpha" }],
+          [{ workspaceId: "Beta", repoPath: "/Beta" }],
         ]);
         expect(harness.getLatest().pendingScope).toBeNull();
         const feedback = latestToast(scope);
@@ -133,8 +134,9 @@ describe("manual pull request sync", () => {
     { kind: "workspace", reason: "disabled", synced: false, feedback: "warning" },
   ] as const)("reports $reason for $kind with synced=$synced as $feedback", async (scenario) => {
     const message = "Configure or enable a provider in Git provider settings.";
-    const syncHost = mock(async (path: string): Promise<RepoPullRequestSyncResponse> =>
-      path === "/Alpha" ? { ok: true } : { ok: false, reason: scenario.reason, message },
+    const syncHost = mock(
+      async ({ repoPath: path }: WorkspaceRef): Promise<RepoPullRequestSyncResponse> =>
+        path === "/Alpha" ? { ok: true } : { ok: false, reason: scenario.reason, message },
     );
     const client = { repoPullRequestSync: syncHost };
     const harness = createHookHarness(() => useManualPullRequestSync(client), {});

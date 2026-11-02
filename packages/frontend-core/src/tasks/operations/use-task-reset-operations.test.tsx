@@ -37,6 +37,7 @@ const createHarness = ({
       const queryClient = useQueryClient();
       const operations = useTaskResetOperations({
         activeRepoPath: "/repo",
+        activeWorkspaceId: "workspace-1",
         agentSessionReadPort: { agentSessionsListForTasks },
         refreshTaskData,
       });
@@ -72,7 +73,10 @@ describe("useTaskResetOperations", () => {
       await setup.harness.mount();
       await setup.harness.run(({ operations }) => operations.resetTaskImplementation("A"));
 
-      expect(setup.taskResetImplementation).toHaveBeenCalledWith("/repo", "A");
+      expect(setup.taskResetImplementation).toHaveBeenCalledWith(
+        { workspaceId: "workspace-1", repoPath: "/repo" },
+        "A",
+      );
       expect(setup.feedback.shownOf("error")).toEqual([
         {
           kind: "error",
@@ -99,7 +103,10 @@ describe("useTaskResetOperations", () => {
       await setup.harness.mount();
       await setup.harness.run(({ operations }) => operations.resetTask("A"));
 
-      expect(setup.taskReset).toHaveBeenCalledWith("/repo", "A");
+      expect(setup.taskReset).toHaveBeenCalledWith(
+        { workspaceId: "workspace-1", repoPath: "/repo" },
+        "A",
+      );
       expect(setup.feedback.shownOf("error")).toEqual([
         {
           kind: "error",
@@ -122,6 +129,7 @@ describe("useTaskResetOperations", () => {
       taskResetImplementationError: new Error("reset failed"),
     });
     const queryKey = taskStopImpactQueryOptions({
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       taskIds: ["A"],
       operation: "reset_implementation",

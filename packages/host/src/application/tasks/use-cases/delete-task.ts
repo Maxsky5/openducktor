@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../../effect/host-errors";
@@ -48,13 +49,17 @@ export const createTaskDeleteUseCase = ({
         [taskId],
         "delete tasks",
       );
-      const workflow = taskWorkflows.forTask(yield* taskStore.getTask({ repoPath, taskId }));
+      const workflow = taskWorkflows.forTask(yield* taskStore.getTask(input));
 
       const targetTaskIds = [taskId];
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
-      const targetTaskSessions = yield* readTaskSessionRecords(taskStore, repoPath, targetTaskIds);
+      const targetTaskSessions = yield* readTaskSessionRecords(
+        taskStore,
+        repoPath,
+        targetTaskIds,
+        input.workspaceId,
+      );
       const hasWorkflowSessions = targetTaskSessions.some((entry) =>
         taskHasSessionsForRoles(entry.sessions, workflowRoleIds(workflow)),
       );
@@ -104,6 +109,7 @@ export const createTaskDeleteUseCase = ({
       let durableDeleteCommitted = false;
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
+          workspaceId: input.workspaceId,
           branchNames,
           gitPort: dependencies.gitPort,
           managedWorktreeBasePath,
@@ -123,7 +129,11 @@ export const createTaskDeleteUseCase = ({
           workspaceId: repoConfig.workspaceId,
         });
         const deletion = yield* Effect.result(
-          taskStore.deleteTask({ repoPath: effectiveRepoPath, taskId }),
+          taskStore.deleteTask({
+            workspaceId: input.workspaceId,
+            repoPath: effectiveRepoPath,
+            taskId,
+          }),
         );
         durableDeleteCommitted =
           deletion._tag === "Success" ||
@@ -132,7 +142,13 @@ export const createTaskDeleteUseCase = ({
         if (!durableDeleteCommitted && deletion._tag === "Failure")
           return yield* Effect.fail(deletion.failure);
         const discarded = yield* Effect.forEach(targetTaskIds, (id) =>
-          Effect.result(completionState.discard(effectiveRepoPath, id)),
+          Effect.result(
+            completionState.discard({
+              workspaceId: input.workspaceId,
+              repoPath: effectiveRepoPath,
+              taskId: id,
+            }),
+          ),
         );
         if (deletion._tag === "Failure") return yield* Effect.fail(deletion.failure);
         for (const result of discarded)

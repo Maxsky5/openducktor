@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRecord, WorkspaceRef } from "@openducktor/contracts";
 import { useAgentSessionLists } from "@openducktor/frontend-core/queries/use-agent-session-lists";
 import { useAgentSessionSummaries } from "@openducktor/frontend-core/sessions/session-store-hooks";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,20 +13,27 @@ const NO_TASK_IDS: string[] = [];
  * Workflow Role, with the saved records and the state of the history read. A null task reads
  * nothing.
  */
-export function useTaskSessionGroups(repoPath: string, taskId: string | null) {
-  const summaries = useAgentSessionSummaries();
+export function useTaskSessionGroups(scope: WorkspaceRef, taskId: string | null) {
+  const allSummaries = useAgentSessionSummaries();
+  const summaries = useMemo(
+    () => allSummaries.filter((summary) => summary.workspaceId === scope.workspaceId),
+    [allSummaries, scope.workspaceId],
+  );
   const queryClient = useQueryClient();
   const taskIds = useMemo(() => (taskId ? [taskId] : NO_TASK_IDS), [taskId]);
   const history = useAgentSessionLists({
-    repoPath,
+    ...scope,
     taskIds,
     enabled: taskId !== null,
     queryClient,
   });
   const records = taskId ? (history.data[taskId] ?? EMPTY_RECORDS) : EMPTY_RECORDS;
   const groups = useMemo(
-    () => (taskId ? groupTaskSessions(taskId, records, summaries) : []),
-    [records, summaries, taskId],
+    () =>
+      taskId
+        ? groupTaskSessions({ workspaceId: scope.workspaceId, taskId }, records, summaries)
+        : [],
+    [records, summaries, taskId, scope.workspaceId],
   );
   return {
     groups,

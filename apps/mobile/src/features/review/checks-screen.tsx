@@ -1,11 +1,8 @@
 import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
-import type { PullRequestReviewActivity } from "@openducktor/contracts";
+import type { PullRequestReviewActivity, WorkspaceRef } from "@openducktor/contracts";
 import { useMinuteClock } from "@openducktor/frontend-core/lib/relative-time";
 import { repositoryGitProviderContextQueryOptionsOrSkip } from "@openducktor/frontend-core/queries/git-provider-context";
-import {
-  type PullRequestReviewContextQueryInput,
-  pullRequestReviewContextQueryOptions,
-} from "@openducktor/frontend-core/queries/pull-request-review";
+import { pullRequestReviewContextQueryOptions } from "@openducktor/frontend-core/queries/pull-request-review";
 import {
   type PullRequestCommentAuthorFilter,
   useHideResolvedComments,
@@ -52,11 +49,6 @@ const STATE_ACTION_LABELS = {
   refresh: { label: "Refresh", pendingLabel: "Refreshing" },
 } as const satisfies Record<CiChecksStateAction, { label: string; pendingLabel: string }>;
 
-const INACTIVE_QUERY_INPUT: PullRequestReviewContextQueryInput = {
-  repoPath: "__inactive_pr_review__",
-  taskId: "__inactive__",
-};
-
 /**
  * The CI Checks view of a task, as the desktop CI panel: the pull request, its checks, and its
  * review comments. Read-only.
@@ -85,9 +77,7 @@ function ChecksForTask({
 }): ReactElement {
   const { resolution, retry } = useTaskOwnerResolution(ownerRef);
   if (resolution.status === "ready") {
-    return (
-      <ChecksContent repoPath={resolution.owner.workspace.repoPath} task={resolution.owner.task} />
-    );
+    return <ChecksContent workspace={resolution.owner.workspace} task={resolution.owner.task} />;
   }
   return (
     <Screen>
@@ -106,10 +96,17 @@ function ChecksForTask({
   );
 }
 
-function ChecksContent({ repoPath, task }: { repoPath: string; task: TaskCard }): ReactElement {
+function ChecksContent({
+  workspace,
+  task,
+}: {
+  workspace: WorkspaceRef;
+  task: TaskCard;
+}): ReactElement {
+  const { repoPath } = workspace;
   const focused = useIsFocused();
   const gate = useCommandGate();
-  const provider = useQuery(repositoryGitProviderContextQueryOptionsOrSkip(repoPath));
+  const provider = useQuery(repositoryGitProviderContextQueryOptionsOrSkip(workspace));
   const providerRead = {
     data: provider.data,
     error: provider.error,
@@ -117,13 +114,18 @@ function ChecksContent({ repoPath, task }: { repoPath: string; task: TaskCard })
   };
   const availability = ciReviewAvailability(providerRead, task.pullRequest);
   const queryInput = ciReviewQueryInput({
+    workspaceId: workspace.workspaceId,
     repoPath,
     taskId: task.id,
     pullRequest: task.pullRequest,
     unavailableReason: availability.unavailableReason,
   });
   const review = useQuery({
-    ...pullRequestReviewContextQueryOptions(queryInput ?? INACTIVE_QUERY_INPUT),
+    ...pullRequestReviewContextQueryOptions({
+      ...workspace,
+      taskId: task.id,
+      ...(task.pullRequest && { pullRequest: task.pullRequest }),
+    }),
     enabled: focused && queryInput !== null,
   });
   const state = ciChecksViewState({

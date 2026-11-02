@@ -1,10 +1,9 @@
+import { workspaceRefSchema } from "./workspace-id-schemas";
 import { z } from "zod";
 import { taskEventCursorSchema } from "./external-task-sync-schemas";
 import { workflowArtifactIdSchema, workflowIdSchema } from "./workflow-condition-schemas";
 
 export const TASK_ARTIFACT_MAX_FILE_BYTES = 10 * 1024 * 1024;
-export const TASK_ARTIFACT_MCP_DEFAULT_READ_BYTES = 16 * 1024;
-export const TASK_ARTIFACT_MCP_MAX_READ_BYTES = 1024 * 1024;
 
 /** The host rejects a free code that equals a workflow artifact ID. */
 export const freeArtifactCodeSchema = z
@@ -83,22 +82,14 @@ export const taskArtifactCollectionSchema = z.strictObject({
 export type TaskArtifactCollection = z.infer<typeof taskArtifactCollectionSchema>;
 
 export const artifactScopeSchema = z.strictObject({
-  repoPath: z.string().min(1),
+  ...workspaceRefSchema.shape,
   taskId: z.string().min(1).max(256),
 });
 export type ArtifactScope = z.infer<typeof artifactScopeSchema>;
 
-export const artifactReadRequestSchema = artifactScopeSchema
-  .extend({
-    artifactId: taskArtifactIdSchema,
-    byteOffset: z.number().int().nonnegative().optional(),
-    maxBytes: z.number().int().min(4).max(TASK_ARTIFACT_MAX_FILE_BYTES).optional(),
-    expectedVersion: z.string().min(1).max(128).optional(),
-  })
-  .refine((input) => !input.byteOffset || input.expectedVersion !== undefined, {
-    path: ["expectedVersion"],
-    message: "Continued artifact reads require the expected version from the first read.",
-  });
+export const artifactReadRequestSchema = artifactScopeSchema.extend({
+  artifactId: taskArtifactIdSchema,
+});
 export type ArtifactReadRequest = z.infer<typeof artifactReadRequestSchema>;
 
 const decodedBase64ByteSize = (value: string): number =>
@@ -145,21 +136,13 @@ export const artifactDeleteRequestSchema = artifactScopeSchema.extend({
 });
 export type ArtifactDeleteRequest = z.infer<typeof artifactDeleteRequestSchema>;
 
-export const artifactReadMetadataSchema = z.strictObject({
-  artifact: taskArtifactSchema,
-  version: z.string().min(1).max(128),
-  byteOffset: z.number().int().nonnegative(),
-  nextByteOffset: z.number().int().nonnegative().nullable(),
-  totalBytes: z.number().int().nonnegative(),
-});
-export type ArtifactReadMetadata = z.infer<typeof artifactReadMetadataSchema>;
-
-export const artifactContentChunkSchema = artifactReadMetadataSchema
-  .extend({
+export const artifactReadResultSchema = z
+  .strictObject({
+    artifact: taskArtifactSchema,
     dataBase64: boundedBase64Schema(TASK_ARTIFACT_MAX_FILE_BYTES),
   })
-  .superRefine(checkArtifactContentChunk);
-export type ArtifactContentChunk = z.infer<typeof artifactContentChunkSchema>;
+  .superRefine(checkArtifactContent);
+export type ArtifactReadResult = z.infer<typeof artifactReadResultSchema>;
 
 export const artifactSaveResultSchema = z.strictObject({
   artifact: taskArtifactSchema,
@@ -173,40 +156,21 @@ export const artifactDeleteResultSchema = z.strictObject({
 });
 export type ArtifactDeleteResult = z.infer<typeof artifactDeleteResultSchema>;
 
-export function checkArtifactContentChunk(
-  chunk: {
+export function checkArtifactContent(
+  result: {
     artifact: { classification: "workflow" } | { classification: "free"; byteSize: number };
-    byteOffset: number;
-    nextByteOffset: number | null;
-    totalBytes: number;
     dataBase64: string;
   },
   context: z.RefinementCtx,
 ): void {
-  const end = chunk.byteOffset + decodedBase64ByteSize(chunk.dataBase64);
-  if (chunk.artifact.classification === "free" && chunk.totalBytes !== chunk.artifact.byteSize) {
-    context.addIssue({
-      code: "custom",
-      path: ["totalBytes"],
-      message: "The total size must match the free artifact metadata.",
-    });
-  }
-  if (end > chunk.totalBytes || chunk.byteOffset > chunk.totalBytes) {
-    context.addIssue({
-      code: "custom",
-      path: ["dataBase64"],
-      message: "Artifact content exceeds its total size.",
-    });
-  }
   if (
-    (end < chunk.totalBytes && chunk.nextByteOffset !== end) ||
-    (end === chunk.totalBytes && chunk.nextByteOffset !== null) ||
-    (end < chunk.totalBytes && end === chunk.byteOffset)
+    result.artifact.classification === "free" &&
+    decodedBase64ByteSize(result.dataBase64) !== result.artifact.byteSize
   ) {
     context.addIssue({
       code: "custom",
-      path: ["nextByteOffset"],
-      message: "The next offset must follow this chunk, or be null at the end.",
+      path: ["dataBase64"],
+      message: "The content size must match the artifact metadata.",
     });
   }
 }

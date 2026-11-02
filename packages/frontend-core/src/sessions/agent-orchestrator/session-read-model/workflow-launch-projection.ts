@@ -18,8 +18,14 @@ export const projectWorkflowLaunch = (
   const workspaceStore = store.getWorkspaceStore(outcome.repoPath);
   if (!outcome.session || !workspaceStore) return;
   const current = workspaceStore.getSessionSnapshot(outcome.session) ?? undefined;
-  const bound = current?.sessionAssociation.kind === "workflow";
-  const key = agentSessionQueryKeys.list(outcome.repoPath, outcome.taskId);
+  const bound =
+    current?.sessionAssociation.kind === "workflow" &&
+    current.sessionAssociation.workspaceId === outcome.workspaceId &&
+    current.sessionAssociation.taskId === outcome.taskId;
+  const key = agentSessionQueryKeys.list(
+    { workspaceId: outcome.workspaceId, repoPath: outcome.repoPath },
+    outcome.taskId,
+  );
   const saved = queryClient
     .getQueryData<AgentSessionRecord[]>(key)
     ?.find((record) => matchesAgentSessionIdentity(record, outcome.session!));
@@ -38,7 +44,12 @@ export const projectWorkflowLaunch = (
     queryClient.setQueryData<AgentSessionRecord[]>(key, (records) =>
       records ? [...records, record] : undefined,
     );
-  const session = toPersistedSessionView({ taskId: outcome.taskId, record, current });
+  const session = toPersistedSessionView({
+    workspaceId: outcome.workspaceId,
+    taskId: outcome.taskId,
+    record,
+    current,
+  });
   if (bound) session.selectedModel = current.selectedModel;
   if (!current && outcome.status === "completed") {
     session.livePresence = "present";

@@ -57,12 +57,17 @@ export type TaskDocumentSources = {
  */
 export function useTaskDocumentSources({
   task,
+  workspaceId,
   repoPath,
 }: {
   task: TaskCard;
+  workspaceId: string;
   repoPath: string;
 }): TaskDocumentSources {
-  const { specDoc, planDoc, qaDoc, reloadDocument } = useTaskDocuments(task.id, true, repoPath);
+  const { specDoc, planDoc, qaDoc, reloadDocument } = useTaskDocuments(task.id, true, {
+    workspaceId,
+    repoPath,
+  });
   const specDocument = useMarkdownBlocks(
     specDoc.markdown,
     `${task.id}:spec:${specDoc.updatedAt ?? ""}`,

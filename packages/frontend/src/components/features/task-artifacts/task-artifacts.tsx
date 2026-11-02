@@ -55,7 +55,7 @@ import { FreeArtifactControls, WorkflowArtifactControls } from "./artifact-contr
 export type TaskArtifactsProps = {
   repoPath: string;
   taskId: string;
-  workspaceId?: string;
+  workspaceId: string;
   artifactSummary?: TaskCard["artifactSummary"];
 };
 
@@ -70,7 +70,7 @@ export type TaskArtifactsViewProps = TaskArtifactsProps & {
 };
 
 const scopeKey = (props: TaskArtifactsProps): string =>
-  `${props.workspaceId ?? ""}:${props.repoPath}:${props.taskId}`;
+  `${props.workspaceId}:${props.repoPath}:${props.taskId}`;
 
 /** Artifacts as a panel that fills its parent. The caller owns the selection. */
 export function TaskArtifactsView(props: TaskArtifactsViewProps): ReactElement {
@@ -93,6 +93,7 @@ export function TaskArtifactsSection(props: TaskArtifactsProps): ReactElement {
 type ArtifactCollectionState = ReturnType<typeof useArtifactCollection>;
 
 function useArtifactCollection({
+  workspaceId,
   repoPath,
   taskId,
   artifactSummary,
@@ -100,7 +101,9 @@ function useArtifactCollection({
   onSelectionChange,
 }: TaskArtifactsViewProps) {
   const queryClient = useQueryClient();
-  const collection = useQuery(taskArtifactsQueryOptions(queryClient, repoPath, taskId));
+  const collection = useQuery(
+    taskArtifactsQueryOptions(queryClient, { workspaceId, repoPath }, taskId),
+  );
   const [action, setAction] = useState<ArtifactAction | null>(null);
   const [actionOpen, setActionOpen] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
@@ -155,6 +158,7 @@ function useArtifactCollection({
     dialog:
       actionPresence && action ? (
         <ArtifactActionDialog
+          workspaceId={workspaceId}
           key={action.kind === "create" ? "create" : `${action.kind}:${action.artifact.artifactId}`}
           action={action}
           repoPath={repoPath}
@@ -191,7 +195,7 @@ function ArtifactBrowser({
           taskId={view.taskId}
           artifactId={state.selectedId}
           title={state.selected?.name ?? selectionTitle(selection)}
-          {...(view.workspaceId ? { workspaceId: view.workspaceId } : {})}
+          workspaceId={view.workspaceId}
           artifact={state.selected}
           workflowCode={selection.kind === "workflow" ? selection.code : undefined}
           canManage={state.canManage}
@@ -510,6 +514,7 @@ const ArtifactContent = memo(function ArtifactContent(props: ArtifactContentProp
 });
 
 function FreeArtifactContent({
+  workspaceId,
   repoPath,
   taskId,
   artifactId,
@@ -521,7 +526,7 @@ function FreeArtifactContent({
 }: ArtifactContentProps): ReactElement {
   const queryClient = useQueryClient();
   const content = useQuery(
-    taskArtifactContentQueryOptions(queryClient, repoPath, taskId, artifactId),
+    taskArtifactContentQueryOptions(queryClient, { workspaceId, repoPath }, taskId, artifactId),
   );
   const data = content.error ? undefined : content.data;
   const metadata = artifact ?? data?.artifact;
@@ -563,7 +568,9 @@ function WorkflowArtifactContent({
   onBack,
 }: ArtifactContentProps & { workflowCode: string }): ReactElement {
   const queryClient = useQueryClient();
-  const content = useQuery(taskDocumentQueryOptions(queryClient, repoPath, taskId, workflowCode));
+  const content = useQuery(
+    taskDocumentQueryOptions(queryClient, { workspaceId, repoPath }, taskId, workflowCode),
+  );
   const error = content.error?.message ?? content.data?.error ?? null;
   const data = error ? undefined : content.data;
   const isAbsent = data?.markdown === "" && data.updatedAt === null;

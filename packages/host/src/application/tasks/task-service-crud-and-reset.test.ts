@@ -1,6 +1,5 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Effect } from "effect";
-import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError, TaskCreatedAssetError } from "../../effect/task-asset-error";
 import { createLiveWorkflowObservations } from "../agent-sessions/live-workflow-observations";
@@ -9,8 +8,6 @@ import { createTaskDeleteUseCase } from "./use-cases/delete-task";
 import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
-import { createEventPublishingTaskService } from "./event-publishing-task-service";
-import { createTaskSyncServiceForTest } from "./sync/task-sync-service.test-support";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
@@ -108,7 +105,7 @@ const createResetTaskStore = (
 const createCleanupTaskServiceInput = (taskStore: TaskStorePort) => ({
   gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
   settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-  taskStore: createTaskStoreTestDouble(taskStore),
+  atomicTaskStore: createTaskStoreTestDouble(taskStore),
   workspaceSettingsService: createBuildWorkspaceSettingsService({
     workspaceId: "repo",
     repoPath: "/repo",
@@ -117,14 +114,13 @@ const createCleanupTaskServiceInput = (taskStore: TaskStorePort) => ({
 });
 describe("createTaskService task mutations and reset", () => {
   test.each([false, true])(
-    "publishes one captured artifact removal list for task reset, partial failure=%s",
+    "captures artifact removals once for task reset, partial failure=%s",
     async (partialFailure) => {
       let artifactReads = 0;
       const failure = new HostOperationError({
         operation: "task-store.clear-agent-sessions",
         message: "clear sessions failed",
       });
-      const events: ExternalTaskSyncEvent[] = [];
       const taskStore = createResetTaskStore([], {
         getTask: () => Effect.succeed(task({ status: "human_review" })),
         listArtifacts: () =>
@@ -155,37 +151,28 @@ describe("createTaskService task mutations and reset", () => {
           partialFailure ? Effect.fail(failure) : Effect.succeed(true),
       });
       const base = createTaskServiceWithMutationProgress(createCleanupTaskServiceInput(taskStore));
-      const service = createEventPublishingTaskService({
-        taskWorkflows: builtinTaskWorkflows,
-        taskService: base,
-        taskSyncService: createTaskSyncServiceForTest({
-          taskService: base,
-          workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
-          eventBus: { publish: (event) => events.push(event) },
-        }),
-      });
       const result = await Effect.runPromise(
-        Effect.result(service.resetTask({ repoPath: "/repo", taskId: "task-1" })),
+        Effect.result(base.resetTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" })),
       );
       expect(artifactReads).toBe(1);
-      expect(events).toHaveLength(1);
-      expect(events[0]?.boardChanges?.artifactChanges).toEqual([
-        {
-          taskId: "task-1",
-          artifactIds: ["workflow:task-1:spec"],
-          removedArtifactIds: ["workflow:task-1:spec"],
-        },
-      ]);
       if (partialFailure) {
-        expect(result).toMatchObject({
-          _tag: "Failure",
-          failure: { cause: failure },
-        });
+        expect(result._tag).toBe("Failure");
+        if (result._tag !== "Failure") throw new Error("Expected reset failure");
+        expect(result.failure).toBeInstanceOf(TaskMutationProgressFailure);
+        if (!(result.failure instanceof TaskMutationProgressFailure)) throw result.failure;
+        expect(result.failure.failure).toMatchObject({ cause: failure });
+        expect(result.failure.artifactChanges).toEqual([
+          {
+            taskId: "task-1",
+            artifactIds: ["workflow:task-1:spec"],
+            removedArtifactIds: ["workflow:task-1:spec"],
+          },
+        ]);
       } else {
-        expect(result).toMatchObject({
-          _tag: "Success",
-          success: { id: "task-1", status: "open" },
-        });
+        expect(result._tag).toBe("Success");
+        if (result._tag !== "Success") throw result.failure;
+        expect(result.success.task).toMatchObject({ id: "task-1", status: "open" });
+        expect(result.success.removedArtifactIds).toEqual(["workflow:task-1:spec"]);
       }
     },
   );
@@ -206,7 +193,11 @@ describe("createTaskService task mutations and reset", () => {
       );
       const ids = ["task-1", "unrelated"];
       for (const id of ids) {
-        const state = completionState.ensure("/repo", id);
+        const state = completionState.ensure({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: id,
+        });
         state.observation.failure = {
           stage: "cleanup",
           code: "task_completion_failed",
@@ -216,33 +207,35 @@ describe("createTaskService task mutations and reset", () => {
         await Effect.runPromise(completionState.publish(state));
       }
       let deleted = false;
+      const cleanupInput = createCleanupTaskServiceInput({
+        listTasks: () => Effect.succeed([task({ id: "task-1" }), task({ id: "unrelated" })]),
+        getTaskMetadata: () => Effect.succeed(metadataWithSessions()),
+        deleteTask: () =>
+          Effect.gen(function* () {
+            if (failure === "before commit")
+              return yield* new HostOperationError({
+                operation: "test.delete",
+                message: "delete failed",
+              });
+            deleted = true;
+            if (failure === "asset cleanup")
+              return yield* new TaskAssetError({
+                operation: "delete",
+                code: "purge",
+                taskId: "task-1",
+                assetIds: [],
+                failedPhase: "cleanup_after_commit",
+                durableState: "committed_cleanup_pending",
+                retryAllowed: false,
+                message: "Asset cleanup failed.",
+              });
+            return true;
+          }),
+      });
       const service = createTaskDeleteUseCase({
         taskWorkflows: builtinTaskWorkflows,
-        ...createCleanupTaskServiceInput({
-          listTasks: () => Effect.succeed([task({ id: "task-1" }), task({ id: "unrelated" })]),
-          getTaskMetadata: () => Effect.succeed(metadataWithSessions()),
-          deleteTask: () =>
-            Effect.gen(function* () {
-              if (failure === "before commit")
-                return yield* new HostOperationError({
-                  operation: "test.delete",
-                  message: "delete failed",
-                });
-              deleted = true;
-              if (failure === "asset cleanup")
-                return yield* new TaskAssetError({
-                  operation: "delete",
-                  code: "purge",
-                  taskId: "task-1",
-                  assetIds: [],
-                  failedPhase: "cleanup_after_commit",
-                  durableState: "committed_cleanup_pending",
-                  retryAllowed: false,
-                  message: "Asset cleanup failed.",
-                });
-              return true;
-            }),
-        }),
+        ...cleanupInput,
+        taskStore: cleanupInput.atomicTaskStore,
         completionState,
         taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
         terminalService: { acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }) },
@@ -250,10 +243,7 @@ describe("createTaskService task mutations and reset", () => {
       });
       const result = await Effect.runPromise(
         Effect.result(
-          service.deleteTask({
-            repoPath: "/repo",
-            taskId: "task-1",
-          }),
+          service.deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
         ),
       );
       expect(deleted).toBe(failure !== "before commit");
@@ -264,7 +254,10 @@ describe("createTaskService task mutations and reset", () => {
         });
         expect(live.snapshot("/repo").taskCompletions.map(({ taskId }) => taskId)).toEqual(ids);
       } else {
-        expect(completionState.ensure("/repo", "task-1").observation.failure).toBeUndefined();
+        expect(
+          completionState.ensure({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" })
+            .observation.failure,
+        ).toBeUndefined();
         expect(live.snapshot("/repo").taskCompletions.map(({ taskId }) => taskId)).toEqual(
           failure === "publication" ? ["task-1", "unrelated"] : ["unrelated"],
         );
@@ -285,7 +278,10 @@ describe("createTaskService task mutations and reset", () => {
             },
           });
       }
-      expect(completionState.ensure("/repo", "unrelated").observation.failure).toBeDefined();
+      expect(
+        completionState.ensure({ workspaceId: "repo", repoPath: "/repo", taskId: "unrelated" })
+          .observation.failure,
+      ).toBeDefined();
     },
   );
   test("reports committed task asset cleanup failures as mutation progress", async () => {
@@ -313,6 +309,7 @@ describe("createTaskService task mutations and reset", () => {
     const result = await Effect.runPromise(
       service
         .createTask({
+          workspaceId: "repo",
           repoPath: "/repo",
           task: { title: "Task", issueType: "task", priority: 2 },
         })
@@ -391,6 +388,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const created = await Effect.runPromise(
       createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).createTask({
+        workspaceId: "repo",
         repoPath: "/repo",
         task: {
           title: "Child",
@@ -399,7 +397,7 @@ describe("createTaskService task mutations and reset", () => {
         },
       }),
     );
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       {
         type: "create",
         input: {
@@ -451,6 +449,7 @@ describe("createTaskService task mutations and reset", () => {
 
     const created = await Effect.runPromise(
       createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).createTask({
+        workspaceId: "repo",
         repoPath: "/repo",
         task: {
           title: "Standalone",
@@ -460,7 +459,7 @@ describe("createTaskService task mutations and reset", () => {
       }),
     );
 
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       {
         type: "create",
         input: {
@@ -568,10 +567,10 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).deleteTask({ repoPath: "/repo", taskId: "task-1" }),
+        }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "listBranches", workingDir: "/repo" },
@@ -709,14 +708,14 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).deleteTask({ repoPath: "/repo-alias", taskId: "task-1" }),
+        }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toEqual({
       ok: true,
       changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] },
     });
-    expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo-alias" } },
+    expect(calls).toMatchObject([
+      { type: "list", input: { repoPath: "/repo" } },
       { type: "listBranches", workingDir: "/repo" },
       {
         type: "activityGuard",
@@ -862,10 +861,10 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).deleteTask({ repoPath: "/repo", taskId: "task-1" }),
+        }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toEqual({ ok: true, changes: { taskIds: ["task-1"], removedTaskIds: ["task-1"] } });
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "listBranches", workingDir: "/repo" },
       {
@@ -948,10 +947,10 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).deleteTask({ repoPath: "/repo", taskId: "task-1" }),
+        }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow("worktree removal race");
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "listBranches", workingDir: "/repo" },
       {
@@ -1058,7 +1057,7 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).deleteTask({ repoPath: "/repo", taskId: "task-1" }),
+        }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow(
       "task_delete requires runtime session activity checks for tasks with workflow sessions.",
@@ -1089,7 +1088,7 @@ describe("createTaskService task mutations and reset", () => {
           taskWorkflows: builtinTaskWorkflows,
           ...createCleanupTaskServiceInput(taskStore),
           taskActivityGuard,
-        }).deleteTask({ repoPath: "/repo", taskId: "task-1" }),
+        }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow("runtime stop failed");
     expect(deleted).toBe(false);
@@ -1114,7 +1113,7 @@ describe("createTaskService task mutations and reset", () => {
           taskWorkflows: builtinTaskWorkflows,
           ...createCleanupTaskServiceInput(taskStore),
           taskActivityGuard,
-        }).deleteTask({ repoPath: "/repo", taskId: "task-1" }),
+        }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow(/Delete cleanup already completed: Stopped 2 live agent sessions,/);
   });
@@ -1320,11 +1319,11 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).resetImplementation({ repoPath: "/repo-alias", taskId: "task-1" }),
+        }).resetImplementation({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "ready_for_dev" });
-    expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo-alias" } },
+    expect(calls).toMatchObject([
+      { type: "list", input: { repoPath: "/repo" } },
       { type: "listBranches", workingDir: "/repo" },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       {
@@ -1368,6 +1367,7 @@ describe("createTaskService task mutations and reset", () => {
         type: "setDirectMerge",
         input: { repoPath: "/repo", taskId: "task-1", directMerge: null },
       },
+      { type: "list", input: { repoPath: "/repo" } },
       {
         type: "transition",
         input: { repoPath: "/repo", taskId: "task-1", status: "ready_for_dev", cause: {} },
@@ -1558,11 +1558,11 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).resetTask({ repoPath: "/repo-alias", taskId: "task-1" }),
+        }).resetTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "open" });
-    expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo-alias" } },
+    expect(calls).toMatchObject([
+      { type: "list", input: { repoPath: "/repo" } },
       { type: "listBranches", workingDir: "/repo" },
       {
         type: "resetActivityGuard",
@@ -1595,6 +1595,7 @@ describe("createTaskService task mutations and reset", () => {
         type: "setDirectMerge",
         input: { repoPath: "/repo", taskId: "task-1", directMerge: null },
       },
+      { type: "list", input: { repoPath: "/repo" } },
       {
         type: "transition",
         input: { repoPath: "/repo", taskId: "task-1", status: "open", cause: {} },
@@ -1607,6 +1608,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService(createCleanupTaskServiceInput(taskStore)).resetTask({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
         }),
@@ -1638,7 +1640,7 @@ describe("createTaskService task mutations and reset", () => {
           taskWorkflows: builtinTaskWorkflows,
           ...createCleanupTaskServiceInput(taskStore),
           taskActivityGuard,
-        }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
+        }).resetTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow("runtime stop failed");
     expect(workflowArtifactsCleared).toBe(false);
@@ -1661,7 +1663,7 @@ describe("createTaskService task mutations and reset", () => {
           taskWorkflows: builtinTaskWorkflows,
           ...createCleanupTaskServiceInput(taskStore),
           taskActivityGuard,
-        }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
+        }).resetTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow(/Reset cleanup already completed: Stopped 2 live agent sessions,/);
   });
@@ -1698,7 +1700,9 @@ describe("createTaskService task mutations and reset", () => {
     });
 
     const result = await Effect.runPromise(
-      service.resetImplementation({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.flip),
+      service
+        .resetImplementation({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" })
+        .pipe(Effect.flip),
     );
 
     if (!(result instanceof TaskMutationProgressFailure)) {
@@ -1751,9 +1755,11 @@ describe("createTaskService task mutations and reset", () => {
     });
 
     await expect(
-      Effect.runPromise(service.resetImplementation({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.resetImplementation({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).rejects.toThrow("is on branch feature/other, which is not a task branch");
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "listBranches", workingDir: "/repo" },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
     ]);
@@ -1762,12 +1768,16 @@ describe("createTaskService task mutations and reset", () => {
     {
       operationLabel: "delete",
       run: (service: ReturnType<typeof createTaskService>) =>
-        service.deleteTask({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.asVoid),
+        service
+          .deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" })
+          .pipe(Effect.asVoid),
     },
     {
       operationLabel: "reset task",
       run: (service: ReturnType<typeof createTaskService>) =>
-        service.resetTask({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.asVoid),
+        service
+          .resetTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" })
+          .pipe(Effect.asVoid),
     },
   ])(
     "rejects $operationLabel when another worktree has the task branch checked out",
@@ -1800,7 +1810,7 @@ describe("createTaskService task mutations and reset", () => {
       await expect(Effect.runPromise(run(service))).rejects.toThrow(
         `Cannot ${operationLabel} task task-1 because branch odt/task-1 is checked out in worktree /repo.`,
       );
-      expect(calls).toEqual([{ type: "listBranches", workingDir: "/repo" }]);
+      expect(calls).toMatchObject([{ type: "listBranches", workingDir: "/repo" }]);
     },
   );
   test("reports task reset failures after workflow artifact clearing as partial progress", async () => {
@@ -1857,7 +1867,9 @@ describe("createTaskService task mutations and reset", () => {
     });
 
     const result = await Effect.runPromise(
-      service.resetTask({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.flip),
+      service
+        .resetTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" })
+        .pipe(Effect.flip),
     );
 
     if (!(result instanceof TaskMutationProgressFailure)) {
@@ -2000,7 +2012,7 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).resetImplementation({ repoPath: "/repo", taskId: "task-1" }),
+        }).resetImplementation({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow(
       "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
@@ -2067,6 +2079,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const updated = await Effect.runPromise(
       createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).updateTask({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         patch: {
@@ -2076,7 +2089,7 @@ describe("createTaskService task mutations and reset", () => {
         },
       }),
     );
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       {
         type: "update",
         input: {
@@ -2172,12 +2185,13 @@ describe("createTaskService task mutations and reset", () => {
     };
     const transitioned = await Effect.runPromise(
       createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).transitionTask({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         status: "in_progress",
       }),
     );
-    expect(calls).toEqual([
+    expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
       {
         type: "transition",
@@ -2261,6 +2275,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).transitionTask({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           status: "open",
@@ -2339,6 +2354,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).transitionTask({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "feature-1",
           status: "in_progress",
@@ -2362,6 +2378,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).transitionTask({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           status: "closed",

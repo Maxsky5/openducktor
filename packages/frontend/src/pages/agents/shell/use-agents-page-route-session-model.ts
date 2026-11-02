@@ -120,8 +120,9 @@ export function useAgentsPageRouteSessionModel({
       workspaceRepoPath,
       taskIdParam,
       sessionExternalIdParam,
+      activeWorkspaceId,
     );
-  }, [locationState, workspaceRepoPath, taskIdParam, sessionExternalIdParam]);
+  }, [locationState, workspaceRepoPath, taskIdParam, sessionExternalIdParam, activeWorkspaceId]);
 
   const taskExecutionFilePreview = useTaskExecutionFilePreviewController();
   const {

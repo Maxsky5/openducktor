@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
 import type { ScheduleTask } from "../lib/scheduling";
@@ -10,21 +11,29 @@ import {
 
 describe("build runtime queries", () => {
   test("uses a repo and task scoped query key for task worktrees", () => {
-    expect(taskWorktreeQueryKeys.taskWorktree({ repoPath: "/repo", taskId: "task-24" })).toEqual([
-      "task-worktree",
-      "/repo",
-      "task-24",
-    ]);
+    expect(
+      taskWorktreeQueryKeys.taskWorktree({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-24",
+      }),
+    ).toEqual(["task-worktree", { workspaceId: "workspace-1", repoPath: "/repo" }, "task-24"]);
   });
 
   test("can key task worktrees by the task version that owns them", () => {
     expect(
       taskWorktreeQueryKeys.taskWorktree({
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         taskId: "task-24",
         taskVersion: "2026-02-22T12:00:00.000Z",
       }),
-    ).toEqual(["task-worktree", "/repo", "task-24", "2026-02-22T12:00:00.000Z"]);
+    ).toEqual([
+      "task-worktree",
+      { workspaceId: "workspace-1", repoPath: "/repo" },
+      "task-24",
+      "2026-02-22T12:00:00.000Z",
+    ]);
   });
 
   test("taskWorktreeQueryOptions loads the canonical working directory", async () => {
@@ -36,6 +45,7 @@ describe("build runtime queries", () => {
 
     const result = await queryClient.fetchQuery(
       taskWorktreeQueryOptions({
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         taskId: "task-24",
       }),
@@ -44,11 +54,12 @@ describe("build runtime queries", () => {
     expect(result).toEqual({
       workingDirectory: "/repo/.worktrees/task-24",
     });
-    expect(taskWorktreeGet).toHaveBeenCalledWith("/repo", "task-24");
+    expect(taskWorktreeGet).toHaveBeenCalledWith(workspaceRefFixture("/repo"), "task-24");
   });
 
   test("taskWorktreeQueryOptions includes the task version in its query key", () => {
     const options = taskWorktreeQueryOptions({
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       taskId: "task-24",
       taskVersion: "2026-02-22T12:00:00.000Z",
@@ -56,7 +67,7 @@ describe("build runtime queries", () => {
 
     expect([...options.queryKey]).toEqual([
       "task-worktree",
-      "/repo",
+      { workspaceId: "workspace-1", repoPath: "/repo" },
       "task-24",
       "2026-02-22T12:00:00.000Z",
     ]);
@@ -84,6 +95,7 @@ describe("build runtime queries", () => {
     await expect(
       queryClient.fetchQuery(
         taskWorktreeQueryOptions({
+          workspaceId: "workspace-1",
           repoPath: "/repo",
           taskId: "task-24",
           scheduleTask,

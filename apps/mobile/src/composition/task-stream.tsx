@@ -13,6 +13,7 @@ export function TaskStreamOwner(): null {
   const createController = useHostTaskStreamControllerFactory();
   useHostTaskStream({
     openWorkspaces: workspaces,
+    activeWorkspaceId: selectedWorkspace?.workspaceId ?? null,
     activeRepoPath: selectedWorkspace?.repoPath ?? null,
     createController,
     events: {

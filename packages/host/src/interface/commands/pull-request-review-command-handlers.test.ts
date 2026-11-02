@@ -22,7 +22,10 @@ describe("createPullRequestReviewCommandHandlers", () => {
     });
 
     await Effect.runPromise(
-      router.invoke("pull_request_review_context_get", { repoPath: " /repo " }),
+      router.invoke("pull_request_review_context_get", {
+        workspaceId: "repo",
+        repoPath: " /repo ",
+      }),
     );
 
     expect(receivedRepoPaths).toEqual([" /repo "]);
@@ -37,7 +40,9 @@ describe("createPullRequestReviewCommandHandlers", () => {
     });
 
     await expect(
-      Effect.runPromise(router.invoke("pull_request_review_context_get", { repoPath: "   " })),
+      Effect.runPromise(
+        router.invoke("pull_request_review_context_get", { workspaceId: "repo", repoPath: "   " }),
+      ),
     ).rejects.toThrow("repoPath is required.");
   });
 });

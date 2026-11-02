@@ -157,8 +157,13 @@ export function useTaskCleanupImpact(taskIds: string[], enabled: boolean): TaskC
   const queryClient = useQueryClient();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const queryRepoPath = workspaceRepoPath ?? "";
+  const queryScope = {
+    workspaceId: activeWorkspace?.workspaceId ?? "disabled",
+    repoPath: queryRepoPath,
+  };
   const shouldLoadImpact = enabled && Boolean(workspaceRepoPath);
   const sessionLists = useAgentSessionLists({
+    workspaceId: activeWorkspace?.workspaceId ?? null,
     repoPath: workspaceRepoPath,
     taskIds,
     enabled: shouldLoadImpact,
@@ -168,7 +173,7 @@ export function useTaskCleanupImpact(taskIds: string[], enabled: boolean): TaskC
   const taskSessionObservers = useQueries(
     {
       queries: taskIds.map((taskId) => ({
-        ...agentSessionListQueryOptions(queryRepoPath, taskId),
+        ...agentSessionListQueryOptions(queryScope, taskId),
         enabled: false,
       })),
     },
@@ -177,7 +182,7 @@ export function useTaskCleanupImpact(taskIds: string[], enabled: boolean): TaskC
   const taskWorktreeQueries = useQueries(
     {
       queries: taskIds.map((taskId) => ({
-        ...taskWorktreeQueryOptions({ repoPath: queryRepoPath, taskId }),
+        ...taskWorktreeQueryOptions({ ...queryScope, taskId }),
         enabled: shouldLoadImpact,
       })),
     },
@@ -187,7 +192,12 @@ export function useTaskCleanupImpact(taskIds: string[], enabled: boolean): TaskC
     {
       queries: taskIds.map((taskId) =>
         terminalListByFilterQueryOptions({
-          filter: { kind: "task", repoPath: queryRepoPath, taskId },
+          filter: {
+            kind: "task",
+            workspaceId: queryScope.workspaceId,
+            repoPath: queryRepoPath,
+            taskId,
+          },
           enabled: shouldLoadImpact,
         }),
       ),

@@ -43,6 +43,7 @@ function TaskExecutionPanel({
 }
 
 const ciQueryInput = {
+  workspaceId: "workspace-1",
   repoPath: "/repo",
   taskId: "task-12",
 };

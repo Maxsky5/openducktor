@@ -68,6 +68,7 @@ export const createStartTaskWorkflowSession =
 
         return yield* Effect.gen(function* () {
           const preparationInput: TaskSessionStartPreparationInput = {
+            workspaceId: scope.workspaceId,
             canonicalRepoPath: repoPath,
             taskId: scope.taskId,
             role: scope.role,

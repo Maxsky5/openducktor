@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Deferred, Effect, Exit, Fiber, Scheduler } from "effect";
+import { Deferred, Effect, Exit, Fiber, Scheduler, Result } from "effect";
 import { createTaskAssetAwareTaskStore } from "./task-asset-aware-task-store";
 import {
   createHarness,
@@ -9,7 +9,7 @@ import {
 
 describe("asset-aware task store lifecycle", () => {
   test("promotes staged assets on create and removes obsolete assets only after update", async () => {
-    const { filePort, registry, repoPath, staging, store } = await createHarness();
+    const { filePort, registry, scope, staging, store } = await createHarness();
     const staged = await Effect.runPromise(
       staging.stage({
         workspaceId: "fairnest",
@@ -22,7 +22,7 @@ describe("asset-aware task store lifecycle", () => {
     const description = `![Architecture](odt-asset:${staged.assetId})`;
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: {
           title: "With image",
@@ -37,7 +37,7 @@ describe("asset-aware task store lifecycle", () => {
     expect(task.description).toBe(description);
     expect(
       await Effect.runPromise(
-        registry.listAssets({ repoPath, taskId: task.id, scope: "description" }),
+        registry.listAssets({ ...scope, taskId: task.id, scope: "description" }),
       ),
     ).toEqual([expect.objectContaining({ id: staged.assetId, taskId: task.id })]);
     expect(
@@ -48,7 +48,7 @@ describe("asset-aware task store lifecycle", () => {
 
     await Effect.runPromise(
       store.updateTask({
-        repoPath,
+        ...scope,
         taskId: task.id,
         patch: { description: "Image removed" },
         descriptionAssets: { stagedAssetIds: [] },
@@ -56,7 +56,7 @@ describe("asset-aware task store lifecycle", () => {
     );
     expect(
       await Effect.runPromise(
-        registry.listAssets({ repoPath, taskId: task.id, scope: "description" }),
+        registry.listAssets({ ...scope, taskId: task.id, scope: "description" }),
       ),
     ).toEqual([]);
     expect(
@@ -67,7 +67,7 @@ describe("asset-aware task store lifecycle", () => {
   });
 
   test("keeps an existing asset when its image changes to reference syntax", async () => {
-    const { filePort, registry, repoPath, staging, store } = await createHarness();
+    const { filePort, registry, scope, staging, store } = await createHarness();
     const staged = await Effect.runPromise(
       staging.stage({
         workspaceId: "fairnest",
@@ -79,7 +79,7 @@ describe("asset-aware task store lifecycle", () => {
     );
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: {
           title: "Referenced image",
@@ -98,7 +98,7 @@ describe("asset-aware task store lifecycle", () => {
 
     const updated = await Effect.runPromise(
       store.updateTask({
-        repoPath,
+        ...scope,
         taskId: task.id,
         patch: { description: referencedDescription },
         descriptionAssets: { stagedAssetIds: [] },
@@ -108,7 +108,7 @@ describe("asset-aware task store lifecycle", () => {
     expect(updated.description).toBe(referencedDescription);
     expect(
       await Effect.runPromise(
-        registry.listAssets({ repoPath, taskId: task.id, scope: "description" }),
+        registry.listAssets({ ...scope, taskId: task.id, scope: "description" }),
       ),
     ).toEqual([expect.objectContaining({ id: staged.assetId })]);
     expect(
@@ -123,13 +123,13 @@ describe("asset-aware task store lifecycle", () => {
   });
 
   test("rejects unbacked and foreign-task logical references", async () => {
-    const { repoPath, staging, store } = await createHarness();
+    const { scope, staging, store } = await createHarness();
     const forged = "550e8400-e29b-41d4-a716-446655440000";
 
     await expect(
       Effect.runPromise(
         store.createTask({
-          repoPath,
+          ...scope,
           status: "open",
           task: {
             title: "Forged",
@@ -152,7 +152,7 @@ describe("asset-aware task store lifecycle", () => {
     );
     const owner = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: {
           title: "Owner",
@@ -165,7 +165,7 @@ describe("asset-aware task store lifecycle", () => {
     );
     const other = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: {
           title: "Other",
@@ -179,19 +179,19 @@ describe("asset-aware task store lifecycle", () => {
     await expect(
       Effect.runPromise(
         store.updateTask({
-          repoPath,
+          ...scope,
           taskId: other.id,
           patch: { description: `![foreign](odt-asset:${staged.assetId})` },
         }),
       ),
     ).rejects.toThrow("not owned by this task");
     expect(
-      (await Effect.runPromise(store.getTask({ repoPath, taskId: owner.id }))).description,
+      (await Effect.runPromise(store.getTask({ ...scope, taskId: owner.id }))).description,
     ).toContain(staged.assetId);
   });
 
   test("retains assets on close and removes files and registry rows on delete", async () => {
-    const { filePort, registry, repoPath, staging, store } = await createHarness();
+    const { filePort, registry, scope, staging, store } = await createHarness();
     const staged = await Effect.runPromise(
       staging.stage({
         workspaceId: "fairnest",
@@ -203,7 +203,7 @@ describe("asset-aware task store lifecycle", () => {
     );
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: {
           title: "Lifecycle",
@@ -215,14 +215,20 @@ describe("asset-aware task store lifecycle", () => {
       }),
     );
 
-    await Effect.runPromise(store.transitionTask({ repoPath, taskId: task.id, status: "closed" }));
+    await Effect.runPromise(
+      store.transitionTask({
+        ...scope,
+        taskId: task.id,
+        decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
+      }),
+    );
     expect(
       await Effect.runPromise(
         filePort.readDurable({ workspaceId: "fairnest", taskId: task.id, assetId: staged.assetId }),
       ),
     ).not.toBeNull();
 
-    await Effect.runPromise(store.deleteTask({ repoPath, taskId: task.id }));
+    await Effect.runPromise(store.deleteTask({ ...scope, taskId: task.id }));
     expect(
       await Effect.runPromise(
         filePort.readDurable({ workspaceId: "fairnest", taskId: task.id, assetId: staged.assetId }),
@@ -230,7 +236,7 @@ describe("asset-aware task store lifecycle", () => {
     ).toBeNull();
     expect(
       await Effect.runPromise(
-        registry.listAssets({ repoPath, taskId: task.id, scope: "description" }),
+        registry.listAssets({ ...scope, taskId: task.id, scope: "description" }),
       ),
     ).toEqual([]);
   });
@@ -239,7 +245,7 @@ describe("asset-aware task store lifecycle", () => {
     const harness = await createHarness();
     const task = await Effect.runPromise(
       harness.store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
@@ -268,14 +274,11 @@ describe("asset-aware task store lifecycle", () => {
       registry: harness.registry,
       persistence: null,
       staging: harness.staging,
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
     const update = (title: string) =>
-      Effect.runFork(
-        store.updateTask({ repoPath: harness.repoPath, taskId: task.id, patch: { title } }),
-      );
-    const remove = () =>
-      Effect.runFork(store.deleteTask({ repoPath: harness.repoPath, taskId: task.id }));
+      Effect.runFork(store.updateTask({ ...harness.scope, taskId: task.id, patch: { title } }));
+    const remove = () => Effect.runFork(store.deleteTask({ ...harness.scope, taskId: task.id }));
 
     const first = update("first");
     const second = update("second");
@@ -330,26 +333,22 @@ describe("asset-aware task store lifecycle", () => {
       registry: harness.registry,
       persistence: harness.registry,
       staging: harness.staging,
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
-    const deletion = Effect.runFork(
-      store.deleteTask({ repoPath: harness.repoPath, taskId: task.id }),
-    );
+    const deletion = Effect.runFork(store.deleteTask({ ...harness.scope, taskId: task.id }));
     await Effect.runPromise(Deferred.await(quarantined));
     deletion.interruptUnsafe();
     await Effect.runPromise(Deferred.succeed(releaseDelete, undefined));
     await Effect.runPromise(Fiber.await(deletion));
 
     expect(events).toEqual(["quarantined", "deleted", "purged"]);
-    const tasks = await Effect.runPromise(
-      harness.innerStore.listTasks({ repoPath: harness.repoPath }),
-    );
+    const tasks = await Effect.runPromise(harness.innerStore.listTasks({ ...harness.scope }));
     expect(tasks.map(({ id }) => id)).not.toContain(task.id);
     // The lock is free again.
     await Effect.runPromise(
       store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: { title: "Next", issueType: "task", priority: 2 },
       }),
@@ -367,7 +366,7 @@ describe("asset-aware task store lifecycle", () => {
     const harness = await createHarness();
     const task = await Effect.runPromise(
       harness.store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: { title: "Task", issueType: "task", priority: 2 },
       }),
@@ -382,7 +381,7 @@ describe("asset-aware task store lifecycle", () => {
       registry: harness.registry,
       persistence: null,
       staging: harness.staging,
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
     let interrupted = 0;
     const YIELD_BUDGET = 256;
@@ -391,7 +390,7 @@ describe("asset-aware task store lifecycle", () => {
         steps(count).pipe(
           Effect.andThen(
             store.deleteTask({
-              repoPath: harness.repoPath,
+              ...harness.scope,
               taskId: task.id,
             }),
           ),
@@ -403,7 +402,7 @@ describe("asset-aware task store lifecycle", () => {
       if (Exit.hasInterrupts(await Effect.runPromise(Fiber.await(deletion)))) interrupted += 1;
       const update = await Effect.runPromise(
         store
-          .updateTask({ repoPath: harness.repoPath, taskId: task.id, patch: { title: `${count}` } })
+          .updateTask({ ...harness.scope, taskId: task.id, patch: { title: `${count}` } })
           .pipe(Effect.timeoutOption("1 second")),
       );
       expect(update._tag).toBe("Some");

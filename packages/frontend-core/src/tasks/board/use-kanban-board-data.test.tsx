@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "../../test-support/workspace-ref-fixture";
 import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
@@ -62,7 +63,10 @@ const renderBoardData = (
     client: { workspaceGetSettingsSnapshot: readSettings },
   });
   for (const task of tasks) {
-    connection.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", task.id), []);
+    connection.queryClient.setQueryData(
+      agentSessionQueryKeys.list(workspaceRefFixture("/repo"), task.id),
+      [],
+    );
   }
   seed(connection);
   const Wrapper = ({ children }: PropsWithChildren): ReactElement => (
@@ -92,9 +96,10 @@ describe("useKanbanBoardData", () => {
           workspaceQueryKeys.settingsSnapshot(),
           createSettingsSnapshotFixture(),
         );
-        connection.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "TASK-1"), [
-          session("build-1"),
-        ]);
+        connection.queryClient.setQueryData(
+          agentSessionQueryKeys.list(workspaceRefFixture("/repo"), "TASK-1"),
+          [session("build-1")],
+        );
       },
     );
     try {

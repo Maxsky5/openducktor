@@ -28,9 +28,10 @@ export function TaskDetailsSheetBody({
         defaultExpanded
         taskId={task.id}
         stripTaskDescriptionFrontMatter
-        {...(repoPath && task.sourceIssue
+        {...(workspaceId && repoPath && task.sourceIssue
           ? {
               issueImageContext: {
+                workspaceId,
                 repoPath,
                 sourceId: task.sourceIssue.sourceId,
                 providerId: task.sourceIssue.providerId,
@@ -48,12 +49,12 @@ export function TaskDetailsSheetBody({
             }
           : {})}
       />
-      {repoPath ? (
+      {repoPath && workspaceId ? (
         <TaskArtifactsSection
           repoPath={repoPath}
           taskId={task.id}
           artifactSummary={task.artifactSummary}
-          {...(workspaceId ? { workspaceId } : {})}
+          workspaceId={workspaceId}
         />
       ) : (
         <p className="text-sm text-muted-foreground">Select a workspace to read artifacts.</p>

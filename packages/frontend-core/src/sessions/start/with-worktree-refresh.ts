@@ -13,6 +13,7 @@ export const withWorktreeRefresh =
       const outcome = await launch(request);
       await invalidateTerminalList(queryClient, {
         kind: "task",
+        workspaceId: request.workspaceId,
         repoPath: request.repoPath,
         taskId: request.taskId,
       }).catch((cause) => console.error("Cannot refresh the workflow terminals.", cause));
@@ -22,6 +23,7 @@ export const withWorktreeRefresh =
       await queryClient
         .invalidateQueries({
           queryKey: taskWorktreeQueryKeys.taskWorktree({
+            workspaceId: request.workspaceId,
             repoPath: request.repoPath,
             taskId: request.taskId,
           }),

@@ -1,13 +1,11 @@
 import { z } from "zod";
 import { odtToolWorkspaceIdSchema } from "./odt-tool-workspace-id-schema";
 import {
-  artifactContentChunkSchema,
-  checkArtifactContentChunk,
-  artifactReadMetadataSchema,
+  artifactReadResultSchema,
+  checkArtifactContent,
   artifactDeleteResultSchema,
   freeArtifactContentInputSchema,
   TASK_ARTIFACT_MAX_FILE_BYTES,
-  TASK_ARTIFACT_MCP_MAX_READ_BYTES,
   taskArtifactFileNameSchema,
   taskArtifactMediaTypeSchema,
   taskArtifactNameSchema,
@@ -23,61 +21,15 @@ const taskArtifactScopeInputSchema = z.strictObject({
   taskId: z.string().trim().min(1).max(256),
 });
 
-export const ReadTaskArtifactsInputSchema = taskArtifactScopeInputSchema
-  .extend({
-    codes: z
-      .array(taskArtifactCodeSchema)
-      .min(1)
-      .refine((codes) => new Set(codes).size === codes.length, "Artifact codes must be distinct.")
-      .describe(
-        "Workflow and free artifact codes from odt_read_task. Returns content in this order.",
-      ),
-    byteOffset: z
-      .number()
-      .int()
-      .nonnegative()
-      .optional()
-      .describe(
-        "Start byte for one selected artifact; default 0. Continue with nextByteOffset and expectedVersion.",
-      ),
-    maxBytes: z
-      .number()
-      .int()
-      .min(4)
-      .max(TASK_ARTIFACT_MCP_MAX_READ_BYTES)
-      .optional()
-      .describe(
-        "Bytes per artifact, from 4 to 1,048,576. Omit for full workflow content or 16 KiB per free artifact. The full response must stay below 10 MiB.",
-      ),
-    expectedVersion: z
-      .string()
-      .min(1)
-      .max(128)
-      .optional()
-      .describe(
-        "Version returned by the first read. Required when byteOffset is greater than 0. Select exactly one artifact.",
-      ),
-  })
-  .superRefine((input, context) => {
-    if (input.codes.length !== 1) {
-      for (const field of ["byteOffset", "expectedVersion"] as const) {
-        if (input[field] !== undefined) {
-          context.addIssue({
-            code: "custom",
-            path: [field],
-            message: `${field} requires exactly one selected artifact.`,
-          });
-        }
-      }
-    }
-    if (input.byteOffset && input.expectedVersion === undefined) {
-      context.addIssue({
-        code: "custom",
-        path: ["expectedVersion"],
-        message: "Continued artifact reads require the expected version from the first read.",
-      });
-    }
-  });
+export const ReadTaskArtifactsInputSchema = taskArtifactScopeInputSchema.extend({
+  codes: z
+    .array(taskArtifactCodeSchema)
+    .min(1)
+    .refine((codes) => new Set(codes).size === codes.length, "Artifact codes must be distinct.")
+    .describe(
+      "Workflow and free artifact codes from odt_read_task. Returns content in this order.",
+    ),
+});
 export type ReadTaskArtifactsInput = z.infer<typeof ReadTaskArtifactsInputSchema>;
 
 export const mcpTaskArtifactSchema = z.discriminatedUnion("classification", [
@@ -86,28 +38,23 @@ export const mcpTaskArtifactSchema = z.discriminatedUnion("classification", [
 ]);
 export type McpTaskArtifact = z.infer<typeof mcpTaskArtifactSchema>;
 
-const mcpArtifactReadMetadataSchema = artifactReadMetadataSchema.extend({
-  artifact: mcpTaskArtifactSchema,
-});
-
-const mcpArtifactContentChunkSchema = mcpArtifactReadMetadataSchema
-  .extend({
-    dataBase64: artifactContentChunkSchema.shape.dataBase64,
-  })
-  .superRefine(checkArtifactContentChunk);
-
 export const readTaskArtifactsResultSchema = z.strictObject({
-  artifacts: z.array(mcpArtifactContentChunkSchema),
+  artifacts: z.array(
+    z
+      .strictObject({
+        artifact: mcpTaskArtifactSchema,
+        dataBase64: artifactReadResultSchema.shape.dataBase64,
+      })
+      .superRefine(checkArtifactContent),
+  ),
 });
 export type ReadTaskArtifactsResult = z.infer<typeof readTaskArtifactsResultSchema>;
 
 export const readTaskArtifactsOutputSchema = z.strictObject({
   artifacts: z.array(
-    mcpArtifactReadMetadataSchema.extend({
-      content: z
-        .string()
-        .optional()
-        .describe("Decoded UTF-8 text for this artifact, when available."),
+    z.strictObject({
+      artifact: mcpTaskArtifactSchema,
+      content: z.string().optional().describe("Complete decoded UTF-8 text, when available."),
     }),
   ),
 });

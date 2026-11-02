@@ -1,3 +1,4 @@
+import { workspaceScopeKey } from "@openducktor/frontend-core/queries/workspace-scope";
 import { useQuery } from "@tanstack/react-query";
 import { type ReactElement, type Ref, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "sonner";
@@ -22,7 +23,12 @@ type TaskDetailsSheetControllerProps = Omit<
 };
 
 export function TaskDetailsSheetController(props: TaskDetailsSheetControllerProps): ReactElement {
-  return <WorkspaceTaskDetailsSheetController key={props.activeWorkspace?.repoPath} {...props} />;
+  return (
+    <WorkspaceTaskDetailsSheetController
+      key={props.activeWorkspace ? workspaceScopeKey(props.activeWorkspace) : "none"}
+      {...props}
+    />
+  );
 }
 
 function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerProps): ReactElement {
@@ -37,7 +43,9 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
   } | null>(null);
   const boardTask = allTasks.find((entry) => entry.id === taskId);
   const taskQuery = useQuery({
-    ...unfilteredRepoTaskDataQueryOptions(repoPath ?? ""),
+    ...unfilteredRepoTaskDataQueryOptions(
+      sheetProps.activeWorkspace ?? { workspaceId: "disabled", repoPath: "" },
+    ),
     enabled: repoPath !== null && taskId !== null && !boardTask,
   });
   const sheetTasks = boardTask || !taskQuery.isSuccess ? allTasks : taskQuery.data.tasks;

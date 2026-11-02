@@ -19,7 +19,7 @@ export type RemoveWorktreeAndFilesystemPathDependencies = {
     | "canonicalizePath"
     | "defaultWorktreeBasePath"
     | "pathExists"
-    | "readConfig"
+    | "readRepoConfigByRepoPath"
     | "resolveConfiguredPath"
   >;
   worktreeFiles: Pick<

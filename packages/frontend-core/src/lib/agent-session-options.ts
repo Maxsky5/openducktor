@@ -16,8 +16,8 @@ export const compareAgentSessionRecency = (
   a: AgentSessionRecencySummary,
   b: AgentSessionRecencySummary,
 ): number => {
-  if (a.startedAt !== b.startedAt) {
-    return a.startedAt > b.startedAt ? -1 : 1;
+  if (Date.parse(a.startedAt) !== Date.parse(b.startedAt)) {
+    return Date.parse(a.startedAt) > Date.parse(b.startedAt) ? -1 : 1;
   }
   const leftIdentityKey = agentSessionIdentityKey(a);
   const rightIdentityKey = agentSessionIdentityKey(b);
@@ -33,8 +33,8 @@ export const buildRoleSessionSequenceByIdentity = (
   return new Map(
     sessions
       .toSorted((a, b) => {
-        if (a.startedAt !== b.startedAt) {
-          return a.startedAt < b.startedAt ? -1 : 1;
+        if (Date.parse(a.startedAt) !== Date.parse(b.startedAt)) {
+          return Date.parse(a.startedAt) < Date.parse(b.startedAt) ? -1 : 1;
         }
         const leftIdentityKey = agentSessionIdentityKey(a);
         const rightIdentityKey = agentSessionIdentityKey(b);

@@ -41,6 +41,7 @@ describe("task asset read service", () => {
     const result = await Effect.runPromise(service.read(context));
 
     expect(registryInput).toEqual({
+      workspaceId: context.workspaceId,
       repoPath: "/repo",
       taskId: context.taskId,
       scope: "description",

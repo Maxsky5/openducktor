@@ -42,6 +42,7 @@ import type { ClaudeWorkspaceFileSearch } from "./claude-agent-sdk-file-search";
 
 export type ClaudeMcpBridgeConnectionResolver = (
   repoPath: string,
+  workspaceId?: string,
 ) => Effect.Effect<OpenDucktorMcpBridgeConnection, HostOperationErrorAggregate>;
 
 export type CreateClaudeAgentSdkServiceInput = {

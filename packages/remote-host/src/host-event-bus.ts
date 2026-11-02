@@ -132,12 +132,27 @@ export class BufferedHostEventStream {
 export class BufferedHostEventBus implements HostEventBusPort {
   private readonly eventStream = new BufferedHostEventStream();
   private readonly listenersByChannel = new Map<HostEventChannel, Set<HostEventListener>>();
+  private readonly failureListeners = new Set<BufferedHostEventDeliveryReporter["report"]>();
 
   constructor(private readonly deliveryReporter: BufferedHostEventDeliveryReporter) {}
 
+  subscribeDeliveryFailures(
+    listener: BufferedHostEventDeliveryReporter["report"],
+  ): HostEventUnsubscribe {
+    this.failureListeners.add(listener);
+    return () => {
+      this.failureListeners.delete(listener);
+    };
+  }
+
+  private reportDeliveryFailure(failure: { channel: HostEventChannel; cause: unknown }): void {
+    for (const listener of this.failureListeners) listener(failure);
+    this.deliveryReporter.report(failure);
+  }
+
   publish(envelope: HostEventEnvelope): void {
     this.eventStream.emit(envelope, (cause) =>
-      this.deliveryReporter.report({ channel: envelope.channel, cause }),
+      this.reportDeliveryFailure({ channel: envelope.channel, cause }),
     );
     const listeners = this.listenersByChannel.get(envelope.channel);
     if (!listeners) {
@@ -148,7 +163,7 @@ export class BufferedHostEventBus implements HostEventBusPort {
       try {
         listener(envelope);
       } catch (cause) {
-        this.deliveryReporter.report({ channel: envelope.channel, cause });
+        this.reportDeliveryFailure({ channel: envelope.channel, cause });
       }
     }
   }

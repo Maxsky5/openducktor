@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -71,7 +72,7 @@ describe("releaseShellConnection", () => {
       },
     });
     const TaskReader = () => {
-      useQuery(repoTaskDataQueryOptions("/repo"));
+      useQuery(repoTaskDataQueryOptions(workspaceRefFixture("/repo")));
       return null;
     };
     const view = render(createElement(TaskReader), {

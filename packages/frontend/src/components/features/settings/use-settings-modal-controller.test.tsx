@@ -21,7 +21,7 @@ import { ChecksStateContext, WorkspaceStateContext } from "@/state/app-state-con
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { repoBranchesQueryOptions } from "@openducktor/frontend-core/queries/git";
-import { autopilotQueryKeys } from "@openducktor/frontend-core/queries/autopilot";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { runtimeExecutableQueryOptions } from "@openducktor/frontend-core/queries/runtime";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
@@ -84,7 +84,6 @@ let settingsSnapshotFactory = createSettingsSnapshot;
 const loadSettingsSnapshot = mock(async (): Promise<SettingsSnapshot> => settingsSnapshotFactory());
 
 let refreshChecks = mock(async () => {});
-let saveGlobalGitConfig = mock(async () => {});
 let saveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) =>
   savedSettingsResult(),
 );
@@ -182,18 +181,10 @@ const createHookHarness = (
     loadRepoSettings: async () => {
       throw new Error("loadRepoSettings is not used in this test");
     },
-    saveRepoSettings: async () => {
-      throw new Error("saveRepoSettings is not used in this test");
-    },
-    saveWorkspaceModelDefaults: async () => {
-      throw new Error("Not used");
-    },
-    loadSettingsSnapshot,
     detectGithubRepository: async () => null,
-    saveGlobalGitConfig,
     previewSettingsSnapshotRuntime: async () => ({ impact: null }),
     saveSettingsSnapshot,
-    saveAgentModelFavorites: async () => loadSettingsSnapshot(),
+    saveAgentModelFavorites: async () => (await loadSettingsSnapshot()).agentModelFavorites,
   } satisfies React.ComponentProps<typeof WorkspaceStateContext.Provider>["value"];
 
   const checksState = createChecksStateFixture({ refreshChecks });
@@ -288,23 +279,27 @@ describe("useSettingsModalController", () => {
     loadSettingsSnapshot.mockClear();
   });
 
-  test("an open modal shows Autopilot rules that another client saved, unless it edited them", async () => {
+  test("an open modal applies cached Autopilot settings and keeps unsaved rule edits", async () => {
     saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(true);
     const rules = (actionIds: AutopilotActionId[], alwaysStartQaReviewsFresh = false) => ({
       alwaysStartQaReviewsFresh,
-      rules: [{ eventId: "taskProgressedToAiReview" as const, actionIds }],
+      rules: [
+        { workflowId: "openducktor", eventId: "taskProgressedToAiReview" as const, actionIds },
+      ],
     });
-    // The saved-rules event reloads the Autopilot settings query.
-    const saveInOtherClient = (autopilot: SettingsSnapshot["autopilot"]) =>
+    const updateSavedAutopilot = (autopilot: SettingsSnapshot["autopilot"]) =>
       harness.run(() => {
-        harness.queryClient.setQueryData(autopilotQueryKeys.settings(), autopilot);
+        const queryKey = settingsSnapshotQueryOptions().queryKey;
+        const snapshot = harness.queryClient.getQueryData<SettingsSnapshot>(queryKey);
+        expect(snapshot).toBeDefined();
+        harness.queryClient.setQueryData(queryKey, { ...snapshot!, autopilot });
       });
     try {
       await harness.mount();
       await harness.waitFor((state) => state.snapshotDraft !== null);
 
-      await saveInOtherClient(rules(["startQa"]));
+      await updateSavedAutopilot(rules(["startQa"]));
       await harness.waitFor(
         (state) => state.snapshotDraft?.autopilot.rules[0]?.actionIds[0] === "startQa",
       );
@@ -312,22 +307,33 @@ describe("useSettingsModalController", () => {
       await harness.run((state) => {
         state.updateGlobalAutopilotSettings(() => rules([]));
       });
-      await saveInOtherClient(rules(["startQa"], true));
+      await updateSavedAutopilot(rules(["startQa"], true));
 
-      expect(harness.getLatest().snapshotDraft?.autopilot).toEqual(rules([]));
+      await harness.waitFor(
+        (state) => state.snapshotDraft?.autopilot.alwaysStartQaReviewsFresh === true,
+      );
+      expect(harness.getLatest().snapshotDraft?.autopilot).toEqual(rules([], true));
     } finally {
       await harness.unmount();
     }
   });
 
-  test("an opened modal shows the saved Autopilot rules, not older rules in the settings snapshot", async () => {
+  test("an opened modal shows Autopilot rules from the refreshed settings snapshot", async () => {
     const harness = createHookHarness(true);
-    // An earlier open read these rules. The settings snapshot cache still holds older rules.
     const saved = {
       alwaysStartQaReviewsFresh: true,
-      rules: [{ eventId: "taskProgressedToAiReview" as const, actionIds: ["startQa" as const] }],
+      rules: [
+        {
+          workflowId: "openducktor",
+          eventId: "taskProgressedToAiReview" as const,
+          actionIds: ["startQa" as const],
+        },
+      ],
     };
-    harness.queryClient.setQueryData(autopilotQueryKeys.settings(), saved);
+    harness.queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, {
+      ...createSettingsSnapshot(),
+      autopilot: saved,
+    });
     try {
       await harness.mount();
       await harness.waitFor((state) => state.snapshotDraft !== null);
@@ -341,7 +347,6 @@ describe("useSettingsModalController", () => {
 
   test("does not refresh diagnostics when the modal opens", async () => {
     refreshChecks = mock(async () => {});
-    saveGlobalGitConfig = mock(async () => {});
     saveSettingsSnapshot = mock(async () => savedSettingsResult());
     loadSettingsSnapshot.mockClear();
 
@@ -579,9 +584,9 @@ describe("useSettingsModalController", () => {
   });
 
   test("an abbreviation and a tile color edit reach the settings save payload", async () => {
-    const savedWorkspaces: SettingsSnapshotSaveInput["workspaces"][string][] = [];
+    const savedWorkspaces: NonNullable<SettingsSnapshotSaveInput["workspaces"]>[string][] = [];
     saveSettingsSnapshot = mock(async (snapshot) => {
-      const repo = snapshot.workspaces.repo;
+      const repo = snapshot.workspaces?.repo;
       if (repo) {
         savedWorkspaces.push(repo);
       }
@@ -610,7 +615,11 @@ describe("useSettingsModalController", () => {
 
       expect(didSave).toBe(true);
       expect(savedWorkspaces).toHaveLength(1);
-      expect(savedWorkspaces[0]).toMatchObject({ abbreviation: "iOS", tileColor: "#f08c00" });
+      expect(savedWorkspaces[0]).toMatchObject({
+        expectedRepoPath: "/repo",
+        abbreviation: { type: "set", value: "iOS" },
+        tileColor: { type: "set", value: "#f08c00" },
+      });
     } finally {
       await harness.unmount();
     }
@@ -765,10 +774,8 @@ describe("useSettingsModalController", () => {
       expect(harness.getLatest().saveError).toBeNull();
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
       const saved = saveSettingsSnapshot.mock.calls[0]![0];
-      expect(saved.chat.showThinkingMessages).toBe(true);
-      expect(saved.workspaces.repo!.defaultModel).toEqual(defaultModel);
-      expect(saved.workspaces.repo!.agentDefaults.build).toEqual(defaultModel);
-      expect(saved.workspaces["repo-two"]!.agentDefaults.qa).toEqual(defaultModel);
+      expect(saved.global?.chat?.showThinkingMessages).toBe(true);
+      expect(saved.workspaces).toBeUndefined();
     } finally {
       await harness.unmount();
     }
@@ -1227,7 +1234,7 @@ describe("useSettingsModalController", () => {
     await harness.unmount();
   });
 
-  test("keeps role edits local until Save Settings and discards them when settings close", async () => {
+  test("keeps role edits local until Save Settings and discards them on Cancel", async () => {
     saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(true);
     const role = { id: "review", name: "Reviewer", systemPrompt: "Review code." };
@@ -1237,6 +1244,7 @@ describe("useSettingsModalController", () => {
       await harness.run((state) => state.updateCustomAgentRoles(() => [role]));
       expect(harness.getLatest().snapshotDraft?.customAgentRoles).toEqual([role]);
       expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+      await harness.run((state) => state.discardDraft());
       await harness.update({ isOpen: false, shouldLoad: false });
       await harness.update({ isOpen: true, shouldLoad: false });
       await harness.waitFor((state) => state.snapshotDraft !== null);
@@ -1248,7 +1256,7 @@ describe("useSettingsModalController", () => {
       });
       expect(saved).toBe(true);
       expect(saveSettingsSnapshot).toHaveBeenCalledWith(
-        expect.objectContaining({ customAgentRoles: [role] }),
+        expect.objectContaining({ customAgentRoles: { create: [role] } }),
         undefined,
       );
     } finally {
@@ -1256,7 +1264,7 @@ describe("useSettingsModalController", () => {
     }
   });
 
-  test("discards a confirmed role deletion when Settings closes without saving", async () => {
+  test("discards a confirmed role deletion on Cancel", async () => {
     const role = { id: "review", name: "Reviewer", systemPrompt: "Review code." };
     settingsSnapshotFactory = () => ({ ...createSettingsSnapshot(), customAgentRoles: [role] });
     saveSettingsSnapshot = mock(async () => savedSettingsResult());
@@ -1267,6 +1275,7 @@ describe("useSettingsModalController", () => {
       await harness.run((state) => state.updateCustomAgentRoles(() => []));
       expect(harness.getLatest().snapshotDraft?.customAgentRoles).toEqual([]);
       expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+      await harness.run((state) => state.discardDraft());
       await harness.update({ isOpen: false, shouldLoad: false });
       await harness.update({ isOpen: true, shouldLoad: false });
       await harness.waitFor((state) => state.snapshotDraft !== null);
@@ -1362,9 +1371,46 @@ describe("useSettingsModalController", () => {
     }
   });
 
+  test("a partial save acknowledges a cleared workspace path and retries only preferences", async () => {
+    settingsSnapshotFactory = () => {
+      const snapshot = createSettingsSnapshot();
+      snapshot.workspaces.repo!.worktreeBasePath = "/custom/worktrees";
+      return snapshot;
+    };
+    saveSettingsSnapshot = mock(async () => savedSettingsResult()).mockResolvedValueOnce({
+      type: "partial",
+      shared: "saved",
+      preferences: { message: "Preferences file is read-only." },
+      workspaces: [],
+      runtimeApplications: [],
+      refreshError: null,
+    });
+    const harness = createHookHarness(true);
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+      await harness.run((state) => {
+        state.updateSelectedRepoConfig((repo) => ({ ...repo, worktreeBasePath: "" }));
+        state.updateGlobalChatSettings((chat) => ({ ...chat, showThinkingMessages: true }));
+      });
+      await harness.run(async (state) => expect(await state.submit()).toBe(false));
+      expect(saveSettingsSnapshot.mock.calls[0]?.[0]?.workspaces).toEqual({
+        repo: { expectedRepoPath: "/repo", worktreeBasePath: { type: "clear" } },
+      });
+      expect(harness.getLatest().saveError).toBeNull();
+      expect(harness.getLatest().snapshotDraft?.workspaces.repo?.worktreeBasePath).toBeUndefined();
+      expect(harness.getLatest().snapshotDraft?.chat.showThinkingMessages).toBe(true);
+      await harness.run(async (state) => expect(await state.submit()).toBe(true));
+      expect(saveSettingsSnapshot.mock.calls[1]?.[0]).toEqual({
+        global: { chat: { showThinkingMessages: true } },
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("saves chat-only edits through the settings snapshot query path", async () => {
     refreshChecks = mock(async () => {});
-    saveGlobalGitConfig = mock(async () => {});
     saveSettingsSnapshot = mock(async () => savedSettingsResult());
     loadSettingsSnapshot.mockClear();
 
@@ -1388,36 +1434,17 @@ describe("useSettingsModalController", () => {
       didSave = await state.submit();
     });
 
-    const expectedSnapshot = createSettingsSnapshot();
-    // A chat-only save leaves out the unedited custom roles and Autopilot rules.
-    const {
-      theme: expectedTheme,
-      customAgentRoles,
-      autopilot: _autopilot,
-      ...expectedSnapshotUpdate
-    } = expectedSnapshot;
-    expect(customAgentRoles).toEqual([]);
     expect(didSave).toBe(true);
-    expect(expectedTheme).toBe("light");
-    expect(saveGlobalGitConfig).toHaveBeenCalledTimes(0);
-    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
     expect(saveSettingsSnapshot).toHaveBeenCalledWith(
       {
-        ...expectedSnapshotUpdate,
-        chat: {
-          ...expectedSnapshot.chat,
-          showThinkingMessages: true,
+        global: {
+          chat: { showThinkingMessages: true },
+          appearance: { horizontalScrollbarVisibility: "hide" },
         },
-        appearance: {
-          ...expectedSnapshot.appearance,
-          horizontalScrollbarVisibility: "hide",
-        },
-        reusablePrompts: [],
-        agentRuntimes: expectedSnapshot.agentRuntimes,
       },
       undefined,
     );
-
+    expect(refreshChecks).not.toHaveBeenCalled();
     await harness.unmount();
   });
 
@@ -1466,7 +1493,7 @@ describe("useSettingsModalController", () => {
     }
   });
 
-  test("keeps action edits in the draft until Save Settings and discards them when settings close", async () => {
+  test("keeps action edits in the draft until Save Settings and discards them on Cancel", async () => {
     saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const actions = {
       items: [
@@ -1492,6 +1519,7 @@ describe("useSettingsModalController", () => {
       expect(harness.getLatest().selectedRepoConfig?.actions).toEqual(actions);
       expect(saveSettingsSnapshot).not.toHaveBeenCalled();
 
+      await harness.run((state) => state.discardDraft());
       await harness.update({ isOpen: false, shouldLoad: false });
       await harness.update({ isOpen: true, shouldLoad: false });
       await harness.waitFor((state) => state.snapshotDraft !== null);
@@ -1509,7 +1537,7 @@ describe("useSettingsModalController", () => {
       });
 
       expect(saved).toBe(true);
-      expect(saveSettingsSnapshot.mock.calls[0]?.[0].workspaces.repo?.actions).toEqual(actions);
+      expect(saveSettingsSnapshot.mock.calls[0]?.[0].workspaces?.repo?.actions).toEqual(actions);
     } finally {
       await harness.unmount();
     }

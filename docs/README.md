@@ -36,6 +36,8 @@ Use this index to find the document for your task.
 
 ## Security and maintenance
 
+- [Host database](host-database.md) defines shared storage, upgrade, backup, and recovery.
+
 - [MCP runtime security](mcp-runtime-security.md) defines the allowed MCP transport and threat assumptions.
 - [Dependency hygiene](dependency-hygiene.md) defines dependency checks and update rules.
 - [Build and packaging](build-and-packaging.md) describes bundles, runtime dependencies, size measurements, and package checks.

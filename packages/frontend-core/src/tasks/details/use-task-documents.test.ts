@@ -1,3 +1,5 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
+import { workspaceRefFixture } from "../../test-support/workspace-ref-fixture";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,7 +28,7 @@ const document = (markdown: string, updatedAt = "2026-05-07T20:00:00.000Z") => (
 const renderDocuments = (connection: ClientConnection, initiallyOpen = true) =>
   renderHook(
     ({ taskId, repo, open }) => ({
-      documents: useTaskDocuments(taskId, open, repo),
+      documents: useTaskDocuments(taskId, open, workspaceRefFixture(repo)),
       queryClient: useQueryClient(),
     }),
     {
@@ -60,20 +62,26 @@ const waitForDocuments = (
 
 const cachedSpec = (view: DocumentView, repo = REPO, taskId = TASK_ID) =>
   view.result.current.queryClient.getQueryData<TaskDocumentPayload>(
-    documentQueryKeys.document(repo, taskId, "spec"),
+    documentQueryKeys.document(workspaceRefFixture(repo), taskId, "spec"),
   );
 
 describe("useTaskDocuments", () => {
   test("document query ensure revalidates stale cached documents on demand", async () => {
     const queryClient = createClientQueryClient();
-    const queryKey = documentQueryKeys.document(REPO, TASK_ID, "plan");
+    const queryKey = documentQueryKeys.document(workspaceRefFixture(REPO), TASK_ID, "plan");
     const cached = document("# Cached plan");
     const fresh = document("# Fresh plan", "2026-05-07T20:05:00.000Z");
     const read = mock(async () => fresh);
     queryClient.setQueryData(queryKey, cached);
     try {
       await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
-      const options = taskDocumentQueryOptions(queryClient, REPO, TASK_ID, "plan", read);
+      const options = taskDocumentQueryOptions(
+        queryClient,
+        workspaceRefFixture(REPO),
+        TASK_ID,
+        "plan",
+        read,
+      );
       expect(await ensureTaskDocumentQueryData(queryClient, options)).toEqual(cached);
       await waitFor(
         () => {
@@ -89,12 +97,12 @@ describe("useTaskDocuments", () => {
 
   test("a late empty read cannot replace an optimistic document update", async () => {
     const pendingRead = Promise.withResolvers<TaskDocumentPayload>();
-    const read = mock(async (_repo: string, _taskId: string, section: string) =>
+    const read = mock(async (_repo: WorkspaceRef, _taskId: string, section: string) =>
       section === "spec" ? pendingRead.promise : document(`${section} content`),
     );
     const optimistic = document("# Saved spec", "2026-05-07T20:05:00.000Z");
     await withDocuments(read, async (view) => {
-      expect(read).toHaveBeenCalledWith(REPO, TASK_ID, "spec");
+      expect(read).toHaveBeenCalledWith(workspaceRefFixture(REPO), TASK_ID, "spec");
       expect(view.result.current.documents.specDoc.isLoading).toBe(true);
       act(() => view.result.current.documents.applyDocumentUpdate("spec", optimistic));
       await waitForDocuments(view, { specDoc: optimistic });
@@ -159,7 +167,7 @@ describe("useTaskDocuments", () => {
     const oldDocument = document("# Old scope spec");
     const nextDocument = document("# Next scope spec");
     const fresh = document("# Reloaded next spec", "2026-05-07T20:05:00.000Z");
-    const read = mock(async (repo: string, taskId: string, section: string) => {
+    const read = mock(async ({ repoPath: repo }: WorkspaceRef, taskId: string, section: string) => {
       const oldScope = repo === REPO && taskId === TASK_ID;
       if (section !== "spec") {
         return document(`${section} ${oldScope ? "old" : "next"}`);
@@ -194,7 +202,7 @@ describe("useTaskDocuments", () => {
         expect(view.result.current.documents.reloadDocument("spec")).toBe(true);
       });
       await waitForDocuments(view, { specDoc: fresh });
-      expect(read).toHaveBeenLastCalledWith(next.repo, next.taskId, "spec");
+      expect(read).toHaveBeenLastCalledWith(workspaceRefFixture(next.repo), next.taskId, "spec");
       expect(cachedSpec(view)).toEqual(oldDocument);
       expect(cachedSpec(view, next.repo, next.taskId)).toEqual(fresh);
     });
@@ -235,15 +243,15 @@ describe("useTaskDocuments", () => {
       act(() => {
         const queryClient = view.result.current.queryClient;
         queryClient.setQueryData(
-          documentQueryKeys.document(REPO, TASK_ID, "spec"),
+          documentQueryKeys.document(workspaceRefFixture(REPO), TASK_ID, "spec"),
           document("spec V1"),
         );
         queryClient.setQueryData(
-          documentQueryKeys.document(REPO, TASK_ID, "plan"),
+          documentQueryKeys.document(workspaceRefFixture(REPO), TASK_ID, "plan"),
           document("plan V1"),
         );
         queryClient.setQueryData(
-          documentQueryKeys.document(REPO, TASK_ID, "qaReport"),
+          documentQueryKeys.document(workspaceRefFixture(REPO), TASK_ID, "qaReport"),
           document("qa V1"),
         );
       });

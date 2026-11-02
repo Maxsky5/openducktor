@@ -76,7 +76,12 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const queued = createAgentMessageQueueSnapshot({
       target: {
         ...SESSION_REF,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
       },
       revision: 3,
       texts: ["Queued follow-up"],
@@ -280,7 +285,12 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/worktree",
         externalSessionId: "session-1",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
       });
       expect(sendInput).not.toHaveProperty("runtimePolicy");
     } finally {
@@ -987,7 +997,12 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         status: "idle",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "qa",
+        },
       }),
     ]);
 

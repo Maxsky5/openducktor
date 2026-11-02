@@ -63,7 +63,7 @@ export const createTaskChatDraftCleanup = ({
 
     const sessionListsByTaskId = await loadAgentSessionListsFromQuery(
       queryClient,
-      repoPath,
+      { workspaceId, repoPath },
       taskIds,
       { forceFresh: true, readPort: agentSessionReadPort },
     );

@@ -1,3 +1,6 @@
+import { workspaceScopeValue } from "./workspace-scope";
+import { queryMatchesWorkspace } from "./workspace-scope";
+import { type WorkspaceRef } from "@openducktor/contracts";
 import {
   type Query,
   type QueryClient,
@@ -33,20 +36,20 @@ export type TaskDocument = {
 
 /** Reads one workflow artifact of a task by its code. */
 export type TaskDocumentReader = (
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
   code: string,
 ) => Promise<TaskDocument>;
 
 export const documentQueryKeys = {
   all: ["task-documents"] as const,
-  document: (repoPath: string, taskId: string, code: string) =>
-    [...documentQueryKeys.all, code, repoPath, taskId] as const,
+  document: (repoPath: WorkspaceRef, taskId: string, code: string) =>
+    [...documentQueryKeys.all, code, workspaceScopeValue(repoPath), taskId] as const,
 };
 
 export const taskDocumentQueryOptions = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
   code: string,
   readDocument: TaskDocumentReader = connectionHost(queryClient).workflowArtifactGet,
@@ -55,7 +58,7 @@ export const taskDocumentQueryOptions = (
   return queryOptions({
     queryKey,
     queryFn: async (): Promise<TaskDocumentPayload> => {
-      if (!repoPath) {
+      if (!repoPath.workspaceId || !repoPath.repoPath) {
         throw new Error("Select a repository before loading task artifacts.");
       }
       const query = queryClient.getQueryCache().find({ queryKey, exact: true });
@@ -144,7 +147,7 @@ export const recordDocumentCommit = (
 /** Capture the query and its save owner before the host write starts. */
 export const createDocumentSaveGuard = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
   code: string,
 ): ((incoming: TaskArtifactSaveResult & { markdown: string }) => void) => {
@@ -179,7 +182,7 @@ export const createDocumentSaveGuard = (
 
 export const fetchFreshTaskDocumentFromQuery = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
   code: string,
   readDocument?: TaskDocumentReader,
@@ -192,7 +195,7 @@ export const fetchFreshTaskDocumentFromQuery = (
 
 export const removeCachedTaskDocumentQueries = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskIds: string[],
 ): void => {
   const taskIdSet = new Set(taskIds);
@@ -200,11 +203,11 @@ export const removeCachedTaskDocumentQueries = (
     queryKey: documentQueryKeys.all,
     exact: false,
   })) {
-    const [scope, _section, cachedRepoPath, cachedTaskId] = query.queryKey;
+    const [scope, _section, _cachedRepoPath, cachedTaskId] = query.queryKey;
     const cachedTaskIdResult = queryKeyStringSchema.safeParse(cachedTaskId);
     if (
       scope !== documentQueryKeys.all[0] ||
-      cachedRepoPath !== repoPath ||
+      !queryMatchesWorkspace(query, repoPath) ||
       !cachedTaskIdResult.success ||
       !taskIdSet.has(cachedTaskIdResult.data)
     ) {
@@ -220,7 +223,7 @@ export const removeCachedTaskDocumentQueries = (
 
 export const invalidateCachedTaskDocumentQueries = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskIds: string[],
 ): Promise<void> => {
   const taskIdSet = new Set(taskIds);
@@ -228,11 +231,11 @@ export const invalidateCachedTaskDocumentQueries = async (
     queryKey: documentQueryKeys.all,
     exact: false,
     predicate: (query) => {
-      const [scope, _section, cachedRepoPath, cachedTaskId] = query.queryKey;
+      const [scope, _section, _cachedRepoPath, cachedTaskId] = query.queryKey;
       const cachedTaskIdResult = queryKeyStringSchema.safeParse(cachedTaskId);
       return (
         scope === documentQueryKeys.all[0] &&
-        cachedRepoPath === repoPath &&
+        queryMatchesWorkspace(query, repoPath) &&
         cachedTaskIdResult.success &&
         taskIdSet.has(cachedTaskIdResult.data)
       );
@@ -243,7 +246,7 @@ export const invalidateCachedTaskDocumentQueries = async (
 
 export const loadTaskDocumentFromQuery = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
   code: string,
 ): Promise<TaskDocument> =>

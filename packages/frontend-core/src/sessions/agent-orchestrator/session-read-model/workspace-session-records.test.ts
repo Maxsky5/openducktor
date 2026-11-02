@@ -47,22 +47,26 @@ describe("Workspace Session records in the shared read model", () => {
     const draft = { ...record(), externalSessionId: null };
     const collection = emptyAgentSessionCollection();
     expect(workspaceSessionIdentity(draft)).toBeNull();
-    expect(applyWorkspaceSessionRecords(collection, [draft])).toBe(collection);
+    expect(applyWorkspaceSessionRecords(collection, [draft], "workspace-1")).toBe(collection);
     expect(
       reconcileWorkspaceSessionTargetFaults(new Map(), collection, [draft], "/repo").size,
     ).toBe(0);
   });
   test("hydrates idle sessions once for unchanged records and uses durable titles", () => {
     const entry = record();
-    const collection = applyWorkspaceSessionRecords(emptyAgentSessionCollection(), [entry]);
+    const collection = applyWorkspaceSessionRecords(
+      emptyAgentSessionCollection(),
+      [entry],
+      "workspace-1",
+    );
     const session = getAgentSession(collection, workspaceSessionIdentity(entry));
     expect(session).toMatchObject({
       status: "idle",
       title: "Untitled session",
       historyLoadState: "not_requested",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     });
-    const unchanged = applyWorkspaceSessionRecords(collection, [{ ...entry }]);
+    const unchanged = applyWorkspaceSessionRecords(collection, [{ ...entry }], "workspace-1");
     expect(unchanged).toBe(collection);
     expect(getAgentSession(unchanged, workspaceSessionIdentity(entry))).toBe(session);
     expect(
@@ -79,6 +83,7 @@ describe("Workspace Session records in the shared read model", () => {
         snapshots: [snapshot(entry)],
       }),
       [entry],
+      "workspace-1",
     );
     const session = getAgentSession(current, workspaceSessionIdentity(entry))!;
     current = replaceAgentSession(current, {
@@ -88,7 +93,7 @@ describe("Workspace Session records in the shared read model", () => {
     });
     const projected = buildAgentSessionLiveCollection({ current, snapshots: [] });
     const retained = getAgentSession(
-      applyWorkspaceSessionRecords(projected, [entry], current),
+      applyWorkspaceSessionRecords(projected, [entry], "workspace-1", current),
       workspaceSessionIdentity(entry),
     );
     expect(retained).toMatchObject({
@@ -112,14 +117,14 @@ describe("Workspace Session records in the shared read model", () => {
     });
     expect(
       getAgentSession(
-        applyWorkspaceSessionRecords(current, [entry]),
+        applyWorkspaceSessionRecords(current, [entry], "workspace-1"),
         workspaceSessionIdentity(entry),
       )?.selectedModel?.modelId,
     ).toBe("live");
     entry.selectedModel = { runtimeKind: "codex", providerId: "openai", modelId: "saved" };
     expect(
       getAgentSession(
-        applyWorkspaceSessionRecords(current, [entry]),
+        applyWorkspaceSessionRecords(current, [entry], "workspace-1"),
         workspaceSessionIdentity(entry),
       )?.selectedModel?.modelId,
     ).toBe("saved");
@@ -135,7 +140,7 @@ describe("Workspace Session records in the shared read model", () => {
       snapshots: [live],
     });
     const selected = getAgentSession(
-      applyWorkspaceSessionRecords(current, [entry]),
+      applyWorkspaceSessionRecords(current, [entry], "workspace-1"),
       workspaceSessionIdentity(entry),
     );
     expect(selected?.status).toBe("idle");
@@ -157,6 +162,7 @@ describe("Workspace Session records in the shared read model", () => {
         snapshots: [wrong],
       }),
       [entry],
+      "workspace-1",
     );
     const faults = reconcileWorkspaceSessionTargetFaults(
       new Map([["stream-fault", { message: "Unrelated fault" }]]),
@@ -171,6 +177,7 @@ describe("Workspace Session records in the shared read model", () => {
         snapshots: [snapshot(entry)],
       }),
       [entry],
+      "workspace-1",
       mismatched,
     );
     expect(getAgentSession(correct, workspaceSessionIdentity(entry))?.status).toBe("running");
@@ -178,9 +185,14 @@ describe("Workspace Session records in the shared read model", () => {
     expect([...recovered]).toEqual([["stream-fault", { message: "Unrelated fault" }]]);
   });
 
-  test("keeps the shared live status and approvals during metadata changes", () => {
+  test("keeps the selected workspace attribution and approvals through physical updates", () => {
     const entry = record();
-    const initial = applyWorkspaceSessionRecords(emptyAgentSessionCollection(), [entry]);
+    const initial = applyWorkspaceSessionRecords(
+      emptyAgentSessionCollection(),
+      [entry],
+      "workspace-a",
+    );
+    const selectedWorkspace = applyWorkspaceSessionRecords(initial, [entry], "workspace-b");
     const live = {
       ...snapshot(entry),
       activity: "waiting_for_permission" as const,
@@ -189,11 +201,21 @@ describe("Workspace Session records in the shared read model", () => {
       ],
     };
     const projected = applyAgentSessionLiveDelta({
-      current: initial,
+      current: selectedWorkspace,
       envelope: { type: "session_upsert", session: live },
     });
+    expect(getAgentSession(projected, workspaceSessionIdentity(entry))?.sessionAssociation).toEqual(
+      {
+        kind: "repository",
+        workspaceId: "workspace-b",
+      },
+    );
     const selected = getAgentSession(
-      applyWorkspaceSessionRecords(projected, [{ ...entry, manualTitle: "Renamed" }]),
+      applyWorkspaceSessionRecords(
+        projected,
+        [{ ...entry, manualTitle: "Renamed" }],
+        "workspace-b",
+      ),
       workspaceSessionIdentity(entry),
     );
     expect(selected?.status).toBe("idle");

@@ -1,3 +1,5 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
+import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord, TaskAgentSessions } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
@@ -23,7 +25,7 @@ const sessionFixture: AgentSessionRecord = {
   selectedModel: null,
 };
 
-type BatchRead = (repoPath: string, taskIds: string[]) => Promise<TaskAgentSessions[]>;
+type BatchRead = (scope: WorkspaceRef, taskIds: string[]) => Promise<TaskAgentSessions[]>;
 
 const emptyLists: BatchRead = async (_repoPath, taskIds) =>
   taskIds.map((taskId) => ({ taskId, agentSessions: [] }));
@@ -35,7 +37,7 @@ const createReadPort = (read: BatchRead = emptyLists) => ({
 const createQueryClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 const listKey = (taskId: string, repoPath = "/repo") =>
-  agentSessionQueryKeys.list(repoPath, taskId);
+  agentSessionQueryKeys.list(workspaceRefFixture(repoPath), taskId);
 
 const waitForCondition = async (condition: () => boolean): Promise<void> => {
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -51,16 +53,25 @@ describe("agent session list reads", () => {
     const readPort = createReadPort();
 
     await Promise.all([
-      loadAgentSessionListsFromQuery(queryClient, "/repo", [" task-2 ", "task-1", "", "task-2"], {
+      loadAgentSessionListsFromQuery(
+        queryClient,
+        workspaceRefFixture("/repo"),
+        [" task-2 ", "task-1", "", "task-2"],
+        {
+          readPort,
+        },
+      ),
+      loadAgentSessionListFromQuery(queryClient, workspaceRefFixture("/repo"), "task-3", {
         readPort,
       }),
-      loadAgentSessionListFromQuery(queryClient, "/repo", "task-3", { readPort }),
-      loadAgentSessionListFromQuery(queryClient, "/other-repo", "task-1", { readPort }),
+      loadAgentSessionListFromQuery(queryClient, workspaceRefFixture("/other-repo"), "task-1", {
+        readPort,
+      }),
     ]);
 
     expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
-      ["/repo", ["task-1", "task-2", "task-3"]],
-      ["/other-repo", ["task-1"]],
+      [workspaceRefFixture("/repo"), ["task-1", "task-2", "task-3"]],
+      [workspaceRefFixture("/other-repo"), ["task-1"]],
     ]);
   });
 
@@ -73,11 +84,20 @@ describe("agent session list reads", () => {
         : emptyLists(repoPath, taskIds),
     );
 
-    const first = loadAgentSessionListFromQuery(queryClient, "/repo", "task-1", { readPort });
+    const first = loadAgentSessionListFromQuery(
+      queryClient,
+      workspaceRefFixture("/repo"),
+      "task-1",
+      { readPort },
+    );
     await waitForCondition(() => readPort.agentSessionsListForTasks.mock.calls.length === 1);
     const later = [
-      loadAgentSessionListFromQuery(queryClient, "/repo", "task-2", { readPort }),
-      loadAgentSessionListFromQuery(queryClient, "/repo", "task-3", { readPort }),
+      loadAgentSessionListFromQuery(queryClient, workspaceRefFixture("/repo"), "task-2", {
+        readPort,
+      }),
+      loadAgentSessionListFromQuery(queryClient, workspaceRefFixture("/repo"), "task-3", {
+        readPort,
+      }),
     ];
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(readPort.agentSessionsListForTasks).toHaveBeenCalledTimes(1);
@@ -87,8 +107,8 @@ describe("agent session list reads", () => {
     await Promise.all(later);
 
     expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
-      ["/repo", ["task-1"]],
-      ["/repo", ["task-2", "task-3"]],
+      [workspaceRefFixture("/repo"), ["task-1"]],
+      [workspaceRefFixture("/repo"), ["task-2", "task-3"]],
     ]);
   });
 
@@ -119,7 +139,7 @@ describe("agent session list reads", () => {
       const readPort = createReadPort(async () => response);
 
       await expect(
-        loadAgentSessionListFromQuery(queryClient, "/repo", "task-1", {
+        loadAgentSessionListFromQuery(queryClient, workspaceRefFixture("/repo"), "task-1", {
           forceFresh: true,
           readPort,
         }),
@@ -139,7 +159,9 @@ describe("agent session list reads", () => {
 
     const results = await Promise.allSettled(
       ["task-1", "task-2"].map((taskId) =>
-        loadAgentSessionListFromQuery(queryClient, "/repo", taskId, { readPort }),
+        loadAgentSessionListFromQuery(queryClient, workspaceRefFixture("/repo"), taskId, {
+          readPort,
+        }),
       ),
     );
 
@@ -161,18 +183,20 @@ describe("agent session list reads", () => {
 
     const lists = await loadAgentSessionListsFromQuery(
       queryClient,
-      "/repo",
+      workspaceRefFixture("/repo"),
       ["cached", "invalidated", "missing"],
       { readPort },
     );
 
     expect(lists).toEqual({ cached: [sessionFixture], invalidated: [], missing: [] });
     expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
-      ["/repo", ["invalidated", "missing"]],
+      [workspaceRefFixture("/repo"), ["invalidated", "missing"]],
     ]);
-    expect(await loadAgentSessionListsFromQuery(queryClient, "/repo", [" "], { readPort })).toEqual(
-      {},
-    );
+    expect(
+      await loadAgentSessionListsFromQuery(queryClient, workspaceRefFixture("/repo"), [" "], {
+        readPort,
+      }),
+    ).toEqual({});
     expect(readPort.agentSessionsListForTasks).toHaveBeenCalledTimes(1);
   });
 
@@ -181,8 +205,10 @@ describe("agent session list reads", () => {
     const readPort = createReadPort();
 
     await Promise.all([
-      queryClient.fetchQuery(agentSessionListQueryOptions("/repo", "task-1", readPort)),
-      loadAgentSessionListsFromQuery(queryClient, "/repo", ["task-1"], {
+      queryClient.fetchQuery(
+        agentSessionListQueryOptions(workspaceRefFixture("/repo"), "task-1", readPort),
+      ),
+      loadAgentSessionListsFromQuery(queryClient, workspaceRefFixture("/repo"), ["task-1"], {
         forceFresh: true,
         readPort,
       }),
@@ -196,7 +222,7 @@ describe("agent session list reads", () => {
     queryClient.setQueryData(listKey("cached"), [sessionFixture]);
     queryClient.setQueryData(listKey("invalidated"), []);
     await queryClient.invalidateQueries({ queryKey: listKey("invalidated"), refetchType: "none" });
-    await loadAgentSessionListFromQuery(queryClient, "/repo", "failed", {
+    await loadAgentSessionListFromQuery(queryClient, workspaceRefFixture("/repo"), "failed", {
       readPort: createReadPort(async () => {
         throw new Error("read failed");
       }),
@@ -205,13 +231,13 @@ describe("agent session list reads", () => {
 
     await retryAgentSessionListQueries(
       queryClient,
-      "/repo",
+      workspaceRefFixture("/repo"),
       ["cached", "failed", "invalidated", "missing"],
       readPort,
     );
 
     expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
-      ["/repo", ["failed", "invalidated", "missing"]],
+      [workspaceRefFixture("/repo"), ["failed", "invalidated", "missing"]],
     ]);
     expect(queryClient.getQueryState(listKey("failed"))?.status).toBe("success");
   });
@@ -220,11 +246,16 @@ describe("agent session list reads", () => {
     const queryClient = createQueryClient();
     const older = Promise.withResolvers<TaskAgentSessions[]>();
     const readPort = createReadPort(() => older.promise);
-    const loading = loadAgentSessionListsFromQuery(queryClient, "/repo", ["task-1"], { readPort });
+    const loading = loadAgentSessionListsFromQuery(
+      queryClient,
+      workspaceRefFixture("/repo"),
+      ["task-1"],
+      { readPort },
+    );
     await waitForCondition(() => readPort.agentSessionsListForTasks.mock.calls.length === 1);
     const updated = { ...sessionFixture, lastActivityAt: Date.parse("2026-10-04T10:00:00Z") };
 
-    updateAgentSessionListQuery(queryClient, "/repo", {
+    updateAgentSessionListQuery(queryClient, workspaceRefFixture("/repo"), {
       taskId: "task-1",
       agentSessions: [updated],
     });
@@ -239,13 +270,21 @@ describe("agent session list reads", () => {
     const queryClient = createQueryClient();
     const older = Promise.withResolvers<TaskAgentSessions[]>();
     const readPort = createReadPort(() => older.promise);
-    const loading = loadAgentSessionListFromQuery(queryClient, "/repo", "task-1", { readPort });
+    const loading = loadAgentSessionListFromQuery(
+      queryClient,
+      workspaceRefFixture("/repo"),
+      "task-1",
+      { readPort },
+    );
     await waitForCondition(() => readPort.agentSessionsListForTasks.mock.calls.length === 1);
     const first = { ...sessionFixture, externalSessionId: "update-1" };
     const second = { ...sessionFixture, externalSessionId: "update-2" };
 
-    updateAgentSessionListQuery(queryClient, "/repo", { taskId: "task-1", agentSessions: [first] });
-    updateAgentSessionListQuery(queryClient, "/repo", {
+    updateAgentSessionListQuery(queryClient, workspaceRefFixture("/repo"), {
+      taskId: "task-1",
+      agentSessions: [first],
+    });
+    updateAgentSessionListQuery(queryClient, workspaceRefFixture("/repo"), {
       taskId: "task-1",
       agentSessions: [second],
     });
@@ -266,16 +305,21 @@ describe("agent session list reads", () => {
         ? older.promise
         : taskIds.map((taskId) => ({ taskId, agentSessions: [current] })),
     );
-    const loading = loadAgentSessionListFromQuery(queryClient, "/repo", "task-1", { readPort });
+    const loading = loadAgentSessionListFromQuery(
+      queryClient,
+      workspaceRefFixture("/repo"),
+      "task-1",
+      { readPort },
+    );
     await waitForCondition(() => readPort.agentSessionsListForTasks.mock.calls.length === 1);
 
     let refreshed = false;
-    const refreshing = refreshAgentSessionLists(queryClient, "/repo", ["task-1"]).then(
-      (ownershipChanged) => {
-        refreshed = true;
-        return ownershipChanged;
-      },
-    );
+    const refreshing = refreshAgentSessionLists(queryClient, workspaceRefFixture("/repo"), [
+      "task-1",
+    ]).then((ownershipChanged) => {
+      refreshed = true;
+      return ownershipChanged;
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(refreshed).toBe(false);
 
@@ -301,14 +345,14 @@ describe("agent session list reads", () => {
       );
       const stopObserving = new QueryObserver(
         queryClient,
-        agentSessionListQueryOptions("/repo", "task-1", readPort),
+        agentSessionListQueryOptions(workspaceRefFixture("/repo"), "task-1", readPort),
       ).subscribe(() => {});
       try {
         await waitForCondition(() => readPort.agentSessionsListForTasks.mock.calls.length === 1);
         older.resolve([{ taskId: "task-1", agentSessions: [sessionFixture] }]);
         for (let tick = 0; tick < microtasks; tick += 1) await Promise.resolve();
 
-        await refreshAgentSessionLists(queryClient, "/repo", ["task-1"]);
+        await refreshAgentSessionLists(queryClient, workspaceRefFixture("/repo"), ["task-1"]);
 
         expect(queryClient.getQueryData<AgentSessionRecord[]>(listKey("task-1"))).toEqual([
           current,
@@ -325,12 +369,17 @@ describe("agent session list reads", () => {
       const older = Promise.withResolvers<TaskAgentSessions[]>();
       const committed = { ...sessionFixture, externalSessionId: "committed" };
       const readPort = createReadPort(() => older.promise);
-      const loading = loadAgentSessionListFromQuery(queryClient, "/repo", "task-1", { readPort });
+      const loading = loadAgentSessionListFromQuery(
+        queryClient,
+        workspaceRefFixture("/repo"),
+        "task-1",
+        { readPort },
+      );
       await waitForCondition(() => readPort.agentSessionsListForTasks.mock.calls.length === 1);
       older.resolve([{ taskId: "task-1", agentSessions: [sessionFixture] }]);
       for (let tick = 0; tick < microtasks; tick += 1) await Promise.resolve();
 
-      updateAgentSessionListQuery(queryClient, "/repo", {
+      updateAgentSessionListQuery(queryClient, workspaceRefFixture("/repo"), {
         taskId: "task-1",
         agentSessions: [committed],
       });
@@ -355,14 +404,19 @@ describe("agent session list reads", () => {
           ? older.promise
           : taskIds.map((taskId) => ({ taskId, agentSessions: [current] })),
       );
-      const loading = loadAgentSessionListFromQuery(queryClient, "/repo", "task-1", { readPort });
+      const loading = loadAgentSessionListFromQuery(
+        queryClient,
+        workspaceRefFixture("/repo"),
+        "task-1",
+        { readPort },
+      );
       await waitForCondition(() => readPort.agentSessionsListForTasks.mock.calls.length === 1);
       older.resolve([{ taskId: "task-1", agentSessions: [sessionFixture] }]);
       for (let tick = 0; tick < microtasks; tick += 1) await Promise.resolve();
       const pendingAtChange =
         queryClient.getQueryState(listKey("task-1"))?.fetchStatus === "fetching";
 
-      await refreshAgentSessionLists(queryClient, "/repo", ["task-1"]);
+      await refreshAgentSessionLists(queryClient, workspaceRefFixture("/repo"), ["task-1"]);
       const loaded = await loading;
 
       const state = queryClient.getQueryState<AgentSessionRecord[]>(listKey("task-1"));
@@ -385,14 +439,14 @@ describe("agent session list reads", () => {
     const queryClient = createQueryClient();
     const readPort = createReadPort(async (_repoPath, taskIds) => {
       if (taskIds.includes("deleted")) throw new Error("Task not found: deleted");
-      return emptyLists("/repo", taskIds);
+      return emptyLists(workspaceRefFixture("/repo"), taskIds);
     });
     queryClient.setQueryData(listKey("deleted"), [sessionFixture]);
     queryClient.setQueryData(listKey("surviving"), []);
     const stops = ["deleted", "surviving"].map((taskId) =>
       new QueryObserver(
         queryClient,
-        agentSessionListQueryOptions("/repo", taskId, readPort),
+        agentSessionListQueryOptions(workspaceRefFixture("/repo"), taskId, readPort),
       ).subscribe(() => {}),
     );
     const syncLists = createAgentSessionListLiveSync(queryClient);
@@ -402,13 +456,15 @@ describe("agent session list reads", () => {
       isConnectionSnapshot: true,
     });
     try {
-      await removeAgentSessionListQueries(queryClient, "/repo", ["deleted"]);
+      await removeAgentSessionListQueries(queryClient, workspaceRefFixture("/repo"), ["deleted"]);
       syncLists(connectionSnapshot);
       syncLists(connectionSnapshot);
       await waitForCondition(() => readPort.agentSessionsListForTasks.mock.calls.length === 1);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([["/repo", ["surviving"]]]);
+      expect(readPort.agentSessionsListForTasks.mock.calls).toEqual([
+        [workspaceRefFixture("/repo"), ["surviving"]],
+      ]);
       expect(queryClient.getQueryState(listKey("deleted"))?.status).toBe("success");
       expect(queryClient.getQueryData<AgentSessionRecord[]>(listKey("deleted"))).toEqual([]);
       expect(queryClient.getQueryState(listKey("surviving"))?.status).toBe("success");
@@ -423,12 +479,12 @@ describe("agent session list reads", () => {
     const readPort = createReadPort(() => older.promise);
     const stopObserving = new QueryObserver(
       queryClient,
-      agentSessionListQueryOptions("/repo", "task-1", readPort),
+      agentSessionListQueryOptions(workspaceRefFixture("/repo"), "task-1", readPort),
     ).subscribe(() => {});
     try {
       await waitForCondition(() => readPort.agentSessionsListForTasks.mock.calls.length === 1);
 
-      await removeAgentSessionListQueries(queryClient, "/repo", ["task-1"]);
+      await removeAgentSessionListQueries(queryClient, workspaceRefFixture("/repo"), ["task-1"]);
       older.resolve([{ taskId: "task-1", agentSessions: [sessionFixture] }]);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -454,7 +510,7 @@ describe("agent session list reads", () => {
     );
     const stopObserving = new QueryObserver(
       queryClient,
-      agentSessionListQueryOptions("/repo", "task-1", readPort),
+      agentSessionListQueryOptions(workspaceRefFixture("/repo"), "task-1", readPort),
     ).subscribe(() => {});
     const syncLists = createAgentSessionListLiveSync(queryClient);
     const connectionSnapshot = createLiveSnapshotEnvelope({

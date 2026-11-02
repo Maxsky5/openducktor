@@ -1,4 +1,4 @@
-import { Context, Data, type Effect } from "effect";
+import { Data, type Effect } from "effect";
 import type {
   HostOperationErrorAggregate,
   HostPathAccessErrorAggregate,
@@ -69,7 +69,3 @@ export type FilesystemPort = {
   /** Return the file-name extension, including its dot, or an empty string. */
   extension(path: string): string;
 };
-
-export class FilesystemPortTag extends Context.Service<FilesystemPortTag, FilesystemPort>()(
-  "@openducktor/host/FilesystemPort",
-) {}

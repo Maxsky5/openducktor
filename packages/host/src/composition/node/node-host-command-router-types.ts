@@ -23,6 +23,11 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
   mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode;
   mcpHostBridge?: McpHostBridgeServer;
   onBackgroundFailure(failure: HostOperationErrorAggregate): Effect.Effect<void, never>;
+  /**
+   * Reports the start and end of the one-time import of legacy data, so a shell can show progress.
+   * `finished` also runs when the import fails.
+   */
+  onHostDatabaseImport?: (phase: "started" | "finished") => Effect.Effect<void, never>;
   taskEventPublicationReporter: TaskEventPublicationReporter;
   /** Replaces the native runtime starters, for example in tests. */
   runtimeStarter?: RuntimeStarterPort;

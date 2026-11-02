@@ -89,6 +89,7 @@ describe("issue import selection", () => {
 
   test("keys each result page by provider scope, search, and cursor", () => {
     const options = issueImportListQueryOptions({
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       provider: githubProvider(),
       search: "crash",
@@ -96,7 +97,7 @@ describe("issue import selection", () => {
     });
     expect([...options.queryKey]).toEqual([
       "issue-items",
-      "/repo",
+      { workspaceId: "workspace-1", repoPath: "/repo" },
       "github",
       { host: "github.com", owner: "example", name: "repo" },
       undefined,

@@ -23,6 +23,7 @@ describe("resolveAgentChatTranscriptPresentation", () => {
       workingDirectory: "/repo/routed-worktree",
       sessionScope: {
         kind: "workflow" as const,
+        workspaceId: "workspace-1",
         taskId: "opaque-task",
         role: "qa" as const,
       },

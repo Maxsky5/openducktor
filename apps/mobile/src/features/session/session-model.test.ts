@@ -112,7 +112,7 @@ describe("resolveSessionOwner", () => {
     const resolution = resolveSessionOwner({
       identity,
       readOnly: false,
-      association: { kind: "workflow", taskId: "task-1", role: "build" },
+      association: { kind: "workflow", workspaceId: "ws-1", taskId: "task-1", role: "build" },
       readModelLoadState: LOADING,
       activeChats: records(undefined),
       archivedChats: records(undefined),
@@ -120,8 +120,13 @@ describe("resolveSessionOwner", () => {
     expect(resolution).toEqual({
       status: "ready",
       owner: { kind: "task", taskId: "task-1", role: "build" },
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "ws-1",
+        taskId: "task-1",
+        role: "build",
+      },
+      sessionScope: { kind: "workflow", workspaceId: "ws-1", taskId: "task-1", role: "build" },
     });
   });
 

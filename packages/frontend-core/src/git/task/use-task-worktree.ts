@@ -22,6 +22,7 @@ export type TaskWorktreeState = {
 const EMPTY_ASYNC_RETRY = async (): Promise<void> => {};
 
 export function useTaskWorktree({
+  workspaceId,
   repoPath,
   taskId,
   contextMode,
@@ -31,6 +32,7 @@ export function useTaskWorktree({
   hasSelectedTask,
   taskWorktreeVersion,
 }: {
+  workspaceId: string | null;
   repoPath: string | null;
   taskId: string | null;
   contextMode: TaskGitContextMode;
@@ -51,11 +53,12 @@ export function useTaskWorktree({
   });
   const query = useQuery({
     ...taskWorktreeQueryOptions({
+      workspaceId: workspaceId ?? "disabled",
       repoPath: repoPath ?? "",
       taskId: taskId ?? "",
       taskVersion: plan.shouldQuery ? taskWorktreeVersion : null,
     }),
-    enabled: plan.queryEnabled,
+    enabled: plan.queryEnabled && workspaceId !== null,
   });
   const read = readWorktree({
     plan,

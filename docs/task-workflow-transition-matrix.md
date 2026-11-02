@@ -8,7 +8,7 @@ This matrix lists every allowed task transition. The backend validates it. The U
 |---|---|
 | `odt_read_task` | `taskId` |
 | `odt_read_task_assets` | `taskId`, `assetIds` |
-| `odt_read_task_artifacts` | `taskId`, `codes`, `byteOffset?`, `maxBytes?`, `expectedVersion?` |
+| `odt_read_task_artifacts` | `taskId`, `codes` |
 | `odt_set_task_artifact` | `taskId`, `code`, `name?`, `fileName?`, `mediaType?`, `content?`, `dataBase64?`, `verdict?` |
 | `odt_delete_task_artifact` | `taskId`, `code` |
 | `odt_search_tasks` | `priority?`, `issueType?`, `status?`, `title?`, `tags?`, `limit?` |
@@ -27,7 +27,7 @@ Call `odt_read_task` first for task fields, `workflowArtifacts`, and an `artifac
 
 When task Markdown contains `odt-asset:<assetId>` images needed for the work, collect the relevant IDs and call `odt_read_task_assets` once when their raw total is at most 20 MiB. Split only larger sets.
 
-Then call `odt_read_task_artifacts` with a nonempty array of distinct `codes` from `task.artifacts`. For example, `{ "taskId": "repo-123", "codes": ["spec"] }` returns the full spec. The built-in workflow declares the codes `spec`, `plan`, and `qaReport`; free artifacts have their own stable codes. Free-artifact reads default to 16 KiB. Continued reads require one selected code and the version returned by the first read. Internal artifact IDs remain within the UI and store.
+Then call `odt_read_task_artifacts` with a nonempty array of distinct `codes` from `task.artifacts`. For example, `{ "taskId": "repo-123", "codes": ["spec"] }` returns the full spec. The built-in workflow declares the codes `spec`, `plan`, and `qaReport`; free artifacts have their own stable codes. Each read returns the complete content or fails. Internal artifact IDs remain within the UI and store.
 
 Human actions are `human_request_changes(taskId, note)` and `human_approve(taskId)`. `human_approve` opens the approval modal. Native task actions are `reset_implementation(taskId)`, `reset_task(taskId)`, `close_task(taskId, removeWorktree)`, and `remove_worktree(taskId)`.
 

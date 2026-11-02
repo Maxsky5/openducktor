@@ -154,9 +154,9 @@ function TaskDetailsContent({
     detectingPullRequestTaskIds,
   } = useRequiredContext(TasksStateContext, "TaskDetailsContent");
   // The list that holds the task.
-  const tasks = useRepoTask(repoPath, task.id).tasks ?? EMPTY_TASKS;
+  const tasks = useRepoTask({ workspaceId: workspaceId, repoPath }, task.id).tasks ?? EMPTY_TASKS;
   const scope = useTaskWorkspaceScope(workspaceId, { selectOnFocus: !embedded });
-  const provider = useQuery(repositoryGitProviderContextQueryOptions(repoPath));
+  const provider = useQuery(repositoryGitProviderContextQueryOptions({ workspaceId, repoPath }));
   const providerReadError = gitProviderReadError(provider.error);
   const queryClient = useQueryClient();
   const {
@@ -165,7 +165,7 @@ function TaskDetailsContent({
     records,
     isLoadingHistory,
     historyError,
-  } = useTaskSessionGroups(repoPath, task.id);
+  } = useTaskSessionGroups({ workspaceId, repoPath }, task.id);
   const workflowSteps = useMemo(
     () => taskWorkflowSteps(task, sessionGroups),
     [sessionGroups, task],
@@ -186,8 +186,11 @@ function TaskDetailsContent({
   );
 
   const refetchHistory = useCallback(
-    () => loadAgentSessionListFromQuery(queryClient, repoPath, task.id, { forceFresh: true }),
-    [queryClient, repoPath, task.id],
+    () =>
+      loadAgentSessionListFromQuery(queryClient, { workspaceId, repoPath }, task.id, {
+        forceFresh: true,
+      }),
+    [queryClient, workspaceId, repoPath, task.id],
   );
   const refreshDetails = useCallback(async () => {
     await Promise.all([refreshTasks(), refetchHistory()]);

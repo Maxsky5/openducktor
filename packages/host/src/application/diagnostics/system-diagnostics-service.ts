@@ -1,4 +1,4 @@
-import type { GitCheck, PathCheck, TaskStoreCheck } from "@openducktor/contracts";
+import type { GitCheck, PathCheck, TaskStoreCheck, WorkspaceRef } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
@@ -23,7 +23,7 @@ const gitVersionError = (version: string): string | null => {
 export type SystemDiagnosticsService = {
   pathCheck(forceRefresh?: boolean): Effect.Effect<PathCheck>;
   gitCheck(): Effect.Effect<GitCheck>;
-  taskStoreCheck(repoPath: string): Effect.Effect<TaskStoreCheck, TaskStoreError>;
+  taskStoreCheck(workspace: WorkspaceRef): Effect.Effect<TaskStoreCheck, TaskStoreError>;
 };
 
 export const createSystemDiagnosticsService = ({
@@ -72,8 +72,8 @@ export const createSystemDiagnosticsService = ({
       return { ok: error === null, executablePath, version: version.success, error };
     });
   },
-  taskStoreCheck(repoPath) {
-    return repoStoreDiagnostics.diagnoseRepoStore({ repoPath, prepare: true }).pipe(
+  taskStoreCheck(workspace) {
+    return repoStoreDiagnostics.diagnoseRepoStore({ ...workspace, prepare: true }).pipe(
       Effect.map((repoStoreHealth): TaskStoreCheck => ({
         repoStoreHealth,
         taskStoreOk: repoStoreHealth.isReady,

@@ -17,7 +17,12 @@ const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 const createSession = (taskId: string, externalSessionId: string) =>
   createAgentSessionSummaryFixture({
     externalSessionId: `ext-${externalSessionId}`,
-    sessionAssociation: { kind: "workflow", taskId: taskId, role: "spec" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: taskId,
+      role: "spec",
+    },
   });
 
 const sessionExternalIdParam = (
@@ -147,7 +152,12 @@ describe("resolveAgentStudioNavigationState", () => {
     const resolvedSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "ext-session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "planner",
+      },
     });
 
     expect(
@@ -166,7 +176,12 @@ describe("resolveAgentStudioNavigationState", () => {
     const resolvedSession = createAgentSessionSummaryFixture({
       runtimeKind: "codex",
       externalSessionId: "session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
 
       workingDirectory: "/repo/worktrees/authoritative",
     });
@@ -235,13 +250,23 @@ test("resolves the exact notification session when native IDs collide", () => {
     externalSessionId: "shared",
     runtimeKind: "opencode",
     workingDirectory: "/repo/first",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "spec",
+    },
   });
   const second = createAgentSessionSummaryFixture({
     externalSessionId: "shared",
     runtimeKind: "codex",
     workingDirectory: "/repo/second",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    },
   });
   const state = createNavigationState({
     sessions: [first, second],
@@ -265,13 +290,23 @@ test("reports an address without identity that matches more than one session", (
     externalSessionId: "shared",
     runtimeKind: "opencode",
     workingDirectory: "/repo/first",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "spec",
+    },
   });
   const second = createAgentSessionSummaryFixture({
     externalSessionId: "shared",
     runtimeKind: "codex",
     workingDirectory: "/repo/second",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    },
   });
   const state = createNavigationState({
     sessions: [first, second],

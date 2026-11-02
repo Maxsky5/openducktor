@@ -33,6 +33,7 @@ export const useAgentStudioTerminals = (
 ): TerminalSessionsModel => {
   const taskScope = useTaskTerminalScope({
     key: workspaceId !== null && taskId !== null ? terminalScopeKey(workspaceId, taskId) : null,
+    workspaceId,
     repoPath,
     taskId,
     taskVersion,

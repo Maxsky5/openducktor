@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { render as renderUi, waitFor } from "@testing-library/react";
 import { act, createElement, createRef, type ReactElement } from "react";
@@ -82,7 +83,7 @@ describe("TaskDetailsSheetController", () => {
     const task = createTaskCardFixture({ id: "task-1" });
     const connection = createTestClientConnection();
     const client = connection.queryClient;
-    const queryKey = taskQueryKeys.unfilteredRepoData(activeWorkspace.repoPath);
+    const queryKey = taskQueryKeys.unfilteredRepoData(activeWorkspace);
     client.setQueryData(queryKey, { tasks: [task] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
     let finishDelete = (): void => {};
@@ -164,7 +165,7 @@ describe("TaskDetailsSheetController", () => {
     const task = createTaskCardFixture({ id: "task-1" });
     const connection = createTestClientConnection();
     const client = connection.queryClient;
-    const queryKey = taskQueryKeys.unfilteredRepoData(activeWorkspace.repoPath);
+    const queryKey = taskQueryKeys.unfilteredRepoData(activeWorkspace);
     client.setQueryData(queryKey, { tasks: [task] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
     let failDelete = (_error: Error): void => {};
@@ -222,7 +223,7 @@ describe("TaskDetailsSheetController", () => {
       const task = createTaskCardFixture({ id: "task-1", status: "closed" });
       const connection = createTestClientConnection();
       const client = connection.queryClient;
-      const queryKey = taskQueryKeys.unfilteredRepoData(activeWorkspace.repoPath);
+      const queryKey = taskQueryKeys.unfilteredRepoData(activeWorkspace);
       client.setQueryData(queryKey, { tasks: [task] });
       const ref = createRef<TaskDetailsSheetControllerHandle>();
       const rendered = renderUi(
@@ -281,22 +282,27 @@ describe("TaskDetailsSheetController", () => {
       }
     },
   );
-  test("opens a closed task outside the board and clears selection on workspace switch", async () => {
+  test.each([
+    { name: "repository path", next: { workspaceId: "workspace-a", repoPath: "/repo-b" } },
+    { name: "workspace ID", next: { workspaceId: "workspace-b", repoPath: "/repo-a" } },
+  ])("opens a closed task and clears selection when its $name changes", async ({ next }) => {
     const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
     const task = createTaskCardFixture({ id: "closed-task", status: "closed" });
     const connection = createTestClientConnection({
       client: { tasksList: async () => [], tasksListAll: async () => [task] },
     });
     const client = connection.queryClient;
-    client.setQueryData(taskQueryKeys.repoData(activeWorkspace.repoPath), { tasks: [] });
+    client.setQueryData(taskQueryKeys.repoData(activeWorkspace), {
+      tasks: [],
+    });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
-    const controller = (repoPath: string) =>
+    const controller = (scope: WorkspaceRef) =>
       createElement(TaskDetailsSheetController, {
         ref,
-        activeWorkspace: { ...activeWorkspace, repoPath },
+        activeWorkspace: { ...activeWorkspace, ...scope },
         allTasks: [],
       });
-    const rendered = renderUi(controller(activeWorkspace.repoPath), {
+    const rendered = renderUi(controller(activeWorkspace), {
       wrapper: ({ children }) => createElement(ClientConnectionProvider, { connection }, children),
     });
     await act(async () => ref.current?.openTask(task.id));
@@ -305,11 +311,11 @@ describe("TaskDetailsSheetController", () => {
         expect.objectContaining({ task, open: true }),
       );
     });
-    await act(async () => rendered.rerender(controller("/repo-b")));
+    await act(async () => rendered.rerender(controller(next)));
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ task: null, open: false }),
     );
-    await act(async () => rendered.rerender(controller(activeWorkspace.repoPath)));
+    await act(async () => rendered.rerender(controller(activeWorkspace)));
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ task: null, open: false }),
     );

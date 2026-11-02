@@ -62,6 +62,13 @@ const workingDirectoryDependencies = {
     resolveConfiguredPath: (path: string) => path,
   },
   workspaceSettingsService: {
+    getRepoConfig: () =>
+      Effect.succeed(
+        repoConfigSchema.parse({
+          workspaceId: "repo",
+          worktreeBasePath: "/worktrees/repo",
+        }),
+      ),
     getRepoConfigByRepoPath: () =>
       Effect.succeed(
         repoConfigSchema.parse({

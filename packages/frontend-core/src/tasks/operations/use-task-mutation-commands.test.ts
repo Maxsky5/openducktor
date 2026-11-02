@@ -1,13 +1,17 @@
+import { workspaceRefFixture } from "../../test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { taskQueryKeys } from "../../queries/tasks";
 import { issueItemsQueryKeys } from "../../queries/issue-items";
+import { agentSessionQueryKeys } from "../../queries/agent-sessions";
+import { taskWorktreeQueryKeys } from "../../queries/build-runtime";
+import { taskStopImpactQueryKeys } from "../../queries/task-stop-impact";
+import { taskWorktreeCleanupImpactQueryKeys } from "../../queries/task-worktree-cleanup-impact";
 import type { TaskChatDraftCleanup } from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import {
   createTaskMutationCommands,
-  type TaskMutationCommandCacheImpact,
   type TaskMutationCommandHostPort,
 } from "./use-task-mutation-commands";
 import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
@@ -16,13 +20,13 @@ const createQueryClient = (): QueryClient =>
   new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 const createHostPort = (): TaskMutationCommandHostPort => ({
-  taskCreate: async () => undefined,
+  taskCreate: async () => createTaskCardFixture(),
   taskUpdate: async () => createTaskCardFixture(),
-  taskDelete: async () => undefined,
-  taskClose: async () => undefined,
+  taskDelete: async () => ({ ok: true }),
+  taskClose: async () => createTaskCardFixture(),
   taskWorktreeRemove: async () => undefined,
-  taskTransition: async () => undefined,
-  humanRequestChanges: async () => undefined,
+  taskTransition: async () => createTaskCardFixture(),
+  humanRequestChanges: async () => createTaskCardFixture(),
 });
 
 const createRunTaskMutation =
@@ -34,13 +38,6 @@ const createRunTaskMutation =
     await options.run("/repo");
   };
 
-const createCacheImpact = (): TaskMutationCommandCacheImpact => ({
-  removeDeletedTaskCaches: async () => undefined,
-  invalidateTaskStopImpact: async () => undefined,
-  invalidateTaskWorktree: async () => undefined,
-  invalidateTaskWorktreeCleanupImpact: async () => undefined,
-});
-
 describe("createTaskMutationCommands", () => {
   test("a delayed target-branch response does not overwrite a newer committed card", async () => {
     const client = createQueryClient();
@@ -51,7 +48,9 @@ describe("createTaskMutationCommands", () => {
     const response = new Promise<TaskCard>((resolve) => {
       resolveUpdate = resolve;
     });
-    client.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [previous] });
+    client.setQueryData(taskQueryKeys.repoData({ workspaceId: "workspace-1", repoPath: "/repo" }), {
+      tasks: [previous],
+    });
     const commands = createTaskMutationCommands({
       activeRepoPath: "/repo",
       activeWorkspaceId: "workspace-1",
@@ -60,15 +59,21 @@ describe("createTaskMutationCommands", () => {
       runTaskMutation: async (options) => {
         await options.run("/repo");
       },
-      cacheImpact: createCacheImpact(),
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
     try {
       const mutation = commands.setTaskTargetBranch("task-1", saved.targetBranch);
-      client.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [latest] });
+      client.setQueryData(
+        taskQueryKeys.repoData({ workspaceId: "workspace-1", repoPath: "/repo" }),
+        { tasks: [latest] },
+      );
       resolveUpdate(saved);
       await mutation;
-      expect(client.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))).toEqual({
+      expect(
+        client.getQueryData<{ tasks: TaskCard[] }>(
+          taskQueryKeys.repoData({ workspaceId: "workspace-1", repoPath: "/repo" }),
+        ),
+      ).toEqual({
         tasks: [latest],
       });
     } finally {
@@ -78,14 +83,13 @@ describe("createTaskMutationCommands", () => {
 
   test("normalizes a nonblank title before creating the task", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
-    const taskCreate = mock(async () => undefined);
+    const taskCreate = mock(async () => createTaskCardFixture());
     const commands = createTaskMutationCommands({
       activeRepoPath: "/repo",
       activeWorkspaceId: "workspace-1",
       runTaskMutation: createRunTaskMutation(received),
       hostPort: { ...createHostPort(), taskCreate },
       queryClient: createQueryClient(),
-      cacheImpact: createCacheImpact(),
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
 
@@ -96,7 +100,7 @@ describe("createTaskMutationCommands", () => {
     });
 
     expect(taskCreate).toHaveBeenCalledWith(
-      "/repo",
+      { workspaceId: "workspace-1", repoPath: "/repo" },
       {
         title: "Ship the release",
         issueType: "task",
@@ -109,14 +113,13 @@ describe("createTaskMutationCommands", () => {
 
   test("does nothing for a blank title", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
-    const taskCreate = mock(async () => undefined);
+    const taskCreate = mock(async () => createTaskCardFixture());
     const commands = createTaskMutationCommands({
       activeRepoPath: "/repo",
       activeWorkspaceId: "workspace-1",
       runTaskMutation: createRunTaskMutation(received),
       hostPort: { ...createHostPort(), taskCreate },
       queryClient: createQueryClient(),
-      cacheImpact: createCacheImpact(),
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
 
@@ -132,14 +135,13 @@ describe("createTaskMutationCommands", () => {
 
   test("rejects task creation without an active repository before calling the host", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
-    const taskCreate = mock(async () => undefined);
+    const taskCreate = mock(async () => createTaskCardFixture());
     const commands = createTaskMutationCommands({
       activeRepoPath: null,
       activeWorkspaceId: "workspace-1",
       runTaskMutation: createRunTaskMutation(received),
       hostPort: { ...createHostPort(), taskCreate },
       queryClient: createQueryClient(),
-      cacheImpact: createCacheImpact(),
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
 
@@ -157,7 +159,7 @@ describe("createTaskMutationCommands", () => {
 
   test("runs a task create once and reports its result", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
-    const taskCreate = mock(async () => undefined);
+    const taskCreate = mock(async () => createTaskCardFixture());
     const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
       received.push(options);
       await options.run("/current-repo");
@@ -168,7 +170,6 @@ describe("createTaskMutationCommands", () => {
       runTaskMutation,
       hostPort: { ...createHostPort(), taskCreate },
       queryClient: createQueryClient(),
-      cacheImpact: createCacheImpact(),
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
 
@@ -179,7 +180,7 @@ describe("createTaskMutationCommands", () => {
     });
 
     expect(taskCreate).toHaveBeenCalledWith(
-      "/current-repo",
+      { workspaceId: "workspace-1", repoPath: "/current-repo" },
       {
         title: "Create task",
         issueType: "task",
@@ -213,7 +214,6 @@ describe("createTaskMutationCommands", () => {
       runTaskMutation,
       hostPort: { ...createHostPort(), taskCreate },
       queryClient: createQueryClient(),
-      cacheImpact: createCacheImpact(),
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
 
@@ -226,7 +226,7 @@ describe("createTaskMutationCommands", () => {
     ).rejects.toThrow("Create failed");
 
     expect(taskCreate).toHaveBeenCalledWith(
-      "/repo",
+      { workspaceId: "workspace-1", repoPath: "/repo" },
       {
         title: "Create task",
         issueType: "task",
@@ -239,7 +239,7 @@ describe("createTaskMutationCommands", () => {
 
   test("forwards staged description assets through create and update", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
-    const taskCreate = mock(async () => undefined);
+    const taskCreate = mock(async () => createTaskCardFixture());
     const taskUpdate = mock(async () => createTaskCardFixture());
     const commands = createTaskMutationCommands({
       activeRepoPath: "/repo",
@@ -247,7 +247,6 @@ describe("createTaskMutationCommands", () => {
       runTaskMutation: createRunTaskMutation(received),
       hostPort: { ...createHostPort(), taskCreate, taskUpdate },
       queryClient: createQueryClient(),
-      cacheImpact: createCacheImpact(),
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
     const assets = {
@@ -265,7 +264,7 @@ describe("createTaskMutationCommands", () => {
     await commands.updateTask("task-1", { description: "Updated" }, assets);
 
     expect(taskCreate).toHaveBeenCalledWith(
-      "/repo",
+      { workspaceId: "workspace-1", repoPath: "/repo" },
       {
         title: "Create task",
         issueType: "task",
@@ -273,18 +272,25 @@ describe("createTaskMutationCommands", () => {
       },
       assets,
     );
-    expect(taskUpdate).toHaveBeenCalledWith("/repo", "task-1", { description: "Updated" }, assets);
+    expect(taskUpdate).toHaveBeenCalledWith(
+      { workspaceId: "workspace-1", repoPath: "/repo" },
+      "task-1",
+      { description: "Updated" },
+      assets,
+    );
   });
 
-  test("deletes a task and requests cached document removal for it", async () => {
+  test("deletes a task and removes its cached session list", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
-    const taskDelete = mock(async () => undefined);
-    const removeDeletedTaskCaches = mock(async () => undefined);
-    const invalidatedWorktrees: [string, string][] = [];
-    const invalidateTaskWorktree = mock(async (repoPath: string, taskId: string) => {
-      invalidatedWorktrees.push([repoPath, taskId]);
-    });
-    const invalidateTaskStopImpact = mock(async () => undefined);
+    const taskDelete = mock(async () => ({ ok: true }));
+    const queryClient = createQueryClient();
+    const scope = { workspaceId: "workspace-1", repoPath: "/repo" };
+    const sessionsKey = agentSessionQueryKeys.list(scope, "task-1");
+    const stopImpactKey = taskStopImpactQueryKeys.repo(scope);
+    const worktreeKey = taskWorktreeQueryKeys.taskWorktree({ ...scope, taskId: "task-1" });
+    queryClient.setQueryData(sessionsKey, []);
+    queryClient.setQueryData(stopImpactKey, {});
+    queryClient.setQueryData(worktreeKey, {});
     const cleanupTaskIds: string[][] = [];
     const taskChatDraftCleanup: Pick<TaskChatDraftCleanup, "runMutation"> = {
       runMutation: async (input) => {
@@ -297,30 +303,38 @@ describe("createTaskMutationCommands", () => {
       activeWorkspaceId: "workspace-1",
       runTaskMutation: createRunTaskMutation(received),
       hostPort: { ...createHostPort(), taskDelete },
-      queryClient: createQueryClient(),
-      cacheImpact: {
-        ...createCacheImpact(),
-        removeDeletedTaskCaches,
-        invalidateTaskStopImpact,
-        invalidateTaskWorktree,
-      },
+      queryClient,
       taskChatDraftCleanup,
     });
 
     await commands.deleteTask("task-1");
 
-    expect(taskDelete).toHaveBeenCalledWith("/repo", "task-1");
-    expect(invalidateTaskStopImpact).toHaveBeenCalledWith("/repo");
+    expect(taskDelete).toHaveBeenCalledWith(
+      { workspaceId: "workspace-1", repoPath: "/repo" },
+      "task-1",
+    );
     expect(cleanupTaskIds).toEqual([["task-1"]]);
-    expect(removeDeletedTaskCaches).toHaveBeenCalledWith("/repo", "task-1");
-    expect(invalidatedWorktrees).toEqual([["/repo", "task-1"]]);
+    expect(queryClient.getQueryState(sessionsKey)).toBeUndefined();
+    expect(queryClient.getQueryState(stopImpactKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(worktreeKey)?.isInvalidated).toBe(true);
   });
 
   test("invalidates cached issue links for the deleted task's repository", async () => {
     const queryClient = createQueryClient();
-    queryClient.setQueryDefaults(issueItemsQueryKeys.repo("/repo"), { staleTime: 60_000 });
-    const repoIssueKey = [...issueItemsQueryKeys.repo("/repo"), "azure_devops", "work-items"];
-    const otherRepoIssueKey = [...issueItemsQueryKeys.repo("/other"), "azure_devops", "work-items"];
+    queryClient.setQueryDefaults(
+      issueItemsQueryKeys.repo({ workspaceId: "workspace-1", repoPath: "/repo" }),
+      { staleTime: 60_000 },
+    );
+    const repoIssueKey = [
+      ...issueItemsQueryKeys.repo({ workspaceId: "workspace-1", repoPath: "/repo" }),
+      "azure_devops",
+      "work-items",
+    ];
+    const otherRepoIssueKey = [
+      ...issueItemsQueryKeys.repo(workspaceRefFixture("/other")),
+      "azure_devops",
+      "work-items",
+    ];
     queryClient.setQueryData(repoIssueKey, { items: [{ linkedTaskId: "task-1" }] });
     queryClient.setQueryData(otherRepoIssueKey, { items: [{ linkedTaskId: "other-task" }] });
     const commands = createTaskMutationCommands({
@@ -329,7 +343,6 @@ describe("createTaskMutationCommands", () => {
       runTaskMutation: createRunTaskMutation([]),
       hostPort: createHostPort(),
       queryClient,
-      cacheImpact: createCacheImpact(),
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
 
@@ -346,9 +359,11 @@ describe("createTaskMutationCommands", () => {
       ...createHostPort(),
       taskClose: async (_repoPath, _taskId, removeWorktree) => {
         calls.push(`close:${removeWorktree}`);
+        return createTaskCardFixture();
       },
       taskTransition: async (_repoPath, _taskId, status, reason) => {
         calls.push(`transition:${status}:${reason}`);
+        return createTaskCardFixture();
       },
     };
     const taskChatDraftCleanup: Pick<TaskChatDraftCleanup, "runMutation"> = {
@@ -365,7 +380,6 @@ describe("createTaskMutationCommands", () => {
       runTaskMutation: createRunTaskMutation(received),
       hostPort,
       queryClient: createQueryClient(),
-      cacheImpact: createCacheImpact(),
       taskChatDraftCleanup,
     });
 
@@ -387,6 +401,12 @@ describe("createTaskMutationCommands", () => {
 
   test("removes the worktree of a closed task and reads its cleanup impact again", async () => {
     const calls: string[] = [];
+    const queryClient = createQueryClient();
+    const impactKey = taskWorktreeCleanupImpactQueryKeys.get(
+      { workspaceId: "workspace-1", repoPath: "/repo" },
+      "task-1",
+    );
+    queryClient.setQueryData(impactKey, {});
     const commands = createTaskMutationCommands({
       activeRepoPath: "/repo",
       activeWorkspaceId: "workspace-1",
@@ -394,26 +414,26 @@ describe("createTaskMutationCommands", () => {
       hostPort: {
         ...createHostPort(),
         taskWorktreeRemove: async (repoPath, taskId) => {
-          calls.push(`remove:${repoPath}:${taskId}`);
+          calls.push(`remove:${repoPath.repoPath}:${taskId}`);
         },
       },
-      queryClient: createQueryClient(),
-      cacheImpact: {
-        ...createCacheImpact(),
-        invalidateTaskWorktreeCleanupImpact: async (repoPath, taskId) => {
-          calls.push(`impact:${repoPath}:${taskId}`);
-        },
-      },
+      queryClient,
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
 
     await commands.removeTaskWorktree("task-1");
 
-    expect(calls).toEqual(["remove:/repo:task-1", "impact:/repo:task-1"]);
+    expect(calls).toEqual(["remove:/repo:task-1"]);
+    expect(queryClient.getQueryState(impactKey)?.isInvalidated).toBe(true);
   });
 
   test("invalidates stop impact after a failed close attempt", async () => {
-    const invalidateTaskStopImpact = mock(async () => undefined);
+    const queryClient = createQueryClient();
+    const stopImpactKey = taskStopImpactQueryKeys.repo({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+    });
+    queryClient.setQueryData(stopImpactKey, {});
     const commands = createTaskMutationCommands({
       activeRepoPath: "/repo",
       activeWorkspaceId: "workspace-1",
@@ -424,14 +444,13 @@ describe("createTaskMutationCommands", () => {
           throw new Error("close failed");
         },
       },
-      queryClient: createQueryClient(),
-      cacheImpact: { ...createCacheImpact(), invalidateTaskStopImpact },
+      queryClient,
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
 
     await expect(commands.closeTask("task-1", { removeWorktree: true })).rejects.toThrow(
       "close failed",
     );
-    expect(invalidateTaskStopImpact).toHaveBeenCalledWith("/repo");
+    expect(queryClient.getQueryState(stopImpactKey)?.isInvalidated).toBe(true);
   });
 });

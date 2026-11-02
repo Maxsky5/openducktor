@@ -129,6 +129,7 @@ export const TaskDetailsDocumentSection = memo(
     previous.taskAssetContext?.workspaceId === next.taskAssetContext?.workspaceId &&
     previous.taskAssetContext?.taskId === next.taskAssetContext?.taskId &&
     previous.taskAssetContext?.scope === next.taskAssetContext?.scope &&
+    previous.issueImageContext?.workspaceId === next.issueImageContext?.workspaceId &&
     previous.issueImageContext?.repoPath === next.issueImageContext?.repoPath &&
     previous.issueImageContext?.sourceId === next.issueImageContext?.sourceId &&
     previous.issueImageContext?.providerId === next.issueImageContext?.providerId,

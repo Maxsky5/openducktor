@@ -27,6 +27,7 @@ const host: RemoteHostDescriptor = {
     { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
   ],
 };
+const workspace = { workspaceId: "repo", repoPath: "/repo" };
 const snapshot: HostRuntimeSnapshot = {
   hostInstanceId: "host-a",
   runtimes: [],
@@ -177,7 +178,7 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
       reconcileStreamSnapshot: async () => {
         taskSnapshotStarted.resolve();
         await taskSnapshotGate.promise;
-        return { taskIdsByRepo: new Map([["/repo", []]]), failures: new Map() };
+        return { taskIdsByRepo: new Map([[workspace, []]]), failures: new Map() };
       },
       releaseWorkspace: async () => {},
     },
@@ -186,7 +187,7 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
       releaseWorkspace: async () => {},
       reconcileStreamSnapshot: async () => new Map(),
       admitExternalEvent: async (event) => ({
-        repoPath: event.repoPath,
+        repoPath: { workspaceId: event.workspaceId, repoPath: event.repoPath },
         changedTaskIds: [],
       }),
       completeExternalEvents: async (changes) => {
@@ -194,7 +195,7 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
         sessionsChanged.resolve();
       },
     },
-    getOpenRepoPaths: () => ["/repo"],
+    getOpenRepoPaths: () => [workspace],
     onDegraded: (cause) => {
       throw cause;
     },
@@ -290,6 +291,7 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
           kind: "external_task_created",
           eventId: "after-retry",
           boardChanges: null,
+          workspaceId: workspace.workspaceId,
           repoPath: "/repo",
           taskId: "task",
           taskSnapshot: { id: "task", title: "After retry", status: "open" },

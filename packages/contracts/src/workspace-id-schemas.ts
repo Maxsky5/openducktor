@@ -10,3 +10,9 @@ export const workspaceIdSchema = z
     WORKSPACE_ID_PATTERN,
     "Workspace ID must contain only lowercase letters, digits, and single dashes.",
   );
+
+export const workspaceRefSchema = z.strictObject({
+  workspaceId: workspaceIdSchema,
+  repoPath: z.string().trim().min(1),
+});
+export type WorkspaceRef = z.infer<typeof workspaceRefSchema>;

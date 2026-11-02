@@ -33,7 +33,12 @@ const repository = {
 const workflow = {
   ...ref,
   runtimePolicy: { kind: "opencode" as const },
-  sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "spec" as const },
+  sessionScope: {
+    kind: "workflow" as const,
+    workspaceId: "repo",
+    taskId: "task-1",
+    role: "spec" as const,
+  },
   systemPrompt: "Full workflow instructions. Read this task and use only allowed tools.",
 };
 const current = session({
@@ -42,6 +47,37 @@ const current = session({
 });
 
 describe("OpenCode V2 conversation identity and history", () => {
+  test("controls one native repository conversation from each selected saved workspace", async () => {
+    const { controller, requests } = createController(({ url, method, body }) => {
+      if (url.pathname.endsWith("/migration/v1")) return Response.json({ status: "completed" });
+      if (method === "PATCH" || method === "PUT") return noContent();
+      if (url.pathname === "/api/session/ses_saved") return response(current);
+      if (url.pathname.endsWith("/prompt"))
+        return response({
+          id: "inbox_native",
+          sessionID: ref.externalSessionId,
+          type: "user",
+          payload: { text: body.text },
+          delivery: "prompt",
+          time: { created: 8 },
+        });
+      throw new Error(`Unexpected repository request ${method} ${url.pathname}`);
+    });
+    for (const workspaceId of ["first", "second", "first"]) {
+      const input = { ...repository, sessionScope: { kind: "repository" as const, workspaceId } };
+      await controller.bind(input);
+      expect(
+        await controller.sendUserMessage({
+          ...input,
+          parts: [{ kind: "text", text: workspaceId }],
+        }),
+      ).toMatchObject({ type: "user_message", messageId: "inbox_native" });
+    }
+    expect(
+      requests.filter(({ url }) => url.pathname.endsWith("/prompt")).map(({ body }) => body.text),
+    ).toEqual(["first", "second", "first"]);
+  });
+
   test.each([
     { speed: "fast", outcome: "reject" },
     { speed: undefined, outcome: "accept" },

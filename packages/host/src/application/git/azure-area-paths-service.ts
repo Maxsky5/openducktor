@@ -1,3 +1,5 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
+import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { AzureAreaPathsPort } from "../../ports/azure-area-paths-port";
@@ -11,11 +13,11 @@ export const createAzureAreaPathsService = ({
 }: {
   resolver: GitProviderResolver;
   areaPaths: AzureAreaPathsPort;
-  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
+  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig">;
 }) => ({
-  list(repoPath: string) {
+  list(workspace: WorkspaceRef) {
     return Effect.gen(function* () {
-      const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const repoConfig = yield* getScopedRepoConfig(workspaceSettingsService, workspace);
       const provider = yield* resolver.resolve(repoConfig);
       if (provider.getDescriptor().id !== "azure_devops") {
         return yield* new HostValidationError({

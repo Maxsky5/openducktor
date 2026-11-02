@@ -213,7 +213,9 @@ describe("createTaskService approval context", () => {
       }),
     });
     await expect(
-      Effect.runPromise(service.getApprovalContext({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(
+        service.getApprovalContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).resolves.toEqual({
       outcome: "ready",
       approvalContext: {
@@ -346,21 +348,7 @@ describe("createTaskService approval context", () => {
           taskWorkflows: builtinTaskWorkflows,
           gitProviderResolver: unusedGitProviderResolver,
           gitPort: createDirectMergeGitPort({ calls: [] }),
-          settingsConfig: extendSettingsConfigPort(createBuildSettingsConfig(new Set(["/repo"])), {
-            readConfig() {
-              return Effect.tryPromise({
-                try: async () => {
-                  return null;
-                },
-                catch: (cause) =>
-                  new HostOperationError({
-                    operation: "test.effect",
-                    message: cause instanceof Error ? cause.message : String(cause),
-                    cause: cause,
-                  }),
-              });
-            },
-          }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           systemCommands: createApprovalSystemCommands(),
           taskStore,
           taskWorktreeService: createDirectMergeTaskWorktreeService(null),
@@ -369,7 +357,7 @@ describe("createTaskService approval context", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).getApprovalContext({ repoPath: "/repo", taskId: "task-1" }),
+        }).getApprovalContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toEqual({
       outcome: "missing_builder_worktree",
@@ -495,24 +483,7 @@ describe("createTaskService approval context", () => {
               "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
             },
           }),
-          settingsConfig: extendSettingsConfigPort(
-            createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-            {
-              readConfig() {
-                return Effect.tryPromise({
-                  try: async () => {
-                    return null;
-                  },
-                  catch: (cause) =>
-                    new HostOperationError({
-                      operation: "test.effect",
-                      message: cause instanceof Error ? cause.message : String(cause),
-                      cause: cause,
-                    }),
-                });
-              },
-            },
-          ),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
           systemCommands: createApprovalSystemCommands(),
           taskStore,
           taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
@@ -521,7 +492,7 @@ describe("createTaskService approval context", () => {
             repoPath: "/repo",
             hooks: { postComplete: [] },
           }),
-        }).getApprovalContext({ repoPath: "/repo", taskId: "task-1" }),
+        }).getApprovalContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
     ).resolves.toMatchObject({
       outcome: "ready",

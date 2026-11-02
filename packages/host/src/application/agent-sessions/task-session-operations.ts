@@ -95,11 +95,16 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
             { ...input.session, repoPath, sessionScope: scope },
             "read-resume",
           );
-          const task = yield* taskReader.getTask({ repoPath, taskId: scope.taskId });
+          const task = yield* taskReader.getTask({
+            workspaceId: scope.workspaceId,
+            repoPath,
+            taskId: scope.taskId,
+          });
           yield* startupStep(
             { id: "workflow", label: "Apply task workflow updates" },
             deps.taskSessionStart.complete(
               {
+                workspaceId: scope.workspaceId,
                 canonicalRepoPath: repoPath,
                 task,
                 preparedStatus: task.status,
@@ -168,14 +173,16 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
         Effect.gen(function* () {
           const repoPath = yield* canonicalizeRepoPath(input.repoPath);
           yield* taskLifecycle.acquireLifecycle(repoPath, [scope.taskId], "fork session");
-          const task = yield* taskReader.getTask({ repoPath, taskId: scope.taskId }).pipe(
-            Effect.mapError((cause) =>
-              toHostOperationError(cause, "task-workflow-session.read-fork-task", {
-                repoPath,
-                taskId: scope.taskId,
-              }),
-            ),
-          );
+          const task = yield* taskReader
+            .getTask({ workspaceId: scope.workspaceId, repoPath, taskId: scope.taskId })
+            .pipe(
+              Effect.mapError((cause) =>
+                toHostOperationError(cause, "task-workflow-session.read-fork-task", {
+                  repoPath,
+                  taskId: scope.taskId,
+                }),
+              ),
+            );
           if (!input.forkPoint)
             yield* validateTaskSessionWorkflowAvailable(
               taskWorkflows.forTask(task),

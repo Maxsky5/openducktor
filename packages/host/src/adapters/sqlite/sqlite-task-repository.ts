@@ -1,7 +1,9 @@
+import { searchTasksInDatabase } from "./sqlite-task-search";
+import { latestWorkflowArtifactRows } from "./sqlite-task-workflow-artifact-queries";
+import { HostValidationError } from "../../effect/host-errors";
 import { Effect } from "effect";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
-import type { TaskStorePort } from "../../ports/task-repository-ports";
-import { recordCommittedTaskStatusChange } from "../../ports/task-status-changes";
+import { errorMessage } from "../../effect/host-errors";
+import type { TaskRecord, TaskStorePort } from "../../ports/task-repository-ports";
 import {
   clearAgentSessionsByRoles,
   deleteAgentSession,
@@ -19,39 +21,37 @@ import {
   renameArtifactInDatabase,
   replaceArtifactInDatabase,
 } from "./sqlite-task-artifact-writes";
-import {
-  clearTaskArtifacts,
-  clearWorkflowArtifacts,
-  insertWorkflowArtifact,
-} from "./sqlite-task-workflow-artifact-writes";
-import { taskMetadata } from "./sqlite-task-metadata-read-model";
+import { clearTaskArtifacts, clearWorkflowArtifacts } from "./sqlite-task-workflow-artifact-writes";
+import { taskMetadata, taskDelivery, toMetadataArtifact } from "./sqlite-task-metadata-read-model";
 import { listPullRequestSyncCandidatesInDatabase } from "./sqlite-task-pull-request-read-model";
 import {
   listDirectMergeTaskIdsInDatabase,
   listTaskIdsInDatabase,
   requireTaskRow,
   taskReferenceCandidates,
+  mergeCandidates,
 } from "./sqlite-task-queries";
 import {
   hostTerminalStates,
   type SqliteTaskRepositoryContextProvider,
+  type SqliteTaskRepositoryContext,
 } from "./sqlite-task-repository-context";
 import {
   applyTaskPatch,
   deleteTasks,
   setDirectMergeRecord,
   setPullRequestRecord,
-  updateTaskStatus,
 } from "./sqlite-task-writes";
+import { commitTaskMutation, type TaskMutationResult } from "./sqlite-task-mutation";
+import { createSqliteTaskWorkflowMutations } from "./sqlite-task-workflow-mutations";
 
 const readyTaskStoreHealth = (databasePath: string) => ({
   category: "healthy" as const,
   status: "ready" as const,
   isReady: true,
-  detail: "SQLite task store is ready.",
+  detail: "The host database is ready.",
   databasePath,
 });
-
 const blockingTaskStoreHealth = (detail: string) => ({
   category: "database_unavailable" as const,
   status: "blocking" as const,
@@ -69,372 +69,372 @@ export const createSqliteTaskRepository = ({
   contextProvider: withDatabase,
   now = () => new Date(),
 }: CreateSqliteTaskRepositoryInput): TaskStorePort => {
+  const withReadDatabase = <A>(
+    input: { repoPath: string; workspaceId: string },
+    operation: string,
+    use: (context: SqliteTaskRepositoryContext) => Effect.Effect<A, unknown>,
+  ) =>
+    withDatabase(input, operation, (context) =>
+      context.session.readTransaction(operation, (session) => use({ ...context, session })),
+    );
   return {
-    listArtifacts(input) {
-      return withDatabase(input.repoPath, "sqliteTaskRepository.listArtifacts", ({ session }) =>
+    listArtifacts: (input) =>
+      withReadDatabase(input, "sqliteTaskRepository.listArtifacts", ({ session, workspaceId }) =>
         Effect.gen(function* () {
-          yield* requireTaskRow(session, input.taskId, input.repoPath);
-          return yield* listArtifactsInDatabase(session, input.taskId);
+          yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
+          return yield* listArtifactsInDatabase(session, workspaceId, input.taskId);
         }),
-      );
-    },
-    readArtifact(input) {
-      return withDatabase(input.repoPath, "sqliteTaskRepository.readArtifact", ({ session }) =>
+      ),
+    readArtifact: (input) =>
+      withReadDatabase(input, "sqliteTaskRepository.readArtifact", ({ session, workspaceId }) =>
         Effect.gen(function* () {
-          yield* requireTaskRow(session, input.taskId, input.repoPath);
-          return yield* readArtifactInDatabase(session, input);
+          yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
+          return yield* readArtifactInDatabase(session, workspaceId, input);
         }),
-      );
-    },
-    createArtifact(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.createArtifact",
-        ({ session, taskWorkflows }) =>
-          session.transaction("sqliteTaskRepository.createArtifact", (transaction) =>
-            createArtifactInDatabase(transaction, input, now(), taskWorkflows),
+      ),
+    createArtifact: (input) =>
+      withDatabase(input, "sqliteTaskRepository.createArtifact", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.createArtifact", (session) =>
+          createArtifactInDatabase(
+            session,
+            context.workspaceId,
+            input,
+            now(),
+            context.taskWorkflows,
+          ).pipe(
+            Effect.map((value) => ({
+              value,
+              taskId: input.taskId,
+              artifactChanges: [
+                { taskId: input.taskId, artifactIds: [value.artifactId], removedArtifactIds: [] },
+              ],
+            })),
           ),
-      );
-    },
-    renameArtifact(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.renameArtifact",
-        ({ session, taskWorkflows }) =>
-          session.transaction("sqliteTaskRepository.renameArtifact", (transaction) =>
-            renameArtifactInDatabase(transaction, input, now(), taskWorkflows),
+        ),
+      ),
+    renameArtifact: (input) =>
+      withDatabase(input, "sqliteTaskRepository.renameArtifact", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.renameArtifact", (session) =>
+          renameArtifactInDatabase(
+            session,
+            context.workspaceId,
+            input,
+            now(),
+            context.taskWorkflows,
+          ).pipe(
+            Effect.map((value) => ({
+              value,
+              taskId: input.taskId,
+              artifactChanges: [
+                { taskId: input.taskId, artifactIds: [value.artifactId], removedArtifactIds: [] },
+              ],
+            })),
           ),
-      );
-    },
-    replaceArtifact(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.replaceArtifact",
-        ({ session, taskWorkflows }) =>
-          session.transaction("sqliteTaskRepository.replaceArtifact", (transaction) =>
-            replaceArtifactInDatabase(transaction, input, now(), taskWorkflows),
+        ),
+      ),
+    replaceArtifact: (input) =>
+      withDatabase(input, "sqliteTaskRepository.replaceArtifact", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.replaceArtifact", (session) =>
+          replaceArtifactInDatabase(
+            session,
+            context.workspaceId,
+            input,
+            now(),
+            context.taskWorkflows,
+          ).pipe(
+            Effect.map((value) => ({
+              value,
+              taskId: input.taskId,
+              artifactChanges: [
+                { taskId: input.taskId, artifactIds: [value.artifactId], removedArtifactIds: [] },
+              ],
+            })),
           ),
-      );
-    },
-    deleteArtifact(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.deleteArtifact",
-        ({ session, taskWorkflows }) =>
-          session.transaction("sqliteTaskRepository.deleteArtifact", (transaction) =>
-            deleteArtifactInDatabase(transaction, input, taskWorkflows),
+        ),
+      ),
+    deleteArtifact: (input) =>
+      withDatabase(input, "sqliteTaskRepository.deleteArtifact", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.deleteArtifact", (session) =>
+          deleteArtifactInDatabase(session, context.workspaceId, input, context.taskWorkflows).pipe(
+            Effect.map((value) => ({
+              value,
+              taskId: input.taskId,
+              artifactChanges: [
+                {
+                  taskId: input.taskId,
+                  artifactIds: [input.artifactId],
+                  removedArtifactIds: [input.artifactId],
+                },
+              ],
+            })),
           ),
-      );
-    },
-    clearAgentSessionsByRoles(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.clearAgentSessionsByRoles",
-        ({ session }) =>
-          session.transaction("sqliteTaskRepository.clearAgentSessionsByRoles", (transaction) =>
-            clearAgentSessionsByRoles(transaction, input, now()),
+        ),
+      ),
+    clearAgentSessionsByRoles: (input) =>
+      withDatabase(input, "sqliteTaskRepository.clearAgentSessionsByRoles", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.clearAgentSessionsByRoles", (session) =>
+          clearAgentSessionsByRoles(session, context.workspaceId, input, now()).pipe(
+            Effect.map((value) => ({ value, taskId: input.taskId })),
           ),
-      );
-    },
-    deleteAgentSession(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.deleteAgentSession",
-        ({ session }) =>
-          session.transaction("sqliteTaskRepository.deleteAgentSession", (transaction) =>
-            deleteAgentSession(transaction, input, now()),
+        ),
+      ),
+    deleteAgentSession: (input) =>
+      withDatabase(input, "sqliteTaskRepository.deleteAgentSession", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.deleteAgentSession", (session) =>
+          deleteAgentSession(session, context.workspaceId, input, now()).pipe(
+            Effect.map((value) => ({ value, taskId: input.taskId })),
           ),
-      );
-    },
-    clearWorkflowArtifacts(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.clearWorkflowArtifacts",
-        ({ session }) =>
-          session.transaction("sqliteTaskRepository.clearWorkflowArtifacts", (transaction) =>
-            clearWorkflowArtifacts(transaction, input.taskId, input.repoPath, input.codes),
+        ),
+      ),
+    clearWorkflowArtifacts: (input) =>
+      withDatabase(input, "sqliteTaskRepository.clearWorkflowArtifacts", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.clearWorkflowArtifacts", (session) =>
+          clearWorkflowArtifacts(
+            session,
+            context.workspaceId,
+            input.taskId,
+            input.repoPath,
+            input.codes,
+          ).pipe(
+            Effect.map((artifactIds) => ({
+              value: true,
+              taskId: input.taskId,
+              artifactChanges: artifactIds.length
+                ? [{ taskId: input.taskId, artifactIds, removedArtifactIds: artifactIds }]
+                : [],
+            })),
           ),
-      );
-    },
-    clearTaskArtifacts(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.clearTaskArtifacts",
-        ({ session }) =>
-          session.transaction("sqliteTaskRepository.clearTaskArtifacts", (transaction) =>
-            clearTaskArtifacts(transaction, input.taskId, input.repoPath),
+        ),
+      ),
+    clearTaskArtifacts: (input) =>
+      withDatabase(input, "sqliteTaskRepository.clearTaskArtifacts", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.clearTaskArtifacts", (session) =>
+          clearTaskArtifacts(session, context.workspaceId, input.taskId, input.repoPath).pipe(
+            Effect.map((artifactIds) => ({
+              value: true,
+              taskId: input.taskId,
+              artifactChanges: artifactIds.length
+                ? [{ taskId: input.taskId, artifactIds, removedArtifactIds: artifactIds }]
+                : [],
+            })),
           ),
-      );
-    },
-    createTask(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.createTask",
-        ({ session, workspaceId, taskWorkflows }) =>
-          session.transaction("sqliteTaskRepository.createTask", (transaction) =>
-            Effect.gen(function* () {
-              const createdAt = now();
-              const taskId = yield* insertTaskFromCreateInput({
-                createdAt,
-                session: transaction,
-                status: input.status,
-                task: input.task,
-                workspaceId,
-              });
-              return yield* getTaskRecord(transaction, taskId, input.repoPath, taskWorkflows);
-            }),
-          ),
-      );
-    },
-    deleteTask(input) {
-      return withDatabase(input.repoPath, "sqliteTaskRepository.deleteTask", ({ session }) =>
-        session.transaction("sqliteTaskRepository.deleteTask", (transaction) =>
+        ),
+      ),
+    createTask: (input) =>
+      withDatabase(input, "sqliteTaskRepository.createTask", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.createTask", (session) =>
           Effect.gen(function* () {
-            const root = yield* requireTaskRow(transaction, input.taskId, input.repoPath);
-            yield* deleteTasks(transaction, new Set<string>([root.id]));
-            return true;
+            const taskId = yield* insertTaskFromCreateInput({
+              createdAt: now(),
+              session,
+              status: input.status,
+              task: input.task,
+              workspaceId: context.workspaceId,
+            });
+            const value = yield* getTaskRecord(
+              session,
+              context.workspaceId,
+              taskId,
+              input.repoPath,
+              context.taskWorkflows,
+            );
+            return { value, taskId };
           }),
         ),
-      );
-    },
-    diagnoseRepoStore(input) {
-      const diagnose = withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.diagnoseRepoStore",
-        ({ databasePath }) => Effect.succeed(readyTaskStoreHealth(databasePath)),
-      );
-      return Effect.catch(diagnose, (cause) =>
-        Effect.succeed(blockingTaskStoreHealth(errorMessage(cause))),
-      );
-    },
-    findTask(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.findTask",
-        ({ session, taskWorkflows }) => findTaskRecord(session, input.taskId, taskWorkflows),
-      );
-    },
-    listTaskReferences(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.listTaskReferences",
-        ({ session }) => taskReferenceCandidates(session),
-      );
-    },
-    getTask(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.getTask",
-        ({ session, taskWorkflows }) =>
-          getTaskRecord(session, input.taskId, input.repoPath, taskWorkflows),
-      );
-    },
-    getTaskMetadata(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.getTaskMetadata",
-        ({ session, taskWorkflows }) =>
+      ),
+    deleteTask: (input) =>
+      withDatabase(input, "sqliteTaskRepository.deleteTask", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.deleteTask", (session) =>
           Effect.gen(function* () {
-            const row = yield* requireTaskRow(session, input.taskId, input.repoPath);
+            yield* requireTaskRow(session, context.workspaceId, input.taskId, input.repoPath);
+            yield* deleteTasks(session, context.workspaceId, [input.taskId]);
+            return { value: true, taskId: input.taskId, removed: true };
+          }),
+        ),
+      ),
+    diagnoseRepoStore(input) {
+      return withDatabase(input, "sqliteTaskRepository.diagnoseRepoStore", ({ databasePath }) =>
+        Effect.succeed(readyTaskStoreHealth(databasePath)),
+      ).pipe(Effect.catch((cause) => Effect.succeed(blockingTaskStoreHealth(errorMessage(cause)))));
+    },
+    findTask: (input) =>
+      withReadDatabase(
+        input,
+        "sqliteTaskRepository.findTask",
+        ({ session, workspaceId, taskWorkflows }) =>
+          findTaskRecord(session, workspaceId, input.taskId, taskWorkflows),
+      ),
+    listTaskReferences: (input) =>
+      withReadDatabase(
+        input,
+        "sqliteTaskRepository.listTaskReferences",
+        ({ session, workspaceId }) => taskReferenceCandidates(session, workspaceId),
+      ),
+    getTask: (input) =>
+      withReadDatabase(
+        input,
+        "sqliteTaskRepository.getTask",
+        ({ session, workspaceId, taskWorkflows }) =>
+          getTaskRecord(session, workspaceId, input.taskId, input.repoPath, taskWorkflows),
+      ),
+    getTaskMetadata: (input) =>
+      withReadDatabase(
+        input,
+        "sqliteTaskRepository.getTaskMetadata",
+        ({ session, workspaceId, taskWorkflows }) =>
+          Effect.gen(function* () {
+            const row = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
             return yield* taskMetadata(session, row, taskWorkflows.forTask(row));
           }),
-      );
-    },
-    listDirectMergeTaskIds(input) {
-      return withDatabase(
-        input.repoPath,
+      ),
+    listDirectMergeTaskIds: (input) =>
+      withReadDatabase(
+        input,
         "sqliteTaskRepository.listDirectMergeTaskIds",
-        ({ session }) => listDirectMergeTaskIdsInDatabase(session),
-      );
-    },
-    listPullRequestSyncCandidates(input) {
-      return withDatabase(
-        input.repoPath,
+        ({ session, workspaceId }) => listDirectMergeTaskIdsInDatabase(session, workspaceId),
+      ),
+    listPullRequestSyncCandidates: (input) =>
+      withReadDatabase(
+        input,
         "sqliteTaskRepository.listPullRequestSyncCandidates",
-        ({ session, taskWorkflows }) =>
-          listPullRequestSyncCandidatesInDatabase(session, hostTerminalStates(taskWorkflows)),
-      );
-    },
-    listAgentSessionsForTasks(input) {
-      if (input.taskIds.length === 0) {
-        return Effect.succeed([]);
-      }
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.listAgentSessionsForTasks",
-        ({ session }) => listAgentSessionsForTasks(session, input),
-      );
-    },
-    listTaskIds(input) {
-      return withDatabase(input.repoPath, "sqliteTaskRepository.listTaskIds", ({ session }) =>
-        listTaskIdsInDatabase(session),
-      );
-    },
-    listTasks(input) {
-      return withDatabase(
-        input.repoPath,
+        ({ session, workspaceId, taskWorkflows }) =>
+          listPullRequestSyncCandidatesInDatabase(
+            session,
+            workspaceId,
+            hostTerminalStates(taskWorkflows),
+          ),
+      ),
+    listAgentSessionsForTasks: (input) =>
+      input.taskIds.length === 0
+        ? Effect.succeed([])
+        : withReadDatabase(
+            input,
+            "sqliteTaskRepository.listAgentSessionsForTasks",
+            ({ session, workspaceId }) => listAgentSessionsForTasks(session, workspaceId, input),
+          ),
+    listTaskIds: (input) =>
+      withReadDatabase(input, "sqliteTaskRepository.listTaskIds", ({ session, workspaceId }) =>
+        listTaskIdsInDatabase(session, workspaceId),
+      ),
+    getTaskDelivery: (input) =>
+      withReadDatabase(input, "sqliteTaskRepository.getTaskDelivery", ({ session, workspaceId }) =>
+        taskDelivery(session, workspaceId, input.taskId, input.repoPath),
+      ),
+    getWorkflowArtifact: (input) =>
+      withReadDatabase(
+        input,
+        "sqliteTaskRepository.getWorkflowArtifact",
+        ({ session, workspaceId, taskWorkflows }) =>
+          Effect.gen(function* () {
+            const task = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
+            const workflow = taskWorkflows.forTask(task);
+            if (!workflow.artifact(input.code))
+              return yield* new HostValidationError({
+                field: "code",
+                message: `Unknown workflow artifact ${input.code}. Use one of ${workflow.definition.artifacts.map(({ id }) => id).join(", ")}.`,
+                details: { code: input.code },
+              });
+            const [artifact] = yield* latestWorkflowArtifactRows(
+              session,
+              workspaceId,
+              input.taskId,
+              [input.code],
+            );
+            return artifact ? toMetadataArtifact(artifact) : { markdown: "" };
+          }),
+      ),
+    listMergeCandidates: (input) =>
+      withReadDatabase(
+        input,
+        "sqliteTaskRepository.listMergeCandidates",
+        ({ session, workspaceId, taskWorkflows }) =>
+          mergeCandidates(session, workspaceId, hostTerminalStates(taskWorkflows)),
+      ),
+    searchTasks: (input) =>
+      withReadDatabase(
+        input,
+        "sqliteTaskRepository.searchTasks",
+        ({ session, workspaceId, taskWorkflows }) =>
+          searchTasksInDatabase(session, workspaceId, input, taskWorkflows),
+      ),
+    listTasks: (input) =>
+      withReadDatabase(
+        input,
         "sqliteTaskRepository.listTasks",
-        ({ session, taskWorkflows }) => listTasksInDatabase(session, input, now, taskWorkflows),
-      );
-    },
-    setDirectMerge(input) {
-      return withDatabase(input.repoPath, "sqliteTaskRepository.setDirectMerge", ({ session }) =>
-        session.transaction("sqliteTaskRepository.setDirectMerge", (transaction) =>
+        ({ session, workspaceId, taskWorkflows }) =>
+          listTasksInDatabase(session, workspaceId, input, now, taskWorkflows),
+      ),
+    setDirectMerge: (input) =>
+      withDatabase(input, "sqliteTaskRepository.setDirectMerge", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.setDirectMerge", (session) =>
           Effect.gen(function* () {
-            yield* requireTaskRow(transaction, input.taskId, input.repoPath);
-            return yield* setDirectMergeRecord(transaction, {
-              directMerge: input.directMerge,
-              taskId: input.taskId,
+            yield* requireTaskRow(session, context.workspaceId, input.taskId, input.repoPath);
+            const value = yield* setDirectMergeRecord(session, context.workspaceId, {
+              ...input,
               updatedAt: now(),
             });
+            return { value, taskId: input.taskId };
           }),
         ),
-      );
-    },
-    setPullRequest(input) {
-      return withDatabase(input.repoPath, "sqliteTaskRepository.setPullRequest", ({ session }) =>
-        session.transaction("sqliteTaskRepository.setPullRequest", (transaction) =>
+      ),
+    setPullRequest: (input) =>
+      withDatabase(input, "sqliteTaskRepository.setPullRequest", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.setPullRequest", (session) =>
           Effect.gen(function* () {
-            yield* requireTaskRow(transaction, input.taskId, input.repoPath);
-            return yield* setPullRequestRecord(transaction, {
-              pullRequest: input.pullRequest,
-              taskId: input.taskId,
+            yield* requireTaskRow(session, context.workspaceId, input.taskId, input.repoPath);
+            const value = yield* setPullRequestRecord(session, context.workspaceId, {
+              ...input,
               updatedAt: now(),
             });
+            return { value, taskId: input.taskId };
           }),
         ),
-      );
-    },
-    saveWorkflowArtifact(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.saveWorkflowArtifact",
-        ({ session, taskWorkflows }) =>
-          // A started commit records its status change, also when the caller is interrupted.
-          Effect.uninterruptible(
-            session
-              .transaction("sqliteTaskRepository.saveWorkflowArtifact", (transaction) =>
-                Effect.gen(function* () {
-                  const previous = yield* requireTaskRow(transaction, input.taskId, input.repoPath);
-                  const workflow = taskWorkflows.forTask(previous);
-                  const declared = workflow.artifact(input.code);
-                  if (declared === undefined) {
-                    return yield* new HostValidationError({
-                      field: "code",
-                      message: `Task workflow "${workflow.definition.id}" has no workflow artifact ${input.code}.`,
-                      details: { code: input.code },
-                    });
-                  }
-                  const updatedAt = now();
-                  if (input.status !== undefined) {
-                    yield* updateTaskStatus(transaction, {
-                      status: input.status,
-                      taskId: input.taskId,
-                      updatedAt,
-                    });
-                  }
-                  const artifact = yield* insertWorkflowArtifact(transaction, {
-                    code: input.code,
-                    name: declared.label,
-                    markdown: input.markdown,
-                    taskId: input.taskId,
-                    updatedAt,
-                    verdict: input.verdict,
-                    sourceTool: input.sourceTool,
-                    updatedBy: input.updatedBy,
-                  });
-                  const task = yield* getTaskRecord(
-                    transaction,
-                    input.taskId,
-                    input.repoPath,
-                    taskWorkflows,
-                  );
-                  return { task, artifact, previousStatus: previous.status };
-                }),
-              )
-              .pipe(
-                Effect.flatMap(({ task, artifact, previousStatus }) =>
-                  recordCommittedTaskStatusChange({
-                    task,
-                    previousStatus,
-                    cause: input.cause,
-                  }).pipe(Effect.as({ task, artifact })),
-                ),
-              ),
-          ),
-      );
-    },
-    transitionTask(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.transitionTask",
-        ({ session, taskWorkflows }) =>
-          // A started commit records its status change, also when the caller is interrupted.
-          Effect.uninterruptible(
-            session
-              .transaction("sqliteTaskRepository.transitionTask", (transaction) =>
-                Effect.gen(function* () {
-                  const previous = yield* requireTaskRow(transaction, input.taskId, input.repoPath);
-                  yield* updateTaskStatus(transaction, {
-                    status: input.status,
-                    taskId: input.taskId,
-                    updatedAt: now(),
-                  });
-                  const task = yield* getTaskRecord(
-                    transaction,
-                    input.taskId,
-                    input.repoPath,
-                    taskWorkflows,
-                  );
-                  return { task, previousStatus: previous.status, cause: input.cause };
-                }),
-              )
-              .pipe(Effect.flatMap(recordCommittedTaskStatusChange)),
-          ),
-      );
-    },
-    updateTask(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.updateTask",
-        ({ session, taskWorkflows }) =>
-          session.transaction("sqliteTaskRepository.updateTask", (transaction) =>
-            Effect.gen(function* () {
-              yield* requireTaskRow(transaction, input.taskId, input.repoPath);
-              return yield* applyTaskPatch(transaction, input, now(), taskWorkflows);
+      ),
+    ...createSqliteTaskWorkflowMutations({ contextProvider: withDatabase, now }),
+    updateTask: (input) =>
+      withDatabase(input, "sqliteTaskRepository.updateTask", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.updateTask", (session) =>
+          Effect.gen(function* () {
+            const { task: value, changed } = yield* applyTaskPatch(
+              session,
+              context.workspaceId,
+              input,
+              now(),
+              context.taskWorkflows,
+            );
+            const result: TaskMutationResult<TaskRecord> = { value };
+            if (changed) result.taskId = input.taskId;
+            return result;
+          }),
+        ),
+      ),
+    recordAgentSessionActivity: (input) =>
+      withDatabase(input, "sqliteTaskRepository.recordAgentSessionActivity", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.recordAgentSessionActivity", (session) =>
+          recordAgentSessionActivity(session, context.workspaceId, input).pipe(
+            Effect.map((value) => {
+              const result: TaskMutationResult<typeof value> = { value };
+              if (value !== null) result.taskId = value.taskId;
+              return result;
             }),
           ),
-      );
-    },
-    recordAgentSessionActivity(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.recordAgentSessionActivity",
-        ({ session }) =>
-          session.transaction("sqliteTaskRepository.recordAgentSessionActivity", (transaction) =>
-            recordAgentSessionActivity(transaction, input),
+        ),
+      ),
+    upsertAgentSession: (input) =>
+      withDatabase(input, "sqliteTaskRepository.upsertAgentSession", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.upsertAgentSession", (session) =>
+          upsertAgentSession(session, context.workspaceId, input, now()).pipe(
+            Effect.map((value) => ({ value, taskId: input.taskId })),
           ),
-      );
-    },
-    upsertAgentSession(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.upsertAgentSession",
-        ({ session }) =>
-          session.transaction("sqliteTaskRepository.upsertAgentSession", (transaction) =>
-            upsertAgentSession(transaction, input, now()),
+        ),
+      ),
+    updateAgentSessionModel: (input) =>
+      withDatabase(input, "sqliteTaskRepository.updateAgentSessionModel", (context) =>
+        commitTaskMutation(context, "sqliteTaskRepository.updateAgentSessionModel", (session) =>
+          updateAgentSessionModel(session, context.workspaceId, input, now()).pipe(
+            Effect.map((value) => ({ value, taskId: input.taskId })),
           ),
-      );
-    },
-    updateAgentSessionModel(input) {
-      return withDatabase(
-        input.repoPath,
-        "sqliteTaskRepository.updateAgentSessionModel",
-        ({ session }) =>
-          session.transaction("sqliteTaskRepository.updateAgentSessionModel", (transaction) =>
-            updateAgentSessionModel(transaction, input, now()),
-          ),
-      );
-    },
+        ),
+      ),
   };
 };

@@ -100,15 +100,19 @@ describe("createTaskCommandHandlers", () => {
         },
       }),
     );
-    expect(await runHandler(handlers.tasks_list({ repoPath: "/repo" }))).toEqual([]);
-    expect(await runHandler(handlers.tasks_list_all({ repoPath: "/repo" }))).toEqual([closed]);
-    expect(calls).toEqual([{ repoPath: "/repo" }]);
-    expect(() => handlers.tasks_list_all({})).toThrow("repoPath is required.");
+    expect(
+      await runHandler(handlers.tasks_list({ workspaceId: "repo", repoPath: "/repo" })),
+    ).toEqual([]);
+    expect(
+      await runHandler(handlers.tasks_list_all({ workspaceId: "repo", repoPath: "/repo" })),
+    ).toEqual([closed]);
+    expect(calls).toEqual([{ workspaceId: "repo", repoPath: "/repo" }]);
+    expect(() => handlers.tasks_list_all({ workspaceId: "repo" })).toThrow("repoPath is required.");
   });
   test.each([
     { repoPath: " " },
-    { repoPath: "/repo", expectedWorkspaceId: " " },
-    { repoPath: "/repo", expectedWorkspaceId: 42 },
+    { workspaceId: " ", repoPath: "/repo" },
+    { workspaceId: 42, repoPath: "/repo" },
   ])("rejects invalid manual sync input before dispatch: %j", (input) => {
     let dispatched = false;
     const handlers = createTaskCommandHandlers(
@@ -137,12 +141,13 @@ describe("createTaskCommandHandlers", () => {
       }),
     );
 
-    await expect(runHandler(handlers.task_ids_list?.({ repoPath: "/repo" }))).resolves.toEqual([
-      "task-1",
-      "task-2",
-    ]);
-    expect(inputs).toEqual([{ repoPath: "/repo" }]);
-    expect(() => handlers.task_ids_list?.({})).toThrow("repoPath is required.");
+    await expect(
+      runHandler(handlers.task_ids_list?.({ workspaceId: "repo", repoPath: "/repo" })),
+    ).resolves.toEqual(["task-1", "task-2"]);
+    expect(inputs).toEqual([{ workspaceId: "repo", repoPath: "/repo" }]);
+    expect(() => handlers.task_ids_list?.({ workspaceId: "repo" })).toThrow(
+      "repoPath is required.",
+    );
   });
 
   test("registers tasks_list", async () => {
@@ -517,35 +522,56 @@ describe("createTaskCommandHandlers", () => {
       },
     });
     const handlers = createTaskCommandHandlers(service);
-    await expect(runHandler(handlers.tasks_list?.({ repoPath: "/repo" }))).resolves.toEqual([]);
+    await expect(
+      runHandler(handlers.tasks_list?.({ workspaceId: "repo", repoPath: "/repo" })),
+    ).resolves.toEqual([]);
     await expect(
       runHandler(
         handlers.task_create?.({
+          workspaceId: "repo",
           repoPath: "/repo",
           input: { title: "Task", issueType: "task", priority: 2 },
         }),
       ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(handlers.task_delete?.({ repoPath: "/repo", taskId: "task-1" })),
+      runHandler(
+        handlers.task_delete?.({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).resolves.toEqual({ ok: true });
     await expect(
       runHandler(
-        handlers.task_close?.({ repoPath: "/repo", taskId: "task-1", removeWorktree: false }),
+        handlers.task_close?.({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          removeWorktree: false,
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(handlers.task_reset_implementation?.({ repoPath: "/repo", taskId: "task-1" })),
+      runHandler(
+        handlers.task_reset_implementation?.({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(handlers.task_reset?.({ repoPath: "/repo", taskId: "task-1" })),
+      runHandler(
+        handlers.task_reset?.({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(handlers.task_metadata_get?.({ repoPath: "/repo", taskId: "task-1" })),
+      runHandler(
+        handlers.task_metadata_get?.({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.agent_session_delete?.({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           identity: {
@@ -557,28 +583,54 @@ describe("createTaskCommandHandlers", () => {
       ),
     ).resolves.toBe(true);
     await expect(
-      runHandler(handlers.agent_sessions_list?.({ repoPath: "/repo", taskId: "task-1" })),
+      runHandler(
+        handlers.agent_sessions_list?.({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).resolves.toEqual([]);
     await expect(
       runHandler(
         handlers.agent_sessions_list_for_tasks?.({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskIds: ["task-2", "task-1", "task-2"],
         }),
       ),
     ).resolves.toEqual([]);
     await expect(
-      runHandler(handlers.task_approval_context_get?.({ repoPath: "/repo", taskId: "task-1" })),
+      runHandler(
+        handlers.task_approval_context_get?.({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(handlers.task_pull_request_detect?.({ repoPath: "/repo", taskId: "task-1" })),
+      runHandler(
+        handlers.task_pull_request_detect?.({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(handlers.task_pull_request_unlink?.({ repoPath: "/repo", taskId: "task-1" })),
+      runHandler(
+        handlers.task_pull_request_unlink?.({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+        }),
+      ),
     ).resolves.toBe(true);
     await expect(
       runHandler(
         handlers.task_pull_request_upsert?.({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           input: { title: "PR", body: "Body" },
@@ -588,6 +640,7 @@ describe("createTaskCommandHandlers", () => {
     await expect(
       runHandler(
         handlers.task_direct_merge?.({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           input: {
@@ -605,6 +658,7 @@ describe("createTaskCommandHandlers", () => {
     await expect(
       runHandler(
         handlers.task_direct_merge_complete?.({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           removeWorktree: true,
@@ -614,6 +668,7 @@ describe("createTaskCommandHandlers", () => {
     await expect(
       runHandler(
         handlers.task_pull_request_link_merged?.({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           pullRequest: {
@@ -630,30 +685,53 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_transition?.({ repoPath: "/repo", taskId: "task-1", status: "in_progress" }),
+        handlers.task_transition?.({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "in_progress",
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_apply_event?.({ repoPath: "/repo", taskId: "task-1", eventId: "defer" }),
+        handlers.task_apply_event?.({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          eventId: "defer",
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.build_blocked?.({ repoPath: "/repo", taskId: "task-1", reason: "Blocked" }),
+        handlers.build_blocked?.({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          reason: "Blocked",
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.build_start?.({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+        handlers.build_start?.({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(handlers.build_resumed?.({ repoPath: "/repo", taskId: "task-1" })),
+      runHandler(
+        handlers.build_resumed?.({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+      ),
     ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.build_completed?.({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           input: { summary: "Done" },
@@ -662,17 +740,21 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_update?.({ repoPath: "/repo", taskId: "task-1", patch: { title: "Task" } }),
+        handlers.task_update?.({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          patch: { title: "Task" },
+        }),
       ),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(
-        handlers.repo_pull_request_sync?.({ repoPath: "/repo", expectedWorkspaceId: "repo-id" }),
-      ),
+      runHandler(handlers.repo_pull_request_sync?.({ workspaceId: "repo", repoPath: "/repo" })),
     ).resolves.toEqual({ ok: true });
     await expect(
       runHandler(
         handlers.human_request_changes?.({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           note: "Please adjust",
@@ -682,6 +764,7 @@ describe("createTaskCommandHandlers", () => {
     await expect(
       runHandler(
         handlers.workflow_artifact_save?.({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           code: "qaReport",
@@ -696,6 +779,7 @@ describe("createTaskCommandHandlers", () => {
     await expect(
       runHandler(
         handlers.workflow_artifact_save?.({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           code: "spec",
@@ -706,41 +790,48 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toEqual(artifactFixture);
     await expect(
       runHandler(
-        handlers.workflow_artifact_get?.({ repoPath: "/repo", taskId: "task-1", code: "plan" }),
+        handlers.workflow_artifact_get?.({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          code: "plan",
+        }),
       ),
     ).resolves.toEqual(artifactFixture);
     expect(calls).toEqual([
-      { command: "tasks_list", input: { repoPath: "/repo" } },
+      { command: "tasks_list", input: { workspaceId: "repo", repoPath: "/repo" } },
       {
         command: "task_create",
         input: {
+          workspaceId: "repo",
           repoPath: "/repo",
           task: { title: "Task", issueType: "task", priority: 2 },
         },
       },
       {
         command: "task_delete",
-        input: { repoPath: "/repo", taskId: "task-1" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "task_close",
-        input: { repoPath: "/repo", taskId: "task-1", removeWorktree: false },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", removeWorktree: false },
       },
       {
         command: "task_reset_implementation",
-        input: { repoPath: "/repo", taskId: "task-1" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "task_reset",
-        input: { repoPath: "/repo", taskId: "task-1" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "task_metadata_get",
-        input: { repoPath: "/repo", taskId: "task-1" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "agent_session_delete",
         input: {
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           identity: {
@@ -752,31 +843,37 @@ describe("createTaskCommandHandlers", () => {
       },
       {
         command: "agent_sessions_list",
-        input: { repoPath: "/repo", taskId: "task-1" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "agent_sessions_list_for_tasks",
-        input: { repoPath: "/repo", taskIds: ["task-2", "task-1"] },
+        input: { workspaceId: "repo", repoPath: "/repo", taskIds: ["task-2", "task-1"] },
       },
       {
         command: "task_approval_context_get",
-        input: { repoPath: "/repo", taskId: "task-1" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "task_pull_request_detect",
-        input: { repoPath: "/repo", taskId: "task-1" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "task_pull_request_unlink",
-        input: { repoPath: "/repo", taskId: "task-1" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "task_pull_request_upsert",
-        input: { repoPath: "/repo", taskId: "task-1", content: { title: "PR", body: "Body" } },
+        input: {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          content: { title: "PR", body: "Body" },
+        },
       },
       {
         command: "task_direct_merge",
         input: {
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           input: {
@@ -792,11 +889,12 @@ describe("createTaskCommandHandlers", () => {
       },
       {
         command: "task_direct_merge_complete",
-        input: { repoPath: "/repo", taskId: "task-1", removeWorktree: true },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", removeWorktree: true },
       },
       {
         command: "task_pull_request_link_merged",
         input: {
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           pullRequest: {
@@ -812,43 +910,54 @@ describe("createTaskCommandHandlers", () => {
       },
       {
         command: "task_transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", status: "in_progress" },
       },
       {
         command: "task_apply_event",
-        input: { repoPath: "/repo", taskId: "task-1", eventId: "defer" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", eventId: "defer" },
       },
       {
         command: "build_blocked",
-        input: { repoPath: "/repo", taskId: "task-1", reason: "Blocked" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", reason: "Blocked" },
       },
       {
         command: "build_start",
-        input: { repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" },
+        input: {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        },
       },
       {
         command: "build_resumed",
-        input: { repoPath: "/repo", taskId: "task-1" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "build_completed",
-        input: { repoPath: "/repo", taskId: "task-1", summary: "Done" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", summary: "Done" },
       },
       {
         command: "task_update",
-        input: { repoPath: "/repo", taskId: "task-1", patch: { title: "Task" } },
+        input: {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          patch: { title: "Task" },
+        },
       },
       {
         command: "repo_pull_request_sync",
-        input: { repoPath: "/repo", expectedWorkspaceId: "repo-id" },
+        input: { workspaceId: "repo", repoPath: "/repo" },
       },
       {
         command: "human_request_changes",
-        input: { repoPath: "/repo", taskId: "task-1", note: "Please adjust" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", note: "Please adjust" },
       },
       {
         command: "workflow_artifact_save",
         input: {
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           code: "qaReport",
@@ -862,6 +971,7 @@ describe("createTaskCommandHandlers", () => {
       {
         command: "workflow_artifact_save",
         input: {
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           code: "spec",
@@ -873,7 +983,7 @@ describe("createTaskCommandHandlers", () => {
       },
       {
         command: "workflow_artifact_get",
-        input: { repoPath: "/repo", taskId: "task-1", code: "plan" },
+        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", code: "plan" },
       },
     ]);
   });
@@ -881,6 +991,7 @@ describe("createTaskCommandHandlers", () => {
 
 test("passes reviewed publication consent through the completion command boundary", async () => {
   const intent = {
+    workspaceId: "repo",
     repoPath: "/repo",
     taskId: "task-1",
     removeWorktree: true,

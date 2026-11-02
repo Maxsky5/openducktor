@@ -62,7 +62,7 @@ const closeConfirmationHost = ({
       }),
       terminalList: async () => ({ hostInstanceId: "host-1", revision: 1, terminals: [] }),
       taskStopImpactGet: readStopImpact,
-      taskMergeStatusGet: async (repoPath) => {
+      taskMergeStatusGet: async (scope) => {
         const status: TaskMergeStatus = {
           taskId: task.id,
           branch: "odt/odt-1",
@@ -75,7 +75,7 @@ const closeConfirmationHost = ({
         };
         // A failed later check keeps the last successful result.
         if (failure) status.failure = failure;
-        return { repoPath, tasks: [status] };
+        return { ...scope, tasks: [status] };
       },
     },
   });

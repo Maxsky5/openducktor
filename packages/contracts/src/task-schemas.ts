@@ -1,3 +1,4 @@
+import { workspaceRefSchema } from "./workspace-id-schemas";
 import { z } from "zod";
 import {
   gitConflictSchema,
@@ -147,7 +148,7 @@ export const taskStopImpactOperationSchema = z.enum([
 export type TaskStopImpactOperation = z.infer<typeof taskStopImpactOperationSchema>;
 
 export const taskStopImpactRequestSchema = z.object({
-  repoPath: z.string().min(1),
+  ...workspaceRefSchema.shape,
   taskIds: z.array(z.string().min(1)),
   operation: taskStopImpactOperationSchema,
 });
@@ -164,7 +165,7 @@ export const taskStopImpactSchema = z.object({
 export type TaskStopImpact = z.infer<typeof taskStopImpactSchema>;
 
 export const taskCloseInputSchema = z.strictObject({
-  repoPath: z.string().min(1),
+  ...workspaceRefSchema.shape,
   taskId: z.string().min(1),
   /** The close removes the task worktree and its local task branch. */
   removeWorktree: z.boolean(),

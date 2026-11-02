@@ -33,7 +33,10 @@ export function useManualPullRequestSync(client: Pick<HostClient, "repoPullReque
           try {
             // Check each workspace at its turn; it may close while an earlier sync runs.
             // react-doctor-disable-next-line react-doctor/async-await-in-loop
-            const result = await client.repoPullRequestSync(target.repoPath, target.workspaceId);
+            const result = await client.repoPullRequestSync({
+              workspaceId: target.workspaceId,
+              repoPath: target.repoPath,
+            });
             if (
               captured.kind === "all" &&
               !result.ok &&

@@ -17,7 +17,7 @@ export {
   type ReadTaskArtifactsResult,
   type SetTaskArtifactInput,
   type DeleteTaskArtifactInput,
-  type ArtifactContentChunk,
+  type ArtifactReadResult,
   type TaskArtifactCollection,
   type SearchTasksInput,
   type SetPullRequestInput,

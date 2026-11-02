@@ -90,12 +90,22 @@ describe("session runtime policy", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo",
         },
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         selectedModel: null,
       },
       async () => createSettingsSnapshotFixture(),
     );
 
-    expect(ref.sessionScope).toEqual({ kind: "workflow", taskId: "task-1", role: "build" });
+    expect(ref.sessionScope).toEqual({
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    });
   });
 });

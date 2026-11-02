@@ -80,6 +80,7 @@ export function TaskDetailsSheetContent(
   const contextTaskSessions = getContextTaskSessions(workflowActions, taskId);
   const activeSessionContext = getActiveTaskSessionContext(workflowActions, taskId);
   const historicalSessions = useTaskDetailsHistoricalSessions({
+    workspaceId: activeWorkspace?.workspaceId ?? null,
     repoPath: activeWorkspace?.repoPath ?? null,
     taskId,
     enabled: workflowActions !== null,

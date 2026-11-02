@@ -266,11 +266,7 @@ export const startMockBridge = async (
       requests.push({ url, body });
       const entry = {
         artifact: freeArtifact,
-        version: "version-1",
         dataBase64: "77u/",
-        byteOffset: 0,
-        nextByteOffset: null,
-        totalBytes: 3,
       };
       const { codes } = z.object({ codes: z.array(z.string()) }).parse(body);
       writeJson(
@@ -280,11 +276,7 @@ export const startMockBridge = async (
             code === "spec"
               ? {
                   artifact: workflowArtifact,
-                  version: "spec-version-1",
                   dataBase64: "IyBTcGVjCg==",
-                  byteOffset: 0,
-                  nextByteOffset: null,
-                  totalBytes: 7,
                 }
               : entry,
           ),

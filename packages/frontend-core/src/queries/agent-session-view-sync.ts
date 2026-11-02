@@ -1,3 +1,5 @@
+import { workspaceScopeKey, workspaceScopeValue } from "./workspace-scope";
+import { type WorkspaceRef } from "@openducktor/contracts";
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import type { HostClient } from "@openducktor/host-client";
@@ -18,7 +20,7 @@ import { repoTaskIdsQueryOptions } from "./tasks";
 export type AgentSessionViewReadPort = AgentSessionReadPort & Pick<HostClient, "taskIdsList">;
 
 /** The session-list result of one admitted task event. */
-export type AdmittedSessionChange = Promise<{ repoPath: string; changedTaskIds: string[] }>;
+export type AdmittedSessionChange = Promise<{ repoPath: WorkspaceRef; changedTaskIds: string[] }>;
 
 /** A live refresh and the session ownership of the cached lists when it was queued. */
 type LiveRefresh = { done: Promise<void>; ownership: Map<string, string> };
@@ -45,11 +47,11 @@ export type AgentSessionViewSync = {
    * lists fails the whole snapshot.
    */
   reconcileStreamSnapshot: (
-    taskIdsByRepo: ReadonlyMap<string, string[]>,
+    taskIdsByRepo: ReadonlyMap<WorkspaceRef, string[]>,
     isCurrentOwner: () => boolean,
-  ) => Promise<ReadonlyMap<string, unknown>>;
+  ) => Promise<ReadonlyMap<WorkspaceRef, unknown>>;
   /** Drop the cached lists and the live refresh state of a workspace that closed. */
-  releaseWorkspace: (repoPath: string) => Promise<void>;
+  releaseWorkspace: (repoPath: WorkspaceRef) => Promise<void>;
 };
 
 export const createAgentSessionViewSync = ({
@@ -64,18 +66,21 @@ export const createAgentSessionViewSync = ({
   queryClient: QueryClient;
   readPort: AgentSessionViewReadPort;
   /** The tasks that own workflow session state, also after their list query expires. */
-  listSessionTaskIds: (repoPath: string) => string[];
-  removeTaskSessions: (repoPath: string, taskIds: string[]) => void;
-  refreshLiveSessions: (repoPath: string) => Promise<void>;
+  listSessionTaskIds: (repoPath: WorkspaceRef) => string[];
+  removeTaskSessions: (repoPath: WorkspaceRef, taskIds: string[]) => void;
+  refreshLiveSessions: (repoPath: WorkspaceRef) => Promise<void>;
   /** Only an open workspace starts session reads or a live refresh. */
-  isWorkspaceOpen: (repoPath: string) => boolean;
+  isWorkspaceOpen: (repoPath: WorkspaceRef) => boolean;
   /** The agent orchestrator reads the lists of the active workspace from the cache. */
-  isWorkspaceActive: (repoPath: string) => boolean;
+  isWorkspaceActive: (repoPath: WorkspaceRef) => boolean;
 }): AgentSessionViewSync => {
   const batch = getAgentSessionListBatch(queryClient);
   const liveRefreshes = new Map<string, LiveRefresh>();
 
-  const startLiveRefresh = (repoPath: string, isCurrentOwner: () => boolean): Promise<void> => {
+  const startLiveRefresh = (
+    repoPath: WorkspaceRef,
+    isCurrentOwner: () => boolean,
+  ): Promise<void> => {
     const epoch = batch.epoch();
     const workspaceEpoch = batch.workspaceEpoch(repoPath);
     const ownership = new Map(
@@ -92,18 +97,20 @@ export const createAgentSessionViewSync = ({
         !isWorkspaceOpen(repoPath) ||
         !isCurrentOwner()
       ) {
-        if (liveRefreshes.get(repoPath) === refresh) liveRefreshes.delete(repoPath);
+        if (liveRefreshes.get(workspaceScopeKey(repoPath)) === refresh)
+          liveRefreshes.delete(workspaceScopeKey(repoPath));
         return;
       }
       await refreshLiveSessions(repoPath);
     });
     const refresh: LiveRefresh = { done, ownership };
-    liveRefreshes.set(repoPath, refresh);
+    liveRefreshes.set(workspaceScopeKey(repoPath), refresh);
     liveRefreshTails.set(
       queryClient,
       done.catch(() => {
         // A failed refresh does not cover later changes or stop the queue.
-        if (liveRefreshes.get(repoPath) === refresh) liveRefreshes.delete(repoPath);
+        if (liveRefreshes.get(workspaceScopeKey(repoPath)) === refresh)
+          liveRefreshes.delete(workspaceScopeKey(repoPath));
       }),
     );
     return refresh.done;
@@ -111,11 +118,11 @@ export const createAgentSessionViewSync = ({
 
   /** Share the last live refresh when it already covers the ownership of these tasks. */
   const refreshLiveFor = (
-    repoPath: string,
+    repoPath: WorkspaceRef,
     taskIds: string[],
     isCurrentOwner: () => boolean,
   ): Promise<void> => {
-    const last = liveRefreshes.get(repoPath);
+    const last = liveRefreshes.get(workspaceScopeKey(repoPath));
     const covered = taskIds.every(
       (taskId) =>
         last?.ownership.get(taskId) === readAgentSessionOwnership(queryClient, repoPath, taskId),
@@ -125,33 +132,34 @@ export const createAgentSessionViewSync = ({
 
   return {
     admitExternalEvent: async (event) => {
-      const workspaceEpoch = batch.workspaceEpoch(event.repoPath);
+      const scope = workspaceScopeValue(event);
+      const workspaceEpoch = batch.workspaceEpoch(scope);
       const { refreshedTaskIds, removedTaskIds } = toTaskChanges(event);
       // An event that keeps a task proves that the task exists.
-      batch.markExisting(event.repoPath, refreshedTaskIds);
+      batch.markExisting(scope, refreshedTaskIds);
       // A list that failed in one request with a deleted task reads again. The deletion can
       // explain the failure of the whole request.
       const failedWithDeletion = batch
-        .takeFailedWith(event.repoPath, removedTaskIds)
+        .takeFailedWith(scope, removedTaskIds)
         .filter(
           (taskId) =>
-            queryClient.getQueryState(agentSessionQueryKeys.list(event.repoPath, taskId))
-              ?.status === "error",
+            queryClient.getQueryState(agentSessionQueryKeys.list(scope, taskId))?.status ===
+            "error",
         );
       // Both start before the first await, so reads in progress learn about the change at once.
-      const removal = removeAgentSessionListQueries(queryClient, event.repoPath, removedTaskIds);
-      removeTaskSessions(event.repoPath, removedTaskIds);
-      const refresh = refreshAgentSessionLists(queryClient, event.repoPath, [
+      const removal = removeAgentSessionListQueries(queryClient, scope, removedTaskIds);
+      removeTaskSessions(scope, removedTaskIds);
+      const refresh = refreshAgentSessionLists(queryClient, scope, [
         ...refreshedTaskIds,
         ...failedWithDeletion,
       ]);
       try {
         const [, changedTaskIds] = await Promise.all([removal, refresh]);
-        return { repoPath: event.repoPath, changedTaskIds };
+        return { repoPath: scope, changedTaskIds };
       } catch (error) {
         // The release of a workspace that closed cancelled these reads. Their result does not matter.
-        if (batch.workspaceEpoch(event.repoPath) !== workspaceEpoch) {
-          return { repoPath: event.repoPath, changedTaskIds: [] };
+        if (batch.workspaceEpoch(scope) !== workspaceEpoch) {
+          return { repoPath: scope, changedTaskIds: [] };
         }
         throw error;
       }
@@ -160,16 +168,21 @@ export const createAgentSessionViewSync = ({
       const results = await Promise.all(changes);
       // A stopped stream or a replacement snapshot supersedes the work of the older owner.
       if (!isCurrentOwner()) return;
-      const changedTaskIdsByRepo = new Map<string, Set<string>>();
+      const changedTaskIdsByRepo = new Map<string, { scope: WorkspaceRef; taskIds: Set<string> }>();
       for (const { repoPath, changedTaskIds } of results) {
         if (changedTaskIds.length === 0 || !isWorkspaceOpen(repoPath)) continue;
-        const repoTaskIds = changedTaskIdsByRepo.get(repoPath) ?? new Set<string>();
+        const key = workspaceScopeKey(repoPath);
+        const entry = changedTaskIdsByRepo.get(key) ?? {
+          scope: repoPath,
+          taskIds: new Set<string>(),
+        };
+        const repoTaskIds = entry.taskIds;
         for (const taskId of changedTaskIds) repoTaskIds.add(taskId);
-        changedTaskIdsByRepo.set(repoPath, repoTaskIds);
+        changedTaskIdsByRepo.set(key, entry);
       }
       await Promise.all(
-        [...changedTaskIdsByRepo].map(([repoPath, taskIds]) =>
-          refreshLiveFor(repoPath, [...taskIds], isCurrentOwner),
+        [...changedTaskIdsByRepo.values()].map(({ scope, taskIds }) =>
+          refreshLiveFor(scope, [...taskIds], isCurrentOwner),
         ),
       );
     },
@@ -178,12 +191,12 @@ export const createAgentSessionViewSync = ({
       void cancelAgentSessionListReads(queryClient);
     },
     reconcileStreamSnapshot: async (taskIdsByRepo, isCurrentOwner) => {
-      const failures = new Map<string, unknown>();
+      const failures = new Map<WorkspaceRef, unknown>();
       /**
        * Run the work of each open workspace. Keep the workspaces whose work succeeded, and record
        * the cause of each other workspace. A release during the work supersedes its result.
        */
-      const runForOpenRepos = async <Repo extends { repoPath: string }, Result>(
+      const runForOpenRepos = async <Repo extends { repoPath: WorkspaceRef }, Result>(
         repos: Repo[],
         work: (repo: Repo) => Promise<Result>,
       ): Promise<Result[]> => {
@@ -268,7 +281,7 @@ export const createAgentSessionViewSync = ({
       return failures;
     },
     releaseWorkspace: (repoPath) => {
-      liveRefreshes.delete(repoPath);
+      liveRefreshes.delete(workspaceScopeKey(repoPath));
       return releaseAgentSessionListQueries(queryClient, repoPath);
     },
   };

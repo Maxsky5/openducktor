@@ -1,4 +1,4 @@
-import type { PullRequest, TaskPullRequestDetectResult } from "@openducktor/contracts";
+import type { HostClient } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "../../lib/errors";
@@ -11,21 +11,15 @@ import type {
 } from "../../types/task-pull-request";
 import type { RunTaskMutationWithChatDraftCleanupInput } from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
-import { requireActiveRepo } from "./task-operations-model";
+import { requireActiveRepo, requireWorkspaceRef } from "./task-operations-model";
 import type { UseTaskOperationsResult } from "./task-operations-types";
 import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
 
-export type TaskPullRequestHostPort = {
-  detectPullRequest: (repoPath: string, taskId: string) => Promise<TaskPullRequestDetectResult>;
-  linkMergedPullRequest: (
-    repoPath: string,
-    taskId: string,
-    pullRequest: PullRequest,
-    removeWorktree: boolean,
-  ) => Promise<TaskCard>;
-  unlinkPullRequest: (repoPath: string, taskId: string) => Promise<{ ok: boolean }>;
-};
+export type TaskPullRequestHostPort = Pick<
+  HostClient,
+  "taskPullRequestDetect" | "taskPullRequestLinkMerged" | "taskPullRequestUnlink"
+>;
 
 export type TaskPullRequestChatDraftCleanupPort = {
   runMutation: <TResult>(
@@ -62,6 +56,7 @@ export function useTaskPullRequestOperations({
   const [operations, setOperations] = useState(() => new Map<string, Operation>());
   const operationsRef = useRef(operations);
   const activeRepoPathRef = useRef(activeRepoPath);
+  const activeWorkspaceIdRef = useRef(activeWorkspaceId);
 
   const updateOperation = useCallback((task: TaskKey, operation: Operation | null): void => {
     const next = new Map(operationsRef.current);
@@ -80,8 +75,12 @@ export function useTaskPullRequestOperations({
   }, []);
 
   const activeOperations = useMemo(
-    () => [...operations.values()].filter((operation) => operation.repoPath === activeRepoPath),
-    [activeRepoPath, operations],
+    () =>
+      [...operations.values()].filter(
+        (operation) =>
+          operation.repoPath === activeRepoPath && operation.workspaceId === activeWorkspaceId,
+      ),
+    [activeRepoPath, activeWorkspaceId, operations],
   );
   const detectingPullRequestTaskIds = useMemo(
     () =>
@@ -123,7 +122,8 @@ export function useTaskPullRequestOperations({
 
   useLayoutEffect(() => {
     activeRepoPathRef.current = activeRepoPath;
-  }, [activeRepoPath]);
+    activeWorkspaceIdRef.current = activeWorkspaceId;
+  }, [activeRepoPath, activeWorkspaceId]);
 
   useLayoutEffect(() => {
     const queryKey = workspaceListQueryOptions().queryKey;
@@ -163,7 +163,8 @@ export function useTaskPullRequestOperations({
       let operation: Operation | null = null;
       try {
         const repoPath = requireActiveRepo(activeRepoPath);
-        operation = { repoPath, taskId, workspaceId: activeWorkspaceId, phase: "detecting" };
+        const scope = requireWorkspaceRef(repoPath, activeWorkspaceId);
+        operation = { ...scope, taskId, phase: "detecting" };
         if (operationsRef.current.has(taskKey(operation))) {
           return;
         }
@@ -171,10 +172,10 @@ export function useTaskPullRequestOperations({
         const detectedTask = tasks.find((task) => task.id === taskId);
         const taskTitle = detectedTask?.title ?? null;
         const taskRemoveWorktreeOnClose = detectedTask?.removeWorktreeOnClose ?? null;
-        const result = await pullRequestHostPort.detectPullRequest(repoPath, taskId);
+        const result = await pullRequestHostPort.taskPullRequestDetect(scope, taskId);
         if (operationsRef.current.get(taskKey(operation)) !== operation) return;
         if (result.outcome === "linked") {
-          await refreshTaskData(repoPath, taskId);
+          await refreshTaskData({ workspaceId: operation.workspaceId, repoPath }, taskId);
           if (operationsRef.current.get(taskKey(operation)) !== operation) return;
           await invalidatePullRequestReviewContextQueries(queryClient);
           if (operationsRef.current.get(taskKey(operation)) !== operation) return;
@@ -187,12 +188,15 @@ export function useTaskPullRequestOperations({
             taskId,
             taskTitle,
             taskRemoveWorktreeOnClose,
-            workspaceId: activeWorkspaceId,
+            workspaceId: scope.workspaceId,
             pullRequest: result.pullRequest,
             phase: "confirming",
             keepConfirmation: true,
           });
-          if (activeRepoPathRef.current !== repoPath) {
+          if (
+            activeRepoPathRef.current !== repoPath ||
+            activeWorkspaceIdRef.current !== scope.workspaceId
+          ) {
             feedback.show("warning", "Merged pull request found", {
               description: `PR #${result.pullRequest.number} for ${taskId}. Switch to ${repoPath} to confirm linking it.`,
             });
@@ -226,7 +230,11 @@ export function useTaskPullRequestOperations({
   );
 
   const cancelLinkMergedPullRequest = useCallback((): void => {
-    if (!pendingMergedOperation || pendingMergedOperation.repoPath !== activeRepoPathRef.current) {
+    if (
+      !pendingMergedOperation ||
+      pendingMergedOperation.repoPath !== activeRepoPathRef.current ||
+      pendingMergedOperation.workspaceId !== activeWorkspaceIdRef.current
+    ) {
       return;
     }
     const current = operationsRef.current.get(taskKey(pendingMergedOperation));
@@ -239,7 +247,8 @@ export function useTaskPullRequestOperations({
     async ({ removeWorktree }: CloseTaskOptions): Promise<void> => {
       if (
         !pendingMergedOperation ||
-        pendingMergedOperation.repoPath !== activeRepoPathRef.current
+        pendingMergedOperation.repoPath !== activeRepoPathRef.current ||
+        pendingMergedOperation.workspaceId !== activeWorkspaceIdRef.current
       ) {
         feedback.show("error", "Merged pull request state expired", {
           description: "Re-run pull request detection and try again.",
@@ -262,8 +271,8 @@ export function useTaskPullRequestOperations({
           workspaceId,
           taskIds: [taskId],
           mutation: async () => {
-            await pullRequestHostPort.linkMergedPullRequest(
-              repoPath,
+            await pullRequestHostPort.taskPullRequestLinkMerged(
+              { workspaceId, repoPath },
               taskId,
               pullRequest,
               removeWorktree,
@@ -271,7 +280,7 @@ export function useTaskPullRequestOperations({
           },
         });
         linked = true;
-        await refreshTaskData(repoPath, taskId);
+        await refreshTaskData({ workspaceId, repoPath }, taskId);
         await invalidatePullRequestReviewContextQueries(queryClient);
         feedback.show("success", "Merged pull request linked", {
           description: `PR #${pullRequest.number} for ${taskId} (${repoPath}); task moved to Done.`,
@@ -303,7 +312,9 @@ export function useTaskPullRequestOperations({
     async (taskId: string): Promise<void> => {
       if (
         activeRepoPath &&
-        operationsRef.current.has(taskKey({ repoPath: activeRepoPath, taskId }))
+        operationsRef.current.has(
+          taskKey({ ...requireWorkspaceRef(activeRepoPath, activeWorkspaceId), taskId }),
+        )
       ) {
         return;
       }
@@ -311,9 +322,10 @@ export function useTaskPullRequestOperations({
       try {
         await runTaskMutation({
           run: async (repoPath) => {
-            operation = { repoPath, taskId, workspaceId: activeWorkspaceId, phase: "unlinking" };
+            const scope = requireWorkspaceRef(repoPath, activeWorkspaceId);
+            operation = { ...scope, taskId, phase: "unlinking" };
             updateOperation(operation, operation);
-            await pullRequestHostPort.unlinkPullRequest(repoPath, taskId);
+            await pullRequestHostPort.taskPullRequestUnlink(scope, taskId);
           },
           successTitle: "Pull request unlinked",
           successDescription: taskId,
@@ -351,11 +363,12 @@ export function useTaskPullRequestOperations({
 }
 
 type TaskKey = {
+  workspaceId: string;
   repoPath: string;
   taskId: string;
 };
 
-type WorkspaceTask = TaskKey & { workspaceId: string | null };
+type WorkspaceTask = TaskKey;
 
 type MergedOperation = WorkspaceTask &
   PendingMergedPullRequest & {
@@ -365,6 +378,6 @@ type MergedOperation = WorkspaceTask &
 
 type Operation = (WorkspaceTask & { phase: "detecting" | "unlinking" }) | MergedOperation;
 
-function taskKey({ repoPath, taskId }: TaskKey): string {
-  return JSON.stringify([repoPath, taskId]);
+function taskKey({ workspaceId, repoPath, taskId }: TaskKey): string {
+  return JSON.stringify([workspaceId, repoPath, taskId]);
 }

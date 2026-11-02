@@ -5,10 +5,10 @@ import type {
   TaskCard,
 } from "@openducktor/contracts";
 import { pathStartsWith } from "@openducktor/path-support";
+import type { TaskIdInput } from "../task-inputs";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 import { Effect } from "effect";
-import { createDefaultGlobalConfig } from "../../../config/global-config";
 import { TaskPolicyError } from "../../../domain/task";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../../ports/settings-config-port";
@@ -17,70 +17,42 @@ import type {
   TaskStoreError,
   TaskStorePort,
 } from "../../../ports/task-repository-ports";
-import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import { taskWorktreeIdError } from "../worktrees/task-worktree-id";
 import {
-  requireEffect,
-  requireTaskEvent,
+  decideTaskTransition,
+  decideEffectTransition,
   startWorktreeSessionHint,
   type HostEffect,
 } from "./task-workflow-events";
 
 /** Decides a named event for a task and commits its transition. A repeat returns the task. */
 export const applyTaskEvent = (
-  taskStore: Pick<TaskStorePort, "getTask" | "transitionTask">,
-  taskWorkflows: TaskWorkflowResolver,
-  input: { repoPath: string; taskId: string },
-  eventId: string,
-): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError> =>
-  Effect.gen(function* () {
-    const current = yield* taskStore.getTask(input);
-    return yield* commitTaskEvent(
-      taskStore,
-      taskWorkflows.forTask(current),
-      input,
-      current,
-      eventId,
-    );
-  });
-
-/** Decides a named event for a loaded task and commits its transition. */
-export const commitTaskEvent = (
   taskStore: Pick<TaskStorePort, "transitionTask">,
-  workflow: TaskWorkflow,
-  input: { repoPath: string; taskId: string },
-  current: TaskRecord,
+  taskWorkflows: TaskWorkflowResolver,
+  input: TaskIdInput,
   eventId: string,
 ): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError> =>
   Effect.gen(function* () {
-    const decision = yield* requireTaskEvent(workflow, eventId, current);
-    if (decision.kind === "unchanged") return enrichTask(workflow, current);
     const updated = yield* taskStore.transitionTask({
       ...input,
-      status: decision.to,
-      cause: decision.cause,
+      decide: (task) => decideTaskTransition(taskWorkflows.forTask(task), eventId, task),
     });
-    return enrichTask(workflow, updated);
+    return enrichTask(taskWorkflows.forTask(updated), updated);
   });
 
 /** Decides the event of a host effect for a task and commits its transition. */
 export const applyEffect = (
-  taskStore: Pick<TaskStorePort, "getTask" | "transitionTask">,
+  taskStore: Pick<TaskStorePort, "transitionTask">,
   taskWorkflows: TaskWorkflowResolver,
-  input: { repoPath: string; taskId: string },
+  input: TaskIdInput,
   effect: HostEffect,
 ): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError> =>
   Effect.gen(function* () {
-    const current = yield* taskStore.getTask(input);
-    const workflow = taskWorkflows.forTask(current);
-    const decision = yield* requireEffect(workflow, effect, current);
-    if (decision.kind === "unchanged") return enrichTask(workflow, current);
     const updated = yield* taskStore.transitionTask({
       ...input,
-      status: decision.to,
-      cause: decision.cause,
+      decide: (task) => decideEffectTransition(taskWorkflows.forTask(task), effect, task),
     });
-    return enrichTask(workflow, updated);
+    return enrichTask(taskWorkflows.forTask(updated), updated);
   });
 
 /** Adds the workflow projection to stored tasks. */
@@ -92,44 +64,13 @@ export const enrichTask = (workflow: TaskWorkflow, task: TaskRecord): TaskCard =
   ...task,
   ...workflow.project(task),
 });
-const tryCanonicalizePath = (
-  settingsConfig: SettingsConfigPort,
-  rawPath: string | null | undefined,
-) =>
-  Effect.gen(function* () {
-    const trimmed = rawPath?.trim();
-    if (!trimmed) {
-      return undefined;
-    }
-    const result = yield* Effect.result(settingsConfig.canonicalizePath(trimmed));
-    return result._tag === "Success" ? result.success : undefined;
-  });
-const canonicalizeRequiredPath = (
-  settingsConfig: SettingsConfigPort,
-  rawPath: string,
-  errorMessage: string,
-) =>
-  Effect.gen(function* () {
-    const trimmed = rawPath.trim();
-    return yield* settingsConfig.canonicalizePath(trimmed).pipe(
-      Effect.mapError(
-        (error) =>
-          new HostValidationError({
-            field: "path",
-            message: `${errorMessage}: ${trimmed}`,
-            cause: error,
-            details: { path: trimmed },
-          }),
-      ),
-    );
-  });
 export const validateAgentSessionWorkingDirectory = (
   settingsConfig: SettingsConfigPort,
-  workspaceSettingsService: WorkspaceSettingsService,
-  repoPath: string,
+  workspace: RepoConfig,
   session: AgentSessionRecord,
 ) =>
   Effect.gen(function* () {
+    const { repoPath, workspaceId } = workspace;
     const canonicalRepoPath = yield* canonicalizeRequiredPath(
       settingsConfig,
       repoPath,
@@ -143,11 +84,11 @@ export const validateAgentSessionWorkingDirectory = (
     if (pathStartsWith(canonicalWorkingDirectory, canonicalRepoPath)) {
       return;
     }
-    const workspaces = yield* workspaceSettingsService.listWorkspaces();
-    const workspace = workspaces.find((entry) => entry.repoPath === canonicalRepoPath);
     const canonicalEffectiveWorktreeBase = yield* tryCanonicalizePath(
       settingsConfig,
-      workspace?.effectiveWorktreeBasePath ?? null,
+      workspace.worktreeBasePath === undefined
+        ? settingsConfig.defaultWorktreeBasePath(workspaceId)
+        : settingsConfig.resolveConfiguredPath(workspace.worktreeBasePath),
     );
     if (
       canonicalEffectiveWorktreeBase &&
@@ -184,13 +125,6 @@ export const loadRemoveWorktreeOnClose = (
   settingsConfig: SettingsConfigPort,
 ): Effect.Effect<boolean, SettingsConfigError | HostValidationError> =>
   loadGlobalGitConfig(settingsConfig).pipe(Effect.map((git) => git.removeWorktreeOnClose));
-const loadGlobalGitConfig = (
-  settingsConfig: SettingsConfigPort,
-): Effect.Effect<GlobalGitConfig, SettingsConfigError | HostValidationError> =>
-  Effect.gen(function* () {
-    const config = (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
-    return config.git;
-  });
 export const buildCompletionWorktreePath = (
   settingsConfig: SettingsConfigPort,
   workflow: TaskWorkflow,
@@ -229,19 +163,16 @@ export const buildCompletionWorktreePath = (
   });
 export const blockBuildCompletionTask = (
   taskStore: Pick<TaskStorePort, "transitionTask">,
-  workflow: TaskWorkflow,
-  repoPath: string,
-  taskId: string,
-  current: TaskRecord,
-) =>
-  Effect.gen(function* () {
-    const decision = yield* requireEffect(workflow, "build.blocked", current);
-    if (decision.kind === "unchanged") return;
+  taskWorkflows: TaskWorkflowResolver,
+  input: TaskIdInput,
+) => {
+  const { workspaceId, repoPath, taskId } = input;
+  return Effect.gen(function* () {
     yield* taskStore.transitionTask({
+      workspaceId,
       repoPath,
       taskId,
-      status: decision.to,
-      cause: decision.cause,
+      decide: (task) => decideEffectTransition(taskWorkflows.forTask(task), "build.blocked", task),
     });
   }).pipe(
     Effect.mapError((error) => {
@@ -257,3 +188,44 @@ export const blockBuildCompletionTask = (
       });
     }),
   );
+};
+
+const tryCanonicalizePath = (
+  settingsConfig: SettingsConfigPort,
+  rawPath: string | null | undefined,
+) =>
+  Effect.gen(function* () {
+    const trimmed = rawPath?.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    const result = yield* Effect.result(settingsConfig.canonicalizePath(trimmed));
+    return result._tag === "Success" ? result.success : undefined;
+  });
+const canonicalizeRequiredPath = (
+  settingsConfig: SettingsConfigPort,
+  rawPath: string,
+  errorMessage: string,
+) =>
+  Effect.gen(function* () {
+    const trimmed = rawPath.trim();
+    return yield* settingsConfig.canonicalizePath(trimmed).pipe(
+      Effect.mapError(
+        (error) =>
+          new HostValidationError({
+            field: "path",
+            message: `${errorMessage}: ${trimmed}`,
+            cause: error,
+            details: { path: trimmed },
+          }),
+      ),
+    );
+  });
+
+const loadGlobalGitConfig = (
+  settingsConfig: SettingsConfigPort,
+): Effect.Effect<GlobalGitConfig, SettingsConfigError | HostValidationError> =>
+  Effect.gen(function* () {
+    const config = yield* settingsConfig.readGlobalConfig();
+    return config.git;
+  });

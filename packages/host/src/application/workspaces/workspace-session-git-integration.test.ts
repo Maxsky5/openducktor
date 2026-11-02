@@ -1,3 +1,4 @@
+import { workspaceSessionCatalog } from "../../test-support/workspace-session-ownership";
 import { HostOperationError } from "../../effect/host-errors";
 import { WorktreeActionExitError } from "../actions/worktree-action-runner";
 import { createWorkspaceSessionImportService } from "./workspace-session-import-service";
@@ -31,6 +32,7 @@ import { Cause, Deferred, Effect, Exit } from "effect";
 import { createWorktreeFileAdapter } from "../../adapters/filesystem/worktree-file-adapter";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
+import { createSqliteSharedSettingsDatabase } from "../../adapters/sqlite/sqlite-shared-settings-database";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
@@ -159,13 +161,16 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     };
     const targetDependencies = {
       git: createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") }),
-      settingsConfig: createSettingsConfigAdapter({ configPath: path.join(root, "settings.json") }),
+      settingsConfig: createSettingsConfigAdapter({
+        configPath: path.join(root, "settings.json"),
+        sharedSettings: createSqliteSharedSettingsDatabase(database),
+      }),
       worktreeFiles: createWorktreeFileAdapter(),
       worktreeActions,
     };
     const store = createSqliteWorkspaceSessionStore(database);
     const dependencies: WorkspaceSessionServiceDependencies = {
-      taskOwnership: database,
+      taskOwnership: database.taskOwnership,
       claudeSessionMetadata: {
         readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
       },
@@ -184,6 +189,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       store,
       settings: {
         getRepoConfig: () => Effect.succeed(config),
+        getWorkspaceCatalog: () => Effect.succeed(workspaceSessionCatalog(config)),
         listCustomAgentRoles: () => Effect.succeed([]),
       },
       runtime: {
@@ -1020,8 +1026,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         ...h.dependencies,
         settings: {
           ...h.dependencies.settings,
-          getWorkspaceCatalog: () =>
-            Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
+          getWorkspaceCatalog: () => Effect.succeed(workspaceSessionCatalog(h.config)),
         },
         registry,
         publishUpdated: () => Effect.void,

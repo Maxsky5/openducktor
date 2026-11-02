@@ -347,6 +347,12 @@ const createHookHarness = (initialProps: HookArgs) => {
         new Map(
           props.sessions.map((summary) => {
             const session = createSession(summary.externalSessionId, {
+              sessionAssociation: {
+                kind: "workflow",
+                workspaceId: summary.workspaceId,
+                taskId: summary.taskId,
+                role: summary.role,
+              },
               runtimeKind: summary.runtimeKind,
               workingDirectory: summary.workingDirectory,
               pendingApprovals: Array.from({ length: summary.pendingApprovalCount }, (_, index) =>
@@ -376,7 +382,16 @@ const createHookHarness = (initialProps: HookArgs) => {
         },
         createElement(
           ActiveWorkspaceContext.Provider,
-          { value: { activeWorkspace: null, setActiveWorkspace: () => {} } },
+          {
+            value: {
+              activeWorkspace: {
+                workspaceId: "workspace-1",
+                workspaceName: "Workspace",
+                repoPath: "/repo",
+              },
+              setActiveWorkspace: () => {},
+            },
+          },
           createElement(
             AgentSessionsContext.Provider,
             { value: store },
@@ -540,7 +555,12 @@ describe("useAgentStudioPageModels", () => {
     async (role) => {
       const command = { id: "review", trigger: "review", title: "Review", hints: [] };
       const selected = createSession("external-command", {
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role,
+        },
       });
       const harness = createHookHarness(
         createHookArgs({
@@ -1072,7 +1092,12 @@ describe("useAgentStudioPageModels", () => {
 
   test("renders Planner subagent waiting-input state", async () => {
     const plannerSession = createSession("external-planner", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "planner",
+      },
       runtimeKind: "opencode",
       workingDirectory: "/repo",
       messages: [
@@ -1096,7 +1121,12 @@ describe("useAgentStudioPageModels", () => {
       ],
     });
     const childSession = createSession("external-child", {
-      sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "other-task",
+        role: "spec",
+      },
       pendingApprovals: [createPendingApproval("perm-child")],
     });
     const harness = createHookHarness(
@@ -1178,7 +1208,12 @@ describe("useAgentStudioPageModels", () => {
   test("keeps the artifact choice until the user selects another role session", async () => {
     const artifactScope = { repoPath: "/repo", taskId: "task-1", workspaceId: "workspace-1" };
     const planner = createSession("planner-1", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "planner",
+      },
     });
     const plannerArgs = createHookArgs({
       artifactScope,
@@ -1235,7 +1270,12 @@ describe("useAgentStudioPageModels", () => {
         state.taskExecutionDocumentPanelModel?.onSelectionChange({ kind: "collection" });
       });
       const anotherPlanner = createSession("planner-2", {
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "planner",
+        },
       });
       await harness.update(
         createHookArgs({
@@ -1677,7 +1717,12 @@ describe("useAgentStudioPageModels", () => {
   test("derives subagent pending approval counts from all live session summaries", async () => {
     const parentSession = createSession("external-parent");
     const childWithApproval = createSession("external-child-1", {
-      sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "other-task",
+        role: "spec",
+      },
       pendingApprovals: [
         createPendingApproval("perm-1"),
         createPendingApproval("perm-2", "shell", ["git status"]),
@@ -1714,7 +1759,12 @@ describe("useAgentStudioPageModels", () => {
   test("keys subagent pending approval counts by session identity", async () => {
     const parentSession = createSession("external-parent");
     const childWithApproval = createSession("session-child-runtime", {
-      sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "other-task",
+        role: "spec",
+      },
       pendingApprovals: [createPendingApproval("perm-1")],
     });
     const harness = createHookHarness(
@@ -1740,7 +1790,12 @@ describe("useAgentStudioPageModels", () => {
     const parentSession = createSession("external-parent");
     const childSummary = toAgentSessionSummary(
       createSession("external-child-session", {
-        sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "other-task",
+          role: "spec",
+        },
         pendingApprovals: [createPendingApproval("perm-1")],
       }),
     );
@@ -1766,7 +1821,12 @@ describe("useAgentStudioPageModels", () => {
   test("keeps subagent pending approval counts unchanged when unrelated sessions change", async () => {
     const parentSession = createSession("external-parent");
     const childWithApproval = createSession("external-child-1", {
-      sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "other-task",
+        role: "spec",
+      },
       pendingApprovals: [createPendingApproval("perm-1")],
     });
     const initialProps = createHookArgs({
@@ -1790,7 +1850,12 @@ describe("useAgentStudioPageModels", () => {
           toAgentSessionSummary(childWithApproval),
           toAgentSessionSummary(
             createSession("external-child-2", {
-              sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
+              sessionAssociation: {
+                kind: "workflow",
+                workspaceId: "workspace-1",
+                taskId: "other-task",
+                role: "spec",
+              },
               pendingApprovals: [],
             }),
           ),
@@ -1812,7 +1877,12 @@ describe("useAgentStudioPageModels", () => {
   test("derives subagent pending question counts from all live session summaries", async () => {
     const parentSession = createSession("external-parent");
     const childWithQuestion = createSession("external-child-1", {
-      sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "other-task",
+        role: "spec",
+      },
       pendingQuestions: [createPendingQuestion("question-1"), createPendingQuestion("question-2")],
     });
     const childWithoutQuestion = createSession("external-child-2", {
@@ -1847,7 +1917,12 @@ describe("useAgentStudioPageModels", () => {
     const parentSession = createSession("external-parent");
     const childSummary = toAgentSessionSummary(
       createSession("external-child-session", {
-        sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "other-task",
+          role: "spec",
+        },
         pendingQuestions: [createPendingQuestion("question-1")],
       }),
     );
@@ -1875,7 +1950,12 @@ describe("useAgentStudioPageModels", () => {
   test("keeps subagent pending question counts unchanged when unrelated sessions change", async () => {
     const parentSession = createSession("external-parent");
     const childWithQuestion = createSession("external-child-1", {
-      sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "other-task",
+        role: "spec",
+      },
       pendingQuestions: [createPendingQuestion("question-1")],
     });
     const initialProps = createHookArgs({
@@ -1899,7 +1979,12 @@ describe("useAgentStudioPageModels", () => {
           toAgentSessionSummary(childWithQuestion),
           toAgentSessionSummary(
             createSession("external-child-2", {
-              sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
+              sessionAssociation: {
+                kind: "workflow",
+                workspaceId: "workspace-1",
+                taskId: "other-task",
+                role: "spec",
+              },
               pendingQuestions: [],
             }),
           ),
@@ -1920,7 +2005,12 @@ describe("useAgentStudioPageModels", () => {
 
   test("keeps composer identity tied to selected session instead of loaded session state", async () => {
     const initialSession = createSession("external-1", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       status: "running",
       workingDirectory: "/repo/selected-worktree",
     });
@@ -1945,7 +2035,12 @@ describe("useAgentStudioPageModels", () => {
     const selectedSessionKey = agentSessionIdentityKey(selectedSessionIdentity);
 
     const sameSessionIdNewRef = createSession("external-1", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       status: "running",
       workingDirectory: "/repo/stale-worktree",
     });
@@ -1971,7 +2066,12 @@ describe("useAgentStudioPageModels", () => {
 
   test("updates composer model when a running session starts waiting for input", async () => {
     const initialSession = createSession("external-1", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       status: "running",
       pendingQuestions: [],
     });
@@ -1995,7 +2095,12 @@ describe("useAgentStudioPageModels", () => {
     expect(initialComposerModel.isWaitingInput).toBe(false);
 
     const waitingSession = createSession("external-1", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       status: "running",
       pendingQuestions: [
         {
@@ -2082,7 +2187,12 @@ describe("useAgentStudioPageModels", () => {
       },
     });
     const runningPlannerSession = createSession("external-plan", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "planner",
+      },
       status: "running",
     });
 

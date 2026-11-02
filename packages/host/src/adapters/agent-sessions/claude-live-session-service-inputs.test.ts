@@ -18,7 +18,7 @@ describe("Claude live-session service inputs", () => {
       repoPath: "/repo",
       runtimeKind: "claude",
       workingDirectory: "/repo/worktree",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       systemPrompt: "Build",
       model: undefined,
     });
@@ -28,7 +28,7 @@ describe("Claude live-session service inputs", () => {
       runtimeKind: "claude",
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       parts: [
         {
           kind: "attachment",
@@ -49,7 +49,7 @@ describe("Claude live-session service inputs", () => {
       runtimeKind: "claude",
       runtimePolicy: { kind: "claude" },
       workingDirectory: "/repo/worktree",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       systemPrompt: "Build",
     });
     expect(sendInput).toEqual({
@@ -59,7 +59,7 @@ describe("Claude live-session service inputs", () => {
       delivery: "new_turn",
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       parts: [
         {
           kind: "attachment",

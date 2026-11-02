@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
 import type {
   IssueItemsImportInput,
   IssueItemsImportResult,
@@ -7,6 +8,7 @@ import type {
   RepoConfig,
   SourceIssueReference,
   SourceIssue,
+  WorkspaceRef,
 } from "@openducktor/contracts";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { requireWorkflowIssueType } from "../tasks/support/task-workflow-events";
@@ -125,21 +127,21 @@ export const createIssueImportService = ({
   taskWorkflows,
   workspaceSettingsService,
   publishTaskCreated,
-  runMutation,
+  runStatusMutation,
 }: {
   resolver: GitProviderResolver;
   store: IssueImportStorePort;
   taskWorkflows: TaskWorkflowResolver;
-  runMutation: TaskSyncService["runMutation"];
-  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
+  runStatusMutation: TaskSyncService["runStatusMutation"];
+  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig">;
   publishTaskCreated: (
-    repoPath: string,
+    workspace: WorkspaceRef,
     task: TaskRecord,
   ) => Effect.Effect<void, HostOperationErrorAggregate>;
 }) => {
-  const resolveReader = (repoPath: string) =>
+  const resolveReader = (workspace: WorkspaceRef) =>
     Effect.gen(function* () {
-      const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const repoConfig = yield* getScopedRepoConfig(workspaceSettingsService, workspace);
       const provider = yield* resolver.resolve(repoConfig);
       const reader = yield* provider.issues();
       return {
@@ -149,15 +151,15 @@ export const createIssueImportService = ({
       };
     });
 
-  const resolve = (repoPath: string) =>
+  const resolve = (workspace: WorkspaceRef) =>
     Effect.gen(function* () {
-      const resolved = yield* resolveReader(repoPath);
+      const resolved = yield* resolveReader(workspace);
       const scope = yield* resolved.reader.scope(resolved.repoConfig);
       return { ...resolved, scope };
     });
 
   const reconcileSourceScopes = (
-    repoPath: string,
+    workspace: WorkspaceRef,
     repoConfig: RepoConfig,
     reader: IssueReaderPort,
     scope: string,
@@ -166,7 +168,7 @@ export const createIssueImportService = ({
     Effect.gen(function* () {
       if (reader.providerId !== "github" || sourceIds.length === 0) return;
       const oldScopes = yield* store.findSourceScopes({
-        repoPath,
+        ...workspace,
         providerId: reader.providerId,
         scope,
         sourceIds,
@@ -181,7 +183,7 @@ export const createIssueImportService = ({
       for (const oldScope of oldScopes) {
         if ((yield* reader.resolveLegacyScope(repoConfig, oldScope)) !== scope) continue;
         yield* store.replaceSourceScope({
-          repoPath,
+          ...workspace,
           providerId: reader.providerId,
           oldScope,
           scope,
@@ -198,10 +200,9 @@ export const createIssueImportService = ({
         let reader: IssueReaderPort;
         let savedDescription: string | undefined;
         if ("taskId" in input) {
-          const currentConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(
-            input.repoPath,
-          );
+          const currentConfig = yield* getScopedRepoConfig(workspaceSettingsService, input);
           const source = yield* store.getSourceIssue({
+            workspaceId: input.workspaceId,
             repoPath: input.repoPath,
             taskId: input.taskId,
           });
@@ -217,7 +218,7 @@ export const createIssueImportService = ({
           const provider = yield* resolver.resolve(repoConfig);
           reader = yield* provider.issues();
         } else {
-          const resolved = yield* resolveReader(input.repoPath);
+          const resolved = yield* resolveReader(input);
           repoConfig = resolved.repoConfig;
           reader = resolved.reader;
           sourceId = input.sourceId;
@@ -238,7 +239,7 @@ export const createIssueImportService = ({
     },
     get(input: IssueItemGetInput) {
       return Effect.gen(function* () {
-        const { repoConfig, reader, scope } = yield* resolve(input.repoPath);
+        const { repoConfig, reader, scope } = yield* resolve(input);
         const item = yield* reader.get({ repoConfig, scope, sourceId: input.sourceId });
         if (
           item.sourceId !== input.sourceId ||
@@ -250,8 +251,9 @@ export const createIssueImportService = ({
             message: "The source item is outside the configured repository. Refresh the list.",
           });
         }
-        yield* reconcileSourceScopes(input.repoPath, repoConfig, reader, scope, [input.sourceId]);
+        yield* reconcileSourceScopes(input, repoConfig, reader, scope, [input.sourceId]);
         const linked = yield* store.findLinkedTaskIds({
+          workspaceId: input.workspaceId,
           repoPath: input.repoPath,
           providerId: reader.providerId,
           scope,
@@ -262,7 +264,7 @@ export const createIssueImportService = ({
     },
     list(input: IssueItemsListInput) {
       return Effect.gen(function* () {
-        const { repoConfig, reader, scope, searchSupported } = yield* resolve(input.repoPath);
+        const { repoConfig, reader, scope, searchSupported } = yield* resolve(input);
         const search = input.search.trim();
         if (search && !searchSupported) {
           return yield* new HostValidationError({
@@ -295,13 +297,14 @@ export const createIssueImportService = ({
           });
         }
         yield* reconcileSourceScopes(
-          input.repoPath,
+          input,
           repoConfig,
           reader,
           scope,
           result.items.map((item) => item.sourceId),
         );
         const linked = yield* store.findLinkedTaskIds({
+          workspaceId: input.workspaceId,
           repoPath: input.repoPath,
           providerId: reader.providerId,
           scope,
@@ -328,7 +331,7 @@ export const createIssueImportService = ({
     },
     import(input: IssueItemsImportInput) {
       return Effect.gen(function* () {
-        const { repoConfig, reader, scope } = yield* resolve(input.repoPath);
+        const { repoConfig, reader, scope } = yield* resolve(input);
         const preparedGet = yield* Effect.result(reader.prepareGet(repoConfig, scope));
         const seen = new Set<string>();
         const results: IssueItemsImportResult["results"] = [];
@@ -371,15 +374,15 @@ export const createIssueImportService = ({
                     "The source item changed since review. Refresh it and review the new content.",
                 });
               }
-              yield* reconcileSourceScopes(input.repoPath, repoConfig, reader, scope, [
-                review.sourceId,
-              ]);
-              return yield* runMutation(
-                input.repoPath,
+              yield* reconcileSourceScopes(input, repoConfig, reader, scope, [review.sourceId]);
+              return yield* runStatusMutation(
+                input,
+                "create-task",
                 Effect.gen(function* () {
                   const workflow = taskWorkflows.forNewTask(input.repoPath);
                   yield* requireWorkflowIssueType(workflow, review.issueType);
-                  const created = yield* store.createImportedTask({
+                  return yield* store.createImportedTask({
+                    workspaceId: input.workspaceId,
                     repoPath: input.repoPath,
                     sourceIssue: source,
                     status: workflow.initialState,
@@ -391,16 +394,20 @@ export const createIssueImportService = ({
                       labels: review.labels,
                     },
                   });
-                  if (created.outcome === "duplicate") {
-                    return {
-                      outcome: "failed" as const,
-                      taskId: created.taskId,
-                      reason: `This source item is already linked to Task ${created.taskId}.`,
-                    };
-                  }
-                  yield* publishTaskCreated(input.repoPath, created.task);
-                  return { outcome: "created" as const, taskId: created.task.id };
                 }),
+                ({ result }) =>
+                  Effect.gen(function* () {
+                    const created = yield* Effect.fromResult(result);
+                    if (created.outcome === "duplicate") {
+                      return {
+                        outcome: "failed" as const,
+                        taskId: created.taskId,
+                        reason: `This source item is already linked to Task ${created.taskId}.`,
+                      };
+                    }
+                    yield* publishTaskCreated(input, created.task);
+                    return { outcome: "created" as const, taskId: created.task.id };
+                  }),
               );
             }),
           );

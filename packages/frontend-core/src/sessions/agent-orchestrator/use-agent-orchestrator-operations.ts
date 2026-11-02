@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -40,7 +41,7 @@ type UseAgentOrchestratorOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  refreshTaskData: (scope: WorkspaceRef, taskIdOrIds?: string | string[]) => Promise<void>;
   agentEngine: AgentEnginePort;
   sessionStore?: AgentSessionsStore;
   messageQueues?: AgentMessageQueuesStore;
@@ -87,8 +88,8 @@ export function useAgentOrchestratorOperations({
       store,
     });
   const invalidateSessionStopQueries = useCallback(
-    ({ repoPath }: { repoPath: string; taskId: string }) =>
-      invalidateRepoTaskQueries(queryClient, repoPath),
+    ({ workspaceId, repoPath }: { workspaceId: string; repoPath: string; taskId: string }) =>
+      invalidateRepoTaskQueries(queryClient, { workspaceId, repoPath }),
     [queryClient],
   );
   const updateSession = useCallback<UpdateSession>(

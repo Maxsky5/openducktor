@@ -41,7 +41,7 @@ const noContent = () => new Response(null, { status: 204 });
 
 const target: AgentMessageTarget = {
   ...ref,
-  sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
 };
 
 const createHarness = async (loseModelResponse = false) => {

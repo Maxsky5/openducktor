@@ -18,6 +18,7 @@ import { createWorkspaceProviderSetupService } from "../../application/workspace
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { AzureDevOpsFetch } from "../../adapters/git-providers/azure-devops/rest-client";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 
 export const createNodeWorkspaceProviderSetup = (
   ports: NodeHostDefaultPorts,
@@ -26,8 +27,9 @@ export const createNodeWorkspaceProviderSetup = (
     azureDevOpsFetch?: AzureDevOpsFetch | undefined;
   },
   onWorkspaceAdded: (repoPath: string) => void,
+  taskWorkflows: TaskWorkflowResolver,
 ) => {
-  const savedSettings = createWorkspaceSettingsService(ports.settingsConfig);
+  const savedSettings = createWorkspaceSettingsService(ports.settingsConfig, taskWorkflows);
   const settings: WorkspaceSettingsService = {
     ...savedSettings,
     addWorkspace: (input) =>

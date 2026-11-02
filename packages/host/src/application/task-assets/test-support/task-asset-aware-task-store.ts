@@ -34,7 +34,7 @@ export const createHarness = async () => {
     registry,
     persistence: registry,
     staging,
-    resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    resolveWorkspaceId: () => Effect.succeed("fairnest"),
   });
   return { ...sqlite, innerStore: sqlite.store, filePort, registry, staging, store };
 };
@@ -80,7 +80,7 @@ export const createTaskWithAsset = async (harness: Awaited<ReturnType<typeof cre
   const description = `![image](odt-asset:${staged.assetId})`;
   const task = await Effect.runPromise(
     harness.store.createTask({
-      repoPath: harness.repoPath,
+      ...harness.scope,
       status: "open",
       task: {
         title: "Asset owner",

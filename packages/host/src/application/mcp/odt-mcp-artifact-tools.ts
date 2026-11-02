@@ -3,6 +3,7 @@ import {
   type McpArtifactDeleteResult,
   type SetTaskArtifactInput,
   type TaskArtifact,
+  type WorkspaceRef,
   freeArtifactCodeSchema,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
@@ -41,7 +42,11 @@ export const executeSetTaskArtifact = (
       toolBody,
     );
     const workspaceId = input.workspaceId ?? "";
-    const { repoPath, task } = yield* context.taskScopeForWorkspace(workspaceId, input.taskId);
+    const {
+      workspaceId: resolvedWorkspaceId,
+      repoPath,
+      task,
+    } = yield* context.taskScopeForWorkspace(workspaceId, input.taskId);
     const owner = yield* resolveArtifactWriter(
       context,
       "odt_set_task_artifact",
@@ -55,6 +60,7 @@ export const executeSetTaskArtifact = (
       yield* rejectFreeArtifactFields(input);
       const markdown = yield* workflowMarkdown(input);
       const saveInput: Parameters<OdtMcpToolContext["taskService"]["workflowArtifactSave"]>[0] = {
+        workspaceId: resolvedWorkspaceId,
         repoPath,
         taskId: task.id,
         code: input.code,
@@ -97,7 +103,14 @@ export const executeSetTaskArtifact = (
           `${input.code} is not a workflow artifact code. ${freeCode.error.issues[0]?.message ?? ""}`.trim(),
       });
     }
-    const artifact = toMcpTaskArtifact(yield* writeFreeArtifact(context, input, repoPath, task.id));
+    const artifact = toMcpTaskArtifact(
+      yield* writeFreeArtifact(
+        context,
+        input,
+        { workspaceId: resolvedWorkspaceId, repoPath },
+        task.id,
+      ),
+    );
     return yield* parseResponse(
       "odt_set_task_artifact",
       ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_set_task_artifact,
@@ -110,13 +123,13 @@ export const executeSetTaskArtifact = (
 const writeFreeArtifact = (
   context: OdtMcpToolContext,
   input: SetTaskArtifactInput,
-  repoPath: string,
+  scope: WorkspaceRef,
   taskId: string,
 ): Effect.Effect<TaskArtifact, OdtMcpBridgeError> =>
   Effect.gen(function* () {
     const { code, name, fileName, mediaType } = input;
     const dataBase64 = artifactContentBase64(input);
-    const collection = yield* context.taskService.listTaskArtifacts({ repoPath, taskId });
+    const collection = yield* context.taskService.listTaskArtifacts({ ...scope, taskId });
     const existing = findFreeTaskArtifact(collection.artifacts, code);
     if (existing === undefined) {
       if (
@@ -132,7 +145,7 @@ const writeFreeArtifact = (
         });
       }
       const result = yield* context.taskService.createTaskArtifact({
-        repoPath,
+        ...scope,
         taskId,
         code,
         name,
@@ -156,7 +169,7 @@ const writeFreeArtifact = (
         });
       }
       const result = yield* context.taskService.renameTaskArtifact({
-        repoPath,
+        ...scope,
         taskId,
         artifactId: existing.artifactId,
         name,
@@ -171,7 +184,7 @@ const writeFreeArtifact = (
       });
     }
     const request: Parameters<TaskService["replaceTaskArtifact"]>[0] = {
-      repoPath,
+      ...scope,
       taskId,
       artifactId: existing.artifactId,
       fileName,
@@ -198,7 +211,7 @@ export const executeDeleteTaskArtifact = (
       ODT_TOOL_SCHEMAS.odt_delete_task_artifact,
       toolBody,
     );
-    const { repoPath, task } = yield* context.taskScopeForWorkspace(
+    const { workspaceId, repoPath, task } = yield* context.taskScopeForWorkspace(
       parsed.workspaceId ?? "",
       parsed.taskId,
     );
@@ -215,10 +228,15 @@ export const executeDeleteTaskArtifact = (
       parsed.workspaceId ?? "",
       task.id,
     );
-    const collection = yield* context.taskService.listTaskArtifacts({ repoPath, taskId: task.id });
+    const collection = yield* context.taskService.listTaskArtifacts({
+      workspaceId,
+      repoPath,
+      taskId: task.id,
+    });
     const artifact = findFreeTaskArtifact(collection.artifacts, parsed.code);
     if (artifact === undefined) return yield* missingFreeTaskArtifact(parsed.code);
     const { artifactId: _artifactId, ...result } = yield* context.taskService.deleteTaskArtifact({
+      workspaceId,
       repoPath,
       taskId: task.id,
       artifactId: artifact.artifactId,

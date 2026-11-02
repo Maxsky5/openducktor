@@ -23,7 +23,6 @@ type AzureDevOpsConnectionController = Pick<
   | "actionError"
   | "canManageConnection"
   | "cancelSignIn"
-  | "connectionInput"
   | "connectionReadFailed"
   | "connectionState"
   | "disconnect"
@@ -37,7 +36,12 @@ type AzureDevOpsConnectionController = Pick<
   | "setPat"
   | "startSignIn"
   | "updatesReady"
->;
+> & {
+  connectionInput: Pick<
+    NonNullable<AzureDevOpsGitProviderFormController["connectionInput"]>,
+    "repoPath" | "repository"
+  > | null;
+};
 
 type AzureDevOpsConnectionSettingsProps = {
   controller: AzureDevOpsConnectionController;

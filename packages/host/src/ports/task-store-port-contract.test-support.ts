@@ -1,80 +1,26 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type {
-  AgentSessionRecord,
-  DirectMergeRecord,
-  PullRequest,
-  TaskCreateInput,
-} from "@openducktor/contracts";
-import { Cause, Effect, Exit } from "effect";
-import { z } from "zod";
+import type { TaskCreateInput, WorkspaceRef } from "@openducktor/contracts";
+import { Effect, Result } from "effect";
 import type { TaskStorePort, TaskRecord } from "./task-repository-ports";
+import {
+  createAgentSessionRecord,
+  createDirectMergeRecord,
+  createPullRequestRecord,
+  expectFailureTag,
+} from "./task-store-port-contract-fixtures";
+export {
+  createAgentSessionRecord,
+  createPullRequestRecord,
+  expectFailureTag,
+} from "./task-store-port-contract-fixtures";
 
 export type TaskStorePortContractHarness = {
   readonly cleanup?: (() => Promise<void>) | undefined;
-  readonly repoPath: string;
+  readonly scope: WorkspaceRef;
   readonly store: TaskStorePort;
 };
 
 export type CreateTaskStorePortContractHarness = () => Promise<TaskStorePortContractHarness>;
-
-const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E> => {
-  const exit = await Effect.runPromiseExit(effect);
-  if (!Exit.isFailure(exit)) {
-    throw new Error("Expected Effect failure.");
-  }
-  const failureOption = Cause.findErrorOption(exit.cause);
-  if (failureOption._tag !== "Some") {
-    throw new Error("Expected Effect failure cause.");
-  }
-  return failureOption.value;
-};
-
-const failureTagSchema = z.object({ _tag: z.string() }).passthrough();
-
-const readTag = (
-  result: z.ZodSafeParseResult<z.output<typeof failureTagSchema>>,
-): string | undefined => (result.success ? result.data._tag : undefined);
-
-export const expectFailureTag = async <A, E>(
-  effect: Effect.Effect<A, E>,
-  expectedTag: string,
-): Promise<E> => {
-  const failure = await firstFailure(effect);
-  expect(readTag(failureTagSchema.safeParse(failure))).toBe(expectedTag);
-  return failure;
-};
-
-export const createAgentSessionRecord = (
-  overrides: Partial<AgentSessionRecord> = {},
-): AgentSessionRecord => ({
-  externalSessionId: "session-1",
-  role: "build",
-  startedAt: "2026-06-10T10:00:00.000Z",
-  runtimeKind: "opencode",
-  workingDirectory: "/repos/fairnest/worktrees/session-1",
-  selectedModel: null,
-  ...overrides,
-});
-
-export const createPullRequestRecord = (overrides: Partial<PullRequest> = {}): PullRequest => ({
-  providerId: "github",
-  number: 42,
-  url: "https://github.com/acme/fairnest/pull/42",
-  state: "open",
-  createdAt: "2026-06-10T10:00:00.000Z",
-  updatedAt: "2026-06-10T10:00:00.000Z",
-  ...overrides,
-});
-
-const createDirectMergeRecord = (
-  overrides: Partial<DirectMergeRecord> = {},
-): DirectMergeRecord => ({
-  method: "squash",
-  sourceBranch: "task/fairnest-1",
-  targetBranch: { remote: "origin", branch: "main" },
-  mergedAt: "2026-06-10T11:00:00.000Z",
-  ...overrides,
-});
 
 const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(effect);
 
@@ -82,9 +28,9 @@ const SQLITE_ORDERING_CONTRACT_TEST_TIMEOUT_MS = 20_000;
 
 const createTask = (
   store: TaskStorePort,
-  repoPath: string,
+  scope: WorkspaceRef,
   input: TaskCreateInput,
-): Promise<TaskRecord> => run(store.createTask({ repoPath, status: "open", task: input }));
+): Promise<TaskRecord> => run(store.createTask({ ...scope, status: "open", task: input }));
 
 export const describeTaskStorePortContract = (
   name: string,
@@ -107,9 +53,9 @@ export const describeTaskStorePortContract = (
     });
 
     test("creates, updates, and lists tasks through the port", async () => {
-      const { repoPath, store } = await createTrackedHarness();
+      const { scope, store } = await createTrackedHarness();
 
-      const parent = await createTask(store, repoPath, {
+      const parent = await createTask(store, scope, {
         title: "Parent",
         issueType: "feature",
         priority: 3,
@@ -117,7 +63,7 @@ export const describeTaskStorePortContract = (
       });
       const updated = await run(
         store.updateTask({
-          repoPath,
+          ...scope,
           taskId: parent.id,
           patch: {
             description: "Updated description",
@@ -134,7 +80,7 @@ export const describeTaskStorePortContract = (
         targetBranch: { remote: "origin", branch: "main" },
         title: "Updated parent",
       });
-      await expect(run(store.listTasks({ repoPath }))).resolves.toEqual(
+      await expect(run(store.listTasks(scope))).resolves.toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: parent.id, title: "Updated parent" }),
         ]),
@@ -144,42 +90,50 @@ export const describeTaskStorePortContract = (
     test(
       "orders open tasks by priority then creation date and non-open tasks by update date",
       async () => {
-        const { repoPath, store } = await createTrackedHarness();
+        const { scope, store } = await createTrackedHarness();
 
-        const olderHighPriorityOpen = await createTask(store, repoPath, {
+        const olderHighPriorityOpen = await createTask(store, scope, {
           title: "Older high priority open",
           issueType: "task",
           priority: 1,
         });
-        const newerHighPriorityOpen = await createTask(store, repoPath, {
+        const newerHighPriorityOpen = await createTask(store, scope, {
           title: "Newer high priority open",
           issueType: "task",
           priority: 1,
         });
-        const newestLowPriorityOpen = await createTask(store, repoPath, {
+        const newestLowPriorityOpen = await createTask(store, scope, {
           title: "Newest low priority open",
           issueType: "task",
           priority: 4,
         });
-        const olderSpecReady = await createTask(store, repoPath, {
+        const olderSpecReady = await createTask(store, scope, {
           title: "Older spec ready",
           issueType: "task",
           priority: 2,
         });
-        const newerSpecReady = await createTask(store, repoPath, {
+        const newerSpecReady = await createTask(store, scope, {
           title: "Newer spec ready",
           issueType: "task",
           priority: 2,
         });
 
         await run(
-          store.transitionTask({ repoPath, taskId: olderSpecReady.id, status: "spec_ready" }),
+          store.transitionTask({
+            ...scope,
+            taskId: olderSpecReady.id,
+            decide: () => Result.succeed({ status: "spec_ready", workflowId: "openducktor" }),
+          }),
         );
         await run(
-          store.transitionTask({ repoPath, taskId: newerSpecReady.id, status: "spec_ready" }),
+          store.transitionTask({
+            ...scope,
+            taskId: newerSpecReady.id,
+            decide: () => Result.succeed({ status: "spec_ready", workflowId: "openducktor" }),
+          }),
         );
 
-        const tasks = await run(store.listTasks({ repoPath }));
+        const tasks = await run(store.listTasks(scope));
 
         expect(tasks.filter((task) => task.status === "open").map((task) => task.id)).toEqual([
           newerHighPriorityOpen.id,
@@ -190,7 +144,7 @@ export const describeTaskStorePortContract = (
           [olderSpecReady.id, newerSpecReady.id],
         );
 
-        const filteredTasks = await run(store.listTasks({ repoPath, doneVisibleDays: 0 }));
+        const filteredTasks = await run(store.listTasks({ ...scope, doneVisibleDays: 0 }));
 
         expect(
           filteredTasks.filter((task) => task.status === "open").map((task) => task.id),
@@ -203,8 +157,8 @@ export const describeTaskStorePortContract = (
     );
 
     test("stores workflow artifacts and exposes the current metadata/read-model state", async () => {
-      const { repoPath, store } = await createTrackedHarness();
-      const task = await createTask(store, repoPath, {
+      const { scope, store } = await createTrackedHarness();
+      const task = await createTask(store, scope, {
         title: "Workflow task",
         issueType: "task",
         priority: 2,
@@ -212,9 +166,11 @@ export const describeTaskStorePortContract = (
 
       await run(
         store.saveWorkflowArtifact({
+          decide: (current) =>
+            Result.succeed({ status: current.status, workflowId: "openducktor" }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
-          repoPath,
+          ...scope,
           taskId: task.id,
           markdown: " # First spec ",
           code: "spec",
@@ -222,9 +178,11 @@ export const describeTaskStorePortContract = (
       );
       const latestSpec = await run(
         store.saveWorkflowArtifact({
+          decide: (current) =>
+            Result.succeed({ status: current.status, workflowId: "openducktor" }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
-          repoPath,
+          ...scope,
           taskId: task.id,
           markdown: "# Second spec",
           code: "spec",
@@ -232,9 +190,11 @@ export const describeTaskStorePortContract = (
       );
       const plan = await run(
         store.saveWorkflowArtifact({
+          decide: (current) =>
+            Result.succeed({ status: current.status, workflowId: "openducktor" }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
-          repoPath,
+          ...scope,
           taskId: task.id,
           markdown: "# Plan",
           code: "plan",
@@ -242,17 +202,17 @@ export const describeTaskStorePortContract = (
       );
       const reviewed = await run(
         store.saveWorkflowArtifact({
+          decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
-          repoPath,
+          ...scope,
           taskId: task.id,
-          status: "closed",
           markdown: "# Approved",
           verdict: "approved",
           code: "qaReport",
         }),
       );
-      const metadata = await run(store.getTaskMetadata({ repoPath, taskId: task.id }));
+      const metadata = await run(store.getTaskMetadata({ ...scope, taskId: task.id }));
 
       expect(latestSpec.artifact).toMatchObject({ markdown: "# Second spec", revision: 2 });
       expect(plan.artifact).toMatchObject({ markdown: "# Plan", revision: 1 });
@@ -275,8 +235,8 @@ export const describeTaskStorePortContract = (
     });
 
     test("clears QA reports and workflow artifacts through the port", async () => {
-      const { repoPath, store } = await createTrackedHarness();
-      const task = await createTask(store, repoPath, {
+      const { scope, store } = await createTrackedHarness();
+      const task = await createTask(store, scope, {
         title: "Artifacts",
         issueType: "task",
         priority: 2,
@@ -284,9 +244,11 @@ export const describeTaskStorePortContract = (
 
       await run(
         store.saveWorkflowArtifact({
+          decide: (current) =>
+            Result.succeed({ status: current.status, workflowId: "openducktor" }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
-          repoPath,
+          ...scope,
           taskId: task.id,
           markdown: "# Spec",
           code: "spec",
@@ -294,9 +256,11 @@ export const describeTaskStorePortContract = (
       );
       await run(
         store.saveWorkflowArtifact({
+          decide: (current) =>
+            Result.succeed({ status: current.status, workflowId: "openducktor" }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
-          repoPath,
+          ...scope,
           taskId: task.id,
           markdown: "# Plan",
           code: "plan",
@@ -304,33 +268,33 @@ export const describeTaskStorePortContract = (
       );
       await run(
         store.saveWorkflowArtifact({
+          decide: () => Result.succeed({ status: "ai_review", workflowId: "openducktor" }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
-          repoPath,
+          ...scope,
           taskId: task.id,
-          status: "ai_review",
           markdown: "# Rejected",
           verdict: "rejected",
           code: "qaReport",
         }),
       );
-      await run(store.clearWorkflowArtifacts({ repoPath, taskId: task.id, codes: ["qaReport"] }));
-      const cleared = await run(store.getTaskMetadata({ repoPath, taskId: task.id }));
+      await run(store.clearWorkflowArtifacts({ ...scope, taskId: task.id, codes: ["qaReport"] }));
+      const cleared = await run(store.getTaskMetadata({ ...scope, taskId: task.id }));
       expect(Object.keys(cleared.artifacts).toSorted()).toEqual(["plan", "spec"]);
       expect(cleared.artifacts).toMatchObject({
         plan: { markdown: "# Plan" },
         spec: { markdown: "# Spec" },
       });
 
-      await run(store.clearTaskArtifacts({ repoPath, taskId: task.id }));
-      expect((await run(store.getTaskMetadata({ repoPath, taskId: task.id }))).artifacts).toEqual(
+      await run(store.clearTaskArtifacts({ ...scope, taskId: task.id }));
+      expect((await run(store.getTaskMetadata({ ...scope, taskId: task.id }))).artifacts).toEqual(
         {},
       );
     });
 
     test("persists delivery records without clearing unrelated empty records", async () => {
-      const { repoPath, store } = await createTrackedHarness();
-      const task = await createTask(store, repoPath, {
+      const { scope, store } = await createTrackedHarness();
+      const task = await createTask(store, scope, {
         title: "Delivery",
         issueType: "task",
         priority: 2,
@@ -338,28 +302,28 @@ export const describeTaskStorePortContract = (
       const pullRequest = createPullRequestRecord();
       const directMerge = createDirectMergeRecord();
 
-      await run(store.setPullRequest({ repoPath, taskId: task.id, pullRequest }));
-      await run(store.setDirectMerge({ repoPath, taskId: task.id, directMerge: null }));
+      await run(store.setPullRequest({ ...scope, taskId: task.id, pullRequest }));
+      await run(store.setDirectMerge({ ...scope, taskId: task.id, directMerge: null }));
       await expect(
-        run(store.getTaskMetadata({ repoPath, taskId: task.id })),
+        run(store.getTaskMetadata({ ...scope, taskId: task.id })),
       ).resolves.toMatchObject({ pullRequest });
-      await expect(run(store.listPullRequestSyncCandidates({ repoPath }))).resolves.toMatchObject([
+      await expect(run(store.listPullRequestSyncCandidates(scope))).resolves.toMatchObject([
         expect.objectContaining({ id: task.id, pullRequest }),
       ]);
-      await expect(run(store.listDirectMergeTaskIds({ repoPath }))).resolves.toEqual([]);
+      await expect(run(store.listDirectMergeTaskIds(scope))).resolves.toEqual([]);
 
-      await run(store.setDirectMerge({ repoPath, taskId: task.id, directMerge }));
-      await run(store.setPullRequest({ repoPath, taskId: task.id, pullRequest: null }));
+      await run(store.setDirectMerge({ ...scope, taskId: task.id, directMerge }));
+      await run(store.setPullRequest({ ...scope, taskId: task.id, pullRequest: null }));
       await expect(
-        run(store.getTaskMetadata({ repoPath, taskId: task.id })),
+        run(store.getTaskMetadata({ ...scope, taskId: task.id })),
       ).resolves.toMatchObject({ directMerge });
-      await expect(run(store.listPullRequestSyncCandidates({ repoPath }))).resolves.toEqual([]);
-      await expect(run(store.listDirectMergeTaskIds({ repoPath }))).resolves.toEqual([task.id]);
+      await expect(run(store.listPullRequestSyncCandidates(scope))).resolves.toEqual([]);
+      await expect(run(store.listDirectMergeTaskIds(scope))).resolves.toEqual([task.id]);
     });
 
     test("upserts and clears persisted agent sessions by role", async () => {
-      const { repoPath, store } = await createTrackedHarness();
-      const task = await createTask(store, repoPath, {
+      const { scope, store } = await createTrackedHarness();
+      const task = await createTask(store, scope, {
         title: "Agent sessions",
         issueType: "task",
         priority: 2,
@@ -387,20 +351,52 @@ export const describeTaskStorePortContract = (
         workingDirectory: "/repos/fairnest/worktrees/build-session-other",
       });
 
-      await run(store.upsertAgentSession({ repoPath, taskId: task.id, session: buildSession }));
-      await run(store.upsertAgentSession({ repoPath, taskId: task.id, session: qaSession }));
       await run(
-        store.upsertAgentSession({ repoPath, taskId: task.id, session: updatedBuildSession }),
+        store.upsertAgentSession({
+          ownershipScope: {
+            catalogRevision: 0,
+            workspaces: [scope],
+          },
+          ...scope,
+          taskId: task.id,
+          session: buildSession,
+        }),
       );
       await run(
         store.upsertAgentSession({
-          repoPath,
+          ownershipScope: {
+            catalogRevision: 0,
+            workspaces: [scope],
+          },
+          ...scope,
+          taskId: task.id,
+          session: qaSession,
+        }),
+      );
+      await run(
+        store.upsertAgentSession({
+          ownershipScope: {
+            catalogRevision: 0,
+            workspaces: [scope],
+          },
+          ...scope,
+          taskId: task.id,
+          session: updatedBuildSession,
+        }),
+      );
+      await run(
+        store.upsertAgentSession({
+          ownershipScope: {
+            catalogRevision: 0,
+            workspaces: [scope],
+          },
+          ...scope,
           taskId: task.id,
           session: sameExternalIdOtherWorktreeSession,
         }),
       );
       await expect(
-        run(store.getTaskMetadata({ repoPath, taskId: task.id })),
+        run(store.getTaskMetadata({ ...scope, taskId: task.id })),
       ).resolves.toMatchObject({
         agentSessions: [
           expect.objectContaining({
@@ -417,13 +413,13 @@ export const describeTaskStorePortContract = (
 
       await run(
         store.deleteAgentSession({
-          repoPath,
+          ...scope,
           taskId: task.id,
           identity: updatedBuildSession,
         }),
       );
       await expect(
-        run(store.getTaskMetadata({ repoPath, taskId: task.id })),
+        run(store.getTaskMetadata({ ...scope, taskId: task.id })),
       ).resolves.toMatchObject({
         agentSessions: [
           expect.objectContaining({
@@ -436,50 +432,56 @@ export const describeTaskStorePortContract = (
 
       await run(
         store.clearAgentSessionsByRoles({
-          repoPath,
+          ...scope,
           taskId: task.id,
           roles: [" build ", ""],
         }),
       );
       await expect(
-        run(store.getTaskMetadata({ repoPath, taskId: task.id })),
+        run(store.getTaskMetadata({ ...scope, taskId: task.id })),
       ).resolves.toMatchObject({
         agentSessions: [expect.objectContaining({ externalSessionId: "qa-session" })],
       });
     });
 
     test("filters closed tasks and deletes tasks", async () => {
-      const { repoPath, store } = await createTrackedHarness();
-      const root = await createTask(store, repoPath, {
+      const { scope, store } = await createTrackedHarness();
+      const root = await createTask(store, scope, {
         title: "Root",
         issueType: "feature",
         priority: 2,
       });
-      const closed = await createTask(store, repoPath, {
+      const closed = await createTask(store, scope, {
         title: "Closed",
         issueType: "task",
         priority: 2,
       });
-      await run(store.transitionTask({ repoPath, taskId: closed.id, status: "closed" }));
+      await run(
+        store.transitionTask({
+          ...scope,
+          taskId: closed.id,
+          decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
+        }),
+      );
 
-      await expect(run(store.listTasks({ repoPath, doneVisibleDays: 0 }))).resolves.not.toEqual(
+      await expect(run(store.listTasks({ ...scope, doneVisibleDays: 0 }))).resolves.not.toEqual(
         expect.arrayContaining([expect.objectContaining({ id: closed.id })]),
       );
-      await expect(run(store.listTasks({ repoPath, doneVisibleDays: 1 }))).resolves.toEqual(
+      await expect(run(store.listTasks({ ...scope, doneVisibleDays: 1 }))).resolves.toEqual(
         expect.arrayContaining([expect.objectContaining({ id: closed.id })]),
       );
 
-      await run(store.deleteTask({ repoPath, taskId: root.id }));
-      await expect(run(store.listTasks({ repoPath }))).resolves.not.toEqual(
+      await run(store.deleteTask({ ...scope, taskId: root.id }));
+      await expect(run(store.listTasks(scope))).resolves.not.toEqual(
         expect.arrayContaining([expect.objectContaining({ id: root.id })]),
       );
     });
 
     test("returns typed failures for missing tasks", async () => {
-      const { repoPath, store } = await createTrackedHarness();
+      const { scope, store } = await createTrackedHarness();
 
       const missing = await expectFailureTag(
-        store.getTask({ repoPath, taskId: "missing-task" }),
+        store.getTask({ ...scope, taskId: "missing-task" }),
         "HostResourceError",
       );
       expect(missing).toMatchObject({ message: "Task not found: missing-task" });

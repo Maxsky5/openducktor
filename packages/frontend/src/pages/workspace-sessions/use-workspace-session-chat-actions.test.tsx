@@ -145,7 +145,7 @@ test.each(["local_repo_root", "local_worktree"] as const)(
         identity,
         expect.any(Array),
         expect.objectContaining({
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "workspace" },
           assertCanSubmit: expect.any(Function),
         }),
       );

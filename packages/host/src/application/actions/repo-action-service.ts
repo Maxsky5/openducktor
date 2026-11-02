@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
 import type { TerminalCreateResponse, TerminalRunActionRequest } from "@openducktor/contracts";
 import { Data, Effect } from "effect";
 import type { TerminalCommandService } from "../terminals/terminal-command";
@@ -30,11 +31,11 @@ export const createRepoActionService = ({
   settings,
 }: {
   terminals: Pick<TerminalCommandService, "startCommand">;
-  settings: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
+  settings: Pick<WorkspaceSettingsService, "getRepoConfig">;
 }): RepoActionService => ({
   run: (request) =>
     Effect.gen(function* () {
-      const repoConfig = yield* settings.getRepoConfigByRepoPath(request.context.repoPath);
+      const repoConfig = yield* getScopedRepoConfig(settings, request.context);
       const action = repoConfig.actions.items.find(
         (candidate) => candidate.id === request.actionId,
       );

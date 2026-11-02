@@ -15,6 +15,7 @@ const selectedSession = {
 
 const createSummary = (overrides: Partial<AgentSessionSummary> = {}): AgentSessionSummary => ({
   ...selectedSession,
+  workspaceId: "workspace-1",
   taskId: "task-1",
   role: "build",
   title: "Build session",

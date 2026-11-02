@@ -16,7 +16,7 @@ const root: AgentSessionAuthorizedRoot = {
   runtimeKind: "codex",
   workingDirectory: "/repo/tree",
   externalSessionId: "root",
-  sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" },
+  sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "qa" },
 };
 const child = {
   repoPath: root.repoPath,
@@ -312,7 +312,12 @@ describe("host workflow approval policy", () => {
   test("a saved fork keeps its own role before native ancestry", async () => {
     const ownedChild = {
       ...child,
-      sessionScope: { kind: "workflow" as const, taskId: "task-2", role: "build" as const },
+      sessionScope: {
+        kind: "workflow" as const,
+        workspaceId: "repo",
+        taskId: "task-2",
+        role: "build" as const,
+      },
     };
     expect(
       await Effect.runPromise(

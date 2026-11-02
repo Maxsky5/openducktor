@@ -29,7 +29,12 @@ const buildSession = (
     createAgentSessionFixture(
       {
         externalSessionId: `external-${externalSessionId}`,
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         runtimeKind: "opencode",
 
         status: "idle",

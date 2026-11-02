@@ -59,16 +59,14 @@ test("node composition leaves Azure storage untouched without an Azure repositor
     const service = createGitProviderService({
       resolver,
       workspaceSettingsService: {
-        getRepoConfigByRepoPath: () => Effect.succeed(noProviderConfig),
+        getRepoConfig: () => Effect.succeed(noProviderConfig),
       },
     });
 
     expect((await Effect.runPromise(resolver.resolve(githubConfig))).getDescriptor()).toBe(
       GITHUB_PROVIDER_DESCRIPTOR,
     );
-    await expect(
-      Effect.runPromise(service.getContext(noProviderConfig.repoPath)),
-    ).resolves.toBeNull();
+    await expect(Effect.runPromise(service.getContext(noProviderConfig))).resolves.toBeNull();
     await expect(stat(path.join(configDir, "credentials", "azure-devops"))).rejects.toMatchObject({
       code: "ENOENT",
     });

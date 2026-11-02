@@ -98,7 +98,7 @@ export function ImportIssuesRoute(): ReactElement {
 }
 
 function ImportIssuesContent({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
-  const { providerQuery, state, query, search, loading } = useIssueImportReads(workspace.repoPath);
+  const { providerQuery, state, query, search, loading } = useIssueImportReads(workspace);
   if (loading || state.kind === "loading")
     return <GroupedSheet title={SHEET_TITLE} loading loadingLabel="Loading items to import…" />;
   switch (state.kind) {
@@ -149,7 +149,7 @@ function IssueImportFlow({
   const openLink = useLinkOpener(undefined);
   const { tasks } = useRequiredContext(TasksStateContext, "IssueImportFlow");
   const knownLabels = useMemo(() => collectKnownLabels(tasks), [tasks]);
-  const { repoPath } = workspace;
+  const { workspaceId, repoPath } = workspace;
   const [step, setStep] = useState<IssueImportStep>("select");
   const selection = useIssueSelectionState();
   const unavailableReason = issueImportUnavailableReason(provider);
@@ -158,6 +158,7 @@ function IssueImportFlow({
   const submission = useIssueImportSubmission({
     selectedItems,
     reviews: selection.reviews,
+    workspaceId,
     repoPath,
     providerId: provider.config.id,
     providerScope: provider.config,

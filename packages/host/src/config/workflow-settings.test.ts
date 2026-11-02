@@ -2,10 +2,13 @@ import { describe, expect, test } from "bun:test";
 import {
   type codexRuntimeConfigSchema,
   globalConfigSchema,
+  workflowDefinitionSchema,
   repoConfigSchema,
 } from "@openducktor/contracts";
 import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
+import { createTaskWorkflow } from "@openducktor/workflows";
 import type { z } from "zod";
+import { createTaskWorkflowResolver } from "../composition/node/task-workflow-composition";
 import { singleTaskWorkflow } from "../test-support/task-workflows";
 import { applyTaskWorkflowSettings } from "./workflow-settings";
 
@@ -25,10 +28,57 @@ const workspace = (input: Partial<z.input<typeof repoConfigSchema>> = {}) =>
   });
 
 describe("applyTaskWorkflowSettings", () => {
+  test("keeps rules with equal signal IDs in separate workflows", () => {
+    const second = createTaskWorkflow(
+      workflowDefinitionSchema.parse({ ...review.definition, id: "another-review" }),
+      review.prompts.templates,
+    );
+    const applied = applyTaskWorkflowSettings(
+      config({
+        autopilot: {
+          rules: [
+            {
+              workflowId: review.definition.id,
+              eventId: "reviewRejected",
+              actionIds: ["startRevision"],
+            },
+            { workflowId: second.definition.id, eventId: "reviewRejected", actionIds: [] },
+          ],
+        },
+      }),
+      createTaskWorkflowResolver({
+        forTask: () => review,
+        forNewTask: () => review,
+        workflows: [review, second],
+      }),
+    );
+    expect(applied.autopilot.rules.filter((rule) => rule.eventId === "reviewRejected")).toEqual([
+      { workflowId: review.definition.id, eventId: "reviewRejected", actionIds: ["startRevision"] },
+      { workflowId: second.definition.id, eventId: "reviewRejected", actionIds: [] },
+    ]);
+    expect(() =>
+      applyTaskWorkflowSettings(
+        config({
+          autopilot: {
+            rules: [{ workflowId: "missing", eventId: "reviewRejected", actionIds: [] }],
+          },
+        }),
+        reviewWorkflows,
+      ),
+    ).toThrow('Unknown Autopilot workflow "missing"');
+  });
   test("adds the notifications and Autopilot rules of the workflow", () => {
     const applied = applyTaskWorkflowSettings(
       config({
-        autopilot: { rules: [{ eventId: "reviewRejected", actionIds: ["startRevision"] }] },
+        autopilot: {
+          rules: [
+            {
+              workflowId: review.definition.id,
+              eventId: "reviewRejected",
+              actionIds: ["startRevision"],
+            },
+          ],
+        },
       }),
       reviewWorkflows,
     );
@@ -44,16 +94,22 @@ describe("applyTaskWorkflowSettings", () => {
       sound: "none",
     });
     expect(applied.autopilot.rules).toEqual([
-      { eventId: "draftSubmitted", actionIds: [] },
-      { eventId: "reviewAccepted", actionIds: [] },
-      { eventId: "reviewRejected", actionIds: ["startRevision"] },
+      { workflowId: review.definition.id, eventId: "draftSubmitted", actionIds: [] },
+      { workflowId: review.definition.id, eventId: "reviewAccepted", actionIds: [] },
+      { workflowId: review.definition.id, eventId: "reviewRejected", actionIds: ["startRevision"] },
     ]);
   });
 
   test("rejects settings keys outside the workflow", () => {
     expect(() =>
       applyTaskWorkflowSettings(
-        config({ autopilot: { rules: [{ eventId: "taskRejectedByQa", actionIds: [] }] } }),
+        config({
+          autopilot: {
+            rules: [
+              { workflowId: review.definition.id, eventId: "taskRejectedByQa", actionIds: [] },
+            ],
+          },
+        }),
         reviewWorkflows,
       ),
     ).toThrow('Unknown Autopilot event "taskRejectedByQa"');

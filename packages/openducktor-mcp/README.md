@@ -231,9 +231,9 @@ The result contains a short label and a native MCP `image` content block for eac
 
 ### Read and manage task artifacts
 
-After `odt_read_task`, call `odt_read_task_artifacts` with `taskId` and a nonempty array of distinct `codes` from `task.artifacts`. For example, `{ "taskId": "repo-123", "codes": ["spec"] }` reads the full spec in the second call. The workflow codes `spec`, `plan`, and `qaReport` are reserved; these reads return full content by default. Free-artifact reads, such as `codes: ["design-preview"]`, default to 16 KiB. The reader has no metadata-only mode.
+After `odt_read_task`, call `odt_read_task_artifacts` with `taskId` and a nonempty array of distinct `codes` from `task.artifacts`. For example, `{ "taskId": "repo-123", "codes": ["spec"] }` reads the full spec in the second call. The workflow codes `spec`, `plan`, and `qaReport` are reserved. Workflow and free-artifact reads return complete content. The reader has no metadata-only mode.
 
-Continue one artifact at `nextByteOffset` with `expectedVersion`. Use `maxBytes` to set an explicit chunk size. Text appears in each JSON artifact entry's `content` string, alongside its metadata and read offsets. One JSON text block matches `structuredContent`; no separate raw text bodies follow it. Binary content uses blob resources, and image previews use native image blocks. A batch must fit the 10 MiB serialized MCP response limit, including both JSON representations.
+Each read returns complete content or fails. Reads accept no byte offset, size, or continuation token. Text appears in each JSON artifact entry's `content` string alongside its metadata. One JSON text block matches `structuredContent`. Binary content uses blob resources, and supported images use native image blocks. A batch must fit the 10 MiB serialized MCP response limit, including both JSON representations. Select fewer artifacts when a batch is too large. If one artifact exceeds the limit, open it in the app.
 
 Use `odt_set_task_artifact` with required `code` to save any artifact. The result is `{ artifact }` with the saved public metadata and no content copy.
 
@@ -243,4 +243,4 @@ For free artifacts, `code` selects the saved artifact. If the code does not exis
 
 Free-artifact codes are unique within a task and never change. Display names can repeat, and a rename keeps the code. Display names cannot change workflow roles. Internal artifact IDs stay within the UI and store. Closed tasks permit reads only. Free-artifact writes preserve task status. Managed sessions can save workflow codes only for their root role: Spec writes `spec`, Planner writes `plan`, Builder writes `spec` and `plan`, and QA writes `qaReport`. Every role can write free artifacts. The host checks the native caller; repository sessions and external clients have no workflow role restriction.
 
-The [artifact access contract](https://github.com/Maxsky5/openducktor/blob/main/docs/external-mcp.md#read-and-manage-task-artifacts) defines chunking, exact-byte access, image previews, failures, and transport limits. Bridge version 2 requires compatible clients and hosts. `odt_read_task_documents` has no compatibility alias.
+The [artifact access contract](https://github.com/Maxsky5/openducktor/blob/main/docs/external-mcp.md#read-and-manage-task-artifacts) defines complete reads, exact-byte access, image previews, failures, and transport limits. Bridge version 2 requires compatible clients and hosts. `odt_read_task_documents` has no compatibility alias.

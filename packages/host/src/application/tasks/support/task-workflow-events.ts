@@ -5,14 +5,39 @@ import type {
   TaskFacts,
   TaskWorkflow,
   TaskWorkflowRole,
-  TransitionCause,
 } from "@openducktor/workflows";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { TaskPolicyError } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 
 export type AdmittedTaskEvent = Exclude<TaskEventDecision, { kind: "denied" }>;
 export type HostEffect = Exclude<WorkflowEventEffect, "status.set">;
+
+/** Re-evaluates policy against the row locked by the repository write transaction. */
+export const decideTaskTransition = (workflow: TaskWorkflow, eventId: string, task: TaskFacts) => {
+  const decision = workflow.decide(eventId, task);
+  return decision.kind === "denied"
+    ? Result.fail(taskEventPolicyError(eventId, task, decision))
+    : Result.succeed({
+        ...decisionTransition(decision),
+        workflowId: workflow.definition.id,
+      });
+};
+
+export const decideEffectTransition = (
+  workflow: TaskWorkflow,
+  effect: HostEffect,
+  task: TaskFacts,
+) => {
+  const eventId = workflow.effectEvent(effect);
+  return eventId === undefined
+    ? Result.fail(
+        TaskPolicyError.policy(
+          `Task workflow "${workflow.definition.id}" has no event with the ${effect} effect. Add one to use this command.`,
+        ),
+      )
+    : decideTaskTransition(workflow, eventId, task);
+};
 
 /** The event of a host effect. A workflow without that event cannot run the command. */
 export const requireEffectEvent = (
@@ -51,18 +76,10 @@ export const requireEffect = (
     Effect.flatMap((eventId) => requireTaskEvent(workflow, eventId, task)),
   );
 
-/** The status after an admitted event, which equals the current status for a repeat. */
-export const resultingStatus = (decision: AdmittedTaskEvent): string =>
-  decision.kind === "transition" ? decision.to : decision.status;
-
-/** The signal and source role that a committed transition reports. A repeat reports none. */
-export const transitionCause = (decision: AdmittedTaskEvent): TransitionCause =>
-  decision.kind === "transition" ? decision.cause : {};
-
 /** The store write of an admitted event. A repeat writes the current status without a cause. */
 export const decisionTransition = (decision: AdmittedTaskEvent) => ({
-  status: resultingStatus(decision),
-  cause: transitionCause(decision),
+  status: decision.kind === "transition" ? decision.to : decision.status,
+  cause: decision.kind === "transition" ? decision.cause : {},
 });
 
 export const requirePullRequestManagement = (
@@ -127,10 +144,19 @@ export const requireTaskEventInput = <Details extends object>(
   eventId: string,
   task: TaskFacts,
   details: Details,
-): Effect.Effect<AdmittedTaskEvent, HostValidationError<Details>> => {
+): Effect.Effect<AdmittedTaskEvent, HostValidationError<Details>> =>
+  Effect.fromResult(decideTaskEventInput(subject, workflow, eventId, task, details));
+
+export const decideTaskEventInput = <Details extends object>(
+  subject: string,
+  workflow: TaskWorkflow,
+  eventId: string,
+  task: TaskFacts,
+  details: Details,
+): Result.Result<AdmittedTaskEvent, HostValidationError<Details>> => {
   const decision = workflow.decide(eventId, task);
-  if (decision.kind !== "denied") return Effect.succeed(decision);
-  return Effect.fail(
+  if (decision.kind !== "denied") return Result.succeed(decision);
+  return Result.fail(
     new HostValidationError({
       field: "taskId",
       message:

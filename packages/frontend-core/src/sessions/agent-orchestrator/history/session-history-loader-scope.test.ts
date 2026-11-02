@@ -27,7 +27,12 @@ const historyReadGeneration = createSessionHistoryReadGeneration();
 const createSession = (): AgentSessionState =>
   createAgentSessionFixture({
     externalSessionId: sessionTarget.externalSessionId,
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    },
     runtimeKind: "opencode",
     status: "running",
     startedAt: "2026-06-12T08:00:00.000Z",

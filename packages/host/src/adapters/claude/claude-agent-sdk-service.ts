@@ -454,7 +454,10 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
           }),
         ),
       );
-      const mcpBridgeConnection = yield* this.input.resolveMcpBridgeConnection(input.repoPath);
+      const mcpBridgeConnection = yield* this.input.resolveMcpBridgeConnection(
+        input.repoPath,
+        input.sessionScope?.workspaceId,
+      );
       yield* fromPromise("claudeRuntime.prewarmFileSearch", async () => {
         this.fileSearch.prewarm(input.workingDirectory);
       });

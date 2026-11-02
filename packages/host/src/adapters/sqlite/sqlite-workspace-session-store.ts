@@ -6,19 +6,37 @@ import {
   workspaceSessionSchema,
   workspaceSessionRenameInputSchema,
 } from "@openducktor/contracts";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostResourceError, HostValidationError } from "../../effect/host-errors";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type {
+  RuntimeSessionMatch,
   WorkspaceSessionStorePort,
   WorkspaceSessionStoreRef,
   WorkspaceSessionStoreScope,
+  RuntimeOwnershipScope,
 } from "../../ports/workspace-session-store-port";
-import type { SqliteTaskRepositoryContextProvider } from "./sqlite-task-repository-context";
-import type { TaskStoreSession } from "./sqlite-task-store-schema";
-import { type WorkspaceSessionRow, workspaceSessions } from "./sqlite-workspace-session-schema";
-import { decodeRecord, readActiveWorkspaceSessions } from "./sqlite-workspace-session-reads";
+import {
+  readWorkspaceSet,
+  type SqliteTaskRepositoryContext,
+  type SqliteTaskRepositoryContextProvider,
+  type SqliteWorkspacesReadProvider,
+} from "./sqlite-task-repository-context";
+import { sqliteValues } from "./sqlite-parameters";
+import {
+  readLiveSessionRoots,
+  readWorktreeOwnershipChats,
+} from "./sqlite-workspace-ownership-reads";
+import type { HostDatabaseSession } from "./sqlite-host-database-schema";
+import { workspaceSessions } from "./sqlite-workspace-session-schema";
+import {
+  decodeRecord,
+  readActiveWorkspaceSessions,
+  encodeWorkspaceSessionRecord,
+  workspaceSessionScope,
+} from "./sqlite-workspace-session-reads";
+import { assertRuntimeOwnershipScope } from "./sqlite-runtime-ownership-scope";
 
 const validateRecord = (value: WorkspaceSession) =>
   Effect.try({
@@ -27,30 +45,14 @@ const validateRecord = (value: WorkspaceSession) =>
       new HostValidationError({ message: "Invalid Workspace Session record.", cause }),
   });
 
-const encodeRecord = (record: WorkspaceSession): WorkspaceSessionRow => ({
-  id: record.id,
-  runtimeKind: record.runtimeKind,
-  externalSessionId: record.externalSessionId,
-  executionTargetJson: JSON.stringify(record.executionTarget),
-  roleSnapshotJson: record.roleSnapshot === null ? null : JSON.stringify(record.roleSnapshot),
-  selectedModelJson: record.selectedModel === null ? null : JSON.stringify(record.selectedModel),
-  generatedTitle: record.generatedTitle,
-  manualTitle: record.manualTitle,
-  targetBranchJson: record.targetBranch === null ? null : JSON.stringify(record.targetBranch),
-  createdAt: record.createdAt,
-  lastActivityAt: record.lastActivityAt ?? null,
-  updatedAt: record.updatedAt,
-  archivedAt: record.archivedAt,
-});
-
-const getRecord = (session: TaskStoreSession, sessionId: string) =>
+const getRecord = (session: HostDatabaseSession, workspaceId: string, sessionId: string) =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
       (database) =>
         database
           .select()
           .from(workspaceSessions)
-          .where(eq(workspaceSessions.id, sessionId))
+          .where(workspaceSessionScope(workspaceId, sessionId))
           .limit(1),
       "workspaceSessionStore.get",
     );
@@ -64,19 +66,37 @@ const getRecord = (session: TaskStoreSession, sessionId: string) =>
     return yield* decodeRecord(row);
   });
 
+const claimScope = (
+  session: HostDatabaseSession,
+  target: WorkspaceSessionStoreScope,
+  scope: RuntimeOwnershipScope | undefined,
+) =>
+  scope === undefined
+    ? Effect.fail(
+        new HostValidationError({
+          field: "ownershipScope",
+          message:
+            "Check the current workspace session ownership scope before saving a native conversation.",
+        }),
+      )
+    : assertRuntimeOwnershipScope(session, scope, target);
+
 export const createSqliteWorkspaceSessionStore = ({
   contextProvider,
-  listForWorktreeOwnership,
+  workspacesProvider,
 }: {
   contextProvider: SqliteTaskRepositoryContextProvider;
-  listForWorktreeOwnership: WorkspaceSessionStorePort["listForWorktreeOwnership"];
+  workspacesProvider: SqliteWorkspacesReadProvider;
 }): WorkspaceSessionStorePort => {
   const withDatabase = <A>(
     scope: WorkspaceSessionStoreScope,
     operation: string,
-    use: (session: TaskStoreSession) => Effect.Effect<A, TaskStoreError>,
+    use: (
+      session: HostDatabaseSession,
+      context: SqliteTaskRepositoryContext,
+    ) => Effect.Effect<A, TaskStoreError>,
   ) =>
-    contextProvider(scope.repoPath, operation, (context) => {
+    contextProvider(scope, operation, (context) => {
       if (context.workspaceId !== scope.workspaceId)
         return Effect.fail(
           new HostValidationError({
@@ -85,7 +105,7 @@ export const createSqliteWorkspaceSessionStore = ({
               "The Workspace no longer matches this Repository. Reload the Workspace before retrying.",
           }),
         );
-      return use(context.session);
+      return use(context.session, context);
     });
 
   const update = (
@@ -93,24 +113,27 @@ export const createSqliteWorkspaceSessionStore = ({
     operation: string,
     change: (current: WorkspaceSession) => WorkspaceSession,
   ) =>
-    withDatabase(ref, operation, (session) =>
-      session.transaction(operation, (transaction) =>
+    withDatabase(ref, operation, (_session, context) =>
+      context.session.transaction(operation, (transaction) =>
         Effect.gen(function* () {
-          const current = yield* getRecord(transaction, ref.sessionId);
+          const current = yield* getRecord(transaction, ref.workspaceId, ref.sessionId);
           const changed = yield* Effect.try({
             try: () => change(current),
             catch: (cause) =>
               new HostValidationError({ message: "Invalid Workspace Session update.", cause }),
           });
           const next = yield* validateRecord(changed);
-          const row = encodeRecord(next);
-          if (JSON.stringify(row) !== JSON.stringify(encodeRecord(current))) {
+          const row = encodeWorkspaceSessionRecord(ref.workspaceId, next);
+          const didChange =
+            JSON.stringify(row) !==
+            JSON.stringify(encodeWorkspaceSessionRecord(ref.workspaceId, current));
+          if (didChange) {
             yield* transaction.execute(
               (database) =>
                 database
                   .update(workspaceSessions)
                   .set(row)
-                  .where(eq(workspaceSessions.id, ref.sessionId)),
+                  .where(workspaceSessionScope(ref.workspaceId, ref.sessionId)),
               operation,
             );
           }
@@ -120,16 +143,48 @@ export const createSqliteWorkspaceSessionStore = ({
     );
 
   return {
-    listForWorktreeOwnership,
-    listRuntimeOwners: (input) =>
-      withDatabase(input, "workspaceSessionStore.owners", (session) =>
-        listRuntimeSessionOwners(session).pipe(
-          Effect.mapError((cause) => new HostValidationError({ message: cause.message, cause })),
-        ),
+    listForWorktreeOwnership: ({ workspaces }) =>
+      readWorkspaceSet(
+        workspacesProvider,
+        workspaces,
+        "ownership",
+        "workspaceSessionStore.worktreeOwners",
+        ({ session, workspaceIds }) => readWorktreeOwnershipChats(session, workspaceIds),
+      ),
+    listLiveSessionRoots: ({ workspaces }) =>
+      readWorkspaceSet(
+        workspacesProvider,
+        workspaces,
+        "open",
+        "workspaceSessionStore.liveRoots",
+        ({ session, workspaceIds, terminalStates }) =>
+          readLiveSessionRoots(session, workspaceIds, terminalStates),
+      ),
+    listRuntimeOwners: ({ ownershipScope, filter, ...scope }) =>
+      readWorkspaceSet(
+        workspacesProvider,
+        [scope],
+        "ownership",
+        "workspaceSessionStore.owners",
+        ({ session }) =>
+          Effect.gen(function* () {
+            const ids =
+              ownershipScope === undefined
+                ? [scope.workspaceId]
+                : yield* assertRuntimeOwnershipScope(session, ownershipScope, scope);
+            return yield* listRuntimeSessionOwners(session, ids, filter).pipe(
+              Effect.mapError(
+                (cause) => new HostValidationError({ message: cause.message, cause }),
+              ),
+            );
+          }),
       ),
     importSession: (input) =>
-      withDatabase(input, "workspaceSessionStore.import", (session) =>
-        session.transaction("workspaceSessionStore.import", (transaction) =>
+      withDatabase(input, "workspaceSessionStore.import", (_session, context) =>
+        context.session.transaction<
+          { session: WorkspaceSession; created: boolean },
+          TaskStoreError
+        >("workspaceSessionStore.import", (transaction) =>
           Effect.gen(function* () {
             const record = yield* validateRecord(input.session);
             if (record.externalSessionId === null)
@@ -137,7 +192,11 @@ export const createSqliteWorkspaceSessionStore = ({
                 field: "externalSessionId",
                 message: "An imported session requires a native conversation ID.",
               });
-            const owners = yield* listRuntimeSessionOwners(transaction).pipe(
+            const workspaceIds = yield* claimScope(transaction, input, input.ownershipScope);
+            const owners = yield* listRuntimeSessionOwners(transaction, workspaceIds, {
+              runtimeKind: record.runtimeKind,
+              externalSessionIds: [record.externalSessionId],
+            }).pipe(
               Effect.mapError(
                 (cause) => new HostValidationError({ message: cause.message, cause }),
               ),
@@ -148,8 +207,16 @@ export const createSqliteWorkspaceSessionStore = ({
                 owner.externalSessionId === record.externalSessionId,
             );
             if (owner) {
+              if (owner.workspaceId !== input.workspaceId)
+                return yield* new HostValidationError({
+                  field: "externalSessionId",
+                  message: `This conversation belongs to workspace ${owner.workspaceId}. Open it from that workspace.`,
+                });
               if (owner.kind === "workspace" && !owner.archived)
-                return { session: yield* getRecord(transaction, owner.sessionId), created: false };
+                return {
+                  session: yield* getRecord(transaction, input.workspaceId, owner.sessionId),
+                  created: false,
+                };
               return yield* new HostValidationError({
                 field: "externalSessionId",
                 message:
@@ -159,7 +226,10 @@ export const createSqliteWorkspaceSessionStore = ({
               });
             }
             yield* transaction.execute(
-              (db) => db.insert(workspaceSessions).values(encodeRecord(record)),
+              (db) =>
+                db
+                  .insert(workspaceSessions)
+                  .values(encodeWorkspaceSessionRecord(input.workspaceId, record)),
               "workspaceSessionStore.import",
             );
             return { session: record, created: true };
@@ -168,19 +238,25 @@ export const createSqliteWorkspaceSessionStore = ({
       ),
     get: (input) =>
       withDatabase(input, "workspaceSessionStore.get", (session) =>
-        getRecord(session, input.sessionId),
+        getRecord(session, input.workspaceId, input.sessionId),
       ),
     listIds: (input) =>
       withDatabase(input, "workspaceSessionStore.listIds", (session) =>
         session
           .execute(
-            (database) => database.select({ id: workspaceSessions.id }).from(workspaceSessions),
+            (database) =>
+              database
+                .select({ id: workspaceSessions.id })
+                .from(workspaceSessions)
+                .where(workspaceSessionScope(input.workspaceId)),
             "workspaceSessionStore.listIds",
           )
           .pipe(Effect.map((rows) => rows.map(({ id }) => id))),
       ),
     listActive: (input) =>
-      withDatabase(input, "workspaceSessionStore.listActive", readActiveWorkspaceSessions),
+      withDatabase(input, "workspaceSessionStore.listActive", (session) =>
+        readActiveWorkspaceSessions(session, input.workspaceId),
+      ),
     listArchived: (input) =>
       withDatabase(input, "workspaceSessionStore.listArchived", (session) =>
         Effect.gen(function* () {
@@ -189,7 +265,12 @@ export const createSqliteWorkspaceSessionStore = ({
               database
                 .select()
                 .from(workspaceSessions)
-                .where(isNotNull(workspaceSessions.archivedAt))
+                .where(
+                  and(
+                    workspaceSessionScope(input.workspaceId),
+                    isNotNull(workspaceSessions.archivedAt),
+                  ),
+                )
                 .orderBy(desc(workspaceSessions.archivedAt))
                 .limit(WORKSPACE_SESSION_ARCHIVE_LIMIT),
             "workspaceSessionStore.listArchived",
@@ -197,33 +278,47 @@ export const createSqliteWorkspaceSessionStore = ({
           return yield* Effect.forEach(rows, decodeRecord);
         }),
       ),
-    findByRuntimeSession: (input) =>
-      withDatabase(input, "workspaceSessionStore.findByRuntimeSession", (session) =>
-        Effect.gen(function* () {
-          const rows = yield* session.execute(
-            (database) =>
-              database
-                .select()
-                .from(workspaceSessions)
-                .where(
-                  and(
-                    eq(workspaceSessions.runtimeKind, input.runtimeKind),
-                    eq(workspaceSessions.externalSessionId, input.externalSessionId),
+    findByRuntimeSession: ({ workspaces, runtimeKind, externalSessionId }) =>
+      readWorkspaceSet(
+        workspacesProvider,
+        workspaces,
+        "open",
+        "workspaceSessionStore.findByRuntimeSession",
+        ({ session, workspaceIds }) =>
+          Effect.gen(function* () {
+            const rows = yield* session.execute(
+              (database) =>
+                database
+                  .select()
+                  .from(workspaceSessions)
+                  .where(
+                    and(
+                      inArray(workspaceSessions.workspaceId, sqliteValues(workspaceIds)),
+                      eq(workspaceSessions.runtimeKind, runtimeKind),
+                      eq(workspaceSessions.externalSessionId, externalSessionId),
+                    ),
                   ),
-                )
-                .limit(1),
-            "workspaceSessionStore.findByRuntimeSession",
-          );
-          return rows[0] ? yield* decodeRecord(rows[0]) : null;
-        }),
+              "workspaceSessionStore.findByRuntimeSession",
+            );
+            const matches: RuntimeSessionMatch[] = [];
+            for (const scope of workspaces) {
+              const row = rows.find((candidate) => candidate.workspaceId === scope.workspaceId);
+              if (row) matches.push({ ...scope, session: yield* decodeRecord(row) });
+            }
+            return matches;
+          }),
       ),
     create: (input) =>
-      withDatabase(input, "workspaceSessionStore.create", (session) =>
-        session.transaction("workspaceSessionStore.create", (transaction) =>
+      withDatabase(input, "workspaceSessionStore.create", (_session, context) =>
+        context.session.transaction("workspaceSessionStore.create", (transaction) =>
           Effect.gen(function* () {
             const record = yield* validateRecord(input.session);
             if (record.externalSessionId !== null) {
-              const owners = yield* listRuntimeSessionOwners(transaction).pipe(
+              const workspaceIds = yield* claimScope(transaction, input, input.ownershipScope);
+              const owners = yield* listRuntimeSessionOwners(transaction, workspaceIds, {
+                runtimeKind: record.runtimeKind,
+                externalSessionIds: [record.externalSessionId],
+              }).pipe(
                 Effect.mapError(
                   (cause) => new HostValidationError({ message: cause.message, cause }),
                 ),
@@ -241,7 +336,10 @@ export const createSqliteWorkspaceSessionStore = ({
                 });
             }
             yield* transaction.execute(
-              (database) => database.insert(workspaceSessions).values(encodeRecord(record)),
+              (database) =>
+                database
+                  .insert(workspaceSessions)
+                  .values(encodeWorkspaceSessionRecord(input.workspaceId, record)),
               "workspaceSessionStore.create",
             );
             return record;
@@ -249,17 +347,22 @@ export const createSqliteWorkspaceSessionStore = ({
         ),
       ),
     bindRuntimeSession: (input) =>
-      withDatabase(input, "workspaceSessionStore.bindRuntimeSession", (session) =>
-        session.transaction("workspaceSessionStore.bindRuntimeSession", (transaction) =>
+      withDatabase(input, "workspaceSessionStore.bindRuntimeSession", (_session, context) =>
+        context.session.transaction("workspaceSessionStore.bindRuntimeSession", (transaction) =>
           Effect.gen(function* () {
-            const current = yield* getRecord(transaction, input.sessionId);
+            const current = yield* getRecord(transaction, input.workspaceId, input.sessionId);
+            if (current.externalSessionId === input.externalSessionId) return current;
             if (current.externalSessionId !== null || current.archivedAt !== null) {
               return yield* new HostValidationError({
                 field: "sessionId",
                 message: "Only an active draft can bind a runtime session.",
               });
             }
-            const owner = (yield* listRuntimeSessionOwners(transaction).pipe(
+            const workspaceIds = yield* claimScope(transaction, input, input.ownershipScope);
+            const owner = (yield* listRuntimeSessionOwners(transaction, workspaceIds, {
+              runtimeKind: current.runtimeKind,
+              externalSessionIds: [input.externalSessionId],
+            }).pipe(
               Effect.mapError(
                 (cause) => new HostValidationError({ message: cause.message, cause }),
               ),
@@ -281,8 +384,8 @@ export const createSqliteWorkspaceSessionStore = ({
               (database) =>
                 database
                   .update(workspaceSessions)
-                  .set(encodeRecord(next))
-                  .where(eq(workspaceSessions.id, input.sessionId)),
+                  .set(encodeWorkspaceSessionRecord(input.workspaceId, next))
+                  .where(workspaceSessionScope(input.workspaceId, input.sessionId)),
               "workspaceSessionStore.bindRuntimeSession",
             );
             return next;

@@ -1,10 +1,7 @@
 import { createGeneratedImageFileAdapter } from "../../adapters/attachments/generated-image-file-adapter";
 import type { GeneratedImageWorkers } from "../../adapters/attachments/generated-image-worker-client";
-import {
-  GeneratedImageFilePortTag,
-  type GeneratedImageFilePort,
-} from "../../ports/generated-image-file-port";
-import { Context, Effect, Layer } from "effect";
+import { type GeneratedImageFilePort } from "../../ports/generated-image-file-port";
+import { Effect } from "effect";
 import { createLocalAttachmentAdapter } from "../../adapters/attachments/local-attachment-adapter";
 import { createPlaywrightBrowserAutomation } from "../../adapters/browser/playwright/playwright-browser-automation";
 import type { BrowserAutomationPort } from "../../ports/browser-automation-port";
@@ -20,13 +17,11 @@ import { createOpenInToolsAdapter } from "../../adapters/open-in-tools/open-in-t
 import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { createRuntimeExecutableProbes } from "../../adapters/runtimes/runtime-executable-probes";
 import { createRuntimeHealthProbe } from "../../adapters/runtimes/runtime-health-probe";
-import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { createSystemCommandRunner } from "../../adapters/system/system-command-runner";
 import {
   createToolDiscoveryAdapter,
   type ToolDiscoveryPathOptions,
 } from "../../adapters/system/tool-discovery";
-import { createRuntimeConfigInitializer } from "../../application/runtimes/runtime-config-initializer";
 import {
   type OpenDucktorConfigDir,
   type OpenDucktorConfigDirScope,
@@ -38,31 +33,23 @@ import {
   createProcessEnvironment,
 } from "../../infrastructure/process/process-environment";
 import { createUserEnvironment } from "../../infrastructure/process/user-environment";
-import { type CodexAppServerPort, CodexAppServerPortTag } from "../../ports/codex-app-server-port";
+import { type CodexAppServerPort } from "../../ports/codex-app-server-port";
 import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
-import { type FilesystemPort, FilesystemPortTag } from "../../ports/filesystem-port";
-import { type GitPort, GitPortTag } from "../../ports/git-port";
-import {
-  type LocalAttachmentPort,
-  LocalAttachmentPortTag,
-} from "../../ports/local-attachment-port";
-import { type OpenInToolsPort, OpenInToolsPortTag } from "../../ports/open-in-tools-port";
+import { type FilesystemPort } from "../../ports/filesystem-port";
+import { type GitPort } from "../../ports/git-port";
+import { type LocalAttachmentPort } from "../../ports/local-attachment-port";
+import { type OpenInToolsPort } from "../../ports/open-in-tools-port";
 import type { RuntimeExecutableProbesByKind } from "../../ports/runtime-executable-probe-port";
-import { type RuntimeHealthPort, RuntimeHealthPortTag } from "../../ports/runtime-health-port";
-import { type SettingsConfigPort, SettingsConfigPortTag } from "../../ports/settings-config-port";
-import { type SystemCommandPort, SystemCommandPortTag } from "../../ports/system-command-port";
-import { type TerminalPtyPort, TerminalPtyPortTag } from "../../ports/terminal-pty-port";
-import {
-  type ToolDiscoveryId,
-  type ToolDiscoveryPort,
-  ToolDiscoveryPortTag,
-} from "../../ports/tool-discovery-port";
+import { type RuntimeHealthPort } from "../../ports/runtime-health-port";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import { type SystemCommandPort } from "../../ports/system-command-port";
+import { type TerminalPtyPort } from "../../ports/terminal-pty-port";
+import { type ToolDiscoveryId, type ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type {
   UserEnvironmentPort,
   UserEnvironmentResolution,
 } from "../../ports/user-environment-port";
-import { type WorktreeFilePort, WorktreeFilePortTag } from "../../ports/worktree-file-port";
-import { guardRuntimeConfigInitializer } from "./user-path-guards";
+import { type WorktreeFilePort } from "../../ports/worktree-file-port";
 
 export type NodeHostDefaultPorts = {
   imageWorkers: GeneratedImageWorkers;
@@ -90,6 +77,8 @@ export type NodeHostDefaultPorts = {
   startupEnv: NodeJS.ProcessEnv;
   worktreeFiles: WorktreeFilePort;
 };
+
+export type NodeHostBootstrapPorts = Omit<NodeHostDefaultPorts, "settingsConfig">;
 
 type CodexAppServer = CodexAppServerPort & CodexSessionHistoryPort;
 type CodexAppServerInput =
@@ -127,34 +116,13 @@ export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
     processEnvironmentInput: CreateProcessEnvironmentInput;
     runtimeExecutableProbes: RuntimeExecutableProbesByKind;
     runtimeHealth: RuntimeHealthPort;
-    settingsConfig: SettingsConfigPort;
     systemCommands: SystemCommandPort;
     toolDiscovery: ToolDiscoveryPort;
     providedToolPaths: Partial<Record<ToolDiscoveryId, string>>;
     worktreeFiles: WorktreeFilePort;
   }>;
 
-export class NodeHostDefaultPortsTag extends Context.Service<
-  NodeHostDefaultPortsTag,
-  NodeHostDefaultPorts
->()("@openducktor/host/NodeHostDefaultPorts") {}
-
-export type NodeHostDefaultPortServices =
-  | CodexAppServerPortTag
-  | FilesystemPortTag
-  | GitPortTag
-  | GeneratedImageFilePortTag
-  | LocalAttachmentPortTag
-  | NodeHostDefaultPortsTag
-  | OpenInToolsPortTag
-  | RuntimeHealthPortTag
-  | SettingsConfigPortTag
-  | SystemCommandPortTag
-  | ToolDiscoveryPortTag
-  | TerminalPtyPortTag
-  | WorktreeFilePortTag;
-
-const makeNodeHostDefaultPorts = (
+export const createNodeHostDefaultPorts = (
   input: CreateNodeHostDefaultPortsInput,
   imageWorkers: GeneratedImageWorkers,
 ) =>
@@ -214,15 +182,6 @@ const makeNodeHostDefaultPorts = (
         const runtimeHealth =
           input.runtimeHealth ??
           createRuntimeHealthProbe(systemCommands, toolDiscovery, runtimeExecutableProbes);
-        const settingsConfig =
-          input.settingsConfig ??
-          createSettingsConfigAdapter({
-            environment: startupEnv,
-            initializeConfig: guardRuntimeConfigInitializer(
-              createRuntimeConfigInitializer(toolDiscovery),
-              userEnvironment,
-            ),
-          });
         const defaultCodexAppServer = createCodexAppServerTransportRegistry();
         const codexAppServer = input.codexAppServer ?? defaultCodexAppServer;
         const codexTransportRegistry =
@@ -254,7 +213,6 @@ const makeNodeHostDefaultPorts = (
           runtimeDistribution: input.runtimeDistribution,
           runtimeExecutableProbes,
           runtimeHealth,
-          settingsConfig,
           systemCommands,
           toolDiscovery,
           terminalPty: input.terminalPty,
@@ -270,48 +228,3 @@ const makeNodeHostDefaultPorts = (
     const browserEngine = yield* input.browserEngine({ configRoot: ports.configDir.root });
     return { ...ports, browserEngine };
   });
-
-const makeNodeHostDefaultPortContext = (
-  input: CreateNodeHostDefaultPortsInput,
-  imageWorkers: GeneratedImageWorkers,
-) =>
-  makeNodeHostDefaultPorts(input, imageWorkers).pipe(
-    Effect.map((ports) =>
-      Context.empty().pipe(
-        Context.add(NodeHostDefaultPortsTag, ports),
-        Context.add(CodexAppServerPortTag, ports.codexAppServer),
-        Context.add(FilesystemPortTag, ports.filesystem),
-        Context.add(GitPortTag, ports.git),
-        Context.add(LocalAttachmentPortTag, ports.localAttachments),
-        Context.add(GeneratedImageFilePortTag, ports.generatedImageFiles),
-        Context.add(OpenInToolsPortTag, ports.openInTools),
-        Context.add(RuntimeHealthPortTag, ports.runtimeHealth),
-        Context.add(SettingsConfigPortTag, ports.settingsConfig),
-        Context.add(SystemCommandPortTag, ports.systemCommands),
-        Context.add(ToolDiscoveryPortTag, ports.toolDiscovery),
-        Context.add(TerminalPtyPortTag, ports.terminalPty),
-        Context.add(WorktreeFilePortTag, ports.worktreeFiles),
-      ),
-    ),
-  );
-
-const createNodeHostDefaultPortsLayer = (
-  input: CreateNodeHostDefaultPortsInput,
-  imageWorkers: GeneratedImageWorkers,
-) => Layer.effectContext(makeNodeHostDefaultPortContext(input, imageWorkers));
-
-const createNodeHostDefaultPortsEffect: Effect.Effect<
-  NodeHostDefaultPorts,
-  never,
-  NodeHostDefaultPortsTag
-> = Effect.gen(function* () {
-  return yield* NodeHostDefaultPortsTag;
-});
-
-export const createNodeHostDefaultPorts = (
-  input: CreateNodeHostDefaultPortsInput,
-  imageWorkers: GeneratedImageWorkers,
-) =>
-  createNodeHostDefaultPortsEffect.pipe(
-    Effect.provide(createNodeHostDefaultPortsLayer(input, imageWorkers)),
-  );

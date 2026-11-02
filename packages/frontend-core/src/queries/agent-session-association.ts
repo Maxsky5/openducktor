@@ -9,6 +9,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { matchesAgentSessionIdentity } from "../lib/agent-session-identity";
 import { agentSessionQueryKeys } from "./agent-sessions";
+import { queryWorkspaceScope } from "./workspace-scope";
 import { workspaceSessionQueryKeys } from "./workspace-sessions";
 
 export const findWorkspaceSessionByIdentity = (
@@ -44,18 +45,31 @@ export function readCachedAgentSessionAssociation(
   workspaceId?: string | null,
 ): AgentSessionScope | null {
   const lists = queryClient.getQueriesData<AgentSessionRecord[]>({
-    queryKey: [...agentSessionQueryKeys.all, "list", ref.repoPath],
+    queryKey: [...agentSessionQueryKeys.all, "list"],
+    predicate: (query) => {
+      const scope = queryWorkspaceScope(query);
+      return (
+        scope?.repoPath === ref.repoPath && (!workspaceId || scope.workspaceId === workspaceId)
+      );
+    },
   });
   for (const [key, records] of lists) {
     const record = records?.find((entry) => matchesAgentSessionIdentity(entry, ref));
-    if (record)
-      return { kind: "workflow", taskId: z.string().min(1).parse(key[3]), role: record.role };
+    const scope = queryWorkspaceScope({ queryKey: key });
+    if (record && scope)
+      return {
+        kind: "workflow",
+        workspaceId: scope.workspaceId,
+        taskId: z.string().min(1).parse(key[3]),
+        role: record.role,
+      };
   }
   if (workspaceId) {
     const records = queryClient.getQueryData<WorkspaceSession[]>(
       workspaceSessionQueryKeys.list(workspaceId, false),
     );
-    if (records && findWorkspaceSessionByIdentity(records, ref)) return { kind: "repository" };
+    if (records && findWorkspaceSessionByIdentity(records, ref))
+      return { kind: "repository", workspaceId };
   }
   return null;
 }

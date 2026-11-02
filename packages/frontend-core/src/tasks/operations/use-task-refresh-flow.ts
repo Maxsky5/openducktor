@@ -5,10 +5,19 @@ import { createTaskRefreshController, type TaskRefreshController } from "./task-
 import type { UseTaskReadFlowResult } from "./use-task-read-flow";
 
 type UseTaskRefreshFlowArgs = {
+  activeWorkspaceId: string | null;
   activeRepoPath: string | null;
   refreshTaskData: UseTaskReadFlowResult["refreshTaskData"];
-  lastTaskRefreshToastRef: MutableRefObject<{ repoPath: string; description: string } | null>;
-  lastTaskLoadErrorToastRef: MutableRefObject<{ repoPath: string; description: string } | null>;
+  lastTaskRefreshToastRef: MutableRefObject<{
+    workspaceId: string;
+    repoPath: string;
+    description: string;
+  } | null>;
+  lastTaskLoadErrorToastRef: MutableRefObject<{
+    workspaceId: string;
+    repoPath: string;
+    description: string;
+  } | null>;
 };
 
 export type TaskRefreshFlow = {
@@ -20,6 +29,7 @@ export type TaskRefreshFlow = {
 };
 
 export function useTaskRefreshFlow({
+  activeWorkspaceId,
   activeRepoPath,
   refreshTaskData,
   lastTaskRefreshToastRef,
@@ -38,17 +48,18 @@ export function useTaskRefreshFlow({
 
   const refreshTasksWithOptions = useCallback(
     async (options?: TaskRefreshOptions): Promise<void> => {
-      if (!activeRepoPath) {
+      if (!activeRepoPath || !activeWorkspaceId) {
         return;
       }
 
       await refreshController.refresh({
+        workspaceId: activeWorkspaceId,
         repoPath: activeRepoPath,
         trigger: options?.trigger ?? "manual",
         refreshTaskData,
       });
     },
-    [activeRepoPath, refreshController, refreshTaskData],
+    [activeWorkspaceId, activeRepoPath, refreshController, refreshTaskData],
   );
 
   const refreshTasks = useCallback(async (): Promise<void> => {

@@ -12,6 +12,7 @@ const skipped = (workspaceId: string): AutopilotOutcome => ({
   workspaceId,
   repoPath: "/repo",
   task: { id: "TASK-1", title: "Export" },
+  workflowId: "openducktor",
   eventId: "taskRejectedByQa",
   actionId: "startReviewQaFeedbacks",
   occurredAt: "2026-10-10T00:00:00.000Z",
@@ -47,9 +48,5 @@ describe("changesHeldOutcomes", () => {
       ),
     ).toBe(false);
     expect(changesHeldOutcomes(connectionStreamWarningEvent("Slow stream."), "ws-1")).toBe(false);
-  });
-
-  test("ignores the settings save event", () => {
-    expect(changesHeldOutcomes({ type: "autopilot_settings_saved" }, "ws-1")).toBe(false);
   });
 });

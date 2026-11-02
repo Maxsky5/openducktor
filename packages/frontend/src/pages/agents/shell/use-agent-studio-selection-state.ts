@@ -122,17 +122,24 @@ export function useAgentStudioSelectionState({
       isNavigationPending ||
       currentSnapshot.routeQueryKey !== routeSelectionQueryKey ||
       !workspaceRepoPath ||
+      !activeWorkspaceId ||
       !selection.taskId ||
       !workflowRole
     )
       return;
-    void prefetchTaskArtifacts(queryClient, workspaceRepoPath, selection.taskId, workflowRole);
+    void prefetchTaskArtifacts(
+      queryClient,
+      { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath },
+      selection.taskId,
+      workflowRole,
+    );
   }, [
     isActive,
     isWorkspaceRestorePending,
     isNavigationPending,
     currentSnapshot.routeQueryKey,
     routeSelectionQueryKey,
+    activeWorkspaceId,
     workspaceRepoPath,
     selection.taskId,
     workflowRole,
@@ -213,12 +220,17 @@ export function useAgentStudioSelectionState({
         ) {
           return;
         }
-        if (workspaceRepoPath && nextSelection.taskId) {
+        if (activeWorkspaceId && workspaceRepoPath && nextSelection.taskId) {
           const role =
             nextSelection.hasExplicitRoleSelection || nextSelection.sessionIdentity
               ? nextSelection.role
               : null;
-          void prefetchTaskArtifacts(queryClient, workspaceRepoPath, nextSelection.taskId, role);
+          void prefetchTaskArtifacts(
+            queryClient,
+            { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath },
+            nextSelection.taskId,
+            role,
+          );
         }
         scheduleQueryUpdate(buildAgentStudioSelectionQueryUpdateFromState(nextSelection));
       });

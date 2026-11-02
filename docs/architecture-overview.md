@@ -91,15 +91,15 @@ Connection rules:
 ## List tasks for the Kanban board
 
 1. `useTaskQueryReadModel` observes `repoTaskDataQueryOptions`. The initial stream snapshot fills the shared query cache. The render query reuses this data without a second request. If the stream cannot start or has not claimed the selected repository, the repository load fills the cache. Manual and event refreshes use `TaskViewSync`.
-2. `repoTaskDataQueryOptions` calls `tasksList(repoPath)` on the host client of the connection that owns the query client. The host reads `kanban.doneVisibleDays`, and SQLite filters old closed tasks before the host builds task rows.
+2. `repoTaskDataQueryOptions` calls `tasksList({ workspaceId, repoPath })` on the host client of the connection that owns the query client. The host reads `kanban.doneVisibleDays`, and SQLite filters old closed tasks before the host builds task rows.
 3. The host client of the connection delegates to the shell bridge transport: Electron IPC, local HTTP, or the remote work endpoint.
 4. `packages/host-client/src/task-client.ts` maps the call to `tasks_list`.
 5. The shell calls the host command router.
-6. The host resolves the workspace, opens `<config-root>/task-stores/<workspaceId>/database.sqlite`, and reads through `TaskStorePort`.
+6. The host validates the full workspace identity against `<config-root>/database.sqlite` and reads through the scoped `TaskStorePort`.
 7. The host adds `available_actions` and `agent_workflows` from the task workflow of each task.
 8. TanStack Query caches the result. Frontend read models render columns and actions.
 
-The frontend renders `availableActions`. It does not derive transition rights from status. Host SQLite adapters own database paths, schema setup, records, and cache invalidation.
+The frontend renders `availableActions`. It does not derive transition rights from status. Host SQLite adapters own database paths, schema setup, and records. Host events drive client cache updates.
 
 ## Start an agent session
 
@@ -213,7 +213,7 @@ Steps have their own IDs, separate from roles. The required, available, and comp
 
 Task and session records store no workflow identity or revision. Before a task can name another workflow, the design must pin an immutable definition revision and define how existing tasks upgrade.
 
-Task update events carry `statusChanges` with the previous status, the source role, and the task snapshot at each committed transition. The committed observer also receives the signal of the transition, and Autopilot reads it. The SQLite adapter reads both states in the transaction and records them only after commit. The mutation publisher collects these values in its Effect fiber and includes them in the task event, including when later work returns a partial failure. The values stay in memory.
+Task update events carry `statusChanges` with the previous status, the source role, and the task snapshot at each committed transition. The committed observer also receives the signal of the transition, and Autopilot reads it. After a transaction commits, the SQLite adapter records its local changes in memory for publication through that host's task stream. Committed changes carry the workflow ID and saved Autopilot rules. The local Autopilot observer creates launch attempts and checks their admission before starting them. These attempts stay in memory. Startup and explicit reads do not dispatch them. See [host database access](host-database.md#concurrent-database-access) for process behavior.
 
 Workflow notifications use these committed transitions. A `snapshot_required` refresh can read newer task data before buffered events arrive, so that read cannot define whether an event changed status. Initial snapshots remain silent. Event IDs and transition positions identify repeated delivery of the same change.
 
@@ -259,7 +259,7 @@ The page does not parse chat text to create a pull request.
 | Workflow evaluation and built-in rules | `packages/workflows/src/*` | Workflows |
 | Workflow execution and typed failures | `packages/host/src/domain/task/*`, `packages/host/src/application/tasks/*` | Host |
 | Task state | SQLite `tasks.status` | Host SQLite adapter |
-| Database identity | `<config-root>/task-stores/<workspaceId>/database.sqlite` | Host SQLite infrastructure |
+| Database identity | `<config-root>/database.sqlite` | Host SQLite infrastructure |
 | Artifacts and durable session records | SQLite task-store rows | Host task services |
 | Live session state and reply routing | `packages/host/src/application/agent-sessions/*`, `packages/host/src/adapters/agent-sessions/*` | Host runtime adapter |
 | Renderer session view | `packages/frontend-core/src/sessions/agent-orchestrator/session-read-model/*` | Client projection |

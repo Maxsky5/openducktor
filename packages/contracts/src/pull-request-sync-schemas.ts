@@ -1,8 +1,8 @@
 import { z } from "zod";
+import { workspaceRefSchema } from "./workspace-id-schemas";
 
 export const repoPullRequestSyncRequestSchema = z.object({
-  repoPath: z.string().trim().min(1),
-  expectedWorkspaceId: z.string().trim().min(1).optional(),
+  ...workspaceRefSchema.shape,
 });
 export type RepoPullRequestSyncRequest = z.infer<typeof repoPullRequestSyncRequestSchema>;
 

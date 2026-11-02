@@ -2,10 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  copyWebSqliteTaskStoreMigrations,
-  resolveWebSqliteTaskStoreMigrationCopyPlan,
-} from "./build-cli";
+import { copyWebSqliteMigrations, resolveWebSqliteMigrationCopyPlans } from "./build-cli";
 
 describe("web CLI build", () => {
   it("places SQLite task-store migrations next to the bundled CLI", () => {
@@ -13,22 +10,24 @@ describe("web CLI build", () => {
     const packageRoot = join(workspaceRoot, "packages", "openducktor-web");
 
     expect(
-      resolveWebSqliteTaskStoreMigrationCopyPlan({
+      resolveWebSqliteMigrationCopyPlans({
         packageRoot,
         workspaceRoot,
       }),
-    ).toEqual({
-      sourceDirectory: join(
-        workspaceRoot,
-        "packages",
-        "host",
-        "src",
-        "adapters",
-        "sqlite",
-        "drizzle",
-      ),
-      targetDirectory: join(packageRoot, "dist", "drizzle"),
-    });
+    ).toEqual(
+      ["drizzle", "drizzle-host"].map((folder) => ({
+        sourceDirectory: join(
+          workspaceRoot,
+          "packages",
+          "host",
+          "src",
+          "adapters",
+          "sqlite",
+          folder,
+        ),
+        targetDirectory: join(packageRoot, "dist", folder),
+      })),
+    );
   });
 
   it("copies the generated SQLite task-store migration folder", async () => {
@@ -41,7 +40,7 @@ describe("web CLI build", () => {
       await writeFile(join(sourceDirectory, "0000_create_task_store_tables.sql"), "create table");
       await writeFile(join(sourceDirectory, "meta", "_journal.json"), "{}");
 
-      await copyWebSqliteTaskStoreMigrations({ sourceDirectory, targetDirectory });
+      await copyWebSqliteMigrations({ sourceDirectory, targetDirectory });
 
       await expect(
         readFile(join(targetDirectory, "0000_create_task_store_tables.sql"), "utf8"),

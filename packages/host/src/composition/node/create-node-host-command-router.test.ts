@@ -1,5 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { createHostEventBus } from "../../events/host-event-bus";
+import { afterEach, describe, expect, test } from "bun:test";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -17,13 +20,14 @@ import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { RuntimeStartInput, RuntimeStarterPort } from "../../ports/runtime-registry-port";
 import { createBrowserEngineTestDouble } from "../../test-support/browser-engine-test-double";
-import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
+import { createSharedSettingsFixture } from "../../test-support/shared-settings-fixture";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import type { TerminalPtyPort } from "../../ports/terminal-pty-port";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 import { createNodeEffectHostCommandRouter } from "./create-node-effect-host-command-router";
 import { createNodeHostCommandRouter } from "./create-node-host-command-router-promise";
+import { findHostStorageStartupError } from "./host-startup-storage-error";
 import type {
   CreateNodeHostCommandRouterInput,
   EffectNodeHostCommandRouter,
@@ -105,12 +109,7 @@ const createMcpHostBridge = (): McpHostBridgeServer =>
     close: () => Effect.succeed({ baseUrl: null, closed: false }),
   }) satisfies McpHostBridgeServer;
 
-const createEventBus = (): HostEventBusPort => ({
-  publish() {},
-  subscribe() {
-    return () => {};
-  },
-});
+const createEventBus = (): HostEventBusPort => createHostEventBus({ report: () => {} });
 
 const browserEngine = () => Effect.succeed(createBrowserEngineTestDouble().engine);
 const terminalPty: TerminalPtyPort = {
@@ -157,7 +156,14 @@ const createAssemblyFailingRouterInput = (): CreateNodeHostCommandRouterInput =>
   browserEngine,
 });
 
-const createRouter = (input: {
+const routerDirectories: string[] = [];
+afterEach(async () => {
+  for (const directory of routerDirectories.splice(0))
+    await rm(directory, { recursive: true, force: true });
+});
+
+const createRouter = async (input: {
+  configRoot?: string;
   eventBus?: HostEventBusPort;
   logger: HostLifecycleLogger;
   onBackgroundFailure?: CreateNodeHostCommandRouterInput["onBackgroundFailure"];
@@ -165,13 +171,16 @@ const createRouter = (input: {
   runtimeStarter?: RuntimeStarterPort;
   mcpHostBridge?: McpHostBridgeServer;
 }) => {
+  const configRoot =
+    input.configRoot ?? (await mkdtemp(path.join(tmpdir(), "odt-router-storage-")));
+  routerDirectories.push(configRoot);
   const routerInput: Parameters<typeof createNodeEffectHostCommandRouter>[0] = {
     configDirScope: "test",
     lifecycleLogger: input.logger,
     mcpBridgeDiscoveryMode: "production",
     mcpHostBridge: input.mcpHostBridge ?? createMcpHostBridge(),
     onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
-    processEnv: { ...process.env },
+    processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot },
     taskEventPublicationReporter: { report: () => Effect.void },
     runtimeDistribution: createRuntimeDistribution(),
     runtimeHealth,
@@ -181,7 +190,13 @@ const createRouter = (input: {
     browserEngine,
   };
   if (input.runtimeStarter) {
-    routerInput.settingsConfig = createFixedRuntimeSettingsConfig("opencode", "opencode");
+    const config = createDefaultGlobalConfig();
+    config.agentRuntimes.opencode = {
+      ...config.agentRuntimes.opencode,
+      enabled: true,
+      executablePath: "opencode",
+    };
+    await writeFile(path.join(configRoot, "config.json"), JSON.stringify(config));
   }
   if (input.eventBus) {
     routerInput.eventBus = input.eventBus;
@@ -190,8 +205,97 @@ const createRouter = (input: {
 };
 
 describe("createNodeEffectHostCommandRouter", () => {
+  test("backs up settings and finishes preference migration before startup returns", async () => {
+    const configRoot = await mkdtemp(path.join(tmpdir(), "odt-startup-settings-"));
+    const configPath = path.join(configRoot, "config.json");
+    const config = createDefaultGlobalConfig();
+    config.theme = "dark";
+    config.git.defaultMergeMethod = "squash";
+    const original = JSON.stringify(config, null, 4) + "\n";
+    await writeFile(configPath, original);
+    const routers = await Promise.all([
+      createRouter({ configRoot, logger: createLogger().logger }),
+      createRouter({ configRoot, logger: createLogger().logger }),
+    ]);
+    try {
+      const preferences = JSON.parse(await readFile(configPath, "utf8"));
+      expect(preferences).toMatchObject({ version: 5, theme: "dark" });
+      expect(preferences).not.toHaveProperty("git");
+      expect(preferences).not.toHaveProperty("agentRuntimes");
+      expect(await readFile(`${configPath}.backup`, "utf8")).toBe(original);
+      for (const router of routers) {
+        expect(
+          await Effect.runPromise(router.invoke("workspace_get_settings_snapshot", {})),
+        ).toMatchObject({ theme: "dark", git: { defaultMergeMethod: "squash" } });
+      }
+      await Effect.runPromise(routers[0]!.invoke("set_theme", { theme: "light" }));
+      expect(await readFile(`${configPath}.backup`, "utf8")).toBe(original);
+    } finally {
+      await Promise.all(routers.map((router) => Effect.runPromise(router.dispose())));
+    }
+  });
+
+  test("stops on backup failure and resumes without importing shared data again", async () => {
+    const configRoot = await mkdtemp(path.join(tmpdir(), "odt-settings-recovery-"));
+    const configPath = path.join(configRoot, "config.json");
+    const backupPath = `${configPath}.backup`;
+    const config = createDefaultGlobalConfig();
+    config.git.defaultMergeMethod = "squash";
+    const original = JSON.stringify(config);
+    await writeFile(configPath, original);
+    await mkdir(backupPath);
+    const failure = await createRouter({ configRoot, logger: createLogger().logger }).catch(
+      (cause: unknown) => cause,
+    );
+    // Shells show this error in their startup error view.
+    expect(findHostStorageStartupError(failure)?.message).toContain(backupPath);
+    expect(await readFile(configPath, "utf8")).toBe(original);
+    await rm(backupPath, { recursive: true });
+    config.git.defaultMergeMethod = "rebase";
+    config.theme = "dark";
+    const corrected = JSON.stringify(config);
+    await writeFile(configPath, corrected);
+    const router = await createRouter({ configRoot, logger: createLogger().logger });
+    try {
+      expect(
+        await Effect.runPromise(router.invoke("workspace_get_settings_snapshot", {})),
+      ).toMatchObject({ theme: "dark", git: { defaultMergeMethod: "squash" } });
+      expect(await readFile(backupPath, "utf8")).toBe(corrected);
+      expect(JSON.parse(await readFile(configPath, "utf8")).version).toBe(5);
+    } finally {
+      await Effect.runPromise(router.dispose());
+    }
+  });
+
+  // An interrupted rewrite leaves a backup with the same text. A different backup stops startup.
+  test("finishes an interrupted settings rewrite and keeps the first backup", async () => {
+    const configRoot = await mkdtemp(path.join(tmpdir(), "odt-settings-rewrite-"));
+    const configPath = path.join(configRoot, "config.json");
+    const config = createDefaultGlobalConfig();
+    config.git.defaultMergeMethod = "squash";
+    const fixture = await createSharedSettingsFixture({ configPath, config });
+    await fixture.cleanup();
+    config.git.defaultMergeMethod = "rebase";
+    config.theme = "dark";
+    const backup = JSON.stringify(config);
+    await writeFile(configPath, backup);
+    await writeFile(`${configPath}.backup`, backup);
+    const router = await createRouter({ configRoot, logger: createLogger().logger });
+    try {
+      expect(
+        await Effect.runPromise(router.invoke("workspace_get_settings_snapshot", {})),
+      ).toMatchObject({ theme: "dark", git: { defaultMergeMethod: "squash" } });
+      expect(await readFile(`${configPath}.backup`, "utf8")).toBe(backup);
+      expect(JSON.parse(await readFile(configPath, "utf8")).version).toBe(5);
+    } finally {
+      await Effect.runPromise(router.dispose());
+    }
+  });
+
   test("only restores sessions for an added or reopened workspace", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-selection-"));
+    const root = await realpath(
+      await mkdtemp(path.join(tmpdir(), "openducktor-workspace-selection-")),
+    );
     const repoPath = path.join(root, "selected");
     const previousRepoPath = path.join(root, "previous");
     const addedRepoPath = path.join(root, "added");
@@ -199,13 +303,17 @@ describe("createNodeEffectHostCommandRouter", () => {
     await Promise.all(
       [repoPath, previousRepoPath, addedRepoPath, closedRepoPath].map((repo) => mkdir(repo)),
     );
-    const restore = Deferred.makeUnsafe<void>();
+    await Promise.all(
+      [repoPath, previousRepoPath, addedRepoPath, closedRepoPath].map((repo) =>
+        promisify(execFile)("git", ["init", repo]),
+      ),
+    );
+    // Session restoration reads the saved roots and publishes one snapshot for the repository.
     const restored: string[] = [];
-    let configReads = 0;
     const observations = new Map(
       [addedRepoPath, closedRepoPath].map((repo) => [repo, Deferred.makeUnsafe<void>()]),
     );
-    let config = createDefaultGlobalConfig();
+    const config = createDefaultGlobalConfig();
     config.workspaces = {
       previous: repoConfigSchema.parse({
         workspaceId: "previous",
@@ -227,6 +335,8 @@ describe("createNodeEffectHostCommandRouter", () => {
       }),
     };
     config.activeWorkspace = "previous";
+    await mkdir(path.join(root, "config"));
+    await writeFile(path.join(root, "config", "config.json"), JSON.stringify(config));
     const { logger } = createLogger();
     const router = await Effect.runPromise(
       createNodeEffectHostCommandRouter({
@@ -239,6 +349,7 @@ describe("createNodeEffectHostCommandRouter", () => {
               envelope.channel === "openducktor://agent-session-live-event" &&
               envelope.payload.type === "snapshot"
             ) {
+              restored.push(envelope.payload.repoPath);
               const observed = observations.get(envelope.payload.repoPath);
               if (observed) Effect.runSync(Deferred.succeed(observed, undefined));
             }
@@ -247,34 +358,16 @@ describe("createNodeEffectHostCommandRouter", () => {
         mcpBridgeDiscoveryMode: "production",
         mcpHostBridge: createMcpHostBridge(),
         onBackgroundFailure: () => Effect.void,
-        processEnv: { ...process.env },
+        processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: path.join(root, "config") },
         runtimeDistribution: createRuntimeDistribution(),
         runtimeHealth,
         runtimeStarter: unusedRuntimeStarter,
-        settingsConfig: {
-          ...createFixedRuntimeSettingsConfig("opencode", "opencode"),
-          readConfig: () =>
-            Effect.sync(() => {
-              configReads += 1;
-              return structuredClone(config);
-            }),
-          writeConfig: (next) =>
-            Effect.sync(() => {
-              config = structuredClone(next);
-            }),
-        },
         taskEventPublicationReporter: { report: () => Effect.void },
-        taskStore: createTaskStoreTestDouble({
-          listTasks: ({ repoPath: restoredRepoPath }) => {
-            restored.push(restoredRepoPath);
-            return Deferred.await(restore).pipe(Effect.as([]));
-          },
-        }),
+        taskStore: createTaskStoreTestDouble({ listTasks: () => Effect.succeed([]) }),
         terminalPty,
         browserEngine,
       }),
     );
-    configReads = 0;
     const selected = Effect.runPromiseExit(
       router.invoke("workspace_select", { workspaceId: "selected" }),
     );
@@ -291,15 +384,15 @@ describe("createNodeEffectHostCommandRouter", () => {
         _tag: "Success",
         value: { workspaceId: "selected", repoPath },
       });
-      expect(config.activeWorkspace).toBe("selected");
+      expect(
+        parseJson(await readFile(path.join(root, "config", "config.json"), "utf8")),
+      ).toMatchObject({ activeWorkspace: "selected", version: 5 });
       await Effect.runPromise(router.invoke("set_theme", { theme: "dark" }));
       await Effect.runPromise(
         router.invoke("workspace_reorder", { workspaceOrder: ["selected", "previous"] }),
       );
       await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(configReads).toBe(3);
       expect(restored).toEqual([]);
-      await Effect.runPromise(Deferred.succeed(restore, undefined));
       await Effect.runPromise(
         router.invoke("workspace_add", {
           workspaceId: "added",
@@ -321,7 +414,6 @@ describe("createNodeEffectHostCommandRouter", () => {
       );
     } finally {
       clearTimeout(deadline);
-      await Effect.runPromise(Deferred.succeed(restore, undefined));
       await selected;
       await Effect.runPromise(router.dispose());
       await rm(root, { recursive: true, force: true });
@@ -422,7 +514,7 @@ describe("createNodeEffectHostCommandRouter", () => {
   test("publishes development discovery from composition mode despite ambient channel", async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-node-host-discovery-"));
     const { logger } = createLogger();
-    const router = Effect.runSync(
+    const router = await Effect.runPromise(
       createNodeEffectHostCommandRouter({
         configDirScope: "test",
         lifecycleLogger: logger,
@@ -482,13 +574,13 @@ describe("createNodeEffectHostCommandRouter", () => {
     expect(infos).toEqual([]);
   });
 
-  test("disposes SQLite task store connections after every other host resource", async () => {
+  test("disposes the host database connection after every other host resource", async () => {
     const { infos, logger } = createLogger();
 
     const router = await createRouter({ logger });
     await Effect.runPromise(router.dispose());
 
-    expect(infos.at(-2)).toBe("Stopped SQLite task store connections");
+    expect(infos.at(-2)).toBe("Stopped host database connection");
     expect(infos.at(-1)).toBe("OpenDucktor host services stopped");
   });
 

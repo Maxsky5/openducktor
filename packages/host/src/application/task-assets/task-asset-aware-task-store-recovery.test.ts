@@ -34,7 +34,7 @@ const createHarness = async () => {
     registry,
     persistence: registry,
     staging,
-    resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    resolveWorkspaceId: () => Effect.succeed("fairnest"),
   });
   return { ...sqlite, innerStore: sqlite.store, filePort, registry, staging, store };
 };
@@ -52,7 +52,7 @@ const createTaskWithAsset = async (harness: Awaited<ReturnType<typeof createHarn
   const description = `![image](odt-asset:${staged.assetId})`;
   const task = await Effect.runPromise(
     harness.store.createTask({
-      repoPath: harness.repoPath,
+      ...harness.scope,
       status: "open",
       task: {
         title: "Asset owner",
@@ -88,7 +88,7 @@ describe("asset-aware task store", () => {
       registry: harness.registry,
       staging: harness.staging,
       persistence: null,
-      resolveWorkspaceIdForRepoPath: () => {
+      resolveWorkspaceId: () => {
         workspaceResolutionRequested = true;
         return Effect.die("Asset-free creates must not resolve an asset workspace.");
       },
@@ -96,7 +96,7 @@ describe("asset-aware task store", () => {
 
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Asset-free task",
@@ -125,13 +125,13 @@ describe("asset-aware task store", () => {
       registry: harness.registry,
       staging: harness.staging,
       persistence: null,
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
     const result = await Effect.runPromise(
       Effect.flip(
         store.createTask({
-          repoPath: harness.repoPath,
+          ...harness.scope,
           status: "open",
           task: {
             title: "Asset-free failure",
@@ -169,12 +169,12 @@ describe("asset-aware task store", () => {
         ...harness.registry,
         createTaskWithDescriptionAssets: () => Effect.fail(failure),
       },
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
     const result = await captureTaskAssetError(
       store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Asset failure",
@@ -206,12 +206,12 @@ describe("asset-aware task store", () => {
       registry: harness.registry,
       staging: harness.staging,
       persistence: null,
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
     const error = await captureTaskAssetError(
       store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Unsupported asset persistence",
@@ -229,9 +229,7 @@ describe("asset-aware task store", () => {
       durableState: "unchanged",
       retryAllowed: false,
     });
-    expect(
-      await Effect.runPromise(harness.innerStore.listTasks({ repoPath: harness.repoPath })),
-    ).toEqual([]);
+    expect(await Effect.runPromise(harness.innerStore.listTasks({ ...harness.scope }))).toEqual([]);
   });
 
   test("restores quarantined files and preserves the previous description when the update transaction fails", async () => {
@@ -248,7 +246,7 @@ describe("asset-aware task store", () => {
     const originalDescription = `![image](odt-asset:${staged.assetId})`;
     const task = await Effect.runPromise(
       harness.store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Rollback",
@@ -280,13 +278,13 @@ describe("asset-aware task store", () => {
             }),
           ),
       },
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
     await expect(
       Effect.runPromise(
         failingStore.updateTask({
-          repoPath: harness.repoPath,
+          ...harness.scope,
           taskId: task.id,
           patch: { description: "Remove image" },
           descriptionAssets: { stagedAssetIds: [] },
@@ -294,11 +292,8 @@ describe("asset-aware task store", () => {
       ),
     ).rejects.toThrow("Injected database failure");
     expect(
-      (
-        await Effect.runPromise(
-          harness.store.getTask({ repoPath: harness.repoPath, taskId: task.id }),
-        )
-      ).description,
+      (await Effect.runPromise(harness.store.getTask({ ...harness.scope, taskId: task.id })))
+        .description,
     ).toBe(originalDescription);
     expect(
       await Effect.runPromise(
@@ -360,7 +355,7 @@ describe("asset-aware task store", () => {
       registry,
       persistence: registry,
       staging: harness.staging,
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
     const retainedDescription = `![owned](odt-asset:${original.assetId})`;
@@ -369,7 +364,7 @@ describe("asset-aware task store", () => {
     const [firstExit, secondExit] = await Promise.all([
       Effect.runPromiseExit(
         store.updateTask({
-          repoPath: harness.repoPath,
+          ...harness.scope,
           taskId: task.id,
           patch: { description: firstDescription },
           descriptionAssets: { stagedAssetIds: [first.assetId] },
@@ -377,7 +372,7 @@ describe("asset-aware task store", () => {
       ),
       Effect.runPromiseExit(
         store.updateTask({
-          repoPath: harness.repoPath,
+          ...harness.scope,
           taskId: task.id,
           patch: { description: secondDescription },
           descriptionAssets: { stagedAssetIds: [second.assetId] },
@@ -402,16 +397,13 @@ describe("asset-aware task store", () => {
       durableState: "unchanged",
     });
     expect(
-      (
-        await Effect.runPromise(
-          harness.innerStore.getTask({ repoPath: harness.repoPath, taskId: task.id }),
-        )
-      ).description,
+      (await Effect.runPromise(harness.innerStore.getTask({ ...harness.scope, taskId: task.id })))
+        .description,
     ).toBe(successfulDescription);
     expect(
       await Effect.runPromise(
         harness.registry.listAssets({
-          repoPath: harness.repoPath,
+          ...harness.scope,
           taskId: task.id,
           scope: "description",
         }),

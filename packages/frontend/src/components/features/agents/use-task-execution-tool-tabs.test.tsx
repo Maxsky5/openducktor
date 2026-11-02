@@ -186,6 +186,7 @@ const linkedPullRequest = {
 } satisfies PullRequest;
 
 const ciQueryInput = {
+  workspaceId: "workspace-1",
   repoPath: "/repo",
   taskId: "task-12",
   workingDirectory: "/tmp/worktree/task-12",
@@ -220,6 +221,7 @@ const basePanelModel = {
   tabs: ["document", "diffs", "files", "ci_checks"],
   activeTabId: "document",
   documentModel: {
+    workspaceId: "workspace-1",
     repoPath: "/repo",
     taskId: "task-1",
     selection: { kind: "collection" },

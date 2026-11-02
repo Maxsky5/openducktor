@@ -31,7 +31,7 @@ export const createNodeGitProviderCommandHandlers = ({
   resolver: GitProviderResolver;
   issueImportStore: IssueImportStorePort;
   taskWorkflows: TaskWorkflowResolver;
-  taskSyncService: Pick<TaskSyncService, "publishExternalTaskCreated" | "runMutation">;
+  taskSyncService: Pick<TaskSyncService, "publishExternalTaskCreated" | "runStatusMutation">;
   workspaceSettingsService: WorkspaceSettingsService;
   azureDevOpsConnection: AzureDevOpsConnectionPort | undefined;
   azureAreaPaths: AzureAreaPathsPort;
@@ -46,7 +46,7 @@ export const createNodeGitProviderCommandHandlers = ({
       taskWorkflows,
       workspaceSettingsService,
       publishTaskCreated: taskSyncService.publishExternalTaskCreated,
-      runMutation: taskSyncService.runMutation,
+      runStatusMutation: taskSyncService.runStatusMutation,
     }),
   ),
   ...createAzureAreaPathsCommandHandlers(

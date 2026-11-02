@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import { type GitProviderRepository, type SettingsRepoConfig } from "@openducktor/contracts";
+import {
+  type GitProviderRepository,
+  type SettingsRepoConfig,
+  type WorkspaceRef,
+} from "@openducktor/contracts";
 import { useState } from "react";
 import {
   createHookHarness as createSharedHookHarness,
@@ -10,9 +14,9 @@ import { useSettingsModalRepositoryActions } from "./use-settings-modal-reposito
 enableReactActEnvironment();
 
 type HookArgs = {
-  selectedRepoPath: string | null;
+  selectedWorkspace: WorkspaceRef | null;
   initialRepoConfig: SettingsRepoConfig;
-  detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
+  detectGithubRepository: (workspace: WorkspaceRef) => Promise<GitProviderRepository | null>;
 };
 
 const createRepoConfig = (): SettingsRepoConfig => ({
@@ -30,13 +34,13 @@ const createRepoConfig = (): SettingsRepoConfig => ({
 });
 
 const useRepositoryActionsHarness = ({
-  selectedRepoPath,
+  selectedWorkspace,
   initialRepoConfig,
   detectGithubRepository,
 }: HookArgs) => {
   const [repoConfig, setRepoConfig] = useState(initialRepoConfig);
   const actions = useSettingsModalRepositoryActions({
-    selectedRepoPath,
+    selectedWorkspace,
     detectGithubRepository,
     updateSelectedRepoConfig: (updater) => {
       setRepoConfig((current) => updater(current));
@@ -60,7 +64,7 @@ describe("useSettingsModalRepositoryActions", () => {
       name: "repo",
     }));
     const harness = createHookHarness({
-      selectedRepoPath: null,
+      selectedWorkspace: null,
       initialRepoConfig: createRepoConfig(),
       detectGithubRepository,
     });
@@ -97,7 +101,7 @@ describe("useSettingsModalRepositoryActions", () => {
       },
     };
     const harness = createHookHarness({
-      selectedRepoPath: "/repo-a",
+      selectedWorkspace: { workspaceId: "repo-a", repoPath: "/repo-a" },
       initialRepoConfig,
       detectGithubRepository,
     });
@@ -109,7 +113,10 @@ describe("useSettingsModalRepositoryActions", () => {
       detectedRepositories.push(await state.detectSelectedRepoGithubRepository());
     });
 
-    expect(detectGithubRepository).toHaveBeenCalledWith("/repo-a");
+    expect(detectGithubRepository).toHaveBeenCalledWith({
+      workspaceId: "repo-a",
+      repoPath: "/repo-a",
+    });
     const [detectedRepo] = detectedRepositories;
     expect(detectedRepo).not.toBeNull();
     if (!detectedRepo) {
@@ -150,7 +157,7 @@ describe("useSettingsModalRepositoryActions", () => {
       repository: { host: "gitlab.com", owner: "duck", name: "repo" },
     } as const;
     const harness = createHookHarness({
-      selectedRepoPath: "/repo-a",
+      selectedWorkspace: { workspaceId: "repo-a", repoPath: "/repo-a" },
       initialRepoConfig: {
         ...createRepoConfig(),
         git: { provider: gitlabProvider },

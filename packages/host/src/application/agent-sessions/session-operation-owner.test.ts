@@ -16,7 +16,7 @@ const target: AgentMessageTarget = {
   runtimeKind: "codex",
   workingDirectory: "/repo/tree",
   externalSessionId: "root",
-  sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
 };
 const setup = (overrides: Partial<Parameters<typeof createSessionOperationOwner>[0]> = {}) => {
   const events: AgentSessionLiveEnvelope[] = [];
@@ -400,7 +400,10 @@ describe("session execution ownership", () => {
       const result = await Effect.runPromise(
         Effect.result(
           owner.run(
-            { ...target, sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" } },
+            {
+              ...target,
+              sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "qa" },
+            },
             "submission",
             Effect.sync(() => {
               dispatches += 1;

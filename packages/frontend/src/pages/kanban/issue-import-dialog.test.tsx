@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
@@ -127,6 +128,7 @@ describe("Issue import dialog", () => {
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog
+            workspaceId="workspace-1"
             open
             onOpenChange={() => {}}
             repoPath="/repo"
@@ -181,6 +183,7 @@ describe("Issue import dialog", () => {
         <ClientConnectionProvider connection={connectHost()}>
           <SettingsModalProvider>
             <IssueImportDialog
+              workspaceId="workspace-1"
               open
               onOpenChange={onOpenChange}
               repoPath="/repo"
@@ -222,6 +225,7 @@ describe("Issue import dialog", () => {
         <ClientConnectionProvider connection={connection}>
           <SettingsModalProvider>
             <IssueImportDialog
+              workspaceId="workspace-1"
               open
               onOpenChange={onOpenChange}
               repoPath="/repo"
@@ -234,7 +238,9 @@ describe("Issue import dialog", () => {
       fireEvent.click(screen.getByRole("checkbox", { name: "Select Issue 2" }));
       linked = true;
       await act(async () => {
-        await queryClient.invalidateQueries({ queryKey: issueItemsQueryKeys.repo("/repo") });
+        await queryClient.invalidateQueries({
+          queryKey: issueItemsQueryKeys.repo(workspaceRefFixture("/repo")),
+        });
       });
       fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
       fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
@@ -265,7 +271,13 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
@@ -283,7 +295,12 @@ describe("Issue import dialog", () => {
         "data:image/png;base64,aGVsbG8=",
       ),
     );
-    expect(imageGet).toHaveBeenCalledWith({ repoPath: "/repo", sourceId: "132", url });
+    expect(imageGet).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      sourceId: "132",
+      url,
+    });
     fireEvent.click(description);
     expect(screen.queryByRole("img", { name: "Screenshot" })).toBeNull();
     view.unmount();
@@ -308,6 +325,7 @@ describe("Issue import dialog", () => {
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog
+            workspaceId="workspace-1"
             open
             onOpenChange={() => {}}
             repoPath="/repo"
@@ -333,7 +351,13 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
@@ -355,7 +379,13 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
@@ -392,7 +422,13 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
@@ -440,6 +476,7 @@ describe("Issue import dialog", () => {
         <ClientConnectionProvider connection={connection}>
           <SettingsModalProvider>
             <IssueImportDialog
+              workspaceId="workspace-1"
               key={JSON.stringify(current.config)}
               open
               onOpenChange={() => {}}
@@ -474,7 +511,13 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
@@ -513,7 +556,13 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
@@ -543,7 +592,13 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
@@ -589,7 +644,13 @@ describe("Issue import dialog", () => {
       const view = render(
         <ClientConnectionProvider connection={connectHost()}>
           <SettingsModalProvider>
-            <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+            <IssueImportDialog
+              workspaceId="workspace-1"
+              open
+              onOpenChange={() => {}}
+              repoPath="/repo"
+              provider={provider}
+            />
           </SettingsModalProvider>
         </ClientConnectionProvider>,
       );
@@ -627,6 +688,7 @@ describe("Issue import dialog", () => {
       <ClientConnectionProvider connection={connection}>
         <SettingsModalProvider>
           <IssueImportDialog
+            workspaceId="workspace-1"
             open={open}
             onOpenChange={() => {}}
             repoPath="/repo"
@@ -670,7 +732,13 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
@@ -714,7 +782,13 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
@@ -740,7 +814,13 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
@@ -780,6 +860,7 @@ describe("Issue import dialog", () => {
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog
+            workspaceId="workspace-1"
             open
             onOpenChange={onOpenChange}
             repoPath="/repo"
@@ -854,7 +935,13 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
@@ -884,7 +971,11 @@ describe("Issue import dialog", () => {
     expect(within(reviewCard("Updated issue")).getByText("reviewed")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
     await screen.findByText("Created Task TASK-1");
-    expect(get).toHaveBeenCalledWith({ repoPath: "/repo", sourceId: "1" });
+    expect(get).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      sourceId: "1",
+    });
     expect(importItems.mock.calls[1]?.[0].items).toMatchObject([
       { sourceId: "1", revision: "2", issueType: "bug", labels: ["reviewed"] },
     ]);
@@ -907,7 +998,13 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
@@ -939,14 +1036,22 @@ describe("Issue import dialog", () => {
     const view = render(
       <ClientConnectionProvider connection={connection}>
         <SettingsModalProvider>
-          <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
+          <IssueImportDialog
+            workspaceId="workspace-1"
+            open
+            onOpenChange={() => {}}
+            repoPath="/repo"
+            provider={provider}
+          />
         </SettingsModalProvider>
       </ClientConnectionProvider>,
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
     linked = true;
-    await queryClient.invalidateQueries({ queryKey: issueItemsQueryKeys.repo("/repo") });
+    await queryClient.invalidateQueries({
+      queryKey: issueItemsQueryKeys.repo(workspaceRefFixture("/repo")),
+    });
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Review tasks" }).hasAttribute("disabled")).toBe(
         true,
@@ -977,6 +1082,7 @@ describe("Issue import dialog", () => {
       <ClientConnectionProvider connection={connection}>
         <SettingsModalProvider>
           <IssueImportDialog
+            workspaceId="workspace-1"
             open={open}
             onOpenChange={() => {}}
             repoPath="/repo"
@@ -990,7 +1096,7 @@ describe("Issue import dialog", () => {
     view.rerender(dialog(false));
 
     linked = false;
-    await invalidateRepoIssueItemsQueries(queryClient, "/repo");
+    await invalidateRepoIssueItemsQueries(queryClient, workspaceRefFixture("/repo"));
     view.rerender(dialog(true));
 
     const checkbox = await screen.findByRole("checkbox", { name: "Select Issue 1" });

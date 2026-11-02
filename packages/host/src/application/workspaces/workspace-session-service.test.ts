@@ -1,3 +1,9 @@
+import { workspaces } from "../../adapters/sqlite/sqlite-host-settings-schema";
+import { createDefaultGlobalConfig } from "../../config/global-config";
+import {
+  workspaceSessionCatalog,
+  workspaceSessionOwnership,
+} from "../../test-support/workspace-session-ownership";
 import { createRuntimeOrchestrator, planSettingsChange } from "@openducktor/runtime-orchestration";
 import {
   readWorkspaceSessionArchivePreview,
@@ -227,7 +233,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       markTitleSyncPending: (ref) => {
         pendingTitles.add(ref.externalSessionId);
       },
-      taskOwnership: database,
+      taskOwnership: database.taskOwnership,
       store: {
         ...store,
         archive: (request) =>
@@ -257,6 +263,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       },
       settings: {
         getRepoConfig: () => Effect.succeed(config),
+        getWorkspaceCatalog: () => Effect.succeed(workspaceSessionCatalog(config)),
         listCustomAgentRoles: () => Effect.succeed(roles),
       },
       git: createGitPortTestDouble({
@@ -326,7 +333,7 @@ describe("host-owned Workspace Session lifecycle", () => {
           }),
       }),
       settingsConfig: createSettingsConfigTestDouble({
-        readConfig: () => Effect.succeed(null),
+        readConfig: () => Effect.succeed(createDefaultGlobalConfig()),
         defaultWorktreeBasePath: () => path.join(database.configDir, "worktrees"),
         resolveConfiguredPath: (value) => value,
         join: path.join,
@@ -479,6 +486,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     h.dependencies.store.create({
       workspaceId: h.config.workspaceId,
       repoPath: h.config.repoPath,
+      ownershipScope: workspaceSessionOwnership(h.config),
       session: {
         ...source,
         id: crypto.randomUUID(),
@@ -872,6 +880,10 @@ describe("host-owned Workspace Session lifecycle", () => {
       h.dependencies.store.create({
         workspaceId: "fairnest",
         repoPath: database.repoPath,
+        ownershipScope: workspaceSessionOwnership({
+          workspaceId: "fairnest",
+          repoPath: database.repoPath,
+        }),
         session,
       }),
     );
@@ -1469,7 +1481,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     // A chat saved before targets existed has no saved target.
     const sqlite = new Database(database.databasePath);
     try {
-      sqlite.run("UPDATE workspace_sessions SET target_branch_json = NULL");
+      sqlite.run("UPDATE workspace_sessions SET target_branch = NULL, target_remote = NULL");
     } finally {
       sqlite.close();
     }
@@ -2051,14 +2063,16 @@ describe("host-owned Workspace Session lifecycle", () => {
             const service = createWorkspaceSessionService({
               ...h.dependencies,
               store: createSqliteWorkspaceSessionStore({
-                listForWorktreeOwnership: (scope) =>
-                  (scope.workspaceId === "other-workspace" && otherDatabase
+                workspacesProvider: (scopes, operation, use) =>
+                  (otherDatabase && scopes.every((scope) => scope.workspaceId === "other-workspace")
                     ? otherDatabase
                     : database
-                  ).listForWorktreeOwnership(scope),
+                  ).workspacesProvider(scopes, operation, use),
                 contextProvider: (repoPath, operation, use) => {
                   const provider =
-                    otherDatabase?.repoPath === repoPath
+                    otherDatabase?.repoPath ===
+                    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Narrow the typed context union to select its database fixture.
+                    (typeof repoPath === "string" ? repoPath : repoPath.repoPath)
                       ? otherDatabase.contextProvider
                       : database.contextProvider;
                   return provider(repoPath, operation, use);
@@ -2468,14 +2482,25 @@ describe("host-owned Workspace Session lifecycle", () => {
 
   test("archive checks durable owners in closed workspaces through canonical aliases", async () => {
     const h = setup();
-    const otherDatabase = await createSqliteTaskStoreHarness({
-      workspaceId: "closed-owner",
-      repoPath: "/repos/closed-owner",
-    });
-    try {
-      const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
-      const otherScope = { workspaceId: "closed-owner", repoPath: otherDatabase.repoPath };
-      const otherStore = createSqliteWorkspaceSessionStore(otherDatabase);
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const otherScope = { workspaceId: "closed-owner", repoPath: "/repos/closed-owner" };
+    await Effect.runPromise(
+      database.contextProvider(h.config, "test.registerClosedOwner", ({ session }) =>
+        session.execute(
+          (db) =>
+            db.insert(workspaces).values({
+              ...otherScope,
+              workspaceName: "Closed owner",
+              branchPrefix: "odt",
+              defaultTargetBranch: "main",
+              closed: false,
+            }),
+          "test.registerClosedOwner",
+        ),
+      ),
+    );
+    const otherStore = createSqliteWorkspaceSessionStore(database);
+    {
       const alias = path.join(database.configDir, "shared-worktree-alias");
       const sibling = await Effect.runPromise(
         otherStore.create({
@@ -2502,11 +2527,11 @@ describe("host-owned Workspace Session lifecycle", () => {
           },
         }),
       );
-      const listOwners = h.dependencies.store.listForWorktreeOwnership;
-      h.dependencies.store.listForWorktreeOwnership = (scope) =>
-        scope.workspaceId === otherScope.workspaceId
-          ? otherStore.listForWorktreeOwnership(scope)
-          : listOwners(scope);
+      const sqlite = new Database(database.databasePath);
+      sqlite.run("UPDATE workspaces SET closed = 1 WHERE workspace_id = ?", [
+        otherScope.workspaceId,
+      ]);
+      sqlite.close();
       h.dependencies.settingsConfig.readConfig = () =>
         Effect.succeed(
           globalConfigSchema.parse({
@@ -2541,16 +2566,13 @@ describe("host-owned Workspace Session lifecycle", () => {
       ).rejects.toThrow("Closed workspace chat");
       expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
       expect(h.calls).not.toContain("remove-worktree");
-      await Effect.runPromise(
-        otherStore.archive({
-          ...otherScope,
-          sessionId: sibling.id,
-          archivedAt: 1000,
-        }),
+      const archiveSqlite = new Database(database.databasePath);
+      archiveSqlite.run(
+        "UPDATE workspace_sessions SET archived_at_ms = 1000 WHERE workspace_id = ? AND id = ?",
+        [otherScope.workspaceId, sibling.id],
       );
+      archiveSqlite.close();
       expect((await Effect.runPromise(h.service.archivePreview(ref))).sharedWith).toEqual([]);
-    } finally {
-      await otherDatabase.cleanup();
     }
   });
 

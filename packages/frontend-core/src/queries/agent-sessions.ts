@@ -1,3 +1,6 @@
+import { workspaceScopeValue } from "./workspace-scope";
+import { queryMatchesWorkspace, queryWorkspaceScope, workspaceScopeKey } from "./workspace-scope";
+import { type WorkspaceRef } from "@openducktor/contracts";
 import type {
   AgentSessionLiveEnvelope,
   AgentSessionRecord,
@@ -32,15 +35,16 @@ export const normalizeAgentSessionTaskIds = (taskIds: string[]): string[] =>
 
 export const agentSessionQueryKeys = {
   all: ["agent-sessions"] as const,
-  repoLists: (repoPath: string) => [...agentSessionQueryKeys.all, "list", repoPath] as const,
-  list: (repoPath: string, taskId: string) =>
+  repoLists: (repoPath: WorkspaceRef) =>
+    [...agentSessionQueryKeys.all, "list", workspaceScopeValue(repoPath)] as const,
+  list: (repoPath: WorkspaceRef, taskId: string) =>
     [...agentSessionQueryKeys.repoLists(repoPath), taskId] as const,
 };
 
 /** A committed host update replaces the full task list and the read in progress for it. */
 export const updateAgentSessionListQuery = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   records: TaskAgentSessions,
 ): void => {
   // An older read cannot replace this update, also when its response has already returned.
@@ -54,7 +58,7 @@ export const updateAgentSessionListQuery = (
 
 /** Each task has its own list query. Reads of one workspace share one host request. */
 export const agentSessionListQueryOptions = (
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
   readPort?: AgentSessionReadPort,
 ) =>
@@ -109,7 +113,7 @@ const readOnce = async (
  */
 const readCurrentList = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
   read: (force: boolean) => Promise<AgentSessionRecord[]>,
 ): Promise<AgentSessionRecord[]> => {
@@ -151,7 +155,7 @@ const readCurrentList = (
 
 export const loadAgentSessionListFromQuery = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
   options?: {
     forceFresh?: boolean;
@@ -166,7 +170,7 @@ export const loadAgentSessionListFromQuery = (
 
 export const loadAgentSessionListsFromQuery = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskIds: string[],
   options?: {
     forceFresh?: boolean;
@@ -187,7 +191,7 @@ export const loadAgentSessionListsFromQuery = async (
 
 export const retryAgentSessionListQueries = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskIds: string[],
   readPort: AgentSessionReadPort = connectionHost(queryClient),
 ): Promise<void> => {
@@ -216,7 +220,7 @@ export const cancelAgentSessionListReads = (queryClient: QueryClient): Promise<v
 
 const cancelTaskListReads = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskIds: string[],
 ): Promise<void> => {
   const cancelled = Promise.all(
@@ -234,7 +238,7 @@ const cancelTaskListReads = (
 /** Remove confirmed deleted tasks. Later reads of these tasks return an empty list. */
 export const removeAgentSessionListQueries = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskIds: string[],
 ): Promise<void> => {
   const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
@@ -256,7 +260,7 @@ export const removeAgentSessionListQueries = async (
 /** Drop the cached lists and the pending reads of a workspace that closed. */
 export const releaseAgentSessionListQueries = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
 ): Promise<void> => {
   const queryKey = agentSessionQueryKeys.repoLists(repoPath);
   const cancelled = queryClient.cancelQueries({ queryKey });
@@ -271,7 +275,7 @@ export const releaseAgentSessionListQueries = async (
  */
 const refreshChangedList = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
   readPort?: AgentSessionReadPort,
 ): Promise<void> => {
@@ -304,7 +308,7 @@ const refreshChangedList = async (
 /** Read current records for one task, also when no view observes its list. */
 export const refreshAgentSessionListQuery = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
   readPort: AgentSessionReadPort = connectionHost(queryClient),
 ): Promise<void> => {
@@ -326,7 +330,7 @@ export const refreshAgentSessionListQuery = async (
  */
 export const refreshAgentSessionLists = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskIds: string[],
 ): Promise<string[]> => {
   const batch = getAgentSessionListBatch(queryClient);
@@ -348,7 +352,7 @@ export const refreshAgentSessionLists = async (
 /** The session membership and ownership of a cached task list, as a comparable key. */
 export const readAgentSessionOwnership = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
 ): string =>
   sessionOwnershipKey(
@@ -368,14 +372,17 @@ const sessionOwnershipKey = (records: AgentSessionRecord[]): string =>
       .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
   );
 
-export const cachedAgentSessionTaskIds = (queryClient: QueryClient, repoPath: string): string[] =>
+export const cachedAgentSessionTaskIds = (
+  queryClient: QueryClient,
+  repoPath: WorkspaceRef,
+): string[] =>
   queryClient
     .getQueryCache()
     .findAll({ queryKey: agentSessionQueryKeys.all, exact: false })
     .flatMap((query) => {
-      const [, kind, cachedRepoPath, taskId] = query.queryKey;
+      const [, kind, _cachedRepoPath, taskId] = query.queryKey;
       const taskIdResult = queryKeyStringSchema.safeParse(taskId);
-      return kind === "list" && cachedRepoPath === repoPath && taskIdResult.success
+      return kind === "list" && queryMatchesWorkspace(query, repoPath) && taskIdResult.success
         ? [taskIdResult.data]
         : [];
     });
@@ -389,14 +396,22 @@ export const createAgentSessionListLiveSync = (queryClient: QueryClient) => {
   let attached = false;
   return (envelope: AgentSessionLiveEnvelope): void => {
     if (envelope.type === "task_session_records_updated") {
-      updateAgentSessionListQuery(queryClient, envelope.repoPath, envelope);
+      updateAgentSessionListQuery(queryClient, envelope, envelope);
       return;
     }
     if (envelope.type !== "snapshot" || !envelope.isConnectionSnapshot) return;
     if (attached) {
-      const taskIds = cachedAgentSessionTaskIds(queryClient, envelope.repoPath);
-      // A failed read stays on its list query, where the session read model reports it.
-      void refreshAgentSessionLists(queryClient, envelope.repoPath, taskIds).catch(() => []);
+      const scopes = new Map<string, WorkspaceRef>();
+      for (const query of queryClient
+        .getQueryCache()
+        .findAll({ queryKey: agentSessionQueryKeys.all })) {
+        const scope = queryWorkspaceScope(query);
+        if (scope?.repoPath === envelope.repoPath) scopes.set(workspaceScopeKey(scope), scope);
+      }
+      for (const scope of scopes.values()) {
+        const taskIds = cachedAgentSessionTaskIds(queryClient, scope);
+        void refreshAgentSessionLists(queryClient, scope, taskIds).catch(() => []);
+      }
     }
     attached = true;
   };

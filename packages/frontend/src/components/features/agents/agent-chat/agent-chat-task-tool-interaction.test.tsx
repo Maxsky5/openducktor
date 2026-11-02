@@ -1,3 +1,4 @@
+import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import { expect, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -50,9 +51,6 @@ function renderTaskCard() {
     addWorkspace: async () => {
       throw new Error("Not used");
     },
-    saveWorkspaceModelDefaults: async () => {
-      throw new Error("Not used");
-    },
     selectWorkspace: async () => {},
     closeWorkspace: async () => {},
     removeWorkspace: async () => {},
@@ -66,19 +64,9 @@ function renderTaskCard() {
     loadRepoSettings: async () => {
       throw new Error("Unexpected settings read");
     },
-    saveRepoSettings: async () => {},
-    loadSettingsSnapshot: async () => {
-      throw new Error("Unexpected settings read");
-    },
     detectGithubRepository: async () => null,
-    saveGlobalGitConfig: async () => {},
     previewSettingsSnapshotRuntime: async () => ({ impact: null }),
-    saveSettingsSnapshot: async () => ({
-      type: "saved" as const,
-      workspaces: [],
-      runtimeApplications: [],
-      refreshError: null,
-    }),
+    saveSettingsSnapshot: async () => savedSettingsResult(),
     saveAgentModelFavorites: async () => {
       throw new Error("Unexpected model mutation");
     },

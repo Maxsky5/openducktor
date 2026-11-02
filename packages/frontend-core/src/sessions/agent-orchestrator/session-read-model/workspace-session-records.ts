@@ -71,6 +71,7 @@ export const reconcileWorkspaceSessionTargetFaults = (
 export const applyWorkspaceSessionRecords = (
   projected: AgentSessionCollection,
   records: readonly WorkspaceSession[],
+  workspaceId: string,
   previous: AgentSessionCollection = projected,
 ): AgentSessionCollection => {
   let collection = projected;
@@ -96,7 +97,7 @@ export const applyWorkspaceSessionRecords = (
     } else {
       session = {
         ...identity,
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId },
         status: "idle",
         livePresence: "unobserved",
         startedAt: new Date(record.createdAt).toISOString(),
@@ -112,9 +113,10 @@ export const applyWorkspaceSessionRecords = (
     const next: AgentSessionState = {
       ...session,
       sessionAssociation:
-        session.sessionAssociation.kind === "repository"
+        session.sessionAssociation.kind === "repository" &&
+        session.sessionAssociation.workspaceId === workspaceId
           ? session.sessionAssociation
-          : { kind: "repository" },
+          : { kind: "repository", workspaceId },
       title: workspaceSessionTitle(record),
       selectedModel: record.selectedModel ?? session.selectedModel,
     };

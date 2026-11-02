@@ -54,7 +54,7 @@ export async function checkClose({ root, shell, wait }: TerminalNativeFixture) {
         {
           terminalId: "close",
           label: "close",
-          context: { repoPath: root, taskId: "close" },
+          context: { workspaceId: "repo", repoPath: root, taskId: "close" },
           initialWorkingDir: root,
           createdAt: new Date().toISOString(),
           lifecycle: "starting",

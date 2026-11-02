@@ -1,5 +1,6 @@
 import { Context, Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
+import { type WorkspaceAccess, workspaceAccessBlock } from "../../domain/workspace-access";
 import {
   HostOperationError,
   HostValidationError,
@@ -37,16 +38,18 @@ export type WorkspaceAdmissionService = {
     workspaceId: string;
   }): Effect.Effect<void, HostValidationErrorAggregate>;
   releaseReservation(workspaceId: string): void;
-  assertTaskStoreAccess(input: {
+  /**
+   * Decides the lifecycle access of one task store operation on this host. It rejects a workspace
+   * with a lifecycle reservation, and grants administrative access inside
+   * `withAdministrativeAccess`. The store checks the result against the current workspace state
+   * in the transaction of the operation.
+   */
+  resolveTaskStoreAccess(input: {
+    access: WorkspaceAccess;
     operation: string;
     repoPath: string;
     workspaceId: string;
-  }): Effect.Effect<void, HostValidationErrorAggregate>;
-  assertTaskStoreOwnershipReadAccess(input: {
-    operation: string;
-    repoPath: string;
-    workspaceId: string;
-  }): Effect.Effect<void, HostValidationErrorAggregate>;
+  }): Effect.Effect<WorkspaceAccess, HostValidationErrorAggregate>;
   withProcessStartAdmission: WithProcessStartAdmission;
   blockWorkspace(input: {
     reason: WorkspaceBlockReason;
@@ -78,14 +81,12 @@ export const createWorkspaceAdmissionService = ({
     `@openducktor/host/WorkspaceAdministrativeAccess/${nextAdministrativeAccessId}`,
     { defaultValue: () => new Set() },
   );
-  let initialized = false;
 
   const replaceBlocked = (nextBlocked: BlockedWorkspace[]): void => {
     blockedByWorkspaceId.clear();
     for (const blocked of nextBlocked) {
       blockedByWorkspaceId.set(blocked.workspaceId, blocked);
     }
-    initialized = true;
   };
 
   const initialize = (): Effect.Effect<void, HostOperationError> =>
@@ -117,44 +118,26 @@ export const createWorkspaceAdmissionService = ({
       Effect.asVoid,
     );
 
-  const ensureInitialized = (): Effect.Effect<void, HostValidationErrorAggregate> =>
-    initialized
-      ? Effect.void
-      : initialize().pipe(
-          Effect.mapError(
-            (cause) =>
-              new HostValidationError({
-                message: cause.message,
-                cause,
-              }),
-          ),
-        );
-
-  const assertTaskStoreAccess: WorkspaceAdmissionService["assertTaskStoreAccess"] = (input) =>
-    ensureInitialized().pipe(
-      Effect.andThen(AdministrativeWorkspaceIds),
-      Effect.flatMap((administrativeAccess) => {
-        if (administrativeAccess.has(input.workspaceId)) {
-          return Effect.void;
-        }
-        const reservation = reservationsByWorkspaceId.get(input.workspaceId);
-        if (reservation) {
-          return Effect.fail(reservedWorkspaceError(reservation));
-        }
-        const blocked = blockedByWorkspaceId.get(input.workspaceId);
-        return blocked ? Effect.fail(blockedWorkspaceError(blocked)) : Effect.void;
-      }),
+  const refreshBlockedWorkspaces = (): Effect.Effect<void, HostValidationErrorAggregate> =>
+    initialize().pipe(
+      Effect.mapError(
+        (cause) =>
+          new HostValidationError({
+            message: cause.message,
+            cause,
+          }),
+      ),
     );
 
-  const assertTaskStoreOwnershipReadAccess: WorkspaceAdmissionService["assertTaskStoreOwnershipReadAccess"] =
-    (input) =>
-      Effect.gen(function* () {
-        yield* ensureInitialized();
+  const resolveTaskStoreAccess: WorkspaceAdmissionService["resolveTaskStoreAccess"] = (input) =>
+    AdministrativeWorkspaceIds.pipe(
+      Effect.flatMap((administrativeAccess) => {
+        if (administrativeAccess.has(input.workspaceId)) return Effect.succeed("administrative");
         const reservation = reservationsByWorkspaceId.get(input.workspaceId);
-        if (reservation) return yield* reservedWorkspaceError(reservation);
-        const blocked = blockedByWorkspaceId.get(input.workspaceId);
-        if (blocked?.reason === "removal") return yield* blockedWorkspaceError(blocked);
-      });
+        if (reservation) return Effect.fail(reservedWorkspaceError(reservation));
+        return Effect.succeed(input.access);
+      }),
+    );
 
   const processStartError = (normalizedRepoPath: string): HostValidationError | null => {
     const reservation = [...reservationsByWorkspaceId.values()].find(
@@ -163,15 +146,21 @@ export const createWorkspaceAdmissionService = ({
     if (reservation) {
       return reservedWorkspaceError(reservation);
     }
-    const blocked = [...blockedByWorkspaceId.values()].find(
-      (candidate) => normalizePathForComparison(candidate.repoPath) === normalizedRepoPath,
-    );
-    return blocked ? blockedWorkspaceError(blocked) : null;
+    for (const blocked of blockedByWorkspaceId.values()) {
+      if (normalizePathForComparison(blocked.repoPath) !== normalizedRepoPath) continue;
+      const message = workspaceAccessBlock(
+        blocked.workspaceId,
+        { closed: blocked.reason === "closed", removal: blocked.reason === "removal" },
+        "open",
+      );
+      if (message !== null) return new HostValidationError({ message, field: "workspaceId" });
+    }
+    return null;
   };
 
   const withProcessStartAdmission: WithProcessStartAdmission = (repoPath, effect) =>
     Effect.acquireUseRelease(
-      ensureInitialized().pipe(
+      refreshBlockedWorkspaces().pipe(
         Effect.flatMap(() =>
           Effect.suspend(() => {
             const normalizedRepoPath = normalizePathForComparison(repoPath);
@@ -223,8 +212,7 @@ export const createWorkspaceAdmissionService = ({
     releaseReservation: (workspaceId) => {
       reservationsByWorkspaceId.delete(workspaceId);
     },
-    assertTaskStoreAccess,
-    assertTaskStoreOwnershipReadAccess,
+    resolveTaskStoreAccess,
     withProcessStartAdmission,
     blockWorkspace: (input) => {
       blockedByWorkspaceId.set(input.workspaceId, input);
@@ -244,19 +232,6 @@ export const createWorkspaceAdmissionService = ({
         (current) => new Set([...current, workspaceId]),
       ),
   };
-};
-
-const blockedWorkspaceError = (blocked: BlockedWorkspace): HostValidationError => {
-  if (blocked.reason === "removal") {
-    return new HostValidationError({
-      message: `Workspace removal is incomplete for ${blocked.workspaceId}. Retry removal before accessing this workspace.`,
-      field: "workspaceId",
-    });
-  }
-  return new HostValidationError({
-    message: `Workspace is closed: ${blocked.workspaceId}. Reopen it before using it.`,
-    field: "workspaceId",
-  });
 };
 
 const reservedWorkspaceError = (reservation: WorkspaceReservation): HostValidationError =>

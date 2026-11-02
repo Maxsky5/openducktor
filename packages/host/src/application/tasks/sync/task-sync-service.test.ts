@@ -33,11 +33,11 @@ describe("task mutation gate and pull request sync", () => {
         repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
         listTasks: (input) => Effect.succeed(input.doneVisibleDays === undefined ? [closed] : []),
       },
-      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([workspace("/repo")]) },
     });
     await Effect.runPromise(
       service.publishTasksUpdated(
-        "/repo",
+        { workspaceId: "repo", repoPath: "/repo" },
         { taskIds: [closed.id], removedTaskIds: [] },
         "update-task",
         [],
@@ -64,9 +64,10 @@ describe("task mutation gate and pull request sync", () => {
             }),
         },
         workspaceSettingsService: {
-          listWorkspaces: () => Effect.succeed([]),
+          listWorkspaces: () => Effect.succeed([workspace("/repo")]),
           getWorkspaceCatalog: () =>
             Effect.succeed({
+              catalogRevision: 0,
               openWorkspaces,
               closedWorkspaces: state === "closed" ? [captured] : [],
               incompleteRemovals:
@@ -110,9 +111,10 @@ describe("task mutation gate and pull request sync", () => {
           }),
       },
       workspaceSettingsService: {
-        listWorkspaces: () => Effect.succeed([]),
+        listWorkspaces: () => Effect.succeed([workspace("/repo")]),
         getWorkspaceCatalog: () =>
           Effect.sync(() => ({
+            catalogRevision: 0,
             openWorkspaces: closed ? [] : [workspace("/repo")],
             closedWorkspaces: closed ? [workspace("/repo")] : [],
             incompleteRemovals: [],
@@ -163,11 +165,12 @@ describe("task mutation gate and pull request sync", () => {
           }),
       },
       workspaceSettingsService: {
-        listWorkspaces: () => Effect.succeed([]),
+        listWorkspaces: () => Effect.succeed([workspace("/repo")]),
         getWorkspaceCatalog: () =>
           fail
             ? Effect.fail(failure)
             : Effect.succeed({
+                catalogRevision: 0,
                 openWorkspaces: [workspace("/repo")],
                 closedWorkspaces: [],
                 incompleteRemovals: [],
@@ -200,7 +203,7 @@ describe("task mutation gate and pull request sync", () => {
               message: "Configure a Git provider.",
             }),
         },
-        workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+        workspaceSettingsService: { listWorkspaces: () => Effect.succeed([workspace("/repo")]) },
       });
       await Effect.runPromise(
         Effect.scoped(
@@ -252,14 +255,16 @@ describe("task mutation gate and pull request sync", () => {
         repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
       },
       workspaceSettingsService: {
-        listWorkspaces: () => Effect.succeed([]),
+        listWorkspaces: () => Effect.succeed([workspace("/repo")]),
       },
     });
 
-    await expect(Effect.runPromise(service.syncRepoPullRequests("/repo"))).resolves.toEqual({
-      ran: true,
-      changedTaskIds: [],
-    });
+    await expect(Effect.runPromise(service.syncRepoPullRequests("/repo", "repo"))).resolves.toEqual(
+      {
+        ran: true,
+        changedTaskIds: [],
+      },
+    );
 
     expect(events).toEqual([]);
     expect(reports).toEqual([]);
@@ -291,10 +296,16 @@ describe("task mutation gate and pull request sync", () => {
         },
       });
       await Effect.runPromise(service.syncOpenWorkspaces());
-      expect(calls).toEqual([{ repoPath: "/first" }, { repoPath: "/repo" }, { repoPath: "/last" }]);
+      expect(calls).toEqual(
+        ["/first", "/repo", "/last"].map((repoPath) => ({
+          workspaceId: repoPath.slice(1),
+          repoPath,
+        })),
+      );
       expect(events).toMatchObject(
         ["/first", "/repo", "/last"].map((repoPath) => ({
           kind: "tasks_updated",
+          workspaceId: repoPath.slice(1),
           repoPath,
           taskIds: ["task-1", "task-2"],
         })),
@@ -317,12 +328,12 @@ describe("task mutation gate and pull request sync", () => {
           }),
       },
       mergeDetection: {
-        runPass: (repoPath) =>
+        runPass: ({ workspaceId, repoPath }) =>
           Effect.suspend(() => {
             steps.push(`detect:${repoPath}`);
             return repoPath === "/first"
               ? Effect.fail(new HostOperationError({ operation: "test", message: "Git failed." }))
-              : Effect.succeed({ repoPath, tasks: [] });
+              : Effect.succeed({ workspaceId, repoPath, tasks: [] });
           }),
       },
       workspaceSettingsService: {
@@ -351,10 +362,10 @@ describe("task mutation gate and pull request sync", () => {
           }),
       },
       mergeDetection: {
-        runPass: (repoPath) =>
+        runPass: ({ workspaceId, repoPath }) =>
           Effect.sync(() => {
             steps.push(`detect:${repoPath}`);
-            return { repoPath, tasks: [] };
+            return { workspaceId, repoPath, tasks: [] };
           }),
       },
       workspaceSettingsService: {
@@ -362,6 +373,7 @@ describe("task mutation gate and pull request sync", () => {
           Effect.succeed([workspace("/open"), workspace("/closed"), workspace("/removed")]),
         getWorkspaceCatalog: () =>
           Effect.succeed({
+            catalogRevision: 0,
             openWorkspaces: [workspace("/open")],
             closedWorkspaces: [workspace("/closed")],
             incompleteRemovals: [],
@@ -393,11 +405,11 @@ describe("task mutation gate and pull request sync", () => {
           );
         },
       },
-      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([workspace("/repo")]) },
     });
 
     await expect(
-      Effect.runPromise(service.syncRepoPullRequests("/repo").pipe(Effect.flip)),
+      Effect.runPromise(service.syncRepoPullRequests("/repo", "repo").pipe(Effect.flip)),
     ).resolves.toBe(mutationFailure);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
@@ -430,10 +442,10 @@ describe("task mutation gate and pull request sync", () => {
             }),
           ),
       },
-      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([workspace("/repo")]) },
     });
     const failure = await Effect.runPromise(
-      service.syncRepoPullRequests("/repo").pipe(Effect.flip),
+      service.syncRepoPullRequests("/repo", "repo").pipe(Effect.flip),
     );
     expect(failure.message).toContain(mutationFailure.message);
     expect(failure.message).toContain("Task changes were saved");
@@ -463,11 +475,11 @@ describe("task mutation gate and pull request sync", () => {
             }),
           ),
       },
-      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([workspace("/repo")]) },
     });
 
     await expect(
-      Effect.runPromise(service.syncRepoPullRequests("/repo").pipe(Effect.flip)),
+      Effect.runPromise(service.syncRepoPullRequests("/repo", "repo").pipe(Effect.flip)),
     ).resolves.toMatchObject({
       _tag: "HostOperationError",
       message: expect.stringContaining("second task failed"),
@@ -476,7 +488,7 @@ describe("task mutation gate and pull request sync", () => {
     });
   });
 
-  test("logs each failed workspace and continues after publishing partial sync progress", async () => {
+  test("logs each failed workspace and continues after partial sync progress", async () => {
     const { eventBus, events } = createEventBus();
     const mutationFailure = new HostOperationError({
       operation: "task.repo-pull-request-sync",
@@ -540,8 +552,8 @@ describe("task mutation gate and pull request sync", () => {
       logs.every((message) => message.includes("the scheduler will retry on the next interval")),
     ).toBe(true);
     expect(events).toMatchObject([
-      { repoPath: "/partial", taskIds: ["task-1"] },
-      { repoPath: "/healthy", taskIds: ["task-2"] },
+      { workspaceId: "partial", repoPath: "/partial", taskIds: ["task-1"] },
+      { workspaceId: "healthy", repoPath: "/healthy", taskIds: ["task-2"] },
     ]);
   });
 
@@ -585,10 +597,24 @@ describe("task mutation gate and pull request sync", () => {
       }).pipe(Effect.provide(TestClock.layer())),
     );
     expect(snapshots).toEqual({
-      startup: [{ repoPath: "/repo" }, { repoPath: "/other" }],
-      beforeInterval: [{ repoPath: "/repo" }, { repoPath: "/other" }],
-      nextInterval: [{ repoPath: "/repo" }, { repoPath: "/other" }, { repoPath: "/other" }],
-      afterStop: [{ repoPath: "/repo" }, { repoPath: "/other" }, { repoPath: "/other" }],
+      startup: [
+        { workspaceId: "repo", repoPath: "/repo" },
+        { workspaceId: "other", repoPath: "/other" },
+      ],
+      beforeInterval: [
+        { workspaceId: "repo", repoPath: "/repo" },
+        { workspaceId: "other", repoPath: "/other" },
+      ],
+      nextInterval: [
+        { workspaceId: "repo", repoPath: "/repo" },
+        { workspaceId: "other", repoPath: "/other" },
+        { workspaceId: "other", repoPath: "/other" },
+      ],
+      afterStop: [
+        { workspaceId: "repo", repoPath: "/repo" },
+        { workspaceId: "other", repoPath: "/other" },
+        { workspaceId: "other", repoPath: "/other" },
+      ],
     });
   });
 

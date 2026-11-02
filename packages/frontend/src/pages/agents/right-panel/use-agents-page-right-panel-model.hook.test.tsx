@@ -126,7 +126,12 @@ const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["se
     ...viewOverrides
   } = overrides;
   const defaultSession = createAgentSessionFixture({
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    },
     status: "running",
     workingDirectory: "/repo",
   });
@@ -352,6 +357,7 @@ describe("useAgentsPageRightPanelModel", () => {
     expect(prefetchPullRequestReviewContextMock).toHaveBeenCalledTimes(1);
     expect(prefetchPullRequestReviewContextMock.mock.calls[0]?.[0]).toBe(queryClient);
     expect(prefetchPullRequestReviewContextMock.mock.calls[0]?.[1]).toEqual({
+      workspaceId: "workspace-repo",
       repoPath: "/repo",
       taskId: "task-1",
       pullRequest: { providerId: "github", number: 42 },

@@ -1,3 +1,5 @@
+import { loadTaskSessions } from "../support/task-sessions";
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { removedArtifactChanges } from "../artifact-changes";
@@ -19,11 +21,7 @@ import {
   workflowRoleIds,
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
-import {
-  requireEffectInput,
-  resultingStatus,
-  transitionCause,
-} from "../support/task-workflow-events";
+import { requireEffectInput, decideEffectTransition } from "../support/task-workflow-events";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
 
@@ -51,18 +49,17 @@ export const createTaskFullResetUseCase = ({
         [taskId],
         "reset task",
       );
-      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
       const workflowRoles = workflowRoleIds(workflow);
       // A reset from the initial state keeps the status and still clears the task.
-      const decision = yield* requireEffectInput("Task reset is", workflow, "task.reset", current, {
+      yield* requireEffectInput("Task reset is", workflow, "task.reset", current, {
         repoPath,
         taskId,
         status: current.status,
       });
-      const { agentSessions: currentSessions } = yield* taskStore.getTaskMetadata(input);
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const currentSessions = yield* loadTaskSessions(taskStore, input);
+      const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       const hasWorkflowSessions = taskHasSessionsForRoles(currentSessions, workflowRoles);
       if (hasWorkflowSessions && !activityGuard) {
@@ -120,6 +117,7 @@ export const createTaskFullResetUseCase = ({
 
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
+          workspaceId: input.workspaceId,
           branchNames,
           gitPort: dependencies.gitPort,
           managedWorktreeBasePath,
@@ -132,16 +130,22 @@ export const createTaskFullResetUseCase = ({
           worktreeFiles,
           worktreePaths,
         });
-        yield* taskStore.clearTaskArtifacts({ repoPath: effectiveRepoPath, taskId });
+        yield* taskStore.clearTaskArtifacts({
+          workspaceId: input.workspaceId,
+          repoPath: effectiveRepoPath,
+          taskId,
+        });
         taskStoreWriteCompleted = true;
         cleanupProgress.completedSteps.push("cleared task artifacts");
         yield* taskStore.clearAgentSessionsByRoles({
+          workspaceId: input.workspaceId,
           repoPath: effectiveRepoPath,
           taskId,
           roles: [...workflowRoles],
         });
         cleanupProgress.completedSteps.push("cleared linked agent sessions");
         yield* taskStore.setPullRequest({
+          workspaceId: input.workspaceId,
           repoPath: effectiveRepoPath,
           taskId,
           pullRequest: null,
@@ -149,19 +153,24 @@ export const createTaskFullResetUseCase = ({
         yield* Effect.uninterruptible(
           Effect.gen(function* () {
             yield* taskStore.setDirectMerge({
+              workspaceId: input.workspaceId,
               repoPath: effectiveRepoPath,
               taskId,
               directMerge: null,
             });
             cleanupProgress.completedSteps.push("cleared linked delivery metadata");
-            yield* completionState.discard(effectiveRepoPath, taskId);
+            yield* completionState.discard({
+              workspaceId: input.workspaceId,
+              repoPath: effectiveRepoPath,
+              taskId,
+            });
           }),
         );
         const updated = yield* taskStore.transitionTask({
+          workspaceId: input.workspaceId,
           repoPath: effectiveRepoPath,
           taskId,
-          status: resultingStatus(decision),
-          cause: transitionCause(decision),
+          decide: (task) => decideEffectTransition(taskWorkflows.forTask(task), "task.reset", task),
         });
         const task = enrichTask(workflow, updated);
         return { task, removedArtifactIds: artifactIds };

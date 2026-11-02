@@ -25,7 +25,12 @@ const createTask = (overrides: Partial<TaskCard> = {}): TaskCard =>
 const createSession = (overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {}) =>
   createAgentSessionSummaryFixture({
     externalSessionId: "ext-session-build-1",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    },
 
     status: "idle",
     startedAt: "2026-02-22T12:00:00.000Z",

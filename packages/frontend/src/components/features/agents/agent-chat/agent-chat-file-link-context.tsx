@@ -2,6 +2,7 @@ import { createContext, use } from "react";
 import type { TaskExecutionSelectedFile } from "../task-execution-file-explorer-model";
 
 export type ChatFileLinkOwner = {
+  workspaceId: string | null;
   repoPath: string | null;
   ownerKey: string;
   onSelectFile(file: TaskExecutionSelectedFile, trigger: HTMLAnchorElement): void;

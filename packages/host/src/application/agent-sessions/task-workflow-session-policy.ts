@@ -204,6 +204,7 @@ export const createTaskWorkflowSessionPolicy = ({
               previousModel: toRuntimeModel(stored.selectedModel),
               save: Effect.suspend(() =>
                 persistTaskModel({
+                  workspaceId: scope.workspaceId,
                   repoPath: input.repoPath,
                   taskId: scope.taskId,
                   identity: {

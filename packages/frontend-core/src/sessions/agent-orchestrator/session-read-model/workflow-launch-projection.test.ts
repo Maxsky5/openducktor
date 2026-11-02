@@ -1,3 +1,5 @@
+import { createSessionMessagesState } from "../support/messages";
+import { sessionMessagesToArray } from "../../../test-support/session-message-test-helpers";
 import { expect, test } from "bun:test";
 import type { AgentSessionRecord, WorkflowLaunchResult } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
@@ -26,11 +28,16 @@ const outcome: WorkflowLaunchResult = {
 test("registers saved preparation ownership before live delivery without reading history", () => {
   const store = createAgentSessionsStore("/repo");
   const queryClient = new QueryClient();
-  const key = agentSessionQueryKeys.list("/repo", "task");
+  const key = agentSessionQueryKeys.list({ workspaceId: "workspace", repoPath: "/repo" }, "task");
   queryClient.setQueryData(key, []);
   projectWorkflowLaunch(store, queryClient, outcome);
   expect(store.getSessionSnapshot(outcome.session!)).toMatchObject({
-    sessionAssociation: { kind: "workflow", taskId: "task", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace",
+      taskId: "task",
+      role: "build",
+    },
     livePresence: "present",
     status: "idle",
     selectedModel: model,
@@ -47,7 +54,7 @@ test.each(["both", "store", "cache"] as const)(
   (binding) => {
     const store = createAgentSessionsStore("/repo");
     const queryClient = new QueryClient();
-    const key = agentSessionQueryKeys.list("/repo", "task");
+    const key = agentSessionQueryKeys.list({ workspaceId: "workspace", repoPath: "/repo" }, "task");
     const selectedModel = { ...model, modelId: "new-model" };
     const record: AgentSessionRecord = {
       ...outcome.session!,
@@ -98,7 +105,12 @@ test("a failed launch registers its saved session without claiming live presence
   });
   const session = store.getSessionSnapshot(outcome.session!);
   expect(session).toMatchObject({
-    sessionAssociation: { kind: "workflow", taskId: "task", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace",
+      taskId: "task",
+      role: "build",
+    },
     historyLoadState: "not_requested",
   });
   expect(session?.livePresence).not.toBe("present");
@@ -108,7 +120,7 @@ test("a failed launch registers its saved session without claiming live presence
 test("a launch without a saved session changes nothing", () => {
   const store = createAgentSessionsStore("/repo");
   const queryClient = new QueryClient();
-  const key = agentSessionQueryKeys.list("/repo", "task");
+  const key = agentSessionQueryKeys.list({ workspaceId: "workspace", repoPath: "/repo" }, "task");
   queryClient.setQueryData(key, []);
   const { session: _session, ...withoutSession } = outcome;
   projectWorkflowLaunch(store, queryClient, {
@@ -118,5 +130,60 @@ test("a launch without a saved session changes nothing", () => {
   });
   expect(store.listSessionSnapshots()).toEqual([]);
   expect(queryClient.getQueryData<AgentSessionRecord[]>(key)).toEqual([]);
+  queryClient.clear();
+});
+
+test("selects each workspace saved binding across two switches while shared native history stays live", () => {
+  const store = createAgentSessionsStore("/repo");
+  const queryClient = new QueryClient();
+  const first = { workspaceId: "first-workspace", repoPath: "/repo" };
+  const second = { workspaceId: "second-workspace", repoPath: "/repo" };
+  const firstRecord: AgentSessionRecord = {
+    ...outcome.session!,
+    role: "build",
+    selectedModel: { ...model, modelId: "first-model" },
+  };
+  const secondRecord: AgentSessionRecord = {
+    ...outcome.session!,
+    role: "qa",
+    selectedModel: { ...model, modelId: "second-model" },
+  };
+  const firstKey = agentSessionQueryKeys.list(first, "task");
+  const secondKey = agentSessionQueryKeys.list(second, "task");
+  queryClient.setQueryData(firstKey, [firstRecord]);
+  queryClient.setQueryData(secondKey, [secondRecord]);
+  projectWorkflowLaunch(store, queryClient, { ...outcome, ...first });
+  const messages = createSessionMessagesState("saved", [
+    {
+      id: "native-message",
+      role: "user",
+      content: "Keep native history",
+      timestamp: "2026-10-04T00:01:00Z",
+    },
+  ]);
+  store.updateSession(outcome.session!, (session) => ({
+    ...session,
+    messages,
+    status: "running",
+    livePresence: "present",
+  }));
+  for (const selected of [second, first, second]) {
+    const expected = selected === first ? firstRecord : secondRecord;
+    projectWorkflowLaunch(store, queryClient, { ...outcome, ...selected, role: expected.role });
+    const projected = store.getSessionSnapshot(outcome.session!)!;
+    expect(projected.sessionAssociation).toEqual({
+      kind: "workflow",
+      workspaceId: selected.workspaceId,
+      taskId: "task",
+      role: expected.role,
+    });
+    expect(projected.selectedModel).toEqual(expected.selectedModel);
+    expect(projected.status).toBe("running");
+    expect(sessionMessagesToArray(projected).map(({ content }) => content)).toEqual([
+      "Keep native history",
+    ]);
+    expect(queryClient.getQueryData(firstKey)).toEqual([firstRecord]);
+    expect(queryClient.getQueryData(secondKey)).toEqual([secondRecord]);
+  }
   queryClient.clear();
 });

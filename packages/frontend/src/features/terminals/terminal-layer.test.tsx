@@ -14,7 +14,7 @@ test("keeps the setup command result visible in its running terminal after start
     summary: {
       terminalId: "setup-terminal",
       label: "Install dependencies",
-      context: { repoPath: "/repo", taskId: "task" },
+      context: { workspaceId: "workspace", repoPath: "/repo", taskId: "task" },
       initialWorkingDir: "/worktrees/task",
       createdAt: "2026-10-26T00:00:00.000Z",
       lifecycle: "running",

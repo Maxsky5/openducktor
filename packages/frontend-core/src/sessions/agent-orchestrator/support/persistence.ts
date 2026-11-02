@@ -52,6 +52,7 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
 };
 
 export type PersistedTaskSessionRecord = {
+  workspaceId: string;
   taskId: string;
   record: AgentSessionRecord;
 };
@@ -66,6 +67,7 @@ export const toPersistedSessionIdentity = (record: AgentSessionRecord): AgentSes
 });
 
 export const fromPersistedSessionRecord = ({
+  workspaceId,
   taskId,
   record,
 }: PersistedTaskSessionRecord): AgentSessionState => {
@@ -74,7 +76,7 @@ export const fromPersistedSessionRecord = ({
   return {
     externalSessionId: identity.externalSessionId,
     title: formatWorkflowAgentSessionTitle(record.role, taskId),
-    sessionAssociation: { kind: "workflow", taskId, role: record.role },
+    sessionAssociation: { kind: "workflow", workspaceId, taskId, role: record.role },
     // Stored records lack live state, so cold reads start idle.
     status: "idle",
     runtimeStatusMessage: null,
@@ -102,6 +104,7 @@ export const fromPersistedSessionRecord = ({
 };
 
 export const toPersistedSessionView = ({
+  workspaceId,
   taskId,
   record,
   current,
@@ -110,13 +113,15 @@ export const toPersistedSessionView = ({
   current?: AgentSessionState | undefined;
   associationEvidence?: AgentSessionAssociation | undefined;
 }): AgentSessionState => {
-  const persisted = fromPersistedSessionRecord({ taskId, record });
+  const persisted = fromPersistedSessionRecord({ workspaceId, taskId, record });
   const previousAssociation = current?.sessionAssociation ?? associationEvidence;
   if (!previousAssociation) {
     return persisted;
   }
+  const previousWorkspaceBinding =
+    previousAssociation.kind === "workflow" && previousAssociation.workspaceId !== workspaceId;
   const transition = resolveAgentSessionAssociationTransition(
-    previousAssociation,
+    previousWorkspaceBinding ? { kind: "unbound" } : previousAssociation,
     persisted.sessionAssociation,
   );
   if (transition.kind === "conflict") {

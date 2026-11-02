@@ -48,9 +48,6 @@ const createWorkspaceState = (): WorkspaceStateContextValue => ({
   addWorkspace: async () => {
     throw new Error("Not used");
   },
-  saveWorkspaceModelDefaults: async () => {
-    throw new Error("Not used");
-  },
   selectWorkspace: async () => {},
   closeWorkspace: async () => {},
   removeWorkspace: async () => {},
@@ -64,15 +61,12 @@ const createWorkspaceState = (): WorkspaceStateContextValue => ({
   loadRepoSettings: async () => {
     throw new Error("Unused");
   },
-  saveRepoSettings: async () => {},
-  loadSettingsSnapshot: async () => {
-    throw new Error("Unused");
-  },
   detectGithubRepository: async () => null,
-  saveGlobalGitConfig: async () => {},
   previewSettingsSnapshotRuntime: async () => ({ impact: null }),
   saveSettingsSnapshot: async () => ({
     type: "saved" as const,
+    shared: "saved" as const,
+    preferences: "saved" as const,
     workspaces: [],
     runtimeApplications: [],
     refreshError: null,
@@ -144,7 +138,7 @@ test("shows a closeable skeleton while context tasks load, then shows the task",
       timeout: 700,
     });
     expect(
-      h.queryClient.getQueryState(taskQueryKeys.unfilteredRepoData("/repo-a"))?.fetchStatus,
+      h.queryClient.getQueryState(taskQueryKeys.unfilteredRepoData(activeWorkspace))?.fetchStatus,
     ).toBe("idle");
   } finally {
     h.dispose();
@@ -169,7 +163,7 @@ test("keeps the skeleton open until the shared task query resolves", async () =>
   const pending = Promise.withResolvers<RepoTaskData>();
   const h = createHarness({ tasks: [], isLoadingTasks: false }, (client) => {
     void client.fetchQuery({
-      queryKey: taskQueryKeys.unfilteredRepoData("/repo-a"),
+      queryKey: taskQueryKeys.unfilteredRepoData(activeWorkspace),
       queryFn: () => pending.promise,
     });
   });
@@ -194,7 +188,7 @@ test.each(["failure", "missing"])(
     const h = createHarness({ tasks: [], isLoadingTasks: false }, (client) => {
       void client
         .fetchQuery({
-          queryKey: taskQueryKeys.unfilteredRepoData("/repo-a"),
+          queryKey: taskQueryKeys.unfilteredRepoData(activeWorkspace),
           queryFn: () => pending.promise,
         })
         .catch(() => {});

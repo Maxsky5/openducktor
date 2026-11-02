@@ -320,7 +320,6 @@ function EditorSaveButton({
     documentSection: !isTaskSection,
     title: controller.state.title,
     typeStep: controller.mode === "create" && controller.isTypeStepVisible,
-    conflict: controller.hasExternalTaskConflict,
     destinationError: controller.destinationError !== null,
     documentDirty: controller.isActiveDocumentDirty,
     documentDraft: controller.activeDraft,

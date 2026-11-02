@@ -1,12 +1,11 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import type {
   AgentModelFavorite,
   GitBranch,
   GitCurrentBranch,
   GitProviderRepository,
-  GlobalGitConfig,
   GitCheck,
   PathCheck,
-  SettingsSnapshot,
   SettingsSnapshotRuntimePreview,
   SettingsSnapshotSaveInput,
   SettingsSnapshotSaveResult,
@@ -67,10 +66,6 @@ export type WorkspaceStateContextValue = {
   commitWorkspaceProviderSetup: (
     input: WorkspaceProviderSetupCommit,
   ) => Promise<WorkspaceProviderSetupProgress>;
-  saveWorkspaceModelDefaults: (
-    workspaceId: string,
-    draft: WorkspaceModelDefaultsDraft,
-  ) => Promise<void>;
   selectWorkspace: (workspaceId: string, onSelected?: () => void) => Promise<void>;
   closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
@@ -80,10 +75,7 @@ export type WorkspaceStateContextValue = {
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string, onSwitched?: () => void) => Promise<void>;
   loadRepoSettings: () => Promise<RepoSettingsInput>;
-  saveRepoSettings: (input: RepoSettingsInput) => Promise<void>;
-  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
-  detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
-  saveGlobalGitConfig: (git: GlobalGitConfig) => Promise<void>;
+  detectGithubRepository: (scope: WorkspaceRef) => Promise<GitProviderRepository | null>;
   /** Validates a save and returns the live sessions it would stop. It writes nothing. */
   previewSettingsSnapshotRuntime: (
     snapshot: SettingsSnapshotSaveInput,
@@ -92,7 +84,7 @@ export type WorkspaceStateContextValue = {
     snapshot: SettingsSnapshotSaveInput,
     runtimeConfirmation?: string,
   ) => Promise<SettingsSaveOutcome>;
-  saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<SettingsSnapshot>;
+  saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<AgentModelFavorite[]>;
 };
 
 export type WorkspaceBranchStateContextValue = Pick<
@@ -132,5 +124,7 @@ export type ChecksStateContextValue = {
  * the local cache reload fails. `refreshError` reports that failure.
  */
 export type SettingsSaveOutcome =
-  | (Extract<SettingsSnapshotSaveResult, { type: "saved" }> & { refreshError: string | null })
+  | (Extract<SettingsSnapshotSaveResult, { type: "saved" | "partial" }> & {
+      refreshError: string | null;
+    })
   | Extract<SettingsSnapshotSaveResult, { type: "runtime_impact_changed" }>;

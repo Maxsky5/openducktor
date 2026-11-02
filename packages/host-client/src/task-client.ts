@@ -1,4 +1,5 @@
 import {
+  type WorkspaceRef,
   artifactScopeSchema,
   artifactReadRequestSchema,
   artifactCreateRequestSchema,
@@ -6,7 +7,7 @@ import {
   artifactReplaceRequestSchema,
   artifactDeleteRequestSchema,
   taskArtifactCollectionSchema,
-  artifactContentChunkSchema,
+  artifactReadResultSchema,
   artifactSaveResultSchema,
   artifactDeleteResultSchema,
   type ArtifactScope,
@@ -16,7 +17,7 @@ import {
   type ArtifactReplaceRequest,
   type ArtifactDeleteRequest,
   type TaskArtifactCollection,
-  type ArtifactContentChunk,
+  type ArtifactReadResult,
   type ArtifactSaveResult,
   type ArtifactDeleteResult,
   type AgentSessionIdentity,
@@ -83,8 +84,7 @@ import {
 } from "@openducktor/workflows";
 
 /** A submit sends the event that the artifact or its verdict declares. */
-export type WorkflowArtifactSaveInput = {
-  repoPath: string;
+export type WorkflowArtifactSaveInput = WorkspaceRef & {
   taskId: string;
   code: string;
   markdown: string;
@@ -98,24 +98,31 @@ export type WorkflowArtifactReadResult = {
   error?: string | null;
 };
 
-type TasksListArgs = { repoPath: string };
-type TaskCreateArgs = {
-  repoPath: string;
+type TaskCreateArgs = WorkspaceRef & {
   input: TaskCreateInput;
   descriptionAssets?: TaskAssetDescriptionMutation;
 };
-type TaskUpdateArgs = {
-  repoPath: string;
+type TaskUpdateArgs = WorkspaceRef & {
   taskId: string;
   patch: TaskUpdatePatch;
   descriptionAssets?: TaskAssetDescriptionMutation;
 };
-type TaskTransitionArgs = {
-  repoPath: string;
+type TaskTransitionArgs = WorkspaceRef & {
   taskId: string;
   status: TaskStatus;
   reason?: string;
 };
+
+/**
+ * Callers can pass a wider object, such as a workspace record, because it has every scope field.
+ * The request holds only the contract fields, so the host's strict schema accepts it.
+ */
+const artifactScopeRequest = z.object(artifactScopeSchema.shape);
+const artifactReadRequest = z.object(artifactReadRequestSchema.shape);
+const artifactCreateRequest = z.object(artifactCreateRequestSchema.shape);
+const artifactRenameRequest = z.object(artifactRenameRequestSchema.shape);
+const artifactReplaceRequest = z.object(artifactReplaceRequestSchema.shape);
+const artifactDeleteRequest = z.object(artifactDeleteRequestSchema.shape);
 
 export class HostTaskClient {
   constructor(private readonly invokeFn: InvokeFn) {}
@@ -123,23 +130,23 @@ export class HostTaskClient {
   taskArtifactsList(input: ArtifactScope): Promise<TaskArtifactCollection> {
     return this.invokeFn(
       "task_artifacts_list",
-      artifactScopeSchema.parse(input),
+      artifactScopeRequest.parse(input),
       taskArtifactCollectionSchema,
     );
   }
 
-  taskArtifactRead(input: ArtifactReadRequest): Promise<ArtifactContentChunk> {
+  taskArtifactRead(input: ArtifactReadRequest): Promise<ArtifactReadResult> {
     return this.invokeFn(
       "task_artifact_read",
-      artifactReadRequestSchema.parse(input),
-      artifactContentChunkSchema,
+      artifactReadRequest.parse(input),
+      artifactReadResultSchema,
     );
   }
 
   taskArtifactCreate(input: ArtifactCreateRequest): Promise<ArtifactSaveResult> {
     return this.invokeFn(
       "task_artifact_create",
-      artifactCreateRequestSchema.parse(input),
+      artifactCreateRequest.parse(input),
       artifactSaveResultSchema,
     );
   }
@@ -147,7 +154,7 @@ export class HostTaskClient {
   taskArtifactRename(input: ArtifactRenameRequest): Promise<ArtifactSaveResult> {
     return this.invokeFn(
       "task_artifact_rename",
-      artifactRenameRequestSchema.parse(input),
+      artifactRenameRequest.parse(input),
       artifactSaveResultSchema,
     );
   }
@@ -155,7 +162,7 @@ export class HostTaskClient {
   taskArtifactReplace(input: ArtifactReplaceRequest): Promise<ArtifactSaveResult> {
     return this.invokeFn(
       "task_artifact_replace",
-      artifactReplaceRequestSchema.parse(input),
+      artifactReplaceRequest.parse(input),
       artifactSaveResultSchema,
     );
   }
@@ -163,13 +170,13 @@ export class HostTaskClient {
   taskArtifactDelete(input: ArtifactDeleteRequest): Promise<ArtifactDeleteResult> {
     return this.invokeFn(
       "task_artifact_delete",
-      artifactDeleteRequestSchema.parse(input),
+      artifactDeleteRequest.parse(input),
       artifactDeleteResultSchema,
     );
   }
 
-  async tasksList(repoPath: string): Promise<TaskCard[]> {
-    const args: TasksListArgs = { repoPath };
+  async tasksList(scope: WorkspaceRef): Promise<TaskCard[]> {
+    const args: WorkspaceRef = { workspaceId: scope.workspaceId, repoPath: scope.repoPath };
     return this.invokeFn(
       "tasks_list",
       args,
@@ -178,8 +185,8 @@ export class HostTaskClient {
   }
 
   /** Read every task card, including closed tasks outside Kanban retention. */
-  async tasksListAll(repoPath: string): Promise<TaskCard[]> {
-    const args: TasksListArgs = { repoPath };
+  async tasksListAll(scope: WorkspaceRef): Promise<TaskCard[]> {
+    const args: WorkspaceRef = { workspaceId: scope.workspaceId, repoPath: scope.repoPath };
     return this.invokeFn(
       "tasks_list_all",
       args,
@@ -188,8 +195,8 @@ export class HostTaskClient {
   }
 
   /** The IDs of all tasks of a repository, also closed tasks that the Kanban board hides. */
-  async taskIdsList(repoPath: string): Promise<string[]> {
-    const args: TasksListArgs = { repoPath };
+  async taskIdsList(scope: WorkspaceRef): Promise<string[]> {
+    const args: WorkspaceRef = { workspaceId: scope.workspaceId, repoPath: scope.repoPath };
     return this.invokeFn("task_ids_list", args, arrayResultSchema(z.string(), "task_ids_list"));
   }
 
@@ -221,12 +228,16 @@ export class HostTaskClient {
     );
   }
 
-  async azureAreaPathsList(repoPath: string): Promise<string[]> {
-    return this.invokeFn("azure_area_paths_list", { repoPath }, azureAreaPathsResultSchema);
+  async azureAreaPathsList(scope: WorkspaceRef): Promise<string[]> {
+    return this.invokeFn(
+      "azure_area_paths_list",
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath },
+      azureAreaPathsResultSchema,
+    );
   }
 
   async taskCreate(
-    repoPath: string,
+    scope: WorkspaceRef,
     input: TaskCreateInput,
     descriptionAssets?: TaskAssetDescriptionMutation,
   ): Promise<TaskCard> {
@@ -235,7 +246,8 @@ export class HostTaskClient {
       ? taskAssetDescriptionMutationSchema.parse(descriptionAssets)
       : undefined;
     const args: TaskCreateArgs = {
-      repoPath,
+      workspaceId: scope.workspaceId,
+      repoPath: scope.repoPath,
       input: createInput,
     };
     if (assetIntent) {
@@ -245,7 +257,7 @@ export class HostTaskClient {
   }
 
   async taskUpdate(
-    repoPath: string,
+    scope: WorkspaceRef,
     taskId: string,
     patch: TaskUpdatePatch,
     descriptionAssets?: TaskAssetDescriptionMutation,
@@ -258,7 +270,8 @@ export class HostTaskClient {
       throw new Error("descriptionAssets requires a description patch.");
     }
     const args: TaskUpdateArgs = {
-      repoPath,
+      workspaceId: scope.workspaceId,
+      repoPath: scope.repoPath,
       taskId,
       patch: updatePatch,
     };
@@ -284,60 +297,90 @@ export class HostTaskClient {
     );
   }
 
-  async taskDelete(repoPath: string, taskId: string): Promise<{ ok: boolean }> {
-    return this.invokeFn("task_delete", { repoPath, taskId }, okResultSchema("task_delete"));
+  async taskDelete(scope: WorkspaceRef, taskId: string): Promise<{ ok: boolean }> {
+    return this.invokeFn(
+      "task_delete",
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
+      okResultSchema("task_delete"),
+    );
   }
 
-  async taskClose(repoPath: string, taskId: string, removeWorktree: boolean): Promise<TaskCard> {
+  async taskClose(scope: WorkspaceRef, taskId: string, removeWorktree: boolean): Promise<TaskCard> {
     return this.invokeFn(
       "task_close",
-      taskCloseInputSchema.parse({ repoPath, taskId, removeWorktree }),
+      taskCloseInputSchema.parse({
+        workspaceId: scope.workspaceId,
+        repoPath: scope.repoPath,
+        taskId,
+        removeWorktree,
+      }),
       builtinTaskCardSchema,
     );
   }
 
   async taskWorktreeCleanupImpactGet(
-    repoPath: string,
+    scope: WorkspaceRef,
     taskId: string,
   ): Promise<TaskWorktreeCleanupImpact> {
     return this.invokeFn(
       "task_worktree_cleanup_impact_get",
-      { repoPath, taskId },
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
       taskWorktreeCleanupImpactSchema,
     );
   }
 
   /** Removes the worktree and local branches of a closed task. */
-  async taskWorktreeRemove(repoPath: string, taskId: string): Promise<void> {
-    await this.invokeFn("task_worktree_remove", { repoPath, taskId }, voidResultSchema);
+  async taskWorktreeRemove(scope: WorkspaceRef, taskId: string): Promise<void> {
+    await this.invokeFn(
+      "task_worktree_remove",
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
+      voidResultSchema,
+    );
   }
 
-  async taskMergeStatusGet(repoPath: string): Promise<TaskMergeStatusSnapshot> {
-    return this.invokeFn("task_merge_status_get", { repoPath }, taskMergeStatusSnapshotSchema);
+  async taskMergeStatusGet(scope: WorkspaceRef): Promise<TaskMergeStatusSnapshot> {
+    return this.invokeFn(
+      "task_merge_status_get",
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath },
+      taskMergeStatusSnapshotSchema,
+    );
   }
 
   /** Fetches and runs a merge detection pass for the workspace, then returns its snapshot. */
-  async taskMergeStatusCheck(repoPath: string): Promise<TaskMergeStatusSnapshot> {
-    return this.invokeFn("task_merge_status_check", { repoPath }, taskMergeStatusSnapshotSchema);
+  async taskMergeStatusCheck(scope: WorkspaceRef): Promise<TaskMergeStatusSnapshot> {
+    return this.invokeFn(
+      "task_merge_status_check",
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath },
+      taskMergeStatusSnapshotSchema,
+    );
   }
 
-  async taskResetImplementation(repoPath: string, taskId: string): Promise<TaskCard> {
-    return this.invokeFn("task_reset_implementation", { repoPath, taskId }, builtinTaskCardSchema);
+  async taskResetImplementation(scope: WorkspaceRef, taskId: string): Promise<TaskCard> {
+    return this.invokeFn(
+      "task_reset_implementation",
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
+      builtinTaskCardSchema,
+    );
   }
 
-  async taskReset(repoPath: string, taskId: string): Promise<TaskCard> {
-    return this.invokeFn("task_reset", { repoPath, taskId }, builtinTaskCardSchema);
+  async taskReset(scope: WorkspaceRef, taskId: string): Promise<TaskCard> {
+    return this.invokeFn(
+      "task_reset",
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
+      builtinTaskCardSchema,
+    );
   }
 
   async taskTransition(
-    repoPath: string,
+    scope: WorkspaceRef,
     taskId: string,
     status: TaskStatus,
     reason?: string,
   ): Promise<TaskCard> {
     taskStatusSchema.parse(status);
     const args: TaskTransitionArgs = {
-      repoPath,
+      workspaceId: scope.workspaceId,
+      repoPath: scope.repoPath,
       taskId,
       status,
     };
@@ -347,18 +390,22 @@ export class HostTaskClient {
     return this.invokeFn("task_transition", args, builtinTaskCardSchema);
   }
 
-  async taskApplyEvent(repoPath: string, taskId: string, eventId: string): Promise<TaskCard> {
-    return this.invokeFn("task_apply_event", { repoPath, taskId, eventId }, builtinTaskCardSchema);
+  async taskApplyEvent(scope: WorkspaceRef, taskId: string, eventId: string): Promise<TaskCard> {
+    return this.invokeFn(
+      "task_apply_event",
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, eventId },
+      builtinTaskCardSchema,
+    );
   }
 
   async workflowArtifactGet(
-    repoPath: string,
+    scope: WorkspaceRef,
     taskId: string,
     code: string,
   ): Promise<WorkflowArtifactReadResult> {
     const artifact = await this.invokeFn(
       "workflow_artifact_get",
-      { repoPath, taskId, code },
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, code },
       taskMetadataArtifactSchema,
     );
     return {
@@ -372,58 +419,59 @@ export class HostTaskClient {
     return this.invokeFn("workflow_artifact_save", { ...input }, taskArtifactSaveResultSchema);
   }
 
-  async taskMetadataGet(repoPath: string, taskId: string): Promise<TaskMetadataPayload> {
-    return this.readTaskMetadata(repoPath, taskId);
+  async taskMetadataGet(scope: WorkspaceRef, taskId: string): Promise<TaskMetadataPayload> {
+    return this.invokeFn(
+      "task_metadata_get",
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
+      taskMetadataPayloadSchema,
+    );
   }
 
-  async agentSessionsList(repoPath: string, taskId: string): Promise<AgentSessionRecord[]> {
+  async agentSessionsList(scope: WorkspaceRef, taskId: string): Promise<AgentSessionRecord[]> {
     return this.invokeFn(
       "agent_sessions_list",
-      { repoPath, taskId },
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
       arrayResultSchema(agentSessionRecordSchema, "agent_sessions_list"),
     );
   }
 
   async taskStopImpactGet(
-    repoPath: string,
+    scope: WorkspaceRef,
     taskIds: string[],
     operation: TaskStopImpactOperation,
   ): Promise<TaskStopImpact> {
     return this.invokeFn(
       "task_stop_impact_get",
-      { repoPath, taskIds, operation },
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskIds, operation },
       taskStopImpactSchema,
     );
   }
 
   async agentSessionsListForTasks(
-    repoPath: string,
+    scope: WorkspaceRef,
     taskIds: string[],
   ): Promise<TaskAgentSessions[]> {
     return this.invokeFn(
       "agent_sessions_list_for_tasks",
-      { repoPath, taskIds },
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskIds },
       arrayResultSchema(taskAgentSessionsSchema, "agent_sessions_list_for_tasks"),
     );
   }
 
   async agentSessionDelete(
-    repoPath: string,
+    scope: WorkspaceRef,
     taskId: string,
     identity: AgentSessionIdentity,
   ): Promise<void> {
     await this.invokeFn(
       "agent_session_delete",
       {
-        repoPath,
+        workspaceId: scope.workspaceId,
+        repoPath: scope.repoPath,
         taskId,
         identity,
       },
       booleanResultSchema,
     );
-  }
-
-  private readTaskMetadata(repoPath: string, taskId: string): Promise<TaskMetadataPayload> {
-    return this.invokeFn("task_metadata_get", { repoPath, taskId }, taskMetadataPayloadSchema);
   }
 }

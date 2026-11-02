@@ -31,7 +31,10 @@ describe("createGitProviderCommandHandlers", () => {
       }),
     });
     await expect(
-      router.invoke("workspace_detect_github_repository", { repoPath: "/repo" }),
+      router.invoke("workspace_detect_github_repository", {
+        workspaceId: "repo",
+        repoPath: "/repo",
+      }),
     ).resolves.toEqual({
       host: "github.com",
       owner: "openai",
@@ -39,15 +42,19 @@ describe("createGitProviderCommandHandlers", () => {
     });
     expect(calls).toEqual([
       {
+        workspaceId: "repo",
         repoPath: "/repo",
         providerId: "github",
       },
     ]);
 
     await expect(
-      router.invoke("workspace_get_git_provider_context", { repoPath: "/repo" }),
+      router.invoke("workspace_get_git_provider_context", {
+        workspaceId: "repo",
+        repoPath: "/repo",
+      }),
     ).resolves.toBeNull();
-    expect(calls.at(-1)).toBe("/repo");
+    expect(calls.at(-1)).toEqual({ workspaceId: "repo", repoPath: "/repo" });
   });
 
   test("preserves typed provider failures", async () => {
@@ -69,7 +76,7 @@ describe("createGitProviderCommandHandlers", () => {
     await expect(
       Effect.runPromise(
         router
-          .invoke("workspace_detect_github_repository", { repoPath: "/repo" })
+          .invoke("workspace_detect_github_repository", { workspaceId: "repo", repoPath: "/repo" })
           .pipe(Effect.flip),
       ),
     ).resolves.toBe(failure);

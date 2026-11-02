@@ -23,7 +23,7 @@ describe("workflow docs contract", () => {
     expect(transitionDoc).toContain(
       "an `artifacts` metadata array of all current workflow and free artifacts",
     );
-    expect(transitionDoc).toContain("| `odt_read_task_artifacts` | `taskId`, `codes`,");
+    expect(transitionDoc).toContain("| `odt_read_task_artifacts` | `taskId`, `codes` |");
     expect(transitionDoc).toContain('"codes": ["spec"]');
     expect(transitionDoc).toContain(
       "collect the relevant IDs and call `odt_read_task_assets` once when their raw total is at most 20 MiB. Split only larger sets.",

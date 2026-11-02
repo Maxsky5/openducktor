@@ -57,6 +57,7 @@ export type CreateTaskSyncLoopInput = {
   onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
   syncRepoPullRequests(
     repoPath: string,
+    workspaceId: string,
   ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError>;
   workspaceSettingsService: Pick<
     WorkspaceSettingsService,
@@ -121,11 +122,11 @@ export const createTaskSyncLoop = ({
       }
       if (workspaceSyncSkip(catalog.success, repoPath, workspace.workspaceId)) return;
       // The pull request sync runs first, so it closes merged pull requests before detection.
-      yield* syncRepoPullRequests(repoPath).pipe(
+      yield* syncRepoPullRequests(repoPath, workspace.workspaceId).pipe(
         Effect.catch((error) => onFailure(error, "pull_request_sync", repoPath)),
       );
       yield* mergeDetection
-        .runPass(repoPath)
+        .runPass(workspace)
         .pipe(Effect.catch((error) => onFailure(error, "merge_detection", repoPath)));
     });
 

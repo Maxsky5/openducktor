@@ -1,4 +1,9 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import { z } from "zod";
+import {
+  type AgentSessionRecord,
+  type WorkspaceRef,
+  artifactScopeSchema,
+} from "@openducktor/contracts";
 import {
   notifyManager,
   QueriesObserver,
@@ -21,7 +26,7 @@ export type AgentSessionListsState = {
   isPending: boolean;
 };
 
-export type AgentSessionListTarget = { repoPath: string; taskId: string };
+export type AgentSessionListTarget = WorkspaceRef & { taskId: string };
 
 /**
  * Read the saved session lists of tasks in one or more repositories.
@@ -49,11 +54,11 @@ export function useAgentSessionListQueries<Result>({
     () =>
       enabled
         ? normalizedTargets.map(
-            ({ repoPath, taskId }) =>
+            ({ workspaceId, repoPath, taskId }) =>
               // A mounted failed list stays active, so a later task change reads it again. A query
               // that will fetch reads as fetching in the first render, as with `useQueries`.
               ({
-                ...agentSessionListQueryOptions(repoPath, taskId, readPort),
+                ...agentSessionListQueryOptions({ workspaceId, repoPath }, taskId, readPort),
                 _optimisticResults: "optimistic",
               }) satisfies ListQueryOptions,
           )
@@ -99,6 +104,7 @@ const useQueryList = (
 };
 
 export const useAgentSessionLists = ({
+  workspaceId,
   repoPath,
   taskIds,
   enabled,
@@ -110,10 +116,13 @@ export const useAgentSessionLists = ({
     () => (taskIdsKey ? taskIdsKey.split(TARGET_SEPARATOR) : []),
     [taskIdsKey],
   );
-  const shouldReadLists = enabled && repoPath !== null;
+  const shouldReadLists = enabled && repoPath !== null && workspaceId !== null;
   const targets = useMemo(
-    () => (repoPath === null ? [] : normalizedTaskIds.map((taskId) => ({ repoPath, taskId }))),
-    [normalizedTaskIds, repoPath],
+    () =>
+      repoPath === null || workspaceId === null
+        ? []
+        : normalizedTaskIds.map((taskId) => ({ workspaceId, repoPath, taskId })),
+    [normalizedTaskIds, repoPath, workspaceId],
   );
   const combine = useCallback(
     (reads: AgentSessionListRead[]): AgentSessionListsState => {
@@ -145,6 +154,7 @@ export const useAgentSessionLists = ({
 export type AgentSessionListRead = Pick<AgentSessionListQueryResult, "data" | "error" | "status">;
 
 type UseAgentSessionListsArgs = {
+  workspaceId: string | null;
   repoPath: string | null;
   taskIds: string[];
   enabled: boolean;
@@ -153,32 +163,26 @@ type UseAgentSessionListsArgs = {
 };
 
 const TARGET_SEPARATOR = "\u001f";
-const TARGETS_SEPARATOR = "\u001e";
-
-export const agentSessionListTargetKey = ({ repoPath, taskId }: AgentSessionListTarget): string =>
-  `${repoPath}${TARGET_SEPARATOR}${taskId}`;
+export const agentSessionListTargetKey = ({
+  workspaceId,
+  repoPath,
+  taskId,
+}: AgentSessionListTarget): string => JSON.stringify([workspaceId, repoPath, taskId]);
 
 const toTargetsKey = (targets: readonly AgentSessionListTarget[]): string => {
-  const taskIdsByRepo = new Map<string, string[]>();
-  for (const { repoPath, taskId } of targets) {
-    // Add in place: a copy for each target would cost O(n²) with thousands of tasks.
-    const taskIds = taskIdsByRepo.get(repoPath);
-    if (taskIds) taskIds.push(taskId);
-    else taskIdsByRepo.set(repoPath, [taskId]);
+  const byWorkspace = new Map<string, { scope: WorkspaceRef; taskIds: string[] }>();
+  for (const { workspaceId, repoPath, taskId } of targets) {
+    const key = JSON.stringify([workspaceId, repoPath]);
+    const entry = byWorkspace.get(key);
+    if (entry) entry.taskIds.push(taskId);
+    else byWorkspace.set(key, { scope: { workspaceId, repoPath }, taskIds: [taskId] });
   }
-  return [...taskIdsByRepo.entries()]
-    .flatMap(([repoPath, taskIds]) =>
-      normalizeAgentSessionTaskIds(taskIds).map((taskId) =>
-        agentSessionListTargetKey({ repoPath, taskId }),
-      ),
-    )
-    .join(TARGETS_SEPARATOR);
+  return JSON.stringify(
+    [...byWorkspace.values()].flatMap(({ scope, taskIds }) =>
+      normalizeAgentSessionTaskIds(taskIds).map((taskId) => ({ ...scope, taskId })),
+    ),
+  );
 };
 
 const toTargets = (targetsKey: string): AgentSessionListTarget[] =>
-  targetsKey
-    ? targetsKey.split(TARGETS_SEPARATOR).map((entry) => {
-        const [repoPath = "", taskId = ""] = entry.split(TARGET_SEPARATOR);
-        return { repoPath, taskId };
-      })
-    : [];
+  z.array(artifactScopeSchema).parse(JSON.parse(targetsKey));

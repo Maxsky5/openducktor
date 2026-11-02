@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { resolveTaskSessionStartTarget } from "./task-session-start-target";
 import { startupStep } from "../../agent-sessions/session-startup-progress";
 import type { RuntimeKind } from "@openducktor/contracts";
@@ -31,6 +32,7 @@ import type { TaskServiceError } from "../task-service";
 import type { TaskSessionLifecycleCoordinator } from "./task-session-lifecycle-coordinator";
 
 export type PreparedTaskSessionStart = {
+  workspaceId: string;
   canonicalRepoPath: string;
   rollback: PreparedTaskWorktree["rollback"];
   preparedStatus: string;
@@ -41,6 +43,7 @@ export type PreparedTaskSessionStart = {
 };
 
 export type TaskSessionStartPreparationInput = {
+  workspaceId: string;
   canonicalRepoPath: string;
   taskId: string;
   role: string;
@@ -91,9 +94,10 @@ export const createTaskSessionStartPreparationService = ({
             workspaceSettingsService,
           ),
         );
-        const repoConfig = yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(
-          input.canonicalRepoPath,
-        );
+        const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, {
+          workspaceId: input.workspaceId,
+          repoPath: input.canonicalRepoPath,
+        });
         const targetInput: Parameters<typeof resolveTaskSessionStartTarget>[0] = {
           settingsConfig: dependencies.settingsConfig,
           gitPort: dependencies.gitPort,
@@ -123,7 +127,11 @@ export const createTaskSessionStartPreparationService = ({
           ),
         );
         // The caller holds the task lifecycle, so the task stays the same during the preparation.
-        const task = yield* taskStore.getTask({ repoPath: canonicalInputRepoPath, taskId });
+        const task = yield* taskStore.getTask({
+          workspaceId: input.workspaceId,
+          repoPath: canonicalInputRepoPath,
+          taskId,
+        });
         const workflow = taskWorkflows.forTask(task);
         const descriptor = yield* resolveRuntimeDescriptorForTaskSession(
           dependencies.runtimeDefinitionsService,
@@ -132,10 +140,10 @@ export const createTaskSessionStartPreparationService = ({
         );
         // Fail before worktree setup when the shared runtime of this kind cannot accept work.
         yield* dependencies.runtimeRegistry.requireReady(descriptor.kind);
-        const repoConfig =
-          yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(
-            canonicalInputRepoPath,
-          );
+        const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, {
+          workspaceId: input.workspaceId,
+          repoPath: input.canonicalRepoPath,
+        });
         const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
         if (
           normalizePathForComparison(canonicalRepoPath) !==
@@ -215,6 +223,7 @@ export const createTaskSessionStartPreparationService = ({
               }),
             );
             return {
+              workspaceId: input.workspaceId,
               canonicalRepoPath,
               rollback,
               preparedStatus: task.status,
@@ -238,6 +247,7 @@ export const createTaskSessionStartPreparationService = ({
       prepared: PreparedTaskSessionStart,
       /** Commits the start event inside the task mutation that publishes it. */
       applyStartEvent: (input: {
+        workspaceId: string;
         repoPath: string;
         taskId: string;
         eventId: string;
@@ -245,6 +255,7 @@ export const createTaskSessionStartPreparationService = ({
     ) {
       return Effect.gen(function* () {
         const task = yield* taskStore.getTask({
+          workspaceId: prepared.workspaceId,
           repoPath: prepared.canonicalRepoPath,
           taskId: prepared.task.id,
         });
@@ -271,6 +282,7 @@ export const createTaskSessionStartPreparationService = ({
         const decision = yield* requireTaskEvent(workflow, startEvent, task);
         if (decision.kind === "transition") {
           yield* applyStartEvent({
+            workspaceId: prepared.workspaceId,
             repoPath: prepared.canonicalRepoPath,
             taskId: task.id,
             eventId: startEvent,

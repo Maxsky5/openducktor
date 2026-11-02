@@ -24,7 +24,14 @@ describe("agent-orchestrator session transcript events", () => {
     };
 
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "planner",
+        },
+      }),
     ]);
 
     const updateSession = createSessionUpdater(sessionsRef);
@@ -589,7 +596,14 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
 
     await listenToAgentSessionEvents({

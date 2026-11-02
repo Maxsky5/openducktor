@@ -78,7 +78,7 @@ export type AgentSessionLiveStateService = {
   readonly retainOperation: (observation: SessionOperationObservation) => Effect.Effect<void>;
   readonly publishTaskSessionRecords: (
     ref: AgentSessionLiveRef,
-    records: TaskAgentSessions,
+    records: TaskAgentSessions & { workspaceId: string },
   ) => Effect.Effect<void, HostError>;
   /**
    * Keeps a failed launch in the live session snapshot until the next accepted message. The

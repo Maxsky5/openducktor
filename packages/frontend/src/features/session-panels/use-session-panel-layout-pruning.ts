@@ -40,7 +40,7 @@ export function useSessionPanelLayoutPruning(): void {
   );
   // The Kanban task list hides old closed tasks, so pruning reads the IDs of all tasks.
   const taskLists = useQueries({
-    queries: openWorkspaces.map(({ repoPath }) => repoTaskIdsQueryOptions(repoPath)),
+    queries: openWorkspaces.map((workspace) => repoTaskIdsQueryOptions(workspace)),
     combine: combineCurrentLists<string[]>,
   });
   // The archive display is capped, so it cannot establish which chats still exist.

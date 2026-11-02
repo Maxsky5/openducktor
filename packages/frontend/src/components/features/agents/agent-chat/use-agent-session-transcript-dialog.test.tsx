@@ -125,7 +125,12 @@ describe("AgentSessionTranscriptDialogHost", () => {
       const target = {
         ...transcriptTarget,
         runtimeKind,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } as const,
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        } as const,
       };
       const childSession = createAgentSessionFixture({
         externalSessionId: "session-child-1",
@@ -224,7 +229,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
         </ClientConnectionProvider>
       );
       queryClient.setQueryData(
-        taskWorktreeQueryOptions({ repoPath: "/repo-a", taskId: "task-1" }).queryKey,
+        taskWorktreeQueryOptions({
+          workspaceId: "workspace-1",
+          repoPath: "/repo-a",
+          taskId: "task-1",
+        }).queryKey,
         () => ({ workingDirectory: "/repo-a/task-worktree" }),
       );
       const workerSpy = spyOn(diffWorkers, "DiffWorkerProvider").mockImplementation(
@@ -685,7 +694,12 @@ describe("AgentSessionTranscriptDialogHost", () => {
     const { AgentChatThread } = await import("./agent-chat-thread");
     let request: OpenAgentSessionTranscriptRequest | null = null;
     const plannerSession = buildSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "planner",
+      },
       runtimeKind: "opencode",
       workingDirectory: "/repo-a",
       messages: [
@@ -707,6 +721,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
     });
     const plannerTranscriptTarget = toAgentStudioTranscriptTarget({
       identity: plannerSession,
+      workspaceId: "workspace-1",
       taskId: "task-1",
       role: "planner",
     });
@@ -749,7 +764,12 @@ describe("AgentSessionTranscriptDialogHost", () => {
         externalSessionId: "session-child-planner-1",
         runtimeKind: "opencode",
         workingDirectory: "/repo-a",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "planner",
+        },
       },
       title: "Subagent activity",
       description: "View what this subagent did.",

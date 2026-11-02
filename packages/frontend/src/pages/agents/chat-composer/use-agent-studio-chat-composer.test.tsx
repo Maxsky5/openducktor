@@ -419,6 +419,7 @@ const createSelectedSessionSummary = ({
   selectedModel: AgentModelSelection;
 }): AgentSessionSummary => ({
   externalSessionId: "external-1",
+  workspaceId: "workspace-1",
   runtimeKind,
   workingDirectory: "/repo",
   taskId: "task-1",

@@ -1,8 +1,8 @@
 import {
   AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
   GITHUB_PROVIDER_DESCRIPTOR,
+  type WorkspaceRef,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
 import type { GitProviderService } from "../../application/git/git-provider-service";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import {
@@ -13,29 +13,29 @@ import {
   requireString,
 } from "./command-inputs";
 
-const parseRepoPath = (args: HostCommandArgs, command: string): string => {
+const parseWorkspace = (args: HostCommandArgs, command: string): WorkspaceRef => {
   const record = requireRecord(commandInputRecordSchema.safeParse(args), `${command} input`);
-  return requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath");
+  return {
+    workspaceId: requireString(
+      commandInputStringSchema.safeParse(record.workspaceId),
+      "workspaceId",
+    ),
+    repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
+  };
 };
 
 export const createGitProviderCommandHandlers = ({ service }: { service: GitProviderService }) =>
   ({
     workspace_detect_azure_devops_repository: (args) =>
       service.detectRepository({
-        repoPath: parseRepoPath(args, "workspace_detect_azure_devops_repository"),
+        ...parseWorkspace(args, "workspace_detect_azure_devops_repository"),
         providerId: AZURE_DEVOPS_PROVIDER_DESCRIPTOR.id,
       }),
     workspace_detect_github_repository: (args) =>
-      Effect.gen(function* () {
-        const repoPath = parseRepoPath(args, "workspace_detect_github_repository");
-        return yield* service.detectRepository({
-          repoPath,
-          providerId: GITHUB_PROVIDER_DESCRIPTOR.id,
-        });
+      service.detectRepository({
+        ...parseWorkspace(args, "workspace_detect_github_repository"),
+        providerId: GITHUB_PROVIDER_DESCRIPTOR.id,
       }),
     workspace_get_git_provider_context: (args) =>
-      Effect.gen(function* () {
-        const repoPath = parseRepoPath(args, "workspace_get_git_provider_context");
-        return yield* service.getContext(repoPath);
-      }),
+      service.getContext(parseWorkspace(args, "workspace_get_git_provider_context")),
   }) satisfies HostCommandHandlerDefinitions;

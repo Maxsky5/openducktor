@@ -22,7 +22,7 @@ const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 describe("createWorkspaceSettingsCommandHandlers", () => {
-  test("validates sidebar grouping before dispatch and returns the saved snapshot", async () => {
+  test("validates sidebar grouping before dispatch and returns the saved mode", async () => {
     const snapshot = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
@@ -34,7 +34,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     const service = createWorkspaceSettingsServiceTestDouble({
       updateSidebarSessionGrouping(grouping) {
         calls.push(grouping);
-        return Effect.succeed(snapshot);
+        return Effect.succeed(snapshot.appearance.sidebarSessionGrouping);
       },
     });
     const router = createHostCommandRouter({
@@ -45,7 +45,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     });
     expect(
       await router.invoke("workspace_update_sidebar_session_grouping", { grouping: "none" }),
-    ).toEqual(snapshot);
+    ).toEqual(snapshot.appearance.sidebarSessionGrouping);
     await expect(
       router.invoke("workspace_update_sidebar_session_grouping", { grouping: "role" }),
     ).rejects.toThrow(/expected one of/);
@@ -213,84 +213,6 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             }),
         });
       },
-      updateRepoConfig() {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push("updateRepoConfig");
-            return {
-              workspaceId: "repo",
-              workspaceName: "repo",
-              abbreviation: null,
-              tileColor: null,
-              repoPath: "/repo",
-              iconDataUrl: null,
-              isActive: true,
-              hasConfig: true,
-              configuredWorktreeBasePath: null,
-              defaultWorktreeBasePath: "/worktrees/repo",
-              effectiveWorktreeBasePath: "/worktrees/repo",
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      saveRepoSettings() {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push("saveRepoSettings");
-            return {
-              workspaceId: "repo",
-              workspaceName: "repo",
-              abbreviation: null,
-              tileColor: null,
-              repoPath: "/repo",
-              iconDataUrl: null,
-              isActive: true,
-              hasConfig: true,
-              configuredWorktreeBasePath: null,
-              defaultWorktreeBasePath: "/worktrees/repo",
-              effectiveWorktreeBasePath: "/worktrees/repo",
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateRepoHooks() {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push("updateRepoHooks");
-            return {
-              workspaceId: "repo",
-              workspaceName: "repo",
-              abbreviation: null,
-              tileColor: null,
-              repoPath: "/repo",
-              iconDataUrl: null,
-              isActive: true,
-              hasConfig: true,
-              configuredWorktreeBasePath: null,
-              defaultWorktreeBasePath: "/worktrees/repo",
-              effectiveWorktreeBasePath: "/worktrees/repo",
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       getSettingsSnapshot() {
         return Effect.sync(() => {
           calls.push("getSettingsSnapshot");
@@ -323,87 +245,18 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           };
         });
       },
-      updateAgentModelFavorites() {
-        return Effect.sync(() => {
-          calls.push("updateAgentModelFavorites");
-          return {
-            system: {},
-            customAgentRoles: [],
-            theme: "light",
-            git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
-            general: { openAgentStudioTabOnBackgroundSessionStart: true },
-            appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
-            chat: {
-              steerMessagesByDefault: false,
-              showThinkingMessages: false,
-              expandFileDiffsByDefault: false,
-              diffStyle: "split",
-              diffIndicators: "bars",
-              diffHeight: "full",
-              lineOverflow: "wrap",
-              hunkSeparators: "metadata",
-              showConversationMinimap: true,
-            },
-            reusablePrompts: [],
-            kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
-            autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-            notifications: createBuiltinNotificationSettings(),
-            agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-            agentModelFavorites: [
-              { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
-            ],
-            workspaces: {},
-            globalPromptOverrides: {},
-          };
-        });
+      updateAgentModelFavorites(favorites) {
+        calls.push("updateAgentModelFavorites");
+        return Effect.succeed(favorites);
       },
       updateKanbanTaskCardView(taskCardView) {
         calls.push("updateKanbanTaskCardView");
-        return Effect.succeed({
-          system: {},
-          customAgentRoles: [],
-          theme: "light",
-          git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
-          general: { openAgentStudioTabOnBackgroundSessionStart: true },
-          appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
-          chat: {
-            steerMessagesByDefault: false,
-            showThinkingMessages: false,
-            expandFileDiffsByDefault: false,
-            diffStyle: "split",
-            diffIndicators: "bars",
-            diffHeight: "full",
-            lineOverflow: "wrap",
-            hunkSeparators: "metadata",
-            showConversationMinimap: true,
-          },
-          reusablePrompts: [],
-          kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView },
-          autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-          notifications: createBuiltinNotificationSettings(),
-          agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-          agentModelFavorites: [],
-          workspaces: {},
-          globalPromptOverrides: {},
-        });
+        return Effect.succeed(taskCardView);
       },
       setTheme() {
         return Effect.tryPromise({
           try: async () => {
             calls.push("setTheme");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateGlobalGitConfig() {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push("updateGlobalGitConfig");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -420,7 +273,13 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
         Effect.sync(() => {
           calls.push("saveSettings");
           savedRuntimeInputs.push(input);
-          return { type: "saved" as const, workspaces: [], runtimeApplications: [] };
+          return {
+            type: "saved" as const,
+            shared: "saved" as const,
+            preferences: "saved" as const,
+            workspaces: [],
+            runtimeApplications: [],
+          };
         }),
     });
     const router = createHostCommandRouter({
@@ -484,24 +343,6 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(
       router.invoke("workspace_get_repo_config", { workspaceId: "repo" }),
     ).resolves.toMatchObject({ workspaceId: "repo" });
-    await expect(
-      router.invoke("workspace_update_repo_config", {
-        workspaceId: "repo",
-        config: { branchPrefix: "odt" },
-      }),
-    ).resolves.toMatchObject({ workspaceId: "repo" });
-    await expect(
-      router.invoke("workspace_save_repo_settings", {
-        workspaceId: "repo",
-        settings: { branchPrefix: "odt" },
-      }),
-    ).resolves.toMatchObject({ workspaceId: "repo" });
-    await expect(
-      router.invoke("workspace_update_repo_hooks", {
-        workspaceId: "repo",
-        hooks: { postComplete: [], extra: true },
-      }),
-    ).resolves.toMatchObject({ workspaceId: "repo" });
     await expect(router.invoke("workspace_get_settings_snapshot")).resolves.toMatchObject({
       system: {},
       theme: "light",
@@ -509,29 +350,26 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(
       router.invoke("workspace_save_settings_snapshot", {
         snapshot: {
-          system: {},
-          git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
-          general: { openAgentStudioTabOnBackgroundSessionStart: true },
-          appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
-          chat: { showThinkingMessages: false, extra: true },
-          reusablePrompts: [],
-          kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
-          autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-          notifications: createBuiltinNotificationSettings(),
-          agentRuntimes: {
-            opencode: { enabled: true, executablePath: "/bin/opencode" },
-            codex: { enabled: false, executablePath: "/bin/codex" },
+          global: {
+            chat: { showThinkingMessages: false },
+            agentRuntimes: {
+              opencode: { enabled: true, executablePath: "/bin/opencode" },
+              codex: { enabled: false, executablePath: "/bin/codex" },
+            },
           },
-          agentModelFavorites: [],
-          workspaces: {},
-          globalPromptOverrides: {},
         },
         runtimeConfirmation: "confirmation-1",
       }),
-    ).resolves.toEqual({ type: "saved", workspaces: [], runtimeApplications: [] });
+    ).resolves.toEqual({
+      type: "saved",
+      shared: "saved",
+      preferences: "saved",
+      workspaces: [],
+      runtimeApplications: [],
+    });
     expect(savedRuntimeInputs).toHaveLength(1);
     expect(savedRuntimeInputs[0]?.runtimeConfirmation).toBe("confirmation-1");
-    expect(savedRuntimeInputs[0]?.snapshot.agentRuntimes).toMatchObject({
+    expect(savedRuntimeInputs[0]?.snapshot.global?.agentRuntimes).toMatchObject({
       opencode: { enabled: true, executablePath: "/bin/opencode" },
       codex: { enabled: false, executablePath: "/bin/codex" },
     });
@@ -539,18 +377,11 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       router.invoke("workspace_update_agent_model_favorites", {
         favorites: [{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }],
       }),
-    ).resolves.toMatchObject({
-      agentModelFavorites: [{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }],
-    });
+    ).resolves.toEqual([{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }]);
     await expect(
       router.invoke("workspace_update_kanban_task_card_view", { taskCardView: "compact" }),
-    ).resolves.toMatchObject({ kanban: { taskCardView: "compact" } });
+    ).resolves.toBe("compact");
     await expect(router.invoke("set_theme", { theme: "dark" })).resolves.toBeUndefined();
-    await expect(
-      router.invoke("workspace_update_global_git_config", {
-        git: { defaultMergeMethod: "squash", extra: true },
-      }),
-    ).resolves.toBeUndefined();
     expect(calls).toEqual([
       "listWorkspaces",
       "addWorkspace",
@@ -560,15 +391,11 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       "replaceAgentStudioState",
       "applyAgentStudioStateAction",
       "getRepoConfig",
-      "updateRepoConfig",
-      "saveRepoSettings",
-      "updateRepoHooks",
       "getSettingsSnapshot",
       "saveSettings",
       "updateAgentModelFavorites",
       "updateKanbanTaskCardView",
       "setTheme",
-      "updateGlobalGitConfig",
     ]);
   });
   test("rejects malformed settings command arguments", async () => {
@@ -638,45 +465,6 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             }),
         });
       },
-      updateRepoConfig() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not call updateRepoConfig");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      saveRepoSettings() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not call saveRepoSettings");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateRepoHooks() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not call updateRepoHooks");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       getSettingsSnapshot() {
         return Effect.tryPromise({
           try: async () => {
@@ -703,19 +491,6 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             }),
         });
       },
-      updateGlobalGitConfig() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not call updateGlobalGitConfig");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
     });
     const router = createHostCommandRouter({
       handlers: createWorkspaceSettingsCommandHandlers(
@@ -731,29 +506,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     );
     await expect(
       router.invoke("workspace_save_settings_snapshot", {
-        snapshot: {
-          system: {},
-          git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
-          general: { openAgentStudioTabOnBackgroundSessionStart: true },
-          appearance: { horizontalScrollbarVisibility: "auto" },
-          chat: {
-            steerMessagesByDefault: false,
-            showThinkingMessages: false,
-            expandFileDiffsByDefault: false,
-            diffStyle: "split",
-            diffIndicators: "bars",
-            diffHeight: "full",
-            lineOverflow: "wrap",
-            hunkSeparators: "metadata",
-          },
-          reusablePrompts: [],
-          kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
-          autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-          agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-          agentModelFavorites: [],
-          workspaces: {},
-          globalPromptOverrides: {},
-        },
+        snapshot: { global: { appearance: { horizontalScrollbarVisibility: "auto" } } },
       }),
     ).rejects.toThrow(
       /appearance\.horizontalScrollbarVisibility: Invalid option.*\(found "auto"\)/,
@@ -793,22 +546,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
 
   test("previews runtime impact and validates the save confirmation", async () => {
     const snapshot = {
-      system: {},
-      git: { defaultMergeMethod: "merge_commit", removeWorktreeOnClose: true },
-      general: { openAgentStudioTabOnBackgroundSessionStart: true },
-      appearance: { horizontalScrollbarVisibility: "system" },
-      chat: { showThinkingMessages: false },
-      reusablePrompts: [],
-      kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
-      autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-      notifications: createBuiltinNotificationSettings(),
-      agentRuntimes: {
-        opencode: { enabled: false, executablePath: "/bin/opencode" },
-        codex: { enabled: false, executablePath: "/bin/codex" },
-      },
-      agentModelFavorites: [],
-      workspaces: {},
-      globalPromptOverrides: {},
+      global: { agentRuntimes: { opencode: { enabled: false, executablePath: "/bin/opencode" } } },
     };
     const impact = {
       kinds: [
@@ -840,7 +578,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       router.invoke("workspace_preview_settings_snapshot_runtime", { snapshot }),
     ).resolves.toEqual({ impact });
     expect(previewed).toHaveLength(1);
-    expect(previewed[0]?.agentRuntimes.opencode).toMatchObject({
+    expect(previewed[0]?.global?.agentRuntimes?.opencode).toMatchObject({
       enabled: false,
       executablePath: "/bin/opencode",
     });

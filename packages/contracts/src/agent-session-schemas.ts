@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { repoRuntimeRefSchema, runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
+import { workspaceIdSchema } from "./workspace-id-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
@@ -24,6 +25,7 @@ export type AgentSessionForkPoint = z.infer<typeof agentSessionForkPointSchema>;
 export const agentSessionWorkflowScopeSchema = z
   .object({
     kind: z.literal("workflow"),
+    workspaceId: workspaceIdSchema,
     taskId: nonEmptyStringSchema,
     role: agentRoleSchema,
   })
@@ -33,6 +35,7 @@ export type AgentSessionWorkflowScope = z.infer<typeof agentSessionWorkflowScope
 export const agentSessionRepositoryScopeSchema = z
   .object({
     kind: z.literal("repository"),
+    workspaceId: workspaceIdSchema.optional(),
     /**
      * Workspace Session title for the runtime session.
      * When absent, the runtime session keeps its current title.

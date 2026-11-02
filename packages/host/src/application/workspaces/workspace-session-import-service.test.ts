@@ -6,6 +6,7 @@ import {
   type WorkspaceRecord,
   type WorkspaceSessionExternal,
 } from "@openducktor/contracts";
+import { workspaceSessionCatalog } from "../../test-support/workspace-session-ownership";
 import type { RuntimeSessionOwner } from "../../ports/workspace-session-store-port";
 import { Deferred, Effect, Fiber } from "effect";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
@@ -118,13 +119,24 @@ const setup = async () => {
   const service = createWorkspaceSessionImportService({
     store: {
       ...store,
-      listRuntimeOwners: (input) =>
-        input.workspaceId === "fairnest"
-          ? store.listRuntimeOwners(input)
-          : Effect.sync(() => {
-              calls.push(`owners:${input.workspaceId}`);
-              return state.otherOwners;
-            }),
+      // The database has no "other" workspace, so the double adds its owners to the one read.
+      listRuntimeOwners: ({ ownershipScope, ...input }) =>
+        store.listRuntimeOwners(input).pipe(
+          Effect.map((owners) => {
+            if (!ownershipScope?.workspaces.some(({ workspaceId }) => workspaceId === "other"))
+              return owners;
+            calls.push("owners:other");
+            const other = state.otherOwners
+              .filter(
+                (owner) =>
+                  input.filter === undefined ||
+                  (owner.runtimeKind === input.filter.runtimeKind &&
+                    input.filter.externalSessionIds.includes(owner.externalSessionId)),
+              )
+              .map((owner) => ({ ...owner, workspaceId: "other" }));
+            return [...owners, ...other];
+          }),
+        ),
       importSession: (input) =>
         Effect.suspend(() => {
           calls.push("save");
@@ -147,7 +159,7 @@ const setup = async () => {
         ),
       getWorkspaceCatalog: () =>
         Effect.sync(() => ({
-          openWorkspaces: [],
+          ...workspaceSessionCatalog({ workspaceId: "fairnest", repoPath: "/repo" }),
           closedWorkspaces: state.otherWorkspaces,
           incompleteRemovals: [],
         })),

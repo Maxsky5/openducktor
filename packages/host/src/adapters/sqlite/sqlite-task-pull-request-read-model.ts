@@ -1,71 +1,42 @@
 import { pullRequestSchema } from "@openducktor/contracts";
-import { and, asc, desc, isNotNull, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, notInArray } from "drizzle-orm";
 import { Effect } from "effect";
-import type { PullRequestSyncCandidate } from "../../ports/task-repository-ports";
-import { decodeWithSchema, parseJsonColumnValue } from "./sqlite-json-codecs";
-import {
-  SqliteTaskStoreDataError,
-  type SqliteTaskStoreReadError,
-} from "./sqlite-task-store-errors";
-import { type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
-
-const parsePullRequestJson = (
-  taskId: string,
-  value: string | null,
-): Effect.Effect<PullRequestSyncCandidate["pullRequest"], SqliteTaskStoreReadError> =>
-  Effect.gen(function* () {
-    if (value === null) {
-      return yield* new SqliteTaskStoreDataError({
-        message: "SQLite pull_request_json must be present for pull request sync candidates.",
-        field: "pull_request_json",
-        details: { taskId },
-      });
-    }
-    const raw = yield* parseJsonColumnValue(value, null, "pull_request_json", taskId);
-    return yield* decodeWithSchema(pullRequestSchema, raw, "pull_request_json", { taskId });
-  });
-
-const isSyncablePullRequestState = (
-  state: PullRequestSyncCandidate["pullRequest"]["state"],
-): boolean => state === "open" || state === "draft";
-
-const isCandidate = (
-  candidate: PullRequestSyncCandidate | null,
-): candidate is PullRequestSyncCandidate => candidate !== null;
+import { pullRequestFromRow } from "./sqlite-task-delivery-rows";
+import { validateWithSchema } from "./sqlite-task-store-validation";
+import { taskPullRequests, tasks, type HostDatabaseSession } from "./sqlite-host-database-schema";
 
 export const listPullRequestSyncCandidatesInDatabase = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   terminalStates: readonly string[],
-): Effect.Effect<PullRequestSyncCandidate[], SqliteTaskStoreReadError> =>
+) =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
-      (database) =>
-        database
-          .select({
-            id: tasks.id,
-            pullRequestJson: tasks.pullRequestJson,
-            status: tasks.status,
-          })
+      (db) =>
+        db
+          .select({ task: { id: tasks.id, status: tasks.status }, pullRequest: taskPullRequests })
           .from(tasks)
+          .innerJoin(
+            taskPullRequests,
+            and(
+              eq(taskPullRequests.workspaceId, tasks.workspaceId),
+              eq(taskPullRequests.taskId, tasks.id),
+            ),
+          )
           .where(
-            and(notInArray(tasks.status, [...terminalStates]), isNotNull(tasks.pullRequestJson)),
+            and(
+              eq(tasks.workspaceId, workspaceId),
+              notInArray(tasks.status, [...terminalStates]),
+              inArray(taskPullRequests.state, ["open", "draft"]),
+            ),
           )
           .orderBy(desc(tasks.updatedAt), asc(tasks.id)),
       "sqliteTaskStore.listPullRequestSyncCandidates.selectTasks",
     );
-
-    const candidates = yield* Effect.forEach(rows, (row) =>
-      Effect.gen(function* () {
-        const pullRequest = yield* parsePullRequestJson(row.id, row.pullRequestJson);
-        if (!isSyncablePullRequestState(pullRequest.state)) {
-          return null;
-        }
-        return {
-          id: row.id,
-          pullRequest,
-          status: row.status,
-        };
-      }),
+    return yield* Effect.forEach(rows, ({ task, pullRequest }) =>
+      validateWithSchema(pullRequestSchema, pullRequestFromRow(pullRequest), "pull request", {
+        workspaceId,
+        taskId: task.id,
+      }).pipe(Effect.map((record) => ({ id: task.id, status: task.status, pullRequest: record }))),
     );
-    return candidates.filter(isCandidate);
   });

@@ -43,7 +43,11 @@ export const createLiveWorkflowObservations = () => {
         );
       } else {
         const observation = envelope.observation;
-        const key = `${observation.repoPath}\u0000${observation.taskId}`;
+        const key = JSON.stringify([
+          observation.workspaceId,
+          observation.repoPath,
+          observation.taskId,
+        ]);
         if (
           observation.phase === "settled" &&
           !observation.failure &&

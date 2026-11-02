@@ -147,7 +147,7 @@ export function PullRequestSyncDialog({
 function useSyncChecks(open: boolean, workspaces: readonly WorkspaceScopeTarget[]) {
   const queries = useQueries({
     queries: workspaces.map((workspace) => ({
-      ...repositoryGitProviderContextQueryOptions(workspace.repoPath),
+      ...repositoryGitProviderContextQueryOptions(workspace),
       enabled: open,
     })),
   });

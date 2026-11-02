@@ -22,7 +22,7 @@ const recordFixture: AgentSessionRecord = {
 };
 
 const loadRecordFixture = (record: AgentSessionRecord = recordFixture): AgentSessionState =>
-  fromPersistedSessionRecord({ taskId: "task-1", record });
+  fromPersistedSessionRecord({ workspaceId: "workspace-1", taskId: "task-1", record });
 
 describe("agent-orchestrator/support/persistence", () => {
   test("loads persisted sessions as idle until runtime state is read", () => {
@@ -146,6 +146,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
     expect(() =>
       fromPersistedSessionRecord({
+        workspaceId: "workspace-1",
         taskId: "task-1",
         // @ts-expect-error -- This case verifies runtime rejection of a record without runtimeKind.
         record: invalidRecord,
@@ -165,6 +166,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
     expect(() =>
       fromPersistedSessionRecord({
+        workspaceId: "workspace-1",
         taskId: "task-1",
         record: invalidRecord,
       }),
@@ -184,6 +186,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
     expect(() =>
       fromPersistedSessionRecord({
+        workspaceId: "workspace-1",
         taskId: "task-1",
         record: invalidRecord,
       }),

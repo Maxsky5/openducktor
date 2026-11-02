@@ -54,6 +54,7 @@ type OdtMcpTaskService = Pick<
   | "findTask"
   | "listTaskReferences"
   | "linkPullRequest"
+  | "searchTasks"
   | "listTasks"
   | "updateTask"
   | "workflowArtifactSave"
@@ -82,15 +83,17 @@ export const createOdtMcpToolContext = ({
   taskService,
   workspaceSettingsService,
 }: CreateOdtMcpToolContextInput) => {
-  const repoPathForWorkspace = (workspaceId: string) =>
+  const workspaceScopeForWorkspace = (workspaceId: string) =>
     Effect.gen(function* () {
       const repoConfig = yield* workspaceSettingsService.getRepoConfig(workspaceId);
-      return repoConfig.repoPath;
+      return { workspaceId: repoConfig.workspaceId, repoPath: repoConfig.repoPath };
     });
+  const repoPathForWorkspace = (workspaceId: string) =>
+    workspaceScopeForWorkspace(workspaceId).pipe(Effect.map(({ repoPath }) => repoPath));
   const tasksForWorkspace = (workspaceId: string) =>
     Effect.gen(function* () {
-      const repoPath = yield* repoPathForWorkspace(workspaceId);
-      return yield* taskService.listTasks({ repoPath });
+      const scope = yield* workspaceScopeForWorkspace(workspaceId);
+      return yield* taskService.listTasks(scope);
     });
   const resolveTask = <Task extends TaskReference>(tasks: readonly Task[], taskId: string) =>
     Effect.try({
@@ -99,13 +102,13 @@ export const createOdtMcpToolContext = ({
     });
   const taskScopeForWorkspace = (workspaceId: string, taskId: string) =>
     Effect.gen(function* () {
-      const repoPath = yield* repoPathForWorkspace(workspaceId);
-      const exactTask = yield* taskService.findTask({ repoPath, taskId: taskId.trim() });
-      if (exactTask !== null) return { repoPath, task: exactTask };
-      const candidates = yield* taskService.listTaskReferences({ repoPath });
+      const scope = yield* workspaceScopeForWorkspace(workspaceId);
+      const exactTask = yield* taskService.findTask({ ...scope, taskId: taskId.trim() });
+      if (exactTask !== null) return { ...scope, task: exactTask };
+      const candidates = yield* taskService.listTaskReferences(scope);
       const reference = yield* resolveTask(candidates, taskId);
-      const task = yield* taskService.findTask({ repoPath, taskId: reference.id });
-      if (task !== null) return { repoPath, task };
+      const task = yield* taskService.findTask({ ...scope, taskId: reference.id });
+      if (task !== null) return { ...scope, task };
       return yield* taskReferenceError(taskNotFoundError(taskId));
     });
   const taskForWorkspace = (workspaceId: string, taskId: string) =>
@@ -119,6 +122,7 @@ export const createOdtMcpToolContext = ({
     taskAssetReadService,
     taskService,
     workspaceSettingsService,
+    workspaceScopeForWorkspace,
     repoPathForWorkspace,
     tasksForWorkspace,
     taskForWorkspace,

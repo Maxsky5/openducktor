@@ -77,7 +77,14 @@ const collectRemovedWorktreePaths = (
     const paths = yield* Effect.forEach(
       targets.filter(({ task, workflow }) => !workflow.isTerminalState(task.status)),
       ({ task, sessions, workflow }) =>
-        collectCloseWorktreePaths(closeDependencies, repoPath, workflow, task, sessions),
+        collectCloseWorktreePaths(
+          closeDependencies,
+          repoPath,
+          workflow,
+          task,
+          sessions,
+          repoConfig.workspaceId,
+        ),
     );
     return paths.flat();
   });

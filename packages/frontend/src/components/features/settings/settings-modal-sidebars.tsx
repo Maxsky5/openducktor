@@ -1,7 +1,7 @@
-import type { WorkspaceRecord } from "@openducktor/contracts";
 import { CircleAlert } from "lucide-react";
 import type { ReactElement } from "react";
 import { RepositorySelector } from "@/components/features/repository/repository-selector";
+import type { RepositorySelectorWorkspace } from "@/components/features/repository/repository-selector-model";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
@@ -60,7 +60,7 @@ export function SettingsSidebar({
 }
 
 type RepositorySidebarProps = {
-  workspaces: WorkspaceRecord[];
+  workspaces: RepositorySelectorWorkspace[];
   selectedWorkspaceId: string | null;
   selectedRepositorySection: RepositorySectionId;
   disabled: boolean;

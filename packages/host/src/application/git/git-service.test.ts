@@ -1,3 +1,4 @@
+import { withSettingsConfigMutationTestMethods } from "../../test-support/settings-config-mutations";
 import type {
   CommitsAheadBehind,
   GitFileDiff,
@@ -525,62 +526,69 @@ const createFakeGitPort = ({
     },
   }) satisfies GitPort;
 const createFakeSettingsConfig = (
-  config: GlobalConfig | null,
+  config: GlobalConfig,
   existingPaths?: Set<string>,
-): SettingsConfigPort => ({
-  readConfig() {
-    return Effect.tryPromise({
-      try: async () => {
-        return config;
-      },
-      catch: (cause) =>
-        new HostOperationError({
-          operation: "test.effect",
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause: cause,
-        }),
-    });
-  },
-  writeConfig() {
-    return Effect.tryPromise({
-      try: async () => {},
-      catch: (cause) =>
-        new HostOperationError({
-          operation: "test.effect",
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause: cause,
-        }),
-    });
-  },
-  defaultWorktreeBasePath(workspaceId) {
-    return `/managed/${workspaceId}`;
-  },
-  defaultRepoWorktreeBasePath(repoPath) {
-    return `/managed/${repoPath.split("/").at(-1) ?? "repo"}`;
-  },
-  resolveConfiguredPath(rawPath) {
-    return rawPath === "~/worktrees" ? "/home/user/worktrees" : rawPath;
-  },
-  canonicalizePath(path) {
-    return Effect.tryPromise({
-      try: async () => {
-        return path;
-      },
-      catch: (cause) =>
-        new HostOperationError({
-          operation: "test.effect",
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause: cause,
-        }),
-    });
-  },
-  pathExists(path) {
-    return Effect.succeed(existingPaths === undefined || existingPaths.has(path));
-  },
-  join(...paths) {
-    return paths.join("/");
-  },
-});
+): SettingsConfigPort =>
+  withSettingsConfigMutationTestMethods({
+    readConfig() {
+      return Effect.tryPromise({
+        try: async () => {
+          return config;
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    updateConfig(change) {
+      return Effect.tryPromise({
+        try: async () => {
+          config = change(
+            structuredClone(config),
+            Object.values(structuredClone(config).workspaces),
+          );
+          return config;
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    defaultWorktreeBasePath(workspaceId) {
+      return `/managed/${workspaceId}`;
+    },
+    defaultRepoWorktreeBasePath(repoPath) {
+      return `/managed/${repoPath.split("/").at(-1) ?? "repo"}`;
+    },
+    resolveConfiguredPath(rawPath) {
+      return rawPath === "~/worktrees" ? "/home/user/worktrees" : rawPath;
+    },
+    canonicalizePath(path) {
+      return Effect.tryPromise({
+        try: async () => {
+          return path;
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
+    pathExists(path) {
+      return Effect.succeed(existingPaths === undefined || existingPaths.has(path));
+    },
+    join(...paths) {
+      return paths.join("/");
+    },
+  });
 const createFakeWorktreeFiles = (calls: string[] = []): WorktreeFilePort => ({
   prepareWorktreeAliasRemoval: () => Effect.die(new Error("Unexpected alias removal")),
   resolveWorktreeRemovalPath: () => Effect.die(new Error("Unexpected removal path resolution")),
@@ -1296,7 +1304,7 @@ describe("createGitService", () => {
         gitRepositories: ["/canonical/repo"],
         calls,
       }),
-      settingsConfig: createFakeSettingsConfig(null),
+      settingsConfig: createFakeSettingsConfig(globalConfigSchema.parse({ version: 4 })),
       worktreeFiles: createFakeWorktreeFiles(calls),
     });
     const error = await Effect.runPromise(
@@ -1311,7 +1319,7 @@ describe("createGitService", () => {
     );
     expect(error).toBeInstanceOf(HostValidationError);
     expect(error.message).toBe(
-      "No OpenDucktor workspace config is available for git worktree mutation.",
+      "Repository is not registered in OpenDucktor settings: /canonical/repo",
     );
     expect(calls).toEqual([]);
   });

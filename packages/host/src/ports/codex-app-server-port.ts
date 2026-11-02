@@ -1,4 +1,4 @@
-import { Context, type Effect } from "effect";
+import type { Effect } from "effect";
 import type { CodexAppServerRuntimeStreamEvent } from "@openducktor/contracts";
 import {
   HostOperationError,
@@ -80,8 +80,3 @@ export type CodexAppServerPort = {
   ): Effect.Effect<CodexAppServerThreadListResponse, CodexAppServerError>;
   respond(input: CodexAppServerRespondInput): Effect.Effect<void, CodexAppServerError>;
 };
-
-export class CodexAppServerPortTag extends Context.Service<
-  CodexAppServerPortTag,
-  CodexAppServerPort
->()("@openducktor/host/CodexAppServerPort") {}

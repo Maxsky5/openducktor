@@ -18,15 +18,17 @@ export function useKanbanTaskCardView(): KanbanTaskCardViewState {
   const hostClient = useHostClient();
   const settingsOptions = settingsSnapshotQueryOptions();
   const settingsQuery = useQuery(settingsOptions);
-  const mutation = useMutation<SettingsSnapshot, Error, KanbanTaskCardView>({
+  const mutation = useMutation<KanbanTaskCardView, Error, KanbanTaskCardView>({
     mutationKey: KANBAN_TASK_CARD_VIEW_MUTATION_KEY,
     scope: { id: KANBAN_TASK_CARD_VIEW_MUTATION_KEY[1] },
     mutationFn: (taskCardView) => hostClient.workspaceUpdateKanbanTaskCardView(taskCardView),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: settingsOptions.queryKey });
     },
-    onSuccess: (snapshot) => {
-      queryClient.setQueryData(settingsOptions.queryKey, snapshot);
+    onSuccess: (taskCardView) => {
+      queryClient.setQueryData<SettingsSnapshot>(settingsOptions.queryKey, (current) =>
+        current ? { ...current, kanban: { ...current.kanban, taskCardView } } : current,
+      );
     },
     onError: (error) => {
       toast.error("Failed to save task card view", { description: errorMessage(error) });

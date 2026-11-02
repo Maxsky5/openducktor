@@ -1,3 +1,4 @@
+import { createTaskSyncService } from "./sync/task-sync-service";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import {
@@ -5,12 +6,16 @@ import {
   type ExternalTaskSyncEvent,
   workflowArtifactId,
 } from "@openducktor/contracts";
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, Result } from "effect";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createDefaultGlobalConfig } from "../../config/global-config";
-import { createTaskServiceWithMutationProgress } from "./task-service";
+import { createTaskEventStream } from "../../events/task-event-stream";
+import {
+  createTaskServiceWithMutationProgress,
+  type TaskServiceWithMutationProgress,
+} from "./task-service";
 import { createEventPublishingTaskService } from "./event-publishing-task-service";
-import { createTaskSyncServiceForTest } from "./sync/task-sync-service.test-support";
+import { noMergeDetection, syncWorkspace } from "./sync/task-sync-service.test-support";
 import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
 
 const run = Effect.runPromise;
@@ -24,17 +29,55 @@ const setup = async () => {
   const harness = await createSqliteTaskStoreHarness();
   const task = await run(
     harness.store.createTask({
-      repoPath: harness.repoPath,
+      ...harness.scope,
       status: "open",
       task: { title: "Artifacts", issueType: "task", priority: 2 },
     }),
   );
-  const scope = { repoPath: harness.repoPath, taskId: task.id };
+  const scope = { ...harness.scope, taskId: task.id };
   const base = createTaskServiceWithMutationProgress({
     taskWorkflows: builtinTaskWorkflows,
     taskStore: harness.store,
   });
-  return { ...harness, scope, base };
+  const attachSync = (
+    taskService: TaskServiceWithMutationProgress,
+    events: ExternalTaskSyncEvent[],
+  ) => {
+    const stream = createTaskEventStream({ reporter: { report: () => {} } });
+    const sync = createTaskSyncService({
+      taskService,
+      mergeDetection: noMergeDetection,
+      taskEventStream: {
+        ...stream,
+        publish: (event) => {
+          events.push(event);
+          return stream.publish(event);
+        },
+      },
+      settingsConfig: {
+        readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()),
+      },
+      workspaceSettingsService: {
+        listWorkspaces: () => Effect.succeed([]),
+        getWorkspaceCatalog: () =>
+          Effect.succeed({
+            catalogRevision: 0,
+            openWorkspaces: [syncWorkspace(harness.repoPath, harness.workspaceId)],
+            closedWorkspaces: [],
+            incompleteRemovals: [],
+          }),
+      },
+      publicationReporter: { report: () => Effect.void },
+      onBackgroundFailure: () => Effect.void,
+    });
+    return sync;
+  };
+  return {
+    ...harness,
+    scope,
+    base,
+    attachSync,
+  };
 };
 
 describe("task artifact service", () => {
@@ -46,7 +89,12 @@ describe("task artifact service", () => {
       const release = Deferred.makeUnsafe<void>();
       let pending: ReturnType<typeof run> | undefined;
       try {
-        await run(h.store.transitionTask({ ...h.scope, status: "ai_review" }));
+        await run(
+          h.store.transitionTask({
+            ...h.scope,
+            decide: () => Result.succeed({ status: "ai_review", workflowId: "openducktor" }),
+          }),
+        );
         const base = createTaskServiceWithMutationProgress({
           taskWorkflows: builtinTaskWorkflows,
           taskStore: {
@@ -64,11 +112,7 @@ describe("task artifact service", () => {
         const service = createEventPublishingTaskService({
           taskWorkflows: builtinTaskWorkflows,
           taskService: base,
-          taskSyncService: createTaskSyncServiceForTest({
-            taskService: base,
-            workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
-            eventBus: { publish: (event) => events.push(event) },
-          }),
+          taskSyncService: h.attachSync(base, events),
         });
         const first = run(
           service.workflowArtifactSave({
@@ -85,12 +129,12 @@ describe("task artifact service", () => {
         await run(Deferred.await(saved));
         const newer = await run(
           h.store.saveWorkflowArtifact({
+            decide: () => Result.succeed({ status: "human_review", workflowId: "openducktor" }),
             sourceTool: "workflow_artifact_save",
             updatedBy: "user",
             ...h.scope,
             markdown: "Later review",
             verdict: "approved",
-            status: "human_review",
             code: "qaReport",
           }),
         );
@@ -115,40 +159,8 @@ describe("task artifact service", () => {
     },
   );
 
-  test("keeps JSON chunks on UTF-8 boundaries for text presentation", async () => {
-    const h = await setup();
-    try {
-      const { artifact } = await run(
-        h.base.createTaskArtifact({
-          ...h.scope,
-          ...file('"ab€"'),
-          mediaType: "application/json",
-          fileName: "output.json",
-        }),
-      );
-      const ref = { ...h.scope, artifactId: artifact.artifactId };
-      const first = await run(h.base.readTaskArtifact({ ...ref, maxBytes: 4 }));
-      expect(Buffer.from(first.dataBase64, "base64").toString()).toBe('"ab');
-      expect(first.nextByteOffset).toBe(3);
-      const last = await run(
-        h.base.readTaskArtifact({ ...ref, byteOffset: 3, expectedVersion: first.version }),
-      );
-      expect(Buffer.from(last.dataBase64, "base64").toString()).toBe('€"');
-      expect(last.nextByteOffset).toBeNull();
-      expect(
-        await run(
-          Effect.flip(
-            h.base.readTaskArtifact({ ...ref, byteOffset: 4, expectedVersion: first.version }),
-          ),
-        ),
-      ).toMatchObject({ field: "byteOffset" });
-    } finally {
-      await h.cleanup();
-    }
-  });
-
-  test.each(["text/plain", "image/svg+xml"])(
-    "reads exact %s UTF-8 chunks and rejects invalid continuations",
+  test.each(["text/plain", "application/json", "image/svg+xml", "application/octet-stream"])(
+    "reads complete %s content and current metadata",
     async (mediaType) => {
       const h = await setup();
       try {
@@ -157,55 +169,14 @@ describe("task artifact service", () => {
           h.base.createTaskArtifact({ ...h.scope, ...file(original), mediaType }),
         );
         const ref = { ...h.scope, artifactId: artifact.artifactId };
-        const first = await run(h.base.readTaskArtifact({ ...ref, maxBytes: 6 }));
-        expect(Buffer.from(first.dataBase64, "base64")).toEqual(Buffer.from("\ufeffa"));
-        const chunks = [Buffer.from(first.dataBase64, "base64")];
-        let offset = first.nextByteOffset;
-        while (offset !== null) {
-          const chunk = await run(
-            h.base.readTaskArtifact({
-              ...ref,
-              maxBytes: 4,
-              byteOffset: offset,
-              expectedVersion: first.version,
-            }),
-          );
-          chunks.push(Buffer.from(chunk.dataBase64, "base64"));
-          offset = chunk.nextByteOffset;
-        }
-        expect(Buffer.concat(chunks)).toEqual(Buffer.from(original));
-        expect(
-          await run(
-            Effect.flip(
-              h.base.readTaskArtifact({ ...ref, byteOffset: 1, expectedVersion: first.version }),
-            ),
-          ),
-        ).toMatchObject({ field: "byteOffset" });
-        expect(
-          await run(Effect.flip(h.base.readTaskArtifact({ ...ref, byteOffset: 4 }))),
-        ).toMatchObject({ field: "artifact" });
+        const read = await run(h.base.readTaskArtifact(ref));
+        expect(Buffer.from(read.dataBase64, "base64")).toEqual(Buffer.from(original));
         await run(h.base.renameTaskArtifact({ ...ref, name: "Renamed" }));
+        expect((await run(h.base.readTaskArtifact(ref))).artifact.name).toBe("Renamed");
+        await run(h.base.replaceTaskArtifact({ ...ref, ...file("replacement") }));
         expect(
-          await run(
-            Effect.flip(
-              h.base.readTaskArtifact({ ...ref, byteOffset: 4, expectedVersion: first.version }),
-            ),
-          ),
-        ).toMatchObject({ field: "expectedVersion" });
-        const renamed = await run(h.base.readTaskArtifact(ref));
-        await run(
-          h.base.replaceTaskArtifact({
-            ...ref,
-            fileName: "next.txt",
-            mediaType: "text/plain",
-            dataBase64: Buffer.from("replacement").toString("base64"),
-          }),
-        );
-        expect(
-          await run(
-            Effect.flip(h.base.readTaskArtifact({ ...ref, expectedVersion: renamed.version })),
-          ),
-        ).toMatchObject({ field: "expectedVersion" });
+          Buffer.from((await run(h.base.readTaskArtifact(ref))).dataBase64, "base64").toString(),
+        ).toBe("replacement");
         await run(h.base.deleteTaskArtifact(ref));
         expect(await run(Effect.flip(h.base.readTaskArtifact(ref)))).toMatchObject({
           field: "artifactId",
@@ -216,7 +187,7 @@ describe("task artifact service", () => {
     },
   );
 
-  test("keeps exact invalid text and empty files readable", async () => {
+  test("keeps complete invalid text and empty files readable", async () => {
     const h = await setup();
     try {
       const bytes = Buffer.from([0x61, 0x62, 0x63, 0xc3, 0xa9, 0xff]);
@@ -228,25 +199,13 @@ describe("task artifact service", () => {
         }),
       );
       const read = await run(
-        h.base.readTaskArtifact({ ...h.scope, artifactId: artifact.artifactId, maxBytes: 4 }),
+        h.base.readTaskArtifact({ ...h.scope, artifactId: artifact.artifactId }),
       );
-      expect(Buffer.from(read.dataBase64, "base64")).toEqual(bytes.subarray(0, 4));
-      expect(read.nextByteOffset).toBe(4);
-      const remaining = await run(
-        h.base.readTaskArtifact({
-          ...h.scope,
-          artifactId: artifact.artifactId,
-          byteOffset: 4,
-          expectedVersion: read.version,
-          maxBytes: 4,
-        }),
-      );
-      expect(Buffer.from(remaining.dataBase64, "base64")).toEqual(bytes.subarray(4));
-      expect(remaining.nextByteOffset).toBeNull();
+      expect(Buffer.from(read.dataBase64, "base64")).toEqual(bytes);
       const empty = await run(h.base.createTaskArtifact({ ...h.scope, ...file("") }));
       expect(
         await run(h.base.readTaskArtifact({ ...h.scope, artifactId: empty.artifact.artifactId })),
-      ).toMatchObject({ dataBase64: "", totalBytes: 0, nextByteOffset: null });
+      ).toMatchObject({ dataBase64: "" });
     } finally {
       await h.cleanup();
     }
@@ -256,16 +215,7 @@ describe("task artifact service", () => {
     const h = await setup();
     try {
       const events: ExternalTaskSyncEvent[] = [];
-      const sync = createTaskSyncServiceForTest({
-        taskService: h.base,
-        workspaceSettingsService: {
-          listWorkspaces: () => Effect.succeed([]),
-          getWorkspaceCatalog: () =>
-            Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
-          getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
-        },
-        eventBus: { publish: (event) => events.push(event) },
-      });
+      const sync = h.attachSync(h.base, events);
       const service = createEventPublishingTaskService({
         taskWorkflows: builtinTaskWorkflows,
         taskService: h.base,
@@ -360,6 +310,8 @@ describe("task artifact service", () => {
       expect(Buffer.from(current.dataBase64, "base64")).toEqual(content);
       await run(
         h.store.saveWorkflowArtifact({
+          decide: (current) =>
+            Result.succeed({ status: current.status, workflowId: "openducktor" }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...h.scope,

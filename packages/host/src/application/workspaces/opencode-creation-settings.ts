@@ -3,13 +3,12 @@ import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { OpenCodeCreationSettingsPort } from "../../ports/opencode-creation-settings-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import { loadGlobalConfig } from "./workspace-settings-model";
 
 export const createOpenCodeCreationSettings = (
   config: SettingsConfigPort,
 ): OpenCodeCreationSettingsPort => ({
   resolve: (scope: AgentSessionScope) =>
-    loadGlobalConfig(config).pipe(
+    config.readGlobalConfig().pipe(
       Effect.mapError(
         (cause) =>
           new HostOperationError({

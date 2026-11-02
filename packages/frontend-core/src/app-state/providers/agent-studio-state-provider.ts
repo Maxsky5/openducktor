@@ -170,10 +170,7 @@ function WorkspaceSessionController({
   dependencies,
 }: WorkspaceControllerProps): null {
   const { refreshTaskData } = useTaskControlContext();
-  const taskQuery = useQuery(
-    repoTaskDataQueryOptions(workspace.repoPath),
-    dependencies.queryClient,
-  );
+  const taskQuery = useQuery(repoTaskDataQueryOptions(workspace), dependencies.queryClient);
   const [sessionStore] = useState(() =>
     createAgentSessionsStore(
       workspace.repoPath,

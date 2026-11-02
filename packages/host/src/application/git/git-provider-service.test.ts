@@ -88,8 +88,8 @@ describe("GitProviderService", () => {
     const service = createGitProviderService({
       resolver,
       workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
-        getRepoConfigByRepoPath: (repoPath) => {
-          calls.push(`settings:${repoPath}`);
+        getRepoConfig: (workspaceId) => {
+          calls.push(`settings:${workspaceId}`);
           const repoConfig = repoConfigs.shift();
           return repoConfig
             ? Effect.succeed(repoConfig)
@@ -99,13 +99,17 @@ describe("GitProviderService", () => {
     });
 
     await expect(
-      Effect.runPromise(service.detectRepository({ repoPath: "/repo", providerId: "github" })),
+      Effect.runPromise(
+        service.detectRepository({ workspaceId: "repo", repoPath: "/repo", providerId: "github" }),
+      ),
     ).resolves.toEqual({
       host: "github.mycorp.com",
       owner: "openai",
       name: "openducktor",
     });
-    await expect(Effect.runPromise(service.getContext("/repo"))).resolves.toEqual({
+    await expect(
+      Effect.runPromise(service.getContext({ workspaceId: "repo", repoPath: "/repo" })),
+    ).resolves.toEqual({
       descriptor: GITHUB_PROVIDER_DESCRIPTOR,
       config: contextRepoConfig.git.provider!,
       health: {
@@ -120,7 +124,7 @@ describe("GitProviderService", () => {
         reason: "GitHub provider is not enabled for this repository.",
       },
     });
-    expect(calls).toEqual(["settings:/repo", "/repo", "settings:/repo", "health:/repo"]);
+    expect(calls).toEqual(["settings:repo", "/repo", "settings:repo", "health:/repo"]);
   });
 
   test("returns null when no provider is configured", async () => {
@@ -134,10 +138,12 @@ describe("GitProviderService", () => {
     const service = createGitProviderService({
       resolver,
       workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
-        getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
+        getRepoConfig: () => Effect.succeed(repoConfig),
       }),
     });
 
-    await expect(Effect.runPromise(service.getContext("/repo"))).resolves.toBeNull();
+    await expect(
+      Effect.runPromise(service.getContext({ workspaceId: "repo", repoPath: "/repo" })),
+    ).resolves.toBeNull();
   });
 });

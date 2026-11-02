@@ -1,92 +1,97 @@
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
-import { Deferred, Effect } from "effect";
-import path from "node:path";
-import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
+import { eq, inArray } from "drizzle-orm";
+import { Context, Deferred, Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
+import { type WorkspaceAccess, workspaceAccessBlock } from "../../domain/workspace-access";
 import {
   HostOperationError,
+  HostValidationError,
   type HostOperationErrorAggregate,
-  type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
-import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
-import type { TaskOwnershipReader, TaskStoreError } from "../../ports/task-repository-ports";
-import {
-  type OpenSqliteTaskStoreConnection,
-  openSqliteTaskStoreConnection,
-} from "./sqlite-task-store-connection";
-import {
-  createSqliteTaskStoreConnectionSlot,
-  type SqliteTaskStoreConnectionSlot,
-} from "./sqlite-task-store-connection-slot";
-import { mapSqliteTaskStoreAdapterError } from "./sqlite-task-store-errors";
-import type { TaskStoreSession } from "./sqlite-task-store-schema";
-import type { WorkspaceSession } from "@openducktor/contracts";
+import { resolveSqliteHostDatabasePath } from "../../infrastructure/sqlite/sqlite-host-database-path";
+import type { TaskStoreError } from "../../ports/task-repository-ports";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type { WorkspaceSessionStoreScope } from "../../ports/workspace-session-store-port";
-import { readWorkspaceSessionsForWorktreeOwnership } from "./sqlite-workspace-session-reads";
-import { readOpenTasksForWorktreeOwnership } from "./sqlite-task-agent-sessions";
+import { sqliteValues } from "./sqlite-parameters";
+import {
+  openHostDatabaseConnection,
+  type OpenHostDatabaseConnection,
+} from "./sqlite-host-database-connection";
+import { createHostDatabaseConnectionSlot } from "./sqlite-host-database-connection-slot";
+import { mapSqliteTaskStoreAdapterError } from "./sqlite-task-store-errors";
+import type { HostDatabaseSession } from "./sqlite-host-database-schema";
+import { workspaceRemovals, workspaces } from "./sqlite-host-settings-schema";
 
-export type ResolveWorkspaceIdForRepoPath = (
-  repoPath: string,
-) => Effect.Effect<string, TaskStoreError>;
-
-export type ResolveSqliteTaskStorePath = (input: {
-  repoPath: string;
-  workspaceId: string;
-}) => Effect.Effect<string, TaskStoreError>;
-
+/** A workspace and the lifecycle access of one operation. Without access, the operation needs `open`. */
+export type WorkspaceDatabaseScope = WorkspaceSessionStoreScope & {
+  access?: WorkspaceAccess | undefined;
+};
 export type SqliteTaskRepositoryContext = {
   databasePath: string;
   repoPath: string;
-  session: TaskStoreSession;
+  session: HostDatabaseSession;
   workspaceId: string;
-  /** Finds the workflow of a task row. Terminal states hide tasks and lock their artifacts. */
   taskWorkflows: TaskWorkflowResolver;
 };
-
-/** A read of many tasks hides a task in a state that ends a task in a host workflow. */
 export const hostTerminalStates = (taskWorkflows: TaskWorkflowResolver): string[] => [
   ...new Set(taskWorkflows.workflows.flatMap(({ terminalStates }) => terminalStates)),
 ];
-
 export type SqliteTaskRepositoryContextProvider = <A>(
-  repoPath: string,
+  scope: WorkspaceDatabaseScope,
   operation: string,
   use: (context: SqliteTaskRepositoryContext) => Effect.Effect<A, unknown>,
 ) => Effect.Effect<A, TaskStoreError>;
-
-export type SqliteTaskRepositoryContextManager = {
-  readonly closeWorkspace: (
-    workspaceId: string,
-    cleanup?: Effect.Effect<void, HostOperationErrorAggregate>,
-  ) => Effect.Effect<void, HostOperationErrorAggregate>;
+type SqliteWorkspacesReadContext = {
+  session: HostDatabaseSession;
+  taskWorkflows: TaskWorkflowResolver;
+};
+/** Runs one read transaction over several workspaces. It checks every workspace in that transaction. */
+export type SqliteWorkspacesReadProvider = <A>(
+  scopes: readonly WorkspaceDatabaseScope[],
+  operation: string,
+  use: (context: SqliteWorkspacesReadContext) => Effect.Effect<A, unknown>,
+) => Effect.Effect<A, TaskStoreError>;
+/** Reads several workspaces with one access in one transaction. An empty set reads nothing. */
+export const readWorkspaceSet = <A>(
+  readWorkspaces: SqliteWorkspacesReadProvider,
+  workspaces: readonly WorkspaceSessionStoreScope[],
+  access: WorkspaceAccess,
+  operation: string,
+  use: (context: {
+    session: HostDatabaseSession;
+    workspaceIds: string[];
+    terminalStates: string[];
+  }) => Effect.Effect<A[], unknown>,
+): Effect.Effect<A[], TaskStoreError> =>
+  workspaces.length === 0
+    ? Effect.succeed([])
+    : readWorkspaces(
+        workspaces.map((scope) => ({ ...scope, access })),
+        operation,
+        ({ session, taskWorkflows }) =>
+          use({
+            session,
+            workspaceIds: workspaces.map(({ workspaceId }) => workspaceId),
+            terminalStates: hostTerminalStates(taskWorkflows),
+          }),
+      );
+export type SqliteHostDatabaseProvider = <A, E>(
+  operation: string,
+  use: (session: HostDatabaseSession) => Effect.Effect<A, E>,
+) => Effect.Effect<A, E | TaskStoreError>;
+export type SqliteHostDatabaseManager = {
   readonly dispose: () => Effect.Effect<
     void,
     HostOperationError<{ failures: HostOperationErrorAggregate[] }>
   >;
   readonly withDatabase: SqliteTaskRepositoryContextProvider;
-  readonly listWorkspaceSessionsForWorktreeOwnership: (
-    scope: WorkspaceSessionStoreScope,
-  ) => Effect.Effect<WorkspaceSession[], TaskStoreError>;
-  readonly listOpenTasksForWorktreeOwnership: TaskOwnershipReader["listOpenTasksForWorktreeOwnership"];
+  readonly readWorkspaces: SqliteWorkspacesReadProvider;
+  readonly withHostDatabase: SqliteHostDatabaseProvider;
 };
-
-type CreateSqliteTaskRepositoryContextManagerInput = {
-  configDir?: string;
-  assertWorkspaceAdmitted?: (input: {
-    operation: string;
-    repoPath: string;
-    workspaceId: string;
-  }) => Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
-  assertWorkspaceOwnershipReadAdmitted: (
-    input: WorkspaceSessionStoreScope,
-  ) => Effect.Effect<void, TaskStoreError>;
-  onBackgroundFailure?: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
-  openConnection?: OpenSqliteTaskStoreConnection;
-  processEnv: NodeJS.ProcessEnv;
-  resolveDatabasePath?: ResolveSqliteTaskStorePath;
-  resolveWorkspaceIdForRepoPath: ResolveWorkspaceIdForRepoPath;
+type CreateSqliteHostDatabaseManagerInput = {
+  configDir: string;
+  openConnection?: OpenHostDatabaseConnection;
   taskWorkflows: TaskWorkflowResolver;
 };
-
 type AdmissionGate = {
   readonly stop: () => Effect.Effect<void>;
   readonly withLease: <A, E>(
@@ -94,40 +99,159 @@ type AdmissionGate = {
   ) => Effect.Effect<A, E | HostOperationError>;
 };
 
-const resolveDefaultDatabasePath =
-  (configDir: string | undefined, processEnv: NodeJS.ProcessEnv): ResolveSqliteTaskStorePath =>
-  ({ workspaceId }) =>
-    resolveSqliteTaskStoreDatabasePath({
-      configDir: configDir ?? resolveOpenDucktorBaseDir("production", processEnv),
-      workspaceId,
+/**
+ * Checks the current registration, repository path, and lifecycle state of each workspace with
+ * one query. Run it in the transaction of the operation, because another host can close or
+ * remove the workspace.
+ */
+const validateScopes = (session: HostDatabaseSession, scopes: readonly WorkspaceDatabaseScope[]) =>
+  Effect.gen(function* () {
+    if (scopes.length === 0) return;
+    const rows = yield* session.execute(
+      (db) =>
+        db
+          .select({
+            workspaceId: workspaces.workspaceId,
+            repoPath: workspaces.repoPath,
+            closed: workspaces.closed,
+            removal: workspaceRemovals.workspaceId,
+          })
+          .from(workspaces)
+          .leftJoin(workspaceRemovals, eq(workspaceRemovals.workspaceId, workspaces.workspaceId))
+          .where(
+            inArray(
+              workspaces.workspaceId,
+              sqliteValues(scopes.map(({ workspaceId }) => workspaceId)),
+            ),
+          ),
+      "sqliteTaskRepository.validateWorkspace",
+    );
+    const byId = new Map(rows.map((row) => [row.workspaceId, row]));
+    for (const scope of scopes) {
+      const row = byId.get(scope.workspaceId);
+      if (
+        !row ||
+        normalizePathForComparison(row.repoPath) !== normalizePathForComparison(scope.repoPath)
+      )
+        return yield* new HostValidationError({
+          field: "workspaceId",
+          message:
+            "The workspace no longer matches this repository. Reload the workspace before retrying.",
+        });
+      const blocked = workspaceAccessBlock(
+        scope.workspaceId,
+        { closed: row.closed, removal: row.removal !== null },
+        scope.access ?? "open",
+      );
+      if (blocked !== null)
+        return yield* new HostValidationError({ field: "workspaceId", message: blocked });
+    }
+  });
+
+export const createSqliteHostDatabaseManager = ({
+  configDir,
+  openConnection = openHostDatabaseConnection,
+  taskWorkflows,
+}: CreateSqliteHostDatabaseManagerInput): SqliteHostDatabaseManager => {
+  const admission = createAdmissionGate();
+  const CurrentSession = Context.Reference<HostDatabaseSession | null>(
+    `host-database-session:${crypto.randomUUID()}`,
+    { defaultValue: () => null },
+  );
+  const databasePath = resolveSqliteHostDatabasePath(configDir);
+  const slot = createHostDatabaseConnectionSlot({ databasePath, openConnection });
+  const withHostDatabase: SqliteHostDatabaseProvider = (operation, use) =>
+    Effect.gen(function* () {
+      const current = yield* CurrentSession;
+      if (current !== null) return yield* use(current);
+      return yield* admission
+        .withLease(() =>
+          slot.run((session) => use(session).pipe(Effect.provideService(CurrentSession, session))),
+        )
+        .pipe(Effect.withSpan(operation));
     });
+  /** Checks the scope again in each transaction, because another host can close the workspace. */
+  const scopedSession = (
+    session: HostDatabaseSession,
+    scope: WorkspaceDatabaseScope,
+  ): HostDatabaseSession => {
+    const checked =
+      (begin: HostDatabaseSession["transaction"]): HostDatabaseSession["transaction"] =>
+      (name, use) =>
+        begin(name, (transaction) =>
+          validateScopes(transaction, [scope]).pipe(
+            Effect.andThen(use(scopedSession(transaction, scope))),
+            Effect.provideService(CurrentSession, transaction),
+          ),
+        );
+    return {
+      ...session,
+      transaction: checked(session.transaction),
+      readTransaction: checked(session.readTransaction),
+    };
+  };
+  const withDatabase: SqliteTaskRepositoryContextProvider = (scope, operation, use) =>
+    withHostDatabase(operation, (session) =>
+      validateScopes(session, [scope]).pipe(
+        Effect.andThen(
+          use({
+            workspaceId: scope.workspaceId,
+            repoPath: scope.repoPath,
+            databasePath,
+            session: scopedSession(session, scope),
+            taskWorkflows,
+          }),
+        ),
+      ),
+    ).pipe(
+      Effect.mapError((cause) => mapSqliteTaskStoreAdapterError(operation, databasePath, cause)),
+    );
+  const readWorkspaces: SqliteWorkspacesReadProvider = (scopes, operation, use) =>
+    withHostDatabase(operation, (session) =>
+      session.readTransaction(operation, (transaction) =>
+        validateScopes(transaction, scopes).pipe(
+          Effect.andThen(use({ session: transaction, taskWorkflows })),
+          Effect.provideService(CurrentSession, transaction),
+        ),
+      ),
+    ).pipe(
+      Effect.mapError((cause) => mapSqliteTaskStoreAdapterError(operation, databasePath, cause)),
+    );
+  const dispose = () =>
+    Effect.gen(function* () {
+      yield* admission.stop();
+      const result = yield* Effect.result(slot.shutdown());
+      if (result._tag === "Failure")
+        return yield* new HostOperationError({
+          operation: "sqliteTaskRepository.disposeConnections",
+          message: result.failure.message,
+          cause: result.failure,
+          details: { failures: [result.failure] },
+        });
+    });
+  return { withHostDatabase, withDatabase, readWorkspaces, dispose };
+};
 
 const hostIsStoppingError = () =>
   new HostOperationError({
     operation: "sqliteTaskRepository.acquireConnection",
-    message: "The SQLite task store is stopping and cannot accept a new operation.",
+    message: "The host database is stopping and cannot accept a new operation.",
   });
 
 const invalidAdmissionReleaseError = () =>
   new HostOperationError({
     operation: "sqliteTaskRepository.releaseConnection",
-    message: "The SQLite task store released an operation without an active admission lease.",
+    message: "The host database released an operation without an active admission lease.",
   });
 
-const workspaceClosingError = (workspaceId: string) =>
-  new HostOperationError({
-    operation: "sqliteTaskRepository.acquireConnection",
-    message: `The task store is closing for workspace ${workspaceId}. Retry after the workspace operation finishes.`,
-  });
-
-const createAdmissionGate = (stoppedError = hostIsStoppingError): AdmissionGate => {
+const createAdmissionGate = (): AdmissionGate => {
   let accepting = true;
   let activeLeases = 0;
   let shutdownWaiter: Deferred.Deferred<void> | null = null;
 
   const acquireLease = Effect.suspend(() => {
     if (!accepting) {
-      return Effect.fail(stoppedError());
+      return Effect.fail(hostIsStoppingError());
     }
     activeLeases += 1;
     return Effect.void;
@@ -162,171 +286,4 @@ const createAdmissionGate = (stoppedError = hostIsStoppingError): AdmissionGate 
     });
 
   return { stop, withLease };
-};
-
-export const createSqliteTaskRepositoryContextManager = ({
-  configDir,
-  assertWorkspaceAdmitted,
-  assertWorkspaceOwnershipReadAdmitted,
-  onBackgroundFailure = (failure) => Effect.logError(failure.message),
-  openConnection = openSqliteTaskStoreConnection,
-  processEnv,
-  resolveDatabasePath = resolveDefaultDatabasePath(configDir, processEnv),
-  resolveWorkspaceIdForRepoPath,
-  taskWorkflows,
-}: CreateSqliteTaskRepositoryContextManagerInput): SqliteTaskRepositoryContextManager => {
-  const admission = createAdmissionGate();
-  const slots = new Map<string, SqliteTaskStoreConnectionSlot>();
-  const workspaceAdmissions = new Map<string, AdmissionGate>();
-
-  const getWorkspaceAdmission = (workspaceId: string): AdmissionGate => {
-    const current = workspaceAdmissions.get(workspaceId);
-    if (current) return current;
-    const next = createAdmissionGate(() => workspaceClosingError(workspaceId));
-    workspaceAdmissions.set(workspaceId, next);
-    return next;
-  };
-
-  const resolveStorage = (repoPath: string) =>
-    Effect.gen(function* () {
-      const workspaceId = yield* resolveWorkspaceIdForRepoPath(repoPath);
-      const databasePath = yield* resolveDatabasePath({ repoPath, workspaceId });
-      return { databasePath, repoPath, workspaceId, taskWorkflows };
-    });
-
-  const getSlot = (databasePath: string) => {
-    const current = slots.get(databasePath);
-    if (current) return current;
-    const slot = createSqliteTaskStoreConnectionSlot({
-      databasePath,
-      onBackgroundFailure,
-      openConnection,
-    });
-    slots.set(databasePath, slot);
-    return slot;
-  };
-
-  const withDatabase: SqliteTaskRepositoryContextProvider = (repoPath, operation, use) =>
-    admission.withLease(() =>
-      Effect.gen(function* () {
-        const storage = yield* resolveStorage(repoPath);
-        return yield* getWorkspaceAdmission(storage.workspaceId).withLease(() =>
-          Effect.gen(function* () {
-            if (assertWorkspaceAdmitted) {
-              yield* assertWorkspaceAdmitted({
-                operation,
-                repoPath: storage.repoPath,
-                workspaceId: storage.workspaceId,
-              });
-            }
-            const slot = getSlot(storage.databasePath);
-            return yield* slot
-              .run((session) => use({ ...storage, session }))
-              .pipe(
-                Effect.mapError((cause) =>
-                  mapSqliteTaskStoreAdapterError(operation, storage.databasePath, cause),
-                ),
-              );
-          }),
-        );
-      }),
-    );
-
-  /**
-   * Ownership reads admit a closed workspace and find its database by workspace ID, so a closed
-   * workspace or a missing repository still reports what needs a worktree.
-   */
-  const readForWorktreeOwnership = <A>(
-    scope: WorkspaceSessionStoreScope,
-    operation: string,
-    read: (session: TaskStoreSession) => Effect.Effect<A, unknown>,
-  ) =>
-    admission.withLease(() =>
-      Effect.gen(function* () {
-        const databasePath = yield* resolveDatabasePath(scope);
-        return yield* getWorkspaceAdmission(scope.workspaceId).withLease(() =>
-          Effect.gen(function* () {
-            yield* assertWorkspaceOwnershipReadAdmitted(scope);
-            return yield* getSlot(databasePath)
-              .run(read)
-              .pipe(
-                Effect.mapError((cause) =>
-                  mapSqliteTaskStoreAdapterError(operation, databasePath, cause),
-                ),
-              );
-          }),
-        );
-      }),
-    );
-  const listWorkspaceSessionsForWorktreeOwnership: SqliteTaskRepositoryContextManager["listWorkspaceSessionsForWorktreeOwnership"] =
-    (scope) =>
-      readForWorktreeOwnership(
-        scope,
-        "workspaceSessionStore.worktreeOwners",
-        readWorkspaceSessionsForWorktreeOwnership,
-      );
-  const listOpenTasksForWorktreeOwnership: SqliteTaskRepositoryContextManager["listOpenTasksForWorktreeOwnership"] =
-    (scope) =>
-      readForWorktreeOwnership(scope, "taskStore.worktreeOwners", (session) =>
-        readOpenTasksForWorktreeOwnership(session, hostTerminalStates(taskWorkflows)),
-      );
-
-  const closeWorkspace = (
-    workspaceId: string,
-    cleanup: Effect.Effect<void, HostOperationErrorAggregate> = Effect.void,
-  ) =>
-    Effect.gen(function* () {
-      yield* getWorkspaceAdmission(workspaceId).stop();
-      const matches = Array.from(slots.entries()).filter(
-        ([databasePath]) => path.basename(path.dirname(databasePath)) === workspaceId,
-      );
-      const failures: HostOperationErrorAggregate[] = [];
-      for (const [databasePath, slot] of matches) {
-        const result = yield* Effect.result(slot.shutdown());
-        if (result._tag === "Failure") {
-          failures.push(result.failure);
-          continue;
-        }
-        slots.delete(databasePath);
-      }
-      if (failures.length > 0) {
-        return yield* new HostOperationError({
-          operation: "sqliteTaskRepository.closeWorkspace",
-          message: failures.map((failure) => failure.message).join("\n"),
-          cause: failures[0],
-          details: { failures, workspaceId },
-        });
-      }
-      yield* cleanup;
-      workspaceAdmissions.delete(workspaceId);
-    });
-
-  const dispose = () =>
-    Effect.gen(function* () {
-      yield* admission.stop();
-      const results = yield* Effect.forEach(
-        Array.from(slots.values()),
-        (slot) => Effect.result(slot.shutdown()),
-        { concurrency: "unbounded" },
-      );
-      const failures = results.flatMap((result) =>
-        result._tag === "Failure" ? [result.failure] : [],
-      );
-      if (failures.length > 0) {
-        return yield* new HostOperationError({
-          operation: "sqliteTaskRepository.disposeConnections",
-          message: failures.map((failure) => failure.message).join("\n"),
-          cause: failures[0],
-          details: { failures },
-        });
-      }
-    });
-
-  return {
-    closeWorkspace,
-    dispose,
-    withDatabase,
-    listWorkspaceSessionsForWorktreeOwnership,
-    listOpenTasksForWorktreeOwnership,
-  };
 };

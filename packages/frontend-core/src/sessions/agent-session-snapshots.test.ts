@@ -11,7 +11,12 @@ import { createAgentSessionsStore } from "./agent-sessions-store";
 
 const session = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   externalSessionId: "session-1",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionAssociation: {
+    kind: "workflow",
+    workspaceId: "workspace-1",
+    taskId: "task-1",
+    role: "build",
+  },
   runtimeKind: "codex",
   status: "running",
   runtimeStatusMessage: null,
@@ -35,7 +40,9 @@ describe("createAgentActivitySnapshot", () => {
       const liveSession = session({
         runtimeKind: "claude",
         sessionAssociation:
-          kind === "workflow" ? { kind, taskId: "task-1", role: "build" } : { kind },
+          kind === "workflow"
+            ? { kind, workspaceId: "workspace-1", taskId: "task-1", role: "build" }
+            : { kind },
       });
       store.replaceSession(liveSession);
       const summaries = () => {

@@ -35,7 +35,7 @@ const fixture = (providerId: "github" | "azure_devops") => {
           return ["Project\\Team"];
         }),
     },
-    workspaceSettingsService: { getRepoConfigByRepoPath: () => Effect.succeed(repoConfig) },
+    workspaceSettingsService: { getRepoConfig: () => Effect.succeed(repoConfig) },
   });
   return { service, paths };
 };
@@ -43,13 +43,17 @@ const fixture = (providerId: "github" | "azure_devops") => {
 describe("Azure area paths service", () => {
   test("reads areas for Azure DevOps", async () => {
     const { service, paths } = fixture("azure_devops");
-    expect(await Effect.runPromise(service.list("/repo"))).toEqual(["Project\\Team"]);
+    expect(
+      await Effect.runPromise(service.list({ workspaceId: "repo", repoPath: "/repo" })),
+    ).toEqual(["Project\\Team"]);
     expect(paths).toEqual(["read"]);
   });
 
   test("rejects another provider before reading areas", async () => {
     const { service, paths } = fixture("github");
-    await expect(Effect.runPromise(service.list("/repo"))).rejects.toThrow("Choose Azure DevOps");
+    await expect(
+      Effect.runPromise(service.list({ workspaceId: "repo", repoPath: "/repo" })),
+    ).rejects.toThrow("Choose Azure DevOps");
     expect(paths).toEqual([]);
   });
 });

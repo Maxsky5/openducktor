@@ -16,7 +16,10 @@ export type TaskAssetAwareMutationDependencies = {
   filePort: TaskAssetFilePort;
   staging: TaskAssetStagingService;
   persistence: TaskDescriptionAssetPersistencePort | null;
-  resolveWorkspaceIdForRepoPath: (repoPath: string) => Effect.Effect<string, TaskStoreError>;
+  resolveWorkspaceId: (scope: {
+    workspaceId: string;
+    repoPath: string;
+  }) => Effect.Effect<string, TaskStoreError>;
 };
 
 export const sameTaskAssetIds = (left: Set<string>, right: Set<string>): boolean =>

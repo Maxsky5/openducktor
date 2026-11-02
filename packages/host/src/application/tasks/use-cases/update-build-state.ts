@@ -1,10 +1,11 @@
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { Effect } from "effect";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import {
   requireBuildCompletedDependencies,
   requireDependencies,
 } from "../support/required-task-dependencies";
-import { requireEffectInput } from "../support/task-workflow-events";
+import { decideEffectTransition, requireEffectInput } from "../support/task-workflow-events";
 import {
   applyEffect,
   blockBuildCompletionTask,
@@ -55,16 +56,13 @@ export const createTaskBuildStateUseCases = ({
           [taskId],
           "block build",
         );
-        return yield* applyEffect(taskStore, taskWorkflows, { repoPath, taskId }, "build.blocked");
+        return yield* applyEffect(taskStore, taskWorkflows, input, "build.blocked");
       }),
     );
   },
 
   buildResumed(input) {
-    return Effect.gen(function* () {
-      const { repoPath, taskId } = input;
-      return yield* applyEffect(taskStore, taskWorkflows, { repoPath, taskId }, "build.resumed");
-    });
+    return applyEffect(taskStore, taskWorkflows, input, "build.resumed");
   },
 
   buildCompleted(input) {
@@ -73,7 +71,7 @@ export const createTaskBuildStateUseCases = ({
       const dependencies = yield* requireDependencies(() =>
         requireBuildCompletedDependencies(settingsConfig, systemCommands, workspaceSettingsService),
       );
-      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
 
       const decision = yield* requireEffectInput(
@@ -91,9 +89,7 @@ export const createTaskBuildStateUseCases = ({
         return enrichTask(workflow, current);
       }
 
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const nextStatus = decision.to;
+      const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
 
       const postCompleteHooks = repoConfig.hooks.postComplete
         .map((hook) => hook.trim())
@@ -103,7 +99,7 @@ export const createTaskBuildStateUseCases = ({
           buildCompletionWorktreePath(dependencies.settingsConfig, workflow, repoConfig, taskId),
         );
         if (worktreePathResult._tag === "Failure") {
-          yield* blockBuildCompletionTask(taskStore, workflow, repoPath, taskId, current);
+          yield* blockBuildCompletionTask(taskStore, taskWorkflows, input);
           return yield* Effect.fail(
             createTaskMutationProgressFailure(
               "build-completed",
@@ -121,7 +117,7 @@ export const createTaskBuildStateUseCases = ({
         );
         if (failure !== null) {
           const message = `Worktree cleanup script command failed: ${failure.hook}\n${failure.stderr}`;
-          yield* blockBuildCompletionTask(taskStore, workflow, repoPath, taskId, current);
+          yield* blockBuildCompletionTask(taskStore, taskWorkflows, input);
           return yield* Effect.fail(
             createTaskMutationProgressFailure(
               "build-completed",
@@ -137,10 +133,11 @@ export const createTaskBuildStateUseCases = ({
       }
 
       const updated = yield* taskStore.transitionTask({
+        workspaceId: input.workspaceId,
         repoPath,
         taskId,
-        status: nextStatus,
-        cause: decision.cause,
+        decide: (task) =>
+          decideEffectTransition(taskWorkflows.forTask(task), "build.completed", task),
       });
       return enrichTask(workflow, updated);
     });

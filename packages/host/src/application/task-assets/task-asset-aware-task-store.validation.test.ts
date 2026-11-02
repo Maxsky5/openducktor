@@ -5,10 +5,10 @@ import { captureTaskAssetError, createHarness } from "./test-support/task-asset-
 
 describe("asset-aware task store", () => {
   test("reports malformed description assets with create context", async () => {
-    const { repoPath, store } = await createHarness();
+    const { scope, store } = await createHarness();
     const error = await captureTaskAssetError(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: {
           title: "Malformed asset",
@@ -32,10 +32,10 @@ describe("asset-aware task store", () => {
   });
 
   test("reports malformed description assets with update context", async () => {
-    const { repoPath, store } = await createHarness();
+    const { scope, store } = await createHarness();
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: {
           title: "Update target",
@@ -47,7 +47,7 @@ describe("asset-aware task store", () => {
     );
     const error = await captureTaskAssetError(
       store.updateTask({
-        repoPath,
+        ...scope,
         taskId: task.id,
         patch: { description: "![broken](odt-asset:not-a-uuid)" },
       }),
@@ -67,7 +67,7 @@ describe("asset-aware task store", () => {
   });
 
   test("reports the description asset limit with create context", async () => {
-    const { repoPath, store } = await createHarness();
+    const { scope, store } = await createHarness();
     const assetIds = Array.from(
       { length: 51 },
       (_, index) => `00000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
@@ -75,7 +75,7 @@ describe("asset-aware task store", () => {
     const description = assetIds.map((assetId) => `![image](odt-asset:${assetId})`).join("\n");
     const error = await captureTaskAssetError(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: {
           title: "Too many assets",
@@ -99,10 +99,10 @@ describe("asset-aware task store", () => {
   });
 
   test("reports the description asset limit with update context", async () => {
-    const { repoPath, store } = await createHarness();
+    const { scope, store } = await createHarness();
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: {
           title: "Update target",
@@ -119,7 +119,7 @@ describe("asset-aware task store", () => {
     const description = assetIds.map((assetId) => `![image](odt-asset:${assetId})`).join("\n");
     const error = await captureTaskAssetError(
       store.updateTask({
-        repoPath,
+        ...scope,
         taskId: task.id,
         patch: { description },
         descriptionAssets: { stagedAssetIds: assetIds },
@@ -139,12 +139,12 @@ describe("asset-aware task store", () => {
   });
 
   test("reports missing staged assets with create and update context", async () => {
-    const { repoPath, store } = await createHarness();
+    const { scope, store } = await createHarness();
     const missingAssetId = "550e8400-e29b-41d4-a716-446655440000";
     const description = `![missing](odt-asset:${missingAssetId})`;
     const createError = await captureTaskAssetError(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: {
           title: "Missing staged asset",
@@ -157,7 +157,7 @@ describe("asset-aware task store", () => {
     );
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...scope,
         status: "open",
         task: {
           title: "Update target",
@@ -169,7 +169,7 @@ describe("asset-aware task store", () => {
     );
     const updateError = await captureTaskAssetError(
       store.updateTask({
-        repoPath,
+        ...scope,
         taskId: task.id,
         patch: { description },
         descriptionAssets: { stagedAssetIds: [missingAssetId] },

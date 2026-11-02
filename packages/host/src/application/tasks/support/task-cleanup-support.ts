@@ -272,16 +272,22 @@ const requireTaskCleanupWorktreeFiles = (
 export const runTaskRuntimeCleanup = ({
   progress,
   repoPath,
+  workspaceId,
   taskIds,
   terminalService,
 }: {
   progress: TaskCleanupProgressState;
   repoPath: string;
+  workspaceId: string;
   taskIds: string[];
   terminalService: TaskTerminalCleanupPort;
 }) =>
   Effect.gen(function* () {
-    const terminalResult = yield* terminalService.acquireTaskCleanup({ repoPath, taskIds });
+    const terminalResult = yield* terminalService.acquireTaskCleanup({
+      workspaceId,
+      repoPath,
+      taskIds,
+    });
     progress.completedSteps.push(
       terminalResult.closedTerminalIds.length > 0
         ? `terminated task terminals: ${terminalResult.closedTerminalIds.join(", ")}`
@@ -294,9 +300,10 @@ export const readTaskSessionRecords = (
   taskStore: Pick<TaskStorePort, "getTaskMetadata">,
   repoPath: string,
   taskIds: readonly string[],
+  workspaceId: string,
 ) =>
   Effect.forEach(taskIds, (taskId) =>
-    taskStore.getTaskMetadata({ repoPath, taskId }).pipe(
+    taskStore.getTaskMetadata({ workspaceId, repoPath, taskId }).pipe(
       Effect.map((metadata): TaskSessionRecords => ({
         taskId,
         sessions: metadata.agentSessions,
@@ -338,6 +345,7 @@ export const runTaskLocalCleanup = ({
   managedWorktreeBasePath,
   progress,
   repoPath,
+  workspaceId,
   settingsConfig,
   taskIds,
   terminalService,
@@ -352,6 +360,7 @@ export const runTaskLocalCleanup = ({
   managedWorktreeBasePath: string;
   progress: TaskCleanupProgressState;
   repoPath: string;
+  workspaceId: string;
   settingsConfig: SettingsConfigPort;
   taskIds: string[];
   terminalService: TaskTerminalCleanupPort | undefined;
@@ -379,6 +388,7 @@ export const runTaskLocalCleanup = ({
         : null;
 
     yield* runTaskRuntimeCleanup({
+      workspaceId,
       progress,
       repoPath,
       taskIds,

@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
-import type { RuntimeSessionOwner } from "../../ports/workspace-session-store-port";
+import type { WorkspaceRuntimeSessionOwner } from "../../ports/workspace-session-store-port";
 import {
   type CreateManagedCallerResolverInput,
   createManagedCallerResolver,
@@ -35,27 +35,29 @@ const liveLink = (
 
 const taskOwner = (externalSessionId: string, runtimeKind: RuntimeKind = "opencode") =>
   ({
+    workspaceId: "repo",
     kind: "task",
     taskId: "task-1",
     role: "qa",
     runtimeKind,
     externalSessionId,
-  }) satisfies RuntimeSessionOwner;
+  }) satisfies WorkspaceRuntimeSessionOwner;
 
 const workspaceOwner = (externalSessionId: string, archived = false) =>
   ({
+    workspaceId: "repo",
     kind: "workspace",
     sessionId: "chat-1",
     archived,
     runtimeKind: "opencode",
     externalSessionId,
-  }) satisfies RuntimeSessionOwner;
+  }) satisfies WorkspaceRuntimeSessionOwner;
 
 const createResolver = ({
   owners = [],
   live = {},
 }: {
-  owners?: RuntimeSessionOwner[];
+  owners?: WorkspaceRuntimeSessionOwner[];
   live?: Partial<Record<RuntimeKind, LiveLink[]>>;
 }) => {
   const ownerReads: unknown[] = [];
@@ -88,7 +90,14 @@ const createResolver = ({
     workspaceSessions: {
       listRuntimeOwners: (scope) => {
         ownerReads.push(scope);
-        return Effect.succeed(owners);
+        return Effect.succeed(
+          owners.filter(
+            (owner) =>
+              scope.filter === undefined ||
+              (owner.runtimeKind === scope.filter.runtimeKind &&
+                scope.filter.externalSessionIds.includes(owner.externalSessionId)),
+          ),
+        );
       },
     },
     liveSessions: {
@@ -135,14 +144,14 @@ describe("createManagedCallerResolver", () => {
       resolver.resolve({ workspaceId: "repo", caller: caller("ses_qa") }),
     );
 
-    expect(owner).toEqual({
-      kind: "task",
-      taskId: "task-1",
-      role: "qa",
-      runtimeKind: "opencode",
-      externalSessionId: "ses_qa",
-    });
-    expect(ownerReads).toEqual([{ workspaceId: "repo", repoPath: "/repo" }]);
+    expect(owner).toEqual(taskOwner("ses_qa"));
+    expect(ownerReads).toEqual([
+      {
+        workspaceId: "repo",
+        repoPath: "/repo",
+        filter: { runtimeKind: "opencode", externalSessionIds: ["ses_qa"] },
+      },
+    ]);
     expect(liveReads()).toBe(0);
   });
 
@@ -153,13 +162,7 @@ describe("createManagedCallerResolver", () => {
       resolver.resolve({ workspaceId: "repo", caller: caller("ses_chat") }),
     );
 
-    expect(owner).toEqual({
-      kind: "workspace",
-      sessionId: "chat-1",
-      archived: false,
-      runtimeKind: "opencode",
-      externalSessionId: "ses_chat",
-    });
+    expect(owner).toEqual(workspaceOwner("ses_chat"));
   });
 
   test.each(["spec", "planner", "build", "qa"])(

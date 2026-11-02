@@ -1,3 +1,4 @@
+import { workspaceRefSchema } from "./workspace-id-schemas";
 import { z } from "zod";
 import {
   azureDevOpsProviderSettingsSchema,
@@ -292,7 +293,7 @@ export const gitPublicationPreviewSchema = z.strictObject({
 });
 export type GitPublicationPreview = z.infer<typeof gitPublicationPreviewSchema>;
 export const taskDirectMergeCompleteIntentSchema = z.strictObject({
-  repoPath: z.string().trim().min(1),
+  ...workspaceRefSchema.shape,
   taskId: z.string().trim().min(1),
   /** The completion removes the task worktree and its local task branch. */
   removeWorktree: z.boolean(),

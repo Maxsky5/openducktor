@@ -84,7 +84,10 @@ describe("OpenCode V2 skill references", () => {
 
   test.each([
     { label: "repository", sessionScope: { kind: "repository" } },
-    { label: "workflow", sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } },
+    {
+      label: "workflow",
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
+    },
   ] satisfies { label: string; sessionScope: AgentSessionScope }[])(
     "sends inline skills with native IDs in $label prompts and commands",
     async ({ sessionScope }) => {

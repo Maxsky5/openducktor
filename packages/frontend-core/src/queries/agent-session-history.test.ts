@@ -173,6 +173,7 @@ describe("agent session history queries", () => {
             ? { type, sequence: 1, session: updated }
             : {
                 type,
+                workspaceId: "workspace-1",
                 sequence: 1,
                 repoPath: "/repo",
                 taskId: "task-1",

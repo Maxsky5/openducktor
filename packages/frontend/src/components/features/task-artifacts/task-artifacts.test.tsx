@@ -1,3 +1,5 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import type {
   FreeTaskArtifact,
@@ -44,11 +46,7 @@ const freeArtifact = (artifactId = "file-1", name = "Notes"): FreeTaskArtifact =
 });
 const content = (artifact: TaskArtifact) => ({
   artifact,
-  version: "v1",
   dataBase64: "aGVsbG8=",
-  byteOffset: 0,
-  nextByteOffset: null,
-  totalBytes: 5,
 });
 type SetupOptions = {
   canManageFree?: boolean;
@@ -77,7 +75,7 @@ const setup = (
     return content(artifact);
   });
   const readWorkflow = mock(
-    async (_repoPath: string, _taskId: string, _code: string): Promise<TaskDocument> => ({
+    async (_repoPath: WorkspaceRef, _taskId: string, _code: string): Promise<TaskDocument> => ({
       markdown: "hello",
       updatedAt: null,
     }),
@@ -100,7 +98,11 @@ const setup = (
       taskArtifactDelete: remove,
     },
   });
-  const ownProps: TaskArtifactsProps = { repoPath: "/repo", taskId: "task-1" };
+  const ownProps: TaskArtifactsProps = {
+    workspaceId: "workspace-1",
+    repoPath: "/repo",
+    taskId: "task-1",
+  };
   if (artifactSummary) ownProps.artifactSummary = artifactSummary;
   const view = render(
     createElement(
@@ -108,6 +110,7 @@ const setup = (
       { connection },
       selection
         ? createElement(TaskArtifactsView, {
+            workspaceId: "workspace-1",
             repoPath: "/repo",
             taskId: "task-1",
             selection,
@@ -122,6 +125,7 @@ const setup = (
         ClientConnectionProvider,
         { connection },
         createElement(TaskArtifactsView, {
+          workspaceId: "workspace-1",
           repoPath: "/repo",
           taskId: "task-1",
           selection: next,
@@ -151,7 +155,12 @@ describe("task artifacts collection", () => {
         fireEvent.click(await screen.findByRole("button", { name: /^Workflow output / }));
         expect(await screen.findByText("hello")).toBeTruthy();
         expect(
-          await loadTaskDocumentFromQuery(view.connection.queryClient, "/repo", "task-1", code),
+          await loadTaskDocumentFromQuery(
+            view.connection.queryClient,
+            workspaceRefFixture("/repo"),
+            "task-1",
+            code,
+          ),
         ).toEqual({
           markdown: "hello",
           updatedAt: null,
@@ -178,7 +187,7 @@ describe("task artifacts collection", () => {
     const pendingCollection = Promise.withResolvers<TaskArtifactCollection>();
     const pendingDocument = Promise.withResolvers<TaskDocument>();
     const read = mock(
-      async (_repoPath: string, _taskId: string, _code: string): Promise<TaskDocument> => ({
+      async (_repoPath: WorkspaceRef, _taskId: string, _code: string): Promise<TaskDocument> => ({
         markdown: "hello",
         updatedAt: null,
       }),
@@ -192,7 +201,12 @@ describe("task artifacts collection", () => {
     await Promise.all(
       (["spec", "plan"] as const).map((section) =>
         connection.queryClient.fetchQuery(
-          taskDocumentQueryOptions(connection.queryClient, "/repo", "task-1", section),
+          taskDocumentQueryOptions(
+            connection.queryClient,
+            workspaceRefFixture("/repo"),
+            "task-1",
+            section,
+          ),
         ),
       ),
     );
@@ -206,6 +220,7 @@ describe("task artifacts collection", () => {
         ClientConnectionProvider,
         { connection },
         createElement(TaskArtifactsView, {
+          workspaceId: "workspace-1",
           repoPath: "/repo",
           taskId: "task-1",
           artifactSummary,
@@ -218,8 +233,9 @@ describe("task artifacts collection", () => {
       expect(screen.getByText("hello")).toBeTruthy();
       expect(screen.getByRole("heading", { name: "Specification" })).toBeTruthy();
       expect(
-        connection.queryClient.getQueryState(artifactQueryKeys.collection("/repo", "task-1"))
-          ?.fetchStatus,
+        connection.queryClient.getQueryState(
+          artifactQueryKeys.collection(workspaceRefFixture("/repo"), "task-1"),
+        )?.fetchStatus,
       ).toBe("fetching");
       view.rerender(selectedView("plan"));
       expect(screen.getByText("hello")).toBeTruthy();
@@ -236,7 +252,7 @@ describe("task artifacts collection", () => {
       read.mockImplementationOnce(() => pendingDocument.promise);
       act(() => {
         void connection.queryClient.invalidateQueries({
-          queryKey: documentQueryKeys.document("/repo", "task-1", "spec"),
+          queryKey: documentQueryKeys.document(workspaceRefFixture("/repo"), "task-1", "spec"),
           exact: true,
         });
       });
@@ -278,7 +294,7 @@ describe("task artifacts collection", () => {
         });
         await act(async () => {
           await view.connection.queryClient.invalidateQueries({
-            queryKey: documentQueryKeys.document("/repo", "task-1", "spec"),
+            queryKey: documentQueryKeys.document(workspaceRefFixture("/repo"), "task-1", "spec"),
             exact: true,
           });
         });
@@ -321,7 +337,11 @@ describe("task artifacts collection", () => {
     try {
       expect(await screen.findByText("hello")).toBeTruthy();
       expect(screen.getByRole("heading", { name: "QA report" })).toBeTruthy();
-      expect(view.readWorkflow).toHaveBeenCalledWith("/repo", "task-1", "qaReport");
+      expect(view.readWorkflow).toHaveBeenCalledWith(
+        workspaceRefFixture("/repo"),
+        "task-1",
+        "qaReport",
+      );
       expect(view.read).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole("button", { name: "All artifacts" }));
       expect(view.onSelectionChange.mock.calls).toEqual([[{ kind: "collection" }]]);
@@ -343,7 +363,7 @@ describe("task artifacts collection", () => {
       mediaType: "text/markdown",
     };
     const pendingCollection = Promise.withResolvers<TaskArtifactCollection>();
-    const read = mock(async (_repoPath: string, _taskId: string, _code: string) => ({
+    const read = mock(async (_repoPath: WorkspaceRef, _taskId: string, _code: string) => ({
       markdown: "hello",
       updatedAt: null,
     }));
@@ -359,6 +379,7 @@ describe("task artifacts collection", () => {
         ClientConnectionProvider,
         { connection },
         createElement(TaskArtifactsView, {
+          workspaceId: "workspace-1",
           repoPath: "/repo",
           taskId: "task-1",
           artifactSummary: {
@@ -377,7 +398,7 @@ describe("task artifacts collection", () => {
       view.rerender(selectedView(true));
       expect(await screen.findByText("hello")).toBeTruthy();
       expect(screen.queryByText(/has not been created yet/)).toBeNull();
-      expect(read).toHaveBeenCalledWith("/repo", "task-1", "plan");
+      expect(read).toHaveBeenCalledWith(workspaceRefFixture("/repo"), "task-1", "plan");
       expect(onSelectionChange).not.toHaveBeenCalled();
     } finally {
       pendingCollection.resolve({ artifacts: [workflow], canManageFree: true });
@@ -406,13 +427,17 @@ describe("task artifacts collection", () => {
       };
       act(() =>
         view.connection.queryClient.setQueryData<TaskArtifactCollection>(
-          artifactQueryKeys.collection("/repo", "task-1"),
+          artifactQueryKeys.collection(workspaceRefFixture("/repo"), "task-1"),
           { artifacts: [freeArtifact(), workflow], canManageFree: true },
         ),
       );
       expect(await screen.findByText("hello")).toBeTruthy();
       expect(screen.queryByText(/has not been created yet/)).toBeNull();
-      expect(view.readWorkflow).toHaveBeenCalledWith("/repo", "task-1", "plan");
+      expect(view.readWorkflow).toHaveBeenCalledWith(
+        workspaceRefFixture("/repo"),
+        "task-1",
+        "plan",
+      );
       expect(view.read).not.toHaveBeenCalled();
       expect(view.onSelectionChange).not.toHaveBeenCalled();
     } finally {
@@ -434,11 +459,15 @@ describe("task artifacts collection", () => {
       view.read.mockImplementationOnce(() => pendingRead.promise);
       act(() => {
         view.connection.queryClient.setQueryData<TaskArtifactCollection>(
-          artifactQueryKeys.collection("/repo", "task-1"),
+          artifactQueryKeys.collection(workspaceRefFixture("/repo"), "task-1"),
           { artifacts: [renamed], canManageFree: true },
         );
         void view.connection.queryClient.invalidateQueries({
-          queryKey: artifactQueryKeys.content("/repo", "task-1", artifact.artifactId),
+          queryKey: artifactQueryKeys.content(
+            workspaceRefFixture("/repo"),
+            "task-1",
+            artifact.artifactId,
+          ),
           exact: true,
         });
       });
@@ -448,7 +477,7 @@ describe("task artifacts collection", () => {
       expect(screen.getByText("Updating preview…")).toBeTruthy();
       expect(screen.getByLabelText("Download").getAttribute("aria-disabled")).toBe("true");
       expect(screen.getByLabelText("Download").getAttribute("href")).toBeNull();
-      act(() => pendingRead.resolve({ ...content(renamed), version: "v2" }));
+      act(() => pendingRead.resolve({ ...content(renamed) }));
       await waitFor(() =>
         expect(screen.getByLabelText("Download").getAttribute("aria-disabled")).toBe("false"),
       );
@@ -474,7 +503,11 @@ describe("task artifacts collection", () => {
       });
       await act(async () => {
         await view.connection.queryClient.invalidateQueries({
-          queryKey: artifactQueryKeys.content("/repo", "task-1", artifact.artifactId),
+          queryKey: artifactQueryKeys.content(
+            workspaceRefFixture("/repo"),
+            "task-1",
+            artifact.artifactId,
+          ),
           exact: true,
         });
       });
@@ -509,11 +542,15 @@ describe("task artifacts collection", () => {
       view.read.mockImplementationOnce(() => pendingRead.promise);
       act(() => {
         view.connection.queryClient.setQueryData<TaskArtifactCollection>(
-          artifactQueryKeys.collection("/repo", "task-1"),
+          artifactQueryKeys.collection(workspaceRefFixture("/repo"), "task-1"),
           { artifacts: [revised], canManageFree: true },
         );
         void view.connection.queryClient.invalidateQueries({
-          queryKey: artifactQueryKeys.content("/repo", "task-1", artifact.artifactId),
+          queryKey: artifactQueryKeys.content(
+            workspaceRefFixture("/repo"),
+            "task-1",
+            artifact.artifactId,
+          ),
           exact: true,
         });
       });
@@ -523,9 +560,7 @@ describe("task artifacts collection", () => {
       act(() =>
         pendingRead.resolve({
           ...content(revised),
-          version: "v2",
           dataBase64: btoa("Changed content"),
-          totalBytes: 15,
         }),
       );
       expect(await screen.findByText("Changed content")).toBeTruthy();
@@ -583,7 +618,7 @@ describe("task artifacts collection", () => {
       await waitFor(() => expect(screen.getByText("hello")).toBeTruthy());
       act(() =>
         view.connection.queryClient.setQueryData<TaskArtifactCollection>(
-          artifactQueryKeys.collection("/repo", "task-1"),
+          artifactQueryKeys.collection(workspaceRefFixture("/repo"), "task-1"),
           { artifacts: [first, { ...second, name: "Renamed" }], canManageFree: true },
         ),
       );
@@ -591,7 +626,7 @@ describe("task artifacts collection", () => {
       expect(view.read).toHaveBeenCalledTimes(1);
       act(() =>
         view.connection.queryClient.setQueryData<TaskArtifactCollection>(
-          artifactQueryKeys.collection("/repo", "task-1"),
+          artifactQueryKeys.collection(workspaceRefFixture("/repo"), "task-1"),
           { artifacts: [second], canManageFree: true },
         ),
       );
@@ -640,7 +675,6 @@ describe("task artifacts collection", () => {
           ...content(artifact),
           dataBase64:
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZFAAAAAASUVORK5CYII=",
-          totalBytes: 68,
         }));
       }
       try {
@@ -688,7 +722,7 @@ describe("task artifacts collection", () => {
       expect(screen.getByRole("dialog").textContent).toContain("hello");
       act(() => {
         view.connection.queryClient.setQueryData(
-          documentQueryKeys.document("/repo", "task-1", "spec"),
+          documentQueryKeys.document(workspaceRefFixture("/repo"), "task-1", "spec"),
           {
             markdown: "Changed content",
             updatedAt: "2026-10-22T13:00:00Z",

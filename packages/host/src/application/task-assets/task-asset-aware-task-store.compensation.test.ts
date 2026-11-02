@@ -33,12 +33,12 @@ describe("asset-aware task store compensation", () => {
             }),
           ),
       },
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
     const error = await captureTaskAssetError(
       store.updateTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         taskId: task.id,
         patch: { description: "Image removed" },
         descriptionAssets: { stagedAssetIds: [] },
@@ -51,7 +51,7 @@ describe("asset-aware task store compensation", () => {
       (
         await Effect.runPromise(
           harness.innerStore.getTask({
-            repoPath: harness.repoPath,
+            ...harness.scope,
             taskId: task.id,
           }),
         )
@@ -116,12 +116,12 @@ describe("asset-aware task store compensation", () => {
           );
         },
       },
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
     const error = await captureTaskAssetError(
       store.updateTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         taskId: task.id,
         patch: { description: `![added](odt-asset:${added.assetId})` },
         descriptionAssets: { stagedAssetIds: [added.assetId] },
@@ -136,7 +136,7 @@ describe("asset-aware task store compensation", () => {
       (
         await Effect.runPromise(
           harness.innerStore.getTask({
-            repoPath: harness.repoPath,
+            ...harness.scope,
             taskId: task.id,
           }),
         )
@@ -172,12 +172,12 @@ describe("asset-aware task store compensation", () => {
             }),
           ),
       },
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
     const error = await captureTaskAssetError(
       store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Promotion failure",
@@ -190,9 +190,7 @@ describe("asset-aware task store compensation", () => {
     );
 
     expect(error.failedPhase).toBe("promote_staged_file");
-    expect(
-      await Effect.runPromise(harness.innerStore.listTasks({ repoPath: harness.repoPath })),
-    ).toEqual([]);
+    expect(await Effect.runPromise(harness.innerStore.listTasks({ ...harness.scope }))).toEqual([]);
   });
 
   test("reuses the resolved workspace while compensating a failed create", async () => {
@@ -230,7 +228,7 @@ describe("asset-aware task store compensation", () => {
       },
       staging: harness.staging,
       filePort: harness.filePort,
-      resolveWorkspaceIdForRepoPath: () => {
+      resolveWorkspaceId: () => {
         resolverCalls += 1;
         return resolverCalls === 1
           ? Effect.succeed("fairnest")
@@ -246,7 +244,7 @@ describe("asset-aware task store compensation", () => {
 
     const error = await captureTaskAssetError(
       store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Resolver create failure",
@@ -263,9 +261,7 @@ describe("asset-aware task store compensation", () => {
     if (!error.taskId) {
       throw new Error("Expected the create failure to retain its generated task ID.");
     }
-    expect(
-      await Effect.runPromise(harness.innerStore.listTasks({ repoPath: harness.repoPath })),
-    ).toEqual([]);
+    expect(await Effect.runPromise(harness.innerStore.listTasks({ ...harness.scope }))).toEqual([]);
     expect(
       await Effect.runPromise(
         harness.filePort.readDurable({
@@ -310,12 +306,12 @@ describe("asset-aware task store compensation", () => {
       },
       staging: harness.staging,
       filePort: harness.filePort,
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
     const error = await captureTaskAssetError(
       store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Destination collision",
@@ -333,9 +329,7 @@ describe("asset-aware task store compensation", () => {
     if (!error.taskId) {
       throw new Error("Expected the rolled-back task ID.");
     }
-    expect(
-      await Effect.runPromise(harness.innerStore.listTasks({ repoPath: harness.repoPath })),
-    ).toEqual([]);
+    expect(await Effect.runPromise(harness.innerStore.listTasks({ ...harness.scope }))).toEqual([]);
     expect(
       await Effect.runPromise(
         harness.filePort.readDurable({
@@ -375,12 +369,12 @@ describe("asset-aware task store compensation", () => {
             }),
           ),
       },
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
     const error = await captureTaskAssetError(
       store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Purge failure",
@@ -430,12 +424,12 @@ describe("asset-aware task store compensation", () => {
           ),
       },
       filePort: harness.filePort,
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
     const error = await captureTaskAssetError(
       store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Discard failure",
@@ -484,7 +478,7 @@ describe("asset-aware task store compensation", () => {
       },
       staging: harness.staging,
       filePort: harness.filePort,
-      resolveWorkspaceIdForRepoPath: () => {
+      resolveWorkspaceId: () => {
         resolverCalls += 1;
         return resolverCalls === 1
           ? Effect.succeed("fairnest")
@@ -500,7 +494,7 @@ describe("asset-aware task store compensation", () => {
 
     const error = await captureTaskAssetError(
       store.updateTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         taskId: task.id,
         patch: { description: `![added](odt-asset:${added.assetId})` },
         descriptionAssets: { stagedAssetIds: [added.assetId] },
@@ -510,11 +504,8 @@ describe("asset-aware task store compensation", () => {
     expect(error.failedPhase).toBe("save_transaction");
     expect(resolverCalls).toBe(1);
     expect(
-      (
-        await Effect.runPromise(
-          harness.innerStore.getTask({ repoPath: harness.repoPath, taskId: task.id }),
-        )
-      ).description,
+      (await Effect.runPromise(harness.innerStore.getTask({ ...harness.scope, taskId: task.id })))
+        .description,
     ).toBe(description);
     expect(
       await Effect.runPromise(
@@ -590,12 +581,12 @@ describe("asset-aware task store compensation", () => {
           );
         },
       },
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
 
     const error = await captureTaskAssetError(
       store.createTask({
-        repoPath: harness.repoPath,
+        ...harness.scope,
         status: "open",
         task: {
           title: "Partial create",
@@ -635,11 +626,11 @@ describe("asset-aware task store compensation", () => {
             }),
           ),
       },
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
     const purgeError = await captureTaskAssetError(
       purgeStore.deleteTask({
-        repoPath: purgeHarness.repoPath,
+        ...purgeHarness.scope,
         taskId: purgeOwned.task.id,
       }),
     );
@@ -676,11 +667,11 @@ describe("asset-aware task store compensation", () => {
             }),
           ),
       },
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      resolveWorkspaceId: () => Effect.succeed("fairnest"),
     });
     const restoreError = await captureTaskAssetError(
       restoreStore.deleteTask({
-        repoPath: restoreHarness.repoPath,
+        ...restoreHarness.scope,
         taskId: restoreOwned.task.id,
       }),
     );

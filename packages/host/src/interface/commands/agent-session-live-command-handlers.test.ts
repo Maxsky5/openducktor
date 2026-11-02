@@ -217,7 +217,7 @@ describe("createAgentSessionLiveCommandHandlers", () => {
         router.invoke("agent_session_workflow_start", {
           repoPath: "/repo",
           runtimeKind: "opencode",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           systemPrompt: "Build the feature",
           model: { providerId: "openai", modelId: "gpt-5" },
           ...invalid,
@@ -248,7 +248,7 @@ describe("createAgentSessionLiveCommandHandlers", () => {
         router.invoke("agent_session_workflow_start", {
           repoPath: "/repo",
           runtimeKind: "opencode",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           systemPrompt: "Build the feature",
           model: { providerId: "openai", modelId: "gpt-5" },
         }),
@@ -318,7 +318,7 @@ describe("createAgentSessionLiveCommandHandlers", () => {
       Effect.runPromise(
         router.invoke("agent_session_control_start", {
           ...startInput,
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         }),
       ),
     ).rejects.toThrow();
@@ -362,7 +362,12 @@ describe("createAgentSessionLiveCommandHandlers", () => {
       runtimeKind: "opencode" as const,
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
-      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+      sessionScope: {
+        kind: "workflow" as const,
+        workspaceId: "repo",
+        taskId: "task-1",
+        role: "build" as const,
+      },
       parts: [
         {
           kind: "attachment" as const,

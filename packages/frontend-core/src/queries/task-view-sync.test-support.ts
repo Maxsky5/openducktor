@@ -1,14 +1,14 @@
-import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
+import type { ExternalTaskSyncEvent, WorkspaceRef } from "@openducktor/contracts";
 import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 
 export const boardEvent = (
-  repoPath: string,
+  scope: WorkspaceRef,
   cards: TaskCard[],
   options: { removedTaskIds?: string[]; doneVisibleDays?: number } = {},
 ): ExternalTaskSyncEvent => ({
   kind: "tasks_updated",
   eventId: "event",
-  repoPath,
+  ...scope,
   taskIds: [...new Set([...cards.map((card) => card.id), ...(options.removedTaskIds ?? [])])],
   removedTaskIds: options.removedTaskIds ?? [],
   statusChanges: [],

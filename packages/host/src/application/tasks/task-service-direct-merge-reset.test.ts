@@ -25,7 +25,7 @@ import {
   task,
 } from "./test-support/task-workflow-harness";
 
-const input = { repoPath: "/repo", taskId: "task-1", removeWorktree: true };
+const input = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", removeWorktree: true };
 const mergeInput = {
   ...input,
   input: {

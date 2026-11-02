@@ -82,7 +82,7 @@ const BASE_TASK_STORE_CHECK_FIXTURE: TaskStoreCheck = {
     category: "healthy",
     status: "ready",
     isReady: true,
-    detail: "SQLite task store is ready.",
+    detail: "The host database is ready.",
     databasePath: "/repo/.openducktor/task-stores/workspace-1/database.sqlite",
   },
 };
@@ -140,7 +140,12 @@ export const TEST_EXTERNAL_SESSION_IDS = {
 
 const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   externalSessionId: TEST_EXTERNAL_SESSION_IDS.default,
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+  sessionAssociation: {
+    kind: "workflow",
+    workspaceId: "workspace-1",
+    taskId: "task-1",
+    role: "spec",
+  },
   runtimeKind: "opencode",
   status: "idle",
   runtimeStatusMessage: null,

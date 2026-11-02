@@ -35,12 +35,14 @@ for (const ownerScope of ["task", "missing-task", "workspace"] as const) {
       ownerScope === "workspace"
         ? {
             kind: "workspace",
+            workspaceId: "workspace-1",
             repoPath: null,
             workingDirectory: null,
             ownerKey: "main",
             onSelectFile,
           }
         : {
+            workspaceId: "workspace-1",
             repoPath: "/repo",
             taskId: ownerScope === "task" ? "a" : null,
             ownerKey: "main",
@@ -87,6 +89,7 @@ test("absolute external links open after the recorded worktree is removed", asyn
     <ClientConnectionProvider connection={connection}>
       <ChatFileLinkProvider
         owner={{
+          workspaceId: "workspace-1",
           repoPath: "/repo",
           taskId: "a",
           workingDirectory: "/repo/removed-worktree",
@@ -117,15 +120,26 @@ test("links use each Task's Build Worktree", async () => {
   const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
   const content = (taskId: string) => (
     <ClientConnectionProvider connection={connection}>
-      <ChatFileLinkProvider owner={{ repoPath: "/repo", taskId, ownerKey: taskId, onSelectFile }}>
+      <ChatFileLinkProvider
+        owner={{
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId,
+          ownerKey: taskId,
+          onSelectFile,
+        }}
+      >
         <AgentChatMarkdownRenderer markdown="[file](src/app.ts:42)" />
       </ChatFileLinkProvider>
     </ClientConnectionProvider>
   );
   for (const taskId of ["a", "b"])
-    client.setQueryData(taskWorktreeQueryOptions({ repoPath: "/repo", taskId }).queryKey, () => ({
-      workingDirectory: `/repo/${taskId}`,
-    }));
+    client.setQueryData(
+      taskWorktreeQueryOptions({ workspaceId: "workspace-1", repoPath: "/repo", taskId }).queryKey,
+      () => ({
+        workingDirectory: `/repo/${taskId}`,
+      }),
+    );
   const view = render(content("a"));
   try {
     expect(onSelectFile).not.toHaveBeenCalled();
@@ -157,10 +171,15 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
       client: { ...defaultHost, taskWorktreeGet: () => deferred.promise },
     });
     const client = connection.queryClient;
-    const options = taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" });
+    const options = taskWorktreeQueryOptions({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      taskId: "a",
+    });
     const pending = client.fetchQuery(options);
     const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
     const owner: ChatFileLinkOwner = {
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       taskId: "a",
       ownerKey: "session-a",
@@ -209,14 +228,21 @@ for (const [href, workingDirectory, message] of invalidChatFileDestinations) {
     const connection = createTestClientConnection({ client: defaultHost });
     const client = connection.queryClient;
     client.setQueryData(
-      taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" }).queryKey,
+      taskWorktreeQueryOptions({ workspaceId: "workspace-1", repoPath: "/repo", taskId: "a" })
+        .queryKey,
       () => ({ workingDirectory }),
     );
     const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
     const view = render(
       <ClientConnectionProvider connection={connection}>
         <ChatFileLinkProvider
-          owner={{ repoPath: "/repo", taskId: "a", ownerKey: "main", onSelectFile }}
+          owner={{
+            workspaceId: "workspace-1",
+            repoPath: "/repo",
+            taskId: "a",
+            ownerKey: "main",
+            onSelectFile,
+          }}
         >
           <AgentChatMarkdownRenderer markdown={`[file](${href})`} />
         </ChatFileLinkProvider>
@@ -252,7 +278,11 @@ for (const failure of ["missing-task", "absent-worktree", "rejected-worktree"] a
     });
     const client = connection.queryClient;
     const taskId = failure === "missing-task" ? null : "a";
-    const options = taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" });
+    const options = taskWorktreeQueryOptions({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      taskId: "a",
+    });
     if (failure === "absent-worktree") client.setQueryData(options.queryKey, () => null);
     let pending: Promise<unknown> | undefined;
     if (failure === "rejected-worktree")
@@ -260,7 +290,15 @@ for (const failure of ["missing-task", "absent-worktree", "rejected-worktree"] a
     const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
     const view = render(
       <ClientConnectionProvider connection={connection}>
-        <ChatFileLinkProvider owner={{ repoPath: "/repo", taskId, ownerKey: "main", onSelectFile }}>
+        <ChatFileLinkProvider
+          owner={{
+            workspaceId: "workspace-1",
+            repoPath: "/repo",
+            taskId,
+            ownerKey: "main",
+            onSelectFile,
+          }}
+        >
           <AgentChatMarkdownRenderer markdown="[file](src/file.ts)" />
         </ChatFileLinkProvider>
       </ClientConnectionProvider>,
@@ -295,10 +333,15 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
       client: { ...defaultHost, taskWorktreeGet: () => deferred.promise },
     });
     const client = connection.queryClient;
-    const options = taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" });
+    const options = taskWorktreeQueryOptions({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      taskId: "a",
+    });
     const pending = client.fetchQuery(options).catch(() => undefined);
     const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
     const owner: ChatFileLinkOwner = {
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       taskId: "a",
       ownerKey: "main",
@@ -347,7 +390,8 @@ for (const [path, rootPath, relativePath] of validChatFileDestinations) {
       const connection = createTestClientConnection({ client: defaultHost });
       const client = connection.queryClient;
       client.setQueryData(
-        taskWorktreeQueryOptions({ repoPath: "C:/repo", taskId: "a" }).queryKey,
+        taskWorktreeQueryOptions({ workspaceId: "workspace-1", repoPath: "C:/repo", taskId: "a" })
+          .queryKey,
         () => ({ workingDirectory: rootPath }),
       );
       const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
@@ -355,6 +399,7 @@ for (const [path, rootPath, relativePath] of validChatFileDestinations) {
         <ClientConnectionProvider connection={connection}>
           <ChatFileLinkProvider
             owner={{
+              workspaceId: "workspace-1",
               repoPath: "C:/repo",
               taskId: "a",
               workingDirectory: rootPath,
@@ -401,13 +446,15 @@ for (const [stage, pendingPath, href] of [
       });
       const client = connection.queryClient;
       client.setQueryData(
-        taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" }).queryKey,
+        taskWorktreeQueryOptions({ workspaceId: "workspace-1", repoPath: "/repo", taskId: "a" })
+          .queryKey,
         () => ({
           workingDirectory: "/repo/a",
         }),
       );
       const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
       const owner: ChatFileLinkOwner = {
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         taskId: "a",
         workingDirectory: "/repo/a",
@@ -459,6 +506,7 @@ test("relative outside links select the canonical local root", async () => {
       <ChatFileLinkProvider
         owner={{
           kind: "workspace",
+          workspaceId: "workspace-1",
           repoPath: "/repo",
           workingDirectory: "/repo/task",
           ownerKey: "main",
@@ -495,13 +543,15 @@ for (const scope of ["task", "workspace"] as const) {
       });
       const client = connection.queryClient;
       client.setQueryData(
-        taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" }).queryKey,
+        taskWorktreeQueryOptions({ workspaceId: "workspace-1", repoPath: "/repo", taskId: "a" })
+          .queryKey,
         () => ({
           workingDirectory: rootPath,
         }),
       );
       const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
       const common = {
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         ownerKey: "main",
         workingDirectory: rootPath,
@@ -543,7 +593,8 @@ test("canonical file resolution decodes once and opens an outside symlink target
   const connection = createTestClientConnection({ client: { gitCanonicalizePath: canonicalize } });
   const client = connection.queryClient;
   client.setQueryData(
-    taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" }).queryKey,
+    taskWorktreeQueryOptions({ workspaceId: "workspace-1", repoPath: "/repo", taskId: "a" })
+      .queryKey,
     () => ({
       workingDirectory: "/alias/a",
     }),
@@ -552,7 +603,13 @@ test("canonical file resolution decodes once and opens an outside symlink target
   const view = render(
     <ClientConnectionProvider connection={connection}>
       <ChatFileLinkProvider
-        owner={{ repoPath: "/repo", taskId: "a", ownerKey: "main", onSelectFile }}
+        owner={{
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "a",
+          ownerKey: "main",
+          onSelectFile,
+        }}
       >
         <AgentChatMarkdownRenderer markdown="[file](/alias/a/a%2520b.ts:42)" />
       </ChatFileLinkProvider>
@@ -589,7 +646,8 @@ for (const [href, failure] of [
       });
       const client = connection.queryClient;
       client.setQueryData(
-        taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" }).queryKey,
+        taskWorktreeQueryOptions({ workspaceId: "workspace-1", repoPath: "/repo", taskId: "a" })
+          .queryKey,
         () => ({
           workingDirectory: "/alias/a",
         }),
@@ -598,7 +656,13 @@ for (const [href, failure] of [
       const view = render(
         <ClientConnectionProvider connection={connection}>
           <ChatFileLinkProvider
-            owner={{ repoPath: "/repo", taskId: "a", ownerKey: "main", onSelectFile }}
+            owner={{
+              workspaceId: "workspace-1",
+              repoPath: "/repo",
+              taskId: "a",
+              ownerKey: "main",
+              onSelectFile,
+            }}
           >
             <AgentChatMarkdownRenderer markdown={`[file](${href})`} />
           </ChatFileLinkProvider>
@@ -640,7 +704,13 @@ test("streaming invalid and partial links do not read or report errors before ac
   const content = (markdown: string) => (
     <ClientConnectionProvider connection={connection}>
       <ChatFileLinkProvider
-        owner={{ repoPath: "/repo", taskId: "a", ownerKey: "main", onSelectFile }}
+        owner={{
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "a",
+          ownerKey: "main",
+          onSelectFile,
+        }}
       >
         <AgentChatMarkdownRenderer markdown={markdown} streaming />
       </ChatFileLinkProvider>

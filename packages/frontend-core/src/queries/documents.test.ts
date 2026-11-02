@@ -1,3 +1,5 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
+import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import { createClientQueryClient } from "../connection/client-query-client";
 import {
@@ -12,12 +14,18 @@ describe("documents query helpers", () => {
   test("normal views cache each section and a Query refetch reaches the reader", async () => {
     const queryClient = createClientQueryClient();
     let version = 1;
-    const read = mock(async (_repoPath: string, _taskId: string, section: string) =>
+    const read = mock(async (_repoPath: WorkspaceRef, _taskId: string, section: string) =>
       document(`${section} V${version}`, `2026-03-28T0${version}:00:00.000Z`),
     );
     const load = (section: string) =>
       queryClient.fetchQuery(
-        taskDocumentQueryOptions(queryClient, "/repo", "task-1", section, read),
+        taskDocumentQueryOptions(
+          queryClient,
+          workspaceRefFixture("/repo"),
+          "task-1",
+          section,
+          read,
+        ),
       );
 
     try {
@@ -42,23 +50,23 @@ describe("documents query helpers", () => {
     const queryClient = createClientQueryClient();
     const read = mock(async () => document("# Spec V2", "2026-03-28T10:00:00.000Z"));
     queryClient.setQueryData(
-      documentQueryKeys.document("/repo", "task-1", "spec"),
+      documentQueryKeys.document(workspaceRefFixture("/repo"), "task-1", "spec"),
       document("# Spec V1", "2026-03-28T09:00:00.000Z"),
     );
 
     try {
       const fresh = await fetchFreshTaskDocumentFromQuery(
         queryClient,
-        "/repo",
+        workspaceRefFixture("/repo"),
         "task-1",
         "spec",
         read,
       );
       expect(fresh.markdown).toBe("# Spec V2");
-      expect(read).toHaveBeenCalledWith("/repo", "task-1", "spec");
+      expect(read).toHaveBeenCalledWith(workspaceRefFixture("/repo"), "task-1", "spec");
       expect(
         queryClient.getQueryData<typeof fresh>(
-          documentQueryKeys.document("/repo", "task-1", "spec"),
+          documentQueryKeys.document(workspaceRefFixture("/repo"), "task-1", "spec"),
         ),
       ).toEqual(fresh);
     } finally {
@@ -70,14 +78,14 @@ describe("documents query helpers", () => {
     const queryClient = createClientQueryClient();
     const read = mock(async () => document("# Spec V1", "2026-03-28T09:00:00.000Z"));
     queryClient.setQueryData(
-      documentQueryKeys.document("/repo", "task-1", "spec"),
+      documentQueryKeys.document(workspaceRefFixture("/repo"), "task-1", "spec"),
       document("# Optimistic spec", "2026-03-28T10:00:00.000Z"),
     );
 
     try {
       const fresh = await fetchFreshTaskDocumentFromQuery(
         queryClient,
-        "/repo",
+        workspaceRefFixture("/repo"),
         "task-1",
         "spec",
         read,
@@ -92,10 +100,10 @@ describe("documents query helpers", () => {
     const queryClient = createClientQueryClient();
     let incoming = document("# Older spec", "2026-03-28T09:00:00.000Z");
     const read = mock(async () => incoming);
-    const queryKey = documentQueryKeys.document("/repo", "task-1", "spec");
+    const queryKey = documentQueryKeys.document(workspaceRefFixture("/repo"), "task-1", "spec");
     const loadSpec = () =>
       queryClient.fetchQuery(
-        taskDocumentQueryOptions(queryClient, "/repo", "task-1", "spec", read),
+        taskDocumentQueryOptions(queryClient, workspaceRefFixture("/repo"), "task-1", "spec", read),
       );
     queryClient.setQueryData(queryKey, document("# Optimistic spec", "2026-03-28T10:00:00.000Z"));
 
@@ -120,7 +128,13 @@ describe("documents query helpers", () => {
 
     try {
       await expect(
-        fetchFreshTaskDocumentFromQuery(queryClient, "/repo", "task-1", "plan", read),
+        fetchFreshTaskDocumentFromQuery(
+          queryClient,
+          workspaceRefFixture("/repo"),
+          "task-1",
+          "plan",
+          read,
+        ),
       ).rejects.toBe(failure);
     } finally {
       queryClient.clear();
@@ -133,7 +147,9 @@ describe("documents query helpers", () => {
 
     try {
       await expect(
-        queryClient.fetchQuery(taskDocumentQueryOptions(queryClient, "", "task-1", "spec", read)),
+        queryClient.fetchQuery(
+          taskDocumentQueryOptions(queryClient, workspaceRefFixture(""), "task-1", "spec", read),
+        ),
       ).rejects.toThrow("Select a repository before loading task artifacts.");
       expect(read).not.toHaveBeenCalled();
     } finally {

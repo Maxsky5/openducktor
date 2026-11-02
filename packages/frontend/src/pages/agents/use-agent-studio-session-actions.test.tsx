@@ -541,7 +541,12 @@ describe("useAgentStudioSessionActions", () => {
     const startAgentSession = mock(async () => createdSession);
     const sendAgentMessage = mock<HookArgs["sendAgentMessage"]>(async () => null);
     const existingSession = createSession({
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       externalSessionId: "builder-old",
     });
     const initialArgs: HookArgs = {
@@ -1227,7 +1232,12 @@ describe("useAgentStudioSessionActions", () => {
     const selectAgentStudioSelection = mock(() => {});
     const sessionTwo = createSession({
       externalSessionId: "session-2",
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-2",
+        role: "spec",
+      },
     });
 
     const harness = createHookHarness({
@@ -1314,7 +1324,7 @@ describe("useAgentStudioSessionActions", () => {
       localSessionIdentity("session-9"),
       questionRequest,
       [["yes"]],
-      { kind: "workflow", taskId: "task-1", role: "spec" },
+      { kind: "workflow", workspaceId: "workspace-1", taskId: "task-1", role: "spec" },
     );
 
     await harness.unmount();
@@ -1365,7 +1375,12 @@ describe("useAgentStudioSessionActions", () => {
       role: "spec",
       ...selectedSessionArgs({
         externalSessionId: "session-spec",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "spec",
+        },
       }),
       selectedTask: createTask(),
       runSessionStartWorkflow: createRunSessionStartWorkflow({
@@ -1453,7 +1468,12 @@ describe("useAgentStudioSessionActions", () => {
     const selectAgentStudioSelection = mock(() => {});
     const session = createSession({
       externalSessionId: "session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
     });
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
@@ -1483,7 +1503,12 @@ describe("useAgentStudioSessionActions", () => {
     const selections: unknown[] = [];
     const session = createSession({
       externalSessionId: "session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
     });
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",

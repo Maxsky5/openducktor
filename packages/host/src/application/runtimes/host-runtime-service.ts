@@ -73,36 +73,36 @@ export const createHostRuntimeService = ({
   saveSettings: ({ snapshot, runtimeConfirmation }) =>
     Effect.gen(function* () {
       const draft = yield* settingsService.prepareSettingsSnapshot(snapshot);
-      const { lifecycleKinds } = planSettingsChange(
-        draft.current.agentRuntimes,
-        draft.next.agentRuntimes,
-      );
+      const change = planSettingsChange(draft.current.agentRuntimes, draft.next.agentRuntimes);
       return yield* mapRuntimeBusy(
-        orchestrator.withSettingsChange(lifecycleKinds, (session) =>
+        orchestrator.withSettingsChange(change.lifecycleKinds, (session) =>
           Effect.gen(function* () {
-            const committed = yield* settingsService.saveSettingsSnapshotWith(
-              snapshot,
-              (prepared, write) =>
-                Effect.gen(function* () {
-                  // Recheck against the latest settings inside the config write lock.
-                  const change = planSettingsChange(
-                    prepared.current.agentRuntimes,
-                    prepared.next.agentRuntimes,
-                  );
-                  const check = yield* mapRuntimeSettings(
-                    session.check(change, runtimeConfirmation),
-                  );
-                  if (check.type === "impact_changed") {
-                    return { type: "runtime_impact_changed" as const, impact: check.impact };
-                  }
-                  const workspaces = yield* write;
-                  return { type: "saved" as const, workspaces, change };
-                }),
+            const committed = yield* settingsService.saveSettingsSnapshotWith(draft, (write) =>
+              Effect.gen(function* () {
+                // Recheck the runtime impact inside the config write lock. The write fails when
+                // the runtime settings changed after `draft` read them.
+                const check = yield* mapRuntimeSettings(session.check(change, runtimeConfirmation));
+                if (check.type === "impact_changed") {
+                  return { type: "runtime_impact_changed" as const, impact: check.impact };
+                }
+                const persistence = yield* write;
+                return { type: "saved" as const, ...persistence, change };
+              }),
             );
             if (committed.type === "runtime_impact_changed") return committed;
             const runtimeApplications = yield* session.apply(committed.change);
+            if (committed.preferences !== "saved" && committed.preferences !== "unchanged")
+              return {
+                type: "partial" as const,
+                shared: "saved" as const,
+                preferences: committed.preferences,
+                workspaces: committed.workspaces,
+                runtimeApplications,
+              };
             return {
               type: "saved" as const,
+              shared: committed.shared,
+              preferences: committed.preferences,
               workspaces: committed.workspaces,
               runtimeApplications,
             };

@@ -109,6 +109,7 @@ export const resolveCanonicalImplementationResetTarget = (
   repoPath: string,
   canonicalWorktreePath: string,
   branchPrefix: string,
+  workspaceId: string,
 ) =>
   Effect.gen(function* () {
     const worktreePath = yield* gitPort.canonicalizePath(canonicalWorktreePath);
@@ -137,6 +138,7 @@ export const resolveCanonicalImplementationResetTarget = (
       workspaceSettingsService,
       task,
       repoPath,
+      workspaceId,
     );
     const restoreReference = (yield* resolveBuildStartPoint(
       { gitPort },

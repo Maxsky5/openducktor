@@ -111,7 +111,7 @@ const createService = ({
         Effect.succeed(worktreeExists ? { workingDirectory: worktreePath } : null),
     },
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
-      getRepoConfigByRepoPath: () =>
+      getRepoConfig: () =>
         Effect.succeed(
           repoConfigSchema.parse({
             workspaceId: "repo",
@@ -144,7 +144,7 @@ const createService = ({
   });
 };
 
-const input = { repoPath: "/repo", taskId: "task-1" };
+const input = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" };
 
 describe("task worktree cleanup impact", () => {
   test("names the worktree, its branches, and its uncommitted files", async () => {

@@ -26,7 +26,14 @@ describe("agent-orchestrator session errors and terminal state", () => {
       replyApproval: async () => {},
     };
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
 
     await listenToAgentSessionEvents({
@@ -81,7 +88,14 @@ describe("agent-orchestrator session errors and terminal state", () => {
       replyApproval: async () => {},
     };
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
     const session = findSession(sessionsRef, "session-1");
     if (!session) {
@@ -157,7 +171,14 @@ describe("agent-orchestrator session errors and terminal state", () => {
       replyApproval: async () => {},
     };
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
 
     await listenToAgentSessionEvents({
@@ -225,7 +246,12 @@ describe("agent-orchestrator session errors and terminal state", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         pendingApprovals: [
           {
             requestId: "perm-1",
@@ -321,7 +347,14 @@ describe("agent-orchestrator session errors and terminal state", () => {
       replyApproval: async () => {},
     };
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
 
     await listenToAgentSessionEvents({
@@ -375,7 +408,12 @@ describe("agent-orchestrator session errors and terminal state", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
       }),
     ]);
 
@@ -427,7 +465,12 @@ describe("agent-orchestrator session errors and terminal state", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         stopRequestedAt: "2026-02-22T08:00:09.000Z",
         messages: [
           {
@@ -547,7 +590,14 @@ describe("agent-orchestrator session errors and terminal state", () => {
     };
 
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
 
     const applySessionUpdate = createSessionUpdater(sessionsRef);
@@ -599,7 +649,14 @@ describe("agent-orchestrator session errors and terminal state", () => {
     };
 
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } }),
+      buildSession({
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
     ]);
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -643,7 +700,12 @@ describe("agent-orchestrator session errors and terminal state", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         stopRequestedAt: "2026-02-22T08:00:09.000Z",
         messages: [
           {
@@ -753,7 +815,12 @@ describe("agent-orchestrator session errors and terminal state", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         stopRequestedAt: "2026-02-22T08:00:09.000Z",
       }),
     ]);

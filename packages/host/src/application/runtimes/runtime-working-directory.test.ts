@@ -2,14 +2,14 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { repoConfigSchema } from "@openducktor/contracts";
+import { repoConfigSchema, type AgentSessionScope } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
-import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import {
   hasNestedNodeErrorCode,
   HostOperationError,
   HostValidationError,
+  toHostOperationError,
 } from "../../effect/host-errors";
 import {
   createGitPortTestDouble,
@@ -23,6 +23,16 @@ import {
 } from "../../test-support/git-repository-fixture";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { requireRuntimeWorkingDirectory } from "./runtime-working-directory";
+import {
+  requireManagedHistoryDirectory,
+  type RuntimeHistoryWorkingDirectoryDependencies,
+} from "./runtime-history-working-directory";
+
+const canonicalizePath = (inputPath: string) =>
+  Effect.tryPromise({
+    try: () => realpath(inputPath),
+    catch: (cause) => toHostOperationError(cause, "test.canonicalizePath"),
+  });
 
 test("checks real legacy directories when the workspace base is absent and rejects symlink escapes", async () => {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "odt-runtime-directory-"));
@@ -41,11 +51,11 @@ test("checks real legacy directories when the workspace base is absent and rejec
     await symlink(outsideDirectory, escapedDirectory, "junction");
     const dependencies = {
       gitPort: createGitPortTestDouble({ readCheckout: () => Effect.succeed(null) }),
-      settingsConfig: {
-        ...createSettingsConfigAdapter(),
+      settingsConfig: createSettingsConfigTestDouble({
+        canonicalizePath,
         defaultWorktreeBasePath: () => join(root, "missing-workspace-base"),
         defaultRepoWorktreeBasePath: () => legacyBase,
-      },
+      }),
       workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
         getRepoConfigByRepoPath: () =>
           Effect.succeed(
@@ -124,11 +134,11 @@ test("accepts registered worktrees outside the managed worktree roots", async ()
         readEnv: () => gitFixtureEnv,
         resolveCommand: () => Effect.succeed("git"),
       }),
-      settingsConfig: {
-        ...createSettingsConfigAdapter(),
+      settingsConfig: createSettingsConfigTestDouble({
+        canonicalizePath,
         defaultWorktreeBasePath: () => join(root, "managed"),
         defaultRepoWorktreeBasePath: () => join(root, "legacy"),
-      },
+      }),
       workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
         getRepoConfigByRepoPath: () =>
           Effect.succeed(
@@ -207,3 +217,88 @@ for (const base of ["/workspace", "/legacy"]) {
     });
   }
 }
+
+test.each(["workflow", "repository"] as const)(
+  "uses the selected %s workspace for live and recorded directories with a shared repository path",
+  async (kind) => {
+    const sessionScope: AgentSessionScope =
+      kind === "workflow"
+        ? { kind, workspaceId: "selected", taskId: "task", role: "build" }
+        : { kind, workspaceId: "selected" };
+    const dependencies: RuntimeHistoryWorkingDirectoryDependencies = {
+      gitPort: createGitPortTestDouble({ readCheckout: () => Effect.succeed(null) }),
+      settingsConfig: createSettingsConfigTestDouble({
+        canonicalizePath: (path) => Effect.succeed(path),
+        defaultRepoWorktreeBasePath: () => "/legacy",
+        defaultWorktreeBasePath: () => "/unselected",
+        resolveConfiguredPath: (path) => path,
+      }),
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getRepoConfig: (workspaceId) =>
+          Effect.succeed(
+            repoConfigSchema.parse({
+              workspaceId,
+              workspaceName: workspaceId,
+              repoPath: "/repo",
+              worktreeBasePath: `/worktrees/${workspaceId}`,
+            }),
+          ),
+        getRepoConfigByRepoPath: () =>
+          Effect.fail(
+            new HostValidationError({
+              message: "Several workspaces share this path. Select a workspace.",
+            }),
+          ),
+      }),
+      worktreeFiles: {
+        resolvePathWithinRoot: (root, candidate) =>
+          Effect.succeed({
+            canonicalPath: candidate,
+            cleanupPath: candidate,
+            isSymlink: false,
+            kind: candidate.startsWith(`${root}/`) ? "descendant" : "outside",
+          }),
+      },
+    };
+    const selected = {
+      repoPath: "/repo",
+      workingDirectory: "/worktrees/selected/task",
+      sessionScope,
+    };
+    await Effect.runPromise(requireRuntimeWorkingDirectory(dependencies, selected));
+    await Effect.runPromise(requireManagedHistoryDirectory(dependencies, selected));
+    await expect(
+      Effect.runPromise(
+        requireRuntimeWorkingDirectory(dependencies, {
+          ...selected,
+          workingDirectory: "/worktrees/foreign/task",
+        }),
+      ),
+    ).rejects.toThrow("outside the selected workspace");
+    await expect(
+      Effect.runPromise(
+        requireManagedHistoryDirectory(dependencies, {
+          ...selected,
+          workingDirectory: "/worktrees/foreign/task",
+        }),
+      ),
+    ).rejects.toThrow("outside the managed worktrees");
+    await expect(
+      Effect.runPromise(
+        requireRuntimeWorkingDirectory(dependencies, {
+          ...selected,
+          repoPath: "/moved/repo",
+          workingDirectory: "/moved/repo",
+        }),
+      ),
+    ).rejects.toThrow("no longer matches");
+    await expect(
+      Effect.runPromise(
+        requireRuntimeWorkingDirectory(dependencies, {
+          repoPath: "/repo",
+          workingDirectory: "/repo",
+        }),
+      ),
+    ).rejects.toThrow("Select a workspace");
+  },
+);

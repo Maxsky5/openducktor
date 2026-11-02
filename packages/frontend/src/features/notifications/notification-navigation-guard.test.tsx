@@ -75,9 +75,6 @@ test("notification workspace selection keeps the draft on cancel and failure", a
     addWorkspace: async () => {
       throw new Error("Not used in this test");
     },
-    saveWorkspaceModelDefaults: async () => {
-      throw new Error("Not used in this test");
-    },
     selectWorkspace,
     reorderWorkspaces: async () => {},
     refreshBranches: async () => {},
@@ -85,15 +82,12 @@ test("notification workspace selection keeps the draft on cancel and failure", a
     loadRepoSettings: async () => {
       throw new Error("Not used in this test");
     },
-    saveRepoSettings: async () => {},
-    loadSettingsSnapshot: async () => {
-      throw new Error("Not used in this test");
-    },
     detectGithubRepository: async () => null,
-    saveGlobalGitConfig: async () => {},
     previewSettingsSnapshotRuntime: async () => ({ impact: null }),
     saveSettingsSnapshot: async () => ({
       type: "saved" as const,
+      shared: "saved" as const,
+      preferences: "saved" as const,
       workspaces: [],
       runtimeApplications: [],
       refreshError: null,

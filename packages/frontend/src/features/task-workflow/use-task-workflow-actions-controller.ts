@@ -70,7 +70,11 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     activeRepoPath: workspaceRepoPath,
     activeWorkspaceId,
   });
-  const sessions = useAgentSessionSummaries();
+  const allSessions = useAgentSessionSummaries();
+  const sessions = useMemo(
+    () => allSessions.filter((session) => session.workspaceId === activeWorkspace?.workspaceId),
+    [allSessions, activeWorkspace?.workspaceId],
+  );
   const {
     tasks,
     refreshTasks,

@@ -13,6 +13,7 @@ import { isWorkflowAgentSession } from "./agent-orchestrator/support/workflow-se
 
 export type AgentSessionSummary = AgentSessionIdentity &
   Pick<WorkflowAgentSessionState, "title" | "startedAt" | "statusUnavailableReason"> & {
+    workspaceId: string;
     taskId: WorkflowAgentSessionState["sessionAssociation"]["taskId"];
     role: BuiltinRoleId;
     activityState: AgentSessionActivityState;
@@ -31,7 +32,10 @@ export type AgentActivitySessionsSnapshot = {
 export type AgentSessionPendingInputSummary = AgentSessionIdentity &
   Pick<AgentSessionSummary, "pendingApprovalCount" | "pendingQuestionCount">;
 
-export type RepositoryAgentSessionSummary = Omit<AgentSessionSummary, "taskId" | "role">;
+export type RepositoryAgentSessionSummary = Omit<
+  AgentSessionSummary,
+  "workspaceId" | "taskId" | "role"
+>;
 
 export const createEmptyAgentActivitySnapshot = (
   workspaceRepoPath: string | null,
@@ -86,14 +90,15 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
 
   return {
     ...toSummary(session),
+    workspaceId: session.sessionAssociation.workspaceId,
     taskId: session.sessionAssociation.taskId,
     role: builtinRoleId(session.sessionAssociation.role),
   };
 }
 
 const newestFirst = (left: AgentSessionState, right: AgentSessionState): number => {
-  if (left.startedAt > right.startedAt) return -1;
-  if (left.startedAt < right.startedAt) return 1;
+  if (Date.parse(left.startedAt) > Date.parse(right.startedAt)) return -1;
+  if (Date.parse(left.startedAt) < Date.parse(right.startedAt)) return 1;
   return 0;
 };
 
@@ -101,7 +106,10 @@ const sameTaskSummary = (
   left: AgentSessionSummary | undefined,
   right: AgentSessionSummary,
 ): boolean =>
-  sameSummary(left, right) && left?.taskId === right.taskId && left?.role === right.role;
+  sameSummary(left, right) &&
+  left?.workspaceId === right.workspaceId &&
+  left?.taskId === right.taskId &&
+  left?.role === right.role;
 
 const toSummary = (session: AgentSessionState): RepositoryAgentSessionSummary => {
   const summary: RepositoryAgentSessionSummary = {
@@ -125,7 +133,7 @@ const sameSummary = (
   left.title === right.title &&
   left.activityState === right.activityState &&
   left.statusUnavailableReason === right.statusUnavailableReason &&
-  left.startedAt === right.startedAt &&
+  Date.parse(left.startedAt) === Date.parse(right.startedAt) &&
   left.workingDirectory === right.workingDirectory &&
   left.selectedModel === right.selectedModel &&
   left.pendingApprovalCount === right.pendingApprovalCount &&

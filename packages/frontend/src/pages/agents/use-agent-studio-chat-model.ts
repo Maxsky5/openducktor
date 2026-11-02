@@ -192,10 +192,16 @@ export function useAgentStudioChatModel({
     () =>
       toAgentStudioTranscriptTarget({
         identity: stableSelectedSessionIdentity,
+        workspaceId: activeWorkspace?.workspaceId ?? null,
         taskId: selectedSession.taskId,
         role: selectedSession.role,
       }),
-    [selectedSession.role, selectedSession.taskId, stableSelectedSessionIdentity],
+    [
+      activeWorkspace?.workspaceId,
+      selectedSession.role,
+      selectedSession.taskId,
+      stableSelectedSessionIdentity,
+    ],
   );
   const chatDrafts = useClientConnection().drafts.chat;
   const draftPersistence = useMemo(
@@ -460,7 +466,14 @@ export function useAgentStudioChatModel({
     repoPath,
     workspaceId: activeWorkspace?.workspaceId ?? null,
     identity: selectedSessionIdentity,
-    scope: { kind: "workflow", taskId: selectedSession.taskId, role: selectedSession.role },
+    scope: activeWorkspace
+      ? {
+          kind: "workflow",
+          workspaceId: activeWorkspace.workspaceId,
+          taskId: selectedSession.taskId,
+          role: selectedSession.role,
+        }
+      : null,
     disabledReason: sessionForkDisabledReason({
       runtimeReadiness,
       interactionEnabled: chatReadiness.interactionEnabled,

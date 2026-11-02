@@ -27,7 +27,12 @@ describe("use-agent-studio-page-model-builders", () => {
     const plannerSession = createSession({
       runtimeKind: "opencode",
       externalSessionId: "planner-session",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "planner",
+      },
     });
     const unavailablePlannerTask = createTaskCardFixture({
       agentWorkflows: {
@@ -59,12 +64,22 @@ describe("use-agent-studio-page-model-builders", () => {
     const specSession = createSession({
       runtimeKind: "opencode",
       externalSessionId: "spec-session",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
     });
     const qaWaitingSession = createSession({
       runtimeKind: "opencode",
       externalSessionId: "qa-session",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "qa",
+      },
       pendingQuestions: [{ requestId: "q-1", questions: [] }],
     });
     const task = createTaskCardFixture({
@@ -95,7 +110,12 @@ describe("use-agent-studio-page-model-builders", () => {
     const activeSession = createSession({
       runtimeKind: "opencode",
       externalSessionId: "spec-session",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
     });
     const taskWithFeedback = createTaskCardFixture({
       status: "human_review",

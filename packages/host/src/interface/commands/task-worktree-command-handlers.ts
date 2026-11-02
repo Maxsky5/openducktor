@@ -14,6 +14,10 @@ import {
 const parseTaskWorktreeInput = (args: HostCommandArgs): TaskWorktreeInput => {
   const record = requireRecord(commandInputRecordSchema.safeParse(args), "task_worktree_get input");
   return {
+    workspaceId: requireString(
+      commandInputStringSchema.safeParse(record.workspaceId),
+      "workspaceId",
+    ),
     repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
     taskId: requireString(commandInputStringSchema.safeParse(record.taskId), "taskId"),
   };

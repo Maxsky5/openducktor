@@ -25,7 +25,6 @@ export {
   type SourceRuntimeDistribution,
   type ToolScriptMcpLauncher,
 } from "./adapters/runtimes/runtime-distribution";
-export { findInvalidSettingsFileError } from "./adapters/settings/settings-config-adapter";
 export {
   attachCdpTargetSession,
   type CdpConnection,
@@ -81,6 +80,11 @@ export {
 } from "./composition/node/create-node-host-command-router";
 export { createNodeEffectHostCommandRouter } from "./composition/node/create-node-effect-host-command-router";
 export { checkStartupSettingsEffect } from "./composition/node/check-startup-settings";
+export {
+  findHostStorageStartupError,
+  formatHostStorageStartupError,
+  HostStorageStartupError,
+} from "./composition/node/host-startup-storage-error";
 export { createNodeHostCommandRouter } from "./composition/node/create-node-host-command-router-promise";
 export {
   type DevelopmentInstanceMode,
@@ -113,6 +117,7 @@ export {
   type OpenDucktorDailyLogWriterOptions,
   OpenDucktorLogPersistenceError,
   type OpenDucktorLogSurface,
+  resolveOpenDucktorLogDirectory,
 } from "./infrastructure/logging/openducktor-daily-log-writer";
 export {
   createProcessEnvironment,

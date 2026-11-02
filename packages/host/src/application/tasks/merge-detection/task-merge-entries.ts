@@ -10,7 +10,7 @@ import {
   isMergeDetectionCandidate,
 } from "../../../domain/task";
 import type { GitRefTip } from "../../../ports/git-port";
-import type { TaskRecord } from "../../../ports/task-repository-ports";
+import type { TaskMergeCandidate } from "../../../ports/task-repository-ports";
 import { findTaskBranch } from "../support/task-branch-tips";
 import type { OwnCommit } from "./task-merge-check";
 
@@ -42,7 +42,7 @@ export type PendingCheck = {
  * detection does not check the task.
  */
 export const planTaskCheck = (
-  task: TaskRecord,
+  task: TaskMergeCandidate,
   context: {
     relatedTips: GitRefTip[];
     taskWorktreePath: string;

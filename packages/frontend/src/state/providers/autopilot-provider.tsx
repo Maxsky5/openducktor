@@ -1,4 +1,4 @@
-import type { WorkspaceRecord } from "@openducktor/contracts";
+import type { WorkspaceRecord, WorkspaceRef } from "@openducktor/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import {
   type PropsWithChildren,
@@ -19,6 +19,7 @@ import { useWorkspaceStateContext } from "../app-state-contexts";
 import { useAgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { readAutopilotHeldOutcomes } from "@openducktor/frontend-core/autopilot/autopilot-held-outcomes";
 import { autopilotQueryKeys } from "@openducktor/frontend-core/queries/autopilot";
+import { invalidateWorkspaceSettingsSnapshot } from "@openducktor/frontend-core/queries/workspace";
 import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-runtime";
 import { invalidateTerminalList } from "@openducktor/frontend-core/queries/terminals";
 import { useHostConnection } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -79,8 +80,8 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
         markInAppFeedbackHandled: (errorId) =>
           notificationsRef.current.markInAppFeedbackHandled(errorId),
         isWorkspaceSelected: (workspaceId) => activeWorkspaceIdRef.current === workspaceId,
-        refreshTaskViews: (repoPath, taskId) =>
-          refreshLaunchedTaskViews(queryClient, repoPath, taskId),
+        refreshTaskViews: (workspace, taskId) =>
+          refreshLaunchedTaskViews(queryClient, workspace, taskId),
       }),
     [host, queryClient],
   );
@@ -116,27 +117,24 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     let disposed = false;
     let unsubscribe: (() => void) | null = null;
     const readWorkspaceIds = readWorkspaceIdsRef.current;
-    // An open settings modal reads the saved rules again at once, and other readers on next use.
-    // A failed read shows in the Autopilot settings section.
-    const reloadSavedRules = () => {
-      void queryClient.invalidateQueries({ queryKey: autopilotQueryKeys.settings() });
-    };
+    const refreshSavedSettings = () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: autopilotQueryKeys.settings(), exact: true }),
+        invalidateWorkspaceSettingsSnapshot(queryClient),
+      ]);
     host
       .subscribeRunEvents((payload) => {
         if ("__openducktorConnectionControl" in payload) {
           if (payload.kind !== CONNECTION_RECONNECTED_EVENT_KIND || !payload.missedEvents) return;
-          // A missed settings event can leave old Autopilot rules in the cache.
-          reloadSavedRules();
-          return readHeldOutcomes(openWorkspaceIdsRef.current, { workspaceSelected: false }).then(
-            (causes) => {
-              if (causes.length > 0) throw causes[0];
-            },
-          );
+          return Promise.all([
+            refreshSavedSettings(),
+            readHeldOutcomes(openWorkspaceIdsRef.current, { workspaceSelected: false }),
+          ]).then(([, causes]) => {
+            if (causes.length > 0) throw causes[0];
+          });
         }
-        // Another client can save the rules, so this client reads them again.
         if (payload.type === "autopilot_settings_saved") {
-          reloadSavedRules();
-          return;
+          return refreshSavedSettings().then(() => {});
         }
         // The shell parsed the payload with the run event contract.
         if (payload.type === "autopilot_outcome") presenter.present(payload.outcome);
@@ -196,13 +194,13 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
 // A failed launch can still create the task worktree and its terminals.
 const refreshLaunchedTaskViews = async (
   queryClient: QueryClient,
-  repoPath: string,
+  workspace: WorkspaceRef,
   taskId: string,
 ): Promise<void> => {
   await Promise.all([
-    invalidateTerminalList(queryClient, { kind: "task", repoPath, taskId }),
+    invalidateTerminalList(queryClient, { kind: "task", ...workspace, taskId }),
     queryClient.invalidateQueries({
-      queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
+      queryKey: taskWorktreeQueryKeys.taskWorktree({ ...workspace, taskId }),
     }),
   ]);
 };

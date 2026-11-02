@@ -15,7 +15,11 @@ import {
 } from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { SettingsConfigPort, SettingsConfigError } from "../../ports/settings-config-port";
-import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
+import type {
+  TaskStoreError,
+  TaskStorePort,
+  TaskOwnershipReader,
+} from "../../ports/task-repository-ports";
 import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
 import { removeWorktreeAndFilesystemPath } from "../git/worktree-removal";
 import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
@@ -43,7 +47,6 @@ export type WorkspaceLifecycleError =
 
 export type WorkspaceStoragePort = {
   removeWorkspaceTaskAssets(workspaceId: string): Effect.Effect<void, TaskAssetError>;
-  removeWorkspaceTaskStore(workspaceId: string): Effect.Effect<void, HostOperationErrorAggregate>;
   removeWorkspaceCredentials(repoConfig: RepoConfig): Effect.Effect<void, HostOperationError>;
   /** Closes the browser tabs of the workspace and deletes its browser profile. Idempotent. */
   removeWorkspaceBrowserData(workspaceId: string): Effect.Effect<void, HostOperationError>;
@@ -86,7 +89,8 @@ type CreateWorkspaceLifecycleServiceInput = {
   settingsConfig: SettingsConfigPort;
   storage: WorkspaceStoragePort;
   taskSessionLifecycleCoordinator: Pick<TaskSessionLifecycleCoordinator, "runWorkspaceLifecycle">;
-  taskStore: Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">;
+  taskStore: Pick<TaskStorePort, "listTaskIds" | "listAgentSessionsForTasks">;
+  taskOwnership: Pick<TaskOwnershipReader, "listTaskDirectoriesForWorktreeOwnership">;
   workspaceSettingsService: WorkspaceSettingsService;
   onWorkspaceReopened: (repoPath: string) => void;
   worktreeFiles: Pick<
@@ -106,6 +110,7 @@ export const createWorkspaceLifecycleService = ({
   storage,
   taskSessionLifecycleCoordinator,
   taskStore,
+  taskOwnership,
   workspaceSettingsService,
   onWorkspaceReopened,
   worktreeFiles,
@@ -222,7 +227,7 @@ export const createWorkspaceLifecycleService = ({
         const worktreePaths = yield* admission.withAdministrativeAccess(
           input.workspaceId,
           collectWorkspaceTaskWorktreePaths(
-            { gitPort, settingsConfig, taskStore, workspaceSettingsService },
+            { gitPort, settingsConfig, taskStore, taskOwnership, workspaceSettingsService },
             repoConfig,
             startedRecord.pendingWorktreePath,
           ),
@@ -280,21 +285,6 @@ export const createWorkspaceLifecycleService = ({
         yield* persistProgress(input.workspaceId, phase, null);
       }
 
-      if (phase === "task_store") {
-        const storeResult = yield* Effect.result(
-          storage.removeWorkspaceTaskStore(input.workspaceId),
-        );
-        if (storeResult._tag === "Failure") {
-          return yield* failRemovalPhase(
-            input.workspaceId,
-            "task_store",
-            removedWorktrees,
-            undefined,
-            `Failed to remove the workspace task store: ${storeResult.failure.message}. The workspace stays frozen. Retry removal to continue.`,
-            storeResult.failure,
-          );
-        }
-      }
       yield* storage.removeWorkspaceCredentials(repoConfig);
       yield* storage.removeWorkspaceBrowserData(input.workspaceId);
       const catalog = yield* workspaceSettingsService.removeWorkspaceRegistration(

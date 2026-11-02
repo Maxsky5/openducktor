@@ -132,7 +132,11 @@ export const createHostApprovalPolicy = (deps: {
             scope.kind === "workflow"
               ? {
                   scope,
-                  workflow: yield* deps.preparation.taskWorkflow(root.repoPath, scope.taskId),
+                  workflow: yield* deps.preparation.taskWorkflow({
+                    workspaceId: scope.workspaceId,
+                    repoPath: root.repoPath,
+                    taskId: scope.taskId,
+                  }),
                 }
               : null;
           const workflowRole = workflowSession
@@ -162,7 +166,7 @@ export const createHostApprovalPolicy = (deps: {
               message = workflowSession.workflow.prompts.readOnlyRejection({
                 role: workflowSession.scope.role,
                 overrides: yield* deps.preparation.promptOverrides(
-                  root.repoPath,
+                  { workspaceId: workflowSession.scope.workspaceId, repoPath: root.repoPath },
                   workflowSession.workflow,
                 ),
               });

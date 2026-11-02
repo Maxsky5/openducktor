@@ -1,3 +1,4 @@
+import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render } from "@testing-library/react";
 import type { ReactElement } from "react";
@@ -65,22 +66,9 @@ const workspaceState = {
   loadRepoSettings: async () => {
     throw new Error("Not used in this test.");
   },
-  saveRepoSettings: async () => {},
-  saveWorkspaceModelDefaults: async () => {
-    throw new Error("Not used");
-  },
-  loadSettingsSnapshot: async () => {
-    throw new Error("Not used in this test.");
-  },
   detectGithubRepository: async () => null,
-  saveGlobalGitConfig: async () => {},
   previewSettingsSnapshotRuntime: async () => ({ impact: null }),
-  saveSettingsSnapshot: async () => ({
-    type: "saved" as const,
-    workspaces: [],
-    runtimeApplications: [],
-    refreshError: null,
-  }),
+  saveSettingsSnapshot: async () => savedSettingsResult(),
   saveAgentModelFavorites: async () => {
     throw new Error("saveAgentModelFavorites is not used in this test");
   },
@@ -265,7 +253,9 @@ describe("task workflow editor save ownership", () => {
         );
 
         view.rerender(tree(workspaceB, taskB));
-        expect(getComposer().composer.open).toBe(false);
+        expect(getComposer().composer.open).toBe(true);
+        expect(getComposer().composer.destination?.workspaceId).toBe(workspaceA.workspaceId);
+        expect(getController().state.title).toBe("Saved A");
         const nextTask = replacement === "another workspace" ? taskB : taskA;
         if (replacement !== "another workspace") {
           view.rerender(tree(workspaceA, taskA));

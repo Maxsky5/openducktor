@@ -1,11 +1,11 @@
-import type { PullRequest, PullRequestReviewContext } from "@openducktor/contracts";
+import { workspaceScopeValue } from "./workspace-scope";
+import type { PullRequest, PullRequestReviewContext, WorkspaceRef } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import type { HostClient } from "@openducktor/host-client";
 import { connectionHost } from "../connection/client-connection";
 
 type PullRequestReviewQueryHost = Pick<HostClient, "pullRequestReviewContextGet">;
-export type PullRequestReviewContextQueryInput = {
-  repoPath: string;
+export type PullRequestReviewContextQueryInput = WorkspaceRef & {
   taskId?: string;
   pullRequest?: Pick<PullRequest, "providerId" | "number">;
 };
@@ -20,7 +20,7 @@ export const pullRequestReviewQueryKeys = {
     [
       ...pullRequestReviewQueryKeys.all,
       "context",
-      input.repoPath,
+      workspaceScopeValue(input),
       input.taskId ?? EMPTY_VALUE,
       input.pullRequest?.providerId ?? EMPTY_VALUE,
       input.pullRequest?.number ?? EMPTY_VALUE,
@@ -32,6 +32,7 @@ export const pullRequestReviewContextQueryOptions = (input: PullRequestReviewCon
     queryKey: pullRequestReviewQueryKeys.context(input),
     queryFn: ({ client }): Promise<PullRequestReviewContext> => {
       const request: Parameters<PullRequestReviewQueryHost["pullRequestReviewContextGet"]>[0] = {
+        workspaceId: input.workspaceId,
         repoPath: input.repoPath,
       };
       if (input.taskId) {

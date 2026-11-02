@@ -39,7 +39,7 @@ const tab: TerminalTab = {
   summary: {
     terminalId: "shell",
     label: "Shell",
-    context: { repoPath: "/repo", taskId: "task" },
+    context: { workspaceId: "repo", repoPath: "/repo", taskId: "task" },
     initialWorkingDir: "/repo",
     createdAt: "2026-10-18T00:00:00.000Z",
     lifecycle: "running",
@@ -254,7 +254,7 @@ test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
     const key = sessionPanelOwnerKey(owner);
     const scope = {
       key,
-      context: { repoPath: `/repo-${mode}`, taskId: "task" },
+      context: { workspaceId: "repo", repoPath: `/repo-${mode}`, taskId: "task" },
       workingDirectory: "/repo",
       workingDirectoryError: "Missing directory",
     };

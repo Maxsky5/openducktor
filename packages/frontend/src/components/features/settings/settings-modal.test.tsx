@@ -102,7 +102,7 @@ for (const shared of [true, false]) {
     }
   });
 
-  test(`${shared ? "shared" : "local"} settings keeps the prompt tab after cancel`, async () => {
+  test(`${shared ? "shared" : "local"} settings discards edits and keeps the prompt tab after cancel`, async () => {
     const settings = renderSettings(shared);
     try {
       let content = await settings.open();
@@ -111,12 +111,25 @@ for (const shared of [true, false]) {
       expect(content.getByRole("tab", { name: "Builder" }).getAttribute("aria-selected")).toBe(
         "true",
       );
+      fireEvent.click(content.getByRole("button", { name: "Chat" }));
+      const thinkingMessages = content.getByRole("switch", {
+        name: "Show thinking messages in session transcripts",
+      });
+      fireEvent.click(thinkingMessages);
+      expect(thinkingMessages.getAttribute("aria-checked")).toBe("true");
+      fireEvent.click(content.getByRole("button", { name: "System prompts" }));
       await settings.close(content);
       expect(settings.saveSettingsSnapshot).not.toHaveBeenCalled();
       content = await settings.open(shared ? "Other settings" : "Open settings");
       expect(content.getByRole("tab", { name: "Builder" }).getAttribute("aria-selected")).toBe(
         "true",
       );
+      fireEvent.click(content.getByRole("button", { name: "Chat" }));
+      expect(
+        content
+          .getByRole("switch", { name: "Show thinking messages in session transcripts" })
+          .getAttribute("aria-checked"),
+      ).toBe("false");
     } finally {
       settings.unmount();
     }
@@ -137,7 +150,7 @@ for (const shared of [true, false]) {
       await settings.close(content, true);
       expect(settings.saveSettingsSnapshot).toHaveBeenCalledTimes(1);
       expect(settings.saveSettingsSnapshot).toHaveBeenCalledWith(
-        expect.objectContaining({ chat: expect.objectContaining({ showThinkingMessages: true }) }),
+        { global: { chat: { showThinkingMessages: true } } },
         undefined,
       );
       content = await settings.open();
@@ -346,7 +359,6 @@ function renderSettings(
     addWorkspace: async () => {
       throw new Error("Not used in this test");
     },
-    saveWorkspaceModelDefaults: async () => {},
     selectWorkspace: async () => {},
     reorderWorkspaces: async () => {},
     refreshBranches: async () => {},
@@ -354,13 +366,10 @@ function renderSettings(
     loadRepoSettings: async () => {
       throw new Error("Not used in this test");
     },
-    saveRepoSettings: async () => {},
-    loadSettingsSnapshot: async () => queryClient.ensureQueryData(settingsSnapshotQueryOptions()),
     detectGithubRepository: async () => null,
-    saveGlobalGitConfig: async () => {},
     previewSettingsSnapshotRuntime: async () => ({ impact: null }),
     saveSettingsSnapshot,
-    saveAgentModelFavorites: async () => structuredClone(snapshot),
+    saveAgentModelFavorites: async () => structuredClone(snapshot.agentModelFavorites),
   } satisfies React.ComponentProps<typeof WorkspaceStateContext.Provider>["value"];
   const checksState = createChecksStateFixture();
   const runtimeState = {
@@ -457,6 +466,7 @@ function ImportTrigger(): ReactElement {
         Import issues
       </button>
       <IssueImportDialog
+        workspaceId="repo"
         open={open}
         onOpenChange={setOpen}
         repoPath="/repo"

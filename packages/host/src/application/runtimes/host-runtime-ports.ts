@@ -5,7 +5,7 @@ import type {
   RuntimeSettingsSource,
 } from "@openducktor/runtime-orchestration";
 import { Effect } from "effect";
-import { type HostError, HostValidationError } from "../../effect/host-errors";
+import { type HostError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { RuntimeAdmissionPort } from "../../ports/runtime-admission-port";
@@ -29,25 +29,17 @@ export const createRuntimeRegistryPort = (
   probeSessionStatus: (input) => mapRuntimeUnavailable(orchestrator.probeSession(input)),
 });
 
-/** Reads the saved runtime settings and workspaces from the OpenDucktor settings file. */
+/** Reads the saved runtime settings and workspace catalog. */
 export const createRuntimeSettingsSource = (
-  settingsConfig: Pick<SettingsConfigPort, "readConfig">,
+  settingsConfig: Pick<SettingsConfigPort, "readGlobalConfig" | "readWorkspaceCatalogSnapshot">,
 ): RuntimeSettingsSource<HostError> => {
-  const readConfig = settingsConfig.readConfig().pipe(
-    Effect.flatMap((config) =>
-      config
-        ? Effect.succeed(config)
-        : Effect.fail(
-            new HostValidationError({
-              field: "agentRuntimes",
-              message: "Runtime settings are not initialized. Open Settings > Runtimes.",
-            }),
-          ),
-    ),
-  );
   return {
-    readRuntimeSettings: () => readConfig.pipe(Effect.map((config) => config.agentRuntimes)),
-    listWorkspaces: () => readConfig.pipe(Effect.map((config) => Object.values(config.workspaces))),
+    readRuntimeSettings: () =>
+      settingsConfig.readGlobalConfig().pipe(Effect.map((config) => config.agentRuntimes)),
+    listWorkspaces: () =>
+      settingsConfig
+        .readWorkspaceCatalogSnapshot()
+        .pipe(Effect.map((snapshot) => snapshot.workspaces)),
   };
 };
 

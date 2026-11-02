@@ -468,7 +468,12 @@ const terminalStartBlockedReason = ({
 const filterForContext = (context: TerminalOwnedContext | null): TerminalListFilter => {
   if (context === null) return { kind: "all" };
   if ("taskId" in context) {
-    return { kind: "task", repoPath: context.repoPath, taskId: context.taskId };
+    return {
+      kind: "task",
+      workspaceId: context.workspaceId,
+      repoPath: context.repoPath,
+      taskId: context.taskId,
+    };
   }
   return {
     kind: "workspace_session",

@@ -22,6 +22,7 @@ const summary = (
   activityState: AgentSessionSummary["activityState"],
   taskId = "TASK-1",
 ): AgentSessionSummary => ({
+  workspaceId: "ws-1",
   externalSessionId: id,
   runtimeKind: "opencode",
   workingDirectory: "/wt/task-1",
@@ -38,7 +39,7 @@ const summary = (
 describe("groupTaskSessions", () => {
   test("groups sessions by Workflow Role in workflow order, newest first", () => {
     const groups = groupTaskSessions(
-      "TASK-1",
+      { workspaceId: "ws-1", taskId: "TASK-1" },
       [
         record("b-old", "build", "2026-10-01T08:00:00.000Z"),
         record("s-1", "spec", "2026-09-30T08:00:00.000Z"),
@@ -62,7 +63,7 @@ describe("groupTaskSessions", () => {
   test("orders sessions that started together by identity, as the desktop selector", () => {
     const startedAt = "2026-10-01T08:00:00.000Z";
     const groups = groupTaskSessions(
-      "TASK-1",
+      { workspaceId: "ws-1", taskId: "TASK-1" },
       [record("b-a", "build", startedAt), record("b-b", "build", startedAt)],
       [],
     );
@@ -74,12 +75,13 @@ describe("groupTaskSessions", () => {
 
   test("shows the live status and adds live sessions that the history does not list yet", () => {
     const groups = groupTaskSessions(
-      "TASK-1",
+      { workspaceId: "ws-1", taskId: "TASK-1" },
       [record("b-1", "build", "2026-10-01T08:00:00.000Z")],
       [
         summary("b-1", "build", "waiting_input"),
         summary("q-1", "qa", "running"),
         summary("other", "qa", "running", "TASK-2"),
+        { ...summary("foreign", "qa", "running"), workspaceId: "ws-2" },
       ],
     );
     expect(groups.map((group) => group.role)).toEqual(["build", "qa"]);

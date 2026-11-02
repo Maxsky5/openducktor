@@ -5,7 +5,12 @@ import { terminalListByFilterQueryOptions, terminalQueryKeys } from "./terminals
 import { createTestClientConnection } from "../test-support/test-client-connection";
 
 test("a paused terminal read keeps its owner's cached list", () => {
-  const filter = { kind: "task" as const, repoPath: "/repo", taskId: "task-1" };
+  const filter = {
+    kind: "task" as const,
+    workspaceId: "workspace-1",
+    repoPath: "/repo",
+    taskId: "task-1",
+  };
   const cached = { hostInstanceId: "host-1", revision: 1, terminals: [] };
   const client = new QueryClient();
   client.setQueryData(terminalQueryKeys.filter(filter), cached);
@@ -31,12 +36,17 @@ test.each(["host", "replacement-host"])(
       client: { terminalList: () => response.promise },
       scheduleTask: () => () => {},
     });
-    const filter = { kind: "task" as const, repoPath: "/repo", taskId: "task" };
+    const filter = {
+      kind: "task" as const,
+      workspaceId: "workspace",
+      repoPath: "/repo",
+      taskId: "task",
+    };
     const options = terminalListByFilterQueryOptions({ filter });
     const terminal = {
       terminalId: "action-terminal",
       label: "Install dependencies",
-      context: { repoPath: "/repo", taskId: "task" },
+      context: { workspaceId: "workspace", repoPath: "/repo", taskId: "task" },
       initialWorkingDir: "/repo",
       createdAt: "2026-10-27T12:00:00.000Z",
       lifecycle: "running" as const,

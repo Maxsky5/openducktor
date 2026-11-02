@@ -1,3 +1,4 @@
+import { createHostEventBus } from "../../events/host-event-bus";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveSnapshot, HostEventEnvelope } from "@openducktor/contracts";
 import {
@@ -26,6 +27,7 @@ const createBus = () => {
   return {
     published,
     bus: {
+      ...createHostEventBus({ report: () => {} }),
       publish: (envelope: HostEventEnvelope) => void published.push(envelope),
       subscribe: () => () => {},
     },

@@ -22,10 +22,11 @@ describe("system settings", () => {
     }
   });
 
-  test("save inputs require system and preserve an explicit clear", () => {
-    const snapshot = settingsSnapshotSchema.parse({ theme: "light" });
-    expect(settingsSnapshotSaveInputSchema.parse(snapshot).system).toEqual({});
-    const { system: _system, ...withoutSystem } = snapshot;
-    expect(settingsSnapshotSaveInputSchema.safeParse(withoutSystem).success).toBe(false);
+  test("save inputs omit untouched system settings and preserve an explicit clear", () => {
+    expect(settingsSnapshotSaveInputSchema.parse({}).global).toBeUndefined();
+    const input = { global: { system: { preferredOpenInToolId: { type: "clear" } } } };
+    expect(settingsSnapshotSaveInputSchema.parse(input).global?.system).toEqual({
+      preferredOpenInToolId: { type: "clear" },
+    });
   });
 });

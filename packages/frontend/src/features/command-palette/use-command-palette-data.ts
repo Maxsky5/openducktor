@@ -1,3 +1,4 @@
+import { workspaceScopeKey } from "@openducktor/frontend-core/queries/workspace-scope";
 import type { AgentSessionRecord, WorkspaceRecord, WorkspaceSession } from "@openducktor/contracts";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -67,7 +68,7 @@ export const liveStateOf = (
 export function useCommandPaletteData(workspaces: readonly WorkspaceRecord[]): CommandPaletteData {
   const queryClient = useQueryClient();
   const taskReads = useQueries({
-    queries: workspaces.map((workspace) => repoTaskDataQueryOptions(workspace.repoPath)),
+    queries: workspaces.map((workspace) => repoTaskDataQueryOptions(workspace)),
     combine: toSessionNavigationReads<RepoTaskData>,
   });
   const chatReads = useQueries({
@@ -116,7 +117,11 @@ export function useCommandPaletteData(workspaces: readonly WorkspaceRecord[]): C
         const read = taskReads[index];
         if (read?.status !== "ready") return [];
         return normalizeAgentSessionTaskIds(read.data.tasks.map((task) => task.id)).map(
-          (taskId) => ({ repoPath: workspace.repoPath, taskId }),
+          (taskId) => ({
+            workspaceId: workspace.workspaceId,
+            repoPath: workspace.repoPath,
+            taskId,
+          }),
         );
       }),
     [taskReads, workspaces],
@@ -131,7 +136,11 @@ export function useCommandPaletteData(workspaces: readonly WorkspaceRecord[]): C
     const byKey = new Map<string, SessionNavigationRead<AgentSessionRecord[]>>();
     for (const { workspace, task, key } of tasks) {
       const read = sessionReadsByTarget.get(
-        agentSessionListTargetKey({ repoPath: workspace.repoPath, taskId: task.id }),
+        agentSessionListTargetKey({
+          workspaceId: workspace.workspaceId,
+          repoPath: workspace.repoPath,
+          taskId: task.id,
+        }),
       );
       if (read) byKey.set(key, read);
     }
@@ -151,7 +160,7 @@ export function useCommandPaletteData(workspaces: readonly WorkspaceRecord[]): C
       return {
         workspace,
         tasks: taskRead.status === "ready" ? { ...taskRead, data: taskRead.data.tasks } : taskRead,
-        taskSessions: taskSessionsByRepo.get(workspace.repoPath) ?? NO_TASK_SESSIONS,
+        taskSessions: taskSessionsByRepo.get(workspaceScopeKey(workspace)) ?? NO_TASK_SESSIONS,
         workspaceSessions: withRecordStreamError(chatReads[index], live.sessionRecordsError),
         live: liveStateOf(live, workspace.workspaceId),
       };
@@ -216,9 +225,9 @@ const groupTaskSessionsByRepo = (
   for (const target of targets) {
     const read = readsByTarget.get(agentSessionListTargetKey(target));
     if (!read) continue;
-    const reads = byRepo.get(target.repoPath);
+    const reads = byRepo.get(workspaceScopeKey(target));
     if (reads) reads.set(target.taskId, read);
-    else byRepo.set(target.repoPath, new Map([[target.taskId, read]]));
+    else byRepo.set(workspaceScopeKey(target), new Map([[target.taskId, read]]));
   }
   return byRepo;
 };

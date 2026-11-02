@@ -1,3 +1,4 @@
+import { createHostEventBus } from "../../events/host-event-bus";
 import { expect, test } from "bun:test";
 import type {
   AcceptedAgentUserMessage,
@@ -39,7 +40,7 @@ test("interrupts a background delivery at shutdown", async () => {
   let backgroundSendInterrupted = false;
   let sends = 0;
   const messageDelivery = createNodeMessageDelivery({
-    eventBus: { publish: () => {}, subscribe: () => () => {} },
+    eventBus: createHostEventBus({ report: () => {} }),
     onBackgroundFailure: () => Effect.void,
     runOperation: (_target, effect) => effect,
     commitQueueResume: (commit) => Effect.sync(commit),
@@ -93,7 +94,7 @@ test("owns attachment preparation after disconnection and returns compact receip
   const delivered = Deferred.makeUnsafe<void>();
   let sends = 0;
   const delivery = createNodeMessageDelivery({
-    eventBus: { publish: () => {}, subscribe: () => () => {} },
+    eventBus: createHostEventBus({ report: () => {} }),
     onBackgroundFailure: () => Effect.void,
     runOperation: (_target, work) => work,
     commitQueueResume: (commit) => Effect.sync(commit),

@@ -98,7 +98,12 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
   test("restores one saved selection without a task-only query write", async () => {
     const savedSession = createAgentSessionSummaryFixture({
       externalSessionId: "session-saved",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "planner",
+      },
     });
     const savedState: WorkspaceAgentStudioState = {
       openTaskIds: ["task-1"],
@@ -390,7 +395,12 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
 
     const savedSession = createAgentSessionSummaryFixture({
       externalSessionId: "session-saved",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
     });
     await harness.update({
       ...failedArgs,

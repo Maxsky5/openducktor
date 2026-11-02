@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import {
-  createObservedCheckFixture,
-  createSettingsSnapshotFixture,
-} from "@/test-utils/shared-test-fixtures";
+import { createObservedCheckFixture } from "@/test-utils/shared-test-fixtures";
 import type { ChecksStateContextValue } from "@/types/state-slices";
 import { buildChecksStateValue, buildWorkspaceStateValue } from "./app-state-context-values";
 
@@ -44,9 +41,6 @@ describe("app-state-context-values", () => {
       addWorkspace: async () => {
         throw new Error("Not used");
       },
-      saveWorkspaceModelDefaults: async () => {
-        throw new Error("Not used");
-      },
       selectWorkspace: async () => {},
       reorderWorkspaces: async () => {},
       refreshBranches: async () => {},
@@ -61,13 +55,12 @@ describe("app-state-context-values", () => {
         worktreeCopyPaths: [],
         agentDefaults: { spec: null, planner: null, build: null, qa: null },
       }),
-      saveRepoSettings: async () => {},
-      loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       detectGithubRepository: async () => null,
-      saveGlobalGitConfig: async () => {},
       previewSettingsSnapshotRuntime: async () => ({ impact: null }),
       saveSettingsSnapshot: async () => ({
         type: "saved" as const,
+        shared: "saved" as const,
+        preferences: "saved" as const,
         workspaces: [],
         runtimeApplications: [],
         refreshError: null,

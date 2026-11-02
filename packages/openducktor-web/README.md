@@ -43,6 +43,7 @@ The npm package must include:
 - `dist/openducktor-mcp.js`
 - `dist/generated-image-worker.js`
 - `dist/drizzle/**`
+- `dist/drizzle-host/**`
 - `dist/web-shell/**`
 
 The release workflow builds the CLI and web shell, verifies package contents, dry-runs npm packaging, and publishes `@openducktor/web` with its Node runtime dependencies.

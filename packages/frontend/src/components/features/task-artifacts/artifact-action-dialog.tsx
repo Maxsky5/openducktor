@@ -1,6 +1,7 @@
 import {
   TASK_ARTIFACT_MAX_FILE_BYTES,
   type ArtifactSaveResult,
+  type WorkspaceRef,
   type ArtifactDeleteResult,
   type FreeTaskArtifact,
 } from "@openducktor/contracts";
@@ -42,6 +43,7 @@ const actionLabels = {
 
 export function ArtifactActionDialog({
   action,
+  workspaceId,
   repoPath,
   taskId,
   canManage,
@@ -50,6 +52,7 @@ export function ArtifactActionDialog({
   onCloseAutoFocus,
 }: {
   action: ArtifactAction;
+  workspaceId: string;
   repoPath: string;
   taskId: string;
   canManage: boolean;
@@ -74,9 +77,9 @@ export function ArtifactActionDialog({
     if (!canSubmit) return;
     setIsSaving(true);
     setError(null);
-    const accept = createArtifactSaveGuard(queryClient, repoPath, taskId);
+    const accept = createArtifactSaveGuard(queryClient, { workspaceId, repoPath }, taskId);
     try {
-      await accept(await saveChange(host, { repoPath, taskId }, action, name, file));
+      await accept(await saveChange(host, { workspaceId, repoPath, taskId }, action, name, file));
       onOpenChange(false);
     } catch (cause) {
       const message =
@@ -225,7 +228,7 @@ function isFormComplete(action: ArtifactAction, name: string, file: File | null)
 
 async function saveChange(
   host: HostClient,
-  scope: { repoPath: string; taskId: string },
+  scope: WorkspaceRef & { taskId: string },
   action: ArtifactAction,
   name: string,
   file: File | null,

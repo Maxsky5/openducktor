@@ -72,13 +72,15 @@ const toEntry = (
  * numbers follow the desktop session selector.
  */
 export const groupTaskSessions = (
-  taskId: string,
+  scope: { workspaceId: string; taskId: string },
   records: readonly AgentSessionRecord[],
   live: readonly AgentSessionSummary[],
 ): TaskSessionGroup[] => {
   const liveByKey = new Map(
     live
-      .filter((summary) => summary.taskId === taskId)
+      .filter(
+        (summary) => summary.workspaceId === scope.workspaceId && summary.taskId === scope.taskId,
+      )
       .map((summary) => [agentSessionIdentityKey(summary), summary] as const),
   );
   const entries = new Map<string, SessionEntry>();

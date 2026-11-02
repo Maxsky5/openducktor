@@ -1,53 +1,61 @@
 import type { TaskArtifactState, TaskArtifactSummary } from "@openducktor/contracts";
-import { and, desc, eq, gt, inArray, notExists, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
+import { sqliteBatches } from "./sqlite-parameters";
 import {
   SqliteTaskStoreDataError,
   type SqliteTaskStoreReadError,
 } from "./sqlite-task-store-errors";
 import {
   type TaskArtifactRow,
-  type TaskStoreSession,
+  type HostDatabaseSession,
   taskArtifacts,
-} from "./sqlite-task-store-schema";
+} from "./sqlite-host-database-schema";
 
-export type WorkflowArtifactRow = TaskArtifactRow & { markdown: string };
+export type WorkflowArtifactRow = Pick<
+  TaskArtifactRow,
+  "code" | "revision" | "updatedAt" | "verdict"
+> & { markdown: string };
 
-export const latestWorkflowArtifactRow = (
-  session: TaskStoreSession,
+export const latestWorkflowArtifactRows = (
+  session: HostDatabaseSession,
+  workspaceId: string,
   taskId: string,
-  code: string,
-): Effect.Effect<WorkflowArtifactRow | null, SqliteTaskStoreReadError> =>
+  codes: readonly string[],
+): Effect.Effect<WorkflowArtifactRow[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
-    const rows = yield* session.execute(
-      (database) =>
-        database
-          .select()
-          .from(taskArtifacts)
-          .where(
-            and(
-              eq(taskArtifacts.taskId, taskId),
-              eq(taskArtifacts.classification, "workflow"),
-              eq(taskArtifacts.code, code),
-            ),
-          )
-          .orderBy(desc(taskArtifacts.revision))
-          .limit(1),
-      "sqliteTaskStore.latestWorkflowArtifactRow.selectArtifact",
-    );
-    const row = rows[0];
-    if (!row) return null;
-    if (row.markdown === null) {
-      return yield* new SqliteTaskStoreDataError({
-        message:
-          "The stored workflow artifact has no Markdown. Restore the task store from a valid backup.",
-        field: "markdown",
-        details: { taskId },
-      });
+    if (codes.length === 0) return [];
+    const artifacts: WorkflowArtifactRow[] = [];
+    for (const batch of sqliteBatches([...new Set(codes)], 2, 1)) {
+      const pairs = batch.map((code) => sql`(${taskId}, ${code})`);
+      const rows = yield* session.execute(
+        (database) =>
+          database
+            .select({
+              code: taskArtifacts.code,
+              markdown: taskArtifacts.markdown,
+              revision: taskArtifacts.revision,
+              updatedAt: taskArtifacts.updatedAt,
+              verdict: taskArtifacts.verdict,
+            })
+            .from(sql`(values ${sql.join(pairs, sql`, `)}) as requested`)
+            .innerJoin(taskArtifacts, latestRequestedArtifact(workspaceId)),
+        "sqliteTaskStore.latestWorkflowArtifactRows.selectArtifacts",
+      );
+      for (const row of rows) {
+        if (row.markdown === null) {
+          return yield* new SqliteTaskStoreDataError({
+            message:
+              "The stored workflow artifact has no Markdown. Restore the task store from a valid backup.",
+            field: "markdown",
+            details: { taskId },
+          });
+        }
+        artifacts.push({ ...row, markdown: row.markdown });
+      }
     }
-    return { ...row, markdown: row.markdown };
+    return artifacts;
   });
 
 /**
@@ -55,74 +63,49 @@ export const latestWorkflowArtifactRow = (
  * workflow is left out.
  */
 export const artifactSummariesByTaskId = (
-  session: TaskStoreSession,
+  session: HostDatabaseSession,
+  workspaceId: string,
   workflowsByTaskId: ReadonlyMap<string, TaskWorkflow>,
 ): Effect.Effect<Map<string, TaskArtifactSummary>, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
-    const uniqueTaskIds = [...workflowsByTaskId.keys()];
     const summaries = new Map<string, TaskArtifactSummary>(
       [...workflowsByTaskId].map(([taskId, workflow]) => [taskId, workflow.emptyArtifactSummary()]),
     );
-    if (uniqueTaskIds.length === 0) {
-      return summaries;
-    }
-
-    const rows = yield* session.execute((database) => {
-      const newerTaskArtifacts = alias(taskArtifacts, "newer_tasks_artifacts");
-
-      return database
-        .select({
-          code: taskArtifacts.code,
-          taskId: taskArtifacts.taskId,
-          updatedAt: taskArtifacts.updatedAt,
-          verdict: taskArtifacts.verdict,
-        })
-        .from(taskArtifacts)
-        .where(
-          and(
-            inArray(taskArtifacts.taskId, uniqueTaskIds),
-            eq(taskArtifacts.classification, "workflow"),
-            notExists(
-              database
-                .select({ value: sql<number>`1` })
-                .from(newerTaskArtifacts)
-                .where(
-                  and(
-                    eq(newerTaskArtifacts.taskId, taskArtifacts.taskId),
-                    eq(newerTaskArtifacts.classification, "workflow"),
-                    eq(newerTaskArtifacts.code, taskArtifacts.code),
-                    gt(newerTaskArtifacts.revision, taskArtifacts.revision),
-                  ),
-                ),
-            ),
-          ),
-        );
-    }, "sqliteTaskStore.artifactSummariesByTaskId.selectLatestArtifacts");
-
-    for (const row of rows) {
-      const summary = summaries.get(row.taskId);
-      if (
-        summary === undefined ||
-        workflowsByTaskId.get(row.taskId)?.artifact(row.code) === undefined
-      ) {
-        continue;
+    const requested = [...summaries].flatMap(([taskId, summary]) =>
+      Object.keys(summary).map((code) => [taskId, code] as const),
+    );
+    for (const batch of sqliteBatches(requested, 2, 1)) {
+      const pairs = batch.map(([taskId, code]) => sql`(${taskId}, ${code})`);
+      const rows = yield* session.execute(
+        (database) =>
+          database
+            .select({
+              code: taskArtifacts.code,
+              taskId: taskArtifacts.taskId,
+              updatedAt: taskArtifacts.updatedAt,
+              verdict: taskArtifacts.verdict,
+            })
+            .from(sql`(values ${sql.join(pairs, sql`, `)}) as requested`)
+            .innerJoin(taskArtifacts, latestRequestedArtifact(workspaceId)),
+        "sqliteTaskStore.artifactSummariesByTaskId.selectLatestArtifacts",
+      );
+      for (const row of rows) {
+        const state: TaskArtifactState = { present: true, updatedAt: toIso(row.updatedAt) };
+        if (row.verdict !== null) state.verdict = row.verdict;
+        summaries.get(row.taskId)![row.code] = state;
       }
-      const state: TaskArtifactState = { present: true, updatedAt: toIso(row.updatedAt) };
-      if (row.verdict !== null) state.verdict = row.verdict;
-      summary[row.code] = state;
     }
     return summaries;
   });
 
-export const artifactSummary = (
-  session: TaskStoreSession,
-  taskId: string,
-  workflow: TaskWorkflow,
-): Effect.Effect<TaskArtifactSummary, SqliteTaskStoreReadError> =>
-  Effect.gen(function* () {
-    const summaries = yield* artifactSummariesByTaskId(session, new Map([[taskId, workflow]]));
-    return summaries.get(taskId) ?? workflow.emptyArtifactSummary();
-  });
+// Each requested task/code pair seeks one row through the workflow revision index.
+const latestRequestedArtifact = (workspaceId: string) => sql`${taskArtifacts}.rowid = (
+  select rowid from task_artifacts
+  where workspace_id = ${workspaceId}
+    and task_id = requested.column1 and code = requested.column2
+    and classification = 'workflow'
+  order by revision desc limit 1
+)`;
 
 const toIso = (value: Date | null): string | undefined => {
   if (value === null) {

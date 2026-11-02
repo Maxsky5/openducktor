@@ -110,14 +110,16 @@ describe("useTaskOperations", () => {
     });
     const refreshTaskData = mock(async () => undefined);
     const agentSessionReadPort: AgentSessionReadPort = {
-      agentSessionsListForTasks: mock(async (_repo: string, ids: string[]) =>
-        ids.map((taskId) => ({ taskId, agentSessions: [] })),
+      agentSessionsListForTasks: mock(
+        async (_scope: { workspaceId: string; repoPath: string }, ids: string[]) =>
+          ids.map((taskId) => ({ taskId, agentSessions: [] })),
       ),
     };
     const harness = createHookHarness(
       () =>
         useTaskResetOperations({
           activeRepoPath: "/repo",
+          activeWorkspaceId: "workspace-1",
           agentSessionReadPort,
           refreshTaskData,
         }),
@@ -134,10 +136,22 @@ describe("useTaskOperations", () => {
       await harness.run((operations) => operations.resetTaskImplementation("task-1"));
       await harness.run((operations) => operations.resetTask("task-2"));
 
-      expect(taskResetImplementation).toHaveBeenCalledWith("/repo", "task-1");
-      expect(taskReset).toHaveBeenCalledWith("/repo", "task-2");
-      expect(refreshTaskData).toHaveBeenCalledWith("/repo", "task-1");
-      expect(refreshTaskData).toHaveBeenCalledWith("/repo", "task-2");
+      expect(taskResetImplementation).toHaveBeenCalledWith(
+        { workspaceId: "workspace-1", repoPath: "/repo" },
+        "task-1",
+      );
+      expect(taskReset).toHaveBeenCalledWith(
+        { workspaceId: "workspace-1", repoPath: "/repo" },
+        "task-2",
+      );
+      expect(refreshTaskData).toHaveBeenCalledWith(
+        { workspaceId: "workspace-1", repoPath: "/repo" },
+        "task-1",
+      );
+      expect(refreshTaskData).toHaveBeenCalledWith(
+        { workspaceId: "workspace-1", repoPath: "/repo" },
+        "task-2",
+      );
       expect(feedback.shownOf("success")).toEqual([
         { kind: "success", message: "Implementation reset", options: { description: "task-1" } },
         { kind: "success", message: "Task reset", options: { description: "task-2" } },
@@ -166,6 +180,7 @@ describe("useTaskOperations", () => {
       () =>
         useTaskResetOperations({
           activeRepoPath: "/repo",
+          activeWorkspaceId: "workspace-1",
           agentSessionReadPort: { agentSessionsListForTasks: mock(async () => []) },
           refreshTaskData,
         }),
@@ -228,9 +243,10 @@ describe("useTaskOperations", () => {
       agentSessionReadPort,
     });
 
-    expect(agentSessionReadPort.agentSessionsListForTasks).toHaveBeenCalledWith("/repo", [
-      "task-1",
-    ]);
+    expect(agentSessionReadPort.agentSessionsListForTasks).toHaveBeenCalledWith(
+      { workspaceId: "workspace-1", repoPath: "/repo" },
+      ["task-1"],
+    );
     expect(plan.targets).toEqual([
       {
         workspaceId: "workspace-1",

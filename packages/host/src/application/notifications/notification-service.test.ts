@@ -1,3 +1,4 @@
+import { withSettingsConfigMutationTestMethods } from "../../test-support/settings-config-mutations";
 import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { builtinTaskWorkflows, reviewTaskWorkflows } from "../../test-support/task-workflows";
 import { withTaskWorkflowSettings } from "../workspaces/task-workflow-settings";
@@ -91,6 +92,7 @@ const transition = (
   repoPath = "/alpha",
 ): Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }> => ({
   kind: "tasks_updated",
+  workspaceId: repoPath.slice(1),
   boardChanges: null,
   eventId: id,
   repoPath,
@@ -119,11 +121,12 @@ const harness = (
   } = {},
 ) => {
   let saved = config();
-  const port: SettingsConfigPort = {
+  const port: SettingsConfigPort = withSettingsConfigMutationTestMethods({
     readConfig: mock(() => Effect.succeed(saved)),
-    writeConfig: (next) =>
+    updateConfig: (change) =>
       Effect.sync(() => {
-        saved = next;
+        saved = change(structuredClone(saved), Object.values(structuredClone(saved).workspaces));
+        return saved;
       }),
     defaultWorktreeBasePath: (id) => `/${id}/worktrees`,
     defaultRepoWorktreeBasePath: (path) => `${path}/worktrees`,
@@ -131,7 +134,7 @@ const harness = (
     canonicalizePath: (path) => Effect.succeed(path),
     pathExists: () => Effect.succeed(true),
     join: (...parts) => parts.join("/"),
-  };
+  });
   const listTasks = mock<TaskService["listTasks"]>(({ repoPath }) => {
     if (repoPath === options.failWorkspace)
       return Effect.fail(
@@ -192,22 +195,79 @@ const harness = (
     config: saved,
   };
 };
+test("routes committed task changes by workspace when repository paths and task IDs match", async () => {
+  const h = harness();
+  const next = structuredClone(h.config);
+  next.workspaces.beta!.repoPath = "/alpha";
+  await Effect.runPromise(h.port.updateConfig(() => next));
+  try {
+    await Effect.runPromise(h.service.initialize());
+    await flush();
+    expect(h.listTasks.mock.calls.map(([scope]) => scope)).toEqual([
+      { workspaceId: "alpha", repoPath: "/alpha" },
+      { workspaceId: "beta", repoPath: "/alpha" },
+    ]);
+    h.service.acceptTask({ ...transition("only-beta"), workspaceId: "beta" });
+    await flush();
+    expect(occurrences(h.frames).map((frame) => frame.selected.occurrence)).toMatchObject([
+      {
+        workspaceId: "beta",
+        repositoryLabel: "Beta",
+        task: { id: "task" },
+        navigationTarget: { workspaceId: "beta" },
+      },
+    ]);
+    const action: NotificationActionOccurrence = {
+      occurrenceId: "duplicate-path-action",
+      kind: "agent.session_error",
+      repoPath: "/alpha",
+      repositoryLabel: "Beta",
+      task: { id: "task" },
+      status: "Launch failed",
+      navigationTarget: { type: "agent_studio_task", repoPath: "/alpha", taskId: "task" },
+    };
+    await expect(Effect.runPromise(h.service.publishAction(action))).rejects.toThrow(
+      "Several workspaces use this repository",
+    );
+    expect(
+      (await Effect.runPromise(h.service.publishAction(action, "beta"))).occurrence,
+    ).toMatchObject({ workspaceId: "beta", navigationTarget: { workspaceId: "beta" } });
+    await expect(
+      Effect.runPromise(
+        h.service.publishAction({
+          ...action,
+          occurrenceId: "wrong-owner",
+          workspaceId: "alpha",
+          navigationTarget: {
+            type: "agent_studio_task",
+            repoPath: "/alpha",
+            taskId: "task",
+            workspaceId: "beta",
+          },
+        }),
+      ),
+    ).rejects.toThrow("Notification navigation does not match its workspace");
+  } finally {
+    await Effect.runPromise(h.service.dispose());
+  }
+});
+
 test.each(["close", "shutdown"])(
   "%s stops a workspace opened through a config write",
   async (stop) => {
     const h = harness();
     const closed = { ...h.config, workspaces: {} };
-    await Effect.runPromise(h.port.writeConfig(closed));
+    await Effect.runPromise(h.port.updateConfig(() => closed));
     await Effect.runPromise(h.service.initialize());
     const wrapped = withConfigCommit(h.port, h.service.configCommitted);
-    await Effect.runPromise(wrapped.writeConfig(h.config));
+    await Effect.runPromise(wrapped.updateConfig(() => h.config));
     await flush();
     expect(h.attachLive).toHaveBeenCalledTimes(2);
 
     const stopped = await Promise.race([
-      Effect.runPromise(stop === "close" ? wrapped.writeConfig(closed) : h.service.dispose()).then(
-        () => true,
-      ),
+      Effect.runPromise(
+        stop === "close" ? wrapped.updateConfig(() => closed) : h.service.dispose(),
+      ).then(() => true),
       Bun.sleep(250).then(() => false),
     ]);
     expect(stopped).toBe(true);
@@ -680,6 +740,7 @@ test("baseline pending input is silent; live input during initialization survive
     ).toEqual([
       {
         type: "pending_input",
+        workspaceId: "alpha",
         repoPath: "/alpha",
         session: { externalSessionId: "root", runtimeKind: "codex", workingDirectory: "/alpha" },
         inputKind: "question",
@@ -781,56 +842,86 @@ test("new pending input waits for ownership, resolves silently, and child questi
     await Effect.runPromise(h.service.dispose());
   }
 });
-test("settings commit changes future selections, failed saves do not, and duplicate actions keep original preferences", async () => {
-  const h = harness();
-  try {
-    await Effect.runPromise(h.service.initialize());
-    await flush();
-    const action: NotificationActionOccurrence = {
-      occurrenceId: "start",
-      kind: "agent.session_started",
-      repoPath: "/alpha",
-      repositoryLabel: "Untrusted label",
-      status: "Started",
-      navigationTarget: {
-        type: "agent_session",
+test.each(["config", "preferences"] as const)(
+  "%s commit changes future selections, failed saves do not, and duplicate actions keep original preferences",
+  async (store) => {
+    const h = harness();
+    try {
+      await Effect.runPromise(h.service.initialize());
+      await flush();
+      const action: NotificationActionOccurrence = {
+        occurrenceId: "start",
+        kind: "agent.session_started",
         repoPath: "/alpha",
-        session: { externalSessionId: "root", runtimeKind: "codex", workingDirectory: "/alpha" },
-      },
-    };
-    const first = await Effect.runPromise(h.service.publishAction(action));
-    expect(first.occurrence.repositoryLabel).toBe("Alpha");
-    const changed: GlobalConfig = structuredClone(h.config);
-    changed.notifications.volumePercent = 0;
-    const wrapped = withConfigCommit(h.port, h.service.configCommitted);
-    await Effect.runPromise(wrapped.writeConfig(changed));
-    expect(await Effect.runPromise(h.service.publishAction(action))).toEqual(first);
-    expect(
-      (await Effect.runPromise(h.service.publishAction({ ...action, occurrenceId: "second" })))
-        .settings.volumePercent,
-    ).toBe(0);
-    const failing = withConfigCommit(
-      {
-        ...h.port,
-        writeConfig: () =>
-          Effect.fail(
-            new HostOperationError({ operation: "config.write", message: "Write failed" }),
-          ),
-      },
-      h.service.configCommitted,
-    );
-    await expect(Effect.runPromise(failing.writeConfig(h.config))).rejects.toThrow("Write failed");
-    expect(
-      (await Effect.runPromise(h.service.publishAction({ ...action, occurrenceId: "third" })))
-        .settings.volumePercent,
-    ).toBe(0);
-    await expect(
-      Effect.runPromise(h.service.publishAction({ ...action, status: "Conflicting" })),
-    ).rejects.toThrow("Conflicting");
-  } finally {
-    await Effect.runPromise(h.service.dispose());
-  }
-});
+        repositoryLabel: "Untrusted label",
+        status: "Started",
+        navigationTarget: {
+          type: "agent_session",
+          repoPath: "/alpha",
+          session: { externalSessionId: "root", runtimeKind: "codex", workingDirectory: "/alpha" },
+        },
+      };
+      const first = await Effect.runPromise(h.service.publishAction(action));
+      expect(first.occurrence.repositoryLabel).toBe("Alpha");
+      const changed: GlobalConfig = structuredClone(h.config);
+      changed.notifications.volumePercent = 0;
+      const wrapped = withConfigCommit(h.port, h.service.configCommitted);
+      if (store === "config") {
+        await Effect.runPromise(wrapped.updateConfig(() => changed));
+      } else {
+        const before = h.attachLive.mock.calls.length;
+        const saved = await Effect.runPromise(
+          h.port.updatePreferences((current) => ({
+            ...current,
+            notifications: changed.notifications,
+          })),
+        );
+        await Effect.runPromise(h.service.preferencesCommitted(saved.notifications));
+        expect(h.attachLive.mock.calls.length).toBe(before);
+      }
+      expect(await Effect.runPromise(h.service.publishAction(action))).toEqual(first);
+      expect(
+        (await Effect.runPromise(h.service.publishAction({ ...action, occurrenceId: "second" })))
+          .settings.volumePercent,
+      ).toBe(0);
+      const failing = withConfigCommit(
+        {
+          ...h.port,
+          updateConfig: () =>
+            Effect.fail(
+              new HostOperationError({ operation: "config.write", message: "Write failed" }),
+            ),
+          updatePreferences: () =>
+            Effect.fail(
+              new HostOperationError({ operation: "config.write", message: "Write failed" }),
+            ),
+        },
+        h.service.configCommitted,
+      );
+      await expect(
+        Effect.runPromise(
+          store === "config"
+            ? failing.updateConfig(() => h.config).pipe(Effect.asVoid)
+            : failing
+                .updatePreferences((current) => current)
+                .pipe(
+                  Effect.tap((saved) => h.service.preferencesCommitted(saved.notifications)),
+                  Effect.asVoid,
+                ),
+        ),
+      ).rejects.toThrow("Write failed");
+      expect(
+        (await Effect.runPromise(h.service.publishAction({ ...action, occurrenceId: "third" })))
+          .settings.volumePercent,
+      ).toBe(0);
+      await expect(
+        Effect.runPromise(h.service.publishAction({ ...action, status: "Conflicting" })),
+      ).rejects.toThrow("Conflicting");
+    } finally {
+      await Effect.runPromise(h.service.dispose());
+    }
+  },
+);
 test("workspace failure is scoped; removal discards late work and re-entry seeds silent state", async () => {
   const gate = Promise.withResolvers<void>();
   const h = harness({

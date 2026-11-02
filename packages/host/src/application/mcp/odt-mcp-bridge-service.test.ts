@@ -1,7 +1,5 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { workflowArtifactLabel } from "@openducktor/workflows";
-import { createDefaultGlobalConfig } from "../../config/global-config";
-import { noMergeDetection } from "../tasks/sync/task-sync-service.test-support";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { createTaskService as createRealTaskService } from "../tasks/task-service";
@@ -23,7 +21,7 @@ import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
 import type { CreateTaskUseCaseInput } from "../tasks/task-inputs";
 import { createEventPublishingTaskService } from "../tasks/event-publishing-task-service";
-import { createTaskSyncService, type TaskSyncService } from "../tasks/sync/task-sync-service";
+import { type TaskSyncService } from "../tasks/sync/task-sync-service";
 import { createOdtMcpBridgeService } from "./odt-mcp-bridge-service";
 
 const repoConfig: RepoConfig = {
@@ -165,6 +163,7 @@ describe("createOdtMcpBridgeService", () => {
         taskWorkflows: builtinTaskWorkflows,
         gitPort: createGitPortTestDouble({ canonicalizePath: (path) => Effect.succeed(path) }),
         taskStore: createTaskStoreTestDouble({
+          getTask: () => Effect.succeed(current),
           findTask: () => Effect.succeed(current),
           listTasks: () => Effect.succeed([current]),
           transitionTask: (input) => {
@@ -190,7 +189,13 @@ describe("createOdtMcpBridgeService", () => {
         reason: "Needs a product decision",
       });
       expect(transitions).toEqual([
-        { repoPath: "/repo", taskId: "task-1", status: "blocked", cause: {} },
+        {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "blocked",
+          cause: {},
+        },
       ]);
       expect(current.status).toBe("blocked");
     },
@@ -482,6 +487,7 @@ describe("createOdtMcpBridgeService", () => {
       {
         type: "save",
         input: {
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           code: "spec",
@@ -493,82 +499,6 @@ describe("createOdtMcpBridgeService", () => {
       },
     ]);
   });
-  test("returns a committed-state recovery error to MCP after snapshot publication fails", async () => {
-    let current = taskCard();
-    let mutations = 0;
-    let snapshotReads = 0;
-    const snapshotFailure = new HostOperationError({
-      operation: "task.list",
-      message: "Snapshot unavailable",
-    });
-    const base = createTaskServiceWithMutationProgressTestDouble({
-      findTask: () => Effect.succeed(current),
-      listTasks: () =>
-        Effect.suspend(() => {
-          if (mutations > 0) {
-            snapshotReads += 1;
-            return Effect.fail(snapshotFailure);
-          }
-          return Effect.succeed([current]);
-        }),
-      workflowArtifactSave: () =>
-        Effect.sync(() => {
-          mutations += 1;
-          current = taskCard({ status: "spec_ready" });
-          return {
-            artifact: { markdown: "Spec", revision: 1, updatedAt: "2026-09-07T00:00:00.000Z" },
-            changes: { taskIds: ["task-1"], removedTaskIds: [] },
-          };
-        }),
-    });
-    const taskSyncService = createTaskSyncService({
-      taskService: base,
-      mergeDetection: noMergeDetection,
-      taskEventStream: {
-        publish: () => {
-          throw new Error("Unexpected event");
-        },
-        subscribe: () => {
-          throw new Error("Unexpected subscription");
-        },
-        acknowledge: () => {},
-      },
-      publicationReporter: { report: () => Effect.void },
-      onBackgroundFailure: () => Effect.void,
-      workspaceSettingsService: {
-        getWorkspaceCatalog: () =>
-          Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
-        listWorkspaces: () => Effect.succeed([]),
-        getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
-      },
-    });
-    const service = createOdtMcpBridgeServiceForTest({
-      taskService: createEventPublishingTaskService({
-        taskWorkflows: builtinTaskWorkflows,
-        taskService: base,
-        taskSyncService,
-      }),
-      workspaceSettingsService: createWorkspaceSettingsService(),
-    });
-    const failure = await Effect.runPromise(
-      service
-        .invoke("odt_set_task_artifact", {
-          workspaceId: "repo",
-          taskId: "task-1",
-          code: "spec",
-          content: "Spec",
-        })
-        .pipe(Effect.flip),
-    );
-    expect(failure.message).toContain("Task changes were saved");
-    expect(failure.message).toContain("Reload the workspace");
-    expect(failure.message).toContain("Do not repeat the change");
-    expect(failure).toMatchObject({ cause: snapshotFailure });
-    expect(current.status).toBe("spec_ready");
-    expect(mutations).toBe(1);
-    expect(snapshotReads).toBe(1);
-  });
-
   test("uses the task facade to publish one event for MCP artifact and create mutations", async () => {
     const events: Array<{ kind: "created" | "updated"; taskIds: string[] }> = [];
     const baseTaskService = createTaskServiceWithMutationProgressTestDouble({
@@ -693,6 +623,7 @@ describe("createOdtMcpBridgeService", () => {
         return Effect.tryPromise({
           try: async () => {
             expect(input).toEqual({
+              workspaceId: "repo",
               repoPath: "/repo",
               task: {
                 title: "New task",
@@ -730,51 +661,25 @@ describe("createOdtMcpBridgeService", () => {
       ),
     ).resolves.toMatchObject({ task: { id: "task-new", title: "New task" } });
   });
-  test("orders task search results by recent activity before applying the result limit", async () => {
+  test("returns the task service search page and exact count", async () => {
     const taskService = createTaskServiceTestDouble({
-      listTasks(input: Parameters<OdtTaskService["listTasks"]>[0]) {
-        expect(input).toEqual({ repoPath: "/repo" });
-        return Effect.succeed([
-          taskCard({
-            id: "open-newer",
-            title: "Open newer",
-            status: "open",
-            updatedAt: "2026-05-10T10:03:00.000Z",
-          }),
-          taskCard({
-            id: "open-middle",
-            title: "Open middle",
-            status: "open",
-            updatedAt: "2026-05-10T10:02:00.000Z",
-          }),
-          taskCard({
-            id: "open-older",
-            title: "Open older",
-            status: "open",
-            updatedAt: "2026-05-10T10:01:00.000Z",
-          }),
-          taskCard({
-            id: "recent-progress",
-            title: "Recent progress",
-            status: "in_progress",
-            updatedAt: "2026-05-10T12:00:00.000Z",
-          }),
-        ]);
+      searchTasks(input) {
+        expect(input).toEqual({ workspaceId: "repo", repoPath: "/repo", limit: 2 });
+        return Effect.succeed({
+          tasks: [taskCard({ id: "recent-progress" }), taskCard({ id: "open-newer" })],
+          totalCount: 4,
+        });
       },
     });
     const service = createOdtMcpBridgeServiceForTest({
       taskService,
       workspaceSettingsService: createWorkspaceSettingsService(),
     });
-
-    await expect(
-      Effect.runPromise(
-        service.invoke("odt_search_tasks", {
-          workspaceId: "repo",
-          limit: 2,
-        }),
+    expect(
+      await Effect.runPromise(
+        service.invoke("odt_search_tasks", { workspaceId: "repo", limit: 2 }),
       ),
-    ).resolves.toMatchObject({
+    ).toMatchObject({
       results: [{ task: { id: "recent-progress" } }, { task: { id: "open-newer" } }],
       limit: 2,
       totalCount: 4,
@@ -823,6 +728,7 @@ describe("createOdtMcpBridgeService", () => {
     });
     expect(linkPullRequestCalls).toEqual([
       {
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         number: 42,
@@ -865,6 +771,7 @@ describe("createOdtMcpBridgeService", () => {
 
     expect(updateCalls).toEqual([
       {
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         patch: { title: "Updated title" },

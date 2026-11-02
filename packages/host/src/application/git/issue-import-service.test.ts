@@ -1,3 +1,4 @@
+import { collectTaskStatusChanges } from "../../ports/task-status-changes";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import {
@@ -9,12 +10,22 @@ import {
 } from "@openducktor/contracts";
 import { Deferred, Effect } from "effect";
 import { createSerialGate } from "../../effect/serial-gate";
-import type { TaskSyncService } from "../tasks/sync/task-sync-service";
+import { createTaskSyncService, type TaskSyncService } from "../tasks/sync/task-sync-service";
 import {
-  createTaskSyncServiceForTest,
   createEventBus,
+  noMergeDetection,
+  syncWorkspace,
   task,
 } from "../tasks/sync/task-sync-service.test-support";
+import {
+  createSqliteTaskStoreHarness,
+  type SqliteTaskStoreTestHarness,
+} from "../../adapters/sqlite/sqlite-task-store-test-support";
+import { createSqliteIssueImportStore } from "../../adapters/sqlite/sqlite-issue-import-store";
+import { createTaskEventStream } from "../../events/task-event-stream";
+import { createDefaultGlobalConfig } from "../../config/global-config";
+import { enrichTasks } from "../tasks/support/task-workflow-helpers";
+import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
 import type { GitProviderPort, IssueReaderPort } from "../../ports/git-provider-port";
 import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
@@ -50,7 +61,8 @@ const issue = (sourceId: string, revision = "1"): SourceIssue => ({
 
 const fixture = (
   issueAccess: "browse" | "search" = "search",
-  taskSyncService?: Pick<TaskSyncService, "runMutation" | "publishExternalTaskCreated">,
+  taskSyncService?: Pick<TaskSyncService, "runStatusMutation" | "publishExternalTaskCreated">,
+  savedStore?: IssueImportStorePort,
 ) => {
   const sources = new Map([
     ["1", issue("1")],
@@ -144,11 +156,15 @@ const fixture = (
   const service = createIssueImportService({
     taskWorkflows: builtinTaskWorkflows,
     resolver,
-    store,
-    workspaceSettingsService: { getRepoConfigByRepoPath: () => Effect.succeed(currentRepoConfig) },
-    runMutation:
-      taskSyncService?.runMutation ??
-      ((repoPath, mutation) => mutationGate.run(repoPath, mutation)),
+    store: savedStore ?? store,
+    workspaceSettingsService: { getRepoConfig: () => Effect.succeed(currentRepoConfig) },
+    runStatusMutation:
+      taskSyncService?.runStatusMutation ??
+      ((workspace, _operation, mutation, afterCommit) =>
+        mutationGate.run(
+          workspace.repoPath,
+          collectTaskStatusChanges(mutation).pipe(Effect.flatMap(afterCommit)),
+        )),
     publishTaskCreated:
       taskSyncService?.publishExternalTaskCreated ??
       ((_repoPath, task) =>
@@ -172,90 +188,161 @@ const fixture = (
   };
 };
 
+const createDatabaseSync = (
+  harness: SqliteTaskStoreTestHarness,
+  eventBus: { publish: (event: ExternalTaskSyncEvent) => void },
+) => {
+  const stream = createTaskEventStream({ reporter: { report: () => {} } });
+  const workspace = syncWorkspace(harness.repoPath, harness.workspaceId);
+  return createTaskSyncService({
+    taskService: {
+      listTasks: (input) =>
+        harness.store
+          .listTasks(input)
+          .pipe(Effect.map((records) => enrichTasks(builtinTaskWorkflows, records))),
+      repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+    },
+    mergeDetection: noMergeDetection,
+    taskEventStream: {
+      ...stream,
+      publish: (event) => {
+        eventBus.publish(event);
+        return stream.publish(event);
+      },
+    },
+    publicationReporter: { report: () => Effect.void },
+    onBackgroundFailure: () => Effect.void,
+    settingsConfig: {
+      readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()),
+    },
+    workspaceSettingsService: {
+      listWorkspaces: () => Effect.succeed([workspace]),
+      getWorkspaceCatalog: () =>
+        Effect.succeed({
+          catalogRevision: 0,
+          openWorkspaces: [workspace],
+          closedWorkspaces: [],
+          incompleteRemovals: [],
+        }),
+    },
+  });
+};
+
 describe("Issue import service", () => {
   test("reports a committed import publication failure without reporting creation success", async () => {
-    const taskSyncService = createTaskSyncServiceForTest({
-      eventBus: {
-        publish: () => {
-          throw new Error("Event transport unavailable");
-        },
+    const harness = await createSqliteTaskStoreHarness({ workspaceId: "repo", repoPath: "/repo" });
+    const sync = createDatabaseSync(harness, {
+      publish: () => {
+        throw new Error("Event transport unavailable");
       },
-      taskService: {
-        listTasks: () => Effect.succeed([task({ title: "Issue 1" })]),
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      },
-      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
     });
-    const { service, created } = fixture("search", taskSyncService);
-    const result = await Effect.runPromise(
-      service.import({
-        repoPath: "/repo",
-        items: [{ sourceId: "1", revision: "1", issueType: "task", priority: 2, labels: [] }],
-      }),
-    );
-    expect(created).toEqual(["1"]);
-    expect(result.results).toEqual([
-      {
-        sourceId: "1",
-        outcome: "failed",
-        reason: expect.stringContaining("Do not repeat the change"),
-      },
-    ]);
+    try {
+      const { service } = fixture(
+        "search",
+        sync,
+        createSqliteIssueImportStore({ contextProvider: harness.contextProvider }),
+      );
+      const result = await Effect.runPromise(
+        service.import({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          items: [{ sourceId: "1", revision: "1", issueType: "task", priority: 2, labels: [] }],
+        }),
+      );
+      const saved = await Effect.runPromise(
+        harness.store.listTasks({ workspaceId: "repo", repoPath: "/repo" }),
+      );
+      expect(saved).toMatchObject([{ title: "Issue 1", sourceIssue: { sourceId: "1" } }]);
+      expect(result.results).toEqual([
+        {
+          sourceId: "1",
+          outcome: "failed",
+          reason: expect.stringContaining("Do not repeat the change"),
+        },
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
   });
 
   test("publishes an import before a concurrent mutation of the imported task", async () => {
+    const harness = await createSqliteTaskStoreHarness({ workspaceId: "repo", repoPath: "/repo" });
     const { eventBus, events } = createEventBus();
     const captured = await Effect.runPromise(Deferred.make<void>());
     const release = await Effect.runPromise(Deferred.make<void>());
-    let current = task({ title: "Issue 1" });
-    let reads = 0;
-    const taskSyncService = createTaskSyncServiceForTest({
-      eventBus,
-      taskService: {
-        listTasks: () =>
-          Effect.gen(function* () {
-            const snapshot = current;
-            if (reads++ === 0) {
-              yield* Deferred.succeed(captured, undefined);
-              yield* Deferred.await(release);
-            }
-            return [snapshot];
-          }),
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
-      },
-      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
-    });
-    const { service } = fixture("search", taskSyncService);
-    const imported = Effect.runPromise(
-      service.import({
-        repoPath: "/repo",
-        items: [{ sourceId: "1", revision: "1", issueType: "task", priority: 2, labels: [] }],
-      }),
-    );
-    await Effect.runPromise(Deferred.await(captured));
-    const updated = Effect.runPromise(
-      taskSyncService.runMutation(
-        "/repo",
-        Effect.gen(function* () {
-          current = { ...current, title: "Edited after import", priority: 1 };
-          yield* taskSyncService.publishTasksUpdated(
-            "/repo",
-            { taskIds: [current.id], removedTaskIds: [] },
-            "update-task",
-            [],
-          );
+    const sync = createDatabaseSync(harness, eventBus);
+    const store = createSqliteIssueImportStore({ contextProvider: harness.contextProvider });
+    try {
+      const { service } = fixture("search", sync, {
+        ...store,
+        createImportedTask: (input) =>
+          store
+            .createImportedTask(input)
+            .pipe(
+              Effect.tap(() =>
+                Deferred.succeed(captured, undefined).pipe(Effect.andThen(Deferred.await(release))),
+              ),
+            ),
+      });
+      const imported = Effect.runPromise(
+        service.import({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          items: [{ sourceId: "1", revision: "1", issueType: "task", priority: 2, labels: [] }],
         }),
-      ),
-    );
-    await Effect.runPromise(Deferred.succeed(release, undefined));
-    const [result] = await Promise.all([imported, updated]);
-    expect(result.results).toEqual([{ sourceId: "1", outcome: "created", taskId: "task-1" }]);
-    expect(events.map((event) => event.kind)).toEqual(["external_task_created", "tasks_updated"]);
-    expect(events.map((event) => event.boardChanges?.cards[0]?.title)).toEqual([
-      "Issue 1",
-      "Edited after import",
-    ]);
-    expect(events.at(-1)?.boardChanges?.cards).toEqual([current]);
+      );
+      await Effect.runPromise(Deferred.await(captured));
+      const [saved] = await Effect.runPromise(
+        harness.store.listTasks({ workspaceId: "repo", repoPath: "/repo" }),
+      );
+      if (!saved) throw new Error("Expected the committed imported task.");
+      const updated = Effect.runPromise(
+        sync.runMutation(
+          "/repo",
+          Effect.gen(function* () {
+            yield* harness.store.updateTask({
+              workspaceId: "repo",
+              repoPath: "/repo",
+              taskId: saved.id,
+              patch: { title: "Edited after import", priority: 1 },
+            });
+            yield* sync.publishTasksUpdated(
+              { workspaceId: "repo", repoPath: "/repo" },
+              { taskIds: [saved.id], removedTaskIds: [] },
+              "update-task",
+              [],
+            );
+          }),
+        ),
+      );
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      const [result] = await Promise.all([imported, updated]);
+      expect(result.results).toEqual([{ sourceId: "1", outcome: "created", taskId: saved.id }]);
+      expect(events).toMatchObject([
+        { kind: "external_task_created", taskSnapshot: { title: "Issue 1" } },
+        { kind: "tasks_updated", boardChanges: { cards: [{ title: "Edited after import" }] } },
+      ]);
+      expect(
+        (
+          await Effect.runPromise(
+            harness.store.listTasks({ workspaceId: "repo", repoPath: "/repo" }),
+          )
+        )[0]?.title,
+      ).toBe("Edited after import");
+    } finally {
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      await harness.cleanup();
+    }
+  });
+
+  test("rejects a stale workspace reference before reading its provider", async () => {
+    const { service, setRepoConfig, resolvedConfigs, created } = fixture();
+    setRepoConfig({ ...repoConfig, repoPath: "/moved" });
+    await expect(
+      Effect.runPromise(service.list({ workspaceId: "repo", repoPath: "/repo", search: "" })),
+    ).rejects.toMatchObject({ field: "workspaceId" });
+    expect(resolvedConfigs).toEqual([]);
+    expect(created).toEqual([]);
   });
 
   test("loads a saved Task image from its original GitHub repository after provider change", async () => {
@@ -298,7 +385,14 @@ describe("Issue import service", () => {
     };
 
     await expect(
-      Effect.runPromise(service.getImage({ repoPath: "/repo", taskId: "task-1", url: imageUrl })),
+      Effect.runPromise(
+        service.getImage({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          url: imageUrl,
+        }),
+      ),
     ).resolves.toEqual({ mediaType: "image/png", bytesBase64: "aGVsbG8=" });
     expect(resolvedConfigs.at(-1)?.git.provider?.id).toBe("github");
   });
@@ -315,6 +409,7 @@ describe("Issue import service", () => {
     await expect(
       Effect.runPromise(
         service.getImage({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           url: "https://github.com/user-attachments/assets/cda6c6b0-48b1-4d49-b8f2-78a1bd758be9",
@@ -326,12 +421,19 @@ describe("Issue import service", () => {
   test("lists browse-only issues and rejects search", async () => {
     const { service } = fixture("browse");
     const first = await Effect.runPromise(
-      service.list({ repoPath: "/repo", search: "", cursor: undefined }),
+      service.list({ workspaceId: "repo", repoPath: "/repo", search: "", cursor: undefined }),
     );
     expect(first.items).toHaveLength(2);
     expect(first.searchSupported).toBe(false);
     await expect(
-      Effect.runPromise(service.list({ repoPath: "/repo", search: "startup", cursor: undefined })),
+      Effect.runPromise(
+        service.list({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          search: "startup",
+          cursor: undefined,
+        }),
+      ),
     ).rejects.toThrow("does not support Issue search");
   });
 
@@ -339,13 +441,18 @@ describe("Issue import service", () => {
     const { service, linked } = fixture();
     linked.set("2", "hidden-task");
     const first = await Effect.runPromise(
-      service.list({ repoPath: "/repo", search: "", cursor: undefined }),
+      service.list({ workspaceId: "repo", repoPath: "/repo", search: "", cursor: undefined }),
     );
     expect(first.items[1]?.linkedTaskId).toBe("hidden-task");
     expect(first.nextCursor).toBeDefined();
     await expect(
       Effect.runPromise(
-        service.list({ repoPath: "/repo", search: "other", cursor: first.nextCursor }),
+        service.list({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          search: "other",
+          cursor: first.nextCursor,
+        }),
       ),
     ).rejects.toThrow("no longer valid");
   });
@@ -368,6 +475,7 @@ describe("Issue import service", () => {
 
     const result = await Effect.runPromise(
       service.import({
+        workspaceId: "repo",
         repoPath: "/repo",
         items: [{ sourceId: "1", revision: "1", issueType: "task", priority: 2, labels: [] }],
       }),
@@ -376,7 +484,7 @@ describe("Issue import service", () => {
     expect(created).toEqual([]);
     legacyLinked.set("2", "other-old-task");
     const listed = await Effect.runPromise(
-      service.list({ repoPath: "/repo", search: "", cursor: undefined }),
+      service.list({ workspaceId: "repo", repoPath: "/repo", search: "", cursor: undefined }),
     );
     expect(listed.items[0]?.linkedTaskId).toBe("old-task");
     expect(listed.items[1]?.linkedTaskId).toBe("other-old-task");
@@ -395,6 +503,7 @@ describe("Issue import service", () => {
 
     const result = await Effect.runPromise(
       service.import({
+        workspaceId: "repo",
         repoPath: "/repo",
         items: [{ sourceId: "1", revision: "1", issueType: "task", priority: 2, labels: [] }],
       }),
@@ -411,6 +520,7 @@ describe("Issue import service", () => {
     sources.set("2", issue("2", "2"));
     const result = await Effect.runPromise(
       service.import({
+        workspaceId: "repo",
         repoPath: "/repo",
         items: [
           { sourceId: "1", revision: "1", issueType: "bug", priority: 0, labels: ["one"] },
@@ -430,6 +540,7 @@ describe("Issue import service", () => {
     linked.set("2", "other-task");
     const retry = await Effect.runPromise(
       service.import({
+        workspaceId: "repo",
         repoPath: "/repo",
         items: [{ sourceId: "2", revision: "2", issueType: "task", priority: 2, labels: [] }],
       }),
@@ -449,6 +560,7 @@ describe("Issue import service", () => {
 
     const result = await Effect.runPromise(
       service.import({
+        workspaceId: "repo",
         repoPath: "/repo",
         items: [
           { sourceId: "1", revision: "1", issueType: "task", priority: 2, labels: [] },
@@ -470,7 +582,9 @@ describe("Issue import service", () => {
     sources.set("42", issue("42", "3"));
     linked.set("42", "TASK-42");
 
-    const refreshed = await Effect.runPromise(service.get({ repoPath: "/repo", sourceId: "42" }));
+    const refreshed = await Effect.runPromise(
+      service.get({ workspaceId: "repo", repoPath: "/repo", sourceId: "42" }),
+    );
 
     expect(refreshed).toMatchObject({ sourceId: "42", revision: "3", linkedTaskId: "TASK-42" });
   });
@@ -480,7 +594,7 @@ describe("Issue import service", () => {
     sources.set("1", { ...issue("1"), scope: "github.com/other/repo" });
 
     await expect(
-      Effect.runPromise(service.get({ repoPath: "/repo", sourceId: "1" })),
+      Effect.runPromise(service.get({ workspaceId: "repo", repoPath: "/repo", sourceId: "1" })),
     ).rejects.toThrow("outside the configured repository");
   });
 });

@@ -1,4 +1,4 @@
-import type { TaskStoreCheck } from "@openducktor/contracts";
+import type { TaskStoreCheck, WorkspaceRef } from "@openducktor/contracts";
 import { useRequiredContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { createContext } from "react";
 import type {
@@ -16,7 +16,7 @@ export const WorkspacePresenceContext = createContext<WorkspacePresenceContextVa
 export const ChecksStateContext = createContext<ChecksStateContextValue | null>(null);
 
 export type ChecksOperationsContextValue = {
-  refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
+  refreshTaskStoreCheckForRepo: (scope: WorkspaceRef, force?: boolean) => Promise<TaskStoreCheck>;
 };
 
 export type WorkspaceOperationsContextValue = {

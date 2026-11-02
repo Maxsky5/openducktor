@@ -43,6 +43,7 @@ export function useAgentsPageBuildTools({
 }): AgentsPageBuildTools {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const buildToolsSnapshot = useAgentStudioBuildToolsWorktreeSnapshot({
+    workspaceId: activeWorkspace?.workspaceId ?? null,
     workspaceRepoPath,
     activeBranch,
     selectedView,

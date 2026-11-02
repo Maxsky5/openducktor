@@ -19,13 +19,14 @@ export function IssueMarkdownRenderer({
 export function useIssueImageComponents(
   issueImageContext?: IssueImageContext,
 ): Components | undefined {
+  const workspaceId = issueImageContext?.workspaceId;
   const providerId = issueImageContext?.providerId;
   const repoPath = issueImageContext?.repoPath;
   const sourceId = issueImageContext?.sourceId;
   const taskId = issueImageContext?.taskId;
   return useMemo<Components | undefined>(() => {
-    if (!providerId || !repoPath || !sourceId) return undefined;
-    const context = { providerId, repoPath, sourceId, taskId };
+    if (!workspaceId || !providerId || !repoPath || !sourceId) return undefined;
+    const context = { workspaceId, providerId, repoPath, sourceId, taskId };
     return {
       img: ({ node: _node, src, alt, title }) => {
         if (providerId === "github" && isGithubIssueAttachmentUrl(src ?? "")) {
@@ -34,5 +35,5 @@ export function useIssueImageComponents(
         return <img src={src} alt={alt ?? ""} title={title} />;
       },
     };
-  }, [providerId, repoPath, sourceId, taskId]);
+  }, [workspaceId, providerId, repoPath, sourceId, taskId]);
 }

@@ -63,7 +63,12 @@ export const buildSessionPreviewModel = (
   const model = live?.model ?? record?.selectedModel ?? null;
   const scope: AgentSessionScope =
     target.kind === "task_session"
-      ? { kind: "workflow", taskId: target.taskId, role: target.role }
+      ? {
+          kind: "workflow",
+          workspaceId: target.workspaceId,
+          taskId: target.taskId,
+          role: target.role,
+        }
       : { kind: "repository" };
   return {
     model,

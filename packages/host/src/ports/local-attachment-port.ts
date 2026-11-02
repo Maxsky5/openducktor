@@ -1,4 +1,4 @@
-import { Context, type Effect } from "effect";
+import type { Effect } from "effect";
 import type {
   HostOperationErrorAggregate,
   HostPathAccessErrorAggregate,
@@ -27,8 +27,3 @@ export type LocalAttachmentPort = {
 };
 
 export type LocalFileInfo = { isFile: boolean; byteSize: number };
-
-export class LocalAttachmentPortTag extends Context.Service<
-  LocalAttachmentPortTag,
-  LocalAttachmentPort
->()("@openducktor/host/LocalAttachmentPort") {}

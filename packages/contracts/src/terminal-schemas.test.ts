@@ -29,11 +29,11 @@ describe("terminal schemas", () => {
     expect(
       terminalLaunchSpecSchema.parse({
         workingDir: "/repo/worktree",
-        context: { repoPath: "/repo", taskId: "task-1" },
+        context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       }),
     ).toEqual({
       workingDir: "/repo/worktree",
-      context: { repoPath: "/repo", taskId: "task-1" },
+      context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
     });
     expect(() =>
       terminalLaunchSpecSchema.parse({
@@ -49,12 +49,31 @@ describe("terminal schemas", () => {
       kind: "unassociated",
     });
     expect(
-      terminalListFilterSchema.parse({ kind: "task", repoPath: "/repo", taskId: "task-1" }),
-    ).toEqual({ kind: "task", repoPath: "/repo", taskId: "task-1" });
+      terminalListFilterSchema.parse({
+        kind: "task",
+        workspaceId: "repo",
+        repoPath: "/repo",
+        taskId: "task-1",
+      }),
+    ).toEqual({ kind: "task", workspaceId: "repo", repoPath: "/repo", taskId: "task-1" });
     expect(() =>
-      terminalListFilterSchema.parse({ kind: "task", repoPath: "/repo", taskId: "" }),
+      terminalListFilterSchema.parse({
+        kind: "task",
+        workspaceId: "repo",
+        repoPath: "/repo",
+        taskId: "",
+      }),
     ).toThrow();
     expect(() => terminalListFilterSchema.parse({ kind: "task", taskId: "task-1" })).toThrow();
+    expect(() =>
+      terminalListFilterSchema.parse({ kind: "task", repoPath: "/repo", taskId: "task-1" }),
+    ).toThrow();
+    expect(() =>
+      terminalLaunchSpecSchema.parse({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
+    ).toThrow();
     expect(
       terminalListFilterSchema.parse({
         kind: "workspace_session",

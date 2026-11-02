@@ -75,19 +75,15 @@ const createArgs = (
   dirtySections: DirtySections = EMPTY_DIRTY_SECTIONS,
 ): HookArgs => ({
   open: true,
+  acknowledgeSave: mock(() => {}),
+  retainDraft: mock(() => {}),
   loadedSnapshot: createSnapshot(),
   snapshotDraft: createSnapshot(),
   dirtySections,
   validation: createValidation(),
   onRuntimeAvailabilityError: () => {},
-  saveGlobalGitConfig: mock(async () => {}),
   previewSettingsSnapshotRuntime: mock(async () => ({ impact: null })),
   saveSettingsSnapshot: mock(async () => savedSettingsResult()),
-  loadSettingsSnapshot: mock(async () => createSnapshot()),
-  isAgentModelFavoritesMutationPending: false,
-  isKanbanTaskCardViewMutationPending: false,
-  isSidebarSessionGroupingMutationPending: false,
-  wasKanbanTaskCardViewEdited: false,
   ...overrides,
 });
 
@@ -126,7 +122,30 @@ describe("useSettingsModalSaveOrchestration", () => {
       await harness.run(async (state) => {
         expect(await state.submit()).toBe(true);
       });
-      expect(save.mock.calls[0]?.[0].system).toEqual(system);
+      expect(save.mock.calls[0]?.[0].global?.system).toEqual({
+        preferredOpenInToolId: { type: "set", value: "zed" },
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("an unavailable edited target blocks preview and Save while retaining its draft", async () => {
+    const args = createArgs(
+      {
+        unavailableTargetError:
+          "Custom role Reviewer is no longer available. Copy your edits or discard them with Cancel.",
+      },
+      { ...EMPTY_DIRTY_SECTIONS, customAgentRoles: true },
+    );
+    const harness = createHookHarness(args);
+    try {
+      await harness.mount();
+      await harness.run(async (state) => expect(await state.submit()).toBe(false));
+      expect(args.previewSettingsSnapshotRuntime).not.toHaveBeenCalled();
+      expect(args.saveSettingsSnapshot).not.toHaveBeenCalled();
+      expect(args.retainDraft).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().saveError).toBe(args.unavailableTargetError ?? null);
     } finally {
       await harness.unmount();
     }
@@ -193,78 +212,6 @@ describe("useSettingsModalSaveOrchestration", () => {
     }
   });
 
-  test("blocks a full snapshot save while favorites are being written", async () => {
-    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
-    const harness = createHookHarness(
-      createArgs(
-        {
-          isAgentModelFavoritesMutationPending: true,
-          saveSettingsSnapshot,
-        },
-        { ...EMPTY_DIRTY_SECTIONS, chat: true },
-      ),
-    );
-
-    await harness.mount();
-    let didSave = true;
-    await harness.run(async (state) => {
-      didSave = await state.submit();
-    });
-
-    expect(didSave).toBe(false);
-    expect(harness.getLatest().saveError).toBe(
-      "Wait for the model favorites update to finish before saving settings.",
-    );
-    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
-    await harness.unmount();
-  });
-
-  test("blocks a full snapshot save while the task card view is being written", async () => {
-    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
-    const harness = createHookHarness(
-      createArgs(
-        {
-          isKanbanTaskCardViewMutationPending: true,
-          saveSettingsSnapshot,
-        },
-        { ...EMPTY_DIRTY_SECTIONS, chat: true },
-      ),
-    );
-
-    await harness.mount();
-    let didSave = true;
-    await harness.run(async (state) => {
-      didSave = await state.submit();
-    });
-
-    expect(didSave).toBe(false);
-    expect(harness.getLatest().saveError).toBe(
-      "Wait for the task card view update to finish before saving settings.",
-    );
-    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
-    await harness.unmount();
-  });
-
-  test("blocks a full snapshot save while sidebar grouping is being written", async () => {
-    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
-    const harness = createHookHarness(
-      createArgs(
-        { saveSettingsSnapshot, isSidebarSessionGroupingMutationPending: true },
-        { ...EMPTY_DIRTY_SECTIONS, appearance: true },
-      ),
-    );
-    try {
-      await harness.mount();
-      await harness.run(async (state) => expect(await state.submit()).toBe(false));
-      expect(harness.getLatest().saveError).toBe(
-        "Wait for the session grouping update to finish before saving settings.",
-      );
-      expect(saveSettingsSnapshot).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
   test("saves an explicit grouping edit over a different saved shortcut value", async () => {
     const snapshotDraft = createSnapshot();
     snapshotDraft.appearance.sidebarSessionGrouping = "none";
@@ -280,7 +227,7 @@ describe("useSettingsModalSaveOrchestration", () => {
       await harness.run(async (state) => expect(await state.submit()).toBe(true));
       expect(saveSettingsSnapshot).toHaveBeenCalledWith(
         expect.objectContaining({
-          appearance: expect.objectContaining({ sidebarSessionGrouping: "none" }),
+          global: { appearance: { sidebarSessionGrouping: "none" } },
         }),
         undefined,
       );
@@ -289,111 +236,28 @@ describe("useSettingsModalSaveOrchestration", () => {
     }
   });
 
-  test("merges independently saved fields into a full snapshot save", async () => {
-    const snapshotDraft = createSnapshot();
-    snapshotDraft.agentModelFavorites = [
-      { runtimeKind: "claude", providerId: "anthropic", modelId: "stale" },
-    ];
-    const latestSnapshot = createSnapshot();
-    latestSnapshot.agentModelFavorites = [
-      { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
-    ];
-    latestSnapshot.kanban.taskCardView = "compact";
-    latestSnapshot.appearance.sidebarSessionGrouping = "none";
-    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
+  test("sends only edited fields and leaves independently saved values to their owners", async () => {
+    const baseline = createSnapshot();
+    const snapshotDraft = { ...baseline, chat: { ...baseline.chat, showThinkingMessages: true } };
+    const save = mock(async (_input: SettingsSnapshotSaveInput, _confirmation?: string) =>
+      savedSettingsResult(),
+    );
     const harness = createHookHarness(
       createArgs(
-        {
-          snapshotDraft,
-          loadSettingsSnapshot: mock(async () => latestSnapshot),
-          saveSettingsSnapshot,
-        },
+        { loadedSnapshot: baseline, snapshotDraft, saveSettingsSnapshot: save },
         { ...EMPTY_DIRTY_SECTIONS, chat: true },
       ),
     );
-
-    await harness.mount();
-    await harness.run(async (state) => {
-      await state.submit();
-    });
-
-    expect(saveSettingsSnapshot).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agentModelFavorites: latestSnapshot.agentModelFavorites,
-        kanban: expect.objectContaining({ taskCardView: "compact" }),
-        appearance: expect.objectContaining({ sidebarSessionGrouping: "none" }),
-      }),
-      undefined,
-    );
-    await harness.unmount();
-  });
-
-  test.each([
-    { name: "leaves Autopilot rules out of an unrelated save", dirty: false },
-    { name: "saves an explicit Autopilot edit from this modal", dirty: true },
-  ])("$name", async ({ dirty }) => {
-    // The host keeps omitted rules, so a stale draft cannot replace another client's save.
-    const snapshotDraft = createSnapshot();
-    snapshotDraft.autopilot = {
-      alwaysStartQaReviewsFresh: false,
-      rules: [{ eventId: "taskProgressedToAiReview", actionIds: [] }],
-    };
-    const saveSettingsSnapshot = mock(
-      async (_snapshot: SettingsSnapshotSaveInput, _confirmation?: string) => savedSettingsResult(),
-    );
-    const harness = createHookHarness(
-      createArgs(
-        { snapshotDraft, saveSettingsSnapshot },
-        { ...EMPTY_DIRTY_SECTIONS, appearance: true, autopilot: dirty },
-      ),
-    );
-
-    await harness.mount();
-    await harness.run(async (state) => {
-      await state.submit();
-    });
-
-    const saved = saveSettingsSnapshot.mock.calls[0]?.[0];
-    if (dirty)
-      expect(
-        saved?.autopilot?.rules.find((rule) => rule.eventId === "taskProgressedToAiReview")
-          ?.actionIds,
-      ).toEqual([]);
-    else expect(saved).not.toHaveProperty("autopilot");
-    await harness.unmount();
-  });
-
-  test("keeps an explicit final task card view that matches the loaded value", async () => {
-    const loadedSnapshot = createSnapshot();
-    const snapshotDraft = createSnapshot();
-    const latestSnapshot = createSnapshot();
-    latestSnapshot.kanban.taskCardView = "compact";
-    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
-    const harness = createHookHarness(
-      createArgs(
-        {
-          loadedSnapshot,
-          snapshotDraft,
-          loadSettingsSnapshot: mock(async () => latestSnapshot),
-          saveSettingsSnapshot,
-          wasKanbanTaskCardViewEdited: true,
-        },
-        { ...EMPTY_DIRTY_SECTIONS, kanban: true },
-      ),
-    );
-
-    await harness.mount();
-    await harness.run(async (state) => {
-      await state.submit();
-    });
-
-    expect(saveSettingsSnapshot).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kanban: expect.objectContaining({ taskCardView: "normal" }),
-      }),
-      undefined,
-    );
-    await harness.unmount();
+    try {
+      await harness.mount();
+      await harness.run(async (state) => expect(await state.submit()).toBe(true));
+      expect(save).toHaveBeenCalledWith(
+        { global: { chat: { showThinkingMessages: true } } },
+        undefined,
+      );
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("blocks runtime executable errors before persistence", async () => {
@@ -504,11 +368,9 @@ describe("useSettingsModalSaveOrchestration", () => {
   });
 
   test("returns true without persistence when nothing is dirty", async () => {
-    const saveGlobalGitConfig = mock(async () => {});
     const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(
       createArgs({
-        saveGlobalGitConfig,
         saveSettingsSnapshot,
       }),
     );
@@ -521,7 +383,6 @@ describe("useSettingsModalSaveOrchestration", () => {
     });
 
     expect(didSave).toBe(true);
-    expect(saveGlobalGitConfig).toHaveBeenCalledTimes(0);
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
 
     await harness.unmount();
@@ -537,6 +398,10 @@ describe("useSettingsModalSaveOrchestration", () => {
       createArgs(
         {
           saveSettingsSnapshot,
+          snapshotDraft: {
+            ...createSnapshot(),
+            chat: { ...createSnapshot().chat, showThinkingMessages: true },
+          },
         },
         {
           ...EMPTY_DIRTY_SECTIONS,
@@ -574,110 +439,71 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
-  test("short-circuits unchanged global git saves and uses the optimized git path when needed", async () => {
-    const unchangedSaveGlobalGitConfig = mock(async () => {});
-    const unchangedHarness = createHookHarness(
+  test("uses the same sparse Save facade for a Git setting edit", async () => {
+    const baseline = createSnapshot();
+    const snapshotDraft = {
+      ...baseline,
+      git: { ...baseline.git, defaultMergeMethod: "squash" as const },
+    };
+    const save = mock(async (_input: SettingsSnapshotSaveInput, _confirmation?: string) =>
+      savedSettingsResult(),
+    );
+    const harness = createHookHarness(
       createArgs(
-        {
-          saveGlobalGitConfig: unchangedSaveGlobalGitConfig,
-        },
-        {
-          ...EMPTY_DIRTY_SECTIONS,
-          globalGit: true,
-        },
+        { loadedSnapshot: baseline, snapshotDraft, saveSettingsSnapshot: save },
+        { ...EMPTY_DIRTY_SECTIONS, globalGit: true },
       ),
     );
-
-    await unchangedHarness.mount();
-
-    let didSave = false;
-    await unchangedHarness.run(async (state) => {
-      didSave = await state.submit();
-    });
-
-    expect(didSave).toBe(true);
-    expect(unchangedSaveGlobalGitConfig).toHaveBeenCalledTimes(0);
-
-    await unchangedHarness.unmount();
-
-    const saveGlobalGitConfig = mock(async () => {});
-    const changedSnapshot = createSnapshot();
-    changedSnapshot.git.defaultMergeMethod = "squash";
-    const changedHarness = createHookHarness(
-      createArgs(
-        {
-          snapshotDraft: changedSnapshot,
-          saveGlobalGitConfig,
-        },
-        {
-          ...EMPTY_DIRTY_SECTIONS,
-          globalGit: true,
-        },
-      ),
-    );
-
-    await changedHarness.mount();
-
-    await changedHarness.run(async (state) => {
-      didSave = await state.submit();
-    });
-
-    expect(didSave).toBe(true);
-    expect(saveGlobalGitConfig).toHaveBeenCalledWith({
-      defaultMergeMethod: "squash",
-      removeWorktreeOnClose: true,
-    });
-
-    await changedHarness.unmount();
+    try {
+      await harness.mount();
+      await harness.run(async (state) => expect(await state.submit()).toBe(true));
+      expect(save).toHaveBeenCalledWith(
+        { global: { git: { defaultMergeMethod: "squash" } } },
+        undefined,
+      );
+    } finally {
+      await harness.unmount();
+    }
   });
 
-  test("saves the prepared snapshot when non-git sections are dirty", async () => {
-    const saveSettingsSnapshot = mock(async () => savedSettingsResult());
-    const snapshotDraft = createSnapshot();
-    snapshotDraft.chat.showThinkingMessages = true;
-    snapshotDraft.appearance.horizontalScrollbarVisibility = "show";
+  test("acknowledges shared fields and keeps the view open after a partial preference save", async () => {
+    const baseline = createSnapshot();
+    const snapshotDraft = {
+      ...baseline,
+      chat: { ...baseline.chat, showThinkingMessages: true },
+      git: { ...baseline.git, removeWorktreeOnClose: false },
+    };
+    const acknowledgeSave = mock(() => {});
     const harness = createHookHarness(
       createArgs(
         {
+          loadedSnapshot: baseline,
           snapshotDraft,
-          saveSettingsSnapshot,
+          acknowledgeSave,
+          saveSettingsSnapshot: async () => ({
+            type: "partial",
+            shared: "saved",
+            preferences: { message: "Read-only preferences" },
+            workspaces: [],
+            runtimeApplications: [],
+            refreshError: null,
+          }),
         },
-        {
-          ...EMPTY_DIRTY_SECTIONS,
-          chat: true,
-        },
+        { ...EMPTY_DIRTY_SECTIONS, chat: true, globalGit: true },
       ),
     );
-
-    await harness.mount();
-
-    let didSave = false;
-    await harness.run(async (state) => {
-      didSave = await state.submit();
-    });
-
-    expect(didSave).toBe(true);
-    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
-    const expectedChatSettings = {
-      ...createSnapshot().chat,
-      showThinkingMessages: true,
-    };
-    expect(saveSettingsSnapshot).toHaveBeenCalledWith(
-      expect.objectContaining({
-        chat: expectedChatSettings,
-        appearance: {
-          horizontalScrollbarVisibility: "show",
-          sidebarSessionGrouping: "task",
+    try {
+      await harness.mount();
+      await harness.run(async (state) => expect(await state.submit()).toBe(false));
+      expect(acknowledgeSave).toHaveBeenCalledWith(true, {
+        global: {
+          chat: { showThinkingMessages: true },
+          git: { removeWorktreeOnClose: false },
         },
-        general: {
-          openAgentStudioTabOnBackgroundSessionStart: true,
-        },
-        reusablePrompts: [],
-      }),
-      undefined,
-    );
-
-    await harness.unmount();
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("surfaces save-preparation errors before persistence", async () => {
@@ -772,7 +598,6 @@ describe("useSettingsModalSaveOrchestration runtime review", () => {
       {
         loadedSnapshot: createSnapshot(),
         snapshotDraft: runtimeDraft(),
-        loadSettingsSnapshot: mock(async () => createSnapshot()),
         ...overrides,
       },
       { ...EMPTY_DIRTY_SECTIONS, agentRuntimes: true },

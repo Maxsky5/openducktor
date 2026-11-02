@@ -22,6 +22,10 @@ const parsePullRequestReviewContextInput = (
     "taskId",
   );
   const input: Parameters<PullRequestReviewService["getContext"]>[0] = {
+    workspaceId: requireStringPreservingWhitespace(
+      commandInputStringSchema.safeParse(record.workspaceId),
+      "workspaceId",
+    ),
     repoPath: requireStringPreservingWhitespace(
       commandInputStringSchema.safeParse(record.repoPath),
       "repoPath",

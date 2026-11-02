@@ -81,7 +81,7 @@ const createService = (tasks: TaskCard[]) => {
   const logs: string[] = [];
   const service = createTaskMergeDetectionService({
     taskStore: {
-      listTasks: () => Effect.succeed(tasks),
+      listMergeCandidates: () => Effect.succeed(tasks),
       listDirectMergeTaskIds: () => Effect.succeed([]),
     },
     gitPort,
@@ -99,7 +99,7 @@ const createService = (tasks: TaskCard[]) => {
       resolveConfiguredPath: (value: string) => value,
     }),
     workspaceSettingsService: {
-      getRepoConfigByRepoPath: () =>
+      getRepoConfig: () =>
         Effect.succeed(
           repoConfigSchema.parse({
             workspaceId: "repo",
@@ -111,13 +111,14 @@ const createService = (tasks: TaskCard[]) => {
         ),
       getWorkspaceCatalog: () =>
         Effect.succeed({
+          catalogRevision: 0,
           openWorkspaces: [
             {
               workspaceId: "repo",
               workspaceName: "Repo",
               abbreviation: null,
               tileColor: null,
-              repoPath: "/workspace",
+              repoPath: repo,
               isActive: true,
               hasConfig: true,
               configuredWorktreeBasePath: null,
@@ -191,7 +192,7 @@ describe("merge detection with real Git", () => {
 
     const tasks = ["t-merge", "t-ff", "t-squash", "t-rebase", "t-open", "t-empty"].map(taskCard);
     const { service, snapshots, logs } = createService(tasks);
-    const first = await Effect.runPromise(service.runPass("/workspace"));
+    const first = await Effect.runPromise(service.runPass({ workspaceId: "repo", repoPath: repo }));
 
     expect(logs).toEqual([]);
     expect(resultsByTask(first)).toEqual({
@@ -209,7 +210,9 @@ describe("merge detection with real Git", () => {
     run(repo, "checkout", "odt/t-ff");
     await commitFile(repo, "t-ff-more.txt", "more\n");
     run(repo, "checkout", "main");
-    const second = await Effect.runPromise(service.runPass("/workspace"));
+    const second = await Effect.runPromise(
+      service.runPass({ workspaceId: "repo", repoPath: repo }),
+    );
     expect(resultsByTask(second)).toMatchObject({ "t-ff": "not_merged:1", "t-merge": "merged" });
   }, 30_000);
 
@@ -228,7 +231,9 @@ describe("merge detection with real Git", () => {
     run(repo, "reflog", "expire", "--expire=now", "--all");
 
     const { service, logs } = createService(["t-idle", "t-squash", "t-open"].map(taskCard));
-    const snapshot = await Effect.runPromise(service.runPass("/workspace"));
+    const snapshot = await Effect.runPromise(
+      service.runPass({ workspaceId: "repo", repoPath: repo }),
+    );
 
     expect(logs).toEqual([]);
     expect(snapshot.tasks.every((status) => status.failure === undefined)).toBe(true);
@@ -270,7 +275,9 @@ describe("merge detection with real Git", () => {
     const { service, logs } = createService(
       ["t-reset", "t-partial", "t-pick", "t-restore"].map(taskCard),
     );
-    const snapshot = await Effect.runPromise(service.runPass("/workspace"));
+    const snapshot = await Effect.runPromise(
+      service.runPass({ workspaceId: "repo", repoPath: repo }),
+    );
 
     expect(logs).toEqual([]);
     expect(resultsByTask(snapshot)).toEqual({
@@ -302,7 +309,9 @@ describe("merge detection with real Git", () => {
     run(repo, "branch", "--force", "odt/t-forward", "origin/main");
 
     const { service, logs } = createService(["t-rebase", "t-forward"].map(taskCard));
-    const snapshot = await Effect.runPromise(service.runPass("/workspace"));
+    const snapshot = await Effect.runPromise(
+      service.runPass({ workspaceId: "repo", repoPath: repo }),
+    );
 
     expect(logs).toEqual([]);
     expect(resultsByTask(snapshot)).toEqual({
@@ -325,7 +334,9 @@ describe("merge detection with real Git", () => {
     const { service, logs } = createService([
       { ...taskCard("t-cherry"), targetBranch: { remote: "origin", branch: "release" } },
     ]);
-    const snapshot = await Effect.runPromise(service.runPass("/workspace"));
+    const snapshot = await Effect.runPromise(
+      service.runPass({ workspaceId: "repo", repoPath: repo }),
+    );
 
     expect(logs).toEqual([]);
     expect(resultsByTask(snapshot)).toEqual({
@@ -339,14 +350,18 @@ describe("merge detection with real Git", () => {
     await commitFile(repo, "t-open.txt", "open\n");
     run(repo, "checkout", "main");
     const { service, logs } = createService([taskCard("t-open")]);
-    const first = await Effect.runPromise(service.runPass("/workspace"));
+    const first = await Effect.runPromise(service.runPass({ workspaceId: "repo", repoPath: repo }));
     expect(first.tasks[0]?.result.kind).toBe("not_merged");
 
     run(repo, "remote", "set-url", "origin", path.join(root, "missing.git"));
     // A scheduled pass reuses the fetch of the first pass, so Check again forces a new one.
-    const scheduled = await Effect.runPromise(service.runPass("/workspace"));
+    const scheduled = await Effect.runPromise(
+      service.runPass({ workspaceId: "repo", repoPath: repo }),
+    );
     expect(scheduled.tasks[0]?.failure).toBeUndefined();
-    const second = await Effect.runPromise(service.checkWorkspace("/workspace"));
+    const second = await Effect.runPromise(
+      service.checkWorkspace({ workspaceId: "repo", repoPath: repo }),
+    );
 
     expect(second.tasks[0]).toMatchObject({
       taskId: "t-open",

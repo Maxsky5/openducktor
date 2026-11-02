@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "./scoped-repo-config";
 import type { RepoConfig, TaskMetadataPayload } from "@openducktor/contracts";
 import { Effect, Equal } from "effect";
 import {
@@ -43,6 +44,7 @@ export const loadOpenApprovalContext = (
     const effectiveRepoPath = repoConfig.repoPath;
     const defaultMergeMethod = yield* loadDefaultMergeMethod(dependencies.settingsConfig);
     const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
+      workspaceId: repoConfig.workspaceId,
       repoPath: effectiveRepoPath,
       taskId,
     });
@@ -82,6 +84,7 @@ export const loadOpenApprovalContext = (
         dependencies.workspaceSettingsService,
         current,
         effectiveRepoPath,
+        repoConfig.workspaceId,
       ),
     );
     const publishTarget =
@@ -129,7 +132,7 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
       completionState,
       taskWorkflows,
     } = services;
-    const { repoPath, taskId } = input;
+    const { taskId } = input;
     const mergeInput = input.input;
     const dependencies = yield* requireDependencies(() =>
       requireDirectMergeDependencies({
@@ -141,8 +144,7 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
         workspaceSettingsService,
       }),
     );
-    const repoConfig =
-      yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+    const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
     const effectiveRepoPath = repoConfig.repoPath;
     const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(effectiveRepoPath);
     yield* taskSessionLifecycleCoordinator.acquireLifecycle(
@@ -150,9 +152,17 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
       [taskId],
       "direct merge",
     );
-    const current = yield* taskStore.getTask({ repoPath: effectiveRepoPath, taskId });
+    const current = yield* taskStore.getTask({
+      workspaceId: input.workspaceId,
+      repoPath: effectiveRepoPath,
+      taskId,
+    });
     const workflow = taskWorkflows.forTask(current);
-    const metadata = yield* taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
+    const metadata = yield* taskStore.getTaskMetadata({
+      workspaceId: input.workspaceId,
+      repoPath: effectiveRepoPath,
+      taskId,
+    });
     yield* ensureNoDirectMergeEffect({
       operation: "direct_merge",
       repoPath: effectiveRepoPath,
@@ -205,7 +215,11 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
         message:
           "The task status, source branch, or target branch changed. Refresh approval context and review the merge again.",
       });
-    const state = completionState.ensure(effectiveRepoPath, taskId);
+    const state = completionState.ensure({
+      workspaceId: input.workspaceId,
+      repoPath: effectiveRepoPath,
+      taskId,
+    });
     if (state.mergeUncertain && !state.merge)
       return yield* new HostValidationError({
         field: "taskId",

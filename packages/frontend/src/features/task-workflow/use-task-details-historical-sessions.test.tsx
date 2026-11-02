@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -37,9 +38,11 @@ const createHarness = (initialProps: HarnessProps, queryClient: QueryClient) =>
 describe("useTaskDetailsHistoricalSessions", () => {
   test("returns the scoped session list for the task", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    queryClient.setQueryData(agentSessionQueryKeys.list("/repo-a", "task-1"), [sessionFixture]);
+    queryClient.setQueryData(agentSessionQueryKeys.list(workspaceRefFixture("/repo-a"), "task-1"), [
+      sessionFixture,
+    ]);
     const harness = createHarness(
-      { repoPath: "/repo-a", taskId: "task-1", enabled: true },
+      { workspaceId: "workspace-1", repoPath: "/repo-a", taskId: "task-1", enabled: true },
       queryClient,
     );
 
@@ -54,9 +57,11 @@ describe("useTaskDetailsHistoricalSessions", () => {
 
   test("returns no records when disabled or without a task", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    queryClient.setQueryData(agentSessionQueryKeys.list("/repo-a", "task-1"), [sessionFixture]);
+    queryClient.setQueryData(agentSessionQueryKeys.list(workspaceRefFixture("/repo-a"), "task-1"), [
+      sessionFixture,
+    ]);
     const harness = createHarness(
-      { repoPath: "/repo-a", taskId: "task-1", enabled: false },
+      { workspaceId: "workspace-1", repoPath: "/repo-a", taskId: "task-1", enabled: false },
       queryClient,
     );
 
@@ -64,10 +69,20 @@ describe("useTaskDetailsHistoricalSessions", () => {
       await harness.mount();
       expect(harness.getLatest()).toEqual([]);
 
-      await harness.update({ repoPath: "/repo-a", taskId: null, enabled: true });
+      await harness.update({
+        workspaceId: "workspace-1",
+        repoPath: "/repo-a",
+        taskId: null,
+        enabled: true,
+      });
       expect(harness.getLatest()).toEqual([]);
 
-      await harness.update({ repoPath: "/repo-a", taskId: "task-1", enabled: true });
+      await harness.update({
+        workspaceId: "workspace-1",
+        repoPath: "/repo-a",
+        taskId: "task-1",
+        enabled: true,
+      });
       expect(harness.getLatest()).toEqual([sessionFixture]);
     } finally {
       await harness.unmount();
@@ -79,6 +94,7 @@ describe("useTaskDetailsHistoricalSessions", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const harness = createHarness(
       {
+        workspaceId: "workspace-1",
         repoPath: "/repo-a",
         taskId: "task-1",
         enabled: true,
@@ -95,7 +111,7 @@ describe("useTaskDetailsHistoricalSessions", () => {
           expect(toastErrorMock).toHaveBeenCalled();
         });
         expect(toastErrorMock).toHaveBeenCalledWith("Failed to load task session history", {
-          id: "task-session-history-error:/repo-a:task-1",
+          id: "task-session-history-error:workspace-1:/repo-a:task-1",
           description: "agent session list unavailable",
         });
       });
@@ -109,7 +125,13 @@ describe("useTaskDetailsHistoricalSessions", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const readPort = createFailingReadPort();
     const harness = createHarness(
-      { repoPath: "/repo-a", taskId: "task-1", enabled: true, readPort },
+      {
+        workspaceId: "workspace-1",
+        repoPath: "/repo-a",
+        taskId: "task-1",
+        enabled: true,
+        readPort,
+      },
       queryClient,
     );
 
@@ -121,12 +143,18 @@ describe("useTaskDetailsHistoricalSessions", () => {
           expect(toastErrorMock).toHaveBeenCalledTimes(1);
         });
 
-        await harness.update({ repoPath: "/repo-a", taskId: "task-2", enabled: true, readPort });
+        await harness.update({
+          workspaceId: "workspace-1",
+          repoPath: "/repo-a",
+          taskId: "task-2",
+          enabled: true,
+          readPort,
+        });
         await waitFor(() => {
           expect(toastErrorMock).toHaveBeenCalledTimes(2);
         });
         expect(toastErrorMock).toHaveBeenNthCalledWith(2, "Failed to load task session history", {
-          id: "task-session-history-error:/repo-a:task-2",
+          id: "task-session-history-error:workspace-1:/repo-a:task-2",
           description: "agent session list unavailable",
         });
       });

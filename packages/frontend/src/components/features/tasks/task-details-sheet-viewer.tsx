@@ -20,7 +20,9 @@ export default function TaskDetailsSheetViewer({
   const { tasks, isLoadingTasks } = useTaskSnapshotContext();
   const contextTask = tasks.find((entry) => entry.id === taskId);
   const taskQuery = useQuery({
-    ...unfilteredRepoTaskDataQueryOptions(activeWorkspace?.repoPath ?? ""),
+    ...unfilteredRepoTaskDataQueryOptions(
+      activeWorkspace ?? { workspaceId: "disabled", repoPath: "" },
+    ),
     enabled: Boolean(activeWorkspace) && !contextTask && !isLoadingTasks,
     retry: false,
   });

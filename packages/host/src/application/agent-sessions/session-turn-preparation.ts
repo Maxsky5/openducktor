@@ -1,7 +1,9 @@
+import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
 import type {
   AgentMessageTarget,
   AgentSessionModelSelection,
   RepoPromptOverrides,
+  WorkspaceRef,
 } from "@openducktor/contracts";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import {
@@ -18,6 +20,7 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
@@ -25,7 +28,8 @@ import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-
 type PreparationTarget = Omit<AgentMessageTarget, "externalSessionId">;
 
 export const createSessionTurnPreparation = (deps: {
-  settings: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath" | "getSettingsSnapshot">;
+  settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "getRepoConfigByRepoPath">;
+  settingsConfig: Pick<SettingsConfigPort, "readGlobalConfig">;
   queries: Pick<AgentRuntimeQueryPort, "loadRuntimeCatalog">;
   taskReader: Pick<TaskStorePort, "getTask">;
   taskWorkflows: TaskWorkflowResolver;
@@ -40,10 +44,10 @@ export const createSessionTurnPreparation = (deps: {
         });
       return read.models.catalog;
     });
-  const overridesFor = (repoPath: string, workflow: TaskWorkflow) =>
+  const overridesFor = (scope: WorkspaceRef, workflow: TaskWorkflow) =>
     Effect.gen(function* () {
-      const config = yield* deps.settings.getRepoConfigByRepoPath(repoPath);
-      const settings = yield* deps.settings.getSettingsSnapshot();
+      const config = yield* getScopedRepoConfig(deps.settings, scope);
+      const settings = yield* deps.settingsConfig.readGlobalConfig();
       return workflow.prompts.mergeOverrides({
         globalOverrides: settings.globalPromptOverrides,
         repoOverrides: config.promptOverrides,
@@ -51,27 +55,33 @@ export const createSessionTurnPreparation = (deps: {
     });
   return {
     /** The task workflow of the task of a workflow session. */
-    taskWorkflow: (repoPath: string, taskId: string): Effect.Effect<TaskWorkflow, HostError> =>
-      deps.taskReader.getTask({ repoPath, taskId }).pipe(
+    taskWorkflow: (
+      scope: WorkspaceRef & { taskId: string },
+    ): Effect.Effect<TaskWorkflow, HostError> =>
+      deps.taskReader.getTask(scope).pipe(
         Effect.map((task) => deps.taskWorkflows.forTask(task)),
         Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-context")),
       ),
     promptOverrides: (
-      repoPath: string,
+      scope: WorkspaceRef,
       workflow: TaskWorkflow,
     ): Effect.Effect<RepoPromptOverrides, HostError> =>
-      overridesFor(repoPath, workflow).pipe(
+      overridesFor(scope, workflow).pipe(
         Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-context")),
       ),
     context: (target: PreparationTarget) =>
       Effect.gen(function* () {
         if (target.sessionScope.kind === "repository") return undefined;
         const task = yield* deps.taskReader.getTask({
+          workspaceId: target.sessionScope.workspaceId,
           repoPath: target.repoPath,
           taskId: target.sessionScope.taskId,
         });
         const workflow = deps.taskWorkflows.forTask(task);
-        const overrides = yield* overridesFor(target.repoPath, workflow);
+        const overrides = yield* overridesFor(
+          { workspaceId: target.sessionScope.workspaceId, repoPath: target.repoPath },
+          workflow,
+        );
         const overrideProblem = workflow.prompts.findOverrideProblem(overrides);
         if (overrideProblem !== undefined) {
           return yield* new HostValidationError({
@@ -103,7 +113,10 @@ export const createSessionTurnPreparation = (deps: {
             message:
               "The selected model belongs to another runtime. Select a model for this session's runtime.",
           });
-        const config = yield* deps.settings.getRepoConfigByRepoPath(target.repoPath);
+        const workspaceId = target.sessionScope.workspaceId;
+        const config = yield* workspaceId === undefined
+          ? deps.settings.getRepoConfigByRepoPath(target.repoPath)
+          : getScopedRepoConfig(deps.settings, { workspaceId, repoPath: target.repoPath });
         const catalog = yield* catalogFor(target);
         const current = saved ? resolveSavedModelAlias(catalog, saved) : null;
         const decision = resolveSavedSessionModel({

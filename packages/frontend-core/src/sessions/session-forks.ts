@@ -66,26 +66,39 @@ export const forkTaskSession = (
         try {
           const taskId = input.sessionScope.taskId;
           const records = queryClient.getQueryData<AgentSessionRecord[]>(
-            agentSessionQueryKeys.list(input.repoPath, taskId),
+            agentSessionQueryKeys.list(
+              { workspaceId: input.sessionScope.workspaceId, repoPath: input.repoPath },
+              taskId,
+            ),
           );
           // An individual result cannot establish a complete task list that has never loaded.
           if (records)
-            updateAgentSessionListQuery(queryClient, input.repoPath, {
-              taskId,
-              agentSessions: [
-                ...records.filter(
-                  (record) =>
-                    agentSessionIdentityKey(record) !== agentSessionIdentityKey(result.record),
-                ),
-                result.record,
-              ],
-            });
+            updateAgentSessionListQuery(
+              queryClient,
+              { workspaceId: input.sessionScope.workspaceId, repoPath: input.repoPath },
+              {
+                taskId,
+                agentSessions: [
+                  ...records.filter(
+                    (record) =>
+                      agentSessionIdentityKey(record) !== agentSessionIdentityKey(result.record),
+                  ),
+                  result.record,
+                ],
+              },
+            );
           const workspaceStore = store.getWorkspaceStore(input.repoPath);
           workspaceStore?.setSessionCollection((projected) =>
             applyWorkflowSessionRecords({
               projected,
               associationEvidence: projected,
-              records: { loadedTaskIds: new Set(), records: [{ taskId, record: result.record }] },
+              records: {
+                workspaceId: input.sessionScope.workspaceId,
+                loadedTaskIds: new Set(),
+                records: [
+                  { workspaceId: input.sessionScope.workspaceId, taskId, record: result.record },
+                ],
+              },
             }),
           );
           if (workspaceStore) applyForkSummary(workspaceStore, result.runtimeSession);
@@ -153,7 +166,7 @@ export const forkWorkspaceSession = (
           updateWorkspaceSessionQueries(queryClient, input.workspaceId, result.record);
           const workspaceStore = store.getWorkspaceStore(repoPath);
           workspaceStore?.setSessionCollection((projected) =>
-            applyWorkspaceSessionRecords(projected, [result.record]),
+            applyWorkspaceSessionRecords(projected, [result.record], input.workspaceId),
           );
           if (workspaceStore) applyForkSummary(workspaceStore, result.runtimeSession);
         } catch (cause) {

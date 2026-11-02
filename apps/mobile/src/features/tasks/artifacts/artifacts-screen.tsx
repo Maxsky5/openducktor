@@ -66,7 +66,13 @@ function TaskArtifactList({ owner, taskId }: { owner: WorkOwner; taskId: string 
   const gate = useCommandGate();
   const theme = useAppTheme();
   const endSpace = useScreenEndSpace(theme.space.xxxl);
-  const collection = useQuery(taskArtifactsQueryOptions(queryClient, owner.repoPath, taskId));
+  const collection = useQuery(
+    taskArtifactsQueryOptions(
+      queryClient,
+      { workspaceId: owner.workspace.workspaceId, repoPath: owner.repoPath },
+      taskId,
+    ),
+  );
   const groups = useMemo(
     () => (collection.data ? groupTaskArtifacts(collection.data.artifacts) : null),
     [collection.data],

@@ -18,80 +18,108 @@ const workspaceRoot = resolve(packageRoot, "../..");
 const outputPath = join(packageRoot, "dist", "cli.js");
 const execFileAsync = promisify(execFile);
 
-export type WebSqliteTaskStoreMigrationCopyPlan = {
+export type WebSqliteMigrationCopyPlan = {
   sourceDirectory: string;
   targetDirectory: string;
 };
 
-export const resolveWebSqliteTaskStoreMigrationCopyPlan = ({
+export const resolveWebSqliteMigrationCopyPlans = ({
   packageRoot,
   workspaceRoot,
 }: {
   packageRoot: string;
   workspaceRoot: string;
-}): WebSqliteTaskStoreMigrationCopyPlan => ({
-  sourceDirectory: join(workspaceRoot, "packages", "host", "src", "adapters", "sqlite", "drizzle"),
-  targetDirectory: join(packageRoot, "dist", "drizzle"),
-});
+}): WebSqliteMigrationCopyPlan[] =>
+  ["drizzle", "drizzle-host"].map((folder) => ({
+    sourceDirectory: join(workspaceRoot, "packages", "host", "src", "adapters", "sqlite", folder),
+    targetDirectory: join(packageRoot, "dist", folder),
+  }));
 
-export const copyWebSqliteTaskStoreMigrationsEffect = ({
+export const copyWebSqliteMigrationsEffect = ({
   sourceDirectory,
   targetDirectory,
-}: WebSqliteTaskStoreMigrationCopyPlan): Effect.Effect<void, WebDependencyError> =>
+}: WebSqliteMigrationCopyPlan): Effect.Effect<void, WebDependencyError> =>
   Effect.tryPromise({
     try: () => cp(sourceDirectory, targetDirectory, { force: true, recursive: true }),
     catch: (cause) =>
       new WebDependencyError({
         dependency: "filesystem",
-        operation: "copy-web-sqlite-task-store-migrations",
+        operation: "copy-web-sqlite-migrations",
         message: errorMessage(cause),
         cause,
         details: { sourceDirectory, targetDirectory },
       }),
   });
 
-export const copyWebSqliteTaskStoreMigrations = (
-  input: WebSqliteTaskStoreMigrationCopyPlan,
-): Promise<void> => runWebBoundary(copyWebSqliteTaskStoreMigrationsEffect(input));
+export const copyWebSqliteMigrations = (input: WebSqliteMigrationCopyPlan): Promise<void> =>
+  runWebBoundary(copyWebSqliteMigrationsEffect(input));
+
+const CLI_BUILD_COMMAND = [
+  "bun",
+  "build",
+  "--target=node",
+  "--minify",
+  "--keep-names",
+  "--splitting",
+  "--external",
+  "vite",
+  "--external",
+  "@ff-labs/fff-node",
+  "--external",
+  "@azure/msal-node-extensions",
+  "--external",
+  "node-pty",
+  "--external",
+  "playwright-core",
+  "--outdir",
+  dirname(outputPath),
+  "--entry-naming",
+  "[name].[ext]",
+  "src/cli.ts",
+  "src/generated-image-worker.ts",
+  "src/claude-transcript-worker.ts",
+] as const;
+
+// The import worker has its own bundle, so its migration folders resolve from the dist folder
+// and not from a shared chunk.
+const IMPORT_WORKER_BUILD_COMMAND = [
+  "bun",
+  "build",
+  "--target=node",
+  "--minify",
+  "--keep-names",
+  "--outdir",
+  dirname(outputPath),
+  "--entry-naming",
+  "[name].[ext]",
+  "src/host-database-import-worker.ts",
+] as const;
+
+type WebBuild = { label: string; command: readonly [string, ...string[]] };
+
+const runWebBuildEffect = ({ label, command }: WebBuild): Effect.Effect<void, WebDependencyError> =>
+  Effect.tryPromise({
+    try: () => runCommand({ command, cwd: packageRoot, label }),
+    catch: (cause) =>
+      new WebDependencyError({
+        dependency: "build-command",
+        operation: "web-cli-build",
+        message: errorMessage(cause),
+        cause,
+        details: { command: [...command], cwd: packageRoot },
+      }),
+  });
 
 export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
   Effect.gen(function* () {
-    const command = [
-      "bun",
-      "build",
-      "--target=node",
-      "--minify",
-      "--keep-names",
-      "--splitting",
-      "--external",
-      "vite",
-      "--external",
-      "@ff-labs/fff-node",
-      "--external",
-      "@azure/msal-node-extensions",
-      "--external",
-      "node-pty",
-      "--external",
-      "playwright-core",
-      "--outdir",
-      dirname(outputPath),
-      "--entry-naming",
-      "[name].[ext]",
-      "src/cli.ts",
-      "src/generated-image-worker.ts",
-      "src/claude-transcript-worker.ts",
-    ] as const;
-    yield* Effect.tryPromise({
-      try: () => runCommand({ command, cwd: packageRoot, label: "Web CLI build" }),
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "build-command",
-          operation: "web-cli-build",
-          message: errorMessage(cause),
-          cause,
-          details: { command: [...command], cwd: packageRoot },
-        }),
-    });
+    yield* Effect.forEach(
+      [
+        { label: "Web CLI build", command: CLI_BUILD_COMMAND },
+        { label: "Web import worker build", command: IMPORT_WORKER_BUILD_COMMAND },
+      ],
+      runWebBuildEffect,
+      { concurrency: 2, discard: true },
+    );
     yield* Effect.tryPromise({
       try: () => markExecutable(outputPath),
       catch: (cause) =>
@@ -103,8 +131,10 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
           details: { outputPath },
         }),
     });
-    yield* copyWebSqliteTaskStoreMigrationsEffect(
-      resolveWebSqliteTaskStoreMigrationCopyPlan({ packageRoot, workspaceRoot }),
+    yield* Effect.forEach(
+      resolveWebSqliteMigrationCopyPlans({ packageRoot, workspaceRoot }),
+      copyWebSqliteMigrationsEffect,
+      { discard: true },
     );
     yield* Effect.tryPromise({
       try: async () => {

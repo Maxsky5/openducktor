@@ -16,6 +16,9 @@ export type HostEventDeliveryReporter = {
 };
 
 export type HostEventBusPort = {
+  subscribeDeliveryFailures(
+    listener: (failure: HostEventDeliveryFailure) => void,
+  ): HostEventUnsubscribe;
   publish(envelope: HostEventEnvelope): void;
   subscribe(channel: string, listener: HostEventListener): HostEventUnsubscribe;
 };
@@ -35,8 +38,15 @@ const parseHostEventChannel = (value: string): HostEventChannel => {
 
 export const createHostEventBus = (reporter: HostEventDeliveryReporter): HostEventBusPort => {
   const listenersByChannel = new Map<HostEventChannel, Set<HostEventListener>>();
+  const failureListeners = new Set<(failure: HostEventDeliveryFailure) => void>();
 
   return {
+    subscribeDeliveryFailures(listener) {
+      failureListeners.add(listener);
+      return () => {
+        failureListeners.delete(listener);
+      };
+    },
     publish(envelope) {
       const listeners = listenersByChannel.get(envelope.channel);
       if (!listeners) {
@@ -48,6 +58,7 @@ export const createHostEventBus = (reporter: HostEventDeliveryReporter): HostEve
         try {
           listener(envelope);
         } catch (cause) {
+          for (const observe of failureListeners) observe({ channel: envelope.channel, cause });
           reporter.report({ channel: envelope.channel, cause });
         }
       }

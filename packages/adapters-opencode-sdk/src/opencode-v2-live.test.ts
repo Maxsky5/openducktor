@@ -559,7 +559,12 @@ describe("OpenCode V2 live observation", () => {
       const runtime = await fixture.prepare();
       const admitted = new Map(children.map((child) => [child.id, Promise.withResolvers<void>()]));
       const sources: Extract<OpencodeSessionRuntimeSignal, { type: "session_source" }>[] = [];
-      const sessionScope = { kind: "workflow" as const, taskId: "task-1", role };
+      const sessionScope = {
+        kind: "workflow" as const,
+        workspaceId: "repo",
+        taskId: "task-1",
+        role,
+      };
       try {
         await runtime.connection.readSessionSources(ref.repoPath, [{ ...ref, sessionScope }]);
         await runtime.startForwarding((signal) => {
@@ -673,7 +678,15 @@ describe("OpenCode V2 live observation", () => {
     const observed = Promise.withResolvers<void>();
     try {
       await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" } },
+        {
+          ...ref,
+          sessionScope: {
+            kind: "workflow",
+            workspaceId: "repo",
+            taskId: "task-1",
+            role: "planner",
+          },
+        },
       ]);
       await runtime.connection.readSessionSources(other.repoPath, [
         { ...other, sessionScope: { kind: "repository" } },
@@ -761,7 +774,15 @@ describe("OpenCode V2 live observation", () => {
     const restored = Promise.withResolvers<void>();
     try {
       await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" } },
+        {
+          ...ref,
+          sessionScope: {
+            kind: "workflow",
+            workspaceId: "repo",
+            taskId: "task-1",
+            role: "planner",
+          },
+        },
       ]);
       await runtime.startForwarding((signal) => {
         if (signal.type === "fault") restored.reject(new Error(signal.message));
@@ -1836,7 +1857,10 @@ describe("OpenCode V2 live observation", () => {
     const runtime = await fixture.prepare();
     try {
       const read = await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" } },
+        {
+          ...ref,
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "spec" },
+        },
       ]);
       expect(read.sources).toEqual([]);
       expect(read.failures).toHaveLength(1);
@@ -1895,7 +1919,12 @@ describe("OpenCode V2 live observation", () => {
         return undefined;
       });
       const runtime = await fixture.prepare();
-      const sessionScope = { kind: "workflow" as const, taskId: "task-1", role };
+      const sessionScope = {
+        kind: "workflow" as const,
+        workspaceId: "repo",
+        taskId: "task-1",
+        role,
+      };
       const input = { ...ref, runtimePolicy: { kind: "opencode" as const }, sessionScope };
       try {
         const read = await runtime.connection.readSessionSources(ref.repoPath, [input]);
@@ -2148,9 +2177,12 @@ describe("OpenCode V2 live observation", () => {
       repoPath,
       workingDirectory: `${repoPath}/worktree`,
       externalSessionId: `ses_${index}`,
-      sessionScope: { kind: "repository" as const },
+      sessionScope: {
+        kind: "repository" as const,
+        workspaceId: index === 0 ? "workspace-a" : "workspace-b",
+      },
     }));
-    const resolved: string[] = [];
+    const resolved: Array<[string, string | undefined]> = [];
     const fixture = prepareFixture(
       ({ url, method }) => {
         const root = roots.find(
@@ -2167,9 +2199,12 @@ describe("OpenCode V2 live observation", () => {
           });
         return undefined;
       },
-      async (repoPath) => {
-        resolved.push(repoPath);
-        return { command: ["odt-mcp"], environment: { OPENDUCKTOR_WORKSPACE_ID: repoPath } };
+      async (repoPath, workspaceId) => {
+        resolved.push([repoPath, workspaceId]);
+        return {
+          command: ["odt-mcp"],
+          environment: { OPENDUCKTOR_WORKSPACE_ID: workspaceId ?? "missing-workspace" },
+        };
       },
     );
     const runtime = await fixture.prepare();
@@ -2184,7 +2219,10 @@ describe("OpenCode V2 live observation", () => {
       for (const root of roots) {
         await runtime.connection.resumeSession({ ...root, runtimePolicy: { kind: "opencode" } });
       }
-      expect(resolved).toEqual(["/repo-a", "/repo-b"]);
+      expect(resolved).toEqual([
+        ["/repo-a", "workspace-a"],
+        ["/repo-b", "workspace-b"],
+      ]);
       const installs = fixture.requests.filter(
         ({ url }) => url.pathname === "/api/experimental/mcp/openducktor",
       );
@@ -2199,7 +2237,7 @@ describe("OpenCode V2 live observation", () => {
           config: {
             type: "local",
             command: ["odt-mcp"],
-            environment: { OPENDUCKTOR_WORKSPACE_ID: root.repoPath },
+            environment: { OPENDUCKTOR_WORKSPACE_ID: root.sessionScope.workspaceId },
             codemode: false,
           },
         })),
@@ -2213,7 +2251,10 @@ describe("OpenCode V2 live observation", () => {
       const rejected = await runtime.connection.readSessionSources(foreign.repoPath, [foreign]);
       expect(rejected.sources).toEqual([]);
       expect(rejected.failures[0]?.runtimeOperationFailure?.code).toBe("identity_mismatch");
-      expect(resolved).toEqual(["/repo-a", "/repo-b"]);
+      expect(resolved).toEqual([
+        ["/repo-a", "workspace-a"],
+        ["/repo-b", "workspace-b"],
+      ]);
       expect(
         fixture.requests.filter(({ url }) => url.pathname === "/api/experimental/mcp/openducktor"),
       ).toHaveLength(2);

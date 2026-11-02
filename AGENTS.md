@@ -2,7 +2,7 @@
 
 ## Project
 
-OpenDucktor is a Bun monorepo. It contains an Electron desktop app and a local browser runner for AI planning and build workflows. A workspace-scoped SQLite task store is the source of truth for tasks.
+OpenDucktor is a Bun monorepo. It contains an Electron desktop app and a local browser runner for AI planning and build workflows. One host SQLite database stores tasks with workspace-scoped keys.
 
 Use Bun and `bun run` for dependency installation and workspace commands. Use npm only in Trusted Publisher workflows that run `npm publish`. Do not use Yarn.
 

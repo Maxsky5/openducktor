@@ -6,10 +6,10 @@ import {
   type SettingsSnapshot,
 } from "@openducktor/contracts";
 import { azureDevOpsRepositoryKey, isAzureDevOpsRepository } from "@openducktor/core";
-import type { ReactElement } from "react";
+import { type ReactElement, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
+import { repositoryGitProviderContextQueryOptionsOrSkip } from "@openducktor/frontend-core/queries/git-provider-context";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
 import type { RepositorySectionId } from "./settings-modal-constants";
@@ -56,13 +56,23 @@ const resolveRepositoryAvailabilityNotice = ({
   requiredWorkspaceRepoPath,
   workspaceCount,
   hasSelectedRepository,
+  hasUnavailableDraft,
 }: {
   repositorySection: RepositorySectionId;
   requiredWorkspaceSelectionUnresolved: boolean;
   requiredWorkspaceRepoPath: string | null;
   workspaceCount: number;
   hasSelectedRepository: boolean;
+  hasUnavailableDraft: boolean;
 }): RepositoryAvailabilityNotice | null => {
+  if (hasUnavailableDraft) {
+    return {
+      message:
+        "This workspace is no longer available. Your unsaved settings remain below. Copy any text you need, then use Cancel to discard the draft. Save cannot update this workspace.",
+      role: "alert",
+    };
+  }
+
   if (workspaceCount === 0) {
     return { message: "Add a repository first, then configure repository settings." };
   }
@@ -185,7 +195,6 @@ export function SettingsRepositoryContent({
     catalogResources,
     favoriteState,
     snapshotDraft,
-    workspaceIds,
     selectedWorkspace,
     selectedWorkspaceId,
     selectedRepoConfig,
@@ -209,12 +218,26 @@ export function SettingsRepositoryContent({
     updateSelectedRepoDefaultModel,
     clearSelectedRepoDefaultModel,
   } = controller;
+  const selectableWorkspaces = useMemo(() => {
+    const liveWorkspaceIds = new Set(
+      controller.workspaces.map((workspace) => workspace.workspaceId),
+    );
+    const unavailableDrafts = Object.values(snapshotDraft?.workspaces ?? {})
+      .filter((workspace) => !liveWorkspaceIds.has(workspace.workspaceId))
+      .map((workspace) => ({
+        workspaceId: workspace.workspaceId,
+        workspaceName: `${workspace.workspaceName} (unavailable draft)`,
+        repoPath: workspace.repoPath,
+      }));
+    return [...controller.workspaces, ...unavailableDrafts];
+  }, [controller.workspaces, snapshotDraft?.workspaces]);
   const repositoryAvailabilityNotice = resolveRepositoryAvailabilityNotice({
     repositorySection,
     requiredWorkspaceSelectionUnresolved,
     requiredWorkspaceRepoPath,
-    workspaceCount: workspaceIds.length,
+    workspaceCount: selectableWorkspaces.length,
     hasSelectedRepository: selectedRepoConfig !== null,
+    hasUnavailableDraft: selectedRepoConfig !== null && selectedWorkspace === null,
   });
   const selectedRepoPath = selectedWorkspace?.repoPath ?? "";
   const savedSettings = useQuery(settingsSnapshotQueryOptions()).data;
@@ -225,7 +248,7 @@ export function SettingsRepositoryContent({
     repoPath: selectedRepoPath,
   });
   const providerContextQuery = useQuery({
-    ...repositoryGitProviderContextQueryOptions(selectedRepoPath),
+    ...repositoryGitProviderContextQueryOptionsOrSkip(selectedWorkspace),
     enabled: loadProviderContext,
   });
   const providerState = getProviderState(providerDirty, loadProviderContext, providerContextQuery);
@@ -233,7 +256,7 @@ export function SettingsRepositoryContent({
   return (
     <div className="grid min-h-full min-w-0 grid-cols-1 grid-rows-[auto_1fr] lg:grid-cols-[240px_minmax(0,1fr)] lg:grid-rows-1">
       <RepositorySidebar
-        workspaces={controller.workspaces}
+        workspaces={selectableWorkspaces}
         selectedWorkspaceId={selectedWorkspaceId}
         selectedRepositorySection={repositorySection}
         disabled={isInteractionDisabled}

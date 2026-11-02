@@ -1,3 +1,5 @@
+import { workspaceScopeValue } from "./workspace-scope";
+import type { WorkspaceRef } from "@openducktor/contracts";
 import type { TaskMergeStatusSnapshot } from "@openducktor/contracts";
 import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
 import { connectionHost, connectionOf } from "../connection/client-connection";
@@ -7,11 +9,12 @@ import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query"
 
 export const taskMergeStatusQueryKeys = {
   all: ["task-merge-status"] as const,
-  repo: (repoPath: string) => [...taskMergeStatusQueryKeys.all, "repo", repoPath] as const,
+  repo: (repoPath: WorkspaceRef) =>
+    [...taskMergeStatusQueryKeys.all, "repo", workspaceScopeValue(repoPath)] as const,
   skipped: ["task-merge-status", SKIPPED_QUERY_KEY_SEGMENT] as const,
 };
 
-export const taskMergeStatusQueryOptions = (repoPath: string) =>
+export const taskMergeStatusQueryOptions = (repoPath: WorkspaceRef) =>
   queryOptions<TaskMergeStatusSnapshot, Error, TaskMergeStatusSnapshot, QueryKey>({
     queryKey: taskMergeStatusQueryKeys.repo(repoPath),
     queryFn: ({ client }) => connectionHost(client).taskMergeStatusGet(repoPath),
@@ -20,7 +23,7 @@ export const taskMergeStatusQueryOptions = (repoPath: string) =>
   });
 
 /** The merge status read of the active workspace, or a skipped read without a workspace. */
-export const workspaceTaskMergeStatusQueryOptions = (repoPath: string | null) =>
+export const workspaceTaskMergeStatusQueryOptions = (repoPath: WorkspaceRef | null) =>
   repoPath === null
     ? skippedQueryOptions<TaskMergeStatusSnapshot, QueryKey>({
         queryKey: taskMergeStatusQueryKeys.skipped,
@@ -31,7 +34,7 @@ export const workspaceTaskMergeStatusQueryOptions = (repoPath: string | null) =>
 /** Fetches and runs a host detection pass for the workspace, then stores its snapshot. */
 export const checkTaskMergeStatus = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
 ): Promise<TaskMergeStatusSnapshot> => {
   const snapshot = await connectionHost(queryClient).taskMergeStatusCheck(repoPath);
   await replaceTaskMergeStatus(queryClient, snapshot);
@@ -82,7 +85,7 @@ const replaceTaskMergeStatus = async (
   queryClient: QueryClient,
   snapshot: TaskMergeStatusSnapshot,
 ): Promise<void> => {
-  const queryKey = taskMergeStatusQueryKeys.repo(snapshot.repoPath);
+  const queryKey = taskMergeStatusQueryKeys.repo(snapshot);
   await queryClient.cancelQueries({ queryKey, exact: true });
   queryClient.setQueryData(queryKey, snapshot);
 };

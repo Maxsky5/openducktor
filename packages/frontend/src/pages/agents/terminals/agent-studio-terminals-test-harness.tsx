@@ -20,7 +20,7 @@ import { useAgentStudioTerminals } from "./use-agent-studio-terminals";
 export const summaryForTask = (taskId: string): TerminalSummary => ({
   terminalId: `terminal-${taskId}`,
   label: "Shell 1",
-  context: { repoPath: "/repo", taskId },
+  context: { workspaceId: "workspace-1", repoPath: "/repo", taskId },
   initialWorkingDir: `/repo/worktrees/${taskId}`,
   createdAt: "2026-07-13T00:00:00.000Z",
   lifecycle: "running",

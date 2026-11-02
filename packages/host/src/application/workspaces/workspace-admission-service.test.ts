@@ -22,6 +22,7 @@ const workspaceRecord = (
 });
 
 const catalog = (overrides: Partial<WorkspaceCatalog> = {}): WorkspaceCatalog => ({
+  catalogRevision: 0,
   openWorkspaces: [],
   closedWorkspaces: [],
   incompleteRemovals: [],
@@ -60,32 +61,6 @@ describe("workspace admission service", () => {
     expect(admission.isWorkspaceBlocked("open-ws")).toBe(false);
   });
 
-  test("blocks all ordinary task store access for closed workspaces", async () => {
-    const admission = createAdmission(
-      catalog({ closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")] }),
-    );
-
-    await expect(
-      Effect.runPromise(
-        admission.assertTaskStoreAccess({
-          operation: "sqliteTaskRepository.createTask",
-          repoPath: "/repos/closed",
-          workspaceId: "closed-ws",
-        }),
-      ),
-    ).rejects.toThrow("Workspace is closed: closed-ws");
-
-    await expect(
-      Effect.runPromise(
-        admission.assertTaskStoreAccess({
-          operation: "sqliteTaskRepository.listTasks",
-          repoPath: "/repos/closed",
-          workspaceId: "closed-ws",
-        }),
-      ),
-    ).rejects.toThrow("Workspace is closed: closed-ws");
-  });
-
   test.each(["close", "reopen", "remove"] as const)(
     "ownership reads permit closed workspaces but reject a %s reservation",
     async (operation) => {
@@ -96,60 +71,20 @@ describe("workspace admission service", () => {
       );
       const scope = { workspaceId: "closed-ws", repoPath: "/repos/closed" };
       const read = () =>
-        admission.assertTaskStoreOwnershipReadAccess({
+        admission.resolveTaskStoreAccess({
           ...scope,
+          access: "ownership",
           operation: "workspaceSessionStore.worktreeOwners",
         });
-      await Effect.runPromise(read());
+      expect(await Effect.runPromise(read())).toBe("ownership");
       await Effect.runPromise(admission.reserveWorkspace({ ...scope, operation }));
       await expect(Effect.runPromise(read())).rejects.toThrow(
         `${operation} operation is already in progress`,
       );
       admission.releaseReservation(scope.workspaceId);
-      admission.blockWorkspace({ ...scope, reason: "removal" });
-      await expect(Effect.runPromise(read())).rejects.toThrow("Workspace removal is incomplete");
+      await Effect.runPromise(read());
     },
   );
-
-  test("blocks all ordinary task store access while removal is incomplete", async () => {
-    const admission = createAdmission(
-      catalog({
-        incompleteRemovals: [
-          {
-            workspace: workspaceRecord("removing-ws", "/repos/removing"),
-            record: {
-              phase: "attachments",
-              removeTaskWorktrees: false,
-              pendingWorktreePath: null,
-            },
-          },
-        ],
-      }),
-    );
-
-    await expect(
-      Effect.runPromise(
-        admission.assertTaskStoreAccess({
-          operation: "sqliteTaskRepository.listTasks",
-          repoPath: "/repos/removing",
-          workspaceId: "removing-ws",
-        }),
-      ),
-    ).rejects.toThrow("Workspace removal is incomplete for removing-ws");
-
-    await expect(
-      Effect.runPromise(
-        admission.withAdministrativeAccess(
-          "removing-ws",
-          admission.assertTaskStoreAccess({
-            operation: "sqliteTaskRepository.listTasks",
-            repoPath: "/repos/removing",
-            workspaceId: "removing-ws",
-          }),
-        ),
-      ),
-    ).resolves.toBeUndefined();
-  });
 
   test("blocks process starts by repository path for blocked workspaces", async () => {
     const admission = createAdmission(
@@ -212,7 +147,8 @@ describe("workspace admission service", () => {
     ).rejects.toThrow("already in progress for ws");
     await expect(
       Effect.runPromise(
-        admission.assertTaskStoreAccess({
+        admission.resolveTaskStoreAccess({
+          access: "open",
           operation: "sqliteTaskRepository.listTasks",
           repoPath: "/repos/ws",
           workspaceId: "ws",
@@ -221,7 +157,8 @@ describe("workspace admission service", () => {
     ).rejects.toThrow("already in progress for ws");
     await expect(
       Effect.runPromise(
-        admission.assertTaskStoreAccess({
+        admission.resolveTaskStoreAccess({
+          access: "open",
           operation: "sqliteTaskRepository.updateTask",
           repoPath: "/repos/ws",
           workspaceId: "ws",
@@ -239,7 +176,8 @@ describe("workspace admission service", () => {
     );
     await expect(
       Effect.runPromise(
-        admission.assertTaskStoreAccess({
+        admission.resolveTaskStoreAccess({
+          access: "open",
           operation: "sqliteTaskRepository.listTasks",
           repoPath: "/repos/ws",
           workspaceId: "ws",
@@ -299,6 +237,14 @@ describe("workspace admission service", () => {
     );
 
     await Effect.runPromise(
+      admission.reserveWorkspace({
+        workspaceId: "closed-ws",
+        repoPath: "/repos/closed",
+        operation: "close",
+      }),
+    );
+
+    await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
           const started = yield* Deferred.make<void>();
@@ -309,7 +255,8 @@ describe("workspace admission service", () => {
               Deferred.succeed(started, undefined).pipe(
                 Effect.andThen(Deferred.await(release)),
                 Effect.andThen(
-                  admission.assertTaskStoreAccess({
+                  admission.resolveTaskStoreAccess({
+                    access: "open",
                     operation: "sqliteTaskRepository.listTasks",
                     repoPath: "/repos/closed",
                     workspaceId: "closed-ws",
@@ -321,7 +268,8 @@ describe("workspace admission service", () => {
           yield* Deferred.await(started);
 
           const ordinaryAccess = yield* Effect.result(
-            admission.assertTaskStoreAccess({
+            admission.resolveTaskStoreAccess({
+              access: "open",
               operation: "sqliteTaskRepository.listTasks",
               repoPath: "/repos/closed",
               workspaceId: "closed-ws",
@@ -330,7 +278,7 @@ describe("workspace admission service", () => {
           expect(ordinaryAccess._tag).toBe("Failure");
 
           yield* Deferred.succeed(release, undefined);
-          yield* Fiber.join(fiber);
+          expect(yield* Fiber.join(fiber)).toBe("administrative");
         }),
       ),
     );
@@ -341,22 +289,38 @@ describe("workspace admission service", () => {
     const admission = createAdmission(closed);
     const otherAdmission = createAdmission(closed);
     const access = {
+      access: "open" as const,
       operation: "sqliteTaskRepository.listTasks",
       repoPath: "/repos/closed",
       workspaceId: "closed-ws",
     };
 
+    await Effect.runPromise(
+      admission.reserveWorkspace({
+        workspaceId: "closed-ws",
+        repoPath: "/repos/closed",
+        operation: "close",
+      }),
+    );
+    await Effect.runPromise(
+      otherAdmission.reserveWorkspace({
+        workspaceId: "closed-ws",
+        repoPath: "/repos/closed",
+        operation: "close",
+      }),
+    );
+
     const [own, other] = await Effect.runPromise(
       admission.withAdministrativeAccess(
         "closed-ws",
         Effect.all([
-          Effect.result(admission.assertTaskStoreAccess(access)),
-          Effect.result(otherAdmission.assertTaskStoreAccess(access)),
+          Effect.result(admission.resolveTaskStoreAccess(access)),
+          Effect.result(otherAdmission.resolveTaskStoreAccess(access)),
         ]),
       ),
     );
 
-    expect(own._tag).toBe("Success");
+    expect(own).toEqual(expect.objectContaining({ _tag: "Success", success: "administrative" }));
     expect(other._tag).toBe("Failure");
   });
 

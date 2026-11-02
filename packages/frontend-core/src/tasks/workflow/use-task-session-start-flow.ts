@@ -121,7 +121,7 @@ const findSessionsByRoleForTask = (
 ): AgentSessionSummary[] => {
   return sessions
     .filter((session) => session.taskId === taskId && session.role === role)
-    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
 };
 
 /**

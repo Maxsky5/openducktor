@@ -15,7 +15,7 @@ const summary = {
   runtimeKind: "claude",
   workingDirectory: "/repo/worktree",
   title: "Claude build",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionAssociation: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
   startedAt: "2026-07-17T10:01:00.000Z",
   status: "idle",
 } as const satisfies AgentSessionSummary;
@@ -31,7 +31,7 @@ const session: ClaudeSessionContext = {
     runtimeKind: "claude",
     workingDirectory: "/repo/worktree",
     runtimePolicy: { kind: "claude" },
-    sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
     systemPrompt: "Build",
   },
   model: undefined,

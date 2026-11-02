@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   AgentSessionUserMessagePart,
@@ -34,6 +35,7 @@ const fields = {
   workspaceId: "alpha",
   repoPath: "/repos/alpha",
   task: { id: "task-1", title: "Task" },
+  workflowId: "openducktor",
   eventId: "taskRejectedByQa" as const,
   actionId: "startReviewQaFeedbacks" as const,
   occurredAt: "2026-10-10T00:00:00.000Z",
@@ -76,7 +78,7 @@ const createPorts = () => {
     ),
     markInAppFeedbackHandled: mock((_errorId: string) => {}),
     isWorkspaceSelected: mock((workspaceId: string) => workspaceId === "alpha"),
-    refreshTaskViews: mock(async (_repoPath: string, _taskId: string) => {}),
+    refreshTaskViews: mock(async (_scope: WorkspaceRef, _taskId: string) => {}),
   } satisfies AutopilotOutcomePresenterPorts;
   return { ports, claims, sends };
 };
@@ -118,7 +120,7 @@ describe("Autopilot outcome presenter", () => {
 
     expect(info).toHaveBeenCalledTimes(1);
     expect(info).toHaveBeenCalledWith("Autopilot skipped Start Review QA Feedbacks for task-1.", {
-      id: "autopilot:skipped-1",
+      id: 'autopilot:["alpha","openducktor","skipped-1"]',
       description: "The task moved to Blocked / Needs Input before the action started.",
     });
     expect(ports.refreshTaskViews).not.toHaveBeenCalled();
@@ -137,7 +139,10 @@ describe("Autopilot outcome presenter", () => {
 
     expect(info).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
-    expect(ports.refreshTaskViews).toHaveBeenCalledWith("/repos/alpha", "task-1");
+    expect(ports.refreshTaskViews).toHaveBeenCalledWith(
+      { workspaceId: "alpha", repoPath: "/repos/alpha" },
+      "task-1",
+    );
   });
 
   test("a failure without first-message recovery stays until dismissed and names the next step", () => {
@@ -149,13 +154,16 @@ describe("Autopilot outcome presenter", () => {
     expect(error).toHaveBeenCalledWith(
       "Autopilot could not start Start Review QA Feedbacks for task-1.",
       {
-        id: "autopilot:failed-1",
+        id: 'autopilot:["alpha","openducktor","failed-1"]',
         description:
           "The model is not available. Fix the cause, then start the action from the task.",
         duration: Infinity,
       },
     );
-    expect(ports.refreshTaskViews).toHaveBeenCalledWith("/repos/alpha", "task-1");
+    expect(ports.refreshTaskViews).toHaveBeenCalledWith(
+      { workspaceId: "alpha", repoPath: "/repos/alpha" },
+      "task-1",
+    );
   });
 
   test("Retry message claims the recovery once and sends the unsent instruction", async () => {
@@ -263,9 +271,9 @@ describe("Autopilot outcome presenter", () => {
     presenter.present(outcome, { workspaceSelected: true });
     presenter.present(ordinary, { workspaceSelected: true });
     expect(error.mock.calls.map((call) => call[1]?.id)).toEqual([
-      "autopilot:failed-1",
-      "autopilot:ordinary",
-      "autopilot:failed-1",
+      'autopilot:["alpha","openducktor","failed-1"]',
+      'autopilot:["alpha","openducktor","ordinary"]',
+      'autopilot:["alpha","openducktor","failed-1"]',
     ]);
 
     clickAction(error.mock.calls[2]);
@@ -333,6 +341,9 @@ describe("Autopilot outcome presenter", () => {
       description: "Autopilot could not read the settings. Restart the host.",
       duration: Infinity,
     });
-    expect(dismiss.mock.calls).toEqual([["autopilot-failure"], ["autopilot:beta-outcome"]]);
+    expect(dismiss.mock.calls).toEqual([
+      ["autopilot-failure"],
+      ['autopilot:["beta","openducktor","beta-outcome"]'],
+    ]);
   });
 });

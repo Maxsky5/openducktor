@@ -41,7 +41,7 @@ export default {
     },
     "packages/frontend": frontendKnipConfig,
     "packages/host": {
-      drizzle: { config: ["drizzle.task-store.config.ts"] },
+      drizzle: { config: ["drizzle.host.config.ts"] },
       // A Bun macro bundles the page capture code with bippy through `bun build`.
       ignoreDependencies: ["bippy"],
     },

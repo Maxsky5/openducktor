@@ -23,7 +23,7 @@ import type {
   GitRebaseBranchResult,
   GitUpstreamAheadBehind,
 } from "@openducktor/contracts";
-import { Context, type Effect } from "effect";
+import type { Effect } from "effect";
 import type {
   HostOperationErrorAggregate,
   HostPathAccessErrorAggregate,
@@ -381,7 +381,3 @@ export type GitPort = {
     operation: GitConflictOperation,
   ): Effect.Effect<GitConflictAbortResult, GitPortError>;
 };
-
-export class GitPortTag extends Context.Service<GitPortTag, GitPort>()(
-  "@openducktor/host/GitPort",
-) {}

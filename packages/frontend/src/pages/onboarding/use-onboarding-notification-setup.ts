@@ -58,11 +58,14 @@ export const useOnboardingNotificationSetup = ({
     try {
       const saved = requireSavedSettings(
         await saveSettingsSnapshot(
-          prepareSettingsSnapshotForSave({
-            ...settingsSnapshot,
-            agentRuntimes,
-            notifications,
-          }),
+          prepareSettingsSnapshotForSave(
+            {
+              ...settingsSnapshot,
+              agentRuntimes,
+              notifications,
+            },
+            settingsSnapshot,
+          ),
         ),
       );
       reportSettingsSaveFollowUps(saved, (title, description) =>

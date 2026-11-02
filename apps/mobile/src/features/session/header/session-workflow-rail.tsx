@@ -57,7 +57,7 @@ export function SessionWorkflowRail({
   role: AgentRole;
   orientation: WorkflowRailOrientation;
 }): ReactElement | null {
-  const { task } = useRepoTask(repoPath, taskId);
+  const { task } = useRepoTask({ workspaceId: workspaceId, repoPath }, taskId);
   if (!task) return null;
   return (
     <WorkflowRailSteps
@@ -96,7 +96,7 @@ function WorkflowRailSteps({
 }): ReactElement {
   const theme = useAppTheme();
   const router = useRouter();
-  const { groups } = useTaskSessionGroups(repoPath, task.id);
+  const { groups } = useTaskSessionGroups({ workspaceId, repoPath }, task.id);
   const steps = useMemo(() => taskWorkflowSteps(task, groups), [groups, task]);
   const availableActions = new Set(task.availableActions);
   return (

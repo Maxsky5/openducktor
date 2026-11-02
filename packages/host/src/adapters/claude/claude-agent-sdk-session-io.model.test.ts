@@ -27,7 +27,7 @@ describe("Claude session I/O model changes", () => {
         workingDirectory: "/repo",
         runtimePolicy: { kind: "claude" },
         delivery: "new_turn",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
         systemPrompt: "Replacement prompt",
         parts: [{ kind: "text", text: "hello" }],
       },
@@ -79,7 +79,7 @@ describe("Claude session I/O model changes", () => {
           workingDirectory: "/repo",
           runtimePolicy: { kind: "claude" },
           delivery: "new_turn",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
           parts: [{ kind: "text", text: "hello" }],
         },
       });
@@ -135,7 +135,12 @@ describe("Claude session I/O model changes", () => {
       runtimeKind: "claude" as const,
       workingDirectory: "/repo",
       runtimePolicy: { kind: "claude" as const },
-      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+      sessionScope: {
+        kind: "workflow" as const,
+        workspaceId: "repo",
+        taskId: "task-1",
+        role: "build" as const,
+      },
       parts: [{ kind: "text" as const, text: "hello" }],
       delivery: "new_turn" as const,
     };

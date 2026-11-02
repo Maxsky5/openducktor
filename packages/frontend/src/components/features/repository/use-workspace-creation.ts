@@ -1,5 +1,6 @@
 import type {
   WorkspacePathResolution,
+  WorkspaceRef,
   WorkspaceRecord,
   WorkspaceProviderSetupCommit,
   WorkspaceProviderSetupProgress,
@@ -79,7 +80,7 @@ export function useWorkspaceCreation({
           throw new Error("Retry provider setup cleanup before reopening this workspace.");
         dispatch({ type: "reset", pickerOpen: state.pickerOpen });
         if (!(await runChange(() => onReopenClosedWorkspace(resolution.workspace)))) return;
-        await onSuccess?.(resolution.workspace.repoPath);
+        await onSuccess?.(resolution.workspace);
         return;
       }
       const setup = await provider.begin(repoPath);
@@ -144,7 +145,10 @@ export function useWorkspaceCreation({
       if (!completed) return;
       dispatch({ type: "progress", value: "finishing" });
       await provider.complete();
-      await onSuccess?.(state.repoPath);
+      await onSuccess?.({
+        workspaceId: state.createdWorkspaceId ?? state.workspaceId.trim(),
+        repoPath: state.repoPath,
+      });
     } catch (cause) {
       dispatch({ type: "error", error: errorMessage(cause), stage: "models" });
     } finally {
@@ -382,7 +386,7 @@ type WorkspaceCreationFormProps = {
   ) => Promise<WorkspaceProviderSetupProgress>;
   disabled?: boolean;
   onSubmittingChange?: (submitting: boolean) => void;
-  onSuccess?: (repoPath: string) => void | Promise<void>;
+  onSuccess?: (scope: WorkspaceRef) => void | Promise<void>;
   resolveRepoPath?: (repoPath: string) => Promise<WorkspacePathResolution>;
   onReopenClosedWorkspace?: (workspace: WorkspaceRecord) => Promise<void>;
   runWorkspaceChange?: (change: () => Promise<void>) => Promise<boolean>;

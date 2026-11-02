@@ -88,7 +88,11 @@ function TaskDocuments({
 }): ReactElement {
   const theme = useAppTheme();
   const { copyText } = useClipboardCopy();
-  const { sources, reload } = useTaskDocumentSources({ task, repoPath: owner.repoPath });
+  const { sources, reload } = useTaskDocumentSources({
+    task,
+    workspaceId: owner.workspace.workspaceId,
+    repoPath: owner.repoPath,
+  });
   const { document: requested } = useLocalSearchParams<{ document?: string }>();
   const [selected, setSelected] = useState<HostDocumentKey>(() =>
     initialDocument(requested, task.artifactSummary),

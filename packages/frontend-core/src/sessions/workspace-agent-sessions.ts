@@ -1,5 +1,6 @@
 import { createAgentSessionsStore, type AgentSessionsStore } from "./agent-sessions-store";
 import type { AgentOrchestratorState } from "./agent-orchestrator/use-agent-orchestrator-operations";
+import type { WorkspaceRef } from "@openducktor/contracts";
 
 /** Views read one workspace; shared listeners also keep hidden transcripts warm. */
 export const createWorkspaceAgentSessions = (): WorkspaceAgentSessions => {
@@ -11,10 +12,10 @@ export const createWorkspaceAgentSessions = (): WorkspaceAgentSessions => {
   };
   const getStore = (repoPath: string): AgentSessionsStore | null =>
     controllers.get(repoPath)?.controller.sessionStore ?? null;
-  const listSessionTaskIds = (repoPath: string) =>
-    getStore(repoPath)?.listSessionTaskIds(repoPath) ?? [];
-  const removeTaskSessions = (repoPath: string, taskIds: string[]) =>
-    getStore(repoPath)?.removeTaskSessions(repoPath, taskIds);
+  const listSessionTaskIds = (scope: WorkspaceRef) =>
+    getStore(scope.repoPath)?.listSessionTaskIds(scope) ?? [];
+  const removeTaskSessions = (scope: WorkspaceRef, taskIds: string[]) =>
+    getStore(scope.repoPath)?.removeTaskSessions(scope, taskIds);
   const subscribe: AgentSessionsStore["subscribe"] = (listener) => {
     listeners.add(listener);
     return () => {

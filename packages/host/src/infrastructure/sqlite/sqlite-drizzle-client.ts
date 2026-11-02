@@ -1,13 +1,11 @@
-import type { ExtractTablesWithRelations } from "drizzle-orm/relations";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import {
   type AsyncRemoteCallback,
   drizzle,
   type SqliteRemoteDatabase,
 } from "drizzle-orm/sqlite-proxy";
-import type { SQLiteProxyTransaction } from "drizzle-orm/sqlite-proxy/session";
 import type { DrizzleConfig } from "drizzle-orm/utils";
-import { type Cause, Deferred, Effect, Exit, Scope } from "effect";
+import { Context, Deferred, Effect, Exit, Scope } from "effect";
 import type { ZodError } from "zod";
 import {
   HostOperationError,
@@ -26,15 +24,23 @@ import { sqliteValueSchema } from "./sqlite-driver-values";
 
 type SqliteRemoteMethod = Parameters<AsyncRemoteCallback>[2];
 type SqliteRemoteRows = { rows: SqliteValueRow | SqliteValueRow[] };
-type SqliteDrizzleTransaction<TSchema extends Record<string, AnySQLiteTable>> =
-  SQLiteProxyTransaction<TSchema, ExtractTablesWithRelations<TSchema>>;
-
 export type SqliteDrizzleExecutor<TSchema extends Record<string, AnySQLiteTable>> =
-  | SqliteRemoteDatabase<TSchema>
-  | SqliteDrizzleTransaction<TSchema>;
+  SqliteRemoteDatabase<TSchema>;
 
-export type SqliteDrizzleSession<TSchema extends Record<string, AnySQLiteTable>> = {
+/** `TransactionError` is an extra failure that a wrapped session can add when a transaction starts. */
+export type SqliteDrizzleSession<
+  TSchema extends Record<string, AnySQLiteTable>,
+  TransactionError = never,
+> = {
   readonly database: SqliteDrizzleExecutor<TSchema>;
+  readonly transactionKind: "read" | "write" | null;
+  readonly afterCommit: (
+    effect: Effect.Effect<void>,
+  ) => Effect.Effect<void, HostOperationErrorAggregate>;
+  readonly readTransaction: <A, E>(
+    operation: string,
+    use: (session: SqliteDrizzleSession<TSchema, TransactionError>) => Effect.Effect<A, E>,
+  ) => Effect.Effect<A, E | HostOperationErrorAggregate | TransactionError>;
   readonly execute: <A, Details extends object>(
     run: (database: SqliteDrizzleExecutor<TSchema>) => PromiseLike<A>,
     operation: string,
@@ -42,8 +48,8 @@ export type SqliteDrizzleSession<TSchema extends Record<string, AnySQLiteTable>>
   ) => Effect.Effect<A, HostOperationErrorAggregate>;
   readonly transaction: <A, E>(
     operation: string,
-    use: (session: SqliteDrizzleSession<TSchema>) => Effect.Effect<A, E>,
-  ) => Effect.Effect<A, E | HostOperationErrorAggregate>;
+    use: (session: SqliteDrizzleSession<TSchema, TransactionError>) => Effect.Effect<A, E>,
+  ) => Effect.Effect<A, E | HostOperationErrorAggregate | TransactionError>;
 };
 
 export type SqliteDrizzleConnection<TSchema extends Record<string, AnySQLiteTable>> = {
@@ -55,127 +61,15 @@ export type SqliteDrizzleConnection<TSchema extends Record<string, AnySQLiteTabl
 export type OpenSqliteDrizzleConnectionInput<TSchema extends Record<string, AnySQLiteTable>> = {
   readonly config: DrizzleConfig<TSchema>;
   readonly configureWal: boolean;
+  readonly configureHostDatabase?: boolean;
   readonly databasePath: string;
   readonly runtime?: SqliteDriverRuntime;
 };
 
-const unsupportedParameterValue = (cause: ZodError): HostOperationError =>
-  new HostOperationError({
-    operation: "sqlite.drizzleParameter",
-    message: "Unsupported SQLite parameter value.",
-    cause,
-  });
-
-const executeRemoteQuery = (
-  database: SqliteDatabase,
-  query: string,
-  params: readonly SqliteValue[],
-  method: SqliteRemoteMethod,
-): Effect.Effect<SqliteRemoteRows, HostOperationErrorAggregate> =>
-  Effect.gen(function* () {
-    const statement = yield* database.prepare(query);
-    return yield* Effect.gen(function* () {
-      if (method === "run") {
-        yield* statement.run(...params);
-        return { rows: [] };
-      }
-
-      if (method === "get") {
-        const rows = yield* statement.values(...params);
-        return { rows: rows[0] ?? [] };
-      }
-
-      return { rows: yield* statement.values(...params) };
-    }).pipe(Effect.ensuring(statement.close().pipe(Effect.ignore)));
-  });
-
-const makeRemoteCallback =
-  (database: SqliteDatabase): AsyncRemoteCallback =>
-  (query, params, method) => {
-    const sqliteParams = Effect.all(
-      params.map((param) => {
-        const parsed = sqliteValueSchema.safeParse(param);
-        return parsed.success
-          ? Effect.succeed(parsed.data)
-          : Effect.fail(unsupportedParameterValue(parsed.error));
-      }),
-    );
-    return Effect.runPromise(
-      sqliteParams.pipe(
-        Effect.flatMap((values) => executeRemoteQuery(database, query, values, method)),
-      ),
-    );
-  };
-
-const configureDatabase = (
-  database: SqliteDatabase,
-  configureWal: boolean,
-): Effect.Effect<void, HostOperationErrorAggregate> => {
-  const enableForeignKeys = database.exec("PRAGMA foreign_keys = ON;");
-  const configure = configureWal
-    ? enableForeignKeys.pipe(Effect.andThen(database.exec("PRAGMA journal_mode = WAL;")))
-    : enableForeignKeys;
-  return configure.pipe(
-    Effect.mapError((cause) => toHostOperationError(cause, "sqlite.configureDatabase")),
-  );
-};
-
-const executeSqliteQuery = <A, Details extends object>(
-  run: () => PromiseLike<A>,
-  operation: string,
-  details?: Readonly<Details>,
-): Effect.Effect<A, HostOperationErrorAggregate> =>
-  Effect.tryPromise({
-    try: () => Promise.resolve(run()),
-    catch: (cause) =>
-      details === undefined
-        ? toHostOperationError(cause, operation)
-        : toHostOperationError(cause, operation, details),
-  });
-
-const runSqliteTransaction = <TSchema extends Record<string, AnySQLiteTable>, A, E>(
-  database: SqliteDrizzleExecutor<TSchema>,
-  operation: string,
-  use: (session: SqliteDrizzleSession<TSchema>) => Effect.Effect<A, E>,
-): Effect.Effect<A, E | HostOperationErrorAggregate> =>
-  Effect.gen(function* () {
-    class SqliteTransactionRollback extends Error {
-      constructor(readonly failureCause: Cause.Cause<E>) {
-        super("SQLite transaction rolled back because the Effect transaction failed.");
-      }
-    }
-
-    return yield* Effect.tryPromise({
-      try: () =>
-        database.transaction(async (transaction) => {
-          const exit = await Effect.runPromiseExit(use(makeSqliteDrizzleSession(transaction)));
-          if (Exit.isSuccess(exit)) {
-            return exit.value;
-          }
-          return Promise.reject(new SqliteTransactionRollback(exit.cause));
-        }),
-      catch: (cause) => cause,
-    }).pipe(
-      Effect.catch((cause): Effect.Effect<A, E | HostOperationErrorAggregate> => {
-        if (cause instanceof SqliteTransactionRollback) {
-          return Effect.failCause(cause.failureCause);
-        }
-        return Effect.fail(toHostOperationError(cause, operation));
-      }),
-    );
-  });
-
-const makeSqliteDrizzleSession = <TSchema extends Record<string, AnySQLiteTable>>(
-  database: SqliteDrizzleExecutor<TSchema>,
-): SqliteDrizzleSession<TSchema> => ({
-  database,
-  execute: (run, operation, details) => executeSqliteQuery(() => run(database), operation, details),
-  transaction: (operation, use) => runSqliteTransaction(database, operation, use),
-});
-
 export const openSqliteDrizzleConnection = <TSchema extends Record<string, AnySQLiteTable>>({
   config,
   configureWal,
+  configureHostDatabase = false,
   databasePath,
   runtime = currentSqliteDriverRuntime(),
 }: OpenSqliteDrizzleConnectionInput<TSchema>): Effect.Effect<
@@ -209,16 +103,221 @@ export const openSqliteDrizzleConnection = <TSchema extends Record<string, AnySQ
       scope,
       close.pipe(
         Effect.catch((cause) =>
-          Effect.logWarning(`Failed to close SQLite task store database: ${cause.message}`),
+          Effect.logWarning(`Failed to close the SQLite database: ${cause.message}`),
         ),
       ),
     );
-    yield* configureDatabase(sqlite, configureWal);
+    yield* configureDatabase(sqlite, configureWal, configureHostDatabase);
 
-    const database = drizzle(makeRemoteCallback(sqlite), config);
+    let activeSignal: AbortSignal | undefined;
+    const database = drizzle(
+      makeRemoteCallback(sqlite, () => activeSignal),
+      config,
+    );
+    const execute: SqliteDrizzleSession<TSchema>["execute"] = (run, operation, details) =>
+      Effect.tryPromise({
+        try: (signal) => {
+          const previous = activeSignal;
+          activeSignal = signal;
+          return Promise.resolve(run(database)).finally(() => {
+            activeSignal = previous;
+          });
+        },
+        catch: (cause) =>
+          details === undefined
+            ? toHostOperationError(cause, operation)
+            : toHostOperationError(cause, operation, details),
+      });
     return {
       close,
       database,
-      session: makeSqliteDrizzleSession(database),
+      session: makeSession(database, execute, sqlite),
     };
   });
+
+const unsupportedParameterValue = (cause: ZodError): HostOperationError =>
+  new HostOperationError({
+    operation: "sqlite.drizzleParameter",
+    message: "Unsupported SQLite parameter value.",
+    cause,
+  });
+
+const executeRemoteQuery = (
+  database: SqliteDatabase,
+  query: string,
+  params: readonly SqliteValue[],
+  method: SqliteRemoteMethod,
+): Effect.Effect<SqliteRemoteRows, HostOperationErrorAggregate> =>
+  Effect.gen(function* () {
+    const statement = yield* database.prepare(query);
+    return yield* Effect.gen(function* () {
+      if (method === "run") {
+        yield* statement.run(...params);
+        return { rows: [] };
+      }
+
+      if (method === "get") {
+        const rows = yield* statement.values(...params);
+        return { rows: rows[0] ?? [] };
+      }
+
+      return { rows: yield* statement.values(...params) };
+    }).pipe(Effect.ensuring(statement.close().pipe(Effect.ignore)));
+  });
+
+const makeRemoteCallback =
+  (database: SqliteDatabase, currentSignal: () => AbortSignal | undefined): AsyncRemoteCallback =>
+  (query, params, method) => {
+    const sqliteParams = Effect.all(
+      params.map((param) => {
+        const parsed = sqliteValueSchema.safeParse(param);
+        return parsed.success
+          ? Effect.succeed(parsed.data)
+          : Effect.fail(unsupportedParameterValue(parsed.error));
+      }),
+    );
+    return Effect.runPromise(
+      sqliteParams.pipe(
+        Effect.flatMap((values) => executeRemoteQuery(database, query, values, method)),
+      ),
+      { signal: currentSignal() },
+    );
+  };
+
+const configureDatabase = (
+  database: SqliteDatabase,
+  configureWal: boolean,
+  configureHostDatabase: boolean,
+): Effect.Effect<void, HostOperationErrorAggregate> =>
+  database.exec("PRAGMA busy_timeout = 0; PRAGMA foreign_keys = ON;").pipe(
+    Effect.andThen(
+      configureHostDatabase
+        ? configureHostJournal(database)
+        : configureWal
+          ? database.exec("PRAGMA journal_mode = WAL;")
+          : Effect.void,
+    ),
+    Effect.mapError((cause) => toHostOperationError(cause, "sqlite.configureDatabase")),
+  );
+
+/** SQLite reports a refused journal change only through the returned mode. */
+const configureHostJournal = (
+  database: SqliteDatabase,
+): Effect.Effect<void, HostOperationErrorAggregate> =>
+  Effect.gen(function* () {
+    const statement = yield* database.prepare("PRAGMA journal_mode = DELETE");
+    const rows = yield* statement
+      .values()
+      .pipe(Effect.ensuring(statement.close().pipe(Effect.ignore)));
+    const mode = rows[0]?.[0];
+    if (mode !== "delete")
+      return yield* new HostOperationError({
+        operation: "sqlite.configureDatabase",
+        message: `The host database stayed in journal mode ${String(mode)}. Stop every OpenDucktor host that uses this config root, then start one host again.`,
+      });
+    yield* database.exec("PRAGMA synchronous = EXTRA;");
+  });
+
+const makeSession = <TSchema extends Record<string, AnySQLiteTable>>(
+  database: SqliteDrizzleExecutor<TSchema>,
+  execute: SqliteDrizzleSession<TSchema>["execute"],
+  native: SqliteDatabase,
+  transactionKind: "read" | "write" | null = null,
+  currentTransaction = Context.Reference<SqliteDrizzleSession<TSchema> | null>(
+    `sqlite-transaction:${crypto.randomUUID()}`,
+    { defaultValue: () => null },
+  ),
+  committedEffects: Effect.Effect<void>[] = [],
+): SqliteDrizzleSession<TSchema> => {
+  const runTransaction = <A, E>(
+    operation: string,
+    kind: "read" | "write",
+    use: (session: SqliteDrizzleSession<TSchema>) => Effect.Effect<A, E>,
+  ): Effect.Effect<A, E | HostOperationErrorAggregate> => {
+    const run = (): Effect.Effect<A, E | HostOperationErrorAggregate> => {
+      if (transactionKind !== null) {
+        if (transactionKind === "read" && kind === "write") {
+          return Effect.fail(
+            new HostOperationError({
+              operation,
+              message:
+                "A database write cannot run inside a read snapshot. Start a separate write transaction.",
+            }),
+          );
+        }
+        return use(session);
+      }
+      // Native Effects keep lock waits cancelable and run rollback in this resource scope.
+      return Effect.suspend(() => {
+        let committed = false;
+        const afterCommit: Effect.Effect<void>[] = [];
+        const transaction = makeSession(
+          database,
+          execute,
+          native,
+          kind,
+          currentTransaction,
+          afterCommit,
+        );
+        return Effect.uninterruptibleMask((restore) =>
+          restore(native.exec(kind === "write" ? "BEGIN IMMEDIATE" : "BEGIN")).pipe(
+            Effect.andThen(
+              restore(
+                use(transaction).pipe(Effect.provideService(currentTransaction, transaction)),
+              ),
+            ),
+            Effect.flatMap((value) =>
+              native.exec("COMMIT").pipe(
+                Effect.tap(() =>
+                  Effect.sync(() => {
+                    committed = true;
+                  }),
+                ),
+                Effect.andThen(Effect.forEach(afterCommit, (effect) => effect, { discard: true })),
+                Effect.as(value),
+              ),
+            ),
+            Effect.onExit(() =>
+              committed
+                ? Effect.void
+                : native
+                    .inTransaction()
+                    .pipe(
+                      Effect.flatMap((active) => (active ? native.exec("ROLLBACK") : Effect.void)),
+                    ),
+            ),
+          ),
+        );
+      });
+    };
+    return Effect.flatMap(currentTransaction, (current) => {
+      if (current === null || current === session) return run();
+      return kind === "write"
+        ? current.transaction(operation, use)
+        : current.readTransaction(operation, use);
+    });
+  };
+  const session: SqliteDrizzleSession<TSchema> = {
+    database,
+    execute,
+    transactionKind,
+    afterCommit: (effect) =>
+      Effect.flatMap(currentTransaction, (current) => {
+        if (current !== null && current !== session) return current.afterCommit(effect);
+        return transactionKind === "write"
+          ? Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
+              committedEffects.push(effect.pipe(Effect.provideContext(context)));
+            })
+          : Effect.fail(
+              new HostOperationError({
+                operation: "sqlite.afterCommit",
+                message: "An after-commit action requires an active write transaction.",
+              }),
+            );
+      }),
+    transaction: (operation, use) => runTransaction(operation, "write", use),
+    readTransaction: (operation, use) => runTransaction(operation, "read", use),
+  };
+  return session;
+};

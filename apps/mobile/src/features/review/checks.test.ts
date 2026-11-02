@@ -120,18 +120,21 @@ describe("CI Checks state", () => {
   test("reads only a linked pull request that the provider can review", () => {
     expect(
       ciReviewQueryInput({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         pullRequest,
         unavailableReason: null,
       }),
     ).toEqual({
+      workspaceId: "repo",
       repoPath: "/repo",
       taskId: "task-1",
       pullRequest: { providerId: "github", number: 7 },
     });
     expect(
       ciReviewQueryInput({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         pullRequest: undefined,
@@ -140,6 +143,7 @@ describe("CI Checks state", () => {
     ).toBeNull();
     expect(
       ciReviewQueryInput({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         pullRequest,

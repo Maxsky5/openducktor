@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import type { TaskApprovalContext } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
@@ -26,7 +27,7 @@ export const createTaskApprovalContextUseCase = ({
 }: CreateTaskServiceInput): Pick<TaskService, "getApprovalContext"> => ({
   getApprovalContext(input) {
     return Effect.gen(function* () {
-      const { repoPath, taskId } = input;
+      const { taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireApprovalContextDependencies({
           gitPort,
@@ -36,13 +37,15 @@ export const createTaskApprovalContextUseCase = ({
         }),
       );
 
-      const current = yield* taskStore.getTask({ repoPath, taskId });
+      const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
       yield* requireHumanReviewStatus(workflow, current);
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+      const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = repoConfig.repoPath;
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
+      const metadata = yield* taskStore.getTaskMetadata({
+        ...input,
+        repoPath: effectiveRepoPath,
+      });
       const defaultMergeMethod = yield* loadDefaultMergeMethod(dependencies.settingsConfig);
       if (metadata.directMerge !== undefined) {
         const directMerge = metadata.directMerge;
@@ -53,6 +56,7 @@ export const createTaskApprovalContextUseCase = ({
           effectiveRepoPath,
           taskId,
           directMerge.sourceBranch,
+          input.workspaceId,
         );
         const workingDirectory =
           cleanupTarget && (yield* dependencies.settingsConfig.pathExists(cleanupTarget))
@@ -95,6 +99,7 @@ export const createTaskApprovalContextUseCase = ({
       }
 
       const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
+        workspaceId: input.workspaceId,
         repoPath: effectiveRepoPath,
         taskId,
       });
@@ -134,6 +139,7 @@ export const createTaskApprovalContextUseCase = ({
           dependencies.workspaceSettingsService,
           current,
           effectiveRepoPath,
+          input.workspaceId,
         ),
       );
       const publishTarget =

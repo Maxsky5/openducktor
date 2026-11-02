@@ -1,3 +1,4 @@
+import { getScopedRepoConfig } from "./scoped-repo-config";
 import type { GitTargetBranch } from "@openducktor/contracts";
 import type { TaskWorkflow, TaskWorkflowRole } from "@openducktor/workflows";
 import { Effect } from "effect";
@@ -46,6 +47,7 @@ export const findLatestCleanupTarget = (
   repoPath: string,
   taskId: string,
   preferredSourceBranch: string,
+  workspaceId: string,
 ) =>
   Effect.gen(function* () {
     const candidates: Array<{
@@ -53,6 +55,7 @@ export const findLatestCleanupTarget = (
       startedAt: string;
     }> = [];
     const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
+      workspaceId,
       repoPath,
       taskId,
     });
@@ -62,7 +65,7 @@ export const findLatestCleanupTarget = (
         startedAt: "\uffff",
       });
     }
-    const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+    const metadata = yield* taskStore.getTaskMetadata({ workspaceId, repoPath, taskId });
     candidates.push(
       ...metadata.agentSessions
         .filter((session) => dependencies.worktreeRoles.includes(session.role))
@@ -72,7 +75,7 @@ export const findLatestCleanupTarget = (
         })),
     );
     candidates.sort((left, right) => {
-      const startedAtComparison = right.startedAt.localeCompare(left.startedAt);
+      const startedAtComparison = Date.parse(right.startedAt) - Date.parse(left.startedAt);
       return startedAtComparison === 0
         ? right.workingDirectory.localeCompare(left.workingDirectory)
         : startedAtComparison;
@@ -126,9 +129,10 @@ export const releaseMergedTaskSessions = (
   taskStore: Pick<TaskStorePort, "getTaskMetadata">,
   repoPath: string,
   taskId: string,
+  workspaceId: string,
 ) =>
   Effect.gen(function* () {
-    const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+    const metadata = yield* taskStore.getTaskMetadata({ workspaceId, repoPath, taskId });
     const workflowSessions = selectWorkflowCleanupSessionRecords(
       dependencies.workflow,
       metadata.agentSessions,
@@ -162,16 +166,18 @@ export const cleanupKeptTaskWorktree = (
   taskStore: Pick<TaskStorePort, "getTaskMetadata">,
   repoPath: string,
   taskId: string,
+  workspaceId: string,
   progress = createTaskCleanupProgressState(),
 ) =>
   Effect.gen(function* () {
     yield* runTaskRuntimeCleanup({
+      workspaceId,
       progress,
       repoPath,
       taskIds: [taskId],
       terminalService: dependencies.terminalService,
     });
-    yield* releaseMergedTaskSessions(dependencies, taskStore, repoPath, taskId);
+    yield* releaseMergedTaskSessions(dependencies, taskStore, repoPath, taskId, workspaceId);
   });
 
 /**
@@ -188,15 +194,17 @@ export const cleanupMergedTaskState = (
   sourceBranch: string,
   targetBranch: string,
   removeWorktreeOnClose: boolean | null,
+  workspaceId: string,
 ) =>
   Effect.gen(function* () {
     // The task value wins, so the global setting is read only for a task without one.
     const removeWorktree =
       removeWorktreeOnClose ?? (yield* loadRemoveWorktreeOnClose(dependencies.settingsConfig));
     if (!removeWorktree) {
-      return yield* cleanupKeptTaskWorktree(dependencies, taskStore, repoPath, taskId);
+      return yield* cleanupKeptTaskWorktree(dependencies, taskStore, repoPath, taskId, workspaceId);
     }
     yield* runTaskRuntimeCleanup({
+      workspaceId,
       progress: createTaskCleanupProgressState(),
       repoPath,
       taskIds: [taskId],
@@ -208,12 +216,13 @@ export const cleanupMergedTaskState = (
       repoPath,
       taskId,
       sourceBranch,
+      workspaceId,
     );
     // Runtime reads of the worktree wait until the cleanup ends, so none restores a released session.
     if (cleanupTarget) {
       yield* dependencies.taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([cleanupTarget]);
     }
-    yield* releaseMergedTaskSessions(dependencies, taskStore, repoPath, taskId);
+    yield* releaseMergedTaskSessions(dependencies, taskStore, repoPath, taskId, workspaceId);
     if (cleanupTarget && (yield* dependencies.settingsConfig.pathExists(cleanupTarget))) {
       const worktreeFiles = yield* requireWorktreeFiles(dependencies.worktreeFiles);
       const canonicalCleanupTarget = yield* dependencies.gitPort.canonicalizePath(cleanupTarget);
@@ -251,6 +260,7 @@ export const effectiveTargetBranchForTask = (
   workspaceSettingsService: WorkspaceSettingsService,
   task: TaskRecord,
   repoPath: string,
+  workspaceId: string,
 ) =>
   Effect.gen(function* () {
     if (task.targetBranchError) {
@@ -265,7 +275,10 @@ export const effectiveTargetBranchForTask = (
     if (task.targetBranch) {
       return task.targetBranch;
     }
-    const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+    const repoConfig = yield* getScopedRepoConfig(workspaceSettingsService, {
+      workspaceId,
+      repoPath,
+    });
     return repoConfig.defaultTargetBranch;
   });
 export const resolveBuildStartPoint = (
@@ -362,6 +375,7 @@ export const loadTaskBranchCleanup = (
   repoPath: string,
   taskId: string,
   operationLabel: string,
+  workspaceId: string,
 ): Effect.Effect<
   {
     sourceBranch: string;
@@ -371,6 +385,7 @@ export const loadTaskBranchCleanup = (
 > =>
   Effect.gen(function* () {
     const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
+      workspaceId,
       repoPath,
       taskId,
     });
@@ -409,6 +424,7 @@ export const loadTaskBranchCleanup = (
       dependencies.workspaceSettingsService,
       task,
       repoPath,
+      workspaceId,
     );
     const checkoutTarget = yield* Effect.try({
       try: () => checkoutBranch(targetBranch),

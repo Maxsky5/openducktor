@@ -157,7 +157,12 @@ const createSession = (
 ): AgentSessionSummary => {
   const session = createAgentSessionFixture({
     externalSessionId,
-    sessionAssociation: { kind: "workflow", taskId: taskId, role: "spec" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: taskId,
+      role: "spec",
+    },
     ...overrides,
   });
   createdSessionStateByKey.set(agentSessionIdentityKey(session), session);
@@ -423,7 +428,12 @@ describe("useAgentStudioSelectionController", () => {
       expect(harness.getLatest().view.selectedSession.loadedSession).toBeNull();
 
       const loadedSession = createSession("task-1", "session-reloaded", {
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         startedAt: "2026-02-22T10:00:00.000Z",
         status: "running",
       });
@@ -528,7 +538,12 @@ describe("useAgentStudioSelectionController", () => {
     });
     const codexSession = createSession("task-1", "codex-session", {
       runtimeKind: "codex",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       historyLoadState: "not_requested",
       messages: createSessionMessagesState("codex-session"),
     });
@@ -579,7 +594,12 @@ describe("useAgentStudioSelectionController", () => {
     });
     const codexSession = createSession("task-1", "codex-session", {
       runtimeKind: "codex",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       historyLoadState: "not_requested",
       messages: createSessionMessagesState("codex-session"),
     });
@@ -1085,17 +1105,29 @@ describe("useAgentStudioSelectionController", () => {
 
   test("prefers immediate selection state over stale query role and session", async () => {
     const specSession = createSession("task-1", "session-spec", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
     });
     const plannerSession = createSession("task-1", "session-planner", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "planner",
+      },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
         sessions: [specSession, plannerSession],
         taskIdParam: "task-1",
         sessionExternalIdParam: sessionExternalIdParam(specSession),
@@ -1124,7 +1156,12 @@ describe("useAgentStudioSelectionController", () => {
 
   test("keeps prepare-session role selection sessionless despite existing role sessions", async () => {
     const buildSession = createSession("task-1", "session-build", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -1157,7 +1194,12 @@ describe("useAgentStudioSelectionController", () => {
 
   test("uses concrete URL session when route selection has a session param", async () => {
     const buildSession = createSession("task-1", "session-build", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -1282,7 +1324,12 @@ describe("useAgentStudioSelectionController", () => {
     const loadRepoRuntimeCatalog = mock(async () => emptyCatalog);
     const readSessionTodos = mock(async () => []);
     const buildSession = createSession("task-1", "session-build", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       runtimeKind: "opencode",
       workingDirectory: "/repo",
       status: "running",
@@ -1325,7 +1372,12 @@ describe("useAgentStudioSelectionController", () => {
     const buildSession = toAgentSessionSummary(
       createAgentSessionFixture({
         externalSessionId: "session-build",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
         runtimeKind: "opencode",
         workingDirectory: "/repo",
         status: "running",
@@ -1381,13 +1433,23 @@ describe("useAgentStudioSelectionController", () => {
     );
     const readSessionTodos = mock(async () => []);
     const activeSession = createSession("task-1", "session-build", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       runtimeKind: "opencode",
       workingDirectory: "/repo/task-1",
       status: "running",
     });
     const viewSession = createSession("task-2", "session-qa", {
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "qa" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-2",
+        role: "qa",
+      },
       runtimeKind: "opencode",
       workingDirectory: "/repo/task-2",
       status: "running",
@@ -1458,7 +1520,12 @@ describe("useAgentStudioSelectionController", () => {
     const staleSession = createSession("task-1", "session-1", {
       runtimeKind: "opencode",
       workingDirectory: "/repo-a",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       status: "running",
     });
     const harness = createHookHarness(
@@ -1527,18 +1594,30 @@ describe("useAgentStudioSelectionController", () => {
 
   test("resolves the conversation from the committed task selection", async () => {
     const sessionTaskOne = createSession("task-1", "session-1", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "planner",
+      },
       startedAt: "2026-02-22T12:00:00.000Z",
       status: "running",
     });
     const sessionTaskTwo = createSession("task-2", "session-2", {
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "qa" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-2",
+        role: "qa",
+      },
       startedAt: "2026-02-22T13:00:00.000Z",
       status: "running",
     });
 
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
         sessions: [sessionTaskOne, sessionTaskTwo],
         taskIdParam: "task-1",
         hasExplicitRoleParam: false,
@@ -1553,6 +1632,8 @@ describe("useAgentStudioSelectionController", () => {
 
       await harness.update(
         createBaseArgs({
+          activeWorkspaceId,
+          workspaceRepoPath,
           sessions: [sessionTaskOne, sessionTaskTwo],
           taskIdParam: "task-1",
           hasExplicitRoleParam: false,
@@ -1572,7 +1653,12 @@ describe("useAgentStudioSelectionController", () => {
 
   test("defaults to build role for open task even when only optional-role session exists", async () => {
     const specSession = createSession("task-1", "session-spec", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "spec",
+      },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -1638,18 +1724,30 @@ describe("useAgentStudioSelectionController", () => {
       status: "human_review",
     });
     const initialBuildSession = createSession("task-1", "session-build", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
     });
     const newerQaSession = createSession("task-1", "session-qa", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "qa",
+      },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
 
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
         tasks: [humanReviewTask, createTask("task-2")],
         sessions: [initialBuildSession],
         taskIdParam: "task-1",
@@ -1668,6 +1766,8 @@ describe("useAgentStudioSelectionController", () => {
 
       await harness.update(
         createBaseArgs({
+          activeWorkspaceId,
+          workspaceRepoPath,
           tasks: [humanReviewTask, createTask("task-2")],
           sessions: [newerQaSession, initialBuildSession],
           taskIdParam: "task-1",
@@ -1693,18 +1793,30 @@ describe("useAgentStudioSelectionController", () => {
       status: "human_review",
     });
     const buildSession = createSession("task-1", "session-build", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
     });
     const qaSession = createSession("task-1", "session-qa", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "qa",
+      },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
 
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
         tasks: [humanReviewTask, createTask("task-2")],
         sessions: [qaSession, buildSession],
         taskIdParam: "task-1",
@@ -1723,6 +1835,8 @@ describe("useAgentStudioSelectionController", () => {
 
       await harness.update(
         createBaseArgs({
+          activeWorkspaceId,
+          workspaceRepoPath,
           tasks: [humanReviewTask, createTask("task-2")],
           sessions: [qaSession, buildSession],
           taskIdParam: "task-1",
@@ -1750,18 +1864,30 @@ describe("useAgentStudioSelectionController", () => {
       status: "human_review",
     });
     const buildSession = createSession("task-2", "session-build", {
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-2",
+        role: "build",
+      },
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
     });
     const qaSession = createSession("task-2", "session-qa", {
-      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "qa" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-2",
+        role: "qa",
+      },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
 
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
         tasks: [taskOne, humanReviewTask],
         sessions: [buildSession, qaSession],
         taskIdParam: "task-1",
@@ -1776,6 +1902,8 @@ describe("useAgentStudioSelectionController", () => {
 
       await harness.update(
         createBaseArgs({
+          activeWorkspaceId,
+          workspaceRepoPath,
           tasks: [taskOne, humanReviewTask],
           sessions: [buildSession, qaSession],
           taskIdParam: "task-1",
@@ -1794,6 +1922,8 @@ describe("useAgentStudioSelectionController", () => {
 
       await harness.update(
         createBaseArgs({
+          activeWorkspaceId,
+          workspaceRepoPath,
           tasks: [taskOne, humanReviewTask],
           sessions: [buildSession, qaSession],
           taskIdParam: "task-2",

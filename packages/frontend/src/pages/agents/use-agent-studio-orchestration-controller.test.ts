@@ -70,7 +70,12 @@ const createBaseArgs = (): BuildArgs => {
   const session = createAgentSessionFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-1",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "planner",
+    },
   });
   const sessionSummary = toAgentSessionSummary(session);
 
@@ -358,6 +363,7 @@ describe("task chat speed", () => {
       selectedModel,
       sessionAssociation: {
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-1",
         role: "planner",
       },
@@ -578,13 +584,19 @@ describe("task workflow artifact loading", () => {
       const expectedSections = [...sections].sort();
       const releaseReads = Promise.withResolvers<void>();
       let revision = 1;
-      const read = mock(async (_repoPath: string, _taskId: string, section: string) => {
-        await releaseReads.promise;
-        return {
-          markdown: `${section} V${revision}`,
-          updatedAt: `2026-10-22T1${revision}:00:00Z`,
-        };
-      });
+      const read = mock(
+        async (
+          _scope: { workspaceId: string; repoPath: string },
+          _taskId: string,
+          section: string,
+        ) => {
+          await releaseReads.promise;
+          return {
+            markdown: `${section} V${revision}`,
+            updatedAt: `2026-10-22T1${revision}:00:00Z`,
+          };
+        },
+      );
       const connection = createTestClientConnection({
         client: {
           workflowArtifactGet: read,
@@ -631,7 +643,11 @@ describe("task workflow artifact loading", () => {
           [...expectedSections, ...expectedSections].sort(),
         );
         for (const section of sections)
-          expect(read).toHaveBeenCalledWith("/repo", "task-1", section);
+          expect(read).toHaveBeenCalledWith(
+            { workspaceId: "workspace-repo", repoPath: "/repo" },
+            "task-1",
+            section,
+          );
       } finally {
         releaseReads.resolve();
         view.unmount();

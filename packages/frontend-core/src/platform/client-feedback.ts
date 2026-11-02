@@ -6,6 +6,7 @@ export type ClientFeedbackOptions = {
   description?: string;
   /** Milliseconds. `Infinity` keeps the message until the code or the user dismisses it. */
   duration?: number;
+  action?: { label: string; onClick: () => void };
 };
 
 /** Short-lived messages for the user. Each platform shows them in its own way. */

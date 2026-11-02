@@ -1,6 +1,7 @@
 import type {
   ClientFeedback,
   ClientFeedbackKind,
+  ClientFeedbackOptions,
 } from "@openducktor/frontend-core/platform/client-feedback";
 import { createStore } from "zustand/vanilla";
 
@@ -11,6 +12,7 @@ export type FeedbackMessage = {
   description: string | null;
   /** Milliseconds, or `null` to keep the message until a dismissal. */
   duration: number | null;
+  action?: ClientFeedbackOptions["action"];
 };
 
 export type FeedbackState = {
@@ -82,6 +84,7 @@ export const createFeedbackStore = () => {
         message,
         description: options?.description ?? null,
         duration,
+        ...(options?.action !== undefined && { action: options.action }),
       };
       const { messages } = store.getState();
       setMessages(

@@ -35,6 +35,7 @@ const buildRef = {
 const missingDirectoryReason =
   "OpenCode could not restore the linked conversation for conversation 'build-1'. The linked working directory is unavailable. Restore the linked worktree or directory, then retry. The saved link is unchanged.";
 const mergeInput = {
+  workspaceId: "repo",
   repoPath,
   taskId: "task-1",
   input: {
@@ -47,8 +48,13 @@ const mergeInput = {
     },
   },
 };
-const deleteInput = { repoPath, taskId: "task-1", deleteSubtasks: false };
-const deletePreviewInput = { repoPath, taskIds: ["task-1"], operation: "delete" as const };
+const deleteInput = { workspaceId: "repo", repoPath, taskId: "task-1", deleteSubtasks: false };
+const deletePreviewInput = {
+  workspaceId: "repo",
+  repoPath,
+  taskIds: ["task-1"],
+  operation: "delete" as const,
+};
 
 /**
  * Live session state as the OpenCode adapter keeps it: a session stays until a release. A later
@@ -117,7 +123,15 @@ const createHarness = () => {
       settingsConfig,
       readSessionRootRefs: () =>
         Effect.succeed([
-          { ...buildRef, sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } },
+          {
+            ...buildRef,
+            sessionScope: {
+              kind: "workflow",
+              workspaceId: "repo",
+              taskId: "task-1",
+              role: "build",
+            },
+          },
         ]),
     }),
     gitPort: extendGitPort(gitPort, {

@@ -57,6 +57,7 @@ const createHarness = () => {
     stream.publish({
       eventId: `event-${sequence}`,
       kind: "tasks_updated",
+      workspaceId: "repo",
       repoPath: "/repo",
       taskIds: ["task-1"],
       removedTaskIds: [],

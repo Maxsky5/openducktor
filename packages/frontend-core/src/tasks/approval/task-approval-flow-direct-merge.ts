@@ -1,3 +1,4 @@
+import { requireWorkspaceRef } from "../operations/task-operations-model";
 import { taskStatusSchema } from "@openducktor/contracts";
 import type { TaskApprovalContext } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
@@ -59,6 +60,7 @@ export async function submitDirectMergeApproval({
   removeWorktree,
 }: DirectMergeApprovalArgs): Promise<SubmitDirectMergeApprovalResult> {
   const host = connectionHost(queryClient);
+  const scope = requireWorkspaceRef(repoPath, workspaceId);
   const approvalContext = approval.approvalContext;
   const directMergeResult = await runTaskMutationWithChatDraftCleanup({
     agentSessionReadPort: host,
@@ -67,7 +69,7 @@ export async function submitDirectMergeApproval({
     workspaceId,
     taskIds: [approval.taskId],
     mutation: async () =>
-      host.taskDirectMerge(repoPath, approval.taskId, {
+      host.taskDirectMerge(scope, approval.taskId, {
         expected: {
           taskStatus: taskStatusSchema.parse(approvalContext.taskStatus),
           sourceBranch: approvalContext.sourceBranch,
@@ -100,11 +102,11 @@ export async function submitDirectMergeApproval({
 
   await Promise.all([
     refreshTasks(),
-    invalidateTaskApprovalContextQuery(queryClient, repoPath, approval.taskId),
+    invalidateTaskApprovalContextQuery(queryClient, scope, approval.taskId),
   ]);
   const nextApprovalContext = await loadTaskApprovalContextFromQuery(
     queryClient,
-    repoPath,
+    scope,
     approval.taskId,
   );
   if (nextApprovalContext.outcome !== "ready") {
@@ -135,6 +137,7 @@ export async function completeDirectMergeApproval({
   removeWorktree,
 }: DirectMergeApprovalArgs): Promise<{ successDescription: string }> {
   const host = connectionHost(queryClient);
+  const scope = requireWorkspaceRef(repoPath, workspaceId);
   const approvalContext = approval.approvalContext;
   const publishTarget = approvalContext.publishTarget;
 
@@ -157,7 +160,7 @@ export async function completeDirectMergeApproval({
         };
       }
       await host.taskDirectMergeComplete(
-        repoPath,
+        scope,
         approval.taskId,
         removeWorktree,
         publicationConsent,

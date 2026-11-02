@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
@@ -59,9 +60,6 @@ const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   addWorkspace: async () => {
     throw new Error("Not used");
   },
-  saveWorkspaceModelDefaults: async () => {
-    throw new Error("Not used");
-  },
   selectWorkspace: async () => {},
   reorderWorkspaces: async () => {},
   refreshBranches: async () => {},
@@ -69,15 +67,12 @@ const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   loadRepoSettings: async () => {
     throw new Error("loadRepoSettings not configured");
   },
-  saveRepoSettings: async () => {},
-  loadSettingsSnapshot: async () => {
-    throw new Error("loadSettingsSnapshot not configured");
-  },
   detectGithubRepository: async () => null,
-  saveGlobalGitConfig: async () => {},
   previewSettingsSnapshotRuntime: async () => ({ impact: null }),
   saveSettingsSnapshot: async () => ({
     type: "saved" as const,
+    shared: "saved" as const,
+    preferences: "saved" as const,
     workspaces: [],
     runtimeApplications: [],
     refreshError: null,
@@ -831,7 +826,10 @@ describe("TaskDetailsSheet", () => {
     const actions = createTaskWorkflowActionsValue();
     const connection = createTestClientConnection();
     const queryClient = connection.queryClient;
-    queryClient.setQueryData(agentSessionQueryKeys.list("/repo-a", "TASK-1"), []);
+    queryClient.setQueryData(
+      agentSessionQueryKeys.list(workspaceRefFixture("/repo-a"), "TASK-1"),
+      [],
+    );
 
     const { unmount } = render(
       createElement(

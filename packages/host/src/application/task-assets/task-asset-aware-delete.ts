@@ -14,13 +14,16 @@ export const createTaskAssetAwareDelete =
     filePort,
     inner,
     registry,
-    resolveWorkspaceIdForRepoPath,
+    resolveWorkspaceId,
   }: {
     assetPersistenceEnabled: boolean;
     filePort: TaskAssetFilePort;
     inner: TaskStorePort;
     registry: TaskAssetRegistryPort;
-    resolveWorkspaceIdForRepoPath: (repoPath: string) => Effect.Effect<string, TaskStoreError>;
+    resolveWorkspaceId: (scope: {
+      workspaceId: string;
+      repoPath: string;
+    }) => Effect.Effect<string, TaskStoreError>;
   }): TaskStorePort["deleteTask"] =>
   (input) => {
     if (!assetPersistenceEnabled) {
@@ -30,9 +33,10 @@ export const createTaskAssetAwareDelete =
     const affectedAssetIds: string[] = [];
     let committed = false;
     const remove = Effect.gen(function* () {
-      const workspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
+      const workspaceId = yield* resolveWorkspaceId(input);
       const { taskId } = input;
       const registered = yield* registry.listAssets({
+        workspaceId,
         repoPath: input.repoPath,
         taskId,
         scope: "description",

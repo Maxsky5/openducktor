@@ -1,3 +1,4 @@
+import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import { createRepoTaskDataQueryOptions, invalidateRepoTaskQueries, taskQueryKeys } from "./tasks";
@@ -33,11 +34,15 @@ describe("tasks query options", () => {
     const queryClient = new QueryClient();
     const listTasks = mock(async (): Promise<TaskCard[]> => [task]);
 
-    await queryClient.fetchQuery(createRepoTaskDataQueryOptions(listTasks)("/repo"));
+    await queryClient.fetchQuery(
+      createRepoTaskDataQueryOptions(listTasks)(workspaceRefFixture("/repo")),
+    );
 
-    expect(listTasks).toHaveBeenCalledWith("/repo", queryClient);
+    expect(listTasks).toHaveBeenCalledWith(workspaceRefFixture("/repo"), queryClient);
     expect(
-      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo")),
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(
+        taskQueryKeys.repoData(workspaceRefFixture("/repo")),
+      ),
     ).toEqual({
       tasks: [task],
     });
@@ -49,7 +54,7 @@ describe("tasks query options", () => {
     const listTasks = mock(async (): Promise<TaskCard[]> => [
       { ...task, title: `Visible for ${doneVisibleDays} days` },
     ]);
-    const query = createRepoTaskDataQueryOptions(listTasks)("/repo");
+    const query = createRepoTaskDataQueryOptions(listTasks)(workspaceRefFixture("/repo"));
 
     await queryClient.fetchQuery({ ...query, staleTime: 0 });
     doneVisibleDays = 7;
@@ -59,22 +64,33 @@ describe("tasks query options", () => {
 
     expect(listTasks).toHaveBeenCalledTimes(3);
     expect(
-      queryClient.getQueryCache().findAll({ queryKey: taskQueryKeys.repoData("/repo") }),
+      queryClient
+        .getQueryCache()
+        .findAll({ queryKey: taskQueryKeys.repoData(workspaceRefFixture("/repo")) }),
     ).toHaveLength(1);
     expect(
-      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
-        ?.title,
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(
+        taskQueryKeys.repoData(workspaceRefFixture("/repo")),
+      )?.tasks[0]?.title,
     ).toBe("Visible for 1 days");
   });
 
-  test("invalidates the repository task query", async () => {
+  test("isolates replacement workspaces at the same repository path", async () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [task] });
-    queryClient.setQueryData(taskQueryKeys.repoData("/other"), { tasks: [task] });
+    queryClient.setQueryData(taskQueryKeys.repoData(workspaceRefFixture("/repo")), {
+      tasks: [task],
+    });
+    const replacement = workspaceRefFixture("/repo", "replacement");
+    queryClient.setQueryData(taskQueryKeys.repoData(replacement), { tasks: [task] });
 
-    await invalidateRepoTaskQueries(queryClient, "/repo");
+    await invalidateRepoTaskQueries(queryClient, workspaceRefFixture("/repo"));
 
-    expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo"))?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(taskQueryKeys.repoData("/other"))?.isInvalidated).toBe(false);
+    expect(
+      queryClient.getQueryState(taskQueryKeys.repoData(workspaceRefFixture("/repo")))
+        ?.isInvalidated,
+    ).toBe(true);
+    expect(queryClient.getQueryState(taskQueryKeys.repoData(replacement))?.isInvalidated).toBe(
+      false,
+    );
   });
 });

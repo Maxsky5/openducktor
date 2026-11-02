@@ -1,3 +1,4 @@
+import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
@@ -141,14 +142,20 @@ describe("task workflow events", () => {
   test("blockBuildCompletionTask preserves transition policy errors", async () => {
     const current = task({ issueType: "bug", status: "closed" });
     const taskStore = {
-      transitionTask() {
-        return Effect.die("transition should not run");
+      transitionTask(input) {
+        return Effect.fromResult(input.decide(current)).pipe(
+          Effect.andThen(Effect.die("transition should not run")),
+        );
       },
     } satisfies Pick<TaskStorePort, "transitionTask">;
 
     const error = await Effect.runPromise(
       Effect.flip(
-        blockBuildCompletionTask(taskStore, builtinTaskWorkflow, "/repo", current.id, current),
+        blockBuildCompletionTask(taskStore, builtinTaskWorkflows, {
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: current.id,
+        }),
       ),
     );
 

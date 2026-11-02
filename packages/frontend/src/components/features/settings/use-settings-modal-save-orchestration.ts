@@ -20,26 +20,22 @@ import type { SettingsSaveOutcome } from "@/types/state-slices";
 import {
   getSettingsSaveBlocker,
   hasAnyDirtySections,
-  hasSameSaveReadyGlobalGitConfig,
-  isGlobalGitOnlySave,
   type SettingsSaveValidation,
 } from "./settings-modal-save-policy";
-import { prepareGlobalGitSettingsForSave } from "./settings-save/global-git-settings";
-import {
-  hasRuntimeLifecycleChange,
-  reportSettingsSaveFollowUps,
-} from "./settings-save/runtime-settings-application";
+import { reportSettingsSaveFollowUps } from "./settings-save/runtime-settings-application";
 import { prepareSettingsSnapshotForSave } from "./settings-save/settings-snapshot";
 import type { DirtySections } from "./use-settings-modal-dirty-state";
 
 type UseSettingsModalSaveOrchestrationArgs = {
   open: boolean;
+  unavailableTargetError?: string | null;
+  acknowledgeSave: (partial: boolean, submitted: SettingsSnapshotSaveInput) => void;
+  retainDraft: () => void;
   loadedSnapshot: SettingsSnapshot | null;
   snapshotDraft: SettingsSnapshot | null;
   dirtySections: DirtySections;
   validation: SettingsSaveValidation;
   onRuntimeAvailabilityError: (runtimeKind: RuntimeKind) => void;
-  saveGlobalGitConfig: (config: SettingsSnapshot["git"]) => Promise<void>;
   previewSettingsSnapshotRuntime: (
     snapshot: SettingsSnapshotSaveInput,
   ) => Promise<SettingsSnapshotRuntimePreview>;
@@ -47,11 +43,6 @@ type UseSettingsModalSaveOrchestrationArgs = {
     snapshot: SettingsSnapshotSaveInput,
     runtimeConfirmation?: string,
   ) => Promise<SettingsSaveOutcome>;
-  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
-  isAgentModelFavoritesMutationPending: boolean;
-  isKanbanTaskCardViewMutationPending: boolean;
-  isSidebarSessionGroupingMutationPending: boolean;
-  wasKanbanTaskCardViewEdited: boolean;
 };
 
 type SettingsModalSaveOrchestration = {
@@ -68,21 +59,22 @@ type SettingsModalSaveOrchestration = {
   submit: () => Promise<boolean>;
 };
 
+type ConfirmedSaveResult =
+  | { type: "completed"; partial: boolean }
+  | Extract<RuntimeImpactActionResult, { type: "impact_changed" }>;
+
 export const useSettingsModalSaveOrchestration = ({
   open,
+  unavailableTargetError,
   loadedSnapshot,
   snapshotDraft,
   dirtySections,
   validation,
   onRuntimeAvailabilityError,
-  saveGlobalGitConfig,
+  acknowledgeSave,
+  retainDraft,
   previewSettingsSnapshotRuntime,
   saveSettingsSnapshot,
-  loadSettingsSnapshot,
-  isAgentModelFavoritesMutationPending,
-  isKanbanTaskCardViewMutationPending,
-  isSidebarSessionGroupingMutationPending,
-  wasKanbanTaskCardViewEdited,
 }: UseSettingsModalSaveOrchestrationArgs): SettingsModalSaveOrchestration => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -97,47 +89,52 @@ export const useSettingsModalSaveOrchestration = ({
 
   /**
    * Saves with the confirmation of `impact`. A changed impact that stops live sessions needs a
-   * new review. Any other changed impact is saved at once.
+   * new review. Any other changed impact is saved again once with its new confirmation.
    */
   const saveConfirmed = useCallback(
     async (
       snapshot: SettingsSnapshotSaveInput,
       impact: RuntimeLifecycleImpact | null,
-    ): Promise<Exclude<RuntimeImpactActionResult, { type: "failed" }>> => {
+    ): Promise<ConfirmedSaveResult> => {
       let confirmation = impact?.confirmation;
-      for (;;) {
+      for (let retried = false; ; retried = true) {
         const result = await saveSettingsSnapshot(snapshot, confirmation);
         if (result.type !== "runtime_impact_changed") {
+          acknowledgeSave(result.type === "partial", snapshot);
           reportSettingsSaveFollowUps(result, (title, description) =>
             toast.warning(title, { description }),
           );
-          return { type: "completed" };
+          return { type: "completed", partial: result.type === "partial" };
         }
-        if (hasLiveSessions(result.impact)) {
+        if (hasLiveSessions(result.impact))
           return { type: "impact_changed", impact: result.impact };
-        }
+        if (retried)
+          throw new Error(
+            "The runtime changes of these settings changed again during the save. Wait until the runtimes finish starting or stopping, then save again.",
+          );
         confirmation = result.impact.confirmation;
       }
     },
-    [saveSettingsSnapshot],
+    [acknowledgeSave, saveSettingsSnapshot],
   );
 
   /**
-   * Saves the snapshot. When the save stops live sessions, the user reviews them first.
-   * A changed impact opens the review again. Cancel keeps the draft and writes nothing.
+   * Saves the snapshot and resolves true only when every part saved. When the save stops live
+   * sessions, the user reviews them first. A changed impact opens the review again. Cancel keeps
+   * the draft and writes nothing.
    */
   const saveWithRuntimeReview = useCallback(
-    async (snapshot: SettingsSnapshotSaveInput, latest: SettingsSnapshot): Promise<boolean> => {
-      const impact = hasRuntimeLifecycleChange(latest.agentRuntimes, snapshot.agentRuntimes)
+    async (snapshot: SettingsSnapshotSaveInput): Promise<boolean> => {
+      const impact = snapshot.global?.agentRuntimes
         ? (await previewSettingsSnapshotRuntime(snapshot)).impact
         : null;
       let notice: string | null = null;
       if (impact === null || !hasLiveSessions(impact)) {
         const result = await saveConfirmed(snapshot, impact);
-        if (result.type === "completed") return true;
+        if (result.type === "completed") return !result.partial;
         notice = RUNTIME_IMPACT_CHANGED_NOTICE;
       }
-      return openRuntimeReview({
+      const completed = await openRuntimeReview({
         readImpact: async () => {
           const { impact: current } = await previewSettingsSnapshotRuntime(snapshot);
           if (!current) {
@@ -150,6 +147,7 @@ export const useSettingsModalSaveOrchestration = ({
         run: (reviewed) => saveConfirmed(snapshot, reviewed),
         notice,
       });
+      return completed !== null && !completed.partial;
     },
     [openRuntimeReview, previewSettingsSnapshotRuntime, saveConfirmed],
   );
@@ -168,10 +166,16 @@ export const useSettingsModalSaveOrchestration = ({
   }
 
   const submit = useCallback(async (): Promise<boolean> => {
-    if (saveInFlightRef.current || !snapshotDraft) {
+    if (saveInFlightRef.current || !snapshotDraft || !loadedSnapshot) {
       return false;
     }
 
+    if (unavailableTargetError) {
+      retainDraft();
+      setSaveError(unavailableTargetError);
+      toast.error("Cannot save settings", { description: unavailableTargetError });
+      return false;
+    }
     const blocker = getSettingsSaveBlocker(validation);
     if (blocker) {
       const { reason } = blocker;
@@ -191,73 +195,18 @@ export const useSettingsModalSaveOrchestration = ({
       return true;
     }
 
-    const saveReadyGit = isGlobalGitOnlySave(dirtySections)
-      ? prepareGlobalGitSettingsForSave(snapshotDraft.git)
-      : null;
-    if (saveReadyGit && hasSameSaveReadyGlobalGitConfig(loadedSnapshot, saveReadyGit)) {
-      return true;
-    }
-
-    if (!saveReadyGit && isAgentModelFavoritesMutationPending) {
-      const reason = "Wait for the model favorites update to finish before saving settings.";
-      setSaveError(reason);
-      toast.error("Cannot save settings", {
-        description: reason,
-      });
-      return false;
-    }
-
-    if (!saveReadyGit && isKanbanTaskCardViewMutationPending) {
-      const reason = "Wait for the task card view update to finish before saving settings.";
-      setSaveError(reason);
-      toast.error("Cannot save settings", {
-        description: reason,
-      });
-      return false;
-    }
-
-    if (!saveReadyGit && isSidebarSessionGroupingMutationPending) {
-      const reason = "Wait for the session grouping update to finish before saving settings.";
-      setSaveError(reason);
-      toast.error("Cannot save settings", { description: reason });
-      return false;
-    }
-
     saveInFlightRef.current = true;
     setIsSaving(true);
 
     try {
-      if (saveReadyGit) {
-        await saveGlobalGitConfig(saveReadyGit);
-      } else {
-        const latestSnapshot = await loadSettingsSnapshot();
-        const taskCardView = wasKanbanTaskCardViewEdited
-          ? snapshotDraft.kanban.taskCardView
-          : latestSnapshot.kanban.taskCardView;
-        const sidebarSessionGrouping =
-          loadedSnapshot &&
-          snapshotDraft.appearance.sidebarSessionGrouping ===
-            loadedSnapshot.appearance.sidebarSessionGrouping
-            ? latestSnapshot.appearance.sidebarSessionGrouping
-            : snapshotDraft.appearance.sidebarSessionGrouping;
-        const saveReadySnapshot = prepareSettingsSnapshotForSave(
-          {
-            ...snapshotDraft,
-            agentModelFavorites: latestSnapshot.agentModelFavorites,
-            kanban: { ...snapshotDraft.kanban, taskCardView },
-            appearance: { ...snapshotDraft.appearance, sidebarSessionGrouping },
-          },
-          {
-            saveCustomAgentRoles: dirtySections.customAgentRoles,
-            // Another client can save Autopilot rules. An unedited section keeps them.
-            saveAutopilot: dirtySections.autopilot,
-          },
-        );
-        return await saveWithRuntimeReview(saveReadySnapshot, latestSnapshot);
+      const saveReadySnapshot = prepareSettingsSnapshotForSave(snapshotDraft, loadedSnapshot);
+      if (Object.keys(saveReadySnapshot).length === 0) {
+        acknowledgeSave(false, saveReadySnapshot);
+        return true;
       }
-
-      return true;
+      return await saveWithRuntimeReview(saveReadySnapshot);
     } catch (error: unknown) {
+      retainDraft();
       const reason = errorMessage(error);
       setSaveError(reason);
       toast.error("Failed to save workspace settings", {
@@ -270,17 +219,14 @@ export const useSettingsModalSaveOrchestration = ({
     }
   }, [
     dirtySections,
-    isAgentModelFavoritesMutationPending,
-    isKanbanTaskCardViewMutationPending,
-    isSidebarSessionGroupingMutationPending,
-    loadSettingsSnapshot,
     loadedSnapshot,
     onRuntimeAvailabilityError,
-    saveGlobalGitConfig,
+    retainDraft,
     saveWithRuntimeReview,
     snapshotDraft,
+    acknowledgeSave,
     validation,
-    wasKanbanTaskCardViewEdited,
+    unavailableTargetError,
   ]);
 
   return {

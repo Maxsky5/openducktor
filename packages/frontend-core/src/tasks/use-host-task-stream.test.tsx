@@ -1,3 +1,5 @@
+import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
+import type { WorkspaceRef } from "@openducktor/contracts";
 import "../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
 import { IsolatedQueryWrapper } from "../test-support/isolated-query-wrapper";
@@ -12,13 +14,15 @@ import {
 
 type StreamProps = Parameters<typeof useHostTaskStream>[0];
 
-const workspaces = (...repoPaths: string[]) => repoPaths.map((repoPath) => ({ repoPath }));
+const scope = (repoPath: string) => workspaceRefFixture(repoPath, repoPath.slice(1));
+
+const workspaces = (...repoPaths: string[]) => repoPaths.map(scope);
 
 const recordingEvents = (log: string[]): StreamProps["events"] => ({
   onDegraded: (description) => log.push(`degraded: ${description}`),
   onWorkspaceFailures: (description) => log.push(`failures: ${description}`),
   onUnavailable: (cause) => log.push(`unavailable: ${String(cause)}`),
-  onWorkspaceReleased: (repoPath) => log.push(`released event: ${repoPath}`),
+  onWorkspaceReleased: (repoPath) => log.push(`released event: ${repoPath.repoPath}`),
   trackStart: () => {
     log.push("track");
     return (start: TaskStreamStart) => log.push(`start: ${start}`);
@@ -36,7 +40,7 @@ const fakeFactory = (log: string[], start: () => Promise<void> = async () => {})
         log.push("stop");
       },
       releaseWorkspace: async (repoPath) => {
-        log.push(`release: ${repoPath}`);
+        log.push(`release: ${repoPath.repoPath}`);
       },
     };
     return controller;
@@ -55,16 +59,17 @@ describe("useHostTaskStream", () => {
     const { createController, inputs } = fakeFactory(log);
     const harness = renderStream({
       openWorkspaces: workspaces("/repo-a"),
+      activeWorkspaceId: "repo-b",
       activeRepoPath: "/repo-b",
       createController,
       events: recordingEvents(log),
     });
     await harness.mount();
     try {
-      expect(harness.getLatest()).toEqual(["/repo-a", "/repo-b"]);
+      expect(harness.getLatest()).toEqual([scope("/repo-a"), scope("/repo-b")]);
       expect(inputs).toHaveLength(1);
-      expect(inputs[0]?.getOpenRepoPaths()).toEqual(["/repo-a", "/repo-b"]);
-      expect(inputs[0]?.getActiveRepoPath()).toBe("/repo-b");
+      expect(inputs[0]?.getOpenRepoPaths()).toEqual([scope("/repo-a"), scope("/repo-b")]);
+      expect(inputs[0]?.getActiveRepoPath()).toEqual(scope("/repo-b"));
       expect(log).toEqual(["track", "start: started"]);
     } finally {
       await harness.unmount();
@@ -77,6 +82,7 @@ describe("useHostTaskStream", () => {
     const { createController, inputs } = fakeFactory(log);
     const props: StreamProps = {
       openWorkspaces: workspaces("/repo-a", "/repo-b"),
+      activeWorkspaceId: "repo-a",
       activeRepoPath: "/repo-a",
       createController,
       events: recordingEvents(log),
@@ -90,7 +96,7 @@ describe("useHostTaskStream", () => {
         events: recordingEvents(log),
       });
       expect(inputs).toHaveLength(1);
-      expect(inputs[0]?.getOpenRepoPaths()).toEqual(["/repo-a"]);
+      expect(inputs[0]?.getOpenRepoPaths()).toEqual([scope("/repo-a")]);
       expect(log).toEqual([
         "track",
         "start: started",
@@ -108,6 +114,7 @@ describe("useHostTaskStream", () => {
     const { createController, inputs } = fakeFactory(log, () => start.promise);
     const harness = renderStream({
       openWorkspaces: workspaces("/repo-a"),
+      activeWorkspaceId: "workspace-1",
       activeRepoPath: null,
       createController,
       events: recordingEvents(log),
@@ -116,9 +123,9 @@ describe("useHostTaskStream", () => {
     try {
       inputs[0]?.onDegraded(new Error("Stream gap"));
       inputs[0]?.onWorkspaceFailures(
-        new Map<string, unknown>([
-          ["/repo-a", new Error("Read failed")],
-          ["/repo-b", new Error("Host offline")],
+        new Map<WorkspaceRef, unknown>([
+          [scope("/repo-a"), new Error("Read failed")],
+          [scope("/repo-b"), new Error("Host offline")],
         ]),
       );
       await harness.run(() => {
@@ -127,7 +134,7 @@ describe("useHostTaskStream", () => {
       expect(log).toEqual([
         "track",
         "degraded: Stream gap",
-        "failures: /repo-a: Read failed\n/repo-b: Host offline",
+        "failures: repo-a (/repo-a): Read failed\nrepo-b (/repo-b): Host offline",
         "start: unavailable",
         "unavailable: Remote control is off",
       ]);

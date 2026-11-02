@@ -1,4 +1,4 @@
-import type { GitCheck, PathCheck, TaskStoreCheck } from "@openducktor/contracts";
+import type { GitCheck, PathCheck, TaskStoreCheck, WorkspaceRef } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { ScheduleTask } from "../lib/scheduling";
@@ -32,7 +32,7 @@ export type DiagnosticsChecks = {
   checksRepoPath: string | null;
   taskStoreCheck: ObservedCheck<TaskStoreCheck>;
   isRefreshingChecks: boolean;
-  refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
+  refreshTaskStoreCheckForRepo: (scope: WorkspaceRef, force?: boolean) => Promise<TaskStoreCheck>;
   /** Read the host runtime status, PATH, Git, and the task store of the workspace again. */
   refreshChecks: () => Promise<void>;
 };
@@ -47,13 +47,17 @@ export function useDiagnosticsChecks({
   scheduleTask,
 }: UseDiagnosticsChecksArgs): DiagnosticsChecks {
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const queryClient = useQueryClient();
   const [isRefreshingChecks, setIsRefreshingChecks] = useState(false);
   const pathCheckQuery = useQuery(pathCheckQueryOptions(false, pathCheck, scheduleTask));
   const gitCheckQuery = useQuery(gitCheckQueryOptions(gitCheck, scheduleTask));
   const taskStoreCheckQuery = useQuery({
     ...taskStoreCheckQueryOptions(
-      activeRepoPath ?? DISABLED_REPO_PATH,
+      {
+        workspaceId: activeWorkspaceId ?? "__disabled__",
+        repoPath: activeRepoPath ?? DISABLED_REPO_PATH,
+      },
       taskStoreCheck,
       scheduleTask,
     ),
@@ -61,8 +65,8 @@ export function useDiagnosticsChecks({
   });
 
   const refreshTaskStoreCheckForRepo = useCallback(
-    (repoPath: string, force = false): Promise<TaskStoreCheck> =>
-      loadTaskStoreCheck(queryClient, repoPath, taskStoreCheck, scheduleTask, force),
+    (scope: WorkspaceRef, force = false): Promise<TaskStoreCheck> =>
+      loadTaskStoreCheck(queryClient, scope, taskStoreCheck, scheduleTask, force),
     [taskStoreCheck, queryClient, scheduleTask],
   );
 
@@ -73,8 +77,13 @@ export function useDiagnosticsChecks({
         refreshHostRuntimeStatus(),
         refreshPathAndGitChecks(queryClient, pathCheck, gitCheck, scheduleTask),
       ];
-      if (activeRepoPath !== null) {
-        checks.push(refreshTaskStoreCheckForRepo(activeRepoPath, true));
+      if (activeRepoPath !== null && activeWorkspaceId !== null) {
+        checks.push(
+          refreshTaskStoreCheckForRepo(
+            { workspaceId: activeWorkspaceId, repoPath: activeRepoPath },
+            true,
+          ),
+        );
       }
       await Promise.allSettled(checks);
     } finally {
@@ -82,6 +91,7 @@ export function useDiagnosticsChecks({
     }
   }, [
     activeRepoPath,
+    activeWorkspaceId,
     refreshHostRuntimeStatus,
     queryClient,
     pathCheck,

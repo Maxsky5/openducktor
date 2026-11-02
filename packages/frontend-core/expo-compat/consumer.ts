@@ -17,7 +17,7 @@ import { createNotificationRuntime } from "../src/notifications/notification-run
 import { repoTaskDataQueryOptions } from "../src/queries/tasks";
 import { createRemoteHostConnection } from "../src/recovery/remote-host-connection";
 import { useAgentSessionsContext } from "../src/sessions/session-contexts";
-import type { WorkspaceRecord } from "@openducktor/contracts";
+import type { WorkspaceRecord, WorkspaceRef } from "@openducktor/contracts";
 import type { RemoteTransport } from "@openducktor/host-client/remote";
 import { useQuery } from "@tanstack/react-query";
 import { createElement, type ReactElement } from "react";
@@ -72,9 +72,9 @@ export const startNotifications = (connection: ReturnType<typeof connectToHost>)
     sound: { play: async () => {} },
   });
 
-export function TaskCount({ repoPath }: { repoPath: string }): ReactElement | null {
+export function TaskCount({ workspace }: { workspace: WorkspaceRef }): ReactElement | null {
   const host = useHostClient();
-  const tasks = useQuery(repoTaskDataQueryOptions(repoPath));
+  const tasks = useQuery(repoTaskDataQueryOptions(workspace));
   const sessions = useAgentSessionsContext();
   const draftCount = useInlineCommentDraftStore((store) => store.getDraftCount("owner"));
   void host;
@@ -97,7 +97,7 @@ export const renderApp = (
       createElement(
         WorkspaceActivityProvider,
         null,
-        createElement(TaskCount, { repoPath: "/repo" }),
+        workspaces[0] ? createElement(TaskCount, { workspace: workspaces[0] }) : null,
       ),
     ),
   );

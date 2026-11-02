@@ -12,7 +12,6 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeKind,
   repoConfigSchema,
-  settingsSnapshotSchema,
   type AgentModelCatalog,
 } from "@openducktor/contracts";
 import { emptyArtifactSummary } from "@openducktor/workflows";
@@ -35,6 +34,7 @@ import { createAgentRuntimeQueryService } from "./agent-runtime-query-service";
 import { createSessionCreationPreparation } from "../agent-sessions/session-creation-preparation";
 import { createSessionTurnPreparation } from "../agent-sessions/session-turn-preparation";
 import { taskCardFixture } from "../../test-support/task-card-fixture";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 
 const repoPath = "/remote/repo";
 const workingDirectory = "/worktrees/workspace/task";
@@ -138,6 +138,15 @@ const harness = async (
       resolveConfiguredPath: (path) => path,
     }),
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+      getRepoConfig: () =>
+        Effect.succeed(
+          repoConfigSchema.parse({
+            workspaceId: "workspace",
+            workspaceName: "Workspace",
+            repoPath,
+            worktreeBasePath: options.worktreeBasePath,
+          }),
+        ),
       getRepoConfigByRepoPath: () =>
         Effect.succeed(
           repoConfigSchema.parse({
@@ -208,8 +217,11 @@ test("a fresh workflow session reads its catalog before native session ownership
   const turnPreparation = createSessionTurnPreparation({
     taskWorkflows: builtinTaskWorkflows,
     queries: h.service,
+    settingsConfig: { readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()) },
     settings: {
       getRepoConfigByRepoPath: () =>
+        Effect.die("Workflow preparation must use the supplied workspace ID."),
+      getRepoConfig: () =>
         Effect.succeed(
           repoConfigSchema.parse({
             workspaceId: "workspace",
@@ -217,7 +229,6 @@ test("a fresh workflow session reads its catalog before native session ownership
             repoPath,
           }),
         ),
-      getSettingsSnapshot: () => Effect.succeed(settingsSnapshotSchema.parse({ theme: "system" })),
     },
     taskReader: {
       getTask: () =>
@@ -262,7 +273,7 @@ test("a fresh workflow session reads its catalog before native session ownership
       repoPath,
       runtimeKind: "codex",
       workingDirectory,
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "task-1", role: "spec" },
       model: { providerId: "codex", modelId: "current", variant: "low" },
       systemPrompt: "Old client context",
     }),
@@ -366,7 +377,7 @@ for (const runtime of [
         repoPath,
         workingDirectory: legacyDirectory,
         externalSessionId: "root",
-        sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "task", role: "build" },
       } as const;
       const searchInput = {
         repoPath,
@@ -615,7 +626,12 @@ test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
             .loadSessionHistory({
               ...historyRef,
               externalSessionId: operation === "child ancestry" ? "cold-child" : "root",
-              sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+              sessionScope: {
+                kind: "workflow",
+                workspaceId: "workspace",
+                taskId: "task",
+                role: "build",
+              },
             })
             .pipe(Effect.timeout("2 seconds")),
         );
@@ -639,16 +655,19 @@ test("reads cold history without a live snapshot and requires task ownership whe
   await Effect.runPromise(
     h.service.loadSessionHistory({
       ...historyRef,
-      sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "task", role: "build" },
     }),
   );
   for (const input of [
     {
       ...historyRef,
       externalSessionId: "unowned",
-      sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "task", role: "build" },
     },
-    { ...historyRef, sessionScope: { kind: "workflow", taskId: "task", role: "qa" } },
+    {
+      ...historyRef,
+      sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "task", role: "qa" },
+    },
   ] as const) {
     expect(
       (await Effect.runPromise(Effect.flip(h.service.loadSessionHistory(input)))).failure.code,
@@ -675,7 +694,7 @@ test("accepts retained child ancestry backed by an ODT root record", async () =>
     h.service.loadSessionHistory({
       ...historyRef,
       externalSessionId: "child",
-      sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "task", role: "build" },
     }),
   );
   expect(h.calls).toHaveLength(1);
@@ -700,7 +719,7 @@ test("rejects retained child ancestry without an ODT ownership record", async ()
       h.service.loadSessionHistory({
         ...historyRef,
         externalSessionId: "child",
-        sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "task", role: "build" },
       }),
     ),
   );
@@ -726,7 +745,7 @@ test("reads cold child history through native lineage and an existing ODT owners
     h.service.loadSessionHistory({
       ...historyRef,
       externalSessionId: "cold-child",
-      sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "workspace", taskId: "task", role: "build" },
     }),
   );
   expect(h.calls).toHaveLength(1);

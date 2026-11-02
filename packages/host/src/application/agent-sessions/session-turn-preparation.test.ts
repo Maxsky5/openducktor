@@ -1,9 +1,8 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
   agentModelCatalogSchema,
   repoConfigSchema,
-  settingsSnapshotSchema,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentMessageTarget,
   type AgentSessionModelSelection,
@@ -12,13 +11,16 @@ import { emptyArtifactSummary } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { createSessionTurnPreparation } from "./session-turn-preparation";
 import { taskCardFixture } from "../../test-support/task-card-fixture";
+import { createDefaultGlobalConfig } from "../../config/global-config";
+import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
+import { toSettingsSnapshot } from "../workspaces/workspace-settings-model";
 
 const target: AgentMessageTarget = {
   repoPath: "/repo",
   runtimeKind: "opencode",
   workingDirectory: "/repo/tree",
   externalSessionId: "saved",
-  sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+  sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
 };
 const selected: AgentSessionModelSelection = {
   runtimeKind: "opencode",
@@ -46,19 +48,31 @@ const catalog = agentModelCatalogSchema.parse({
 const setup = () => {
   let currentCatalog = catalog;
   let description = "First task context";
+  const settings = createDefaultGlobalConfig();
+  const readGlobalConfig = mock(() => Effect.succeed(settings));
+  const getSettingsSnapshot = mock(() => Effect.succeed(toSettingsSnapshot(settings)));
   const preparation = createSessionTurnPreparation({
     taskWorkflows: builtinTaskWorkflows,
-    settings: {
-      getRepoConfigByRepoPath: () =>
+    settingsConfig: { readGlobalConfig },
+    settings: createWorkspaceSettingsServiceTestDouble({
+      getRepoConfig: () =>
         Effect.succeed(
           repoConfigSchema.parse({
-            workspaceId: "workspace",
+            workspaceId: "repo",
             workspaceName: "Workspace",
             repoPath: "/repo",
           }),
         ),
-      getSettingsSnapshot: () => Effect.succeed(settingsSnapshotSchema.parse({ theme: "system" })),
-    },
+      getRepoConfigByRepoPath: () =>
+        Effect.succeed(
+          repoConfigSchema.parse({
+            workspaceId: "repo",
+            workspaceName: "Workspace",
+            repoPath: "/repo",
+          }),
+        ),
+      getSettingsSnapshot,
+    }),
     queries: {
       loadRuntimeCatalog: () =>
         Effect.succeed({ models: { status: "available", catalog: currentCatalog } }),
@@ -82,6 +96,7 @@ const setup = () => {
   });
   return {
     preparation,
+    settingsReads: { global: readGlobalConfig, snapshot: getSettingsSnapshot },
     setDescription: (next: string) => {
       description = next;
     },
@@ -93,12 +108,14 @@ const setup = () => {
 
 describe("session turn preparation", () => {
   test("reads current task context for each new turn", async () => {
-    const { preparation, setDescription } = setup();
+    const { preparation, setDescription, settingsReads } = setup();
     expect(await Effect.runPromise(preparation.context(target))).toContain("First task context");
     setDescription("Edited after the client snapshot");
     const prompt = await Effect.runPromise(preparation.context(target));
     expect(prompt).toContain("Edited after the client snapshot");
     expect(prompt).not.toContain("First task context");
+    expect(settingsReads.global).toHaveBeenCalledTimes(2);
+    expect(settingsReads.snapshot).not.toHaveBeenCalled();
   });
 
   test("preserves a valid saved variant while blocking an explicit forbidden live change", async () => {

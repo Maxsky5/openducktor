@@ -1,8 +1,8 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
-import { taskStoreSchema } from "../../adapters/sqlite/sqlite-task-store-schema";
+import { hostDatabaseSchema } from "../../adapters/sqlite/sqlite-host-database-schema";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { openSqliteDrizzleConnection } from "../../infrastructure/sqlite/sqlite-drizzle-client";
 import { createAgentSessionRecord } from "../../ports/task-store-port-contract.test-support";
@@ -14,12 +14,17 @@ type LoggedQuery = {
   readonly sql: string;
 };
 
-const expectSingleAgentSessionSelect = (queries: LoggedQuery[], taskId: string): void => {
-  expect(queries).toHaveLength(1);
-  expect(queries[0]?.sql).toMatch(/^select "id", "agent_sessions_json" from "tasks"/i);
-  expect(queries[0]?.sql).toContain('where "tasks"."id" in (?)');
-  expect(queries[0]?.params).toEqual([taskId]);
-  expect(queries[0]?.sql).not.toContain("task_documents");
+const expectScopedAgentSessionReads = (
+  queries: LoggedQuery[],
+  workspaceId: string,
+  taskId: string,
+): void => {
+  expect(queries).toHaveLength(2);
+  expect(queries[0]?.sql).toMatch(/^select "id" from "tasks"/i);
+  expect(queries[0]?.params).toEqual([workspaceId, JSON.stringify([taskId])]);
+  expect(queries[1]?.sql).toContain('from "task_sessions"');
+  expect(queries[1]?.params).toEqual([workspaceId, JSON.stringify([taskId])]);
+  expect(queries.some(({ sql }) => sql.includes("task_artifacts"))).toBe(false);
 };
 
 describe("single-task session queries", () => {
@@ -35,29 +40,33 @@ describe("single-task session queries", () => {
       }),
     });
     const failure = await Effect.runPromise(
-      Effect.flip(service.agentSessionsList({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.flip(
+        service.agentSessionsList({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+      ),
     );
-    expect(calls).toEqual([{ repoPath: "/repo", taskIds: ["task-1"] }]);
+    expect(calls).toEqual([{ workspaceId: "repo", repoPath: "/repo", taskIds: ["task-1"] }]);
     expect(failure).toMatchObject({
       _tag: "HostInvariantError",
       invariant: "task-agent-sessions-result",
     });
   });
-  test("uses one narrow SELECT and preserves sessions, missing tasks, and full metadata", async () => {
+  test("uses scoped task and session reads and preserves full metadata", async () => {
     const harness = await createSqliteTaskStoreHarness();
     const { repoPath, store } = harness;
     try {
       const task = await Effect.runPromise(
         store.createTask({
-          repoPath,
+          ...harness.scope,
           status: "open",
           task: { title: "Session query", issueType: "task", priority: 2 },
         }),
       );
-      const input = { repoPath, taskId: task.id };
+      const input = { workspaceId: harness.workspaceId, repoPath, taskId: task.id };
       const markdown = "Unrelated document content.";
       await Effect.runPromise(
         store.saveWorkflowArtifact({
+          decide: (current) =>
+            Result.succeed({ status: current.status, workflowId: "openducktor" }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...input,
@@ -67,6 +76,8 @@ describe("single-task session queries", () => {
       );
       await Effect.runPromise(
         store.saveWorkflowArtifact({
+          decide: (current) =>
+            Result.succeed({ status: current.status, workflowId: "openducktor" }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...input,
@@ -76,12 +87,12 @@ describe("single-task session queries", () => {
       );
       await Effect.runPromise(
         store.saveWorkflowArtifact({
+          decide: () => Result.succeed({ status: "human_review", workflowId: "openducktor" }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...input,
           markdown,
           verdict: "approved",
-          status: "human_review",
           code: "qaReport",
         }),
       );
@@ -94,7 +105,7 @@ describe("single-task session queries", () => {
               databasePath: harness.databasePath,
               configureWal: false,
               config: {
-                schema: taskStoreSchema,
+                schema: hostDatabaseSchema,
                 logger: {
                   logQuery(sql, params) {
                     queries.push({ params, sql });
@@ -110,7 +121,7 @@ describe("single-task session queries", () => {
             });
             const service = createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore });
             expect(yield* service.agentSessionsList(input)).toEqual([]);
-            expectSingleAgentSessionSelect(queries, input.taskId);
+            expectScopedAgentSessionReads(queries, harness.workspaceId, input.taskId);
 
             const older = createAgentSessionRecord({
               externalSessionId: "older",
@@ -120,15 +131,33 @@ describe("single-task session queries", () => {
               externalSessionId: "newer",
               startedAt: "2026-06-10T11:00:00.000Z",
             });
-            yield* store.upsertAgentSession({ ...input, session: newer });
-            yield* store.upsertAgentSession({ ...input, session: older });
+            yield* store.upsertAgentSession({
+              ...input,
+              ownershipScope: {
+                catalogRevision: 0,
+                workspaces: [{ workspaceId: harness.workspaceId, repoPath }],
+              },
+              session: newer,
+            });
+            yield* store.upsertAgentSession({
+              ...input,
+              ownershipScope: {
+                catalogRevision: 0,
+                workspaces: [{ workspaceId: harness.workspaceId, repoPath }],
+              },
+              session: older,
+            });
             queries.length = 0;
             expect(yield* service.agentSessionsList(input)).toEqual([newer, older]);
-            expectSingleAgentSessionSelect(queries, input.taskId);
+            expectScopedAgentSessionReads(queries, harness.workspaceId, input.taskId);
 
             queries.length = 0;
             const failure = yield* Effect.flip(
-              service.agentSessionsList({ repoPath, taskId: "missing-task" }),
+              service.agentSessionsList({
+                workspaceId: harness.workspaceId,
+                repoPath,
+                taskId: "missing-task",
+              }),
             );
             expect(failure).toMatchObject({
               _tag: "HostResourceError",
@@ -136,7 +165,7 @@ describe("single-task session queries", () => {
               message: "Task not found: missing-task",
               details: { repoPath, taskId: "missing-task" },
             });
-            expectSingleAgentSessionSelect(queries, "missing-task");
+            expectScopedAgentSessionReads(queries, harness.workspaceId, "missing-task");
 
             const metadata = yield* service.getTaskMetadata(input);
             expect(metadata).toMatchObject({

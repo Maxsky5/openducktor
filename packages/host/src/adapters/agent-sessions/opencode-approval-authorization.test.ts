@@ -36,7 +36,7 @@ describe("OpenCode approval authorization at the host reply boundary", () => {
         adapter.resumeSession({
           ...ref,
           resumeMode: "reattach",
-          sessionScope: { kind: "workflow", taskId: "task-1", role },
+          sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role },
         }),
       );
       await Effect.runPromise(prepared.startForwarding());
@@ -134,7 +134,7 @@ describe("OpenCode approval authorization at the host reply boundary", () => {
       prepared.adapter.resumeSession({
         ...ref,
         resumeMode: "reattach",
-        sessionScope: { kind: "workflow", taskId: "task-1", role },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role },
       }),
     );
     await Effect.runPromise(prepared.startForwarding());

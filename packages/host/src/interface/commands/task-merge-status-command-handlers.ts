@@ -9,10 +9,10 @@ export const createTaskMergeStatusCommandHandlers = (
   ({
     task_merge_status_get: (args) =>
       mergeDetection.getSnapshot(
-        parseCommandInput(taskMergeStatusRequestSchema, args, "task_merge_status_get").repoPath,
+        parseCommandInput(taskMergeStatusRequestSchema, args, "task_merge_status_get"),
       ),
     task_merge_status_check: (args) =>
       mergeDetection.checkWorkspace(
-        parseCommandInput(taskMergeStatusRequestSchema, args, "task_merge_status_check").repoPath,
+        parseCommandInput(taskMergeStatusRequestSchema, args, "task_merge_status_check"),
       ),
   }) satisfies HostCommandHandlerDefinitions;

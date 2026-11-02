@@ -84,6 +84,7 @@ const start = (overrides: StartOverrides = {}) => {
   const refreshTaskStoreCheckForRepo = mock(async () => readyCheck());
   const loadWorkspaceTasks = mock(async () => {});
   const input = {
+    workspaceId: "workspace-1",
     repoPath: "/repo",
     isCurrent: () => true,
     refreshBranches,
@@ -115,8 +116,14 @@ describe("useAppLifecycle repository-load coordination", () => {
     const branches = createDeferred<void>();
     const lifecycle = start({ refreshBranches: async () => await branches.promise });
     await flush();
-    expect(lifecycle.refreshTaskStoreCheckForRepo).toHaveBeenCalledWith("/repo", false);
-    expect(lifecycle.loadWorkspaceTasks).toHaveBeenCalledWith("/repo");
+    expect(lifecycle.refreshTaskStoreCheckForRepo).toHaveBeenCalledWith(
+      { workspaceId: "workspace-1", repoPath: "/repo" },
+      false,
+    );
+    expect(lifecycle.loadWorkspaceTasks).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+    });
     branches.resolve();
   });
 
@@ -177,8 +184,16 @@ describe("useAppLifecycle repository-load coordination", () => {
   test("runs follow-up diagnostics after successful or cancelled initialization only for a blocking first check", async () => {
     const successful = start({ refreshTaskStoreCheckForRepo: mock(async () => blockingCheck()) });
     await flush();
-    expect(successful.refreshTaskStoreCheckForRepo).toHaveBeenNthCalledWith(1, "/repo", false);
-    expect(successful.refreshTaskStoreCheckForRepo).toHaveBeenNthCalledWith(2, "/repo", true);
+    expect(successful.refreshTaskStoreCheckForRepo).toHaveBeenNthCalledWith(
+      1,
+      { workspaceId: "workspace-1", repoPath: "/repo" },
+      false,
+    );
+    expect(successful.refreshTaskStoreCheckForRepo).toHaveBeenNthCalledWith(
+      2,
+      { workspaceId: "workspace-1", repoPath: "/repo" },
+      true,
+    );
 
     const cancelled = start({
       refreshTaskStoreCheckForRepo: mock(async () => blockingCheck()),
@@ -187,7 +202,11 @@ describe("useAppLifecycle repository-load coordination", () => {
       },
     });
     await flush();
-    expect(cancelled.refreshTaskStoreCheckForRepo).toHaveBeenNthCalledWith(2, "/repo", true);
+    expect(cancelled.refreshTaskStoreCheckForRepo).toHaveBeenNthCalledWith(
+      2,
+      { workspaceId: "workspace-1", repoPath: "/repo" },
+      true,
+    );
 
     const ready = start();
     await flush();

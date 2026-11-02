@@ -149,7 +149,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const harness = createHarness(
       session({ runtimeKind: "opencode", sessionAssociation: { kind: "unbound" } }),
       readSessionHistory,
-      { kind: "workflow", taskId: "task-1", role: "build" },
+      { kind: "workflow", workspaceId: "workspace-1", taskId: "task-1", role: "build" },
     );
 
     try {
@@ -158,7 +158,12 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
       expect(readSessionHistory).toHaveBeenCalledWith(
         expect.objectContaining({
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          sessionScope: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "build",
+          },
         }),
       );
     } finally {
@@ -189,7 +194,12 @@ describe("useRuntimeTranscriptSessionHistory", () => {
   test("uses the canonical owner for a registered workflow transcript", async () => {
     const readSessionHistory = mock(async () => []);
     const loadAgentSessionHistory = mock(async () => null);
-    const workflowScope = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+    const workflowScope = {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    } as const;
     const live = session({ runtimeKind: "opencode", sessionAssociation: workflowScope });
     const harness = createHarness(live, readSessionHistory, workflowScope, loadAgentSessionHistory);
     try {
@@ -219,11 +229,17 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const harness = createHarness(
       session({
         runtimeKind: "opencode",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
       }),
       readSessionHistory,
       {
         kind: "workflow",
+        workspaceId: "workspace-1",
         taskId: "task-2",
         role: "qa",
       },

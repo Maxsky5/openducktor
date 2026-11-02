@@ -88,6 +88,17 @@ export * from "./git-schemas";
 export * from "./issue-import-schemas";
 export * from "./local-image-schemas";
 export * from "./host-event-schemas";
+export * from "./settings-patch-schema";
+export * from "./json-values-equal";
+export {
+  applySettingsSnapshotPatch,
+  diffSettingsSnapshot,
+  retainSettingsSnapshotUpdateTargets,
+  applyGlobalSettingsPatch,
+  applyCustomAgentRoleEdits,
+  applyAutopilotSettingsPatch,
+  applyWorkspaceSettingsPatch,
+} from "./settings-snapshot-edits";
 export * from "./host-runtime-schemas";
 export * from "./host-command-contracts";
 export * from "./host-read-command-contracts";

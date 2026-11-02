@@ -22,8 +22,13 @@ import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-st
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
+import {
+  resolveRuntimeOwnershipScope,
+  type RuntimeOwnershipScopeDependencies,
+} from "./workspace-session-import-owners";
 
 export type WorkspaceSessionStartDependencies = WorkspaceSessionRecordReaderDependencies &
+  RuntimeOwnershipScopeDependencies &
   WorkspaceSessionTargetValidationDependencies & {
     store: Pick<WorkspaceSessionStorePort, "bindRuntimeSession">;
     runtime: Pick<RuntimeRegistryPort, "requireReady">;
@@ -86,8 +91,8 @@ export const createWorkspaceSessionStart = (
               workingDirectory: session.executionTarget.workingDirectory,
               sessionScope:
                 startTitle === null
-                  ? { kind: "repository" }
-                  : { kind: "repository", title: startTitle },
+                  ? { kind: "repository", workspaceId: ref.workspaceId }
+                  : { kind: "repository", workspaceId: ref.workspaceId, title: startTitle },
               systemPrompt: session.roleSnapshot?.systemPrompt ?? "",
             };
             if (workStartGuard) startInput.workStartGuard = workStartGuard;
@@ -109,10 +114,12 @@ export const createWorkspaceSessionStart = (
                   });
                 }
                 yield* onStarted(runtimeSession);
+                const ownershipScope = yield* resolveRuntimeOwnershipScope({ settings, git }, ref);
                 return yield* startupStep(
                   { id: "save", label: "Save native session identity" },
                   store.bindRuntimeSession({
                     ...ref,
+                    ownershipScope,
                     externalSessionId: runtimeSession.externalSessionId,
                   }),
                 );

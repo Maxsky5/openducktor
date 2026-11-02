@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import type {
-  AutopilotOutcome,
-  AutopilotState,
-  SettingsSnapshot,
-  WorkspaceRecord,
-} from "@openducktor/contracts";
-import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import type { AutopilotOutcome, AutopilotState, WorkspaceRecord } from "@openducktor/contracts";
+import { QueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -21,15 +16,14 @@ import {
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
 import {
-  createSettingsSnapshotFixture,
   createWorkspaceRecordFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
+import { autopilotQueryKeys } from "@openducktor/frontend-core/queries/autopilot";
+import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-runtime";
-import { autopilotSettingsQueryOptions } from "@openducktor/frontend-core/queries/autopilot";
 import { AutopilotProvider } from "./autopilot-provider";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
-import type { BuiltinAutomationId as AutopilotActionId } from "@openducktor/workflows";
 
 const alpha = createWorkspaceRecordFixture({ workspaceId: "alpha", repoPath: "/repos/alpha" });
 const beta = createWorkspaceRecordFixture({
@@ -44,6 +38,7 @@ const skipped = (outcomeId: string, workspace: WorkspaceRecord): AutopilotOutcom
   workspaceId: workspace.workspaceId,
   repoPath: workspace.repoPath,
   task: { id: `${workspace.workspaceId}-task`, title: "Task" },
+  workflowId: "openducktor",
   eventId: "taskProgressedToAiReview",
   actionId: "startQa",
   occurredAt: "2026-10-10T00:00:00.000Z",
@@ -89,12 +84,7 @@ afterEach(() => {
   dismiss.mockRestore();
 });
 
-const renderProvider = (
-  held: Record<string, AutopilotState>,
-  readSettings: () => Promise<SettingsSnapshot> = async () => {
-    throw new Error("Unexpected settings read.");
-  },
-) => {
+const renderProvider = (held: Record<string, AutopilotState>) => {
   const calls: string[] = [];
   const listeners: RunEventListener[] = [];
   const deferred = new Map<string, PromiseWithResolvers<AutopilotState>>();
@@ -110,7 +100,7 @@ const renderProvider = (
   const connection = createTestClientConnection({
     queryClient,
     host: createTestHostConnection({
-      client: { autopilotStateRead: readState, workspaceGetSettingsSnapshot: mock(readSettings) },
+      client: { autopilotStateRead: readState },
       subscribeRunEvents: async (listener) => {
         calls.push("subscribe");
         listeners.push(listener);
@@ -195,7 +185,7 @@ describe("AutopilotProvider", () => {
         if (failure) expect(cause).toMatchObject({ message: "Autopilot recovery failed." });
         else {
           expect(cause).toBeNull();
-          expect(shownToastIds()).toEqual(["autopilot:recovered"]);
+          expect(shownToastIds()).toEqual(['autopilot:["alpha","openducktor","recovered"]']);
         }
       } finally {
         provider.unmount();
@@ -215,11 +205,16 @@ describe("AutopilotProvider", () => {
     });
     try {
       await waitFor(() =>
-        expect(shownToastIds()).toEqual(["autopilot:alpha-held", "autopilot:beta-held"]),
+        expect(shownToastIds()).toEqual([
+          'autopilot:["alpha","openducktor","alpha-held"]',
+          'autopilot:["beta","openducktor","beta-held"]',
+        ]),
       );
       // A workspace that opens later is read once.
       await provider.rerender(alpha, [alpha, beta, gamma]);
-      await waitFor(() => expect(shownToastIds()).toContain("autopilot:gamma-held"));
+      await waitFor(() =>
+        expect(shownToastIds()).toContain('autopilot:["gamma","openducktor","gamma-held"]'),
+      );
       // A selection reads its workspace again, and the outcomes do not show again.
       await provider.rerender(beta, [alpha, beta, gamma]);
       await provider.rerender(alpha, [alpha, beta, gamma]);
@@ -234,9 +229,9 @@ describe("AutopilotProvider", () => {
         "read:alpha",
       ]);
       expect(shownToastIds()).toEqual([
-        "autopilot:alpha-held",
-        "autopilot:beta-held",
-        "autopilot:gamma-held",
+        'autopilot:["alpha","openducktor","alpha-held"]',
+        'autopilot:["beta","openducktor","beta-held"]',
+        'autopilot:["gamma","openducktor","gamma-held"]',
       ]);
     } finally {
       provider.unmount();
@@ -254,7 +249,9 @@ describe("AutopilotProvider", () => {
         betaRead.resolve({ outcomes: [skipped("beta-held", beta)], failure: null });
       });
 
-      await waitFor(() => expect(shownToastIds()).toEqual(["autopilot:beta-held"]));
+      await waitFor(() =>
+        expect(shownToastIds()).toEqual(['autopilot:["beta","openducktor","beta-held"]']),
+      );
     } finally {
       provider.unmount();
     }
@@ -289,9 +286,9 @@ describe("AutopilotProvider", () => {
       });
 
       expect(shownToastIds()).toEqual([
-        "autopilot:beta-live",
-        "autopilot:alpha-missed",
-        "autopilot:beta-missed",
+        'autopilot:["beta","openducktor","beta-live"]',
+        'autopilot:["alpha","openducktor","alpha-missed"]',
+        'autopilot:["beta","openducktor","beta-missed"]',
       ]);
       expect(provider.calls).toEqual([
         "subscribe",
@@ -305,11 +302,31 @@ describe("AutopilotProvider", () => {
     }
   });
 
+  test("a local settings save refreshes the saved rules and settings snapshot", async () => {
+    const provider = renderProvider({});
+    try {
+      await provider.waitForAttachReads();
+      const rulesKey = autopilotQueryKeys.settings();
+      const snapshotKey = workspaceQueryKeys.settingsSnapshot();
+      provider.queryClient.setQueryData(rulesKey, { rules: [] });
+      provider.queryClient.setQueryData(snapshotKey, { autopilot: { rules: [] } });
+
+      await provider.emit({ type: "autopilot_settings_saved" });
+
+      expect(provider.queryClient.getQueryState(rulesKey)?.isInvalidated).toBe(true);
+      expect(provider.queryClient.getQueryData(snapshotKey)).toBeUndefined();
+      expect(info).not.toHaveBeenCalled();
+    } finally {
+      provider.unmount();
+    }
+  });
+
   test("a started outcome refreshes the task worktree view without a toast", async () => {
     const provider = renderProvider({});
     try {
       await provider.waitForAttachReads();
       const worktreeKey = taskWorktreeQueryKeys.taskWorktree({
+        workspaceId: "beta",
         repoPath: "/repos/beta",
         taskId: "beta-task",
       });
@@ -321,6 +338,7 @@ describe("AutopilotProvider", () => {
           workspaceId: "beta",
           repoPath: "/repos/beta",
           task: { id: "beta-task", title: "Task" },
+          workflowId: "openducktor",
           eventId: "taskProgressedToAiReview",
           actionId: "startQa",
           occurredAt: "2026-10-10T00:00:00.000Z",
@@ -351,6 +369,7 @@ describe("AutopilotProvider", () => {
       workspaceId: "alpha",
       repoPath: "/repos/alpha",
       task: { id: "alpha-task", title: "Task" },
+      workflowId: "openducktor",
       eventId: "taskRejectedByQa",
       actionId: "startReviewQaFeedbacks",
       occurredAt: "2026-10-10T00:00:00.000Z",
@@ -381,50 +400,12 @@ describe("AutopilotProvider", () => {
       await waitFor(() => expect(error).toHaveBeenCalledTimes(2));
 
       expect(error.mock.calls.map((call) => call[1]?.id)).toEqual([
-        "autopilot:alpha-recoverable",
-        "autopilot:alpha-recoverable",
+        'autopilot:["alpha","openducktor","alpha-recoverable"]',
+        'autopilot:["alpha","openducktor","alpha-recoverable"]',
       ]);
     } finally {
       provider.unmount();
       error.mockRestore();
-    }
-  });
-
-  test.each([
-    { name: "a saved-rules event", payload: { type: "autopilot_settings_saved" as const } },
-    {
-      name: "a reconnect after missed events",
-      payload: {
-        __openducktorConnectionControl: true as const,
-        kind: "reconnected" as const,
-        missedEvents: true,
-        hostChanged: false,
-        missedEventNames: [],
-      },
-    },
-  ])("$name reloads the saved Autopilot rules for an open settings modal", async ({ payload }) => {
-    let savedQaActions: AutopilotActionId[] = [];
-    const provider = renderProvider({}, async () => ({
-      ...createSettingsSnapshotFixture(),
-      autopilot: {
-        alwaysStartQaReviewsFresh: false,
-        rules: [{ eventId: "taskProgressedToAiReview", actionIds: savedQaActions }],
-      },
-    }));
-    // An open settings modal watches the saved rules.
-    const observer = new QueryObserver(provider.queryClient, autopilotSettingsQueryOptions());
-    const stopObserving = observer.subscribe(() => {});
-    const qaActions = () => observer.getCurrentResult().data?.rules[0]?.actionIds;
-    try {
-      await waitFor(() => expect(qaActions()).toEqual([]));
-      savedQaActions = ["startQa"];
-
-      provider.emit(payload);
-
-      await waitFor(() => expect(qaActions()).toEqual(["startQa"]));
-    } finally {
-      stopObserving();
-      provider.unmount();
     }
   });
 
@@ -474,7 +455,7 @@ describe("AutopilotProvider", () => {
       provider.emit({ type: "autopilot_outcome", outcome: skipped("beta-live", beta) });
       await provider.rerender(alpha, [alpha]);
 
-      expect(dismiss).toHaveBeenCalledWith("autopilot:beta-live");
+      expect(dismiss).toHaveBeenCalledWith('autopilot:["beta","openducktor","beta-live"]');
     } finally {
       provider.unmount();
     }

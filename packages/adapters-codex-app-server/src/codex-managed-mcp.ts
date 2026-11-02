@@ -18,10 +18,11 @@ export const resolveCodexThreadConfig = async (
   resolveManagedMcpServer: ManagedMcpServerResolver,
   repoPath: string,
   enabledTools: readonly string[],
+  workspaceId?: string,
 ): Promise<CodexThreadConfig> => {
   let server: ManagedMcpServer;
   try {
-    server = await resolveManagedMcpServer(repoPath);
+    server = await resolveManagedMcpServer(repoPath, workspaceId);
   } catch (cause) {
     const reason = cause instanceof Error ? cause.message : String(cause);
     throw new Error(

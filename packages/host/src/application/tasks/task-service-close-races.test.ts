@@ -56,7 +56,7 @@ describe("blocker and close concurrency", () => {
                 join: (...paths: string[]) => paths.join("/"),
               }),
               workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
-                getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
+                getRepoConfig: () => Effect.succeed(repoConfig),
               }),
               terminalService: {
                 acquireTaskCleanup: () =>
@@ -79,8 +79,16 @@ describe("blocker and close concurrency", () => {
               },
             });
             const input = { repoPath: "/repo", taskId: current.id };
-            const block = service.buildBlocked({ ...input, reason: "Needs clarification" });
-            const close = service.closeTask({ ...input, removeWorktree: false });
+            const block = service.buildBlocked({
+              workspaceId: "workspace-1",
+              ...input,
+              reason: "Needs clarification",
+            });
+            const close = service.closeTask({
+              workspaceId: "workspace-1",
+              ...input,
+              removeWorktree: false,
+            });
             const first = yield* Effect.forkScoped(
               Effect.result(scenario === "blocker writing" ? block : close),
             );

@@ -1,9 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 import path from "node:path";
 import { globalConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import type { OpenTaskDirectories } from "../../ports/task-repository-ports";
+import type { TaskWorktreeDirectories } from "../../ports/task-repository-ports";
+import type {
+  WorkspaceSessionStoreScope,
+  WorktreeOwnershipChat,
+} from "../../ports/workspace-session-store-port";
 import {
   createSettingsConfigTestDouble,
   createWorktreeFilePortTestDouble,
@@ -32,17 +37,48 @@ const record = (id: string, directory: string): WorkspaceSession => ({
   archivedAt: null,
 });
 
+/** The columns of a saved chat that the ownership read returns. */
+const ownershipChat = (workspaceId: string, session: WorkspaceSession): WorktreeOwnershipChat => ({
+  workspaceId,
+  id: session.id,
+  runtimeKind: session.runtimeKind,
+  externalSessionId: session.externalSessionId,
+  workingDirectory: session.executionTarget.workingDirectory,
+  generatedTitle: session.generatedTitle,
+  manualTitle: session.manualTitle,
+  archivedAt: session.archivedAt,
+});
+
+/** A store that returns the chats of each requested workspace and records each read. */
+const chatStore = (
+  chatsFor: (workspaceId: string) => WorkspaceSession[],
+  reads: string[][] = [],
+) => ({
+  listForWorktreeOwnership: ({
+    workspaces,
+  }: {
+    workspaces: readonly WorkspaceSessionStoreScope[];
+  }) => {
+    reads.push(workspaces.map(({ workspaceId }) => workspaceId));
+    return Effect.succeed(
+      workspaces.flatMap(({ workspaceId }) =>
+        chatsFor(workspaceId).map((session) => ownershipChat(workspaceId, session)),
+      ),
+    );
+  },
+});
+
 const dependenciesFor = (
   records: WorkspaceSession[],
   nativeDirectories: ReadonlyMap<string, string>,
 ): Parameters<typeof readWorktreeOwners>[0] => ({
-  settingsConfig: createSettingsConfigTestDouble({ readConfig: () => Effect.succeed(null) }),
+  settingsConfig: createSettingsConfigTestDouble({
+    readConfig: () => Effect.succeed(createDefaultGlobalConfig()),
+  }),
   worktreeFiles: createWorktreeFilePortTestDouble({
     resolveWorktreeRemovalPath: (directory) => Effect.succeed(directory),
   }),
-  store: {
-    listForWorktreeOwnership: () => Effect.succeed(records),
-  },
+  store: chatStore((workspaceId) => (workspaceId === scope.workspaceId ? records : [])),
   taskOwnership: { listOpenTasksForWorktreeOwnership: () => Effect.succeed([]) },
   claudeSessionMetadata: {
     readWorkingDirectory: (externalSessionId: string) => {
@@ -147,8 +183,11 @@ describe("workspace session worktree owners", () => {
           },
         }),
       );
-    dependencies.store.listForWorktreeOwnership = (candidate: typeof scope) =>
-      Effect.succeed(candidate.workspaceId === "closed" ? [child] : [source]);
+    const reads: string[][] = [];
+    dependencies.store = chatStore(
+      (workspaceId) => (workspaceId === "closed" ? [child] : [source]),
+      reads,
+    );
     dependencies.worktreeFiles.resolveWorktreeRemovalPath = (directory) =>
       Effect.succeed(
         directory === "/aliases/source" ? source.executionTarget.workingDirectory : directory,
@@ -157,6 +196,8 @@ describe("workspace session worktree owners", () => {
     expect(await Effect.runPromise(chatOwners(dependencies, source))).toEqual([
       { workspaceId: "closed", sessionId: child.id, title: "child" },
     ]);
+    // One store read covers every configured workspace.
+    expect(reads).toEqual([[scope.workspaceId, "closed"]]);
   });
 
   test("fails when another workspace uses the worktree as its repository checkout", async () => {
@@ -215,7 +256,7 @@ describe("workspace session worktree owners", () => {
 });
 
 describe("workspace session worktree task owners", () => {
-  const openTask = (taskId: string, ...sessionDirectories: string[]): OpenTaskDirectories => ({
+  const openTask = (taskId: string, ...sessionDirectories: string[]): TaskWorktreeDirectories => ({
     taskId,
     title: `Task ${taskId}`,
     sessionDirectories,
@@ -238,7 +279,7 @@ describe("workspace session worktree task owners", () => {
       },
     },
   });
-  const dependenciesFor = (tasksByWorkspace: Record<string, OpenTaskDirectories[]>) => ({
+  const dependenciesFor = (tasksByWorkspace: Record<string, TaskWorktreeDirectories[]>) => ({
     settingsConfig: createSettingsConfigTestDouble({
       readConfig: () => Effect.succeed(config),
       resolveConfiguredPath: (value: string) => value,
@@ -248,12 +289,18 @@ describe("workspace session worktree task owners", () => {
       resolveWorktreeRemovalPath: (directory: string) =>
         Effect.succeed(directory === "/aliases/shared" ? "/worktrees/shared" : directory),
     }),
-    store: {
-      listForWorktreeOwnership: (_scope: typeof scope) => Effect.succeed<WorkspaceSession[]>([]),
-    },
+    store: chatStore(() => []),
     taskOwnership: {
-      listOpenTasksForWorktreeOwnership: (candidate: typeof scope) =>
-        Effect.succeed(tasksByWorkspace[candidate.workspaceId] ?? []),
+      listOpenTasksForWorktreeOwnership: ({
+        workspaces,
+      }: {
+        workspaces: readonly WorkspaceSessionStoreScope[];
+      }) =>
+        Effect.succeed(
+          workspaces.flatMap(({ workspaceId }) =>
+            (tasksByWorkspace[workspaceId] ?? []).map((task) => ({ ...task, workspaceId })),
+          ),
+        ),
     },
     claudeSessionMetadata: {
       readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
@@ -278,8 +325,9 @@ describe("workspace session worktree task owners", () => {
     const source = record("source", "/worktrees/shared");
     const sibling = record("sibling", "/worktrees/shared");
     const dependencies = dependenciesFor({ workspace: [openTask("shared")] });
-    dependencies.store.listForWorktreeOwnership = (candidate) =>
-      Effect.succeed(candidate.workspaceId === scope.workspaceId ? [source, sibling] : []);
+    dependencies.store = chatStore((workspaceId) =>
+      workspaceId === scope.workspaceId ? [source, sibling] : [],
+    );
 
     await expect(
       Effect.runPromise(requireNoWorktreeOwners(dependencies, scope, source)),

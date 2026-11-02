@@ -1,5 +1,6 @@
 import type {
   AgentRuntimes,
+  WorkspaceRef,
   NotificationSettings,
   RuntimeDescriptor,
   RuntimeKind,
@@ -391,7 +392,7 @@ type WorkspaceStageProps = {
   workspaceState: WorkspaceStateContextValue;
   isFinalizing: boolean;
   onBack: () => void;
-  onComplete: (repoPath: string) => Promise<void>;
+  onComplete: (scope: WorkspaceRef) => Promise<void>;
 };
 
 export function WorkspaceStage({

@@ -1,6 +1,7 @@
 import type { TerminalContext, TerminalListFilter } from "@openducktor/contracts";
 
 export type TerminalTaskScope = {
+  workspaceId: string;
   repoPath: string;
   taskIds: readonly string[];
 };
@@ -18,7 +19,7 @@ export const isWorkspaceSessionTerminalContext = (
 
 export const terminalContextKey = (context: TerminalContext): string =>
   "taskId" in context
-    ? JSON.stringify([context.repoPath, context.taskId])
+    ? JSON.stringify(["task", context.workspaceId, context.repoPath, context.taskId])
     : isWorkspaceSessionTerminalContext(context)
       ? terminalWorkspaceSessionKey(context)
       : "__unassociated__";
@@ -39,6 +40,7 @@ export const terminalContextMatchesTaskScope = (
   scope: TerminalTaskScope,
 ): boolean =>
   "taskId" in context &&
+  context.workspaceId === scope.workspaceId &&
   context.repoPath === scope.repoPath &&
   scope.taskIds.includes(context.taskId);
 
@@ -51,6 +53,7 @@ export const terminalContextMatchesFilter = (
   if (filter.kind === "workspace_session")
     return terminalContextMatchesWorkspaceSession(context, filter);
   return terminalContextMatchesTaskScope(context, {
+    workspaceId: filter.workspaceId,
     repoPath: filter.repoPath,
     taskIds: [filter.taskId],
   });
@@ -58,7 +61,12 @@ export const terminalContextMatchesFilter = (
 
 export const terminalListFilterForContext = (context: TerminalContext): TerminalListFilter => {
   if (isTaskTerminalContext(context))
-    return { kind: "task", repoPath: context.repoPath, taskId: context.taskId };
+    return {
+      kind: "task",
+      workspaceId: context.workspaceId,
+      repoPath: context.repoPath,
+      taskId: context.taskId,
+    };
   if (isWorkspaceSessionTerminalContext(context)) return context;
   return { kind: "unassociated" };
 };

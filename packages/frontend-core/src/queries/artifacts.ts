@@ -1,8 +1,11 @@
+import { workspaceScopeValue } from "./workspace-scope";
+import { queryMatchesWorkspace } from "./workspace-scope";
+import { type WorkspaceRef } from "@openducktor/contracts";
 import type {
   ArtifactSaveResult,
   ArtifactDeleteResult,
-  ArtifactReadRequest,
   TaskArtifact,
+  ArtifactReadResult,
   TaskArtifactChange,
   TaskArtifactCollection,
   TaskEventCursor,
@@ -19,39 +22,33 @@ import { taskDocumentQueryOptions } from "./documents";
 
 export const artifactQueryKeys = {
   all: ["task-artifacts"] as const,
-  collection: (repoPath: string, taskId: string) =>
-    ["task-artifacts", "collection", repoPath, taskId] as const,
-  content: (repoPath: string, taskId: string, artifactId: string) =>
-    ["task-artifacts", "content", repoPath, taskId, artifactId] as const,
+  collection: (repoPath: WorkspaceRef, taskId: string) =>
+    ["task-artifacts", "collection", workspaceScopeValue(repoPath), taskId] as const,
+  content: (repoPath: WorkspaceRef, taskId: string, artifactId: string) =>
+    ["task-artifacts", "content", workspaceScopeValue(repoPath), taskId, artifactId] as const,
   /** A read that keeps the bytes outside the query cache, such as in a device file. */
-  file: (repoPath: string, taskId: string, artifactId: string) =>
-    ["task-artifacts", "file", repoPath, taskId, artifactId] as const,
+  file: (repoPath: WorkspaceRef, taskId: string, artifactId: string) =>
+    ["task-artifacts", "file", workspaceScopeValue(repoPath), taskId, artifactId] as const,
 };
 
-export type TaskArtifactContent = { artifact: TaskArtifact; version: string; bytes: Uint8Array };
-export type TaskArtifactChunk = {
-  dataBase64: string;
-  byteOffset: number;
-  totalBytes: number;
-};
-const READ_CHUNK_BYTES = 1_048_576;
+export type TaskArtifactContent = { artifact: TaskArtifact; bytes: Uint8Array };
 const commits = new WeakMap<object, TaskEventCursor>();
 const saveOwners = new WeakMap<object, symbol>();
 
 export const taskArtifactsQueryOptions = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
 ) =>
   queryOptions({
     queryKey: artifactQueryKeys.collection(repoPath, taskId),
-    queryFn: () => connectionHost(queryClient).taskArtifactsList({ repoPath, taskId }),
+    queryFn: () => connectionHost(queryClient).taskArtifactsList({ ...repoPath, taskId }),
   });
 
 /** Start the selected workflow read before navigation renders the session. */
 export const prefetchTaskArtifacts = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
   role: AgentRole | null,
 ): Promise<void> => {
@@ -65,76 +62,32 @@ export const prefetchTaskArtifacts = async (
   await Promise.all([refresh, read]);
 };
 
-/**
- * Reads one version of an artifact in chunks. `write` receives each chunk in order. The read fails
- * when the artifact changes or a chunk does not continue it.
- *
- * It reads `context.signal` only after a chunk arrives. TanStack Query cancels a fetch that has
- * read its signal when the last view unmounts, so a view that remounts would start the read again.
- */
+/** Keep a shared read alive across preview remounts; explicit cancellation still drops it. */
 export const readTaskArtifact = async (
   queryClient: QueryClient,
-  scope: { repoPath: string; taskId: string; artifactId: string },
+  scope: WorkspaceRef & { taskId: string; artifactId: string },
   context: { readonly signal: AbortSignal },
-  write: (chunk: TaskArtifactChunk) => void | Promise<void>,
-): Promise<{ artifact: TaskArtifact; version: string }> => {
-  const host = connectionHost(queryClient);
-  let offset = 0;
-  let version: string | undefined;
-  let totalBytes: number | undefined;
-  while (true) {
-    const request: ArtifactReadRequest = {
-      ...scope,
-      byteOffset: offset,
-      maxBytes: READ_CHUNK_BYTES,
-    };
-    if (version) request.expectedVersion = version;
-    const chunk = await host.taskArtifactRead(request);
-    // Let a shared first chunk finish when its preview unmounts; explicit cancellation still drops it.
-    if (context.signal.aborted) throw new CancelledError();
-    if (chunk.byteOffset !== offset || (version && chunk.version !== version)) {
-      throw new Error(
-        "The artifact changed while loading. Open it again to read its current content.",
-      );
-    }
-    totalBytes ??= chunk.totalBytes;
-    const next = offset + decodedByteSize(chunk.dataBase64);
-    if (next > totalBytes || chunk.totalBytes !== totalBytes) {
-      throw new Error("The artifact read returned an invalid size. Open it again.");
-    }
-    await write({ dataBase64: chunk.dataBase64, byteOffset: offset, totalBytes });
-    version = chunk.version;
-    if (chunk.nextByteOffset === null) {
-      if (next !== totalBytes) throw new Error("The artifact read is incomplete. Open it again.");
-      return { artifact: chunk.artifact, version };
-    }
-    if (chunk.nextByteOffset !== next || next <= offset) {
-      throw new Error("The artifact read did not advance. Open it again.");
-    }
-    offset = next;
-  }
+): Promise<ArtifactReadResult> => {
+  const result = await connectionHost(queryClient).taskArtifactRead(scope);
+  if (context.signal.aborted) throw new CancelledError();
+  return result;
 };
 
 export const taskArtifactContentQueryOptions = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
   artifactId: string,
 ) =>
   queryOptions({
     queryKey: artifactQueryKeys.content(repoPath, taskId, artifactId),
     queryFn: async (context): Promise<TaskArtifactContent> => {
-      let bytes = new Uint8Array(0);
-      const read = await readTaskArtifact(
+      const result = await readTaskArtifact(
         queryClient,
-        { repoPath, taskId, artifactId },
+        { ...repoPath, taskId, artifactId },
         context,
-        ({ dataBase64, byteOffset, totalBytes }) => {
-          if (byteOffset === 0) bytes = new Uint8Array(totalBytes);
-          bytes.set(decodeBase64(dataBase64), byteOffset);
-        },
       );
-      return { ...read, bytes };
+      return { artifact: result.artifact, bytes: decodeBase64(result.dataBase64) };
     },
     structuralSharing: (previous, incoming) => {
       // SAFETY: this query key holds only TaskArtifactContent values.
@@ -157,7 +110,7 @@ const equalBytes = (first: Uint8Array, second: Uint8Array): boolean => {
 
 export const refreshArtifactQueries = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   changes?: readonly TaskArtifactChange[],
   permissionTaskIds: readonly string[] = [],
   cursor?: TaskEventCursor,
@@ -221,7 +174,7 @@ export const resetArtifactSaveOwners = (queryClient: QueryClient): void => {
 
 export const removeArtifactQueries = async (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskIds?: readonly string[],
 ): Promise<void> => {
   const filter = scopeFilter(repoPath, taskIds);
@@ -233,7 +186,7 @@ export const removeArtifactQueries = async (
 /** A receipt cannot restore metadata after a newer event, snapshot, or workspace release. */
 export const createArtifactSaveGuard = (
   queryClient: QueryClient,
-  repoPath: string,
+  repoPath: WorkspaceRef,
   taskId: string,
 ) => {
   const queryKey = artifactQueryKeys.collection(repoPath, taskId);
@@ -281,10 +234,11 @@ export const createArtifactSaveGuard = (
   };
 };
 
-const scopeFilter = (repoPath: string, taskIds?: readonly string[]) => ({
+const scopeFilter = (repoPath: WorkspaceRef, taskIds?: readonly string[]) => ({
   queryKey: artifactQueryKeys.all,
   predicate: (query: { queryKey: readonly unknown[] }) =>
-    query.queryKey[2] === repoPath && (!taskIds || taskIds.includes(String(query.queryKey[3]))),
+    queryMatchesWorkspace(query, repoPath) &&
+    (!taskIds || taskIds.includes(String(query.queryKey[3]))),
 });
 
 const decodedByteSize = (value: string): number =>

@@ -8,6 +8,7 @@ import type {
 } from "@openducktor/contracts";
 import {
   agentSessionStatusFromActivity,
+  agentSessionScopesEqual,
   describeAgentSessionScope,
   resolveAgentSessionAssociationTransition,
 } from "@openducktor/core";
@@ -491,10 +492,8 @@ const sameSessionAssociation = (
   if (left.kind !== right.kind) {
     return false;
   }
-  if (left.kind !== "workflow") {
-    return true;
-  }
-  return right.kind === "workflow" && left.taskId === right.taskId && left.role === right.role;
+  if (left.kind === "unbound" || right.kind === "unbound") return true;
+  return agentSessionScopesEqual(left, right);
 };
 
 export const closeProjectedBackgroundQuestions = (

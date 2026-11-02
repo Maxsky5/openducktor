@@ -8,6 +8,7 @@ const autopilotOutcomeFieldsSchema = z.strictObject({
   workspaceId: z.string().min(1),
   repoPath: z.string().min(1),
   task: z.strictObject({ id: z.string().min(1), title: z.string() }),
+  workflowId: z.string().min(1),
   eventId: autopilotEventIdSchema,
   actionId: autopilotActionIdSchema,
   occurredAt: z.string().min(1),

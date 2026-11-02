@@ -78,7 +78,6 @@ const workspaceState = (
     error: null,
   }),
   addWorkspace: async (input) => record(input),
-  saveWorkspaceModelDefaults: async () => {},
   selectWorkspace: async () => {},
   closeWorkspace: async () => {},
   removeWorkspace: async () => {},
@@ -90,18 +89,17 @@ const workspaceState = (
   loadRepoSettings: async () => {
     throw new Error("Not used");
   },
-  saveRepoSettings: async () => {},
-  loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
   detectGithubRepository: async () => null,
-  saveGlobalGitConfig: async () => {},
   previewSettingsSnapshotRuntime: async () => ({ impact: null }),
   saveSettingsSnapshot: async () => ({
     type: "saved" as const,
+    shared: "saved" as const,
+    preferences: "saved" as const,
     workspaces: [],
     runtimeApplications: [],
     refreshError: null,
   }),
-  saveAgentModelFavorites: async () => createSettingsSnapshotFixture(),
+  saveAgentModelFavorites: async () => [],
   ...overrides,
 });
 

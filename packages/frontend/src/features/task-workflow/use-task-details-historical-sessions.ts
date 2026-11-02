@@ -9,6 +9,7 @@ import { useAgentSessionLists } from "@openducktor/frontend-core/queries/use-age
 export const TASK_SESSION_HISTORY_ERROR_TOAST_ID = "task-session-history-error";
 
 type UseTaskDetailsHistoricalSessionsArgs = {
+  workspaceId: string | null;
   repoPath: string | null;
   taskId: string | null;
   enabled: boolean;
@@ -21,6 +22,7 @@ type ReportedSessionHistoryError = {
 };
 
 export function useTaskDetailsHistoricalSessions({
+  workspaceId,
   repoPath,
   taskId,
   enabled,
@@ -29,6 +31,7 @@ export function useTaskDetailsHistoricalSessions({
   const queryClient = useQueryClient();
   const taskIds = useMemo(() => (taskId ? [taskId] : []), [taskId]);
   const listArgs: Parameters<typeof useAgentSessionLists>[0] = {
+    workspaceId,
     repoPath,
     taskIds,
     enabled: enabled && repoPath !== null && taskIds.length > 0,
@@ -39,7 +42,8 @@ export function useTaskDetailsHistoricalSessions({
   }
   const sessionLists = useAgentSessionLists(listArgs);
   const sessionListsError = sessionLists.error;
-  const errorKey = repoPath !== null && taskId !== null ? `${repoPath}:${taskId}` : null;
+  const errorKey =
+    repoPath !== null && taskId !== null ? `${workspaceId}:${repoPath}:${taskId}` : null;
   const reportedErrorRef = useRef<ReportedSessionHistoryError | null>(null);
   useEffect(() => {
     if (!sessionListsError || !errorKey) {

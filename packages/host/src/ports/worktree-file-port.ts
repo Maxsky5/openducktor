@@ -1,4 +1,4 @@
-import { Context, type Effect } from "effect";
+import type { Effect } from "effect";
 import type {
   HostOperationErrorAggregate,
   HostValidationErrorAggregate,
@@ -34,7 +34,3 @@ export type WorktreeFilePort = {
   ): Effect.Effect<ResolvedPathWithinRoot, HostOperationErrorAggregate>;
   pathIsWithinRoot(root: string, candidate: string): Effect.Effect<boolean, WorktreeFileError>;
 };
-
-export class WorktreeFilePortTag extends Context.Service<WorktreeFilePortTag, WorktreeFilePort>()(
-  "@openducktor/host/WorktreeFilePort",
-) {}

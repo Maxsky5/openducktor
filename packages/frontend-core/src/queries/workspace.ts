@@ -115,7 +115,15 @@ export const writeWorkspaceListToQuery = (
     },
     { revert: false },
   );
-  queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), recordsOrUpdater);
+  const catalog = queryClient.getQueryData<WorkspaceCatalog>(workspaceQueryKeys.catalog());
+  const records = Array.isArray(recordsOrUpdater)
+    ? recordsOrUpdater
+    : recordsOrUpdater(
+        queryClient.getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list()) ??
+          catalog?.openWorkspaces,
+      );
+  if (catalog) writeWorkspaceCatalogToQuery(queryClient, { ...catalog, openWorkspaces: records });
+  else queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), records);
 };
 
 export const writeWorkspaceCatalogToQuery = (
@@ -130,6 +138,7 @@ export const writeWorkspaceCatalogToQuery = (
     { revert: false },
   );
   queryClient.setQueryData<WorkspaceCatalog>(workspaceQueryKeys.catalog(), catalog);
+  queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), catalog.openWorkspaces);
 };
 
 export const invalidateWorkspaceSettingsSnapshot = async (

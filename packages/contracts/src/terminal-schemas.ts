@@ -15,6 +15,7 @@ const terminalSessionIdSchema = z.string().trim().min(1);
 
 const taskTerminalContextSchema = z
   .object({
+    workspaceId: terminalWorkspaceIdSchema,
     repoPath: terminalRepoPathSchema,
     taskId: terminalTaskIdSchema,
   })
@@ -176,6 +177,7 @@ export const terminalListFilterSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("task"),
+      workspaceId: terminalWorkspaceIdSchema,
       repoPath: terminalRepoPathSchema,
       taskId: terminalTaskIdSchema,
     })

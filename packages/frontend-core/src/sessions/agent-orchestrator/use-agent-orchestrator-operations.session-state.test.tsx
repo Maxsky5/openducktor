@@ -400,14 +400,17 @@ describe("use-agent-orchestrator-operations session state", () => {
 
   test("task session record query changes remove sessions whose durable records disappeared", async () => {
     const dependencies = createTestDependencies(host);
-    dependencies.queryClient.setQueryData(agentSessionQueryKeys.list("/tmp/repo", "task-1"), [
-      persistedSessionFixture,
-      {
-        ...persistedSessionFixture,
-        externalSessionId: "external-spec",
-        role: "spec",
-      },
-    ]);
+    dependencies.queryClient.setQueryData(
+      agentSessionQueryKeys.list({ workspaceId: "repo", repoPath: "/tmp/repo" }, "task-1"),
+      [
+        persistedSessionFixture,
+        {
+          ...persistedSessionFixture,
+          externalSessionId: "external-spec",
+          role: "spec",
+        },
+      ],
+    );
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
@@ -426,13 +429,16 @@ describe("use-agent-orchestrator-operations session state", () => {
       ).toEqual(["external-1", "external-spec"]);
 
       await harness.run(async () => {
-        dependencies.queryClient.setQueryData(agentSessionQueryKeys.list("/tmp/repo", "task-1"), [
-          {
-            ...persistedSessionFixture,
-            externalSessionId: "external-spec",
-            role: "spec",
-          },
-        ]);
+        dependencies.queryClient.setQueryData(
+          agentSessionQueryKeys.list({ workspaceId: "repo", repoPath: "/tmp/repo" }, "task-1"),
+          [
+            {
+              ...persistedSessionFixture,
+              externalSessionId: "external-spec",
+              role: "spec",
+            },
+          ],
+        );
       });
 
       await harness.waitFor((state) =>
@@ -836,7 +842,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         host,
         {
           agentSessionsListForTasks: async (repoPath) =>
-            repoPath === "/tmp/repo-a"
+            repoPath.repoPath === "/tmp/repo-a"
               ? [{ taskId: "task-1", agentSessions: [persistedSessionFixture] }]
               : [{ taskId: "task-1", agentSessions: [] }],
         },

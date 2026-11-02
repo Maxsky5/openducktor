@@ -2,6 +2,14 @@ import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, mock, test } from "bun:test";
 import type { GitProviderDescriptor, PullRequest } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { and, eq } from "drizzle-orm";
+import {
+  applyHostSharedConfigEdits,
+  readHostSharedConfig,
+} from "../../adapters/sqlite/sqlite-host-settings-store";
+import { tasks } from "../../adapters/sqlite/sqlite-host-database-schema";
+import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
+import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { GitProviderCapabilityError } from "../../ports/git-provider-errors";
 import type {
   GitProviderPort,
@@ -47,7 +55,9 @@ test.each(["not_configured", "disabled"] as const)(
       }),
     });
     expect(
-      await Effect.runPromise(service.repoPullRequestSync({ repoPath: "/repo" })),
+      await Effect.runPromise(
+        service.repoPullRequestSync({ workspaceId: "repo", repoPath: "/repo" }),
+      ),
     ).toMatchObject({
       ok: false,
       reason,
@@ -187,6 +197,119 @@ const createClosedLinkService = (persistedProviderId: string) => {
 };
 
 describe("createTaskService Pull Request provider ports", () => {
+  test("syncs the selected workspace when repository paths and task IDs are identical", async () => {
+    const harness = await createSqliteTaskStoreHarness({
+      workspaceId: "abcdefghij-one",
+      repoPath: "/repo",
+    });
+    try {
+      const template = await Effect.runPromise(workspaceSettingsService.getRepoConfig("repo"));
+      const first = { ...template, workspaceId: harness.workspaceId };
+      const second = { ...template, workspaceId: "abcdefghij-two" };
+      await Effect.runPromise(
+        harness.withHostDatabase("test.workspaces", (session) =>
+          session.transaction("test.workspaces", (transaction) =>
+            Effect.gen(function* () {
+              const current = yield* readHostSharedConfig(transaction);
+              yield* applyHostSharedConfigEdits(transaction, current, {
+                ...current,
+                workspaces: { [first.workspaceId]: first, [second.workspaceId]: second },
+              });
+            }),
+          ),
+        ),
+      );
+      const created = await Effect.runPromise(
+        harness.store.createTask({
+          workspaceId: first.workspaceId,
+          repoPath: "/repo",
+          status: "human_review",
+          task: { title: "First", issueType: "task", priority: 2 },
+        }),
+      );
+      await Effect.runPromise(
+        harness.withHostDatabase("test.sameTaskId", (session) =>
+          session.transaction("test.sameTaskId", (transaction) =>
+            Effect.gen(function* () {
+              const [row] = yield* transaction.execute(
+                (db) =>
+                  db
+                    .select()
+                    .from(tasks)
+                    .where(and(eq(tasks.workspaceId, first.workspaceId), eq(tasks.id, created.id))),
+                "test.firstTask",
+              );
+              if (!row) return yield* Effect.die(new Error("Missing fixture task."));
+              yield* transaction.execute(
+                (db) =>
+                  db.insert(tasks).values({
+                    ...row,
+                    workspaceId: second.workspaceId,
+                    title: "Second",
+                  }),
+                "test.secondTask",
+              );
+            }),
+          ),
+        ),
+      );
+      for (const workspace of [first, second])
+        await Effect.runPromise(
+          harness.store.setPullRequest({
+            workspaceId: workspace.workspaceId,
+            repoPath: "/repo",
+            taskId: created.id,
+            pullRequest: linkedPullRequest("gitlab"),
+          }),
+        );
+      const refreshedWorkspaces: string[] = [];
+      const provider = createProvider(
+        gitlabDescriptor,
+        createPullRequestPort("gitlab", {
+          refresh: ({ repoConfig, linkedPullRequest: linked }) =>
+            Effect.sync(() => {
+              refreshedWorkspaces.push(repoConfig.workspaceId);
+              return {
+                record: { ...linked, state: "closed_unmerged", updatedAt: "2026-05-03T10:00:00Z" },
+                sourceBranch: "odt/task",
+                targetBranch: "main",
+              };
+            }),
+        }),
+      );
+      const service = createTaskService({
+        atomicTaskStore: harness.store,
+        gitProviderResolver: Effect.runSync(createGitProviderResolver([provider])),
+        workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+          getRepoConfig: (workspaceId) =>
+            Effect.succeed(workspaceId === first.workspaceId ? first : second),
+        }),
+      });
+      await expect(
+        Effect.runPromise(
+          service.repoPullRequestSyncDetailed({
+            workspaceId: first.workspaceId,
+            repoPath: "/moved/repo",
+          }),
+        ),
+      ).rejects.toThrow("no longer matches");
+      expect(refreshedWorkspaces).toEqual([]);
+      await Effect.runPromise(service.repoPullRequestSyncDetailed(first));
+      expect(
+        (await Effect.runPromise(harness.store.getTaskMetadata({ ...second, taskId: created.id })))
+          .pullRequest?.state,
+      ).toBe("open");
+      await Effect.runPromise(service.repoPullRequestSyncDetailed(second));
+      expect(
+        (await Effect.runPromise(harness.store.getTaskMetadata({ ...first, taskId: created.id })))
+          .pullRequest?.state,
+      ).toBe("closed_unmerged");
+      expect(refreshedWorkspaces).toEqual([first.workspaceId, second.workspaceId]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   test("detects an open Pull Request through the configured provider port", async () => {
     const findOpenForSourceBranch = mock(() => Effect.succeed(resolvedPullRequest("gitlab")));
     const pullRequests = createPullRequestPort("gitlab", { findOpenForSourceBranch });
@@ -217,7 +340,7 @@ describe("createTaskService Pull Request provider ports", () => {
     });
 
     const result = await Effect.runPromise(
-      service.detectPullRequest({ repoPath: "/repo", taskId: "task-1" }),
+      service.detectPullRequest({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
     );
 
     expect(result).toEqual({
@@ -264,7 +387,9 @@ describe("createTaskService Pull Request provider ports", () => {
     });
 
     const failure = await Effect.runPromise(
-      service.detectPullRequest({ repoPath: "/repo", taskId: "task-1" }).pipe(Effect.flip),
+      service
+        .detectPullRequest({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" })
+        .pipe(Effect.flip),
     );
 
     expect(failure).toMatchObject({
@@ -299,6 +424,7 @@ describe("createTaskService Pull Request provider ports", () => {
 
     const result = await Effect.runPromise(
       service.linkPullRequest({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         number: 42,
@@ -311,6 +437,7 @@ describe("createTaskService Pull Request provider ports", () => {
       number: 42,
     });
     expect(setPullRequest).toHaveBeenCalledWith({
+      workspaceId: "repo",
       repoPath: "/repo",
       taskId: "task-1",
       pullRequest: linkedPullRequest("gitlab"),
@@ -340,11 +467,7 @@ describe("createTaskService Pull Request provider ports", () => {
 
     const failure = await Effect.runPromise(
       service
-        .linkPullRequest({
-          repoPath: "/repo",
-          taskId: "task-1",
-          number: 42,
-        })
+        .linkPullRequest({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1", number: 42 })
         .pipe(Effect.flip),
     );
 
@@ -377,7 +500,9 @@ describe("createTaskService Pull Request provider ports", () => {
     });
 
     const failure = await Effect.runPromise(
-      service.repoPullRequestSyncDetailed({ repoPath: "/repo" }).pipe(Effect.flip),
+      service
+        .repoPullRequestSyncDetailed({ workspaceId: "repo", repoPath: "/repo" })
+        .pipe(Effect.flip),
     );
 
     expect(failure).toMatchObject({
@@ -442,6 +567,7 @@ describe("createTaskService Pull Request provider ports", () => {
 
     await Effect.runPromise(
       service.upsertPullRequest({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         content: { title: "Task 42", body: "Task body" },
@@ -491,6 +617,7 @@ describe("createTaskService Pull Request provider ports", () => {
     const failure = await Effect.runPromise(
       service
         .linkMergedPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           removeWorktree: true,
@@ -510,6 +637,7 @@ describe("createTaskService Pull Request provider ports", () => {
 
     const result = await Effect.runPromise(
       service.linkMergedPullRequest({
+        workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
         removeWorktree: true,
@@ -528,6 +656,7 @@ describe("createTaskService Pull Request provider ports", () => {
     const failure = await Effect.runPromise(
       service
         .linkMergedPullRequest({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           removeWorktree: true,

@@ -13,7 +13,12 @@ import {
   agentWorkflowSessionForkInputSchema,
 } from "./agent-session-control-schemas";
 
-const workflowScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+const workflowScope = {
+  kind: "workflow" as const,
+  workspaceId: "repo",
+  taskId: "task-1",
+  role: "build" as const,
+};
 const repositoryScope = { kind: "repository" as const };
 
 describe("agent session control contracts", () => {

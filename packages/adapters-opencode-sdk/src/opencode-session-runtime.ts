@@ -1,3 +1,4 @@
+import type { AgentSessionScope } from "@openducktor/contracts";
 import {
   AgentSessionMessageAcceptanceUnknownError,
   AgentSessionMessageRefusedError,
@@ -150,7 +151,10 @@ export const createPrepareOpencodeSessionRuntime =
       consumedInboxIds: Set<string>;
     };
     const awaitingTurns = new Map<string, Set<AwaitingTurn>>();
-    const installedMcp = new Map<string, { repoPath: string; workingDirectory: string }>();
+    const installedMcp = new Map<
+      string,
+      { repoPath: string; workingDirectory: string; sessionScope?: AgentSessionScope | undefined }
+    >();
     const mcpInstallations = new Map<string, Promise<void>>();
     const mcpChanges = new Set<() => void>();
     let mcpVersion = 0;
@@ -246,8 +250,16 @@ export const createPrepareOpencodeSessionRuntime =
           });
     let controller: OpencodeSdkAdapter;
     const connectMcp = async (
-      identity: { repoPath: string; workingDirectory: string },
-      owner: { repoPath: string; workingDirectory: string },
+      identity: {
+        repoPath: string;
+        workingDirectory: string;
+        sessionScope?: AgentSessionScope | undefined;
+      },
+      owner: {
+        repoPath: string;
+        workingDirectory: string;
+        sessionScope?: AgentSessionScope | undefined;
+      },
     ) => {
       const directory = identity.workingDirectory;
       const requireCurrent = () => {
@@ -269,7 +281,10 @@ export const createPrepareOpencodeSessionRuntime =
             "The native configuration already contains an MCP server named 'openducktor'.",
             "Rename or remove the conflicting user MCP server, then restart the selected runtime.",
           );
-        const config = await options.resolveMcpServerConfig(identity.repoPath);
+        const config = await options.resolveMcpServerConfig(
+          identity.repoPath,
+          identity.sessionScope?.workspaceId,
+        );
         requireCurrent();
         await controller.client.mcp.add({
           server: "openducktor",
@@ -318,10 +333,18 @@ export const createPrepareOpencodeSessionRuntime =
       );
     };
     const mcpConfigured = new Set<string>();
-    const ensureMcp = (ref: { repoPath: string; workingDirectory: string }): Promise<void> => {
+    const ensureMcp = (ref: {
+      repoPath: string;
+      workingDirectory: string;
+      sessionScope?: AgentSessionScope | undefined;
+    }): Promise<void> => {
       const directory = ref.workingDirectory;
       let owner = installedMcp.get(directory);
-      if (owner && owner.repoPath !== ref.repoPath)
+      if (
+        owner &&
+        (owner.repoPath !== ref.repoPath ||
+          owner.sessionScope?.workspaceId !== ref.sessionScope?.workspaceId)
+      )
         return Promise.reject(
           operationError(
             ref,

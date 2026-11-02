@@ -9,20 +9,22 @@ import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 
 export const toAgentStudioTranscriptTarget = ({
   identity,
+  workspaceId,
   taskId,
   role,
 }: {
   identity: AgentSessionIdentity | null;
+  workspaceId: string | null;
   taskId: string;
   role: AgentRole;
 }): AgentSessionTranscriptTarget | null => {
-  if (!identity) {
+  if (!identity || !workspaceId) {
     return null;
   }
 
   return {
     ...identity,
-    sessionScope: workflowAgentSessionScope(taskId, role),
+    sessionScope: workflowAgentSessionScope(workspaceId, taskId, role),
   };
 };
 

@@ -64,11 +64,13 @@ export const issueImportUnavailableReason = (provider: IssueImportProvider): str
 
 /** The open source items of one result page of a search. */
 export const issueImportListQueryOptions = ({
+  workspaceId,
   repoPath,
   provider,
   search,
   cursor,
 }: {
+  workspaceId: string;
   repoPath: string;
   provider: IssueImportProvider | null;
   search: string;
@@ -76,12 +78,15 @@ export const issueImportListQueryOptions = ({
 }) =>
   provider === null
     ? skippedQueryOptions<IssueItemsListResult>({
-        queryKey: [...issueItemsQueryKeys.repo(repoPath), SKIPPED_QUERY_KEY_SEGMENT],
+        queryKey: [
+          ...issueItemsQueryKeys.repo({ workspaceId, repoPath }),
+          SKIPPED_QUERY_KEY_SEGMENT,
+        ],
         staleTime: Number.POSITIVE_INFINITY,
       })
     : queryOptions<IssueItemsListResult, Error, IssueItemsListResult, QueryKey>({
         queryKey: [
-          ...issueItemsQueryKeys.repo(repoPath),
+          ...issueItemsQueryKeys.repo({ workspaceId, repoPath }),
           provider.config.id,
           provider.config.repository,
           provider.config.settings?.areaPath,
@@ -89,7 +94,7 @@ export const issueImportListQueryOptions = ({
           cursor,
         ],
         queryFn: ({ client }) =>
-          connectionHost(client).issueItemsList({ repoPath, search, cursor }),
+          connectionHost(client).issueItemsList({ workspaceId, repoPath, search, cursor }),
       });
 
 /**

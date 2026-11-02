@@ -1,4 +1,8 @@
-import { azureDevOpsRepositorySchema, type AzureDevOpsRepository } from "@openducktor/contracts";
+import {
+  azureDevOpsRepositorySchema,
+  type AzureDevOpsRepository,
+  type WorkspaceRef,
+} from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
 import type { AzureDevOpsConnectionService } from "../../application/git/azure-devops-connection-service";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
@@ -10,8 +14,7 @@ import {
   requireString,
 } from "./command-inputs";
 
-type ParsedConnectionInput = {
-  repoPath: string;
+type ParsedConnectionInput = WorkspaceRef & {
   repository: AzureDevOpsRepository;
 };
 
@@ -25,6 +28,10 @@ const parseConnectionInput = (args: HostCommandArgs, command: string) => {
     });
   }
   const input: ParsedConnectionInput = {
+    workspaceId: requireString(
+      commandInputStringSchema.safeParse(record.workspaceId),
+      "workspaceId",
+    ),
     repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
     repository: repository.data,
   };

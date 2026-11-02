@@ -146,7 +146,11 @@ function RemoveTask() {
   const client = useQueryClient();
   return (
     <button
-      onClick={() => client.setQueryData(taskQueryKeys.repoData(workspace.repoPath), { tasks: [] })}
+      onClick={() =>
+        client.setQueryData(taskQueryKeys.repoData(workspace), {
+          tasks: [],
+        })
+      }
     >
       Remove task
     </button>
@@ -430,7 +434,11 @@ test("task and chat switches keep their inputs and terminal viewports and stop h
       summary: {
         terminalId: key,
         label: key,
-        context: { repoPath: current.repoPath, taskId: "current" },
+        context: {
+          workspaceId: current.workspaceId,
+          repoPath: current.repoPath,
+          taskId: "current",
+        },
         initialWorkingDir: current.repoPath,
         createdAt: "2026-10-18T00:00:00.000Z",
         lifecycle: "running",

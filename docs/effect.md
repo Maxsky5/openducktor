@@ -95,7 +95,7 @@ import { Layer } from "effect";
 
 export const SettingsConfigPortLive = Layer.succeed(
   SettingsConfigPortTag,
-  createSettingsConfigAdapter(),
+  createSettingsConfigAdapter({ configPath, sharedSettings }),
 );
 ```
 

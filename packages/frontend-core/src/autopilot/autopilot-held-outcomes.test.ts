@@ -9,6 +9,7 @@ const heldState = (): AutopilotState => ({
       workspaceId: "alpha",
       repoPath: "/repos/alpha",
       task: { id: "task-1", title: "Task" },
+      workflowId: "openducktor",
       eventId: "taskRejectedByQa",
       actionId: "startReviewQaFeedbacks",
       occurredAt: "2026-10-10T00:00:00.000Z",

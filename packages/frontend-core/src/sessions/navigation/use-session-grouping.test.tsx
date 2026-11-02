@@ -1,6 +1,6 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot, SidebarSessionGrouping } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
@@ -29,7 +29,9 @@ describe("useSessionGrouping", () => {
   test("starts grouped and prevents writes until settings are loaded", async () => {
     const read = createDeferred<SettingsSnapshot>();
     const saved = createSettingsSnapshotFixture();
-    const workspaceUpdateSidebarSessionGrouping = mock(async () => saved);
+    const workspaceUpdateSidebarSessionGrouping = mock(
+      async () => saved.appearance.sidebarSessionGrouping,
+    );
     const harness = createHookHarness(() => useSessionGrouping(), undefined, {
       wrapper: createWrapper({
         workspaceGetSettingsSnapshot: async () => read.promise,
@@ -57,7 +59,7 @@ describe("useSessionGrouping", () => {
         theme: "dark",
         appearance: { ...initial.appearance, sidebarSessionGrouping: "none" },
       });
-      const write = createDeferred<SettingsSnapshot>();
+      const write = createDeferred<SidebarSessionGrouping>();
       const workspaceUpdateSidebarSessionGrouping = mock(async () => write.promise);
       const feedback = createFeedbackFake();
       const harness = createHookHarness(
@@ -88,7 +90,7 @@ describe("useSessionGrouping", () => {
           client.setQueryData(workspaceQueryKeys.settingsSnapshot(), { ...initial, theme: "dark" });
         });
         expect(harness.getLatest()).toMatchObject({ grouping: "none", disabled: false });
-        if (result === "success") write.resolve(saved);
+        if (result === "success") write.resolve(saved.appearance.sidebarSessionGrouping);
         else write.reject(new Error("Config directory is read-only"));
         await harness.waitFor((state) =>
           result === "success"
@@ -111,11 +113,10 @@ describe("useSessionGrouping", () => {
 
   test("saves a change made during a save after it, and keeps the last change", async () => {
     const initial = createSettingsSnapshotFixture();
-    const snapshotOf = (grouping: "task" | "none") =>
-      createSettingsSnapshotFixture({
-        appearance: { ...initial.appearance, sidebarSessionGrouping: grouping },
-      });
-    const writes = [createDeferred<SettingsSnapshot>(), createDeferred<SettingsSnapshot>()];
+    const writes = [
+      createDeferred<SidebarSessionGrouping>(),
+      createDeferred<SidebarSessionGrouping>(),
+    ];
     const workspaceUpdateSidebarSessionGrouping = mock(
       async (_grouping: "task" | "none") =>
         // SAFETY: the test makes exactly two writes.
@@ -136,12 +137,12 @@ describe("useSessionGrouping", () => {
       await harness.waitFor((state) => state.grouping === "task");
       expect(workspaceUpdateSidebarSessionGrouping.mock.calls).toEqual([["none"]]);
 
-      writes[0]?.resolve(snapshotOf("none"));
+      writes[0]?.resolve("none");
       await harness.waitFor(() => workspaceUpdateSidebarSessionGrouping.mock.calls.length === 2);
       expect(harness.getLatest().grouping).toBe("task");
       expect(workspaceUpdateSidebarSessionGrouping.mock.calls).toEqual([["none"], ["task"]]);
 
-      writes[1]?.resolve(snapshotOf("task"));
+      writes[1]?.resolve("task");
       await harness.waitFor((state) => state.grouping === "task");
     } finally {
       await harness.unmount();

@@ -6,17 +6,13 @@ import {
   createWorkflowLiveObserver,
   workflowShutdown,
 } from "./workflow-workspace-observation";
-import { createLiveSessionRootRefsReader } from "./live-session-root-refs";
 import { createEffectHostCommandRouter } from "../../interface/router/host-command-router";
 import { createRuntimeAdmissionGate } from "@openducktor/runtime-orchestration";
 import { createNodeNotificationServices } from "./node-notification-services";
 import { createNotificationCommandHandlers } from "../../interface/commands/notification-command-handlers";
 import { createAutopilotCommandHandlers } from "../../interface/commands/autopilot-command-handlers";
-import {
-  type AutopilotService,
-  createAutopilotService,
-} from "../../application/autopilot/autopilot-service";
-import { withConfigCommit } from "../../adapters/config/config-commit";
+import type { AutopilotService } from "../../application/autopilot/autopilot-service";
+import { createAutopilotService } from "../../application/autopilot/autopilot-service";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { createNodeLocalToolCommandHandlers } from "./node-local-tool-command-handlers";
 import { createNodeGitProviderCommandHandlers } from "./node-git-provider-command-handlers";
@@ -36,7 +32,7 @@ import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/w
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createRepoActionService } from "../../application/actions/repo-action-service";
 import { createWorktreeActionRunner } from "../../application/actions/worktree-action-runner";
-import { createTerminalService } from "../../application/terminals/terminal-service";
+import { createNodeTerminalService } from "./node-terminal-composition";
 import { createNodeSessionLaunchControls } from "./node-session-launch-controls";
 import {
   resolveSessionMessageParts,
@@ -45,7 +41,6 @@ import {
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
 import type { AzureAreaPathsPort } from "../../ports/azure-area-paths-port";
-import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createLocalAttachmentCommandHandlers } from "../../interface/commands/local-attachment-command-handlers";
 import { createPullRequestReviewCommandHandlers } from "../../interface/commands/pull-request-review-command-handlers";
 import { createRuntimeDefinitionsCommandHandlers } from "../../interface/commands/runtime-definitions-command-handlers";
@@ -60,12 +55,12 @@ import type {
   CreateNodeHostCommandRouterInput,
   EffectNodeHostCommandRouter,
 } from "./node-host-command-router-types";
-import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import { createNodeAgentSessionLiveState } from "./node-agent-session-live-state";
 import { createNodeMessageDelivery } from "./node-message-delivery";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeHostRouterLifecycle } from "./node-host-router-lifecycle";
+import type { NodeHostSharedPorts } from "./node-shared-storage";
 import { createNodeBrowser } from "./node-browser-composition";
 import { createNodeWorkspaceStorageRemoval } from "./node-workspace-storage-removal";
 import { createBrowserCommandHandlers } from "../../interface/commands/browser-command-handlers";
@@ -78,7 +73,7 @@ import { createNodeSessionStartupTracker } from "./node-session-startup-progress
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 export const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
-  defaultPorts: NodeHostDefaultPorts,
+  defaultPorts: NodeHostSharedPorts,
   gitProviderResolver: GitProviderResolver,
   azureDevOpsConnection: AzureDevOpsConnectionPort | undefined,
   azureAreaPaths: AzureAreaPathsPort,
@@ -102,7 +97,6 @@ export const assembleNodeEffectHostCommandRouter = (
     runtimeHealth,
     settingsConfig: baseSettingsConfig,
     systemCommands,
-    terminalPty,
     browserEngine,
     browserAutomation,
     toolDiscovery,
@@ -112,27 +106,25 @@ export const assembleNodeEffectHostCommandRouter = (
   } = defaultPorts;
   let autopilot: AutopilotService | undefined; // Autopilot needs services that this function creates later, so the hooks bind it late.
   const notificationComposition = createNodeNotificationServices(
-    withConfigCommit(withTaskWorkflowSettings(baseSettingsConfig, taskWorkflows), (config) =>
-      autopilot ? autopilot.configCommitted(config) : Effect.void,
-    ),
+    withTaskWorkflowSettings(baseSettingsConfig, taskWorkflows),
     eventBus,
+    (config) => (autopilot ? autopilot.configCommitted(config) : Effect.void),
   );
   const { settingsConfig } = notificationComposition;
   const setup = createNodeWorkspaceProviderSetup(
     { ...defaultPorts, settingsConfig },
     input,
     (repoPath) => observeWorkflowWorkspace(repoPath),
+    taskWorkflows,
   );
   const { workspaceSettingsService, workspaceProviderSetup, workspaceAdmissionService } = setup;
   const assets = createNodeTaskAssetServices({
     configDir,
-    assertWorkspaceAdmitted: workspaceAdmissionService.assertTaskStoreAccess,
-    assertOwnershipReadAdmitted: workspaceAdmissionService.assertTaskStoreOwnershipReadAccess,
+    contextManager: defaultPorts.taskDatabase,
+    resolveTaskStoreAccess: workspaceAdmissionService.resolveTaskStoreAccess,
     configuredTaskStore,
     isWorkspaceBlocked: workspaceAdmissionService.isWorkspaceBlocked,
     onBackgroundFailure,
-    processEnv: startupEnv,
-    taskWorkflows,
     workspaceSettingsService,
   });
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
@@ -145,6 +137,7 @@ export const assembleNodeEffectHostCommandRouter = (
     faultLog: createLiveSessionFaultLogger(lifecycleLogger),
     updateRuntimeSessionTitle: (input) => agentSessionLiveStateService.updateSessionTitle(input),
   });
+  const workspaceSessionStore = workspaceSessions.store;
   const runtimeDefinitionsService = createHostRuntimeDefinitionsService();
   const messageDelivery = createNodeMessageDelivery({
     eventBus,
@@ -176,13 +169,11 @@ export const assembleNodeEffectHostCommandRouter = (
       messageQueues: messageDelivery,
       persistence: workspaceSessions.persistence,
       withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
-      store: assets.workspaceSessionStore,
-      taskStore,
+      store: workspaceSessionStore,
       settings: workspaceSettingsService,
       eventBus,
       lifecycleLogger,
     });
-  // The Git panel and merge detection share one fetch of each remote.
   const remoteFetch = createRemoteFetchService(git);
   const localAttachmentService = createLocalAttachmentService(localAttachments);
   const workingDirectoryDependencies = { gitPort: git, settingsConfig, workspaceSettingsService };
@@ -194,6 +185,7 @@ export const assembleNodeEffectHostCommandRouter = (
     registry: runtimeRegistry,
   } = createNodeHostRuntimeComposition({
     clientVersion,
+    hostInstanceId: defaultPorts.hostInstanceId,
     configuredRuntimeStarter,
     defaultPorts,
     eventBus,
@@ -213,20 +205,13 @@ export const assembleNodeEffectHostCommandRouter = (
     settingsConfig,
     workspaceSettingsService,
   });
-  const terminalService = Effect.runSync(
-    createTerminalService({
-      withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
-      filesystem,
-      git,
-      taskWorktrees: taskWorktreeService,
-      workspaceSessions: {
-        settings: workspaceSettingsService,
-        store: assets.workspaceSessionStore,
-      },
-      ptyPort: terminalPty,
-      launchEnvironment: createTerminalLaunchEnvironment({ readEnv }),
-    }),
-  );
+  const terminalService = createNodeTerminalService({
+    ports: defaultPorts,
+    admission: workspaceAdmissionService,
+    taskWorktrees: taskWorktreeService,
+    settings: workspaceSettingsService,
+    sessions: assets.workspaceSessionStore,
+  });
   const { browserService, ...callers } = createNodeBrowser({
     engine: browserEngine,
     automation: browserAutomation,
@@ -234,7 +219,7 @@ export const assembleNodeEffectHostCommandRouter = (
     settings: workspaceSettingsService,
     git,
     tasks: taskStore,
-    workspaceSessions: assets.workspaceSessionStore,
+    workspaceSessions: workspaceSessionStore,
     liveSessions: liveSessionAdapterRegistry,
     localAttachments: localAttachmentService,
     eventBus,
@@ -261,6 +246,7 @@ export const assembleNodeEffectHostCommandRouter = (
     }),
     taskSessionLifecycleCoordinator,
     taskStore,
+    taskOwnership: assets.taskOwnership,
     workspaceSettingsService,
     worktreeFiles,
   });
@@ -299,11 +285,7 @@ export const assembleNodeEffectHostCommandRouter = (
     agentSessionLiveStateService,
     repositoryPolicy: workspaceSessions.persistence,
     pauseForStop: messageDelivery.pauseForStop,
-    readSessionRootRefs: createLiveSessionRootRefsReader({
-      store: assets.workspaceSessionStore,
-      taskStore,
-      settings: workspaceSettingsService,
-    }),
+    readSessionRootRefs: workspaceSessions.readSessionRootRefs,
     workflowLaunch: {
       messageDelivery,
       resolveParts: (parts) => resolveSessionMessageParts(parts, localAttachmentService),
@@ -321,16 +303,16 @@ export const assembleNodeEffectHostCommandRouter = (
     taskWorkflows,
     tasks: taskService,
     live: agentSessionLiveStateService,
-    workspaceSessions: assets.workspaceSessionStore,
+    workspaceSessions: workspaceSessionStore,
   });
   const autopilotService = createAutopilotService({
-    settingsConfig,
-    taskWorkflows,
     tasks: taskService,
     mutations: taskSyncService,
+    publish: (payload) => eventBus?.publish({ channel: "openducktor://run-event", payload }),
+    settingsConfig,
+    taskWorkflows,
     workflowLaunch: taskSessions.workflowLaunchService,
     notifications: notificationService,
-    publish: (event) => eventBus?.publish({ channel: "openducktor://run-event", payload: event }),
     onBackgroundFailure,
   });
   autopilot = autopilotService;
@@ -362,7 +344,7 @@ export const assembleNodeEffectHostCommandRouter = (
     browserTabs: browserService,
     lifecycle: taskSessionLifecycleCoordinator,
     ...workspaceSessions,
-    store: assets.workspaceSessionStore,
+    store: workspaceSessionStore,
     taskOwnership: assets.taskOwnership,
     settings: workspaceSettingsService,
     runtime: runtimeRegistry,

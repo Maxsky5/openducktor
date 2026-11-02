@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import { expect, mock, test } from "bun:test";
 import type { RepositoryGitProviderContext, WorkspaceRecord } from "@openducktor/contracts";
 import { act, fireEvent, render, within } from "@testing-library/react";
@@ -33,7 +34,7 @@ test.each([false, true])(
       }),
     );
     const read = createDeferred<RepositoryGitProviderContext>();
-    const sync = mock(async (_repoPath: string, _workspaceId?: string) => ({ ok: true as const }));
+    const sync = mock(async (_scope: WorkspaceRef) => ({ ok: true as const }));
     const connection = createTestClientConnection({
       client: {
         workspaceGetGitProviderContext: async () => read.promise,
@@ -44,7 +45,7 @@ test.each([false, true])(
     for (const [index, provider] of providers.entries()) {
       if (index !== 2)
         queryClient.setQueryData(
-          repositoryGitProviderContextQueryKeys.repo(workspaces[index]!.repoPath),
+          repositoryGitProviderContextQueryKeys.repo(workspaces[index]!),
           provider,
         );
     }
@@ -99,8 +100,8 @@ test.each([false, true])(
           fireEvent.click(all);
         });
         expect(sync.mock.calls).toEqual([
-          ["/repo-0", "workspace-0"],
-          ["/repo-1", "workspace-1"],
+          [{ workspaceId: "workspace-0", repoPath: "/repo-0" }],
+          [{ workspaceId: "workspace-1", repoPath: "/repo-1" }],
         ]);
       }
     } finally {
@@ -129,11 +130,11 @@ test.each(["closed", "path changed", "identity replaced"] as const)(
     const connection = createTestClientConnection({ client: { repoPullRequestSync: sync } });
     const queryClient = connection.queryClient;
     queryClient.setQueryData(
-      repositoryGitProviderContextQueryKeys.repo(captured.repoPath),
+      repositoryGitProviderContextQueryKeys.repo(captured),
       createGitProviderContextFixture(),
     );
     queryClient.setQueryData(
-      repositoryGitProviderContextQueryKeys.repo(active.repoPath),
+      repositoryGitProviderContextQueryKeys.repo(active),
       createGitProviderContextFixture(),
     );
     const content = (workspaces: WorkspaceRecord[], closedWorkspaces: WorkspaceRecord[] = []) => (
@@ -176,7 +177,7 @@ test.each(["closed", "path changed", "identity replaced"] as const)(
         workspaces = [{ ...captured, workspaceId: "replacement" }, active];
       for (const entry of workspaces) {
         queryClient.setQueryData(
-          repositoryGitProviderContextQueryKeys.repo(entry.repoPath),
+          repositoryGitProviderContextQueryKeys.repo(entry),
           createGitProviderContextFixture(),
         );
       }

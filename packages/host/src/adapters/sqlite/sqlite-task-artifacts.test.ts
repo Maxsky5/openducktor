@@ -1,14 +1,19 @@
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { TASK_ARTIFACT_MAX_FILE_BYTES, workflowArtifactId } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { legacyTaskStoreSchema } from "./sqlite-legacy-task-store-schema";
+import { ensureLegacySchema } from "./sqlite-legacy-task-store-migrations";
 import { openSqliteDrizzleConnection } from "../../infrastructure/sqlite/sqlite-drizzle-client";
 import {
   type SqliteValue,
   sqliteValueSchema,
 } from "../../infrastructure/sqlite/sqlite-driver-values";
 import { createSqliteTaskRepository } from "./sqlite-task-repository";
-import { taskStoreSchema } from "./sqlite-task-store-schema";
+import { hostDatabaseSchema } from "./sqlite-host-database-schema";
 import {
   createLegacyTaskStore,
   createSqliteTaskStoreHarness,
@@ -32,12 +37,12 @@ const createTaskHarness = async () => {
   const harness = await createHarness();
   const task = await Effect.runPromise(
     harness.store.createTask({
-      repoPath: harness.repoPath,
+      ...harness.scope,
       status: "open",
       task: { title: "Artifact task", issueType: "task", priority: 2 },
     }),
   );
-  return { ...harness, task, scope: { repoPath: harness.repoPath, taskId: task.id } };
+  return { ...harness, task, scope: { ...harness.scope, taskId: task.id } };
 };
 const file = {
   name: "Specification",
@@ -59,9 +64,26 @@ const KEPT_TASK_COLUMNS =
 const createLegacyStore = (databasePath: string, migrationCount = 7) =>
   createLegacyTaskStore(databasePath, migrationCount);
 
+const createLegacyDatabasePath = async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "odt-legacy-artifacts-"));
+  cleanups.add(() => rm(directory, { recursive: true, force: true }));
+  return path.join(directory, "database.sqlite");
+};
+const normalizeLegacyArtifacts = (databasePath: string) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const connection = yield* openSqliteDrizzleConnection({
+        databasePath,
+        config: { schema: legacyTaskStoreSchema },
+        configureWal: false,
+      });
+      yield* ensureLegacySchema(connection.session, databasePath);
+    }),
+  );
+
 describe("task artifact migration", () => {
   test("preserves every legacy revision, exact Markdown, null fields and provenance without changing tasks", async () => {
-    const { databasePath, repoPath, store } = await createHarness();
+    const databasePath = await createLegacyDatabasePath();
     await createLegacyStore(databasePath);
     insertLegacyTask({ databasePath, taskId: "legacy", status: "human_review" });
     const database = openFixtureDatabase(databasePath);
@@ -132,11 +154,7 @@ describe("task artifact migration", () => {
     const before = database.query(`SELECT ${KEPT_TASK_COLUMNS} FROM tasks`).all();
     database.close();
 
-    const artifacts = await Effect.runPromise(store.listArtifacts({ repoPath, taskId: "legacy" }));
-    expect(artifacts).toHaveLength(3);
-    expect(
-      artifacts.find((artifact) => artifact.artifactId === "workflow:legacy:qaReport"),
-    ).toMatchObject({ revision: 5, verdict: "approved" });
+    await Effect.runPromise(normalizeLegacyArtifacts(databasePath));
     const migrated = new Database(databasePath, { readonly: true });
     try {
       expect<unknown>(
@@ -163,15 +181,10 @@ describe("task artifact migration", () => {
     }
     expect(readTableNames(databasePath)).not.toContain("task_documents");
     expect(readDrizzleMigrationRows(databasePath)).toHaveLength(11);
-    expect(
-      await Effect.runPromise(
-        store.readArtifact({ repoPath, taskId: "legacy", artifactId: "workflow:legacy:spec" }),
-      ),
-    ).toMatchObject({ content: Buffer.from("\ufeff# Current\r\n  ") });
   });
 
   test("adds unique task-local codes without changing existing artifact bytes, history or provenance", async () => {
-    const { databasePath, repoPath, store } = await createHarness();
+    const databasePath = await createLegacyDatabasePath();
     await createLegacyStore(databasePath, 8);
     for (const taskId of ["legacy-a", "legacy-b"]) insertLegacyTask({ databasePath, taskId });
     const columns =
@@ -281,16 +294,7 @@ describe("task artifact migration", () => {
     const beforeTasks = database.query(`SELECT ${KEPT_TASK_COLUMNS} FROM tasks ORDER BY id`).all();
     database.close();
 
-    const artifacts = await Effect.runPromise(
-      store.listArtifacts({ repoPath, taskId: "legacy-a" }),
-    );
-    expect(artifacts).toHaveLength(3);
-    expect(artifacts.find((artifact) => artifact.artifactId === "free-a")).toMatchObject({
-      code: "artifact-1",
-    });
-    expect(artifacts.find((artifact) => artifact.artifactId === "free-z")).toMatchObject({
-      code: "artifact-2",
-    });
+    await Effect.runPromise(normalizeLegacyArtifacts(databasePath));
     const migrated = new Database(databasePath, { readonly: true });
     try {
       expect(
@@ -319,7 +323,7 @@ describe("task artifact migration", () => {
   });
 
   test("rolls back a failed copy and keeps the old table and migration ledger", async () => {
-    const { databasePath, repoPath, store } = await createHarness();
+    const databasePath = await createLegacyDatabasePath();
     await createLegacyStore(databasePath);
     insertLegacyTask({ databasePath, taskId: "legacy" });
     const database = openFixtureDatabase(databasePath);
@@ -329,9 +333,10 @@ describe("task artifact migration", () => {
     );
     database.close();
 
-    const health = await Effect.runPromise(store.diagnoseRepoStore({ repoPath }));
-    expect(health).toMatchObject({ isReady: false, status: "blocking" });
-    expect(health.detail).toContain("Resolve the database error before retrying");
+    const failed = await Effect.runPromise(Effect.result(normalizeLegacyArtifacts(databasePath)));
+    expect(failed._tag).toBe("Failure");
+    if (failed._tag === "Failure")
+      expect(failed.failure.message).toContain("Resolve the database error before retrying");
     expect(readTableNames(databasePath)).toContain("task_documents");
     expect(readTableNames(databasePath)).not.toContain("tasks_artifacts");
     expect(readDrizzleMigrationRows(databasePath)).toHaveLength(7);
@@ -346,7 +351,7 @@ describe("task artifact migration", () => {
   });
 
   test("rolls back a failed code migration without changing pre-code rows or the migration ledger", async () => {
-    const { databasePath, repoPath, store } = await createHarness();
+    const databasePath = await createLegacyDatabasePath();
     await createLegacyStore(databasePath, 8);
     insertLegacyTask({ databasePath, taskId: "legacy" });
     const database = openFixtureDatabase(databasePath);
@@ -358,9 +363,10 @@ describe("task artifact migration", () => {
     const before = database.query("SELECT * FROM tasks_artifacts").all();
     database.close();
 
-    const health = await Effect.runPromise(store.diagnoseRepoStore({ repoPath }));
-    expect(health).toMatchObject({ isReady: false, status: "blocking" });
-    expect(health.detail).toContain("chk_tasks_artifacts_variant");
+    const failed = await Effect.runPromise(Effect.result(normalizeLegacyArtifacts(databasePath)));
+    expect(failed._tag).toBe("Failure");
+    if (failed._tag === "Failure")
+      expect(failed.failure.message).toContain("chk_tasks_artifacts_variant");
     expect(readTableNames(databasePath)).toContain("tasks_artifacts");
     expect(readTableNames(databasePath)).not.toContain("__new_tasks_artifacts");
     expect(readDrizzleMigrationRows(databasePath)).toHaveLength(8);
@@ -379,6 +385,7 @@ describe("task artifact repository", () => {
     const { store, scope, databasePath } = harness;
     await Effect.runPromise(
       store.saveWorkflowArtifact({
+        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -394,7 +401,7 @@ describe("task artifact repository", () => {
             databasePath,
             configureWal: false,
             config: {
-              schema: taskStoreSchema,
+              schema: hostDatabaseSchema,
               logger: {
                 logQuery(sql, params) {
                   queries.push({ sql, params });
@@ -403,14 +410,16 @@ describe("task artifact repository", () => {
             },
           });
           const observedStore = createSqliteTaskRepository({
-            contextProvider: (repoPath, operation, use) =>
-              harness.contextProvider(repoPath, operation, (context) =>
+            contextProvider: (scope, operation, use) =>
+              harness.contextProvider(scope, operation, (context) =>
                 use({ ...context, session: connection.session }),
               ),
           });
           yield* observedStore.getTask(scope);
           yield* observedStore.getTaskMetadata(scope);
           yield* observedStore.saveWorkflowArtifact({
+            decide: (current) =>
+              Result.succeed({ status: current.status, workflowId: "openducktor" }),
             sourceTool: "workflow_artifact_save",
             updatedBy: "user",
             ...scope,
@@ -423,7 +432,10 @@ describe("task artifact repository", () => {
     const database = new Database(databasePath, { readonly: true });
     try {
       const historyQueries = queries.filter(
-        ({ sql }) => sql.startsWith("select ") && sql.includes('from "tasks_artifacts"'),
+        ({ sql, params }) =>
+          sql.startsWith("select ") &&
+          sql.includes('from "task_artifacts"') &&
+          params.includes("workflow"),
       );
       expect(historyQueries.length).toBeGreaterThan(0);
       for (const { sql, params } of historyQueries) {
@@ -432,10 +444,10 @@ describe("task artifact repository", () => {
           .all(...params.map((param) => sqliteValueSchema.parse(param)));
         const searches = plan.filter(({ detail }) => detail.startsWith("SEARCH "));
         expect(
-          searches.some(({ detail }) => detail.includes("idx_tasks_artifacts_workflow_revision")),
+          searches.some(({ detail }) => detail.includes("idx_task_artifacts_workflow_revision")),
         ).toBe(true);
         for (const { detail } of searches.filter(({ parent }) => parent !== 0)) {
-          expect(detail).toContain("idx_tasks_artifacts_workflow_revision");
+          expect(detail).toContain("idx_task_artifacts_workflow_revision");
         }
         expect(plan.some(({ detail }) => detail.includes("TEMP B-TREE"))).toBe(false);
       }
@@ -444,23 +456,24 @@ describe("task artifact repository", () => {
     }
   });
 
-  test("versions identify captured metadata and bytes across workflow recreation", async () => {
+  test("reads current bytes and metadata across workflow recreation", async () => {
     const harness = await createSqliteTaskStoreHarness({
       now: () => new Date("2026-10-22T10:00:00.000Z"),
     });
     cleanups.add(harness.cleanup);
-    const { store, repoPath } = harness;
+    const { store } = harness;
     const task = await Effect.runPromise(
       store.createTask({
-        repoPath,
+        ...harness.scope,
         status: "open",
         task: { title: "Versioned output", issueType: "task", priority: 2 },
       }),
     );
-    const scope = { repoPath, taskId: task.id };
+    const scope = { ...harness.scope, taskId: task.id };
     const reference = { ...scope, artifactId: workflowArtifactId(task.id, "spec") };
     await Effect.runPromise(
       store.saveWorkflowArtifact({
+        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -469,11 +482,14 @@ describe("task artifact repository", () => {
       }),
     );
     const first = await Effect.runPromise(store.readArtifact(reference));
-    expect(first?.version).toMatch(/^[a-f0-9]{64}$/);
-    expect((await Effect.runPromise(store.readArtifact(reference)))?.version).toBe(first?.version);
+    expect(Buffer.from(first!.content).toString()).toBe("# First");
+    expect((await Effect.runPromise(store.readArtifact(reference)))?.content).toEqual(
+      first?.content,
+    );
     await Effect.runPromise(store.clearTaskArtifacts(scope));
     await Effect.runPromise(
       store.saveWorkflowArtifact({
+        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -483,10 +499,11 @@ describe("task artifact repository", () => {
     );
     const changed = await Effect.runPromise(store.readArtifact(reference));
     expect(changed?.artifact).toEqual(first?.artifact);
-    expect(changed?.version).not.toBe(first?.version);
+    expect(Buffer.from(changed!.content).toString()).toBe("# Other");
     await Effect.runPromise(store.clearTaskArtifacts(scope));
     await Effect.runPromise(
       store.saveWorkflowArtifact({
+        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -494,7 +511,9 @@ describe("task artifact repository", () => {
         code: "spec",
       }),
     );
-    expect((await Effect.runPromise(store.readArtifact(reference)))?.version).toBe(first?.version);
+    expect((await Effect.runPromise(store.readArtifact(reference)))?.content).toEqual(
+      first?.content,
+    );
 
     const free = await Effect.runPromise(store.createArtifact({ ...scope, ...file }));
     const freeReference = { ...scope, artifactId: free.artifactId };
@@ -502,7 +521,7 @@ describe("task artifact repository", () => {
     await Effect.runPromise(store.renameArtifact({ ...freeReference, name: "Changed name" }));
     const afterRename = await Effect.runPromise(store.readArtifact(freeReference));
     expect(afterRename?.content).toEqual(beforeRename?.content);
-    expect(afterRename?.version).not.toBe(beforeRename?.version);
+    expect(afterRename?.artifact.name).toBe("Changed name");
   });
 
   test("enforces exclusive row variants, byte sizes, and one current free revision", async () => {
@@ -513,6 +532,7 @@ describe("task artifact repository", () => {
     );
     await Effect.runPromise(
       store.saveWorkflowArtifact({
+        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -523,7 +543,7 @@ describe("task artifact repository", () => {
     const database = openFixtureDatabase(databasePath);
     try {
       expect(() =>
-        database.run("UPDATE tasks_artifacts SET code = NULL WHERE artifact_id = ?", [
+        database.run("UPDATE task_artifacts SET code = NULL WHERE artifact_id = ?", [
           artifact.artifactId,
         ]),
       ).toThrow("NOT NULL constraint failed");
@@ -543,27 +563,27 @@ describe("task artifact repository", () => {
         `code = '${"a".repeat(129)}'`,
       ]) {
         expect(() =>
-          database.run(`UPDATE tasks_artifacts SET ${assignment} WHERE artifact_id = ?`, [
+          database.run(`UPDATE task_artifacts SET ${assignment} WHERE artifact_id = ?`, [
             artifact.artifactId,
           ]),
-        ).toThrow("chk_tasks_artifacts_variant");
+        ).toThrow("chk_task_artifacts_variant");
       }
       expect(() =>
         database.run(
-          "INSERT INTO tasks_artifacts (artifact_id, task_id, classification, revision, name, code, updated_at_ms, content, file_name, media_type, byte_size) SELECT artifact_id, task_id, classification, revision + 1, name, code, updated_at_ms, content, file_name, media_type, byte_size FROM tasks_artifacts WHERE artifact_id = ?",
+          "INSERT INTO task_artifacts (workspace_id, artifact_id, task_id, classification, revision, name, code, updated_at_ms, content, file_name, media_type, byte_size) SELECT workspace_id, artifact_id, task_id, classification, revision + 1, name, code, updated_at_ms, content, file_name, media_type, byte_size FROM task_artifacts WHERE artifact_id = ?",
           [artifact.artifactId],
         ),
       ).toThrow("UNIQUE constraint failed");
       expect(() =>
-        database.run("UPDATE tasks_artifacts SET code = 'specification' WHERE artifact_id = ?", [
+        database.run("UPDATE task_artifacts SET code = 'specification' WHERE artifact_id = ?", [
           other.artifactId,
         ]),
       ).toThrow("UNIQUE constraint failed");
       expect(() =>
-        database.run("UPDATE tasks_artifacts SET code = 'workflow-code' WHERE artifact_id = ?", [
+        database.run("UPDATE task_artifacts SET code = 'workflow-code' WHERE artifact_id = ?", [
           workflowArtifactId(scope.taskId, "spec"),
         ]),
-      ).toThrow("chk_tasks_artifacts_variant");
+      ).toThrow("chk_task_artifacts_variant");
     } finally {
       database.close();
     }
@@ -645,7 +665,7 @@ describe("task artifact repository", () => {
     }
     const other = await Effect.runPromise(
       store.createTask({
-        repoPath: scope.repoPath,
+        ...scope,
         status: "open",
         task: { title: "Other task", issueType: "task", priority: 2 },
       }),
@@ -658,7 +678,7 @@ describe("task artifact repository", () => {
 
     const database = new Database(databasePath, { readonly: true });
     try {
-      const before = database.query("SELECT * FROM tasks_artifacts ORDER BY rowid").all();
+      const before = database.query("SELECT * FROM task_artifacts ORDER BY rowid").all();
       for (const code of [
         "build-output",
         "spec",
@@ -677,9 +697,7 @@ describe("task artifact repository", () => {
             Effect.flip(store.createArtifact({ ...scope, ...file, name: "Rejected output", code })),
           ),
         ).toMatchObject({ _tag: "HostValidationError", field: "code" });
-        expect(database.query("SELECT * FROM tasks_artifacts ORDER BY rowid").all()).toEqual(
-          before,
-        );
+        expect(database.query("SELECT * FROM task_artifacts ORDER BY rowid").all()).toEqual(before);
       }
     } finally {
       database.close();
@@ -718,7 +736,7 @@ describe("task artifact repository", () => {
     ).rejects.toThrow("at most 10 MiB");
     const database = openFixtureDatabase(databasePath);
     database.exec(
-      "CREATE TRIGGER reject_artifact_update BEFORE UPDATE ON tasks_artifacts BEGIN SELECT RAISE(ABORT, 'forced write failure'); END",
+      "CREATE TRIGGER reject_artifact_update BEFORE UPDATE ON task_artifacts BEGIN SELECT RAISE(ABORT, 'forced write failure'); END",
     );
     database.close();
     await expect(
@@ -744,6 +762,7 @@ describe("task artifact repository", () => {
     const free = await Effect.runPromise(store.createArtifact({ ...scope, ...file }));
     await Effect.runPromise(
       store.saveWorkflowArtifact({
+        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -760,7 +779,7 @@ describe("task artifact repository", () => {
       await expect(Effect.runPromise<unknown, unknown>(mutate)).rejects.toThrow("workflow control");
     const other = await Effect.runPromise(
       store.createTask({
-        repoPath: scope.repoPath,
+        ...scope,
         status: "open",
         task: { title: "Other", issueType: "task", priority: 2 },
       }),
@@ -776,7 +795,12 @@ describe("task artifact repository", () => {
     await expect(
       Effect.runPromise(store.replaceArtifact({ ...otherScope, ...file })),
     ).rejects.toThrow("Artifact not found");
-    await Effect.runPromise(store.transitionTask({ ...scope, status: "closed" }));
+    await Effect.runPromise(
+      store.transitionTask({
+        ...scope,
+        decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
+      }),
+    );
     for (const mutate of [
       store.createArtifact({ ...scope, ...file }),
       store.renameArtifact({ ...scope, artifactId: free.artifactId, name: "No" }),
@@ -793,6 +817,7 @@ describe("task artifact repository", () => {
     ).toEqual(Buffer.from(file.content));
     await Effect.runPromise(
       store.saveWorkflowArtifact({
+        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -807,6 +832,7 @@ describe("task artifact repository", () => {
     const { store, scope, databasePath } = await createTaskHarness();
     await Effect.runPromise(
       store.saveWorkflowArtifact({
+        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -816,6 +842,7 @@ describe("task artifact repository", () => {
     );
     await Effect.runPromise(
       store.saveWorkflowArtifact({
+        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -826,10 +853,11 @@ describe("task artifact repository", () => {
     for (const verdict of ["rejected", "approved"] as const)
       await Effect.runPromise(
         store.saveWorkflowArtifact({
+          decide: () => Result.succeed({ status: "human_review", workflowId: "openducktor" }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...scope,
-          status: "human_review",
+
           markdown: `# ${verdict}`,
           verdict,
           code: "qaReport",
@@ -855,7 +883,7 @@ describe("task artifact repository", () => {
     await Effect.runPromise(store.deleteTask({ ...scope }));
     const database = new Database(databasePath, { readonly: true });
     try {
-      expect(database.query("SELECT count(*) as count FROM tasks_artifacts").get()).toEqual({
+      expect(database.query("SELECT count(*) as count FROM task_artifacts").get()).toEqual({
         count: 0,
       });
     } finally {

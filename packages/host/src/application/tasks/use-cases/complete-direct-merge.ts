@@ -44,8 +44,8 @@ export const createTaskCompleteDirectMergeUseCase = ({
         [taskId],
         "complete direct merge",
       );
-      const current = yield* taskStore.getTask({ repoPath, taskId });
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+      const current = yield* taskStore.getTask({ ...input, repoPath });
+      const metadata = yield* taskStore.getTaskMetadata({ ...input, repoPath });
       const merge = metadata.directMerge;
       if (!merge)
         return yield* new HostValidationError({
@@ -53,7 +53,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
           message: `Task ${taskId} does not have a locally applied direct merge to complete.`,
           details: { repoPath, taskId },
         });
-      const state = completionState.ensure(repoPath, taskId);
+      const state = completionState.ensure({ workspaceId: input.workspaceId, repoPath, taskId });
       const workflow = taskWorkflows.forTask(current);
       const completeEvent = yield* requireEffectEvent(workflow, "direct_merge.completed");
       const decision = workflow.decide(completeEvent, current);
@@ -94,6 +94,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
           taskActivityGuard,
           taskSessionLifecycleCoordinator,
           workflow,
+          taskWorkflows,
         },
         { ...input, repoPath },
         merge,

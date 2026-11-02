@@ -3,7 +3,9 @@ import { hasNestedNodeErrorCode, HostValidationError } from "../../effect/host-e
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import {
   requireRuntimeWorkingDirectory,
+  resolveRuntimeRepoConfig,
   type RuntimeWorkingDirectoryDependencies,
+  type RuntimeWorkingDirectoryInput,
 } from "./runtime-working-directory";
 
 export type RuntimeHistoryWorkingDirectoryDependencies = RuntimeWorkingDirectoryDependencies & {
@@ -12,12 +14,14 @@ export type RuntimeHistoryWorkingDirectoryDependencies = RuntimeWorkingDirectory
 
 export const requireManagedHistoryDirectory = (
   dependencies: RuntimeHistoryWorkingDirectoryDependencies,
-  input: { repoPath: string; workingDirectory: string },
+  input: RuntimeWorkingDirectoryInput,
 ) =>
   Effect.gen(function* () {
     const repoPath = yield* dependencies.settingsConfig.canonicalizePath(input.repoPath);
-    const repoConfig =
-      yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
+    const repoConfig = yield* resolveRuntimeRepoConfig(dependencies.workspaceSettingsService, {
+      ...input,
+      repoPath,
+    });
     const worktreeBasePath =
       repoConfig.worktreeBasePath === undefined
         ? dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId)
@@ -44,7 +48,7 @@ export const requireManagedHistoryDirectory = (
  */
 export const requireRecordedSessionDirectory = (
   dependencies: RuntimeHistoryWorkingDirectoryDependencies,
-  input: { repoPath: string; workingDirectory: string },
+  input: RuntimeWorkingDirectoryInput,
 ) =>
   requireRuntimeWorkingDirectory(dependencies, input).pipe(
     Effect.catchTag("HostOperationError", (cause) =>

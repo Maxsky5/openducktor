@@ -13,7 +13,7 @@ import type {
   TaskMetadataPayload,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
-import type { Effect } from "effect";
+import type { Effect, Result } from "effect";
 import type {
   HostDependencyErrorAggregate,
   HostInvariantErrorAggregate,
@@ -22,8 +22,10 @@ import type {
   HostPathNotFoundErrorAggregate,
   HostResourceErrorAggregate,
   HostValidationErrorAggregate,
+  SettingsFileError,
 } from "../effect/host-errors";
 import type { TaskAssetError } from "../effect/task-asset-error";
+import type { RuntimeOwnershipScope } from "./workspace-session-store-port";
 import type { TransitionCause } from "@openducktor/workflows";
 
 export type TaskStoreError =
@@ -34,9 +36,11 @@ export type TaskStoreError =
   | HostPathAccessErrorAggregate
   | HostPathNotFoundErrorAggregate
   | HostResourceErrorAggregate
-  | HostValidationErrorAggregate;
+  | HostValidationErrorAggregate
+  | SettingsFileError;
 
 export type TaskStoreListTasksInput = {
+  workspaceId: string;
   repoPath: string;
   doneVisibleDays?: number;
   /** Read these tasks for a committed change event. */
@@ -47,41 +51,94 @@ export type PullRequestSyncCandidate = {
   pullRequest: PullRequest;
   status: string;
 };
+export type TaskMergeCandidate = Pick<
+  TaskRecord,
+  "id" | "status" | "targetBranch" | "targetBranchError"
+>;
 export type TaskReference = Pick<TaskCard, "id" | "title">;
 /** A stored task. The workflow projection adds its actions and role states. */
 export type TaskRecord = Omit<TaskCard, "availableActions" | "agentWorkflows">;
+export type TaskSearchInput = {
+  workspaceId: string;
+  repoPath: string;
+  priority?: number | undefined;
+  issueType?: string | undefined;
+  status?: string | undefined;
+  title?: string | undefined;
+  tags?: readonly string[] | undefined;
+  limit: number;
+};
 export type TaskReader = {
+  listMergeCandidates(input: {
+    workspaceId: string;
+    repoPath: string;
+  }): Effect.Effect<TaskMergeCandidate[], TaskStoreError>;
+  searchTasks(
+    input: TaskSearchInput,
+  ): Effect.Effect<{ tasks: TaskRecord[]; totalCount: number }, TaskStoreError>;
   findTask(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
   }): Effect.Effect<TaskRecord | null, TaskStoreError>;
   /** Read IDs and titles in listTasks order without loading cards. */
-  listTaskReferences(input: { repoPath: string }): Effect.Effect<TaskReference[], TaskStoreError>;
-  getTask(input: { repoPath: string; taskId: string }): Effect.Effect<TaskRecord, TaskStoreError>;
+  listTaskReferences(input: {
+    workspaceId: string;
+    repoPath: string;
+  }): Effect.Effect<TaskReference[], TaskStoreError>;
+  getTask(input: {
+    workspaceId: string;
+    repoPath: string;
+    taskId: string;
+  }): Effect.Effect<TaskRecord, TaskStoreError>;
   getTaskMetadata(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
   }): Effect.Effect<TaskMetadataPayload, TaskStoreError>;
+  getTaskDelivery(input: {
+    workspaceId: string;
+    repoPath: string;
+    taskId: string;
+  }): Effect.Effect<Pick<TaskMetadataPayload, "directMerge" | "pullRequest">, TaskStoreError>;
   /** Read every task ID in listTasks order, including all closed tasks. */
-  listTaskIds(input: { repoPath: string }): Effect.Effect<string[], TaskStoreError>;
+  listTaskIds(input: {
+    workspaceId: string;
+    repoPath: string;
+  }): Effect.Effect<string[], TaskStoreError>;
   listTasks(input: TaskStoreListTasksInput): Effect.Effect<TaskRecord[], TaskStoreError>;
 };
+export type DecideTaskTransition<E> = (
+  current: TaskRecord,
+) => Result.Result<{ status: string; workflowId: string; cause?: TransitionCause }, E>;
+
+export type AtomicTaskTransition<E> = {
+  workspaceId: string;
+  repoPath: string;
+  taskId: string;
+  decide: DecideTaskTransition<E>;
+};
+export type AtomicWorkflowArtifactWrite<E> = WorkflowArtifactWrite & {
+  decide: DecideTaskTransition<E>;
+};
+
 export type TaskWriter = {
   createTask(input: {
+    workspaceId: string;
     repoPath: string;
     task: TaskCreateInput;
     /** The initial state of the task workflow. */
     status: string;
     descriptionAssets?: TaskAssetDescriptionMutation;
   }): Effect.Effect<TaskRecord, TaskStoreError>;
-  deleteTask(input: { repoPath: string; taskId: string }): Effect.Effect<boolean, TaskStoreError>;
-  transitionTask(input: {
+  deleteTask(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
-    status: string;
-    cause?: TransitionCause;
-  }): Effect.Effect<TaskRecord, TaskStoreError>;
+  }): Effect.Effect<boolean, TaskStoreError>;
+  transitionTask<E>(input: AtomicTaskTransition<E>): Effect.Effect<TaskRecord, TaskStoreError | E>;
   updateTask(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
     patch: TaskUpdatePatch;
@@ -89,22 +146,31 @@ export type TaskWriter = {
   }): Effect.Effect<TaskRecord, TaskStoreError>;
 };
 export type WorkflowArtifactRepository = {
+  getWorkflowArtifact(input: {
+    workspaceId: string;
+    repoPath: string;
+    taskId: string;
+    code: string;
+  }): Effect.Effect<TaskMetadataArtifact, TaskStoreError>;
   /** Deletes every revision of these workflow artifacts. */
   clearWorkflowArtifacts(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
     codes: readonly string[];
   }): Effect.Effect<boolean, TaskStoreError>;
   clearTaskArtifacts(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
   }): Effect.Effect<boolean, TaskStoreError>;
   /** Saves a new revision. A status commits in the same transaction. */
-  saveWorkflowArtifact(
-    input: WorkflowArtifactWrite,
-  ): Effect.Effect<WorkflowArtifactSaveResult, TaskStoreError>;
+  saveWorkflowArtifact<E>(
+    input: AtomicWorkflowArtifactWrite<E>,
+  ): Effect.Effect<WorkflowArtifactSaveResult, TaskStoreError | E>;
 };
 export type WorkflowArtifactWrite = {
+  workspaceId: string;
   repoPath: string;
   taskId: string;
   code: string;
@@ -114,11 +180,9 @@ export type WorkflowArtifactWrite = {
   /** The role of the acting session, or `user`. */
   updatedBy: string;
   verdict?: string;
-  status?: string;
-  cause?: TransitionCause;
 };
 export type WorkflowArtifactSaveResult = { task: TaskRecord; artifact: TaskMetadataArtifact };
-export type ArtifactStoreScope = { repoPath: string; taskId: string };
+export type ArtifactStoreScope = { workspaceId: string; repoPath: string; taskId: string };
 export type ArtifactStoreReference = ArtifactStoreScope & { artifactId: string };
 export type ArtifactStoreContent = {
   content: Uint8Array;
@@ -128,8 +192,6 @@ export type ArtifactStoreContent = {
 export type StoredArtifactContent = {
   artifact: TaskArtifact;
   content: Uint8Array;
-  version: string;
-  isUtf8: boolean;
 };
 export type TaskArtifactRepository = {
   listArtifacts(input: ArtifactStoreScope): Effect.Effect<TaskArtifact[], TaskStoreError>;
@@ -149,31 +211,38 @@ export type TaskArtifactRepository = {
 };
 export type AgentSessionRepository = {
   recordAgentSessionActivity(input: {
+    workspaceId: string;
     repoPath: string;
     identity: AgentSessionIdentity;
     occurredAt: number;
-  }): Effect.Effect<TaskAgentSessions | null, TaskStoreError>;
+  }): Effect.Effect<(TaskAgentSessions & { workspaceId: string }) | null, TaskStoreError>;
   listAgentSessionsForTasks(input: {
+    workspaceId: string;
     repoPath: string;
     taskIds: string[];
   }): Effect.Effect<TaskAgentSessions[], TaskStoreError>;
   clearAgentSessionsByRoles(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
     roles: string[];
   }): Effect.Effect<boolean, TaskStoreError>;
   upsertAgentSession(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
     session: AgentSessionRecord;
+    ownershipScope?: RuntimeOwnershipScope;
   }): Effect.Effect<boolean, TaskStoreError>;
   updateAgentSessionModel(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
     identity: AgentSessionIdentity;
     selectedModel: AgentSessionRecord["selectedModel"];
   }): Effect.Effect<boolean, TaskStoreError>;
   deleteAgentSession(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
     identity: AgentSessionIdentity;
@@ -181,9 +250,11 @@ export type AgentSessionRepository = {
 };
 export type PullRequestRepository = {
   listPullRequestSyncCandidates(input: {
+    workspaceId: string;
     repoPath: string;
   }): Effect.Effect<PullRequestSyncCandidate[], TaskStoreError>;
   setPullRequest(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
     pullRequest: PullRequest | null;
@@ -191,8 +262,12 @@ export type PullRequestRepository = {
 };
 export type DirectMergeRepository = {
   /** Read the IDs of the tasks that have a recorded direct merge, without loading metadata. */
-  listDirectMergeTaskIds(input: { repoPath: string }): Effect.Effect<string[], TaskStoreError>;
+  listDirectMergeTaskIds(input: {
+    workspaceId: string;
+    repoPath: string;
+  }): Effect.Effect<string[], TaskStoreError>;
   setDirectMerge(input: {
+    workspaceId: string;
     repoPath: string;
     taskId: string;
     directMerge: DirectMergeRecord | null;
@@ -200,23 +275,28 @@ export type DirectMergeRepository = {
 };
 export type RepoStoreDiagnostics = {
   diagnoseRepoStore(input: {
+    workspaceId: string;
     repoPath: string;
     prepare?: boolean;
   }): Effect.Effect<RepoStoreHealth, TaskStoreError>;
 };
-/** An open task and the working directories of its sessions. */
-export type OpenTaskDirectories = {
+/** A task and the working directories of its sessions. */
+export type TaskWorktreeDirectories = {
   taskId: string;
   title: string;
+  /** Trimmed, with empty directories left out. */
   sessionDirectories: string[];
 };
 
 /** Reads the tasks that can own a worktree, also in a closed workspace. */
 export type TaskOwnershipReader = {
-  listOpenTasksForWorktreeOwnership(scope: {
-    workspaceId: string;
-    repoPath: string;
-  }): Effect.Effect<OpenTaskDirectories[], TaskStoreError>;
+  /** Reads every task, open or closed, with administrative access for workspace removal. */
+  listTaskDirectoriesForWorktreeOwnership(input: {
+    workspaces: readonly { workspaceId: string; repoPath: string }[];
+  }): Effect.Effect<(TaskWorktreeDirectories & { workspaceId: string })[], TaskStoreError>;
+  listOpenTasksForWorktreeOwnership(input: {
+    workspaces: readonly { workspaceId: string; repoPath: string }[];
+  }): Effect.Effect<(TaskWorktreeDirectories & { workspaceId: string })[], TaskStoreError>;
 };
 
 export type TaskStorePort = AgentSessionRepository &

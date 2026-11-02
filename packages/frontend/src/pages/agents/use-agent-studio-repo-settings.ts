@@ -33,8 +33,15 @@ export function useAgentStudioRepoSettings(args: {
     });
     return toRepoSettingsInput(config);
   }, [activeWorkspaceId, queryClient]);
+  const activeScope = useMemo(
+    () =>
+      activeWorkspaceId && activeRepoPath
+        ? { workspaceId: activeWorkspaceId, repoPath: activeRepoPath }
+        : null,
+    [activeWorkspaceId, activeRepoPath],
+  );
   const providerContextQuery = useQuery(
-    repositoryGitProviderContextQueryOptionsOrSkip(activeRepoPath),
+    repositoryGitProviderContextQueryOptionsOrSkip(activeScope),
   );
   const repoSettings = useMemo(
     () => (activeWorkspaceId !== null && repoConfig ? toRepoSettingsInput(repoConfig) : null),
@@ -45,14 +52,14 @@ export function useAgentStudioRepoSettings(args: {
     activeRepoPath !== null && providerContextQuery.isError ? providerContextQuery.error : null;
   const refetchGitProviderContext = providerContextQuery.refetch;
   const loadGitProviderContext = useCallback((): Promise<RepositoryGitProviderContext> => {
-    if (activeRepoPath === null) {
+    if (activeScope === null) {
       return Promise.reject(new Error("Select a repository before loading Git provider context."));
     }
     return queryClient.fetchQuery({
-      ...repositoryGitProviderContextQueryOptions(activeRepoPath),
+      ...repositoryGitProviderContextQueryOptions(activeScope),
       staleTime: 0,
     });
-  }, [activeRepoPath, queryClient]);
+  }, [activeScope, queryClient]);
   const retryGitProviderContext = useCallback((): void => {
     void refetchGitProviderContext();
   }, [refetchGitProviderContext]);

@@ -144,7 +144,12 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     const previousProps = baseProps({
       transcriptTarget: {
         ...createSessionIdentity(),
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "spec",
+        },
       },
     });
 
@@ -153,7 +158,12 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
         ...previousProps,
         transcriptTarget: {
           ...createSessionIdentity(),
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" },
+          sessionScope: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "planner",
+          },
         },
       }),
     ).toBe(false);
@@ -163,7 +173,12 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     const previousProps = baseProps({
       transcriptTarget: {
         ...createSessionIdentity(),
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "spec",
+        },
       },
     });
 
@@ -172,7 +187,12 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
         ...previousProps,
         transcriptTarget: {
           ...createSessionIdentity(),
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+          sessionScope: {
+            kind: "workflow",
+            workspaceId: "workspace-1",
+            taskId: "task-1",
+            role: "spec",
+          },
         },
       }),
     ).toBe(true);

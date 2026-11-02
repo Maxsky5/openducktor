@@ -1,3 +1,4 @@
+import { withSettingsConfigMutationTestMethods } from "./settings-config-mutations";
 import { unexpectedSessionImport } from "./session-import-test-doubles";
 import { unexpectedRuntimeQueries } from "./runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../ports/agent-session-live-adapter-port";
@@ -120,18 +121,19 @@ export const createGitPortTestDouble = <Overrides extends Partial<GitPort>>(
 
 export const createSettingsConfigTestDouble = <Overrides extends Partial<SettingsConfigPort>>(
   overrides: Overrides,
-): SettingsConfigPort => ({
-  canonicalizePath: unexpectedEffectCall("settings config", "canonicalizePath"),
-  defaultRepoWorktreeBasePath: () =>
-    unexpectedSyncCall("settings config", "defaultRepoWorktreeBasePath"),
-  defaultWorktreeBasePath: () => unexpectedSyncCall("settings config", "defaultWorktreeBasePath"),
-  join: () => unexpectedSyncCall("settings config", "join"),
-  pathExists: unexpectedEffectCall("settings config", "pathExists"),
-  readConfig: unexpectedEffectCall("settings config", "readConfig"),
-  resolveConfiguredPath: () => unexpectedSyncCall("settings config", "resolveConfiguredPath"),
-  writeConfig: unexpectedEffectCall("settings config", "writeConfig"),
-  ...overrides,
-});
+): SettingsConfigPort =>
+  withSettingsConfigMutationTestMethods({
+    canonicalizePath: unexpectedEffectCall("settings config", "canonicalizePath"),
+    defaultRepoWorktreeBasePath: () =>
+      unexpectedSyncCall("settings config", "defaultRepoWorktreeBasePath"),
+    defaultWorktreeBasePath: () => unexpectedSyncCall("settings config", "defaultWorktreeBasePath"),
+    join: () => unexpectedSyncCall("settings config", "join"),
+    pathExists: unexpectedEffectCall("settings config", "pathExists"),
+    readConfig: unexpectedEffectCall("settings config", "readConfig"),
+    resolveConfiguredPath: () => unexpectedSyncCall("settings config", "resolveConfiguredPath"),
+    updateConfig: unexpectedEffectCall("settings config", "updateConfig"),
+    ...overrides,
+  });
 
 export const createWorkspaceSettingsServiceTestDouble = <
   Overrides extends Partial<WorkspaceSettingsService>,
@@ -184,7 +186,6 @@ export const createWorkspaceSettingsServiceTestDouble = <
     "applyAgentStudioStateAction",
   ),
   resolveWorkspacePath: unexpectedEffectCall("workspace settings service", "resolveWorkspacePath"),
-  saveRepoSettings: unexpectedEffectCall("workspace settings service", "saveRepoSettings"),
   saveSettingsSnapshotWith: unexpectedEffectCall(
     "workspace settings service",
     "saveSettingsSnapshotWith",
@@ -207,12 +208,7 @@ export const createWorkspaceSettingsServiceTestDouble = <
     "workspace settings service",
     "updateSidebarSessionGrouping",
   ),
-  updateGlobalGitConfig: unexpectedEffectCall(
-    "workspace settings service",
-    "updateGlobalGitConfig",
-  ),
-  updateRepoConfig: unexpectedEffectCall("workspace settings service", "updateRepoConfig"),
-  updateRepoHooks: unexpectedEffectCall("workspace settings service", "updateRepoHooks"),
+  updateRepoGitConfig: unexpectedEffectCall("workspace settings service", "updateRepoGitConfig"),
   readHostId: unexpectedEffectCall("workspace settings service", "readHostId"),
   readRemoteAccessSettings: unexpectedEffectCall(
     "workspace settings service",

@@ -1,5 +1,6 @@
-import type { RepositoryGitProviderContext } from "@openducktor/contracts";
-import { queryOptions } from "@tanstack/react-query";
+import { workspaceScopeValue } from "./workspace-scope";
+import type { RepositoryGitProviderContext, WorkspaceRef } from "@openducktor/contracts";
+import { type QueryKey, queryOptions } from "@tanstack/react-query";
 import { scheduleTask, type ScheduleTask } from "../lib/scheduling";
 import { connectionHost } from "../connection/client-connection";
 import { withDiagnosticsQueryTimeout } from "./checks";
@@ -9,31 +10,31 @@ const REPOSITORY_GIT_PROVIDER_CONTEXT_STALE_TIME_MS = 30_000;
 
 export const repositoryGitProviderContextQueryKeys = {
   all: ["repository-git-provider-context"] as const,
-  repo: (repoPath: string | null) =>
-    [...repositoryGitProviderContextQueryKeys.all, repoPath] as const,
+  repo: (scope: WorkspaceRef | null) =>
+    [
+      ...repositoryGitProviderContextQueryKeys.all,
+      scope ? workspaceScopeValue(scope) : null,
+    ] as const,
 };
 
 export const repositoryGitProviderContextQueryOptions = (
-  repoPath: string,
+  scope: WorkspaceRef,
   scheduler: ScheduleTask = scheduleTask,
 ) =>
-  queryOptions({
-    queryKey: repositoryGitProviderContextQueryKeys.repo(repoPath),
+  queryOptions<RepositoryGitProviderContext, Error, RepositoryGitProviderContext, QueryKey>({
+    queryKey: repositoryGitProviderContextQueryKeys.repo(scope),
     queryFn: ({ client }): Promise<RepositoryGitProviderContext> =>
       withDiagnosticsQueryTimeout(
-        connectionHost(client).workspaceGetGitProviderContext(repoPath),
+        connectionHost(client).workspaceGetGitProviderContext(scope),
         scheduler,
       ),
     staleTime: REPOSITORY_GIT_PROVIDER_CONTEXT_STALE_TIME_MS,
   });
 
-export const repositoryGitProviderContextQueryOptionsOrSkip = (repoPath: string | null) =>
-  repoPath === null
-    ? skippedQueryOptions<
-        RepositoryGitProviderContext,
-        ReturnType<typeof repositoryGitProviderContextQueryKeys.repo>
-      >({
+export const repositoryGitProviderContextQueryOptionsOrSkip = (scope: WorkspaceRef | null) =>
+  scope === null
+    ? skippedQueryOptions<RepositoryGitProviderContext, QueryKey>({
         queryKey: repositoryGitProviderContextQueryKeys.repo(null),
         staleTime: REPOSITORY_GIT_PROVIDER_CONTEXT_STALE_TIME_MS,
       })
-    : repositoryGitProviderContextQueryOptions(repoPath);
+    : repositoryGitProviderContextQueryOptions(scope);

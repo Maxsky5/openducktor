@@ -101,7 +101,7 @@ export const PROMPT_TEMPLATES = {
         "- The saved spec, plan, and QA report are not in this prompt.",
         '- After odt_read_task, read needed content with odt_read_task_artifacts, for example odt_read_task_artifacts({"taskId":"{{task.id}}","codes":["spec"]}).',
         "- Select artifacts with codes from task.artifacts. Workflow codes are spec, plan, and qaReport. Free-artifact codes stay the same when display names change.",
-        "- Workflow reads return full content by default. Free-artifact reads default to 16 KiB; continue with the returned version and nextByteOffset when needed.",
+        "- Artifact reads return complete content in one request, or fail. They accept no byte offsets or continuation tokens.",
       ]),
       bulletSection("Task-context handling", [
         "Treat the odt_read_task response as the latest persisted workflow summary unless newer evidence is produced in this session.",

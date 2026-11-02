@@ -5,11 +5,16 @@ import type {
   AgentSessionControlSummary,
   AgentSessionControlUpdateModelInput,
   AgentSessionLiveRef,
+  AgentSessionScope,
   AgentSessionModelSettings,
   AgentSessionModelSelection,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { HostError } from "../../effect/host-errors";
+
+export type ScopedAgentSessionRef = AgentSessionLiveRef & {
+  sessionScope?: AgentSessionScope | undefined;
+};
 
 /** A send input before the host picks its `delivery`. */
 export type AgentSessionSendContent = Omit<AgentSessionControlSendInput, "delivery">;
@@ -29,20 +34,20 @@ export type PreparedSessionModelUpdate = {
 /** Internal owner policy. Only the command module runs native controls. */
 export type AgentSessionOperationPolicy = {
   run<A, E, R>(
-    ref: AgentSessionLiveRef,
+    ref: ScopedAgentSessionRef,
     operation: string,
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E | HostError, R>;
   /** Runs a send command. Send-aware policies mark the send as in flight. */
   runSend<A, E, R>(
-    ref: AgentSessionLiveRef,
+    ref: ScopedAgentSessionRef,
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E | HostError, R>;
   prepareResume(
     input: AgentSessionControlResumeInput,
   ): Effect.Effect<PreparedSessionResume, HostError>;
   /** Reads accepted settings and prompt context without preparing a send. */
-  prepareForkSource(ref: AgentSessionLiveRef): Effect.Effect<
+  prepareForkSource(ref: ScopedAgentSessionRef): Effect.Effect<
     {
       model: AgentSessionModelSelection | null;
       systemPrompt?: string;
@@ -52,11 +57,11 @@ export type AgentSessionOperationPolicy = {
   /** Checks the destination and supplies the owned prompt context. */
   prepareSend(input: AgentSessionSendContent): Effect.Effect<AgentSessionSendContent, HostError>;
   recordAcceptedMessage(
-    ref: AgentSessionLiveRef,
+    ref: ScopedAgentSessionRef,
     accepted: AcceptedAgentUserMessage,
   ): Effect.Effect<void, HostError>;
   prepareModelUpdate(
     input: AgentSessionControlUpdateModelInput,
   ): Effect.Effect<PreparedSessionModelUpdate, HostError>;
-  validateRef(ref: AgentSessionLiveRef): Effect.Effect<void, HostError>;
+  validateRef(ref: ScopedAgentSessionRef): Effect.Effect<void, HostError>;
 };

@@ -1,15 +1,44 @@
-import { workspaceSessionSchema } from "@openducktor/contracts";
-import { desc, isNull } from "drizzle-orm";
+import { selectedModelColumns } from "./sqlite-task-relations";
+import { workspaceSessionSchema, type WorkspaceSession } from "@openducktor/contracts";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
-import type { TaskStoreSession } from "./sqlite-task-store-schema";
+import type { HostDatabaseSession } from "./sqlite-host-database-schema";
 import { type WorkspaceSessionRow, workspaceSessions } from "./sqlite-workspace-session-schema";
 
-export const readActiveWorkspaceSessions = (session: TaskStoreSession) =>
-  readWorkspaceSessions(session, true);
+export const workspaceSessionScope = (workspaceId: string, sessionId?: string) =>
+  and(
+    eq(workspaceSessions.workspaceId, workspaceId),
+    sessionId === undefined ? undefined : eq(workspaceSessions.id, sessionId),
+  );
 
-export const readWorkspaceSessionsForWorktreeOwnership = (session: TaskStoreSession) =>
-  readWorkspaceSessions(session, false);
+export const encodeWorkspaceSessionRecord = (
+  workspaceId: string,
+  record: WorkspaceSession,
+): WorkspaceSessionRow => ({
+  workspaceId,
+  id: record.id,
+  runtimeKind: record.runtimeKind,
+  externalSessionId: record.externalSessionId,
+  executionKind: record.executionTarget.kind,
+  workingDirectory: record.executionTarget.workingDirectory,
+  branchName:
+    record.executionTarget.kind === "local_worktree" ? record.executionTarget.branchName : null,
+  worktreeState:
+    record.executionTarget.kind === "local_worktree" ? record.executionTarget.worktreeState : null,
+  roleSnapshotId: record.roleSnapshot?.id ?? null,
+  roleSnapshotName: record.roleSnapshot?.name ?? null,
+  roleSnapshotSystemPrompt: record.roleSnapshot?.systemPrompt ?? null,
+  ...selectedModelColumns(record.selectedModel),
+  generatedTitle: record.generatedTitle,
+  manualTitle: record.manualTitle,
+  targetBranch: record.targetBranch?.branch ?? null,
+  targetRemote: record.targetBranch?.remote ?? null,
+  createdAt: record.createdAt,
+  lastActivityAt: record.lastActivityAt ?? null,
+  updatedAt: record.updatedAt,
+  archivedAt: record.archivedAt,
+});
 
 export const decodeRecord = (row: WorkspaceSessionRow) =>
   Effect.try({
@@ -18,12 +47,43 @@ export const decodeRecord = (row: WorkspaceSessionRow) =>
         id: row.id,
         runtimeKind: row.runtimeKind,
         externalSessionId: row.externalSessionId,
-        executionTarget: JSON.parse(row.executionTargetJson),
-        roleSnapshot: row.roleSnapshotJson === null ? null : JSON.parse(row.roleSnapshotJson),
-        selectedModel: row.selectedModelJson === null ? null : JSON.parse(row.selectedModelJson),
+        executionTarget:
+          row.executionKind === "local_repo_root"
+            ? { kind: row.executionKind, workingDirectory: row.workingDirectory }
+            : {
+                kind: row.executionKind,
+                workingDirectory: row.workingDirectory,
+                branchName: row.branchName,
+                worktreeState: row.worktreeState,
+              },
+        roleSnapshot:
+          row.roleSnapshotId === null
+            ? null
+            : {
+                id: row.roleSnapshotId,
+                name: row.roleSnapshotName,
+                systemPrompt: row.roleSnapshotSystemPrompt,
+              },
+        selectedModel:
+          row.modelRuntimeKind === null
+            ? null
+            : {
+                runtimeKind: row.modelRuntimeKind,
+                providerId: row.modelProviderId,
+                modelId: row.modelId,
+                variant: row.modelVariant ?? undefined,
+                profileId: row.modelProfileId ?? undefined,
+                speed: row.modelSpeed ?? undefined,
+              },
         generatedTitle: row.generatedTitle,
         manualTitle: row.manualTitle,
-        targetBranch: row.targetBranchJson === null ? null : JSON.parse(row.targetBranchJson),
+        targetBranch:
+          row.targetBranch === null
+            ? null
+            : {
+                branch: row.targetBranch,
+                remote: row.targetRemote ?? undefined,
+              },
         createdAt: row.createdAt,
         lastActivityAt: row.lastActivityAt ?? undefined,
         updatedAt: row.updatedAt,
@@ -31,21 +91,22 @@ export const decodeRecord = (row: WorkspaceSessionRow) =>
       }),
     catch: (cause) =>
       new HostValidationError({
-        message: `Stored Workspace Session ${row.id} is invalid.`,
+        message: `Stored workspace session ${row.id} in workspace ${row.workspaceId} is invalid.`,
         cause,
       }),
   });
 
-const readWorkspaceSessions = (session: TaskStoreSession, activeOnly: boolean) =>
+/** Reads the active saved chats of one workspace, the most recently updated first. */
+export const readActiveWorkspaceSessions = (session: HostDatabaseSession, workspaceId: string) =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
       (database) =>
         database
           .select()
           .from(workspaceSessions)
-          .where(activeOnly ? isNull(workspaceSessions.archivedAt) : undefined)
+          .where(and(workspaceSessionScope(workspaceId), isNull(workspaceSessions.archivedAt)))
           .orderBy(desc(workspaceSessions.updatedAt)),
-      activeOnly ? "workspaceSessionStore.listActive" : "workspaceSessionStore.worktreeOwners",
+      "workspaceSessionStore.listActive",
     );
     return yield* Effect.forEach(rows, decodeRecord);
   });

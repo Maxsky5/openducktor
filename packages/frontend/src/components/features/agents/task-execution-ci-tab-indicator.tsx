@@ -12,7 +12,10 @@ import {
   type TaskExecutionCiTabIndicator,
 } from "./task-execution-ci-tab-indicator-model";
 
-const inactiveCiReviewQueryInput = { repoPath: "__inactive_ci_header__" };
+const inactiveCiReviewQueryInput = {
+  workspaceId: "__inactive__",
+  repoPath: "__inactive_ci_header__",
+};
 
 const ciCheckStatusDotClassName = {
   failure: "bg-rose-500",

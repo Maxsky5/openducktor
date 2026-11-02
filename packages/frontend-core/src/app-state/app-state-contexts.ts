@@ -1,5 +1,10 @@
 import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
-import type { AgentRuntimes, RuntimeDescriptor, WorkspaceRecord } from "@openducktor/contracts";
+import type {
+  AgentRuntimes,
+  RuntimeDescriptor,
+  WorkspaceRecord,
+  WorkspaceRef,
+} from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentRuntimeCatalog,
@@ -66,8 +71,8 @@ export type TaskRefreshOptions = {
 };
 
 export type TaskControlContextValue = {
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
-  loadWorkspaceTasks: (repoPath: string) => Promise<void>;
+  refreshTaskData: (scope: WorkspaceRef, taskIdOrIds?: string | string[]) => Promise<void>;
+  loadWorkspaceTasks: (scope: WorkspaceRef) => Promise<void>;
   refreshTasksWithOptions: (options?: TaskRefreshOptions) => Promise<void>;
   clearTaskData: () => void;
   setIsLoadingTasks: (value: boolean) => void;

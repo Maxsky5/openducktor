@@ -3,7 +3,11 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { Cause, Effect, Exit } from "effect";
-import { checkStartupSettingsEffect, findInvalidSettingsFileError } from "@openducktor/host";
+import {
+  checkStartupSettingsEffect,
+  findHostStorageStartupError,
+  HostStorageStartupError,
+} from "@openducktor/host";
 import { runElectronEffect } from "../effect/electron-boundary";
 import { causeToElectronBoundaryError, ElectronLifecycleError } from "../effect/electron-errors";
 import {
@@ -13,7 +17,7 @@ import {
 } from "./electron-main-lifecycle";
 import { createElectronMainLogger } from "./electron-main-logger";
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
-import { renderInvalidSettingsErrorHtml } from "./electron-settings-error-window";
+import { renderStartupErrorHtml, startupErrorMessage } from "./electron-startup-windows";
 
 const REPO_ROOT = resolve(import.meta.dir, "../../../..");
 
@@ -288,7 +292,7 @@ describe("Electron main lifecycle policy", () => {
     await runElectronMainStartupBoundary({
       cleanupAfterFailure: () => Effect.sync(() => steps.push("cleanup")),
       exitProcess: () => steps.push("exit"),
-      invalidSettingsMessage: () => startupError.message,
+      startupErrorMessage: () => startupError.message,
       logger: {
         error: (message, cause) => Effect.sync(() => errors.push({ message, cause })),
         info: () => Effect.void,
@@ -296,31 +300,59 @@ describe("Electron main lifecycle policy", () => {
       markShutdownComplete: () => steps.push("shutdown-complete"),
       markShutdownStarted: () => steps.push("shutdown-started"),
       reportFailure: () => steps.push("report-failure"),
-      showInvalidSettingsError: async (message) => {
+      showStartupError: async (message) => {
         expect(message).toBe(startupError.message);
         steps.push("show-error");
       },
       startupEffect: Effect.fail(startupError),
     });
 
-    expect(errors).toEqual([{ message: startupError.message, cause: undefined }]);
+    expect(errors).toEqual([{ message: startupError.message, cause: startupError }]);
     expect(steps).toEqual(["shutdown-started", "cleanup", "shutdown-complete", "show-error"]);
   });
 
-  test("settings error screen escapes file content and shows restart advice", () => {
-    const html = renderInvalidSettingsErrorHtml(
-      "Invalid config file </pre><script>alert(1)</script>",
-    );
-    expect(html).toContain("&lt;/pre&gt;&lt;script&gt;alert(1)&lt;/script&gt;");
-    expect(html).toContain("Close OpenDucktor and restart it after you fix or move the file.");
-    expect(html).not.toContain("<script>");
+  test("packaged host database failure opens the error screen with the source path", async () => {
+    const importError = new HostStorageStartupError({
+      message: "Workspace history is newer than this version. Restore a compatible backup.",
+      cause: null,
+      sourcePath: "/data/repo/tasks.sqlite",
+    });
+    const startupError = new ElectronLifecycleError({
+      operation: "electron.main.create-host-router",
+      message: importError.message,
+      cause: importError,
+    });
+    const shown: string[] = [];
+    const exitCodes: number[] = [];
+
+    await runElectronMainStartupBoundary({
+      cleanupAfterFailure: () => Effect.void,
+      exitProcess: (exitCode) => exitCodes.push(exitCode),
+      logger: { error: () => Effect.void, info: () => Effect.void },
+      markShutdownComplete: () => {},
+      markShutdownStarted: () => {},
+      reportFailure: () => {},
+      showStartupError: async (message) => {
+        shown.push(message);
+      },
+      startupErrorMessage,
+      startupEffect: Effect.fail(startupError),
+    });
+
+    expect(shown).toEqual([`${importError.message}\n\nSource: /data/repo/tasks.sqlite`]);
+    expect(exitCodes).toEqual([]);
   });
 
-  test("closing the packaged settings error window exits with a failure status", () => {
-    const source = readRepoFile("apps/electron/src/main/main.ts");
-    expect(source).toContain(
-      'window.on("closed", () => {\n    startupFailureWindow = null;\n    app.exit(1);',
+  test("startup error screen escapes the message and shows the log directory", () => {
+    const html = renderStartupErrorHtml(
+      "Invalid config file </pre><script>alert(1)</script>",
+      "/home/user/.openducktor/logs",
     );
+    expect(html).toContain("&lt;/pre&gt;&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).toContain("<code>/home/user/.openducktor/logs</code>");
+    expect(html).toContain("Close OpenDucktor and restart it after you correct the problem.");
+    expect(html).toContain("prefers-color-scheme: dark");
+    expect(html).not.toContain("<script>");
   });
 
   test("finds an invalid settings file through the Electron startup error", async () => {
@@ -345,7 +377,7 @@ describe("Electron main lifecycle policy", () => {
 
       expect(Exit.isFailure(startupExit)).toBe(true);
       if (Exit.isFailure(startupExit)) {
-        const error = findInvalidSettingsFileError(causeToElectronBoundaryError(startupExit.cause));
+        const error = findHostStorageStartupError(causeToElectronBoundaryError(startupExit.cause));
         expect(error?.message).toContain(
           `Invalid config file ${resolve(configDir, "config.json")}`,
         );

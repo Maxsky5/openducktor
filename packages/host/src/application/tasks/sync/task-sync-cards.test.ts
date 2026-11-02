@@ -1,11 +1,11 @@
+import { createTaskSyncService } from "./task-sync-service";
 import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import { describe, expect, mock, test } from "bun:test";
-import { noMergeDetection } from "./task-sync-service.test-support";
+import { noMergeDetection, syncWorkspace } from "./task-sync-service.test-support";
 import {
   workflowArtifactId,
   type ExternalTaskSyncEvent,
-  type TaskCard,
   type TaskEventStreamFrame,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -15,7 +15,6 @@ import { createTaskServiceWithMutationProgress } from "../task-service";
 import { createEventPublishingTaskService } from "../event-publishing-task-service";
 import { enrichTask } from "../support/task-workflow-helpers";
 import { createTaskSyncServiceForTest } from "./task-sync-service.test-support";
-import { createTaskSyncService } from "./task-sync-service";
 import { createTaskEventStream } from "../../../events/task-event-stream";
 
 describe("committed task cards", () => {
@@ -36,6 +35,7 @@ describe("committed task cards", () => {
       const { repoPath, store } = harness;
       const task = await Effect.runPromise(
         store.createTask({
+          workspaceId: "fairnest",
           repoPath,
           status: "open",
           task: { title: "Task", issueType: "task", priority: 2 },
@@ -46,7 +46,7 @@ describe("committed task cards", () => {
           taskWorkflows: builtinTaskWorkflows,
           taskStore: store,
         }),
-        resetTask: (input: { repoPath: string; taskId: string }) =>
+        resetTask: (input: { workspaceId: string; repoPath: string; taskId: string }) =>
           Effect.gen(function* () {
             const artifacts = yield* store.listArtifacts(input);
             yield* store.clearTaskArtifacts(input);
@@ -60,11 +60,16 @@ describe("committed task cards", () => {
         taskService: base,
         mergeDetection: noMergeDetection,
         taskEventStream: stream,
+        settingsConfig: { readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()) },
         workspaceSettingsService: {
           getWorkspaceCatalog: () =>
-            Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
+            Effect.succeed({
+              catalogRevision: 0,
+              openWorkspaces: [syncWorkspace(repoPath, "fairnest")],
+              closedWorkspaces: [],
+              incompleteRemovals: [],
+            }),
           listWorkspaces: () => Effect.succeed([]),
-          getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
         },
         publicationReporter: { report: () => Effect.void },
         onBackgroundFailure: () => Effect.void,
@@ -78,6 +83,7 @@ describe("committed task cards", () => {
         service.workflowArtifactSave({
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
+          workspaceId: "fairnest",
           repoPath,
           taskId: task.id,
           markdown: "# Before",
@@ -85,12 +91,17 @@ describe("committed task cards", () => {
           submit: false,
         }),
       );
-      await Effect.runPromise(service.resetTask({ repoPath, taskId: task.id }));
-      await Effect.runPromise(service.resetTask({ repoPath, taskId: task.id }));
+      await Effect.runPromise(
+        service.resetTask({ workspaceId: "fairnest", repoPath, taskId: task.id }),
+      );
+      await Effect.runPromise(
+        service.resetTask({ workspaceId: "fairnest", repoPath, taskId: task.id }),
+      );
       const after = await Effect.runPromise(
         service.workflowArtifactSave({
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
+          workspaceId: "fairnest",
           repoPath,
           taskId: task.id,
           markdown: "# After",
@@ -99,7 +110,12 @@ describe("committed task cards", () => {
         }),
       );
       await Effect.runPromise(
-        service.updateTask({ repoPath, taskId: task.id, patch: { title: "Renamed" } }),
+        service.updateTask({
+          workspaceId: "fairnest",
+          repoPath,
+          taskId: task.id,
+          patch: { title: "Renamed" },
+        }),
       );
       await Promise.resolve();
       expect(before.artifact.updatedAt).toBe(timestamp);
@@ -138,8 +154,11 @@ describe("committed task cards", () => {
         [],
       ]);
       expect(
-        (await Effect.runPromise(store.getTaskMetadata({ repoPath, taskId: task.id }))).artifacts
-          .spec?.markdown,
+        (
+          await Effect.runPromise(
+            store.getTaskMetadata({ workspaceId: "fairnest", repoPath, taskId: task.id }),
+          )
+        ).artifacts.spec?.markdown,
       ).toBe("# After");
       expect(failures).toEqual([]);
     } finally {
@@ -155,6 +174,7 @@ describe("committed task cards", () => {
       const create = (title: string) =>
         Effect.runPromise(
           store.createTask({
+            workspaceId: "fairnest",
             repoPath,
             status: "open",
             task: { title, issueType: "task", priority: 2 },
@@ -168,15 +188,29 @@ describe("committed task cards", () => {
       });
       const events: ExternalTaskSyncEvent[] = [];
       const readCards = mock(base.listTasks);
-      const sync = createTaskSyncServiceForTest({
+      const sync = createTaskSyncService({
         taskService: { ...base, listTasks: readCards },
+        settingsConfig: { readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()) },
         workspaceSettingsService: {
           getWorkspaceCatalog: () =>
-            Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
+            Effect.succeed({
+              catalogRevision: 0,
+              openWorkspaces: [syncWorkspace(repoPath, "fairnest")],
+              closedWorkspaces: [],
+              incompleteRemovals: [],
+            }),
           listWorkspaces: () => Effect.succeed([]),
-          getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
         },
-        eventBus: { publish: (event) => events.push(event) },
+        mergeDetection: noMergeDetection,
+        taskEventStream: {
+          ...createTaskEventStream({ reporter: { report: () => {} } }),
+          publish: (event) => {
+            events.push(event);
+            return { epoch: "11111111-1111-4111-8111-111111111111", sequence: events.length };
+          },
+        },
+        publicationReporter: { report: () => Effect.void },
+        onBackgroundFailure: () => Effect.void,
       });
       const service = createEventPublishingTaskService({
         taskWorkflows: builtinTaskWorkflows,
@@ -185,6 +219,7 @@ describe("committed task cards", () => {
       });
       await Effect.runPromise(
         service.updateTask({
+          workspaceId: "fairnest",
           repoPath,
           taskId: changed.id,
           patch: { description: "Changed description" },
@@ -194,48 +229,34 @@ describe("committed task cards", () => {
       const cards = events[0]?.boardChanges?.cards;
       expect(cards).toHaveLength(1);
       expect(cards?.[0]).toMatchObject({ id: changed.id, description: "Changed description" });
-      const fullBoard = await Effect.runPromise(base.listTasks({ repoPath, doneVisibleDays: 1 }));
+      const fullBoard = await Effect.runPromise(
+        base.listTasks({ workspaceId: "fairnest", repoPath, doneVisibleDays: 1 }),
+      );
       expect(cards).toEqual(fullBoard.filter((card) => card.id === changed.id));
     } finally {
       await harness.cleanup();
     }
   });
 
-  test("publishes session-only changes without a task card read", async () => {
+  test("publishes changed task identities for saved session association refresh", async () => {
     const events: ExternalTaskSyncEvent[] = [];
-    const listTasks = mock((): Effect.Effect<TaskCard[]> =>
-      Effect.die("Session changes must not read the board"),
-    );
     const sync = createTaskSyncServiceForTest({
       taskService: {
-        listTasks,
-        repoPullRequestSyncDetailed: () =>
-          Effect.succeed({
-            ran: false,
-            changedTaskIds: [],
-            reason: "not_configured",
-            message: "Configure a Git provider.",
-          }),
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
       },
-      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([syncWorkspace()]) },
       eventBus: { publish: (event) => events.push(event) },
     });
-    for (const operation of [
-      "agent-session-create",
-      "agent-session-update-model",
-      "agent-session-delete",
-    ] as const) {
-      await Effect.runPromise(
-        sync.publishTasksUpdated(
-          "/repo",
-          { taskIds: ["task-1"], removedTaskIds: [] },
-          operation,
-          [],
-        ),
-      );
-    }
-    expect(listTasks).not.toHaveBeenCalled();
-    expect(events).toHaveLength(3);
-    expect(events.every((event) => event.boardChanges === null)).toBe(true);
+    await Effect.runPromise(
+      sync.publishTasksUpdated(
+        { workspaceId: "repo", repoPath: "/repo" },
+        { taskIds: ["task-1"], removedTaskIds: [] },
+        "agent-session-create",
+        [],
+      ),
+    );
+    expect(events).toMatchObject([
+      { kind: "tasks_updated", repoPath: "/repo", taskIds: ["task-1"] },
+    ]);
   });
 });

@@ -138,11 +138,11 @@ describe("agent-session live contracts", () => {
     expect(
       agentSessionLiveLoadContextInputSchema.parse({
         ...ref,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
       }),
     ).toEqual({
       ...ref,
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
     });
     expect(agentSessionLiveLoadContextInputSchema.parse(ref)).toEqual(ref);
     expect(
@@ -159,7 +159,15 @@ describe("agent-session live contracts", () => {
       { runtimeId: "runtime-private" },
       { runtimePolicy: { kind: "codex" } },
       { sessionScope: { kind: "unbound" } },
-      { sessionScope: { kind: "workflow", taskId: "task-1", role: "build", runtimeId: "x" } },
+      {
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "repo",
+          taskId: "task-1",
+          role: "build",
+          runtimeId: "x",
+        },
+      },
     ]) {
       expect(
         agentSessionLiveLoadContextInputSchema.safeParse({ ...ref, ...nativeField }).success,
@@ -172,7 +180,12 @@ describe("agent-session live contracts", () => {
     expect(
       agentSessionLiveSnapshotSchema.safeParse({
         ...snapshot,
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "repo",
+          taskId: "task-1",
+          role: "build",
+        },
       }).success,
     ).toBe(false);
   });
@@ -181,6 +194,7 @@ describe("agent-session live contracts", () => {
     const variants = [
       {
         type: "task_session_records_updated",
+        workspaceId: "repo",
         repoPath: ref.repoPath,
         taskId: "task-1",
         agentSessions: [],

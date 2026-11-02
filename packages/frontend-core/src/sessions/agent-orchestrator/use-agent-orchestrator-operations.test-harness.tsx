@@ -169,7 +169,7 @@ export const createHookHarness = (args: {
   activeWorkspace?: ActiveWorkspace;
   tasks: TaskCard[];
   isLoadingTasks?: boolean;
-  refreshTaskData: (repoPath: string) => Promise<void>;
+  refreshTaskData: (scope: import("@openducktor/contracts").WorkspaceRef) => Promise<void>;
   agentEngine?: AgentEnginePort;
   /** Create these with `createTestDependencies`; the hook renders under their connection. */
   dependencies: OrchestratorDependencies;
@@ -216,7 +216,7 @@ export const createHookHarness = (args: {
       activeWorkspace: ActiveWorkspace;
       tasks: TaskCard[];
       isLoadingTasks: boolean;
-      refreshTaskData: (repoPath: string) => Promise<void>;
+      refreshTaskData: (scope: import("@openducktor/contracts").WorkspaceRef) => Promise<void>;
       agentEngine: AgentEnginePort;
       dependencies: OrchestratorDependencies;
     }>,

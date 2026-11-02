@@ -32,6 +32,7 @@ import {
 } from "@openducktor/frontend-core/sessions/session-view/selected-session-view-projection";
 
 type UseAgentStudioSelectedSessionViewArgs = {
+  workspaceId: string | null;
   workspaceRepoPath: string | null;
   selectedTask: TaskCard | null;
   sessionSummaries: AgentSessionSummary[];
@@ -53,6 +54,7 @@ export type AgentStudioSelectedSessionView = {
 };
 
 export function useAgentStudioSelectedSessionView({
+  workspaceId,
   workspaceRepoPath,
   selectedTask,
   sessionSummaries,
@@ -104,10 +106,15 @@ export function useAgentStudioSelectedSessionView({
     ? null
     : selection.sessionIdentity;
   const session = useAgentSession(selectedSessionIdentity);
-  const loadedSession = useMemo(
-    () => (matchesAgentSessionIdentity(session, selectedSessionIdentity) ? session : null),
-    [selectedSessionIdentity, session],
-  );
+  const loadedSession = useMemo(() => {
+    if (!matchesAgentSessionIdentity(session, selectedSessionIdentity)) return null;
+    if (
+      session?.sessionAssociation.kind === "workflow" &&
+      session.sessionAssociation.workspaceId !== workspaceId
+    )
+      return null;
+    return session;
+  }, [selectedSessionIdentity, session, workspaceId]);
   const { getSessionFault, sessionReadModelLoadState } = useAgentSessionReadModelState();
   const selectedSessionFault = getSessionFault(selectedSessionIdentity);
   const runtimeTarget = useMemo(
@@ -192,21 +199,43 @@ export function useAgentStudioSelectedSessionView({
   const taskId = selectedTask?.id ?? null;
   const role = selection.role;
   const prepare = useCallback(async () => {
-    if (!workspaceRepoPath || !runtimeKind || !externalSessionId || !workingDirectory || !taskId)
+    if (
+      !workspaceId ||
+      !workspaceRepoPath ||
+      !runtimeKind ||
+      !externalSessionId ||
+      !workingDirectory ||
+      !taskId
+    )
       return;
     await host.agentSessionControlResume({
       repoPath: workspaceRepoPath,
       runtimeKind,
       externalSessionId,
       workingDirectory,
-      sessionScope: { kind: "workflow", taskId, role },
+      sessionScope: { kind: "workflow", workspaceId, taskId, role },
       resumeMode: "reattach",
     });
-  }, [host, workspaceRepoPath, runtimeKind, externalSessionId, workingDirectory, taskId, role]);
+  }, [
+    host,
+    workspaceId,
+    workspaceRepoPath,
+    runtimeKind,
+    externalSessionId,
+    workingDirectory,
+    taskId,
+    role,
+  ]);
   const preparation = useChatSessionPreparation({
     repoPath: workspaceRepoPath,
     identity: selectedSessionIdentity,
-    targetKey: JSON.stringify([workspaceRepoPath, selectedSessionIdentity, taskId, role]),
+    targetKey: JSON.stringify([
+      workspaceId,
+      workspaceRepoPath,
+      selectedSessionIdentity,
+      taskId,
+      role,
+    ]),
     enabled:
       loadedSession !== null &&
       runtimeReadinessState === "ready" &&
@@ -287,6 +316,7 @@ const toSessionRuntimeDataTarget = (
     identity,
     sessionAssociation: {
       kind: "workflow",
+      workspaceId: summary.workspaceId,
       taskId: summary.taskId,
       role: summary.role,
     },

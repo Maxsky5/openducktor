@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
+import {
+  workspaceSessionCatalog,
+  workspaceSessionOwnership,
+} from "../../test-support/workspace-session-ownership";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
 import { createAgentSessionRecord } from "../../ports/task-store-port-contract.test-support";
@@ -18,7 +22,7 @@ test("reload roots recover workflow roles and repository scope from persisted ow
     });
     const task = await Effect.runPromise(
       harness.store.createTask({
-        repoPath,
+        ...harness.scope,
         status: "open",
         task: { title: "Permissions", issueType: "task", priority: 2 },
       }),
@@ -35,11 +39,17 @@ test("reload roots recover workflow roles and repository scope from persisted ow
     );
     for (const session of workflowSessions)
       await Effect.runPromise(
-        harness.store.upsertAgentSession({ repoPath, taskId: task.id, session }),
+        harness.store.upsertAgentSession({
+          workspaceId: harness.workspaceId,
+          ownershipScope: workspaceSessionOwnership({ workspaceId: harness.workspaceId, repoPath }),
+          repoPath,
+          taskId: task.id,
+          session,
+        }),
       );
     const closed = await Effect.runPromise(
       harness.store.createTask({
-        repoPath,
+        ...harness.scope,
         status: "open",
         task: { title: "Closed history", issueType: "task", priority: 2 },
       }),
@@ -49,13 +59,23 @@ test("reload roots recover workflow roles and repository scope from persisted ow
       workingDirectory: `${repoPath}/removed-worktree`,
     });
     await Effect.runPromise(
-      harness.store.upsertAgentSession({ repoPath, taskId: closed.id, session: historicalSession }),
+      harness.store.upsertAgentSession({
+        workspaceId: harness.workspaceId,
+        ownershipScope: workspaceSessionOwnership({ workspaceId: harness.workspaceId, repoPath }),
+        repoPath,
+        taskId: closed.id,
+        session: historicalSession,
+      }),
     );
     await Effect.runPromise(
-      harness.store.transitionTask({ repoPath, taskId: closed.id, status: "closed" }),
+      harness.store.transitionTask({
+        ...harness.scope,
+        taskId: closed.id,
+        decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
+      }),
     );
     const history = await Effect.runPromise(
-      harness.store.getTaskMetadata({ repoPath, taskId: closed.id }),
+      harness.store.getTaskMetadata({ ...harness.scope, taskId: closed.id }),
     );
     const chat: WorkspaceSession = {
       id: "repository-chat",
@@ -72,11 +92,17 @@ test("reload roots recover workflow roles and repository scope from persisted ow
       archivedAt: null,
     };
     for (const session of [chat, { ...chat, id: "draft", externalSessionId: null }])
-      await Effect.runPromise(store.create({ repoPath, workspaceId: config.workspaceId, session }));
+      await Effect.runPromise(
+        store.create({
+          repoPath,
+          workspaceId: config.workspaceId,
+          ownershipScope: workspaceSessionOwnership(config),
+          session,
+        }),
+      );
     const readRoots = createLiveSessionRootRefsReader({
       store,
-      taskStore: harness.store,
-      settings: { getRepoConfigByRepoPath: () => Effect.succeed(config) },
+      settings: { getWorkspaceCatalog: () => Effect.succeed(workspaceSessionCatalog(config)) },
     });
     const roots = await Effect.runPromise(readRoots(repoPath));
     expect(roots).toEqual([
@@ -85,28 +111,44 @@ test("reload roots recover workflow roles and repository scope from persisted ow
         runtimeKind: "opencode",
         externalSessionId: "repository-native",
         workingDirectory: repoPath,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: harness.workspaceId },
       },
       ...workflowSessions.map((session) => ({
         repoPath,
         runtimeKind: session.runtimeKind,
         externalSessionId: session.externalSessionId,
         workingDirectory: session.workingDirectory,
-        sessionScope: { kind: "workflow" as const, taskId: task.id, role: session.role },
+        sessionScope: {
+          kind: "workflow" as const,
+          workspaceId: harness.workspaceId,
+          taskId: task.id,
+          role: session.role,
+        },
       })),
     ]);
     expect(
-      await Effect.runPromise(harness.store.getTaskMetadata({ repoPath, taskId: closed.id })),
+      await Effect.runPromise(
+        harness.store.getTaskMetadata({ ...harness.scope, taskId: closed.id }),
+      ),
     ).toEqual(history);
     await Effect.runPromise(
-      harness.store.transitionTask({ repoPath, taskId: closed.id, status: "open" }),
+      harness.store.transitionTask({
+        ...harness.scope,
+        taskId: closed.id,
+        decide: () => Result.succeed({ status: "open", workflowId: "openducktor" }),
+      }),
     );
     expect(await Effect.runPromise(readRoots(repoPath))).toContainEqual({
       repoPath,
       runtimeKind: historicalSession.runtimeKind,
       externalSessionId: historicalSession.externalSessionId,
       workingDirectory: historicalSession.workingDirectory,
-      sessionScope: { kind: "workflow", taskId: closed.id, role: historicalSession.role },
+      sessionScope: {
+        kind: "workflow",
+        workspaceId: harness.workspaceId,
+        taskId: closed.id,
+        role: historicalSession.role,
+      },
     });
   } finally {
     await harness.cleanup();

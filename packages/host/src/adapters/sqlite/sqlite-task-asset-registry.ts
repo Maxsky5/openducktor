@@ -1,3 +1,4 @@
+import { sqliteValues } from "./sqlite-parameters";
 import type { TaskUpdatePatch } from "@openducktor/contracts";
 import { and, eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
@@ -12,7 +13,8 @@ import { getTaskRecord } from "./sqlite-task-card-read-model";
 import { insertTaskFromCreateInput } from "./sqlite-task-create";
 import { requireTaskRow } from "./sqlite-task-queries";
 import type { SqliteTaskRepositoryContextProvider } from "./sqlite-task-repository-context";
-import { type TaskStoreSession, taskAssets, tasks } from "./sqlite-task-store-schema";
+import { type HostDatabaseSession, taskAssets, tasks } from "./sqlite-host-database-schema";
+import { commitTaskMutation } from "./sqlite-task-mutation";
 import { applyTaskPatch } from "./sqlite-task-writes";
 import type { TaskRecord } from "../../ports/task-repository-ports";
 
@@ -31,7 +33,12 @@ const toRecord = (row: typeof taskAssets.$inferSelect): TaskAssetRecord => ({
   createdAt: row.createdAt,
 });
 
-const insertAssets = (session: TaskStoreSession, taskId: string, assets: NewTaskAssetRecord[]) => {
+const insertAssets = (
+  session: HostDatabaseSession,
+  workspaceId: string,
+  taskId: string,
+  assets: NewTaskAssetRecord[],
+) => {
   if (assets.length === 0) {
     return Effect.void;
   }
@@ -40,6 +47,7 @@ const insertAssets = (session: TaskStoreSession, taskId: string, assets: NewTask
       (database) =>
         database.insert(taskAssets).values(
           assets.map((asset) => ({
+            workspaceId,
             id: asset.id,
             taskId,
             scope: asset.scope,
@@ -86,14 +94,14 @@ export const createSqliteTaskAssetRegistry = ({
   TaskDescriptionAssetPersistencePort => {
   return {
     taskExists(input) {
-      return withDatabase(input.repoPath, "sqliteTaskAssetRegistry.taskExists", ({ session }) =>
+      return withDatabase(input, "sqliteTaskAssetRegistry.taskExists", ({ session, workspaceId }) =>
         session
           .execute(
             (database) =>
               database
                 .select({ id: tasks.id })
                 .from(tasks)
-                .where(eq(tasks.id, input.taskId))
+                .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, input.taskId)))
                 .limit(1),
             "sqliteTaskAssetRegistry.taskExists.select",
           )
@@ -101,22 +109,27 @@ export const createSqliteTaskAssetRegistry = ({
       );
     },
     assetIdExists(input) {
-      return withDatabase(input.repoPath, "sqliteTaskAssetRegistry.assetIdExists", ({ session }) =>
-        session
-          .execute(
-            (database) =>
-              database
-                .select({ id: taskAssets.id })
-                .from(taskAssets)
-                .where(eq(taskAssets.id, input.assetId))
-                .limit(1),
-            "sqliteTaskAssetRegistry.assetIdExists.select",
-          )
-          .pipe(Effect.map((rows) => rows.length > 0)),
+      return withDatabase(
+        input,
+        "sqliteTaskAssetRegistry.assetIdExists",
+        ({ session, workspaceId }) =>
+          session
+            .execute(
+              (database) =>
+                database
+                  .select({ id: taskAssets.id })
+                  .from(taskAssets)
+                  .where(
+                    and(eq(taskAssets.workspaceId, workspaceId), eq(taskAssets.id, input.assetId)),
+                  )
+                  .limit(1),
+              "sqliteTaskAssetRegistry.assetIdExists.select",
+            )
+            .pipe(Effect.map((rows) => rows.length > 0)),
       );
     },
     getAsset(input) {
-      return withDatabase(input.repoPath, "sqliteTaskAssetRegistry.getAsset", ({ session }) =>
+      return withDatabase(input, "sqliteTaskAssetRegistry.getAsset", ({ session, workspaceId }) =>
         session
           .execute(
             (database) =>
@@ -125,6 +138,7 @@ export const createSqliteTaskAssetRegistry = ({
                 .from(taskAssets)
                 .where(
                   and(
+                    eq(taskAssets.workspaceId, workspaceId),
                     eq(taskAssets.id, input.assetId),
                     eq(taskAssets.taskId, input.taskId),
                     eq(taskAssets.scope, input.scope),
@@ -137,38 +151,47 @@ export const createSqliteTaskAssetRegistry = ({
       );
     },
     listAssets(input) {
-      return withDatabase(input.repoPath, "sqliteTaskAssetRegistry.listAssets", ({ session }) =>
+      return withDatabase(input, "sqliteTaskAssetRegistry.listAssets", ({ session, workspaceId }) =>
         session
           .execute(
             (database) =>
               database
                 .select()
                 .from(taskAssets)
-                .where(and(eq(taskAssets.taskId, input.taskId), eq(taskAssets.scope, input.scope))),
+                .where(
+                  and(
+                    eq(taskAssets.workspaceId, workspaceId),
+                    eq(taskAssets.taskId, input.taskId),
+                    eq(taskAssets.scope, input.scope),
+                  ),
+                ),
             "sqliteTaskAssetRegistry.listAssets.select",
           )
           .pipe(Effect.map((rows) => rows.map(toRecord))),
       );
     },
     registerAssets(input) {
-      return withDatabase(input.repoPath, "sqliteTaskAssetRegistry.registerAssets", ({ session }) =>
-        session.transaction("sqliteTaskAssetRegistry.registerAssets", (transaction) =>
+      return withDatabase(input, "sqliteTaskAssetRegistry.registerAssets", (context) =>
+        commitTaskMutation(context, "sqliteTaskAssetRegistry.registerAssets", (transaction) =>
           Effect.gen(function* () {
-            yield* requireTaskRow(transaction, input.taskId, input.repoPath);
-            yield* insertAssets(transaction, input.taskId, input.assets);
+            yield* requireTaskRow(transaction, context.workspaceId, input.taskId, input.repoPath);
+            yield* insertAssets(transaction, context.workspaceId, input.taskId, input.assets);
+            return { value: undefined, taskId: input.taskId };
           }),
         ),
       );
     },
     createTaskWithDescriptionAssets(input) {
       return withDatabase(
-        input.repoPath,
+        input,
         "sqliteTaskAssetRegistry.createTaskWithDescriptionAssets",
-        ({ session, workspaceId, taskWorkflows }) =>
-          session.transaction(
+        (context) =>
+          commitTaskMutation(
+            context,
             "sqliteTaskAssetRegistry.createTaskWithDescriptionAssets",
             (transaction) =>
               Effect.gen(function* () {
+                const { workspaceId, taskWorkflows } = context;
                 const taskId = yield* insertTaskFromCreateInput({
                   createdAt: now(),
                   session: transaction,
@@ -177,23 +200,33 @@ export const createSqliteTaskAssetRegistry = ({
                   workspaceId,
                 });
                 yield* input.prepareFiles(taskId);
-                yield* insertAssets(transaction, taskId, input.assets);
-                return yield* getTaskRecord(transaction, taskId, input.repoPath, taskWorkflows);
+                yield* insertAssets(transaction, workspaceId, taskId, input.assets);
+                const value = yield* getTaskRecord(
+                  transaction,
+                  workspaceId,
+                  taskId,
+                  input.repoPath,
+                  taskWorkflows,
+                );
+                return { value, taskId };
               }),
           ),
       );
     },
     updateTaskWithDescriptionAssets(input) {
       return withDatabase(
-        input.repoPath,
+        input,
         "sqliteTaskAssetRegistry.updateTaskWithDescriptionAssets",
-        ({ session, taskWorkflows }) =>
-          session.transaction(
+        (context) =>
+          commitTaskMutation(
+            context,
             "sqliteTaskAssetRegistry.updateTaskWithDescriptionAssets",
             (transaction) =>
               Effect.gen(function* () {
+                const { workspaceId, taskWorkflows } = context;
                 const currentTask = yield* getTaskRecord(
                   transaction,
+                  workspaceId,
                   input.taskId,
                   input.repoPath,
                   taskWorkflows,
@@ -205,6 +238,7 @@ export const createSqliteTaskAssetRegistry = ({
                       .from(taskAssets)
                       .where(
                         and(
+                          eq(taskAssets.workspaceId, workspaceId),
                           eq(taskAssets.taskId, input.taskId),
                           eq(taskAssets.scope, "description"),
                         ),
@@ -227,7 +261,7 @@ export const createSqliteTaskAssetRegistry = ({
                     message: "The task changed while it was being saved. Refresh and try again.",
                   });
                 }
-                yield* insertAssets(transaction, input.taskId, input.insertAssets);
+                yield* insertAssets(transaction, workspaceId, input.taskId, input.insertAssets);
                 if (input.removeAssetIds.length > 0) {
                   yield* transaction.execute(
                     (database) =>
@@ -235,21 +269,23 @@ export const createSqliteTaskAssetRegistry = ({
                         .delete(taskAssets)
                         .where(
                           and(
+                            eq(taskAssets.workspaceId, workspaceId),
                             eq(taskAssets.taskId, input.taskId),
                             eq(taskAssets.scope, "description"),
-                            inArray(taskAssets.id, input.removeAssetIds),
+                            inArray(taskAssets.id, sqliteValues(input.removeAssetIds)),
                           ),
                         ),
                     "sqliteTaskAssetRegistry.updateTaskWithDescriptionAssets.deleteAssets",
                   );
                 }
-                yield* applyTaskPatch(transaction, input, now(), taskWorkflows);
-                return yield* getTaskRecord(
+                const { task: value } = yield* applyTaskPatch(
                   transaction,
-                  input.taskId,
-                  input.repoPath,
+                  workspaceId,
+                  { ...input, workspaceId },
+                  now(),
                   taskWorkflows,
                 );
+                return { value, taskId: input.taskId };
               }),
           ),
       );

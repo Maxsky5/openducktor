@@ -19,14 +19,14 @@ export function ChatFileLinkProvider({
   children: ReactNode;
 }) {
   const queryClient = useQueryClient();
-  const { repoPath, ownerKey, onSelectFile } = owner;
+  const { workspaceId, repoPath, ownerKey, onSelectFile } = owner;
   const taskId = owner.taskId ?? null;
   const workingDirectory = owner.workingDirectory ?? null;
   const isWorkspace = owner.kind === "workspace";
   const generation = useRef(0);
   const identity = useMemo(
-    () => ({ repoPath, taskId, workingDirectory, ownerKey }),
-    [repoPath, taskId, workingDirectory, ownerKey],
+    () => ({ workspaceId, repoPath, taskId, workingDirectory, ownerKey }),
+    [workspaceId, repoPath, taskId, workingDirectory, ownerKey],
   );
   const activeIdentity = useRef<typeof identity | null>(null);
   useLayoutEffect(() => {
@@ -66,9 +66,10 @@ export function ChatFileLinkProvider({
           if (isWorkspace) {
             if (!repoPath || !root) throw new Error("The workspace directory is unavailable.");
           } else {
-            if (!repoPath || !taskId) throw new Error("The Task's Build Worktree is unavailable.");
+            if (!workspaceId || !repoPath || !taskId)
+              throw new Error("The Task's Build Worktree is unavailable.");
             const worktree = await queryClient.fetchQuery(
-              taskWorktreeQueryOptions({ repoPath, taskId }),
+              taskWorktreeQueryOptions({ workspaceId, repoPath, taskId }),
             );
             if (request !== generation.current) return;
             if (!worktree) throw new Error("The Task's Build Worktree is unavailable.");
@@ -101,7 +102,16 @@ export function ChatFileLinkProvider({
         }
       })();
     },
-    [identity, isWorkspace, onSelectFile, queryClient, repoPath, taskId, workingDirectory],
+    [
+      identity,
+      isWorkspace,
+      onSelectFile,
+      queryClient,
+      workspaceId,
+      repoPath,
+      taskId,
+      workingDirectory,
+    ],
   );
   return <ChatFileLinkContext value={openFile}>{children}</ChatFileLinkContext>;
 }

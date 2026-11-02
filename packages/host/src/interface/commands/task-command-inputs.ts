@@ -71,7 +71,10 @@ const readRequiredString = (record: CommandInputRecord, key: string, label: stri
 
 export const parseRepoPathInput = (input: HostCommandArgs, label: string): RepoPathInput => {
   const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
-  return { repoPath: readRequiredString(record, "repoPath") };
+  return {
+    workspaceId: readRequiredString(record, "workspaceId"),
+    repoPath: readRequiredString(record, "repoPath"),
+  };
 };
 
 export const parseTaskStopImpactInput = (input: HostCommandArgs): TaskStopImpactRequest => {
@@ -92,6 +95,7 @@ export const parseCloseTaskInput = (input: HostCommandArgs): CloseTaskInput =>
 export const parseTaskIdInput = (input: HostCommandArgs, label: string): TaskIdInput => {
   const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
   return {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
   };
@@ -126,6 +130,7 @@ export const parseListAgentSessionsForTasksInput = (
   });
 
   return {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskIds: Array.from(new Set(taskIds)),
   };
@@ -137,6 +142,7 @@ export const parseAgentSessionDeleteInput = (input: HostCommandArgs): AgentSessi
     "agent_session_delete input",
   );
   return {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     identity: parseAgentSessionIdentity(
@@ -151,6 +157,7 @@ export const parsePullRequestUpsertInput = (input: HostCommandArgs): PullRequest
     "task_pull_request_upsert input",
   );
   return {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     content: parsePullRequestContent(commandInputRecordSchema.safeParse(record.input)),
@@ -165,6 +172,7 @@ export const parsePullRequestLinkMergedInput = (
     "task_pull_request_link_merged input",
   );
   return {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     pullRequest: parsePullRequest(pullRequestSchema.safeParse(record.pullRequest)),
@@ -181,6 +189,7 @@ export const parseDirectMergeInput = (input: HostCommandArgs): DirectMergeInput 
     "task_direct_merge input",
   );
   return {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     input: parseTaskDirectMergeInput(taskDirectMergeInputSchema.safeParse(record.input)),
@@ -196,6 +205,7 @@ export const parseCreateTaskInput = (input: HostCommandArgs): CreateTaskUseCaseI
     optionalDescriptionAssetsSchema.safeParse(record.descriptionAssets),
   );
   const result: CreateTaskUseCaseInput = {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     task: parseCreateInput(taskCreateInputSchema.safeParse(record.input)),
   };
@@ -211,6 +221,7 @@ export const parseDeleteTaskInput = (input: HostCommandArgs): DeleteTaskInput =>
     "task_delete input",
   );
   return {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
   };
@@ -232,6 +243,7 @@ export const parseUpdateTaskInput = (input: HostCommandArgs): UpdateTaskInput =>
     });
   }
   const result: UpdateTaskInput = {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     patch,
@@ -248,6 +260,7 @@ export const parseTransitionTaskInput = (input: HostCommandArgs): TransitionTask
     "task_transition input",
   );
   return {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     status: parseTransitionStatus(taskStatusSchema.safeParse(record.status)),
@@ -260,6 +273,7 @@ export const parseApplyTaskEventInput = (input: HostCommandArgs): ApplyTaskEvent
     "task_apply_event input",
   );
   return {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     eventId: readRequiredString(record, "eventId"),
@@ -272,6 +286,7 @@ export const parseWorkflowArtifactInput = (input: HostCommandArgs): WorkflowArti
     "workflow_artifact_get input",
   );
   return {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     code: readRequiredString(record, "code"),
@@ -294,6 +309,7 @@ export const parseWorkflowArtifactSaveInput = (
     });
   }
   const parsed: WorkflowArtifactSaveInput = {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     code,
@@ -312,6 +328,7 @@ export const parseBuildStartInput = (input: HostCommandArgs): BuildStartInput =>
     "build_start input",
   );
   return {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     runtimeKind: readRequiredString(record, "runtimeKind"),
@@ -332,6 +349,7 @@ export const parseBuildBlockedInput = (input: HostCommandArgs): BuildBlockedInpu
     });
   }
   return {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     reason,
@@ -355,6 +373,7 @@ export const parseBuildCompletedInput = (input: HostCommandArgs): BuildCompleted
     "build_completed summary",
   );
   const result: BuildCompletedInput = {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
   };
@@ -372,6 +391,7 @@ export const parseOptionalNoteInput = (
   const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
   const note = parseOptionalNote(optionalStringSchema.safeParse(record.note), noteLabel);
   const result: OptionalNoteInput = {
+    workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
   };

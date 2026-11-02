@@ -11,7 +11,8 @@ for (const href of ["src/file.ts", "/alias/a/src/file.ts:42", "file:///real/a/sr
   test(`an aliased task worktree opens the canonical preview for ${href}`, async () => {
     const h = createDialogPreviewHarness(href);
     h.client.setQueryData(
-      taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" }).queryKey,
+      taskWorktreeQueryOptions({ workspaceId: "workspace", repoPath: "/repo", taskId: "a" })
+        .queryKey,
       () => ({
         workingDirectory: "/alias/a",
       }),
@@ -195,7 +196,11 @@ for (const readKind of ["worktree", "file"] as const) {
       if (readKind === "file") h.read.mockImplementationOnce(() => pendingFile.promise);
       else {
         h.worktree.mockImplementationOnce(() => pendingWorktree.promise);
-        const options = taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" });
+        const options = taskWorktreeQueryOptions({
+          workspaceId: "workspace",
+          repoPath: "/repo",
+          taskId: "a",
+        });
         h.client.removeQueries({ queryKey: options.queryKey });
         request = h.client.fetchQuery(options);
       }
@@ -337,7 +342,11 @@ for (const kind of ["file", "worktree"] as const) {
     if (kind === "file") h.read.mockImplementationOnce(() => deferred.promise);
     else {
       h.worktree.mockImplementationOnce(() => deferred.promise);
-      const options = taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" });
+      const options = taskWorktreeQueryOptions({
+        workspaceId: "workspace",
+        repoPath: "/repo",
+        taskId: "a",
+      });
       h.client.removeQueries({ queryKey: options.queryKey });
       request = h.client.fetchQuery(options).catch(() => undefined);
     }

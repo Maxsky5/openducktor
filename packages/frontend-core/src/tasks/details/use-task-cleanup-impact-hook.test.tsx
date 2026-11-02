@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
@@ -5,7 +6,10 @@ import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import type { ClientConnection } from "../../connection/client-connection";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { taskWorktreeQueryKeys } from "../../queries/build-runtime";
-import { createActiveWorkspaceWrapper } from "../../test-support/active-workspace-wrapper";
+import {
+  createActiveWorkspaceWrapper,
+  TEST_ACTIVE_WORKSPACE,
+} from "../../test-support/active-workspace-wrapper";
 import { createHookHarness } from "../../test-support/react-hook-harness";
 import { createDeferred } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
@@ -23,13 +27,13 @@ const createSessionFixture = (): AgentSessionRecord => ({
 const createHost = () => {
   const sessionFixture = createSessionFixture();
   const agentSessionsList = mock(async () => [sessionFixture]);
-  const agentSessionsListForTasks = mock(async (_repoPath: string, taskIds: string[]) =>
+  const agentSessionsListForTasks = mock(async (_repoPath: WorkspaceRef, taskIds: string[]) =>
     taskIds.map((taskId) => ({
       taskId,
       agentSessions: taskId === "task-1" ? [sessionFixture] : [],
     })),
   );
-  const taskWorktreeGet = mock(async (_repoPath: string, taskId: string) => ({
+  const taskWorktreeGet = mock(async (_repoPath: WorkspaceRef, taskId: string) => ({
     workingDirectory: `/worktrees/${taskId}`,
   }));
   const terminalList = mock(async () => ({ hostInstanceId: "host-1", revision: 1, terminals: [] }));
@@ -98,7 +102,13 @@ describe("useTaskCleanupImpact", () => {
         await harness.mount();
         await harness.waitFor(({ impact }) => !impact.isLoadingImpact, 500);
         expect(calls.agentSessionsListForTasks).toHaveBeenCalledTimes(1);
-        expect(calls.agentSessionsListForTasks).toHaveBeenCalledWith("/repo", ["task-1", "task-2"]);
+        expect(calls.agentSessionsListForTasks).toHaveBeenCalledWith(
+          {
+            workspaceId: TEST_ACTIVE_WORKSPACE.workspaceId,
+            repoPath: TEST_ACTIVE_WORKSPACE.repoPath,
+          },
+          ["task-1", "task-2"],
+        );
         expect(calls.agentSessionsList).not.toHaveBeenCalled();
         expect(calls.taskWorktreeGet).toHaveBeenCalledTimes(2);
         expect(calls.terminalList).toHaveBeenCalledTimes(2);
@@ -121,9 +131,12 @@ describe("useTaskCleanupImpact", () => {
     try {
       await harness.mount();
       const { queryClient } = harness.getLatest();
-      queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [sessionFixture]);
+      queryClient.setQueryData(agentSessionQueryKeys.list(TEST_ACTIVE_WORKSPACE, "task-1"), [
+        sessionFixture,
+      ]);
       queryClient.setQueryData(
         taskWorktreeQueryKeys.taskWorktree({
+          workspaceId: TEST_ACTIVE_WORKSPACE.workspaceId,
           repoPath: "/repo",
           taskId: "task-1",
         }),
@@ -153,9 +166,11 @@ describe("useTaskCleanupImpact", () => {
     try {
       await harness.mount();
       const { queryClient } = harness.getLatest();
-      queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [sessionFixture]);
+      queryClient.setQueryData(agentSessionQueryKeys.list(TEST_ACTIVE_WORKSPACE, "task-1"), [
+        sessionFixture,
+      ]);
       await queryClient.invalidateQueries({
-        queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+        queryKey: agentSessionQueryKeys.list(TEST_ACTIVE_WORKSPACE, "task-1"),
         exact: true,
         refetchType: "none",
       });
@@ -167,7 +182,13 @@ describe("useTaskCleanupImpact", () => {
       await harness.waitFor(({ impact }) => !impact.isLoadingImpact);
       expect(calls.agentSessionsList).not.toHaveBeenCalled();
       expect(calls.agentSessionsListForTasks).toHaveBeenCalledTimes(1);
-      expect(calls.agentSessionsListForTasks).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(calls.agentSessionsListForTasks).toHaveBeenCalledWith(
+        {
+          workspaceId: TEST_ACTIVE_WORKSPACE.workspaceId,
+          repoPath: TEST_ACTIVE_WORKSPACE.repoPath,
+        },
+        ["task-1"],
+      );
     } finally {
       await harness.unmount();
     }

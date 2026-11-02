@@ -58,6 +58,7 @@ const targetTip: GitRefTip = {
 };
 
 const emptyCatalog: WorkspaceCatalog = {
+  catalogRevision: 0,
   openWorkspaces: [],
   closedWorkspaces: [],
   incompleteRemovals: [],
@@ -85,7 +86,7 @@ type Harness = {
   gitPort?: Partial<GitPort>;
   remoteFetch?: RemoteFetchService["fetch"];
   catalog?: WorkspaceCatalog;
-  listTasks?: () => Effect.Effect<TaskCard[], HostOperationError>;
+  listMergeCandidates?: () => Effect.Effect<TaskCard[], HostOperationError>;
 };
 
 const createHarness = ({
@@ -95,7 +96,7 @@ const createHarness = ({
   gitPort = {},
   remoteFetch,
   catalog = openCatalog,
-  listTasks,
+  listMergeCandidates,
 }: Harness = {}) => {
   const gitCalls: string[] = [];
   const snapshots: TaskMergeStatusSnapshot[] = [];
@@ -110,9 +111,9 @@ const createHarness = ({
       });
   const service = createTaskMergeDetectionService({
     taskStore: {
-      listTasks: () => {
+      listMergeCandidates: () => {
         listTaskCalls += 1;
-        return listTasks ? listTasks() : Effect.succeed(tasks);
+        return listMergeCandidates ? listMergeCandidates() : Effect.succeed(tasks);
       },
       listDirectMergeTaskIds: () => Effect.succeed(directMergeTaskIds),
     },
@@ -156,12 +157,12 @@ const createHarness = ({
       resolveConfiguredPath: (value: string) => value,
     }),
     workspaceSettingsService: {
-      getRepoConfigByRepoPath: (repoPath: string) =>
+      getRepoConfig: () =>
         Effect.succeed(
           repoConfigSchema.parse({
             workspaceId: "repo",
             workspaceName: "Repo",
-            repoPath,
+            repoPath: "/repo",
             worktreeBasePath: "/worktrees",
             defaultTargetBranch: { remote: "origin", branch: "main" },
           }),
@@ -175,15 +176,15 @@ const createHarness = ({
 };
 
 const runPass = (harness: ReturnType<typeof createHarness>) =>
-  Effect.runPromise(harness.service.runPass("/repo"));
+  Effect.runPromise(harness.service.runPass({ workspaceId: "repo", repoPath: "/repo" }));
 
 describe("task merge detection service", () => {
   test("a workspace without candidates makes no Git call and publishes nothing", async () => {
     const harness = createHarness({
-      tasks: [task({ status: "open" }), task({ id: "task-2", status: "closed" })],
+      tasks: [],
     });
 
-    expect(await runPass(harness)).toEqual({ repoPath: "/repo", tasks: [] });
+    expect(await runPass(harness)).toEqual({ workspaceId: "repo", repoPath: "/repo", tasks: [] });
     expect(harness.gitCalls).toEqual([]);
     expect(harness.snapshots).toEqual([]);
   });
@@ -595,7 +596,7 @@ describe("task merge detection service", () => {
   test("a pass failure keeps each last result, adds the failure, and fails the pass", async () => {
     let failList = false;
     const harness = createHarness({
-      listTasks: () =>
+      listMergeCandidates: () =>
         failList
           ? Effect.fail(new HostOperationError({ operation: "test", message: "Store is busy." }))
           : Effect.succeed([task()]),
@@ -603,10 +604,16 @@ describe("task merge detection service", () => {
     await runPass(harness);
     failList = true;
 
-    const failure = await Effect.runPromise(Effect.flip(harness.service.runPass("/repo")));
+    const failure = await Effect.runPromise(
+      Effect.flip(harness.service.runPass({ workspaceId: "repo", repoPath: "/repo" })),
+    );
 
     expect(failure.message).toBe("Store is busy.");
-    expect(await Effect.runPromise(harness.service.getSnapshot("/repo"))).toMatchObject({
+    expect(
+      await Effect.runPromise(
+        harness.service.getSnapshot({ workspaceId: "repo", repoPath: "/repo" }),
+      ),
+    ).toMatchObject({
       tasks: [
         {
           taskId: "task-1",
@@ -620,13 +627,17 @@ describe("task merge detection service", () => {
 
   test("a call during a pass of the same workspace joins that pass", async () => {
     const harness = createHarness({
-      listTasks: () => Effect.sleep("1 second").pipe(Effect.as([task()])),
+      listMergeCandidates: () => Effect.sleep("1 second").pipe(Effect.as([task()])),
     });
 
     const [first, second] = await Effect.runPromise(
       Effect.gen(function* () {
-        const firstFiber = yield* Effect.forkChild(harness.service.runPass("/repo"));
-        const secondFiber = yield* Effect.forkChild(harness.service.runPass("/repo"));
+        const firstFiber = yield* Effect.forkChild(
+          harness.service.runPass({ workspaceId: "repo", repoPath: "/repo" }),
+        );
+        const secondFiber = yield* Effect.forkChild(
+          harness.service.runPass({ workspaceId: "repo", repoPath: "/repo" }),
+        );
         yield* TestClock.adjust("1 second");
         return [yield* Fiber.join(firstFiber), yield* Fiber.join(secondFiber)] as const;
       }).pipe(Effect.provide(TestClock.layer())),
@@ -654,11 +665,21 @@ describe("task merge detection service", () => {
   test("Check again forces the fetch and checks only open workspaces", async () => {
     const closed = createHarness({ catalog: { ...emptyCatalog, closedWorkspaces: [workspace] } });
     expect(
-      (await Effect.runPromise(Effect.flip(closed.service.checkWorkspace("/repo")))).message,
+      (
+        await Effect.runPromise(
+          Effect.flip(closed.service.checkWorkspace({ workspaceId: "repo", repoPath: "/repo" })),
+        )
+      ).message,
     ).toContain("The workspace is closed");
 
     const open = createHarness({ catalog: openCatalog });
-    expect((await Effect.runPromise(open.service.checkWorkspace("/repo"))).tasks).toHaveLength(1);
+    expect(
+      (
+        await Effect.runPromise(
+          open.service.checkWorkspace({ workspaceId: "repo", repoPath: "/repo" }),
+        )
+      ).tasks,
+    ).toHaveLength(1);
     expect(open.gitCalls.filter((call) => call.startsWith("fetch:"))).toEqual([
       "fetch:origin:true",
     ]);

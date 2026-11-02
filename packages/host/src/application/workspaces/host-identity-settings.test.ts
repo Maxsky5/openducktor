@@ -2,40 +2,52 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { persistedGlobalConfigV4Schema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
+import { hostPreferencesSchema } from "../../config/global-config";
+import type { SharedSettingsDatabase } from "../../ports/settings-config-port";
+import { createSharedSettingsFixture } from "../../test-support/shared-settings-fixture";
 import { createWorkspaceSettingsService } from "./workspace-settings-service";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 
-const withConfigFile = async (run: (configPath: string) => Promise<void>) => {
+const withConfigFile = async (
+  run: (configPath: string, sharedSettings: SharedSettingsDatabase) => Promise<void>,
+) => {
   const tempDir = await mkdtemp(path.join(tmpdir(), "odt-host-identity-"));
+  const configPath = path.join(tempDir, "config.json");
+  const fixture = await createSharedSettingsFixture({ configPath });
   try {
-    await run(path.join(tempDir, "config.json"));
+    await run(configPath, fixture.database);
   } finally {
+    await fixture.cleanup();
     await rm(tempDir, { recursive: true, force: true });
   }
 };
 
-/** A new service on the same file, as after a host restart. */
-const startHost = (configPath: string) =>
-  createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
+const startHost = (configPath: string, sharedSettings: SharedSettingsDatabase) =>
+  createWorkspaceSettingsService(
+    createSettingsConfigAdapter({ configPath, sharedSettings }),
+    builtinTaskWorkflows,
+  );
 
 const readFileConfig = async (configPath: string) =>
-  persistedGlobalConfigV4Schema.parse(JSON.parse(await readFile(configPath, "utf8")));
+  hostPreferencesSchema.parse(JSON.parse(await readFile(configPath, "utf8")));
 
 describe("host identity settings", () => {
   test("creates the host ID once and keeps it after a restart", async () => {
-    await withConfigFile(async (configPath) => {
-      const hostId = await Effect.runPromise(startHost(configPath).readHostId());
+    await withConfigFile(async (configPath, sharedSettings) => {
+      const hostId = await Effect.runPromise(startHost(configPath, sharedSettings).readHostId());
       expect(hostId).toMatch(/^[0-9a-f-]{36}$/);
-      expect((await readFileConfig(configPath)).hostId).toBe(hostId);
-      expect(await Effect.runPromise(startHost(configPath).readHostId())).toBe(hostId);
+      expect((await Effect.runPromise(sharedSettings.readConfig()))?.hostId).toBe(hostId);
+      expect(await Effect.runPromise(startHost(configPath, sharedSettings).readHostId())).toBe(
+        hostId,
+      );
     });
   });
 
   test("gives one host ID to concurrent first reads", async () => {
-    await withConfigFile(async (configPath) => {
-      const service = startHost(configPath);
+    await withConfigFile(async (configPath, sharedSettings) => {
+      const service = startHost(configPath, sharedSettings);
       const ids = await Effect.runPromise(
         Effect.all([service.readHostId(), service.readHostId()], { concurrency: "unbounded" }),
       );
@@ -44,8 +56,10 @@ describe("host identity settings", () => {
   });
 
   test("keeps remote control settings after a restart", async () => {
-    await withConfigFile(async (configPath) => {
-      expect(await Effect.runPromise(startHost(configPath).readRemoteAccessSettings())).toEqual({
+    await withConfigFile(async (configPath, sharedSettings) => {
+      expect(
+        await Effect.runPromise(startHost(configPath, sharedSettings).readRemoteAccessSettings()),
+      ).toEqual({
         enabled: false,
         configuration: null,
       });
@@ -53,17 +67,21 @@ describe("host identity settings", () => {
         enabled: true,
         configuration: { listenHost: "192.168.1.9", listenPort: 14328 },
       };
-      await Effect.runPromise(startHost(configPath).saveRemoteAccessSettings(settings));
-      expect(await Effect.runPromise(startHost(configPath).readRemoteAccessSettings())).toEqual(
+      await Effect.runPromise(
+        startHost(configPath, sharedSettings).saveRemoteAccessSettings(settings),
+      );
+      expect(
+        await Effect.runPromise(startHost(configPath, sharedSettings).readRemoteAccessSettings()),
+      ).toEqual(settings);
+      expect((await Effect.runPromise(sharedSettings.readConfig()))?.remoteAccess).toEqual(
         settings,
       );
-      expect((await readFileConfig(configPath)).remoteAccess).toEqual(settings);
     });
   });
 
   test("keeps the other settings when it saves remote control", async () => {
-    await withConfigFile(async (configPath) => {
-      const service = startHost(configPath);
+    await withConfigFile(async (configPath, sharedSettings) => {
+      const service = startHost(configPath, sharedSettings);
       await Effect.runPromise(service.setTheme("dark"));
       const hostId = await Effect.runPromise(service.readHostId());
       await Effect.runPromise(
@@ -74,13 +92,13 @@ describe("host identity settings", () => {
       );
       const saved = await readFileConfig(configPath);
       expect(saved.theme).toBe("dark");
-      expect(saved.hostId).toBe(hostId);
+      expect((await Effect.runPromise(sharedSettings.readConfig()))?.hostId).toBe(hostId);
     });
   });
 
   test("refuses a saved listener without a fixed port", async () => {
-    await withConfigFile(async (configPath) => {
-      const service = startHost(configPath);
+    await withConfigFile(async (configPath, sharedSettings) => {
+      const service = startHost(configPath, sharedSettings);
       const result = await Effect.runPromise(
         Effect.result(
           service.saveRemoteAccessSettings({

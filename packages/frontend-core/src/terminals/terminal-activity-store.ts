@@ -19,7 +19,8 @@ export const EMPTY_TERMINAL_ACTIVITY: TerminalActivityState = {
 };
 
 export const terminalActivityOwnerKey = (context: TerminalContext): string => {
-  if ("taskId" in context) return JSON.stringify(["task", context.repoPath, context.taskId]);
+  if ("taskId" in context)
+    return JSON.stringify(["task", context.workspaceId, context.repoPath, context.taskId]);
   if ("kind" in context)
     return JSON.stringify([
       "workspace_session",

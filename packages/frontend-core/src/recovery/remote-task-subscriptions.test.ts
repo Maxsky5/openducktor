@@ -139,7 +139,10 @@ test("restores task delivery after disconnect during acknowledgement and after i
     completeExternalEvents: async (changes) => {
       await Promise.all(changes);
     },
-    admitExternalEvent: async (event) => ({ repoPath: event.repoPath, changedTaskIds: [] }),
+    admitExternalEvent: async (event) => ({
+      repoPath: { workspaceId: event.workspaceId, repoPath: event.repoPath },
+      changedTaskIds: [],
+    }),
   };
   const controller = createTaskStreamController({
     transport: subscriptions,
@@ -167,6 +170,7 @@ test("restores task delivery after disconnect during acknowledgement and after i
     expect(creates).toBe(3);
     const event: ExternalTaskSyncEvent = {
       kind: "external_task_created",
+      workspaceId: "workspace-1",
       eventId: "after-foreground",
       boardChanges: null,
       repoPath: "/repo",

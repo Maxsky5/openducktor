@@ -6,15 +6,16 @@ export const useStableAgentSessionScope = (
 ): AgentSessionScope | null => {
   const kind = scope?.kind ?? null;
   const taskId = scope?.kind === "workflow" ? scope.taskId : null;
+  const workspaceId = scope?.workspaceId ?? null;
   const role = scope?.kind === "workflow" ? scope.role : null;
 
   return useMemo(() => {
     if (kind === "repository") {
-      return { kind: "repository" };
+      return workspaceId ? { kind: "repository", workspaceId } : { kind: "repository" };
     }
-    if (kind === "workflow" && taskId !== null && role !== null) {
-      return { kind: "workflow", taskId, role };
+    if (kind === "workflow" && taskId !== null && role !== null && workspaceId !== null) {
+      return { kind: "workflow", workspaceId, taskId, role };
     }
     return null;
-  }, [kind, role, taskId]);
+  }, [kind, role, taskId, workspaceId]);
 };

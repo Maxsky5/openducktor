@@ -31,7 +31,12 @@ const createSelectionView = (
 ): HookArgs["selection"]["view"] => {
   const loadedSession = createAgentSessionFixture({
     externalSessionId: "session-1",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "build",
+    },
 
     status: "running",
     workingDirectory: "/repo/worktrees/task-1",

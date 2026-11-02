@@ -1,9 +1,11 @@
 ---
-status: accepted
+status: superseded by ADR 0013
 date: 2026-06-10
 ---
 
 # Use a SQLite task store with a workspace-scoped database path
+
+[ADR 0013](0013-use-one-host-database-for-shared-data.md) supersedes this decision. The text below records the previous storage design.
 
 ## Decision
 

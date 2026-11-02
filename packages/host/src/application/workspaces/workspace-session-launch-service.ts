@@ -77,7 +77,7 @@ export const createWorkspaceSessionLaunchService = (deps: WorkspaceSessionLaunch
           workingDirectory: record.executionTarget.workingDirectory,
           externalSessionId: record.externalSessionId,
         };
-        const sessionScope = { kind: "repository" as const };
+        const sessionScope = { kind: "repository" as const, workspaceId: request.workspaceId };
         if (started.runtimeSession) attempt.ownershipSaved();
         else {
           const live = yield* deps.live.read(ref);

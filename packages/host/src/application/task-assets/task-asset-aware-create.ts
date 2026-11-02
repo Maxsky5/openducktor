@@ -18,7 +18,7 @@ export const createTaskAssetAwareCreate =
     filePort,
     staging,
     persistence,
-    resolveWorkspaceIdForRepoPath,
+    resolveWorkspaceId,
   }: TaskAssetAwareMutationDependencies): TaskStorePort["createTask"] =>
   (input) => {
     let createdTaskId: string | undefined;
@@ -55,11 +55,7 @@ export const createTaskAssetAwareCreate =
         });
       }
       if (referencedAssetIds.size === 0) {
-        return yield* inner.createTask({
-          repoPath: input.repoPath,
-          task: input.task,
-          status: input.status,
-        });
+        return yield* inner.createTask(input);
       }
       if (!persistence) {
         return yield* new TaskAssetError({
@@ -74,14 +70,20 @@ export const createTaskAssetAwareCreate =
         });
       }
       const assetPersistence = persistence;
-      const resolvedWorkspaceId = yield* resolveWorkspaceIdForRepoPath(input.repoPath);
+      const resolvedWorkspaceId = yield* resolveWorkspaceId(input);
       workspaceId = resolvedWorkspaceId;
       const stagedAssets = yield* staging.getStagedAssets({
         workspaceId: resolvedWorkspaceId,
         assetIds: Array.from(suppliedAssetIds),
       });
       for (const asset of stagedAssets) {
-        if (yield* registry.assetIdExists({ repoPath: input.repoPath, assetId: asset.assetId })) {
+        if (
+          yield* registry.assetIdExists({
+            workspaceId,
+            repoPath: input.repoPath,
+            assetId: asset.assetId,
+          })
+        ) {
           return yield* new TaskAssetError({
             operation: "create",
             code: "validation",
@@ -94,6 +96,7 @@ export const createTaskAssetAwareCreate =
         }
       }
       const created = yield* assetPersistence.createTaskWithDescriptionAssets({
+        workspaceId: resolvedWorkspaceId,
         repoPath: input.repoPath,
         task: input.task,
         status: input.status,

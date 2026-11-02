@@ -1,6 +1,7 @@
 import { AsyncResource } from "node:async_hooks";
 import { Worker } from "node:worker_threads";
 import { Effect } from "effect";
+import { siblingWorkerUrl } from "../../infrastructure/sibling-worker-url";
 import { HostOperationError, HostValidationError, type HostError } from "../../effect/host-errors";
 import {
   generatedImageWorkerReplySchema,
@@ -8,9 +9,7 @@ import {
   type GeneratedImageWorkerResponse,
 } from "./generated-image-worker-protocol";
 
-const workerUrl = import.meta.url.endsWith(".ts")
-  ? new URL("./generated-image-worker.ts", import.meta.url)
-  : new URL("./generated-image-worker.js", import.meta.url);
+const workerUrl = siblingWorkerUrl(import.meta.url, "generated-image-worker");
 
 export const imageWorkerFailure = (
   itemId: string,

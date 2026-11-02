@@ -179,6 +179,7 @@ export const createTerminalAdmission = ({
     });
 
   const acquireTaskCleanupLease = ({
+    workspaceId,
     repoPath,
     taskIds,
   }: TerminalTaskScope): Effect.Effect<TerminalCleanupLease> => {
@@ -191,7 +192,9 @@ export const createTerminalAdmission = ({
       Effect.andThen(
         Effect.sync(() => {
           const keys = [
-            ...new Set(taskIds.map((taskId) => terminalContextKey({ repoPath, taskId }))),
+            ...new Set(
+              taskIds.map((taskId) => terminalContextKey({ workspaceId, repoPath, taskId })),
+            ),
           ];
           return holdContexts(keys);
         }),

@@ -32,7 +32,8 @@ import {
 
 const repoPath = "/repo";
 const workingDirectory = "/repo/worktree";
-const workflowAssociation = () => ({ kind: "workflow", taskId: "task-1", role: "build" }) as const;
+const workflowAssociation = () =>
+  ({ kind: "workflow", workspaceId: "workspace-1", taskId: "task-1", role: "build" }) as const;
 
 const snapshot = (
   externalSessionId: string,

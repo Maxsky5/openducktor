@@ -1,4 +1,9 @@
-import type { TaskChangeSet, TaskArtifactChange, TaskEventCursor } from "@openducktor/contracts";
+import type {
+  TaskChangeSet,
+  TaskArtifactChange,
+  TaskEventCursor,
+  WorkspaceRef,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import type { TaskMutationOperation } from "./task-mutation-operation";
@@ -13,18 +18,17 @@ export const createMutationPublisher = ({
 }) => {
   const publish = <A>(
     operation: TaskMutationOperation,
-    repoPath: string,
+    workspace: WorkspaceRef,
     changes: TaskChangeSet,
     mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
     options: {
-      settleOnInterrupt?: boolean;
       changes?: (result: A) => TaskChangeSet;
       artifactChanges?: (result: A) => TaskArtifactChange[];
     } = {},
   ): Effect.Effect<{ value: A; cursor: TaskEventCursor }, TaskServiceError> =>
     Effect.suspend(() =>
       taskSyncService.runStatusMutation(
-        repoPath,
+        workspace,
         operation,
         mutation,
         ({ result, statusChanges }) =>
@@ -32,7 +36,7 @@ export const createMutationPublisher = ({
             if (result._tag === "Failure") {
               if (result.failure instanceof TaskMutationProgressFailure) {
                 yield* taskSyncService.publishTasksUpdated(
-                  repoPath,
+                  workspace,
                   result.failure.changes,
                   operation,
                   statusChanges,
@@ -44,7 +48,7 @@ export const createMutationPublisher = ({
               return yield* Effect.fail(result.failure);
             }
             const cursor = yield* taskSyncService.publishTasksUpdated(
-              repoPath,
+              workspace,
               options.changes?.(result.success) ?? changes,
               operation,
               statusChanges,
@@ -53,7 +57,6 @@ export const createMutationPublisher = ({
             );
             return { value: result.success, cursor };
           }),
-        options.settleOnInterrupt,
       ),
     );
 

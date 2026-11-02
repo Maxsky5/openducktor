@@ -38,7 +38,7 @@ describe("terminal protocol", () => {
             lifecycle: "running",
             exit: null,
             startedBy: "user",
-            context: { repoPath: "/repo", taskId: "task-1" },
+            context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
           },
         },
       },

@@ -91,9 +91,6 @@ function mountCreation(
     addWorkspace: async () => {
       throw new Error("Not used");
     },
-    saveWorkspaceModelDefaults: async () => {
-      throw new Error("Not used");
-    },
     selectWorkspace: async () => {},
     closeWorkspace: async () => {},
     removeWorkspace: async () => {},
@@ -107,20 +104,17 @@ function mountCreation(
     loadRepoSettings: async () => {
       throw new Error("Unexpected settings read");
     },
-    saveRepoSettings: async () => {
-      throw new Error("Unexpected settings save");
-    },
-    loadSettingsSnapshot: async () => snapshot,
     detectGithubRepository: async () => null,
-    saveGlobalGitConfig: async () => {},
     previewSettingsSnapshotRuntime: async () => ({ impact: null }),
     saveSettingsSnapshot: async () => ({
       type: "saved" as const,
+      shared: "saved" as const,
+      preferences: "saved" as const,
       workspaces: [],
       runtimeApplications: [],
       refreshError: null,
     }),
-    saveAgentModelFavorites: async () => snapshot,
+    saveAgentModelFavorites: async () => snapshot.agentModelFavorites,
   };
   const definitions: ComponentProps<typeof RuntimeDefinitionsContext>["value"] = {
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],

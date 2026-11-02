@@ -133,13 +133,25 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
     await actions.sendAgentMessage(
       getSession(sessionsRef),
       [{ kind: "text", text: "child reply" }],
-      { sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } },
+      {
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      },
     );
 
     expect(sendInputs).toHaveLength(1);
     expect(sendInputs[0]).toMatchObject({
       externalSessionId: "session-1",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionScope: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
     });
     expect(getSession(sessionsRef).sessionAssociation).toEqual({ kind: "unbound" });
   });
@@ -158,7 +170,12 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
 
     await expect(
       actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "wrong scope" }], {
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
       }),
     ).rejects.toThrow(
       "Cannot send message for session 'session-1' because its registered repository scope does not match the requested workflow scope for task 'task-1' and role 'build'.",

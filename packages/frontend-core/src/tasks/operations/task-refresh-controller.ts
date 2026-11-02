@@ -1,9 +1,10 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import type { TaskRefreshOptions } from "../../app-state/app-state-contexts";
 import type { ClientFeedback } from "../../platform/client-feedback";
 import { summarizeTaskLoadError } from "../task-load-errors";
 
 type TaskToastDedupeRef = {
-  current: { repoPath: string; description: string } | null;
+  current: { workspaceId: string; repoPath: string; description: string } | null;
 };
 
 type CreateTaskRefreshControllerArgs = {
@@ -13,10 +14,9 @@ type CreateTaskRefreshControllerArgs = {
   lastTaskLoadErrorToastRef: TaskToastDedupeRef;
 };
 
-type RefreshTasksArgs = {
-  repoPath: string;
+type RefreshTasksArgs = WorkspaceRef & {
   trigger: TaskRefreshOptions["trigger"];
-  refreshTaskData: (repoPath: string) => Promise<void>;
+  refreshTaskData: (scope: WorkspaceRef) => Promise<void>;
 };
 
 export type TaskRefreshController = {
@@ -26,7 +26,7 @@ export type TaskRefreshController = {
 
 type InFlightTaskRefresh = {
   promise: Promise<void>;
-  repoPath: string;
+  scope: WorkspaceRef;
 };
 
 export const createTaskRefreshController = ({
@@ -39,22 +39,25 @@ export const createTaskRefreshController = ({
   let inFlightRefresh: InFlightTaskRefresh | null = null;
 
   const getRefreshPromise = (
-    repoPath: string,
-    refreshTaskData: (repoPath: string) => Promise<void>,
+    scope: WorkspaceRef,
+    refreshTaskData: (scope: WorkspaceRef) => Promise<void>,
   ) => {
-    if (inFlightRefresh?.repoPath === repoPath) {
+    if (
+      inFlightRefresh?.scope.workspaceId === scope.workspaceId &&
+      inFlightRefresh.scope.repoPath === scope.repoPath
+    ) {
       return { promise: inFlightRefresh.promise, joinedExisting: true } satisfies {
         promise: Promise<void>;
         joinedExisting: boolean;
       };
     }
 
-    const promise = refreshTaskData(repoPath).finally(() => {
+    const promise = refreshTaskData(scope).finally(() => {
       if (inFlightRefresh?.promise === promise) {
         inFlightRefresh = null;
       }
     });
-    inFlightRefresh = { repoPath, promise };
+    inFlightRefresh = { scope, promise };
     return { promise, joinedExisting: false } satisfies {
       promise: Promise<void>;
       joinedExisting: boolean;
@@ -62,28 +65,32 @@ export const createTaskRefreshController = ({
   };
 
   return {
-    refresh: async ({ repoPath, trigger, refreshTaskData }): Promise<void> => {
+    refresh: async ({ workspaceId, repoPath, trigger, refreshTaskData }): Promise<void> => {
       const isManualRefresh = trigger === "manual";
       const token = isManualRefresh ? ++manualRefreshToken : null;
       if (isManualRefresh) {
         setIsManualLoading(true);
       }
 
-      const { promise, joinedExisting } = getRefreshPromise(repoPath, refreshTaskData);
+      const { promise, joinedExisting } = getRefreshPromise(
+        { workspaceId, repoPath },
+        refreshTaskData,
+      );
       try {
         await promise;
         lastTaskRefreshToastRef.current = null;
       } catch (error) {
         const description = summarizeTaskLoadError({ error });
-        lastTaskLoadErrorToastRef.current = { repoPath, description };
+        lastTaskLoadErrorToastRef.current = { workspaceId, repoPath, description };
         const lastToast = lastTaskRefreshToastRef.current;
         const shouldDeduplicateToast =
-          lastToast?.repoPath === repoPath &&
+          lastToast?.workspaceId === workspaceId &&
+          lastToast.repoPath === repoPath &&
           lastToast.description === description &&
           (trigger === "scheduled" || joinedExisting);
 
         if (!shouldDeduplicateToast) {
-          lastTaskRefreshToastRef.current = { repoPath, description };
+          lastTaskRefreshToastRef.current = { workspaceId, repoPath, description };
           feedback.show("error", "Failed to refresh tasks", { description });
         }
       } finally {

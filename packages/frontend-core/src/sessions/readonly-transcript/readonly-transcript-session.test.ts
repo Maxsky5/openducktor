@@ -23,7 +23,12 @@ const createHistoryMessage = (): AgentSessionHistoryMessage => ({
 
 describe("createReadonlyTranscriptSession", () => {
   test("keeps transcript routing out of rendered session data", () => {
-    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "spec" as const };
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      role: "spec" as const,
+    };
 
     const session = createReadonlyTranscriptSession({
       externalSessionId: "session-1",

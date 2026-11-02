@@ -4,6 +4,7 @@ import path from "node:path";
 import { Effect } from "effect";
 import type { WorkspaceSettingsService } from "../../../application/workspaces/workspace-settings-service";
 import { createTaskStoreTestDouble } from "../../../test-support/task-store-test-double";
+import { createSqliteHostDatabaseManager } from "../../../adapters/sqlite/sqlite-task-repository-context";
 import { createNodeTaskAssetServices } from "../node-task-asset-services";
 
 type TaskAssetState = {
@@ -97,9 +98,12 @@ const runTestScopeProductionConfigCase = async ({
 
   try {
     const services = createNodeTaskAssetServices({
-      taskWorkflows: builtinTaskWorkflows,
-      assertOwnershipReadAdmitted: () => Effect.void,
       configDir: { root: configuredConfigDir, scope: "test" },
+      contextManager: createSqliteHostDatabaseManager({
+        configDir: configuredConfigDir,
+        taskWorkflows: builtinTaskWorkflows,
+      }),
+      resolveTaskStoreAccess: ({ access }) => Effect.succeed(access),
       configuredTaskStore: createTaskStoreTestDouble({
         deleteTask: () =>
           Effect.sync(() => {
@@ -108,7 +112,6 @@ const runTestScopeProductionConfigCase = async ({
           }),
       }),
       onBackgroundFailure: () => Effect.void,
-      processEnv: { OPENDUCKTOR_CONFIG_DIR: configuredConfigDir },
       workspaceSettingsService: unusedWorkspaceSettingsService,
     });
     await Effect.runPromise(services.startupSweep());

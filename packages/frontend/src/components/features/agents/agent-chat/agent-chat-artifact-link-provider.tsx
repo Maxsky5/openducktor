@@ -16,6 +16,7 @@ export function ChatArtifactLinkProvider({
 }) {
   const queryClient = useQueryClient();
   const repoPath = owner?.repoPath ?? null;
+  const workspaceId = owner?.workspaceId ?? null;
   const taskId = owner?.taskId ?? null;
   const ownerKey = owner?.ownerKey ?? null;
   const onOpenArtifact = owner?.onOpenArtifact;
@@ -23,7 +24,10 @@ export function ChatArtifactLinkProvider({
   useLayoutEffect(() => {
     openAction.current = onOpenArtifact;
   }, [onOpenArtifact]);
-  const identity = useMemo(() => ({ repoPath, taskId, ownerKey }), [repoPath, taskId, ownerKey]);
+  const identity = useMemo(
+    () => ({ workspaceId, repoPath, taskId, ownerKey }),
+    [workspaceId, repoPath, taskId, ownerKey],
+  );
   const activeIdentity = useRef<typeof identity | null>(null);
   const generation = useRef(0);
   useLayoutEffect(() => {
@@ -37,13 +41,13 @@ export function ChatArtifactLinkProvider({
   const openArtifact = useCallback(
     async (target: ChatArtifactLinkTarget): Promise<void> => {
       if (activeIdentity.current !== identity) return;
-      if (!repoPath || !taskId || !openAction.current || target.taskId !== taskId) {
+      if (!workspaceId || !repoPath || !taskId || !openAction.current || target.taskId !== taskId) {
         throw new Error("This artifact belongs to another task. Open that task to view it.");
       }
       const request = ++generation.current;
       try {
         const collection = await queryClient.fetchQuery(
-          taskArtifactsQueryOptions(queryClient, repoPath, taskId),
+          taskArtifactsQueryOptions(queryClient, { workspaceId, repoPath }, taskId),
         );
         if (request !== generation.current) return;
         const artifact = collection.artifacts.find(
@@ -60,7 +64,7 @@ export function ChatArtifactLinkProvider({
         if (request === generation.current) throw error;
       }
     },
-    [identity, queryClient, repoPath, taskId],
+    [identity, queryClient, workspaceId, repoPath, taskId],
   );
   return (
     <ChatArtifactLinkContext value={owner ? openArtifact : null}>

@@ -10,12 +10,11 @@ export const createNodeWorkspaceStorageRemoval = ({
   azureDevOpsConnection,
   browserService,
 }: {
-  taskAssets: Pick<WorkspaceStoragePort, "removeWorkspaceTaskAssets" | "removeWorkspaceTaskStore">;
+  taskAssets: Pick<WorkspaceStoragePort, "removeWorkspaceTaskAssets">;
   azureDevOpsConnection: AzureDevOpsConnectionPort | undefined;
   browserService: Pick<BrowserService, "removeWorkspace">;
 }): WorkspaceStoragePort => ({
   removeWorkspaceTaskAssets: taskAssets.removeWorkspaceTaskAssets,
-  removeWorkspaceTaskStore: taskAssets.removeWorkspaceTaskStore,
   removeWorkspaceCredentials: (repoConfig) => {
     if (!azureDevOpsConnection) {
       const provider = repoConfig.git.provider;

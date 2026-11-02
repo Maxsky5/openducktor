@@ -213,6 +213,7 @@ const useTaskWorkGit = ({
     [ownerRef.workspaceId, queryClient],
   );
   const panel = useTaskGitPanel({
+    workspaceId: task ? ownerRef.workspaceId : null,
     repoPath: task ? repoPath : null,
     taskId: task?.id ?? null,
     contextMode: "worktree",
@@ -311,7 +312,10 @@ function TaskOwnerSource({
   });
   const comparisonChoice = useTaskComparisonChoice(ownerRef, panel.comparison.target);
   const sessionsQuery = useQuery({
-    ...agentSessionListQueryOptions(repoPath ?? NO_REPO, ownerRef.taskId),
+    ...agentSessionListQueryOptions(
+      { workspaceId: ownerRef.workspaceId, repoPath: repoPath ?? NO_REPO },
+      ownerRef.taskId,
+    ),
     enabled: repoPath !== null && task !== null,
   });
   const { refetch: refetchSessions } = sessionsQuery;

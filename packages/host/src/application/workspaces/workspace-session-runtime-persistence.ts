@@ -25,10 +25,12 @@ import type {
   WorkspaceSessionStorePort,
   WorkspaceSessionStoreRef,
 } from "../../ports/workspace-session-store-port";
+import { createWorkspaceSessionRuntimeOwners } from "./workspace-session-runtime-owners";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type {
   AgentSessionOperationPolicy,
   AgentSessionSendContent,
+  ScopedAgentSessionRef,
 } from "../agent-sessions/agent-session-operation-policy";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
@@ -62,7 +64,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
   reportRenameFailure,
 }: {
   store: WorkspaceSessionStorePort;
-  settings: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
+  settings: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
   git: WorkspaceSessionTargetDependencies["git"];
   publishUpdated: WorkspaceSessionUpdatedPublisher;
   operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
@@ -100,28 +102,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       }
       yield* publishUpdated(known.ref.workspaceId, saved);
     });
-  const find = (runtimeRef: AgentSessionLiveRef) =>
-    Effect.gen(function* () {
-      const config = yield* settings.getRepoConfigByRepoPath(runtimeRef.repoPath);
-      const scope = { workspaceId: config.workspaceId, repoPath: runtimeRef.repoPath };
-      const session = yield* storeEffect(
-        store.findByRuntimeSession({
-          ...scope,
-          runtimeKind: runtimeRef.runtimeKind,
-          externalSessionId: runtimeRef.externalSessionId,
-        }),
-      );
-      if (!session) return null;
-      if (session.executionTarget.workingDirectory !== runtimeRef.workingDirectory) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Runtime directory does not match Workspace Session ${session.id}: ${runtimeRef.workingDirectory}`,
-            field: "workingDirectory",
-          }),
-        );
-      }
-      return { ref: { ...scope, sessionId: session.id }, session };
-    });
+  const { find, findAll } = createWorkspaceSessionRuntimeOwners({ store, settings });
   const requireActive = (session: WorkspaceSession) =>
     session.archivedAt === null
       ? Effect.void
@@ -131,7 +112,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
             field: "sessionId",
           }),
         );
-  const findActive = (runtimeRef: AgentSessionLiveRef) =>
+  const findActive = (runtimeRef: ScopedAgentSessionRef) =>
     Effect.gen(function* () {
       const known = yield* find(runtimeRef);
       if (!known) return null;
@@ -154,9 +135,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const prepared = {
         ...input,
         sessionScope:
-          storedTitle === null
-            ? input.sessionScope
-            : { kind: "repository" as const, title: storedTitle },
+          storedTitle === null ? input.sessionScope : { ...input.sessionScope, title: storedTitle },
         systemPrompt: known.session.roleSnapshot?.systemPrompt ?? "",
       };
       return {
@@ -258,7 +237,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       }),
     );
   const recordAcceptedMessage = (
-    runtimeRef: AgentSessionLiveRef,
+    runtimeRef: ScopedAgentSessionRef,
     message: AcceptedAgentUserMessage,
   ) =>
     Effect.gen(function* () {
@@ -282,7 +261,16 @@ export const createWorkspaceSessionRuntimePersistence = ({
     message: AcceptedAgentUserMessage,
   ) =>
     Effect.gen(function* () {
-      const known = yield* find(runtimeRef);
+      const associations = yield* findAll(runtimeRef);
+      if (associations.length > 1) {
+        for (const known of associations) {
+          const plan = yield* planAcceptedMessage(known, runtimeRef, message);
+          const saved = yield* storeEffect(store.recordAcceptedMessage(plan.input));
+          yield* publishUpdated(known.ref.workspaceId, saved);
+        }
+        return;
+      }
+      const known = associations[0];
       if (!known) return;
       const plan = yield* planAcceptedMessage(known, runtimeRef, message);
       if (titleSyncNeedsTurn(runtimeRef.runtimeKind))
@@ -306,25 +294,26 @@ export const createWorkspaceSessionRuntimePersistence = ({
     });
   const recordActivity = (runtimeRef: AgentSessionLiveRef, occurredAt: number) =>
     Effect.gen(function* () {
-      const known = yield* find(runtimeRef);
-      if (!known) return false;
-      if (occurredAt > (known.session.lastActivityAt ?? known.session.createdAt)) {
-        const saved = yield* storeEffect(
-          store.recordActivity({
-            ...known.ref,
-            activity: { type: "session_activity", occurredAt },
-          }),
-        );
-        yield* publishUpdated(known.ref.workspaceId, saved);
+      const associations = yield* findAll(runtimeRef);
+      for (const known of associations) {
+        if (occurredAt > (known.session.lastActivityAt ?? known.session.createdAt)) {
+          const saved = yield* storeEffect(
+            store.recordActivity({
+              ...known.ref,
+              activity: { type: "session_activity", occurredAt },
+            }),
+          );
+          yield* publishUpdated(known.ref.workspaceId, saved);
+        }
       }
-      return true;
+      return associations.length > 0;
     });
-  const validateRef = (runtimeRef: AgentSessionLiveRef) =>
+  const validateRef = (runtimeRef: ScopedAgentSessionRef) =>
     Effect.gen(function* () {
       yield* findActive(runtimeRef);
     });
   const runOperation = <A, E, R>(
-    runtimeRef: AgentSessionLiveRef,
+    runtimeRef: ScopedAgentSessionRef,
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E | HostError, R> =>
     Effect.gen(function* () {

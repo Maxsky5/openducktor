@@ -20,32 +20,33 @@ type ElectronBuildCommandErrorDetails = {
   readonly label: string;
 };
 
-export type SqliteTaskStoreMigrationCopyPlan = {
+export type SqliteMigrationCopyPlan = {
   sourceDirectory: string;
   targetDirectory: string;
 };
 
-export const resolveSqliteTaskStoreMigrationCopyPlan = ({
+export const resolveSqliteMigrationCopyPlans = ({
   electronPackageRoot,
   workspaceRoot,
 }: {
   electronPackageRoot: string;
   workspaceRoot: string;
-}): SqliteTaskStoreMigrationCopyPlan => ({
-  sourceDirectory: join(workspaceRoot, "packages", "host", "src", "adapters", "sqlite", "drizzle"),
-  targetDirectory: join(electronPackageRoot, "dist", "drizzle"),
-});
+}): SqliteMigrationCopyPlan[] =>
+  ["drizzle", "drizzle-host"].map((folder) => ({
+    sourceDirectory: join(workspaceRoot, "packages", "host", "src", "adapters", "sqlite", folder),
+    targetDirectory: join(electronPackageRoot, "dist", folder),
+  }));
 
-export const copySqliteTaskStoreMigrations = ({
+export const copySqliteMigrations = ({
   sourceDirectory,
   targetDirectory,
-}: SqliteTaskStoreMigrationCopyPlan): Promise<void> =>
-  runElectronEffect(copySqliteTaskStoreMigrationsEffect({ sourceDirectory, targetDirectory }));
+}: SqliteMigrationCopyPlan): Promise<void> =>
+  runElectronEffect(copySqliteMigrationsEffect({ sourceDirectory, targetDirectory }));
 
-export const copySqliteTaskStoreMigrationsEffect = ({
+export const copySqliteMigrationsEffect = ({
   sourceDirectory,
   targetDirectory,
-}: SqliteTaskStoreMigrationCopyPlan): Effect.Effect<
+}: SqliteMigrationCopyPlan): Effect.Effect<
   void,
   ElectronOperationError<CopySqliteMigrationsErrorDetails>
 > =>
@@ -94,16 +95,22 @@ export const buildElectronPackageEffect = (): Effect.Effect<
     yield* Effect.all(
       [
         runBuildCommandEffect("Electron main build", ["bun", "run", "build:main"]),
+        // The import worker has its own bundle. In the split main bundle, its migration code moves
+        // into a chunk, and the migration folders resolve from the chunk folder.
+        runBuildCommandEffect("Electron import worker build", [
+          "bun",
+          "run",
+          "build:import-worker",
+        ]),
         runBuildCommandEffect("Electron preload build", ["bun", "run", "build:preload"]),
         runBuildCommandEffect("Electron renderer build", ["bun", "run", "build:renderer"]),
       ],
       { concurrency: "unbounded" },
     );
-    yield* copySqliteTaskStoreMigrationsEffect(
-      resolveSqliteTaskStoreMigrationCopyPlan({
-        electronPackageRoot: packageRoot,
-        workspaceRoot,
-      }),
+    yield* Effect.forEach(
+      resolveSqliteMigrationCopyPlans({ electronPackageRoot: packageRoot, workspaceRoot }),
+      copySqliteMigrationsEffect,
+      { discard: true },
     );
   });
 

@@ -1,4 +1,11 @@
 import {
+  workspaceScopeKey,
+  workspaceScopeValue,
+  queryWorkspaceScope,
+  queryMatchesWorkspace,
+} from "./workspace-scope";
+import { type WorkspaceRef } from "@openducktor/contracts";
+import {
   type ExternalTaskSyncEvent,
   type TaskArtifactChange,
   workflowArtifactId,
@@ -33,29 +40,29 @@ import { builtinTaskCardSchema, type BuiltinTaskCard as TaskCard } from "@opendu
 const queryKeyStringSchema = z.string();
 
 export type TaskViewSyncPorts = {
-  listTasks: (repoPath: string) => Promise<TaskCard[]>;
+  listTasks: (repoPath: WorkspaceRef) => Promise<TaskCard[]>;
   loadFreshDocument: TaskDocumentReader;
 };
 
 export type TaskViewSync = {
-  loadWorkspace: (repoPath: string, options?: { forceFresh?: boolean }) => Promise<void>;
-  refreshManually: (repoPath: string) => Promise<void>;
+  loadWorkspace: (repoPath: WorkspaceRef, options?: { forceFresh?: boolean }) => Promise<void>;
+  refreshManually: (repoPath: WorkspaceRef) => Promise<void>;
   /** Read the lists of every open workspace again. Other cached lists read when a view needs them. */
-  refreshAfterTaskRetentionChange: (openRepoPaths: readonly string[]) => Promise<void>;
-  refreshDocumentsForTasks: (repoPath: string, taskIds: string[]) => Promise<void>;
+  refreshAfterTaskRetentionChange: (openRepoPaths: readonly WorkspaceRef[]) => Promise<void>;
+  refreshDocumentsForTasks: (repoPath: WorkspaceRef, taskIds: string[]) => Promise<void>;
   reconcileExternalEvent: (event: ExternalTaskSyncEvent, cursor: TaskEventCursor) => Promise<void>;
   /** Read the task list of every open workspace again. One failed workspace does not stop the others. */
-  reconcileStreamSnapshot: (openRepoPaths: readonly string[]) => Promise<TaskSnapshotResult>;
+  reconcileStreamSnapshot: (openRepoPaths: readonly WorkspaceRef[]) => Promise<TaskSnapshotResult>;
   /** Drop the cached task lists and artifacts of a workspace that closed. */
-  releaseWorkspace: (repoPath: string) => Promise<void>;
+  releaseWorkspace: (repoPath: WorkspaceRef) => Promise<void>;
 };
 
 /** A workspace that a release superseded during the snapshot appears in neither map. */
 export type TaskSnapshotResult = {
   /** The task IDs of each open workspace whose task read succeeded. */
-  taskIdsByRepo: ReadonlyMap<string, string[]>;
+  taskIdsByRepo: ReadonlyMap<WorkspaceRef, string[]>;
   /** The cause for each open workspace whose task or document read failed. Its query keeps it. */
-  failures: ReadonlyMap<string, unknown>;
+  failures: ReadonlyMap<WorkspaceRef, unknown>;
 };
 
 type CachedDocument = {
@@ -65,7 +72,7 @@ type CachedDocument = {
 };
 
 /** A task list read, with the workspace epoch when the read was requested. */
-type ListRequest = { repoPath: string; workspaceEpoch: number };
+type ListRequest = { repoPath: WorkspaceRef; workspaceEpoch: number };
 
 type PendingPatch =
   | { kind: "board"; changes: TaskQueryChanges<TaskCard[]> }
@@ -81,9 +88,10 @@ export const createTaskViewSync = ({
   const repoRefreshes = new Map<string, Promise<unknown>>();
   // Each release of a workspace advances its epoch and supersedes the reads requested before it.
   const workspaceEpochs = new Map<string, number>();
-  const workspaceEpochOf = (repoPath: string): number => workspaceEpochs.get(repoPath) ?? 0;
-  const listRequest = (repoPath: string): ListRequest => ({
-    repoPath,
+  const workspaceEpochOf = (repoPath: WorkspaceRef): number =>
+    workspaceEpochs.get(workspaceScopeKey(repoPath)) ?? 0;
+  const listRequest = (repoPath: WorkspaceRef): ListRequest => ({
+    repoPath: workspaceScopeValue(repoPath),
     workspaceEpoch: workspaceEpochOf(repoPath),
   });
   const isSuperseded = ({ repoPath, workspaceEpoch }: ListRequest): boolean =>
@@ -171,7 +179,10 @@ export const createTaskViewSync = ({
     applyPatch(query, patch);
   };
 
-  const refreshDocuments = async (repoPath: string, entries: CachedDocument[]): Promise<void> => {
+  const refreshDocuments = async (
+    repoPath: WorkspaceRef,
+    entries: CachedDocument[],
+  ): Promise<void> => {
     await Promise.all(
       entries.map((entry) =>
         fetchFreshTaskDocumentFromQuery(
@@ -186,7 +197,7 @@ export const createTaskViewSync = ({
   };
 
   const updateDocuments = async (
-    repoPath: string,
+    repoPath: WorkspaceRef,
     cards: TaskCard[],
     removed = new Set<string>(),
     eventTime = Date.now(),
@@ -294,14 +305,14 @@ export const createTaskViewSync = ({
   };
 
   /** The cached documents of a repository, or only those of the given tasks. */
-  const documentsOf = (repoPath: string, taskIds?: string[]): CachedDocument[] => {
+  const documentsOf = (repoPath: WorkspaceRef, taskIds?: string[]): CachedDocument[] => {
     const taskIdSet = taskIds ? new Set(taskIds) : null;
     return cachedDocuments(queryClient, repoPath).filter(
       (entry) => !taskIdSet || taskIdSet.has(entry.taskId),
     );
   };
 
-  const cancelDocuments = async (repoPath: string, taskIds?: string[]): Promise<void> => {
+  const cancelDocuments = async (repoPath: WorkspaceRef, taskIds?: string[]): Promise<void> => {
     await Promise.all(
       documentsOf(repoPath, taskIds).map((entry) =>
         queryClient.cancelQueries({ queryKey: entry.queryKey, exact: true }, { silent: true }),
@@ -309,7 +320,7 @@ export const createTaskViewSync = ({
     );
   };
 
-  const cancelRepoTaskQueries = (repoPath: string): Promise<void> => {
+  const cancelRepoTaskQueries = (repoPath: WorkspaceRef): Promise<void> => {
     const filters = { queryKey: taskQueryKeys.repoDataPrefix(repoPath), exact: false };
     for (const query of queryClient.getQueryCache().findAll(filters)) {
       waitingPatches.delete(query);
@@ -318,13 +329,13 @@ export const createTaskViewSync = ({
     return queryClient.cancelQueries(filters, { silent: true });
   };
 
-  const removeDocuments = (repoPath: string, taskIds?: string[]): void => {
+  const removeDocuments = (repoPath: WorkspaceRef, taskIds?: string[]): void => {
     for (const entry of documentsOf(repoPath, taskIds)) {
       queryClient.removeQueries({ queryKey: entry.queryKey, exact: true });
     }
   };
 
-  const invalidateDocuments = async (repoPath: string, taskIds?: string[]): Promise<void> => {
+  const invalidateDocuments = async (repoPath: WorkspaceRef, taskIds?: string[]): Promise<void> => {
     await Promise.all(
       documentsOf(repoPath, taskIds).map((entry) =>
         queryClient.invalidateQueries({
@@ -336,7 +347,7 @@ export const createTaskViewSync = ({
     );
   };
 
-  const refreshUnfilteredTasks = async (repoPath: string): Promise<void> => {
+  const refreshUnfilteredTasks = async (repoPath: WorkspaceRef): Promise<void> => {
     const queryKey = taskQueryKeys.unfilteredRepoData(repoPath);
     const query = queryClient.getQueryCache().find({ queryKey, exact: true });
     if (!query) return;
@@ -349,23 +360,23 @@ export const createTaskViewSync = ({
   };
 
   const runForRepo = <Result>(
-    repoPath: string,
+    repoPath: WorkspaceRef,
     operation: () => Promise<Result>,
   ): Promise<Result> => {
-    const previous = repoRefreshes.get(repoPath) ?? Promise.resolve();
+    const previous = repoRefreshes.get(workspaceScopeKey(repoPath)) ?? Promise.resolve();
     let current!: Promise<Result>;
     current = previous.then(operation, operation).finally(() => {
-      if (repoRefreshes.get(repoPath) === current) {
-        repoRefreshes.delete(repoPath);
+      if (repoRefreshes.get(workspaceScopeKey(repoPath)) === current) {
+        repoRefreshes.delete(workspaceScopeKey(repoPath));
       }
     });
-    repoRefreshes.set(repoPath, current);
+    repoRefreshes.set(workspaceScopeKey(repoPath), current);
     return current;
   };
 
   /** Queue work that reads a task list. A release after this call supersedes the read. */
   const runListRead = <Result>(
-    repoPath: string,
+    repoPath: WorkspaceRef,
     operation: (request: ListRequest) => Promise<Result>,
   ): Promise<Result> => {
     const request = listRequest(repoPath);
@@ -395,7 +406,7 @@ export const createTaskViewSync = ({
     }
   };
 
-  const observedDocumentsOf = (repoPath: string): CachedDocument[] =>
+  const observedDocumentsOf = (repoPath: WorkspaceRef): CachedDocument[] =>
     cachedDocuments(queryClient, repoPath).filter(
       (entry) =>
         queryClient.getQueryCache().find({ queryKey: entry.queryKey, exact: true })?.isActive() ===
@@ -420,7 +431,7 @@ export const createTaskViewSync = ({
     });
 
   /** Mark the cached views of a workspace that is not open stale. Observed views read again. */
-  const markRepoStale = (repoPath: string): Promise<void> =>
+  const markRepoStale = (repoPath: WorkspaceRef): Promise<void> =>
     runForRepo(repoPath, async () => {
       await Promise.all([cancelDocuments(repoPath), cancelRepoTaskQueries(repoPath)]);
       await Promise.all([
@@ -450,16 +461,18 @@ export const createTaskViewSync = ({
         await refreshUnfilteredTasks(repoPath);
       }),
     refreshAfterTaskRetentionChange: async (openRepoPaths) => {
-      const openRepos = new Set(openRepoPaths);
-      const repos = new Set<string>([
-        ...openRepoPaths,
-        ...cachedRepoPaths(
-          queryClient.getQueryCache().findAll({ queryKey: taskQueryKeys.all, exact: false }),
-        ),
-      ]);
+      const openRepos = new Set(openRepoPaths.map(workspaceScopeKey));
+      const repos = new Map<string, WorkspaceRef>(
+        [
+          ...openRepoPaths,
+          ...cachedRepoPaths(
+            queryClient.getQueryCache().findAll({ queryKey: taskQueryKeys.all, exact: false }),
+          ),
+        ].map((scope) => [workspaceScopeKey(scope), scope]),
+      );
       await Promise.all(
-        [...repos].map((repoPath) =>
-          openRepos.has(repoPath)
+        [...repos.values()].map((repoPath) =>
+          openRepos.has(workspaceScopeKey(repoPath))
             ? runListRead(repoPath, async (request) => {
                 try {
                   await replaceIncompleteList(request);
@@ -483,12 +496,12 @@ export const createTaskViewSync = ({
       }),
     reconcileExternalEvent: async (event, cursor) => {
       if (!event.boardChanges) return;
-      await runForRepo(event.repoPath, async () => {
+      const scope = workspaceScopeValue(event);
+      await runForRepo(scope, async () => {
         const { doneVisibleDays } = event.boardChanges!;
         const cards = event.boardChanges!.cards.map((card) => builtinTaskCardSchema.parse(card));
         const previousCards =
-          queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(event.repoPath))?.tasks ??
-          [];
+          queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(scope))?.tasks ?? [];
         const { taskIds, removedTaskIds } = toEventChanges(event);
         const removed = new Set(removedTaskIds);
         const change: TaskQueryChange = {
@@ -500,30 +513,26 @@ export const createTaskViewSync = ({
               ? Infinity
               : Date.parse(event.emittedAt) - doneVisibleDays * 86400000,
         };
-        await patchQuery(taskQueryKeys.repoData(event.repoPath), "board", change);
-        await patchQuery(taskQueryKeys.ids(event.repoPath), "ids", change);
-        await patchQuery(taskQueryKeys.unfilteredRepoData(event.repoPath), "board", {
+        await patchQuery(taskQueryKeys.repoData(scope), "board", change);
+        await patchQuery(taskQueryKeys.ids(scope), "ids", change);
+        await patchQuery(taskQueryKeys.unfilteredRepoData(scope), "board", {
           ...change,
           cutoff: -Infinity,
         });
-        await cancelDocuments(event.repoPath, removedTaskIds);
-        removeDocuments(event.repoPath, removedTaskIds);
-        await removeArtifactQueries(queryClient, event.repoPath, removedTaskIds);
+        await cancelDocuments(scope, removedTaskIds);
+        removeDocuments(scope, removedTaskIds);
+        await removeArtifactQueries(queryClient, scope, removedTaskIds);
         await refreshArtifactQueries(
           queryClient,
-          event.repoPath,
+          scope,
           event.boardChanges!.artifactChanges,
           cards.map((card) => card.id),
           cursor,
         );
-        await updateDocuments(
-          event.repoPath,
-          cards,
-          removed,
-          Date.parse(event.emittedAt),
-          previousCards,
-          { cursor, artifactChanges: event.boardChanges!.artifactChanges },
-        );
+        await updateDocuments(scope, cards, removed, Date.parse(event.emittedAt), previousCards, {
+          cursor,
+          artifactChanges: event.boardChanges!.artifactChanges,
+        });
       });
     },
     reconcileStreamSnapshot: async (openRepoPaths) => {
@@ -546,13 +555,13 @@ export const createTaskViewSync = ({
       const artifactQueries = queryClient
         .getQueryCache()
         .findAll({ queryKey: artifactQueryKeys.all });
-      const openRepoPathSet = new Set(openRepoPaths);
+      const openRepoPathSet = new Set(openRepoPaths.map(workspaceScopeKey));
       const otherRepos = new Set(
         [
           ...cachedRepoPaths(taskQueries),
           ...cachedRepoPaths(documentQueries),
           ...cachedRepoPaths(artifactQueries),
-        ].filter((repoPath) => !openRepoPathSet.has(repoPath)),
+        ].filter((repoPath) => !openRepoPathSet.has(workspaceScopeKey(repoPath))),
       );
       const [results] = await Promise.all([
         Promise.allSettled(
@@ -560,8 +569,8 @@ export const createTaskViewSync = ({
         ),
         ...[...otherRepos].map(markRepoStale),
       ]);
-      const taskIdsByRepo = new Map<string, string[]>();
-      const failures = new Map<string, unknown>();
+      const taskIdsByRepo = new Map<WorkspaceRef, string[]>();
+      const failures = new Map<WorkspaceRef, unknown>();
       openRepos.forEach(({ request }, index) => {
         // A release during the snapshot superseded this workspace. Its result does not matter.
         if (isSuperseded(request)) return;
@@ -577,7 +586,7 @@ export const createTaskViewSync = ({
       return { taskIdsByRepo, failures };
     },
     releaseWorkspace: async (repoPath) => {
-      workspaceEpochs.set(repoPath, workspaceEpochOf(repoPath) + 1);
+      workspaceEpochs.set(workspaceScopeKey(repoPath), workspaceEpochOf(repoPath) + 1);
       // Cancel before removal so late reads cannot restore workspace data.
       const cancelled = Promise.all([
         cancelRepoTaskQueries(repoPath),
@@ -616,23 +625,23 @@ const toEventChanges = (event: ExternalTaskSyncEvent) =>
     ? { taskIds: [event.taskId], removedTaskIds: [] }
     : { taskIds: event.taskIds, removedTaskIds: event.removedTaskIds };
 
-const cachedRepoPaths = (queries: Query[]): string[] =>
+const cachedRepoPaths = (queries: Query[]): WorkspaceRef[] =>
   queries.flatMap((query) => {
-    const repoPathResult = queryKeyStringSchema.safeParse(query.queryKey[2]);
-    return repoPathResult.success ? [repoPathResult.data] : [];
+    const scope = queryWorkspaceScope(query);
+    return scope ? [scope] : [];
   });
 
-const cachedDocuments = (queryClient: QueryClient, repoPath: string): CachedDocument[] =>
+const cachedDocuments = (queryClient: QueryClient, repoPath: WorkspaceRef): CachedDocument[] =>
   queryClient
     .getQueryCache()
     .findAll({ queryKey: documentQueryKeys.all, exact: false })
     .flatMap<CachedDocument>((query) => {
-      const [scope, code, cachedRepoPath, taskId] = query.queryKey;
+      const [scope, code, _cachedRepoPath, taskId] = query.queryKey;
       const codeResult = queryKeyStringSchema.safeParse(code);
       const taskIdResult = queryKeyStringSchema.safeParse(taskId);
       if (
         scope !== documentQueryKeys.all[0] ||
-        cachedRepoPath !== repoPath ||
+        !queryMatchesWorkspace(query, repoPath) ||
         !codeResult.success ||
         !taskIdResult.success
       ) {

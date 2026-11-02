@@ -1,4 +1,6 @@
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
+import { mock } from "bun:test";
+import { createDefaultGlobalConfig } from "../../../config/global-config";
 import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 import { commandPreparationFixture } from "./command-preparation-fixture";
 import { createAgentMessageDeliveryService } from "../agent-message-delivery-service";
@@ -18,7 +20,6 @@ import {
   GITHUB_PROVIDER_DESCRIPTOR,
   repositoryGitProviderContextSchema,
   repoConfigSchema,
-  settingsSnapshotSchema,
   taskCardSchema,
 } from "@openducktor/contracts";
 import { Deferred, Effect } from "effect";
@@ -53,6 +54,7 @@ import {
 } from "../../../ports/agent-session-send-error";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import { taskCardFixture } from "../../../test-support/task-card-fixture";
+import { toSettingsSnapshot } from "../../workspaces/workspace-settings-model";
 
 const unexpected = (operation: string) => () =>
   Effect.die(new Error(`Unexpected ${operation} in the workflow launch harness.`));
@@ -101,7 +103,9 @@ export const createLaunchHarness = async (
     defaultModel: modelFor(runtimeKind),
     worktreeBasePath: "/worktrees",
   });
-  const settings = settingsSnapshotSchema.parse({ theme: "system" });
+  const settings = createDefaultGlobalConfig();
+  const readGlobalConfig = mock(() => Effect.succeed(settings));
+  const getSettingsSnapshot = mock(() => Effect.succeed(toSettingsSnapshot(settings)));
   let provider: import("@openducktor/contracts").RepositoryGitProviderContext = null;
   let providerFailure = false;
   const sendEntered = await Effect.runPromise(Deferred.make<void>());
@@ -400,7 +404,7 @@ export const createLaunchHarness = async (
         ? Effect.succeed(config)
         : Effect.fail(new HostValidationError({ message: "Unknown workspace" })),
     getRepoConfigByRepoPath: () => Effect.succeed(config),
-    getSettingsSnapshot: () => Effect.succeed(settings),
+    getSettingsSnapshot,
   });
   const git = createGitPortTestDouble({
     canonicalizePath: (path) => Effect.succeed(path),
@@ -425,6 +429,7 @@ export const createLaunchHarness = async (
       }),
   });
   const settingsConfig = createSettingsConfigTestDouble({
+    readGlobalConfig,
     join: (...parts) => parts.join("/"),
     defaultWorktreeBasePath: () => "/worktrees",
     resolveConfiguredPath: (path) => path,
@@ -496,12 +501,17 @@ export const createLaunchHarness = async (
         }),
     },
     readSessionRootRefs: (repoPath) =>
-      tasks.agentSessionsList({ repoPath, taskId: "task" }).pipe(
+      tasks.agentSessionsList({ workspaceId: "workspace", repoPath, taskId: "task" }).pipe(
         Effect.map((records) =>
           records.map((record) => ({
             repoPath,
             ...record,
-            sessionScope: { kind: "workflow" as const, taskId: "task", role: record.role },
+            sessionScope: {
+              kind: "workflow" as const,
+              workspaceId: "workspace",
+              taskId: "task",
+              role: record.role,
+            },
           })),
         ),
         Effect.mapError(
@@ -541,6 +551,7 @@ export const createLaunchHarness = async (
     messageDelivery,
     resolveParts: (parts) => Effect.succeed(parts),
     settings: workspaceSettings,
+    settingsConfig,
     startPreparation: preparation,
     tasks,
     taskReader,
@@ -712,6 +723,7 @@ export const createLaunchHarness = async (
     deletedBranches,
     envelopes,
     settings,
+    settingsReads: { global: readGlobalConfig, snapshot: getSettingsSnapshot },
     config,
     catalogLoads: () => catalogLoads,
     getTask: () => task,

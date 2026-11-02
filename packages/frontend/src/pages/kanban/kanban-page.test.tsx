@@ -1,4 +1,6 @@
 import { createAgentStudioStartupTestHost } from "../agents/agent-studio-startup-test-host";
+import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   type AppPlatform,
@@ -253,7 +255,7 @@ let currentSessionsFixture: AgentSessionState[] = [
   createAgentSessionFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-spec",
-    sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "spec" },
+    sessionAssociation: { kind: "workflow", workspaceId: "repo", taskId: "TASK-123", role: "spec" },
 
     status: "running",
     startedAt: "2026-01-01T00:00:00.000Z",
@@ -261,7 +263,12 @@ let currentSessionsFixture: AgentSessionState[] = [
   createAgentSessionFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-build-older",
-    sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "repo",
+      taskId: "TASK-123",
+      role: "build",
+    },
 
     status: "running",
     startedAt: "2026-01-01T12:00:00.000Z",
@@ -269,7 +276,12 @@ let currentSessionsFixture: AgentSessionState[] = [
   createAgentSessionFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-build-latest",
-    sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "build" },
+    sessionAssociation: {
+      kind: "workflow",
+      workspaceId: "repo",
+      taskId: "TASK-123",
+      role: "build",
+    },
 
     status: "idle",
     startedAt: "2026-01-02T00:00:00.000Z",
@@ -317,9 +329,7 @@ const activeWorkspaceFixture: WorkspaceRecord = {
   effectiveWorktreeBasePath: "/tmp/default-worktrees",
 };
 
-const createWorkspaceStateValue = (
-  renderState: Pick<KanbanPageRenderState, "settingsSnapshot">,
-): WorkspaceStateContextValue => ({
+const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   activeWorkspace: activeWorkspaceFixture,
   workspaces: [activeWorkspaceFixture],
   branches: [],
@@ -340,25 +350,14 @@ const createWorkspaceStateValue = (
   addWorkspace: async () => {
     throw new Error("Not used");
   },
-  saveWorkspaceModelDefaults: async () => {
-    throw new Error("Not used");
-  },
   selectWorkspace: async () => {},
   reorderWorkspaces: async () => {},
   refreshBranches: async () => {},
   switchBranch: async () => {},
   loadRepoSettings: async () => createRepoSettingsFixture(),
-  saveRepoSettings: async () => {},
-  loadSettingsSnapshot: async () => renderState.settingsSnapshot,
   detectGithubRepository: async () => null,
-  saveGlobalGitConfig: async () => {},
   previewSettingsSnapshotRuntime: async () => ({ impact: null }),
-  saveSettingsSnapshot: async () => ({
-    type: "saved" as const,
-    workspaces: [],
-    runtimeApplications: [],
-    refreshError: null,
-  }),
+  saveSettingsSnapshot: async () => savedSettingsResult(),
   saveAgentModelFavorites: async () => {
     throw new Error("saveAgentModelFavorites is not used in this test");
   },
@@ -588,7 +587,10 @@ const renderPage = async (
   if (options.seedSettingsSnapshot !== false) {
     queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), renderState.settingsSnapshot);
   }
-  queryClient.setQueryData(repositoryGitProviderContextQueryKeys.repo("/repo"), null);
+  queryClient.setQueryData(
+    repositoryGitProviderContextQueryKeys.repo({ workspaceId: "repo", repoPath: "/repo" }),
+    null,
+  );
   // The scrollbar default reads this device's platform.
   Object.defineProperty(globalThis.navigator, "platform", {
     configurable: true,
@@ -596,7 +598,10 @@ const renderPage = async (
   });
   if (options.seedAgentSessionLists !== false) {
     for (const task of renderState.tasks) {
-      queryClient.setQueryData(agentSessionQueryKeys.list("/repo", task.id), []);
+      queryClient.setQueryData(
+        agentSessionQueryKeys.list(workspaceRefFixture("/repo", "repo"), task.id),
+        [],
+      );
     }
   }
   const LocationProbe = (): ReactElement | null => {
@@ -635,7 +640,7 @@ const renderPage = async (
           setActiveWorkspace: () => {},
         }}
       >
-        <WorkspaceStateContext.Provider value={createWorkspaceStateValue(renderState)}>
+        <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
           <WorkspaceBranchStateContext.Provider value={createWorkspaceBranchStateValue()}>
             <WorkspacePresenceContext.Provider value={createWorkspacePresenceValue()}>
               <HostRuntimeStatusContext.Provider value={createHostRuntimeStatusContextValue()}>
@@ -876,7 +881,12 @@ describe("KanbanPage session start modal flow", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-spec",
-        sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "repo",
+          taskId: "TASK-123",
+          role: "spec",
+        },
 
         status: "running",
         startedAt: "2026-01-01T00:00:00.000Z",
@@ -884,7 +894,12 @@ describe("KanbanPage session start modal flow", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-build-older",
-        sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "repo",
+          taskId: "TASK-123",
+          role: "build",
+        },
 
         status: "running",
         startedAt: "2026-01-01T12:00:00.000Z",
@@ -892,7 +907,12 @@ describe("KanbanPage session start modal flow", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-build-latest",
-        sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "repo",
+          taskId: "TASK-123",
+          role: "build",
+        },
 
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
@@ -1406,7 +1426,7 @@ describe("KanbanPage session start modal flow", () => {
     expect(sendAgentMessageMock).not.toHaveBeenCalled();
     expect(renderer.getLocation()).toBe("/");
     expect(publishSessionErrorMock).not.toHaveBeenCalled();
-    expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(toastErrorMock.mock.calls).toEqual([]);
 
     await act(async () => {
       renderer.unmount();
@@ -1717,7 +1737,12 @@ describe("KanbanPage session start modal flow", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-build-idle",
-        sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "repo",
+          taskId: "TASK-123",
+          role: "build",
+        },
 
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
@@ -1725,7 +1750,12 @@ describe("KanbanPage session start modal flow", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-qa-stopped",
-        sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "qa" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "repo",
+          taskId: "TASK-123",
+          role: "qa",
+        },
 
         status: "stopped",
         startedAt: "2026-01-03T00:00:00.000Z",
@@ -1775,7 +1805,12 @@ describe("KanbanPage session start modal flow", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-build-idle",
-        sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "repo",
+          taskId: "TASK-123",
+          role: "build",
+        },
 
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",

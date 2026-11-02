@@ -11,6 +11,12 @@ import type { TaskStoreError } from "./task-repository-ports";
 
 export type WorkspaceSessionStoreScope = { repoPath: string; workspaceId: string };
 export type WorkspaceSessionStoreRef = WorkspaceSessionStoreScope & { sessionId: string };
+export type RuntimeOwnershipScope = {
+  catalogRevision: number;
+  workspaces: readonly WorkspaceSessionStoreScope[];
+};
+/** Lists the workspaces of one cross-workspace read. The read admits each one. */
+type WorkspaceSessionStoreScopes = { workspaces: readonly WorkspaceSessionStoreScope[] };
 type Result<A = WorkspaceSession> = Effect.Effect<A, TaskStoreError>;
 
 export type RuntimeSessionOwner = {
@@ -21,23 +27,73 @@ export type RuntimeSessionOwner = {
   | { kind: "task"; taskId: string; role: string }
 );
 
+export type WorkspaceRuntimeSessionOwner = RuntimeSessionOwner & { workspaceId: string };
+
+export type RuntimeOwnerFilter = {
+  runtimeKind: RuntimeKind;
+  externalSessionIds: readonly string[];
+};
+
+/** The saved chat columns that decide if a chat needs a worktree. */
+export type WorktreeOwnershipChat = Pick<
+  WorkspaceSession,
+  "id" | "runtimeKind" | "externalSessionId" | "generatedTitle" | "manualTitle" | "archivedAt"
+> & { workspaceId: string; workingDirectory: string };
+
+export type RuntimeSessionMatch = WorkspaceSessionStoreScope & { session: WorkspaceSession };
+
+/** A native conversation that an active chat or an open task owns. */
+export type LiveSessionRoot = {
+  sessionScope:
+    | { kind: "repository"; workspaceId: string }
+    | { kind: "workflow"; workspaceId: string; taskId: string; role: string };
+  runtimeKind: RuntimeKind;
+  externalSessionId: string;
+  workingDirectory: string;
+};
+
 export type WorkspaceSessionStorePort = {
-  listRuntimeOwners(input: WorkspaceSessionStoreScope): Result<RuntimeSessionOwner[]>;
+  /**
+   * Reads the owners of the workspace. With an ownership scope, reads the owners of every
+   * workspace in it, after the read checks the scope like an ownership claim.
+   */
+  listRuntimeOwners(
+    input: WorkspaceSessionStoreScope & {
+      filter?: RuntimeOwnerFilter;
+      ownershipScope?: RuntimeOwnershipScope;
+    },
+  ): Result<WorkspaceRuntimeSessionOwner[]>;
   importSession(
-    input: WorkspaceSessionStoreScope & { session: WorkspaceSession },
+    input: WorkspaceSessionStoreScope & {
+      session: WorkspaceSession;
+      ownershipScope: RuntimeOwnershipScope;
+    },
   ): Result<{ session: WorkspaceSession; created: boolean }>;
 
   get(input: WorkspaceSessionStoreRef): Result;
   listIds(input: WorkspaceSessionStoreScope): Result<string[]>;
   listActive(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;
-  /** Reads all saved sessions without an archive limit. Allows configured closed workspaces and unavailable roots. */
-  listForWorktreeOwnership(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;
+  /** Reads all saved chats without an archive limit. Allows closed workspaces and unavailable roots. */
+  listForWorktreeOwnership(input: WorkspaceSessionStoreScopes): Result<WorktreeOwnershipChat[]>;
+  /** Reads the native conversations of active chats and open tasks. */
+  listLiveSessionRoots(input: WorkspaceSessionStoreScopes): Result<LiveSessionRoot[]>;
   listArchived(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;
+  /** Reads the saved chats of one native conversation, at most one in each workspace. */
   findByRuntimeSession(
-    input: WorkspaceSessionStoreScope & { runtimeKind: RuntimeKind; externalSessionId: string },
-  ): Result<WorkspaceSession | null>;
-  create(input: WorkspaceSessionStoreScope & { session: WorkspaceSession }): Result;
-  bindRuntimeSession(input: WorkspaceSessionStoreRef & { externalSessionId: string }): Result;
+    input: WorkspaceSessionStoreScopes & { runtimeKind: RuntimeKind; externalSessionId: string },
+  ): Result<RuntimeSessionMatch[]>;
+  create(
+    input: WorkspaceSessionStoreScope & {
+      session: WorkspaceSession;
+      ownershipScope?: RuntimeOwnershipScope;
+    },
+  ): Result;
+  bindRuntimeSession(
+    input: WorkspaceSessionStoreRef & {
+      externalSessionId: string;
+      ownershipScope: RuntimeOwnershipScope;
+    },
+  ): Result;
   setExecutionTarget(
     input: WorkspaceSessionStoreRef & { executionTarget: WorkspaceSessionExecutionTarget },
   ): Result;

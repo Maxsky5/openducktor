@@ -1,3 +1,5 @@
+import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
+import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
@@ -253,7 +255,6 @@ const createWorkspaceState = (
   addWorkspace: async () => {
     throw new Error("Not used");
   },
-  saveWorkspaceModelDefaults: async () => {},
   selectWorkspace: async () => undefined,
   reorderWorkspaces: async () => undefined,
   refreshBranches: async () => undefined,
@@ -261,17 +262,9 @@ const createWorkspaceState = (
   loadRepoSettings: async () => {
     throw new Error("loadRepoSettings is not used in this test");
   },
-  saveRepoSettings: async () => undefined,
-  loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
   detectGithubRepository: async () => null,
-  saveGlobalGitConfig: async () => undefined,
   previewSettingsSnapshotRuntime: async () => ({ impact: null }),
-  saveSettingsSnapshot: async () => ({
-    type: "saved" as const,
-    workspaces: [],
-    runtimeApplications: [],
-    refreshError: null,
-  }),
+  saveSettingsSnapshot: async () => savedSettingsResult(),
   saveAgentModelFavorites: async () => {
     throw new Error("saveAgentModelFavorites is not used in this test");
   },
@@ -790,7 +783,7 @@ describe("AppShell", () => {
       workspaceAdd,
       prepareQueryClient: (queryClient) => {
         void queryClient.fetchQuery({
-          ...repoTaskDataQueryOptions(createdWorkspace.repoPath),
+          ...repoTaskDataQueryOptions(workspaceRefFixture(createdWorkspace.repoPath)),
           queryFn: async () => {
             await initialTaskLoad.promise;
             return { tasks: [] };
@@ -1517,17 +1510,30 @@ describe("AppShell command palette", () => {
       extraWorkspaces: [fairnest],
       tasksByRepoPath: { "/repo": [ownTask, closedTask], "/fairnest": [fairnestTask] },
       prepareQueryClient: (queryClient) => {
-        queryClient.setQueryData(repoTaskDataQueryOptions("/repo").queryKey, {
+        queryClient.setQueryData(repoTaskDataQueryOptions(workspaceRefFixture("/repo")).queryKey, {
           tasks: [ownTask, closedTask],
         });
-        queryClient.setQueryData(agentSessionQueryKeys.list("/repo", closedTask.id), [
-          { ...builderSession, externalSessionId: "build-closed" },
-        ]);
-        queryClient.setQueryData(repoTaskDataQueryOptions("/fairnest").queryKey, {
-          tasks: [fairnestTask],
-        });
-        queryClient.setQueryData(agentSessionQueryKeys.list("/repo", ownTask.id), [builderSession]);
-        queryClient.setQueryData(agentSessionQueryKeys.list("/fairnest", fairnestTask.id), []);
+        queryClient.setQueryData(
+          agentSessionQueryKeys.list(workspaceRefFixture("/repo"), closedTask.id),
+          [{ ...builderSession, externalSessionId: "build-closed" }],
+        );
+        queryClient.setQueryData(
+          repoTaskDataQueryOptions(workspaceRefFixture("/fairnest", "workspace-2")).queryKey,
+          {
+            tasks: [fairnestTask],
+          },
+        );
+        queryClient.setQueryData(
+          agentSessionQueryKeys.list(workspaceRefFixture("/repo"), ownTask.id),
+          [builderSession],
+        );
+        queryClient.setQueryData(
+          agentSessionQueryKeys.list(
+            workspaceRefFixture("/fairnest", "workspace-2"),
+            fairnestTask.id,
+          ),
+          [],
+        );
       },
       ...options,
     });
@@ -1640,7 +1646,11 @@ describe("AppShell command palette", () => {
     fireEvent.click(
       await within(chooser).findByRole("button", { name: "Sync workspace Fairnest" }),
     );
-    await waitFor(() => expect(sync).toHaveBeenCalledWith("/fairnest", "workspace-2"));
+    await waitFor(() =>
+      expect(sync).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceId: "workspace-2", repoPath: "/fairnest" }),
+      ),
+    );
     expect(screen.getByRole("button", { name: "New task in OpenDucktor" })).toBeTruthy();
     expect(screen.getByTestId("current-route").textContent).toBe("/kanban");
   });
@@ -1650,9 +1660,9 @@ describe("AppShell command palette", () => {
     const calls: unknown[] = [];
     configurePaletteHost({
       workspaceGetGitProviderContext: async () => createGitProviderContextFixture(),
-      repoPullRequestSync: async (repoPath, workspaceId) => {
-        calls.push([repoPath, workspaceId]);
-        return repoPath === "/repo" ? first.promise : { ok: true };
+      repoPullRequestSync: async (scope) => {
+        calls.push([scope.repoPath, scope.workspaceId]);
+        return scope.repoPath === "/repo" ? first.promise : { ok: true };
       },
     });
     renderPalette({
@@ -1717,9 +1727,9 @@ describe("AppShell command palette", () => {
     const check = createDeferred<TaskMergeStatusSnapshot>();
     const calls: string[] = [];
     configurePaletteHost({
-      taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
-      taskMergeStatusCheck: async (repoPath) => {
-        calls.push(repoPath);
+      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+      taskMergeStatusCheck: async (scope) => {
+        calls.push(scope.repoPath);
         return check.promise;
       },
     });
@@ -1746,7 +1756,9 @@ describe("AppShell command palette", () => {
       expect(actionOption(reopened, "Check merged tasks").getAttribute("aria-disabled")).toBe(
         "true",
       );
-      await act(async () => check.resolve({ repoPath: "/repo", tasks: [] }));
+      await act(async () =>
+        check.resolve({ workspaceId: "workspace-1", repoPath: "/repo", tasks: [] }),
+      );
       await waitFor(() =>
         expect(toastSuccess).toHaveBeenCalledWith(
           "Merge check completed: workspace OpenDucktor",
@@ -1754,7 +1766,7 @@ describe("AppShell command palette", () => {
         ),
       );
     } finally {
-      check.resolve({ repoPath: "/repo", tasks: [] });
+      check.resolve({ workspaceId: "workspace-1", repoPath: "/repo", tasks: [] });
       toastLoading.mockRestore();
       toastSuccess.mockRestore();
     }
@@ -1763,11 +1775,11 @@ describe("AppShell command palette", () => {
   test("checks all open workspaces and keeps the toast when one check fails", async () => {
     const calls: string[] = [];
     configurePaletteHost({
-      taskMergeStatusGet: async (repoPath) => ({ repoPath, tasks: [] }),
-      taskMergeStatusCheck: async (repoPath) => {
-        calls.push(repoPath);
-        if (repoPath === "/fairnest") throw new Error("Workspace removal is incomplete.");
-        return { repoPath, tasks: [] };
+      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+      taskMergeStatusCheck: async (scope) => {
+        calls.push(scope.repoPath);
+        if (scope.repoPath === "/fairnest") throw new Error("Workspace removal is incomplete.");
+        return { ...scope, tasks: [] };
       },
     });
     const toastLoading = spyOn(toast, "loading").mockReturnValue("merge-check");
@@ -1853,10 +1865,18 @@ describe("AppShell command palette", () => {
       tasksByRepoPath: { "/repo": tasks },
       prepareQueryClient: (client) => {
         queryClient = client;
-        client.setQueryData(repoTaskDataQueryOptions("/repo").queryKey, { tasks });
-        client.setQueryData(repoTaskDataQueryOptions("/fairnest").queryKey, { tasks: [] });
+        client.setQueryData(repoTaskDataQueryOptions(workspaceRefFixture("/repo")).queryKey, {
+          tasks,
+        });
+        client.setQueryData(
+          repoTaskDataQueryOptions(workspaceRefFixture("/fairnest", "workspace-2")).queryKey,
+          { tasks: [] },
+        );
         for (const task of tasks) {
-          client.setQueryData(agentSessionQueryKeys.list("/repo", task.id), []);
+          client.setQueryData(
+            agentSessionQueryKeys.list(workspaceRefFixture("/repo"), task.id),
+            [],
+          );
         }
       },
     });
@@ -1887,7 +1907,7 @@ describe("AppShell command palette", () => {
       // A data update keeps the highlighted option, so it keeps the wheel scroll.
       scrolled.length = 0;
       await act(async () => {
-        queryClient?.setQueryData(repoTaskDataQueryOptions("/repo").queryKey, {
+        queryClient?.setQueryData(repoTaskDataQueryOptions(workspaceRefFixture("/repo")).queryKey, {
           tasks: tasks.filter((task) => task.id !== "alpha-10"),
         });
       });
@@ -1965,22 +1985,36 @@ describe("AppShell command palette", () => {
     renderPalette({
       prepareQueryClient: (client) => {
         queryClient = client;
-        client.setQueryData(repoTaskDataQueryOptions("/repo").queryKey, {
+        client.setQueryData(repoTaskDataQueryOptions(workspaceRefFixture("/repo")).queryKey, {
           tasks: [ownTask, closedTask],
         });
-        client.setQueryData(repoTaskDataQueryOptions("/fairnest").queryKey, {
-          tasks: [fairnestTask],
-        });
-        client.setQueryData(agentSessionQueryKeys.list("/repo", ownTask.id), [builderSession]);
-        client.setQueryData(agentSessionQueryKeys.list("/repo", closedTask.id), []);
-        client.setQueryData(agentSessionQueryKeys.list("/fairnest", fairnestTask.id), []);
+        client.setQueryData(
+          repoTaskDataQueryOptions(workspaceRefFixture("/fairnest", "workspace-2")).queryKey,
+          {
+            tasks: [fairnestTask],
+          },
+        );
+        client.setQueryData(agentSessionQueryKeys.list(workspaceRefFixture("/repo"), ownTask.id), [
+          builderSession,
+        ]);
+        client.setQueryData(
+          agentSessionQueryKeys.list(workspaceRefFixture("/repo"), closedTask.id),
+          [],
+        );
+        client.setQueryData(
+          agentSessionQueryKeys.list(
+            workspaceRefFixture("/fairnest", "workspace-2"),
+            fairnestTask.id,
+          ),
+          [],
+        );
       },
     });
     const palette = await openPalette();
 
     await act(async () => {
       await queryClient?.refetchQueries({
-        queryKey: agentSessionQueryKeys.list("/repo", ownTask.id),
+        queryKey: agentSessionQueryKeys.list(workspaceRefFixture("/repo"), ownTask.id),
         exact: true,
       });
     });
@@ -2096,9 +2130,7 @@ describe("AppShell command palette", () => {
   });
 
   test("switches the task card view and marks the current view", async () => {
-    const updateCardView = mock(async (taskCardView: "normal" | "compact") =>
-      createSettingsSnapshotFixture({ kanban: { taskCardView } }),
-    );
+    const updateCardView = mock(async (taskCardView: "normal" | "compact") => taskCardView);
     configurePaletteHost({ workspaceUpdateKanbanTaskCardView: updateCardView });
     renderPalette();
     const palette = await openPalette();

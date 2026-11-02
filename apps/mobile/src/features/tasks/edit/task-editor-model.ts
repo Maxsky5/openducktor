@@ -27,7 +27,7 @@ export const labelSuggestions = (
 
 /**
  * The desktop save rules of the task editor. A task save needs a title and waits out the type
- * step, a task conflict, and a destination error. A document save needs edited text.
+ * step and a destination error. A document save needs edited text.
  */
 export const taskEditorSaveDisabled = ({
   busy,
@@ -35,7 +35,6 @@ export const taskEditorSaveDisabled = ({
   documentSection,
   title,
   typeStep,
-  conflict,
   destinationError,
   documentDirty,
   documentDraft,
@@ -48,13 +47,11 @@ export const taskEditorSaveDisabled = ({
   title: string;
   /** True while a new task still shows its type step. */
   typeStep: boolean;
-  /** True when the live task has a newer version than the draft. */
-  conflict: boolean;
   destinationError: boolean;
   documentDirty: boolean;
   documentDraft: string;
 }): boolean => {
   if (busy || locked) return true;
   if (documentSection) return !documentDirty || documentDraft.trim().length === 0;
-  return title.trim().length === 0 || typeStep || conflict || destinationError;
+  return title.trim().length === 0 || typeStep || destinationError;
 };

@@ -150,7 +150,7 @@ export const createTerminalService = ({
       scope: TerminalTaskScope,
     ): Effect.Effect<TerminalTaskScope, TerminalServiceError> =>
       canonicalizeRepositoryPath(scope.repoPath, "close_by_task").pipe(
-        Effect.map((repoPath) => ({ repoPath, taskIds: scope.taskIds })),
+        Effect.map((repoPath) => ({ ...scope, repoPath })),
       );
 
     // Task contexts bind after target resolution gives their canonical repository path.

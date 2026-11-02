@@ -11,7 +11,7 @@ Thanks for contributing. This project is public, but it is still early and the c
 ## Current Product Constraints
 
 - OpenDucktor supports macOS, Windows, and Linux desktop builds.
-- The workspace-scoped SQLite task store is the V1 source of truth for tasks.
+- The host SQLite database is the source of truth for tasks.
 - OpenCode, Codex, and Claude Code are the supported local agent runtimes.
 - Runtime integrations may use proprietary services when their executable, authentication, and
   billing requirements are documented and the integration fits the shared runtime contract.
@@ -171,9 +171,9 @@ Important paths:
 
 - config file: `<config-root>/config.json`
 - Electron and web lifecycle logs: `<config-root>/logs/` (daily files, retained for 30 local calendar dates)
-- workspace task-store databases: `<config-root>/task-stores/<workspaceId>/database.sqlite`
+- shared host database: `<config-root>/database.sqlite`
 
-OpenDucktor uses one SQLite database per configured workspace.
+OpenDucktor uses one SQLite database per config root. Read [host database operations](docs/host-database.md) for upgrade, backup, and recovery.
 
 ## Development Expectations
 

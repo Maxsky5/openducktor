@@ -47,7 +47,12 @@ const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessi
     {
       runtimeKind: "opencode",
       externalSessionId: "external-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      sessionAssociation: {
+        kind: "workflow",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        role: "build",
+      },
 
       status: "running",
       runtimeStatusMessage: null,
@@ -171,7 +176,12 @@ describe("use-kanban-board-model helpers", () => {
     ];
     const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-waiting", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-waiting",
+          role: "spec",
+        },
         pendingApprovals: [
           {
             requestId: "permission-1",
@@ -190,7 +200,12 @@ describe("use-kanban-board-model helpers", () => {
         ],
       }),
       createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-with-session", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-with-session",
+          role: "spec",
+        },
         externalSessionId: "session-2",
       }),
     ]);
@@ -217,7 +232,12 @@ describe("use-kanban-board-model helpers", () => {
     ];
     const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1-waiting", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1-waiting",
+          role: "spec",
+        },
         externalSessionId: "session-1",
         pendingQuestions: [
           {
@@ -233,11 +253,21 @@ describe("use-kanban-board-model helpers", () => {
         ],
       }),
       createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-2-active", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-2-active",
+          role: "spec",
+        },
         externalSessionId: "session-2",
       }),
       createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-4-waiting", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-4-waiting",
+          role: "spec",
+        },
         externalSessionId: "session-4",
         pendingApprovals: [
           {
@@ -257,7 +287,12 @@ describe("use-kanban-board-model helpers", () => {
         ],
       }),
       createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-5-active", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-5-active",
+          role: "spec",
+        },
         externalSessionId: "session-5",
       }),
     ]);
@@ -309,11 +344,21 @@ describe("use-kanban-board-model helpers", () => {
     ];
     const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-waiting", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-waiting",
+          role: "spec",
+        },
         externalSessionId: "session-waiting",
       }),
       createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-waiting", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-waiting",
+          role: "spec",
+        },
         externalSessionId: "session-question",
         status: "idle",
         pendingQuestions: [
@@ -330,7 +375,12 @@ describe("use-kanban-board-model helpers", () => {
         ],
       }),
       createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-active", role: "spec" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-active",
+          role: "spec",
+        },
         externalSessionId: "session-active",
       }),
     ]);
@@ -345,14 +395,24 @@ describe("use-kanban-board-model helpers", () => {
   test("buildActiveTaskSessionContextByTaskId prioritizes waiting-input session role", () => {
     const activeTaskSessionContextByTaskId = buildActiveTaskSessionContextByTaskId([
       createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
 
         externalSessionId: "build-running",
         status: "running",
         startedAt: "2026-03-21T10:00:00.000Z",
       }),
       createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "qa",
+        },
 
         externalSessionId: "qa-waiting",
         status: "idle",

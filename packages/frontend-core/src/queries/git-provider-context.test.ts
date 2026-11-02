@@ -9,6 +9,8 @@ import {
   repositoryGitProviderContextQueryOptionsOrSkip,
 } from "./git-provider-context";
 
+const scope = { workspaceId: "workspace-1", repoPath: "/repo" };
+
 describe("repository Git provider context query", () => {
   test("skips the host read when no repository is active", () => {
     const context = createGitProviderContextFixture();
@@ -35,13 +37,17 @@ describe("repository Git provider context query", () => {
     });
 
     await expect(
-      queryClient.fetchQuery(repositoryGitProviderContextQueryOptions("/repo")),
+      queryClient.fetchQuery(repositoryGitProviderContextQueryOptions(scope)),
     ).resolves.toEqual(context);
-    expect(repositoryGitProviderContextQueryKeys.repo("/repo")).toEqual([
+    expect(repositoryGitProviderContextQueryKeys.repo(scope)).toEqual([
       "repository-git-provider-context",
-      "/repo",
+      scope,
     ]);
-    expect(workspaceGetGitProviderContext).toHaveBeenCalledWith("/repo");
+    expect(workspaceGetGitProviderContext).toHaveBeenCalledWith(scope);
+    const otherWorkspace = { ...scope, workspaceId: "workspace-2" };
+    await queryClient.fetchQuery(repositoryGitProviderContextQueryOptions(otherWorkspace));
+    expect(workspaceGetGitProviderContext).toHaveBeenLastCalledWith(otherWorkspace);
+    expect(workspaceGetGitProviderContext).toHaveBeenCalledTimes(2);
     queryClient.clear();
   });
 
@@ -51,11 +57,9 @@ describe("repository Git provider context query", () => {
     });
 
     await expect(
-      queryClient.fetchQuery(repositoryGitProviderContextQueryOptions("/repo")),
+      queryClient.fetchQuery(repositoryGitProviderContextQueryOptions(scope)),
     ).resolves.toBeNull();
-    expect(
-      queryClient.getQueryData(repositoryGitProviderContextQueryKeys.repo("/repo")),
-    ).toBeNull();
+    expect(queryClient.getQueryData(repositoryGitProviderContextQueryKeys.repo(scope))).toBeNull();
     queryClient.clear();
   });
 
@@ -70,7 +74,7 @@ describe("repository Git provider context query", () => {
       client: { workspaceGetGitProviderContext: () => hostRead.promise },
     });
     const query = queryClient.fetchQuery(
-      repositoryGitProviderContextQueryOptions("/repo", scheduler),
+      repositoryGitProviderContextQueryOptions(scope, scheduler),
     );
 
     runTimeout?.();

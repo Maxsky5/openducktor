@@ -82,7 +82,7 @@ const renderPruning = (
 ): PruningView => {
   const connection = createTestClientConnection({ client, storage, queryClient });
   const connectionState = { current: connection };
-  if (taskIds) queryClient.setQueryData(taskQueryKeys.ids(workspace.repoPath), taskIds);
+  if (taskIds) queryClient.setQueryData(taskQueryKeys.ids(workspace), taskIds);
   const workspaceState = createWorkspaceStateFixture({
     activeWorkspace: workspace,
     workspaces,
@@ -136,11 +136,7 @@ const cachedLists = (): ReturnType<typeof createClientQueryClient> => {
     },
   });
   for (const entry of [workspace, inactiveWorkspace]) {
-    queryClient.setQueryData(taskQueryKeys.ids(entry.repoPath), [
-      "kept",
-      "removed",
-      "closed-long-ago",
-    ]);
+    queryClient.setQueryData(taskQueryKeys.ids(entry), ["kept", "removed", "closed-long-ago"]);
     queryClient.setQueryData(workspaceSessionQueryKeys.ids(entry.workspaceId), [
       "kept",
       "removed",
@@ -176,7 +172,7 @@ describe("useSessionPanelLayoutPruning", () => {
     storage = createMemoryClientStorage();
     saveLayout(owner);
     const nextQueries = cachedLists();
-    nextQueries.setQueryData(taskQueryKeys.ids(workspace.repoPath), current.taskIds);
+    nextQueries.setQueryData(taskQueryKeys.ids(workspace), current.taskIds);
     const next = createTestClientConnection({ storage, queryClient: nextQueries });
     try {
       view.connectionState.current = next;
@@ -259,10 +255,7 @@ describe("useSessionPanelLayoutPruning", () => {
     try {
       expect(owners.filter((owner) => !isSaved(owner))).toEqual([]);
       await act(async () => {
-        queryClient.setQueryData(taskQueryKeys.ids(inactiveWorkspace.repoPath), [
-          "kept",
-          "closed-long-ago",
-        ]);
+        queryClient.setQueryData(taskQueryKeys.ids(inactiveWorkspace), ["kept", "closed-long-ago"]);
         queryClient.setQueryData(workspaceSessionQueryKeys.ids(inactiveWorkspace.workspaceId), [
           "kept",
           "archived",
@@ -289,7 +282,7 @@ describe("useSessionPanelLayoutPruning", () => {
         const queryClient = cachedLists();
         const key =
           source === "tasks"
-            ? taskQueryKeys.ids(inactiveWorkspace.repoPath)
+            ? taskQueryKeys.ids(inactiveWorkspace)
             : workspaceSessionQueryKeys.ids(inactiveWorkspace.workspaceId);
         const owner: SessionPanelOwner =
           source === "tasks"
@@ -355,7 +348,7 @@ describe("useSessionPanelLayoutPruning", () => {
     saveLayout(newChat);
     try {
       await act(async () => {
-        queryClient.setQueryData(taskQueryKeys.ids(inactiveWorkspace.repoPath), ["kept"]);
+        queryClient.setQueryData(taskQueryKeys.ids(inactiveWorkspace), ["kept"]);
         queryClient.setQueryData(workspaceSessionQueryKeys.ids(workspace.workspaceId), []);
       });
       expect([newTask, newChat].map(isSaved)).toEqual([true, true]);
@@ -366,7 +359,7 @@ describe("useSessionPanelLayoutPruning", () => {
 
   test("does not reapply an unchanged owner list when open workspaces reorder", async () => {
     const queryClient = cachedLists();
-    queryClient.setQueryData(taskQueryKeys.ids(inactiveWorkspace.repoPath), ["inactive-task"]);
+    queryClient.setQueryData(taskQueryKeys.ids(inactiveWorkspace), ["inactive-task"]);
     queryClient.setQueryData(workspaceSessionQueryKeys.ids(inactiveWorkspace.workspaceId), [
       "inactive-chat",
     ]);

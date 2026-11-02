@@ -61,6 +61,59 @@ test.each(['"]', "unknown", "error][id]"])("rejects malformed attention kind %s"
 });
 
 describe("notification navigation", () => {
+  test.each([undefined, "two"])(
+    "requires workspace attribution for duplicate repository paths (%s)",
+    async (workspaceId) => {
+      const selected: string[] = [];
+      const reads: unknown[] = [];
+      const stale: string[] = [];
+      const navigated: string[] = [];
+      await navigateToNotificationTarget(
+        {
+          type: "kanban_task",
+          repoPath: "/repo",
+          taskId: "same-task",
+          ...(workspaceId !== undefined && { workspaceId }),
+        },
+        {
+          activeWorkspaceId: null,
+          workspaces: [
+            { workspaceId: "one", repoPath: "/repo" },
+            { workspaceId: "two", repoPath: "/repo" },
+          ],
+          selectWorkspace: async (id) => {
+            selected.push(id);
+          },
+          loadTasks: async (scope) => {
+            reads.push(scope);
+            return [createTaskCardFixture({ id: "same-task" })];
+          },
+          loadTaskSessions: async () => [],
+          loadWorkspaceSessions: async () => [],
+          navigate: (href) => {
+            navigated.push(href);
+          },
+          reportStale: (message) => {
+            stale.push(message);
+          },
+          openSettings: () => {},
+        },
+      );
+      if (workspaceId === undefined) {
+        expect(stale).toEqual([
+          "Several workspaces use this repository. Open this task from its workspace.",
+        ]);
+        expect(selected).toEqual([]);
+        expect(reads).toEqual([]);
+        expect(navigated).toEqual([]);
+      } else {
+        expect(stale).toEqual([]);
+        expect(selected).toEqual(["two"]);
+        expect(reads).toEqual([{ workspaceId: "two", repoPath: "/repo" }]);
+        expect(navigated).toHaveLength(1);
+      }
+    },
+  );
   test("matches a task-scoped session by its external ID", () => {
     expect(matchesNotificationSession(session, target)).toBe(true);
     expect(
@@ -158,7 +211,7 @@ describe("notification navigation", () => {
 
     await Promise.resolve();
     expect(selectWorkspace).toHaveBeenCalledWith("workspace-repo");
-    expect(loadTasks).toHaveBeenCalledWith("/repo");
+    expect(loadTasks).toHaveBeenCalledWith({ workspaceId: "workspace-repo", repoPath: "/repo" });
     expect(navigate).not.toHaveBeenCalled();
 
     finishSelection?.();

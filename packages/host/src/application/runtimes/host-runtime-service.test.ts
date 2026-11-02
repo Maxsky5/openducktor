@@ -3,6 +3,8 @@ import {
   type AgentSessionLiveSnapshot,
   type GlobalConfig,
   globalConfigSchema,
+  settingsSnapshotSaveInputSchema,
+  type SettingsSnapshotSaveInput,
   type RuntimeKind,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
@@ -20,6 +22,7 @@ import {
   createTestRuntimeDrivers,
   testRuntimeHandle,
 } from "../../test-support/runtime-orchestrator-test-support";
+import { createSettingsConfigTestDouble } from "../../test-support/service-test-doubles";
 import {
   createLiveSessionInventory,
   createRuntimeAdmissionPort,
@@ -66,6 +69,7 @@ const snapshot = (
 const createHarness = (initialConfig: GlobalConfig) => {
   let config: GlobalConfig | null = initialConfig;
   let writeFailure: HostOperationError | null = null;
+  let preferenceFailure: string | null = null;
   const writes: GlobalConfig[] = [];
   const events: string[] = [];
   let starts = 0;
@@ -96,9 +100,18 @@ const createHarness = (initialConfig: GlobalConfig) => {
           : Effect.void,
     },
   );
-  const settingsConfig = {
-    readConfig: () => Effect.sync(() => config),
-  };
+  const settingsConfig = createSettingsConfigTestDouble({
+    readConfig: () =>
+      config
+        ? Effect.succeed(config)
+        : Effect.fail(
+            new HostOperationError({
+              operation: "hostSettings.read",
+              message:
+                "Host database settings are not initialized. Restart the host and complete database migration.",
+            }),
+          ),
+  });
   const gate = createRuntimeAdmissionGate();
   const orchestrator = createRuntimeOrchestrator({
     drivers,
@@ -113,11 +126,12 @@ const createHarness = (initialConfig: GlobalConfig) => {
   const registry = createRuntimeRegistryPort(orchestrator);
   const admission = createRuntimeAdmissionPort(gate);
   const workspaces: WorkspaceRecord[] = [];
-  const prepare = (next: { agentRuntimes: GlobalConfig["agentRuntimes"] }) => {
+  const prepare = (next: SettingsSnapshotSaveInput) => {
     const current = config ?? initialConfig;
     return {
       current,
-      next: globalConfigSchema.parse({ ...current, agentRuntimes: next.agentRuntimes }),
+      edits: next,
+      next: globalConfigSchema.parse({ ...current, agentRuntimes: next.global?.agentRuntimes }),
     };
   };
   const service = createHostRuntimeService({
@@ -125,18 +139,22 @@ const createHarness = (initialConfig: GlobalConfig) => {
     orchestrator,
     settingsService: {
       prepareSettingsSnapshot: (next) => Effect.sync(() => prepare(next)),
-      saveSettingsSnapshotWith: (next, commit) =>
+      saveSettingsSnapshotWith: (prepared, commit) =>
         Effect.suspend(() => {
-          const prepared = prepare(next);
           const nextConfig = prepared.next;
           return commit(
-            prepared,
             Effect.suspend(() => {
               if (writeFailure) return Effect.fail(writeFailure);
               return Effect.sync(() => {
                 writes.push(nextConfig);
                 config = nextConfig;
-                return workspaces;
+                return {
+                  workspaces,
+                  shared: "saved" as const,
+                  preferences: preferenceFailure
+                    ? { message: preferenceFailure }
+                    : ("unchanged" as const),
+                };
               });
             }),
           );
@@ -145,6 +163,9 @@ const createHarness = (initialConfig: GlobalConfig) => {
   });
   return {
     service,
+    failPreferences: (message: string) => {
+      preferenceFailure = message;
+    },
     orchestrator,
     registry,
     admission,
@@ -175,11 +196,8 @@ const waitForState = async (
   throw new Error(`Runtime ${kind} did not reach ${state}.`);
 };
 
-// SAFETY: the fake settings service reads only `agentRuntimes` from the snapshot.
 const saveInput = (agentRuntimes: GlobalConfig["agentRuntimes"]) =>
-  ({ agentRuntimes }) as Parameters<
-    ReturnType<typeof createHostRuntimeService>["saveSettings"]
-  >[0]["snapshot"];
+  settingsSnapshotSaveInputSchema.parse({ global: { agentRuntimes } });
 
 describe("host runtime service", () => {
   test("starts enabled kinds at host startup and leaves disabled kinds stopped", async () => {
@@ -208,9 +226,10 @@ describe("host runtime service", () => {
 
     const snapshot = await Effect.runPromise(harness.service.snapshot());
     expect(snapshot.runtimes.map((status) => status.state)).toEqual(["error", "error", "error"]);
+    expect(harness.events).toEqual([]);
     for (const status of snapshot.runtimes) {
       expect(status.failure?.message).toEndWith(
-        "Runtime settings are not initialized. Open Settings > Runtimes.",
+        "Host database settings are not initialized. Restart the host and complete database migration.",
       );
     }
   });
@@ -376,6 +395,30 @@ describe("host runtime service", () => {
     await expect(
       Effect.runPromise(harness.registry.requireReady("opencode")),
     ).resolves.toMatchObject({ runtimeId: "opencode-1" });
+  });
+
+  test("applies committed runtime settings when the preference write fails", async () => {
+    const harness = createHarness(
+      configWith({ opencode: { enabled: true, executablePath: "opencode" } }),
+    );
+    await Effect.runPromise(harness.service.initialize());
+    await waitForState(harness.registry, "opencode", "ready");
+    harness.failPreferences("Preferences are read-only.");
+    const result = await Effect.runPromise(
+      harness.service.saveSettings({
+        snapshot: saveInput(
+          configWith({ opencode: { enabled: false, executablePath: "opencode" } }).agentRuntimes,
+        ),
+      }),
+    );
+    expect(result).toMatchObject({
+      type: "partial",
+      shared: "saved",
+      preferences: { message: "Preferences are read-only." },
+      runtimeApplications: [{ kind: "opencode", effect: "stop", outcome: "applied" }],
+    });
+    expect(harness.writes).toHaveLength(1);
+    expect(harness.events).toContain("stop:opencode-1");
   });
 
   test("a failed settings write never stops a runtime", async () => {

@@ -7,7 +7,6 @@ import {
 } from "@/pages/agents/agent-studio-test-utils";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalDirtyDraftActions } from "./use-settings-modal-dirty-draft-actions";
-import type { DirtySections } from "./use-settings-modal-dirty-state";
 import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
 
 enableReactActEnvironment();
@@ -38,7 +37,6 @@ const createSnapshot = (): SettingsSnapshot =>
 
 const useDirtyDraftActionsHarness = ({ selectedWorkspaceId, initialSnapshot }: HookArgs) => {
   const [snapshotDraft, setSnapshotDraft] = useState<SettingsSnapshot | null>(initialSnapshot);
-  const [dirtyCalls, setDirtyCalls] = useState<(keyof DirtySections)[]>([]);
   const [clearSaveError] = useState(() => mock(() => {}));
   const draftActions = useSettingsModalDraftActions({
     selectedWorkspaceId,
@@ -46,15 +44,11 @@ const useDirtyDraftActionsHarness = ({ selectedWorkspaceId, initialSnapshot }: H
   });
   const actions = useSettingsModalDirtyDraftActions({
     clearSaveError,
-    markDirty: (section) => {
-      setDirtyCalls((current) => [...current, section]);
-    },
     draftActions,
   });
 
   return {
     snapshotDraft,
-    dirtyCalls,
     clearSaveError,
     ...actions,
   };
@@ -64,7 +58,7 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useDirtyDraftActionsHarness, initialProps);
 
 describe("useSettingsModalDirtyDraftActions", () => {
-  test("marks Appearance dirty when setting the preference", async () => {
+  test("updates the preferred tool draft", async () => {
     const harness = createHookHarness({
       selectedWorkspaceId: null,
       initialSnapshot: createSnapshot(),
@@ -74,11 +68,10 @@ describe("useSettingsModalDirtyDraftActions", () => {
       state.updateGlobalSystemSettings(() => ({ preferredOpenInToolId: "zed" })),
     );
     expect(harness.getLatest().snapshotDraft?.system).toEqual({ preferredOpenInToolId: "zed" });
-    expect(harness.getLatest().dirtyCalls).toEqual(["appearance"]);
     await harness.unmount();
   });
 
-  test("clears save errors and marks the matching section before updating draft state", async () => {
+  test("clears save errors before updating draft state", async () => {
     const harness = createHookHarness({
       selectedWorkspaceId: "repo",
       initialSnapshot: createSnapshot(),
@@ -110,13 +103,6 @@ describe("useSettingsModalDirtyDraftActions", () => {
     });
 
     expect(harness.getLatest().clearSaveError).toHaveBeenCalledTimes(5);
-    expect(harness.getLatest().dirtyCalls).toEqual([
-      "chat",
-      "general",
-      "appearance",
-      "autopilot",
-      "repoSettings",
-    ]);
     expect(harness.getLatest().snapshotDraft?.chat.showThinkingMessages).toBe(true);
     expect(
       harness.getLatest().snapshotDraft?.general.openAgentStudioTabOnBackgroundSessionStart,
@@ -150,7 +136,6 @@ describe("useSettingsModalDirtyDraftActions", () => {
       state.updateSelectedRepoAgentDefault("build", "profileId", "builder");
     });
 
-    expect(harness.getLatest().dirtyCalls).toEqual(["repoSettings", "repoSettings"]);
     expect(
       harness.getLatest().snapshotDraft?.workspaces.repo?.promptOverrides["kickoff.spec_initial"]
         ?.template,

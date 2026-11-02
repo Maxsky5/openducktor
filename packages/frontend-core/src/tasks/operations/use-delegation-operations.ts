@@ -1,3 +1,4 @@
+import type { WorkspaceRef } from "@openducktor/contracts";
 import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import { useCallback } from "react";
 import { resolveRequiredDefaultSessionSelection } from "../../sessions/session-start-selection";
@@ -15,7 +16,7 @@ type RepoRuntimeCatalogLoader = (
 
 type UseDelegationOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
+  refreshTaskData: (scope: WorkspaceRef, taskIdOrIds?: string | string[]) => Promise<void>;
   loadRepoRuntimeCatalog: RepoRuntimeCatalogLoader;
 };
 
@@ -37,8 +38,13 @@ export function useDelegationOperations({
         throw new Error("Active workspace is required.");
       }
       await startDelegatedBuild(queryClient, repo, taskId, workspaceId, loadRepoRuntimeCatalog);
-      await invalidateTerminalList(queryClient, { kind: "task", repoPath: repo, taskId });
-      await refreshTaskData(repo, taskId);
+      await invalidateTerminalList(queryClient, {
+        kind: "task",
+        workspaceId,
+        repoPath: repo,
+        taskId,
+      });
+      await refreshTaskData({ workspaceId, repoPath: repo }, taskId);
     },
     [activeWorkspace, loadRepoRuntimeCatalog, queryClient, refreshTaskData],
   );
@@ -63,5 +69,9 @@ const startDelegatedBuild = async (
     loadRepoRuntimeCatalog: (runtimeRef) =>
       loadRuntimeCatalogFromQuery(queryClient, runtimeRef, loadRepoRuntimeCatalog),
   });
-  await connectionHost(queryClient).buildStart(repoPath, taskId, builderSelection.runtimeKind);
+  await connectionHost(queryClient).buildStart(
+    { workspaceId, repoPath },
+    taskId,
+    builderSelection.runtimeKind,
+  );
 };

@@ -36,7 +36,7 @@ function MainChatPreview() {
     };
   }, [taskId]);
   const model: AgentsPageLayoutModel = {
-    activeWorkspace: { workspaceId: "repo", workspaceName: "Repo", repoPath: "/repo" },
+    activeWorkspace: { workspaceId: "workspace", workspaceName: "Repo", repoPath: "/repo" },
     navigationPersistenceError: null,
     navigationPersistenceOperation: "load",
     chatSettingsLoadError: null,
@@ -49,6 +49,7 @@ function MainChatPreview() {
     chatHeaderModel: createAgentStudioHeaderModelFixture(),
     chatModel,
     chatFileLinkOwner: {
+      workspaceId: "workspace",
       repoPath: "/repo",
       taskId,
       ownerKey: taskId,

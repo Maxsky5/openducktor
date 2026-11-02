@@ -1,3 +1,4 @@
+const workspace = { workspaceId: "workspace-1", repoPath: "/repo" };
 import { describe, expect, test } from "bun:test";
 import type { TaskMetadataArtifact, TaskMetadataPayload } from "@openducktor/contracts";
 import { createHostClient } from "./index";
@@ -28,16 +29,16 @@ describe("host client task reads", () => {
     };
     const client = createHostClient(invoke);
 
-    expect((await client.taskMetadataGet("/repo", "task-1")).artifacts.spec?.markdown).toBe(
+    expect((await client.taskMetadataGet(workspace, "task-1")).artifacts.spec?.markdown).toBe(
       "Spec V1",
     );
     version = "V2";
-    expect((await client.taskMetadataGet("/repo", "task-1")).artifacts.spec?.markdown).toBe(
+    expect((await client.taskMetadataGet(workspace, "task-1")).artifacts.spec?.markdown).toBe(
       "Spec V2",
     );
     expect(calls).toEqual([
-      { repoPath: "/repo", taskId: "task-1" },
-      { repoPath: "/repo", taskId: "task-1" },
+      { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" },
+      { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" },
     ]);
   });
 
@@ -52,11 +53,16 @@ describe("host client task reads", () => {
     };
     const client = createHostClient(invoke);
 
-    const spec = client.workflowArtifactGet("/repo", "task-1", "spec");
-    const plan = client.workflowArtifactGet("/repo", "task-1", "plan");
-    const qa = client.workflowArtifactGet("/repo", "task-1", "qaReport");
+    const spec = client.workflowArtifactGet(workspace, "task-1", "spec");
+    const plan = client.workflowArtifactGet(workspace, "task-1", "plan");
+    const qa = client.workflowArtifactGet(workspace, "task-1", "qaReport");
     expect(pending.map((read) => read.args)).toEqual(
-      ["spec", "plan", "qaReport"].map((code) => ({ repoPath: "/repo", taskId: "task-1", code })),
+      ["spec", "plan", "qaReport"].map((code) => ({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        code,
+      })),
     );
 
     pending[2]?.resolve({ markdown: "QA V3" });
@@ -93,16 +99,19 @@ describe("host client task reads", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const document = client.workflowArtifactGet("/repo", "task-1", "spec");
-    const sessions = client.agentSessionsList("/repo", "task-1");
+    const document = client.workflowArtifactGet(workspace, "task-1", "spec");
+    const sessions = client.agentSessionsList(workspace, "task-1");
     const observedCalls = [...calls];
     releaseArtifact?.({ markdown: "Spec V1" });
     expect(observedCalls).toEqual([
       {
         command: "workflow_artifact_get",
-        args: { repoPath: "/repo", taskId: "task-1", code: "spec" },
+        args: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1", code: "spec" },
       },
-      { command: "agent_sessions_list", args: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        command: "agent_sessions_list",
+        args: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" },
+      },
     ]);
 
     expect((await document).markdown).toBe("Spec V1");
@@ -122,7 +131,7 @@ describe("host client task reads", () => {
         return Promise.resolve(resultSchema.parse(payload));
       });
 
-      await expect(client.workflowArtifactGet("/repo", "task-1", code)).resolves.toEqual({
+      await expect(client.workflowArtifactGet(workspace, "task-1", code)).resolves.toEqual({
         markdown: "Saved content",
         updatedAt: "2026-07-22T00:00:00Z",
         error: null,
@@ -132,9 +141,9 @@ describe("host client task reads", () => {
         updatedAt: "2026-07-22T00:00:00Z",
         error: "Failed to decode saved content",
       };
-      await expect(client.workflowArtifactGet("/repo", "task-1", code)).resolves.toEqual(payload);
+      await expect(client.workflowArtifactGet(workspace, "task-1", code)).resolves.toEqual(payload);
       payload = { markdown: "" };
-      await expect(client.workflowArtifactGet("/repo", "task-1", code)).resolves.toEqual({
+      await expect(client.workflowArtifactGet(workspace, "task-1", code)).resolves.toEqual({
         markdown: "",
         updatedAt: null,
         error: null,
@@ -142,7 +151,7 @@ describe("host client task reads", () => {
       expect(calls).toEqual(
         Array(3).fill({
           command: "workflow_artifact_get",
-          args: { repoPath: "/repo", taskId: "task-1", code },
+          args: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1", code },
         }),
       );
     },
@@ -152,7 +161,29 @@ describe("host client task reads", () => {
     const failure = new Error("Task store is unavailable");
     const client = createHostClient(() => Promise.reject(failure));
 
-    await expect(client.taskMetadataGet("/repo", "task-1")).rejects.toBe(failure);
-    await expect(client.workflowArtifactGet("/repo", "task-1", "plan")).rejects.toBe(failure);
+    await expect(client.taskMetadataGet(workspace, "task-1")).rejects.toBe(failure);
+    await expect(client.workflowArtifactGet(workspace, "task-1", "plan")).rejects.toBe(failure);
+  });
+});
+
+describe("host client artifact requests", () => {
+  test("sends only the contract fields when the caller passes a workspace record", async () => {
+    const calls: unknown[] = [];
+    const invoke: InvokeFn = async (_command, args, resultSchema) => {
+      calls.push(args);
+      return resultSchema.parse({ artifacts: [], workflow: {} });
+    };
+    const client = createHostClient(invoke);
+    const record = {
+      ...workspace,
+      workspaceName: "Workspace",
+      abbreviation: "WS",
+      tileColor: "blue",
+      iconDataUrl: null,
+    };
+
+    await client.taskArtifactsList({ ...record, taskId: "task-1" }).catch(() => undefined);
+
+    expect(calls).toEqual([{ workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" }]);
   });
 });

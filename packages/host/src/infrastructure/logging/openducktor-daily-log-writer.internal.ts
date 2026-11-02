@@ -53,6 +53,14 @@ const defaultDependencies: OpenDucktorDailyLogWriterDependencies = {
   resolveBaseDirectory: (environment, scope) => resolveOpenDucktorBaseDir(scope, environment),
 };
 
+const logDirectoryIn = (baseDirectory: string): string => path.join(baseDirectory, "logs");
+
+/** The folder that holds the daily log files of the scope. */
+export const resolveOpenDucktorLogDirectory = (
+  scope: OpenDucktorConfigDirScope,
+  environment: NodeJS.ProcessEnv = process.env,
+): string => logDirectoryIn(resolveOpenDucktorBaseDir(scope, environment));
+
 const pad = (value: number, length = 2): string => String(value).padStart(length, "0");
 
 const localDateKey = (date: Date): string =>
@@ -140,7 +148,7 @@ export const createOpenDucktorDailyLogWriterWithDependencies = (
               cause,
             }),
     });
-    const logDirectory = path.join(baseDirectory, "logs");
+    const logDirectory = logDirectoryIn(baseDirectory);
     yield* runFileOperation("openducktor.logs.create-directory", logDirectory, () =>
       dependencies.createDirectory(logDirectory),
     );

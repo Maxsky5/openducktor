@@ -177,12 +177,10 @@ export function useTaskApprovalFlow({
         // The merge status read runs with the Git provider read.
         const mergeStatusRead =
           options?.mode === undefined
-            ? queryClient
-                .ensureQueryData(taskMergeStatusQueryOptions(requestWorkspace.repoPath))
-                .then(
-                  (snapshot) => ({ snapshot, error: null }),
-                  (error) => ({ snapshot: undefined, error: errorMessage(error) }),
-                )
+            ? queryClient.ensureQueryData(taskMergeStatusQueryOptions(requestWorkspace)).then(
+                (snapshot) => ({ snapshot, error: null }),
+                (error) => ({ snapshot: undefined, error: errorMessage(error) }),
+              )
             : null;
         if (options?.mode !== "direct_merge") {
           try {
@@ -220,7 +218,7 @@ export function useTaskApprovalFlow({
         try {
           const approvalContextResult = await loadTaskApprovalContextFromQuery(
             queryClient,
-            requestWorkspace.repoPath,
+            requestWorkspace,
             taskId,
           );
           if (isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
@@ -390,6 +388,7 @@ export function useTaskApprovalFlow({
           host,
           approval: approvalState,
           repoPath,
+          workspaceId: submissionWorkspace.workspaceId,
           requestPullRequestGeneration,
           refreshTasks,
         });

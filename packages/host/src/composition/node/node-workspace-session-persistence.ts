@@ -1,6 +1,9 @@
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
+import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
+import { createLiveSessionRootRefsReader } from "./live-session-root-refs";
 import { createAgentSessionActivityPersistence } from "../../application/agent-sessions/agent-session-activity-persistence";
-import type { AgentSessionRepository } from "../../ports/task-repository-ports";
+import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { AgentSessionLiveFaultLogger } from "../../application/agent-sessions/agent-session-live-state-service";
 import { createWorkspaceSessionRuntimePersistence } from "../../application/workspaces/workspace-session-runtime-persistence";
 import type {
@@ -21,6 +24,7 @@ export const createNodeWorkspaceSessionPersistence = ({
   eventBus,
   faultLog,
   taskStore,
+  store,
   ...dependencies
 }: Omit<
   Parameters<typeof createWorkspaceSessionRuntimePersistence>[0],
@@ -28,8 +32,13 @@ export const createNodeWorkspaceSessionPersistence = ({
 > & {
   eventBus: HostEventBusPort | undefined;
   faultLog: AgentSessionLiveFaultLogger;
-  taskStore: Pick<AgentSessionRepository, "recordAgentSessionActivity">;
+  taskStore: Pick<TaskStorePort, "recordAgentSessionActivity">;
+  settings: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
 }) => {
+  const readSessionRootRefs = createLiveSessionRootRefsReader({
+    store,
+    settings: dependencies.settings,
+  });
   const operationGate = createWorkspaceSessionOperationGate();
   // Title transitions serialize on their own gate, because an observed message
   // renames the runtime session without an operation. Always acquire the
@@ -77,6 +86,7 @@ export const createNodeWorkspaceSessionPersistence = ({
     );
   const workspacePersistence = createWorkspaceSessionRuntimePersistence({
     ...dependencies,
+    store,
     publishUpdated,
     operationGate,
     sessionTitleGate,
@@ -86,17 +96,34 @@ export const createNodeWorkspaceSessionPersistence = ({
     ...workspacePersistence,
     ...createAgentSessionActivityPersistence({
       tasks: taskStore,
+      // Saved sessions can receive activity after their task closes.
+      readTaskWorkspaces: (ref) =>
+        dependencies.settings
+          .getWorkspaceCatalog()
+          .pipe(
+            Effect.map((catalog) =>
+              catalog.openWorkspaces
+                .filter(
+                  (workspace) =>
+                    normalizePathForComparison(workspace.repoPath) ===
+                    normalizePathForComparison(ref.repoPath),
+                )
+                .map(({ workspaceId }) => ({ workspaceId, repoPath: ref.repoPath })),
+            ),
+          ),
       workspace: workspacePersistence,
-      publishTaskRecords: (repoPath, records) =>
+      publishTaskRecords: (scope, records) =>
         Effect.try({
           try: () =>
-            publishLiveEnvelope({ type: "task_session_records_updated", repoPath, ...records }),
+            publishLiveEnvelope({ type: "task_session_records_updated", ...scope, ...records }),
           catch: (cause) => toHostOperationError(cause, "agent-session.persist-activity.publish"),
         }),
     }),
   };
   return {
     persistence,
+    store,
+    readSessionRootRefs,
     publishUpdated,
     operationGate,
     sessionTitleGate,

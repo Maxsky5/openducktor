@@ -35,6 +35,8 @@ const taskStoreWithTasks = (
   sessionsByTaskId: Record<string, ReturnType<typeof createAgentSessionRecord>[]> = {},
 ): RealTaskStorePort =>
   ({
+    getWorkflowArtifact: () => Effect.die(new Error("unexpected getWorkflowArtifact")),
+    getTaskDelivery: () => Effect.die(new Error("unexpected getTaskDelivery")),
     listArtifacts: () => Effect.die(new Error("unexpected listArtifacts")),
     readArtifact: () => Effect.die(new Error("unexpected readArtifact")),
     createArtifact: () => Effect.die(new Error("unexpected createArtifact")),
@@ -64,6 +66,8 @@ const taskStoreWithTasks = (
       Effect.die(new Error("unexpected listPullRequestSyncCandidates")),
     listAgentSessionsForTasks: () => Effect.die(new Error("unexpected listAgentSessionsForTasks")),
     listTaskIds: () => Effect.die(new Error("unexpected listTaskIds")),
+    listMergeCandidates: () => Effect.die(new Error("unexpected listMergeCandidates")),
+    searchTasks: () => Effect.die(new Error("unexpected searchTasks")),
     listTasks: () => Effect.succeed(tasks),
     setDirectMerge: () => Effect.die(new Error("unexpected setDirectMerge")),
     setPullRequest: () => Effect.die(new Error("unexpected setPullRequest")),
@@ -160,6 +164,7 @@ describe("task worktree cleanup", () => {
         "/repo",
         "task-1",
         "odt/task-1",
+        "repo",
       ),
     );
 
@@ -194,6 +199,7 @@ describe("task worktree cleanup", () => {
         "/repo",
         "task-1",
         "odt/task-1",
+        "repo",
       ),
     );
 
@@ -229,6 +235,7 @@ describe("task worktree cleanup", () => {
         "/repo",
         "task-1",
         "odt/task-1",
+        "repo",
       ),
     );
 
@@ -268,6 +275,7 @@ describe("task worktree cleanup", () => {
         "/repo",
         "task-1",
         "odt/task-1",
+        "repo",
       ),
     );
     expect(cleanupTarget).toBe("/worktrees/repo/task-1");
@@ -304,6 +312,7 @@ describe("task worktree cleanup", () => {
           "/repo/a/b",
           "task-1",
           "odt/task-1",
+          "repo",
         ),
       );
 
@@ -352,6 +361,7 @@ describe("task worktree cleanup", () => {
         "/repo",
         "task-1",
         "odt/task-1",
+        "repo",
       ),
     );
 
@@ -394,6 +404,7 @@ describe("task worktree cleanup", () => {
           "odt/task-1",
           "main",
           true,
+          "repo",
         ),
       ),
     );
@@ -481,6 +492,7 @@ describe("task worktree cleanup", () => {
           "odt/task-1",
           "main",
           true,
+          "repo",
         ),
       ),
     );
@@ -532,6 +544,7 @@ describe("task worktree cleanup", () => {
             "odt/task-1",
             "main",
             true,
+            "repo",
           ),
         ),
       ),
@@ -572,6 +585,7 @@ describe("task worktree cleanup", () => {
           "odt/task-1",
           "main",
           true,
+          "repo",
         ),
       ),
     );
@@ -641,6 +655,7 @@ describe("task worktree cleanup", () => {
             "odt/task-1",
             "main",
             true,
+            "repo",
           ),
         ),
       ),
@@ -699,6 +714,7 @@ describe("task worktree cleanup", () => {
             "odt/task-1",
             "main",
             true,
+            "repo",
           ),
         ),
       );
@@ -747,6 +763,7 @@ describe("task worktree cleanup", () => {
             "odt/task-1",
             "main",
             true,
+            "repo",
           ),
         ),
       ),
@@ -781,6 +798,7 @@ describe("task worktree cleanup", () => {
         "/repo",
         "task-1",
         "direct_merge",
+        "repo",
       ),
     );
 
@@ -805,6 +823,7 @@ describe("task worktree cleanup", () => {
           "/repo",
           "task-1",
           "direct_merge",
+          "repo",
         ),
       ),
     ).rejects.toThrow(
@@ -833,6 +852,7 @@ describe("task worktree cleanup", () => {
           "/repo",
           "task-1",
           "direct_merge",
+          "repo",
         ),
       ),
     ).rejects.toThrow("direct_merge requires a task branch, but the task worktree is detached.");
@@ -859,6 +879,7 @@ describe("task worktree cleanup", () => {
           "/repo",
           "task-1",
           "direct_merge",
+          "repo",
         ),
       ),
     ).rejects.toThrow("direct_merge requires a task branch name.");
