@@ -1,5 +1,6 @@
 import type { StartupInstruction } from "@openducktor/contracts";
 import type { ReactElement } from "react";
+import type { StyleProp, TextStyle } from "react-native";
 import { Text } from "@/ui/text";
 import { useAnnounce } from "@/ui/use-announce";
 
@@ -14,13 +15,15 @@ const INSTRUCTION_TEXT = {
 
 export function StartupInstructionNotice({
   instruction,
+  style,
 }: {
   instruction: StartupInstruction | undefined;
+  style?: StyleProp<TextStyle>;
 }): ReactElement | null {
   const message = instruction ? INSTRUCTION_TEXT[instruction.state] : null;
   useAnnounce(message);
   return message ? (
-    <Text variant="footnote" tone="secondary" accessibilityLiveRegion="polite">
+    <Text variant="footnote" tone="secondary" accessibilityLiveRegion="polite" style={style}>
       {message}
     </Text>
   ) : null;
