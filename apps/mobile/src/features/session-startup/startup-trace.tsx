@@ -1,6 +1,8 @@
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import {
+  startupActiveStep,
   startupFailureRows,
+  startupStepHasFailure,
   startupTraceRows,
 } from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import {
@@ -20,8 +22,9 @@ import { Icon, type IconName } from "@/ui/icon";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
+import { SwapTransition } from "@/ui/swap-transition";
 import { useAnnounce } from "@/ui/use-announce";
-import { StartupStepDetails, StartupStepRow } from "./startup-step-row";
+import { STATUS_COLUMN, StartupStepDetails, StartupStepRow } from "./startup-step-row";
 import { useStartupPresentation } from "./startup-presentation-context";
 import { StartupSavedSession } from "./startup-saved-session";
 import { StartupAttemptActions } from "./startup-attempt-actions";
@@ -31,7 +34,8 @@ const PHASE_LABELS = {
   submitting: "Submitting request",
   waiting: "Waiting",
   running: "Starting session",
-  settling: "Finishing cleanup",
+  // The host settles every launch, also a successful one, before it reports the outcome.
+  settling: "Starting session",
   ready: "Session ready",
   failed: "Session start failed",
   canceled: "Canceled",
@@ -129,7 +133,7 @@ export function StartupTrace({
           maxHeight={detailsMaxHeight}
         />
       )}
-      <StartupInstructionNotice instruction={attempt.instruction} />
+      <StartupInstructionNotice instruction={attempt.instruction} style={styles.textColumn} />
       <StartupAttemptActions
         attempt={attempt}
         onContinueInBackground={onContinueInBackground}
@@ -179,27 +183,31 @@ function StartupTraceHeader({
   const origin = `${workspace}${scope}`;
   return (
     <View style={styles.header}>
-      <View
-        style={[
-          styles.phaseIcon,
-          { backgroundColor: withAlpha(theme.colors[PHASE_COLORS[phase]], 0.12) },
-        ]}
-      >
-        {phase === "submitting" || phase === "running" || phase === "settling" ? (
-          <LoaderSpinner size={16} colorStyle={styles.activeIcon} />
-        ) : (
-          <Icon name={PHASE_ICONS[phase]} size={16} color={PHASE_COLORS[phase]} />
-        )}
-      </View>
-      <View style={styles.heading}>
-        <Text
-          variant="headline"
-          accessibilityRole={compact ? "header" : "text"}
-          numberOfLines={2}
-          style={styles.title}
+      <SwapTransition swapKey={PHASE_ICONS[phase]}>
+        <View
+          style={[
+            styles.phaseIcon,
+            { backgroundColor: withAlpha(theme.colors[PHASE_COLORS[phase]], 0.12) },
+          ]}
         >
-          {PHASE_LABELS[phase]}
-        </Text>
+          {PHASE_ICONS[phase] === "loader-circle" ? (
+            <LoaderSpinner size={16} colorStyle={styles.activeIcon} />
+          ) : (
+            <Icon name={PHASE_ICONS[phase]} size={16} color={PHASE_COLORS[phase]} />
+          )}
+        </View>
+      </SwapTransition>
+      <View style={styles.heading}>
+        <SwapTransition swapKey={PHASE_LABELS[phase]}>
+          <Text
+            variant="headline"
+            accessibilityRole={compact ? "header" : "text"}
+            numberOfLines={2}
+            style={styles.title}
+          >
+            {PHASE_LABELS[phase]}
+          </Text>
+        </SwapTransition>
         <Text
           variant="caption1"
           tone="secondary"
@@ -281,29 +289,20 @@ function StartupTraceSummary({
   compact: boolean;
   progressOpen: boolean;
 }): ReactElement | null {
-  if (!compact || rows.length === 0) return null;
-  const steps = rows.map(({ step }) => step);
-  const failedStep = steps.findLast(
-    (step) =>
-      step.state === "failed" ||
-      step.failure ||
-      (step.action?.result && !terminalCommandSucceeded(step.action.result)),
-  );
-  const activeStep =
-    steps.findLast((step) => step.state === "running" || step.state === "waiting") ?? failedStep;
+  if (!compact || rows.length === 0 || progressOpen) return null;
+  const activeStep = startupActiveStep(rows);
+  const failed = activeStep ? startupStepHasFailure(activeStep) : false;
   return (
     <>
-      {activeStep && !progressOpen ? (
-        <Text
-          variant="footnote"
-          tone={activeStep === failedStep ? "red" : "secondary"}
-          numberOfLines={2}
-        >
-          {activeStep.label}
-        </Text>
+      {activeStep ? (
+        <SwapTransition swapKey={`${activeStep.id}:${failed}`} style={styles.textColumn}>
+          <Text variant="footnote" tone={failed ? "red" : "secondary"} numberOfLines={1}>
+            {activeStep.label}
+          </Text>
+        </SwapTransition>
       ) : null}
-      {attempt.error && !progressOpen ? (
-        <Text variant="footnote" tone="red" numberOfLines={2} selectable>
+      {attempt.error ? (
+        <Text variant="footnote" tone="red" numberOfLines={2} selectable style={styles.textColumn}>
           {attempt.error}
         </Text>
       ) : null}
@@ -346,6 +345,8 @@ function StartupTraceDetails({
           { maxHeight: maxHeight ?? (compact ? 240 : Math.min(360, height * 0.5)) },
         ]}
         contentContainerStyle={styles.steps}
+        // Android flashes the indicator each time the toast opens its steps, also when they fit.
+        showsVerticalScrollIndicator={!compact}
         nestedScrollEnabled
         bounces={false}
         alwaysBounceVertical={false}
@@ -368,7 +369,7 @@ function StartupTraceDetails({
           />
         ))}
         {attempt.error ? (
-          <Text variant="footnote" tone="red" selectable>
+          <Text variant="footnote" tone="red" selectable style={styles.textColumn}>
             {attempt.error}
           </Text>
         ) : null}
@@ -440,15 +441,7 @@ function startupAnnouncement(
 ): string | null {
   if (!attempt || attempt.presentation !== expectedPresentation) return null;
   const current = attempt.status.confirmation === "current";
-  const steps = startupTraceRows(attempt).map(({ step }) => step);
-  const activeStep =
-    steps.findLast((step) => step.state === "running" || step.state === "waiting") ??
-    steps.findLast(
-      (step) =>
-        step.state === "failed" ||
-        step.failure ||
-        (step.action?.result && !terminalCommandSucceeded(step.action.result)),
-    );
+  const activeStep = startupActiveStep(startupTraceRows(attempt));
   const state =
     activeStep?.action?.result && !terminalCommandSucceeded(activeStep.action.result)
       ? "failed"
@@ -465,8 +458,8 @@ const styles = StyleSheet.create((theme) => ({
   compact: { padding: theme.space.md },
   header: { flexDirection: "row", alignItems: "flex-start", gap: theme.space.md, flexShrink: 0 },
   phaseIcon: {
-    width: 32,
-    height: 32,
+    width: STATUS_COLUMN,
+    height: STATUS_COLUMN,
     borderRadius: theme.radius.pill,
     alignItems: "center",
     justifyContent: "center",
@@ -486,4 +479,6 @@ const styles = StyleSheet.create((theme) => ({
   steps: { paddingBottom: theme.space.xs },
   statusDetails: { gap: theme.space.sm },
   failure: { gap: theme.space.xs },
+  // Text lines start under the header title, after the status icon column.
+  textColumn: { paddingLeft: STATUS_COLUMN + theme.space.md },
 }));

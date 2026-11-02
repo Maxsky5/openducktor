@@ -6,6 +6,7 @@ import { StyleSheet } from "react-native-unistyles";
 import type { ThemeColorName } from "@/theme/tokens";
 import { Icon, type IconName } from "@/ui/icon";
 import { LoaderSpinner } from "@/ui/loader-spinner";
+import { SwapTransition } from "@/ui/swap-transition";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { terminalCommandResultLabel } from "../terminals/terminal-command-result-label";
@@ -35,6 +36,9 @@ const STEP_COLORS = {
   failed: "red",
   not_run: "tertiaryLabel",
 } satisfies Record<StartupStep["state"], ThemeColorName>;
+/** The width of the status icon column. Step icons center in it under the header icon. */
+export const STATUS_COLUMN = 32;
+
 export function StartupStepRow({
   attemptId,
   step,
@@ -65,11 +69,13 @@ export function StartupStepRow({
         accessibilityLabel={`${step.label}. ${STEP_LABELS[displayState]}`}
         style={styles.stepHeading}
       >
-        {displayState === "running" ? (
-          <LoaderSpinner size={16} colorStyle={styles.activeIcon} />
-        ) : (
-          <Icon name={STEP_ICONS[displayState]} size={16} color={STEP_COLORS[displayState]} />
-        )}
+        <SwapTransition swapKey={displayState} style={styles.statusIcon}>
+          {displayState === "running" ? (
+            <LoaderSpinner size={16} colorStyle={styles.activeIcon} />
+          ) : (
+            <Icon name={STEP_ICONS[displayState]} size={16} color={STEP_COLORS[displayState]} />
+          )}
+        </SwapTransition>
         <Text variant="subhead" weight="medium" style={styles.stepName}>
           {step.label}
         </Text>
@@ -142,19 +148,20 @@ const styles = StyleSheet.create((theme) => ({
   step: { minWidth: 0 },
   line: {
     position: "absolute",
-    left: 7.5,
+    left: STATUS_COLUMN / 2 - 0.5,
     top: theme.touchTarget / 2 + 8,
     bottom: -theme.touchTarget / 2 + 8,
     width: 1,
     backgroundColor: theme.desktop.border,
   },
-  stepBody: { paddingLeft: 24, gap: theme.space.xs },
+  stepBody: { paddingLeft: STATUS_COLUMN + theme.space.md, gap: theme.space.xs },
   stepHeading: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.space.sm,
+    gap: theme.space.md,
     minHeight: theme.touchTarget,
   },
+  statusIcon: { width: STATUS_COLUMN, alignItems: "center" },
   stepName: { flex: 1, minWidth: 0 },
   details: { gap: theme.space.xs, paddingBottom: theme.space.sm },
 }));

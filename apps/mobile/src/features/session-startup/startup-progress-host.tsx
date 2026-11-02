@@ -8,7 +8,10 @@ import Animated, {
   FadeOut,
   LayoutAnimationConfig,
   ReduceMotion,
+  useAnimatedStyle,
   useReducedMotion,
+  useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FullWindowOverlay } from "react-native-screens";
@@ -32,6 +35,11 @@ const CARD_ENTERING_REDUCED = FadeIn.duration(motion.fast)
 const CARD_EXITING = FadeOut.duration(motion.fast)
   .easing(motion.easeOutCurve)
   .reduceMotion(ReduceMotion.Never);
+const CARD_RESIZE = {
+  duration: motion.base,
+  easing: motion.easeOutCurve,
+  reduceMotion: ReduceMotion.System,
+};
 
 /** Startup feedback has its own retention and count, while it shares native window placement. */
 export function StartupProgressHost(): ReactElement | null {
@@ -133,6 +141,12 @@ function StartupCard({
   useEffect(() => {
     notificationPresented.add(attemptId);
   }, [attemptId, notificationPresented]);
+  // The stack grows from the bottom of the screen. The card animates its own height, so the views
+  // above it follow each frame and the card bottom stays in place.
+  const height = useSharedValue<number | null>(null);
+  const resizeStyle = useAnimatedStyle(() =>
+    height.value === null ? {} : { height: height.value },
+  );
   const entering = reducedMotion ? CARD_ENTERING_REDUCED : CARD_ENTERING;
   return (
     <Animated.View
@@ -140,11 +154,20 @@ function StartupCard({
       exiting={CARD_EXITING}
       style={styles.card}
     >
-      <StartupTrace
-        attemptId={attemptId}
-        presentation="notification"
-        detailsMaxHeight={detailsMaxHeight}
-      />
+      <Animated.View style={[styles.resize, resizeStyle]}>
+        <View
+          onLayout={(event) => {
+            const next = event.nativeEvent.layout.height;
+            height.value = height.value === null ? next : withTiming(next, CARD_RESIZE);
+          }}
+        >
+          <StartupTrace
+            attemptId={attemptId}
+            presentation="notification"
+            detailsMaxHeight={detailsMaxHeight}
+          />
+        </View>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -153,6 +176,7 @@ const styles = StyleSheet.create((theme) => ({
   host: { position: "absolute", left: theme.space.md, right: theme.space.md, alignItems: "center" },
   stack: { width: "100%", maxWidth: 520, flexGrow: 0, flexShrink: 1 },
   content: { gap: theme.space.sm },
+  resize: { overflow: "hidden" },
   card: {
     overflow: "hidden",
     borderRadius: theme.radius.xl,

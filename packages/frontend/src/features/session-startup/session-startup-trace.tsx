@@ -17,6 +17,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { STARTUP_TEXT_INSET } from "./constants";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
 import {
@@ -135,7 +136,7 @@ export function StartupTrace({
         onScroll={(event) => {
           presentation.scrollTop = event.currentTarget.scrollTop;
         }}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 [overflow-anchor:none]"
+        className="-mx-2 min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-2 [overflow-anchor:none]"
       >
         {attempt.status.confirmation === "unconfirmed" ? (
           <p
@@ -147,7 +148,7 @@ export function StartupTrace({
         ) : null}
         {rows.length > 0 ? (
           <Trace>
-            <ul aria-label="Session startup steps" className="flex min-w-0 flex-col gap-1">
+            <ul aria-label="Session startup steps" className="-mx-2 flex min-w-0 flex-col gap-1">
               {rows.map(({ step, id }) => (
                 <StartupStepRow key={id} step={step} rowId={id} presentation={presentation} />
               ))}
@@ -156,13 +157,11 @@ export function StartupTrace({
         ) : (
           <StartupStatus attempt={attempt} />
         )}
-        {rows.length > 0 &&
-        startupIsPending(attempt) &&
-        !rows.some(({ step }) => step.state === "running" || step.state === "waiting") ? (
-          <StartupStatus attempt={attempt} />
-        ) : null}
         {attempt.error && !repeatedError ? (
-          <p role="alert" className="mt-2 break-words text-xs text-destructive">
+          <p
+            role="alert"
+            className={cn("break-words text-xs text-destructive", STARTUP_TEXT_INSET)}
+          >
             {attempt.error}
           </p>
         ) : null}
@@ -215,10 +214,14 @@ function StartupInstructionStatus({
   instruction: StartupAttempt["instruction"];
 }): ReactElement | null {
   if (instruction?.state === "queued")
-    return <p className="text-xs text-muted-foreground">The initial instruction is queued.</p>;
+    return (
+      <p className={cn("text-xs text-muted-foreground", STARTUP_TEXT_INSET)}>
+        The initial instruction is queued.
+      </p>
+    );
   if (instruction?.state === "unknown")
     return (
-      <p className="text-xs text-warning-surface-foreground">
+      <p className={cn("text-xs text-warning-surface-foreground", STARTUP_TEXT_INSET)}>
         Instruction delivery is unconfirmed. Inspect the session before sending again.
       </p>
     );
@@ -237,17 +240,19 @@ function StartupStatus({ attempt }: { attempt: StartupAttempt }): ReactElement {
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      className="flex items-center gap-2 py-2 text-sm"
+      className="flex items-center gap-2 py-1.5 text-sm"
     >
-      <Icon
-        aria-hidden="true"
-        className={cn(
-          "size-4 shrink-0",
-          pending && "text-info-surface-foreground motion-safe:animate-spin",
-          ready && "text-success-icon",
-          !pending && !ready && "text-destructive",
-        )}
-      />
+      <TraceIcon className="size-5">
+        <Icon
+          aria-hidden="true"
+          className={cn(
+            "size-4",
+            pending && "text-info-surface-foreground motion-safe:animate-spin",
+            ready && "text-success-icon",
+            !pending && !ready && "text-destructive",
+          )}
+        />
+      </TraceIcon>
       {pending && attempt.status.phase === "ready"
         ? "Waiting for session confirmation"
         : phaseLabels[attempt.status.phase]}
@@ -277,6 +282,7 @@ function StartupStepRow({
   const hasDetails = hasStepDetails(step);
   const { status, stateLabel, traceStatus, iconClass, lineClass } = stepPresentation(step);
   const Icon = status.icon;
+  const rowClass = cn("w-full", step.state === "running" && "bg-info-surface");
   const line = (
     <TraceLine
       {...(traceStatus ? { status: traceStatus } : {})}
@@ -305,20 +311,20 @@ function StartupStepRow({
             else presentation.expandedSteps.delete(rowId);
           }}
         >
-          <TraceCollapsibleTrigger
-            className={cn("w-full", step.state === "running" && "bg-info-surface")}
-          >
-            {line}
-          </TraceCollapsibleTrigger>
-          <TraceCollapsibleContent className="flex flex-col gap-2 text-xs">
+          <TraceCollapsibleTrigger className={rowClass}>{line}</TraceCollapsibleTrigger>
+          <TraceCollapsibleContent className="ml-4.5 flex flex-col gap-2 text-xs">
             <StartupStepDetails step={step} expanded={expanded} presentation={presentation} />
           </TraceCollapsibleContent>
         </TraceCollapsible>
       ) : (
-        <div>{line}</div>
+        // Keep the chevron column, so state labels line up with the rows that open.
+        <div className={cn("flex min-w-0 items-center gap-1 rounded-md", rowClass)}>
+          {line}
+          <TraceIcon />
+        </div>
       )}
       {step.failure && !expanded ? (
-        <p className="mb-1 ml-6 break-words text-xs text-destructive">
+        <p className="mb-1 ml-9 break-words text-xs text-destructive">
           {step.action?.result
             ? terminalCommandResultNotice(step.action.result).text
             : step.failure.message}
@@ -513,7 +519,7 @@ export function StartupRecoveryActions({ attempt }: { attempt: StartupAttempt })
   return (
     <>
       {!pending && attempt.recoveryActions?.length ? (
-        <div className="flex flex-wrap gap-1.5">
+        <div className={cn("flex flex-wrap gap-1.5", STARTUP_TEXT_INSET)}>
           {attempt.recoveryActions.map((action) => (
             <Button
               key={action.kind}
@@ -535,7 +541,7 @@ export function StartupRecoveryActions({ attempt }: { attempt: StartupAttempt })
         </div>
       ) : null}
       {actionError ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className={cn("text-sm text-destructive", STARTUP_TEXT_INSET)}>
           {actionError}
         </p>
       ) : null}

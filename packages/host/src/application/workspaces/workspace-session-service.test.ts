@@ -24,6 +24,11 @@ import {
   globalConfigSchema,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import type { StartupOperationSnapshot } from "@openducktor/contracts";
+import {
+  CurrentStartupProgress,
+  createStartupProgressRecorder,
+} from "../agent-sessions/session-startup-progress";
 import { BrowserServiceError } from "../browser/browser-service-error";
 import { TestClock } from "effect/testing";
 import { createRuntimeRegistryPort } from "../runtimes/host-runtime-ports";
@@ -1227,6 +1232,58 @@ describe("host-owned Workspace Session lifecycle", () => {
       h.service.start({ workspaceId: "fairnest", sessionId: created.session.id }),
     );
     expect(h.starts[0]?.systemPrompt).toBe("");
+  });
+
+  const recordStartup = () => {
+    const snapshots: StartupOperationSnapshot[] = [];
+    const progress = createStartupProgressRecorder(
+      {
+        context: { startupAttemptId: "attempt", operationId: "operation" },
+        hostInstanceId: "host",
+        workspaceId: "fairnest",
+        repoPath: database.repoPath,
+        scope: { kind: "workspace" },
+      },
+      (snapshot) => snapshots.push(snapshot),
+      () => Effect.die(new Error("The test does not finalize a startup.")),
+      () => Effect.void,
+    );
+    return { snapshots, progress };
+  };
+
+  test("worktree creation publishes every setup step in one snapshot", async () => {
+    const h = setup();
+    const { snapshots, progress } = recordStartup();
+    await Effect.runPromise(
+      h.service
+        .create(worktreeInput())
+        .pipe(Effect.provideService(CurrentStartupProgress, progress)),
+    );
+
+    const planned = snapshots.find((snapshot) =>
+      snapshot.steps.some((step) => step.id === "checkout"),
+    );
+    expect(planned?.steps.map((step) => `${step.id}:${step.state}`)).toEqual([
+      "checkout:pending",
+      "upstream:pending",
+      "copies:pending",
+      "action:setup:pending",
+    ]);
+  });
+
+  test("a rejected worktree directory publishes no setup steps", async () => {
+    const h = setup();
+    h.paths.add(path.join(database.configDir, "worktrees", "workspace-sessions", "my-feature"));
+    const { snapshots, progress } = recordStartup();
+    await expect(
+      Effect.runPromise(
+        h.service
+          .create(worktreeInput())
+          .pipe(Effect.provideService(CurrentStartupProgress, progress)),
+      ),
+    ).rejects.toThrow("Worktree directory already exists");
+
+    expect(snapshots.flatMap((snapshot) => snapshot.steps.map((step) => step.id))).toEqual([]);
   });
 
   test("worktree creation starts from the target branch and runs Workspace setup before runtime startup", async () => {

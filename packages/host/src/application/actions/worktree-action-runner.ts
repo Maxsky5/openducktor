@@ -219,8 +219,7 @@ export const createWorktreeActionRunner = (
         Effect.gen(function* () {
           const progress = yield* CurrentStartupProgress;
           const configured = actions.items.filter((action) => action.runOnWorktreeCreate);
-          for (const action of configured)
-            progress?.step({ ...worktreeActionStep(action), state: "pending" });
+          progress?.plan(configured.map(pendingActionStep));
           yield* Effect.forEach(
             configured,
             (action) =>
@@ -272,7 +271,16 @@ export const createWorktreeActionRunner = (
   },
 });
 
-export const worktreeActionStep = (
+/** The pending steps of the actions that run on worktree creation, in their run order. */
+const pendingActionStep = (action: RepoAction) => ({
+  ...worktreeActionStep(action),
+  state: "pending" as const,
+});
+
+export const plannedWorktreeActionSteps = (actions: { items: readonly RepoAction[] }) =>
+  actions.items.filter((action) => action.runOnWorktreeCreate).map(pendingActionStep);
+
+const worktreeActionStep = (
   action: RepoAction,
 ): Pick<StartupStep, "id" | "label"> & { action: NonNullable<StartupStep["action"]> } => ({
   id: `action:${action.id}`,

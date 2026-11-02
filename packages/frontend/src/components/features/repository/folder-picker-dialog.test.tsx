@@ -3,6 +3,7 @@ import type { DirectoryListing, FilesystemListDirectoryInput } from "@openduckto
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { z } from "zod";
+import { directoryListingQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -75,7 +76,16 @@ describe("FolderPickerDialog", () => {
     scrollAreaSpy.mockRestore();
   });
 
-  const renderDialog = (
+  /** A first listing that is ready when the dialog opens shows without the minimum loader. */
+  const loadedConnection = async (initialPath?: string, includeFiles = false) => {
+    const connection = createFolderPickerConnection();
+    await connection.queryClient.fetchQuery(
+      directoryListingQueryOptions(initialPath, includeFiles),
+    );
+    return connection;
+  };
+
+  const renderDialog = async (
     props?: Partial<{
       onConfirm: (path: string) => Promise<void>;
       initialPath: string;
@@ -94,15 +104,19 @@ describe("FolderPickerDialog", () => {
     if (props?.initialPath) {
       dialogProps.initialPath = props.initialPath;
     }
+    const connection = await loadedConnection(
+      props?.initialPath,
+      dialogProps.selectionMode === "file",
+    );
     return render(
-      <QueryProvider connection={createFolderPickerConnection()}>
+      <QueryProvider connection={connection}>
         <FolderPickerDialog {...dialogProps} />
       </QueryProvider>,
     );
   };
 
-  test("fills the available height to keep directory navigation stable", () => {
-    const rendered = renderDialog();
+  test("fills the available height to keep directory navigation stable", async () => {
+    const rendered = await renderDialog();
 
     try {
       const dialog = screen.getByRole("dialog");
@@ -163,7 +177,7 @@ describe("FolderPickerDialog", () => {
       });
     });
 
-    const rendered = renderDialog();
+    const rendered = await renderDialog();
 
     try {
       await screen.findByRole("textbox", { name: "Open path" });
@@ -209,7 +223,7 @@ describe("FolderPickerDialog", () => {
         ],
       });
     });
-    const rendered = renderDialog({ onConfirm, selectionMode: "file" });
+    const rendered = await renderDialog({ onConfirm, selectionMode: "file" });
 
     try {
       await screen.findByRole("textbox", { name: "Open path" });
@@ -249,7 +263,7 @@ describe("FolderPickerDialog", () => {
         ],
       });
     });
-    const rendered = renderDialog({ onConfirm, selectionMode: "file" });
+    const rendered = await renderDialog({ onConfirm, selectionMode: "file" });
 
     try {
       await screen.findByRole("textbox", { name: "Open path" });
@@ -300,7 +314,7 @@ describe("FolderPickerDialog", () => {
         ],
       });
     });
-    const rendered = renderDialog({
+    const rendered = await renderDialog({
       onConfirm,
       initialPath: "/Users/dev",
       selectionMode: "file",
@@ -355,7 +369,7 @@ describe("FolderPickerDialog", () => {
       }
       return createListing();
     });
-    const rendered = renderDialog({ onConfirm, initialPath: "/Users/dev" });
+    const rendered = await renderDialog({ onConfirm, initialPath: "/Users/dev" });
 
     try {
       await screen.findByRole("textbox", { name: "Open path" });
@@ -401,7 +415,7 @@ describe("FolderPickerDialog", () => {
       }
       return listing;
     });
-    const rendered = renderDialog({
+    const rendered = await renderDialog({
       onConfirm,
       initialPath: "/Users/dev",
       selectionMode: "file",
@@ -461,7 +475,7 @@ describe("FolderPickerDialog", () => {
         ],
       });
     });
-    const rendered = renderDialog({ initialPath: "/Users/dev" });
+    const rendered = await renderDialog({ initialPath: "/Users/dev" });
 
     try {
       await screen.findByRole("textbox", { name: "Open path" });
@@ -583,7 +597,7 @@ describe("FolderPickerDialog", () => {
       }
     });
 
-    const rendered = renderDialog({ onConfirm, initialPath: "/Users/dev/projects" });
+    const rendered = await renderDialog({ onConfirm, initialPath: "/Users/dev/projects" });
 
     try {
       await screen.findByRole("textbox", { name: "Open path" });
@@ -661,8 +675,9 @@ describe("FolderPickerDialog", () => {
       });
     });
 
+    const connection = await loadedConnection();
     const rendered = render(
-      <QueryProvider connection={createFolderPickerConnection()}>
+      <QueryProvider connection={connection}>
         <FolderPickerDialog
           open
           onOpenChange={() => {}}
@@ -722,7 +737,7 @@ describe("FolderPickerDialog", () => {
     });
 
     const onConfirm = mock(async (_path: string) => {});
-    const rendered = renderDialog({ onConfirm });
+    const rendered = await renderDialog({ onConfirm });
 
     try {
       await screen.findByRole("textbox", { name: "Open path" });
@@ -781,8 +796,9 @@ describe("FolderPickerDialog", () => {
     );
     const onOpenChange = mock((_open: boolean) => {});
 
+    const connection = await loadedConnection();
     const rendered = render(
-      <QueryProvider connection={createFolderPickerConnection()}>
+      <QueryProvider connection={connection}>
         <FolderPickerDialog
           open
           onOpenChange={onOpenChange}
