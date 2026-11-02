@@ -1,7 +1,7 @@
 import { humanDate } from "@openducktor/frontend-core/tasks/presentation/task-display";
 import { type ReactElement, useDeferredValue, useState } from "react";
 import { TextInput, View } from "react-native";
-import Animated, { useReducedMotion } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { MarkdownView } from "@/rich-content/markdown/markdown-view";
 import { useAppTheme } from "@/theme/app-theme-context";
@@ -9,6 +9,7 @@ import { withAlpha } from "@/theme/color-alpha";
 import { haptics } from "@/ui/haptics";
 import { Text } from "@/ui/text";
 import { useAnnounce } from "@/ui/use-announce";
+import { useEndlessAnimation } from "@/ui/use-endless-animation";
 import { ToolbarButton, ViewSwitch } from "./form-parts";
 import { SKELETON_PULSE } from "@/theme/tokens";
 
@@ -28,10 +29,10 @@ const lineCountLabel = (markdown: string): string => {
 };
 
 function LoadingPane(): ReactElement {
-  const reducedMotion = useReducedMotion();
+  const pulse = useEndlessAnimation(SKELETON_PULSE);
   return (
     <Animated.View
-      style={[styles.pane, styles.skeleton, reducedMotion ? null : SKELETON_PULSE]}
+      style={[styles.pane, styles.skeleton, pulse]}
       accessibilityRole="progressbar"
       accessibilityLabel="Loading the document"
     >

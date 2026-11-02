@@ -6,10 +6,11 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import Animated, { useReducedMotion } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { DELAYED_FADE_IN, MONO_TYPE, SKELETON_PULSE } from "@/theme/tokens";
 import type { TextVariant } from "./text";
+import { useEndlessAnimation } from "./use-endless-animation";
 
 /**
  * The frame of a skeleton: it fades in after a short delay, so a fast load shows no placeholder,
@@ -19,7 +20,7 @@ export function SkeletonFrame({
   label,
   children,
 }: PropsWithChildren<{ label: string }>): ReactElement {
-  const reducedMotion = useReducedMotion();
+  const pulse = useEndlessAnimation(SKELETON_PULSE);
   return (
     <Animated.View
       style={DELAYED_FADE_IN}
@@ -27,7 +28,7 @@ export function SkeletonFrame({
       accessibilityRole="progressbar"
       accessibilityLabel={label}
     >
-      <Animated.View style={reducedMotion ? null : SKELETON_PULSE}>{children}</Animated.View>
+      <Animated.View style={pulse}>{children}</Animated.View>
     </Animated.View>
   );
 }

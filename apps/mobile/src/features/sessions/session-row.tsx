@@ -15,7 +15,7 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import Animated, { type CSSStyle, cubicBezier, useReducedMotion } from "react-native-reanimated";
+import Animated, { type CSSStyle, cubicBezier } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import type { CommandFailure } from "@/host-session/command-outcome";
 import { taskStatusLabel, taskStatusTone } from "@/features/tasks/presentation/task-status-paint";
@@ -32,6 +32,7 @@ import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
 import { radius, sansWeight } from "@/theme/tokens";
 import { Touchable } from "@/ui/touchable";
+import { useEndlessAnimation } from "@/ui/use-endless-animation";
 import {
   type DesktopColorName,
   parseSessionMenuAction,
@@ -67,29 +68,29 @@ function StatusDot({
   entry: SessionNavigationEntry;
   unread: boolean;
 }): ReactElement {
-  const reducedMotion = useReducedMotion();
   const theme = useAppTheme();
   const color = sessionEntryDotColor(entry, unread);
   const running = entry.status.kind === "running" && entry.attention.length === 0;
   return (
     <View style={styles.dotFrame}>
-      {running ? (
-        <>
-          {/* The desktop `running-status-dot`: a glow and a ring that pulse around the dot. */}
-          <Animated.View
-            style={[
-              styles.dotGlow,
-              pulseStyles(theme, color).glow,
-              reducedMotion ? null : RUNNING_GLOW,
-            ]}
-          />
-          {reducedMotion ? null : (
-            <Animated.View style={[styles.dotRing, pulseStyles(theme, color).ring, RUNNING_RING]} />
-          )}
-        </>
-      ) : null}
+      {running ? <RunningPulse color={color} /> : null}
       <View style={[styles.dot, colorStyles(theme, color).dot]} />
     </View>
+  );
+}
+
+/** The desktop `running-status-dot`: a glow and a ring that pulse around the dot. */
+function RunningPulse({ color }: { color: DesktopColorName }): ReactElement {
+  const theme = useAppTheme();
+  const glow = useEndlessAnimation(RUNNING_GLOW);
+  const ring = useEndlessAnimation(RUNNING_RING);
+  const pulses = pulseStyles(theme, color);
+  return (
+    <>
+      <Animated.View style={[styles.dotGlow, pulses.glow, glow]} />
+      {/* The ring exists only to animate, so reduced motion removes it. */}
+      {ring ? <Animated.View style={[styles.dotRing, pulses.ring, ring]} /> : null}
+    </>
   );
 }
 

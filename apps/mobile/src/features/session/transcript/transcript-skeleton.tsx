@@ -1,11 +1,12 @@
 import type { ReactElement } from "react";
 import { View } from "react-native";
-import Animated, { useReducedMotion } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { DELAYED_FADE_IN, SKELETON_PULSE } from "@/theme/tokens";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Text } from "@/ui/text";
+import { useEndlessAnimation } from "@/ui/use-endless-animation";
 
 /** The widths of the placeholder turns: a user message, tool rows, and lines of an answer. */
 const TURNS = [
@@ -21,7 +22,7 @@ const TURNS = [
  */
 export function TranscriptSkeleton({ label }: { label: string }): ReactElement {
   const theme = useAppTheme();
-  const reducedMotion = useReducedMotion();
+  const pulse = useEndlessAnimation(SKELETON_PULSE);
   return (
     <View style={styles.root} accessible accessibilityRole="progressbar" accessibilityLabel={label}>
       <Animated.View style={[styles.status, DELAYED_FADE_IN]}>
@@ -30,7 +31,7 @@ export function TranscriptSkeleton({ label }: { label: string }): ReactElement {
           {label}
         </Text>
       </Animated.View>
-      <Animated.View style={[styles.turns, reducedMotion ? null : SKELETON_PULSE]}>
+      <Animated.View style={[styles.turns, pulse]}>
         {TURNS.map((turn) => (
           <View key={turn.bubble} style={styles.turn}>
             <View style={[styles.bubble, { width: turn.bubble }]} />

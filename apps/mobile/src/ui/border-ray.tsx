@@ -30,9 +30,7 @@ type Size = { width: number; height: number };
  * so the ray draws no picture again. It runs only while its screen has focus. With reduced
  * motion, the ray stays still, as on desktop.
  *
- * A blur stops the ray and a focus starts it again, with no render. A sheet that opens or closes
- * over the screen then mounts no segments: React Native shows the sheet only after the
- * JavaScript work of that change ends.
+ * A blur stops the ray and a focus starts it again, with no render.
  */
 export const BorderRay = memo(function BorderRay({
   color,
