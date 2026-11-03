@@ -10,7 +10,7 @@ import {
 import type { TaskReadState } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
 import { useTaskRemoveWorktreeConfirmDialog } from "@openducktor/frontend-core/tasks/details/use-task-remove-worktree-confirm-dialog";
 import type { BuiltinTaskCard as TaskCard, TaskWorkflowAction } from "@openducktor/workflows";
-import { useRouter } from "expo-router";
+import { useNavigation } from "expo-router";
 import { type ReactElement, useCallback, useMemo } from "react";
 import { TaskRemoveWorktreeConfirm } from "@/features/workflow/close/task-remove-worktree-confirm";
 import { useTaskActions } from "@/features/workflow/use-task-actions";
@@ -21,6 +21,7 @@ import {
   taskDetailsMenuChoice,
   taskDetailsMenuItems,
 } from "./task-details-model";
+import { closeScreen } from "@/navigation/close-screen";
 
 type SessionSummaries = Parameters<typeof buildTaskSessionsByTaskId>[0];
 
@@ -64,7 +65,7 @@ export function useTaskDetailsActions({
   onDeleteStarted: () => void;
   onDeleteFailed: () => void;
 }): TaskDetailsActionsView {
-  const router = useRouter();
+  const navigation = useNavigation();
   const { unlinkPullRequest, removeTaskWorktree } = useRequiredContext(
     TasksStateContext,
     "useTaskDetailsActions",
@@ -77,7 +78,7 @@ export function useTaskDetailsActions({
         if (request.action === "delete") onDeleteStarted();
       },
       onSucceeded: (request) => {
-        if (request.action === "delete" && !embedded) router.back();
+        if (request.action === "delete" && !embedded) closeScreen(navigation);
       },
       onFailed: (request) => {
         if (request.action === "delete") onDeleteFailed();

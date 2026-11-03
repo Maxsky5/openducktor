@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { IconButton } from "@/ui/icon-button";
+import { closeScreen } from "./close-screen";
 
 type SearchTextEvent = Parameters<NonNullable<SearchBarProps["onChangeText"]>>[0];
 
@@ -122,7 +123,7 @@ function StackHeader({ back, options, route, navigation }: NativeStackHeaderProp
           canGoBack={back !== undefined}
           options={options}
           routeName={route.name}
-          onBack={() => navigation.goBack()}
+          onBack={() => closeScreen(navigation)}
           onSearch={search ? headerSearch.start : null}
         />
       )}

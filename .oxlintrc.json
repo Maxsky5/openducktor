@@ -30,6 +30,10 @@
     {
       "name": "unistyles",
       "specifier": "./tools/oxlint/anti-slop/src/unistyles/index.ts"
+    },
+    {
+      "name": "expo-router",
+      "specifier": "./tools/oxlint/anti-slop/src/expo-router/index.ts"
     }
   ],
   "rules": {
@@ -351,6 +355,7 @@
       "rules": {
         "anti-slop/no-hex-alpha-suffix": "error",
         "unistyles/no-stylesheet-dependency-aliases": "error",
+        "expo-router/no-queued-back": "error",
         "unistyles/no-themed-colors-on-unbound-components": [
           "error",
           { "boundModules": ["react-native", "react-native-reanimated"], "appPrefixes": ["@/"] }

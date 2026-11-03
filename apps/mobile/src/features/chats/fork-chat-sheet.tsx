@@ -53,6 +53,7 @@ import { StartupTrace } from "@/features/session-startup/startup-trace";
 import { useVisibleHandoff } from "@/features/session-startup/use-visible-handoff";
 import { useStartupSheetClose } from "@/features/session-startup/startup-presentation-context";
 import { useRepairedStartupHandoff } from "@/features/session-startup/use-repaired-startup-handoff";
+import { closeScreen } from "@/navigation/close-screen";
 
 const TITLE = "Fork chat";
 
@@ -242,7 +243,7 @@ const useForkChatCommand = (
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
     setClosing(true);
     allowRemoval();
-    navigation.goBack();
+    closeScreen(navigation);
   }, [allowRemoval, navigation]);
   useStartupSheetClose(attemptId, close);
   useRepairedStartupHandoff(attempt);

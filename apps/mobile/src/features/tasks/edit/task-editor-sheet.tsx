@@ -56,6 +56,7 @@ import { IssueTypeGrid, IssueTypeSummary } from "./issue-type-grid";
 import { LabelsField } from "./labels-field";
 import { MarkdownEditorField } from "./markdown-editor-field";
 import { taskEditorSaveDisabled } from "./task-editor-model";
+import { closeScreen } from "@/navigation/close-screen";
 
 const PRIORITY_CHOICES = PRIORITY_OPTIONS.map((option) => ({
   value: String(option.value),
@@ -233,7 +234,7 @@ export function TaskEditorSheet({
     (open: boolean) => {
       if (open) return;
       allowRemoval.current();
-      navigation.goBack();
+      closeScreen(navigation);
     },
     [navigation],
   );

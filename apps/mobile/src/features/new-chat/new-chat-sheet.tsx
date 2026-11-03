@@ -37,6 +37,7 @@ import { NewChatWorkspaceField } from "./new-chat-workspace-field";
 import { WorktreeFields } from "./new-chat-worktree-fields";
 import { TargetBranchField } from "./target-branch-field";
 import { useNewChatModel } from "./use-new-chat-model";
+import { closeScreen } from "@/navigation/close-screen";
 
 export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
   const router = useRouter();
@@ -253,7 +254,7 @@ const useClose = (edited: boolean, running: boolean) => {
     closed.current = true;
     setClosing(true);
     allowRemoval();
-    navigation.goBack();
+    closeScreen(navigation);
   }, [allowRemoval, navigation]);
   const requestClose = useCallback(() => {
     if (running) return;

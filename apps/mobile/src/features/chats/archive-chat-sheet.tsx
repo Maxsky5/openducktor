@@ -38,6 +38,7 @@ import {
 import type { ChatSheetParams } from "./chat-sheet-params";
 import { ChatSheetStateScreen } from "./chat-sheet-states";
 import { useChatRecord } from "./use-chat-record";
+import { closeScreen } from "@/navigation/close-screen";
 
 const TITLE = "Archive chat";
 
@@ -260,7 +261,7 @@ function ArchiveChatForm({
             fill
             style={styles.action}
             disabled={archive.isPending}
-            onPress={() => navigation.goBack()}
+            onPress={() => closeScreen(navigation)}
           />
           <Button
             label={archive.isPending ? ARCHIVE_CHAT_TEXT.confirming : ARCHIVE_CHAT_TEXT.confirm}
@@ -289,7 +290,7 @@ function ArchiveChatRead({ params }: { params: ChatSheetParams }): ReactElement 
   // The sheet owns the command, so its result still closes the sheet after the form changes.
   const archive = useArchiveWorkspaceSession(() => {
     feedback.show("success", "Chat archived.");
-    if (mounted.current) navigation.goBack();
+    if (mounted.current) closeScreen(navigation);
   });
   // An archived chat leaves the active list while the sheet closes; show nothing in that time.
   if (archive.isSuccess) return <SheetFrame title={TITLE} closable={false} />;

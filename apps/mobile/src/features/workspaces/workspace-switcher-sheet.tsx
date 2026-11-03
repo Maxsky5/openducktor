@@ -20,6 +20,7 @@ import { usePullRefresh } from "@/ui/use-pull-refresh";
 import { NoOpenWorkspaceState } from "./no-open-workspace";
 import { workspaceBadgePresentations } from "./workspace-activity-badges";
 import { WorkspaceTile } from "./workspace-tile";
+import { closeScreen } from "@/navigation/close-screen";
 
 const WorkspaceOption = memo(function WorkspaceOption({
   workspace,
@@ -100,7 +101,7 @@ function WorkspaceOptions(): ReactElement {
     (workspaceId: string) => {
       if (workspaceId !== selectedId) haptics.selection();
       selectWorkspace(workspaceId);
-      navigation.goBack();
+      closeScreen(navigation);
     },
     [navigation, selectWorkspace, selectedId],
   );

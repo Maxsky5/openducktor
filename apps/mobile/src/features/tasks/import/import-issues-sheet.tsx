@@ -73,6 +73,7 @@ import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { IssueReviewCard } from "./issue-review-card";
 import { IssueRow, IssueRowPlaceholder } from "./issue-row";
 import { type IssueImportReads, useIssueImportReads } from "./use-issue-import-reads";
+import { closeScreen } from "@/navigation/close-screen";
 import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 /** Mobile has no repository settings, so the texts tell where they are. */
@@ -165,7 +166,7 @@ function IssueImportFlow({
     providerScope: provider.config,
     onComplete: (createdCount) => {
       feedback.show("success", issueImportCreatedMessage(createdCount));
-      navigation.goBack();
+      closeScreen(navigation);
     },
     onRefreshed: selection.replaceItem,
   });
