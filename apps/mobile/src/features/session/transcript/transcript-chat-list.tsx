@@ -230,6 +230,7 @@ export const TranscriptChatList = memo(function TranscriptChatList({
           data={items}
           inverted={kind === "latest"}
           drawDistance={DRAW_DISTANCE}
+          overrideProps={FIRST_RENDER}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
@@ -267,3 +268,9 @@ const BOTTOM_SPACE = <View style={styles.bottomSpace} />;
  */
 const DRAW_DISTANCE = 1000;
 const TOP_SPACE = <View style={styles.topSpace} />;
+/**
+ * The rows that the first render of a list adds in each pass. FlashList adds 2 rows in each pass by
+ * default, and each pass is a render and a measure before the screen shows. A larger batch renders
+ * the rows of the screen in one pass.
+ */
+const FIRST_RENDER = { initialDrawBatchSize: 100 } as const;
