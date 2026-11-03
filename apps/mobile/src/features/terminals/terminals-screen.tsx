@@ -13,7 +13,6 @@ import { WorkOwnerScreen } from "@/features/work-owner/work-owner-screen";
 import { useCommandGate } from "@/host-session/active-session-context";
 import { routes } from "@/navigation/routes";
 import { useAppTheme } from "@/theme/app-theme-context";
-import { Button } from "@/ui/button";
 import { Icon } from "@/ui/icon";
 import { IconButton } from "@/ui/icon-button";
 import { SkeletonFrame, TextPlaceholder } from "@/ui/placeholders";
@@ -24,7 +23,11 @@ import { Text } from "@/ui/text";
 import { useWideLayout } from "@/ui/use-wide-layout";
 import { TerminalLauncher } from "./terminal-launcher";
 import { buildTerminalRows, terminalLimitText } from "./terminal-list-model";
-import { TerminalNoticeStrip, TerminalTransportNotice } from "./terminal-notice-strip";
+import {
+  TerminalDiscoveryRetryButton,
+  TerminalNoticeStrip,
+  TerminalTransportNotice,
+} from "./terminal-notice-strip";
 import { TerminalPane } from "./terminal-pane";
 import { TerminalRow, TerminalRowPlaceholder } from "./terminal-row";
 import { useOwnerTerminals } from "./use-owner-terminals";
@@ -171,7 +174,6 @@ function TerminalList({
   onClose: (tab: TerminalTab) => Promise<void>;
   onStart: (action?: RepoAction) => void;
 }): ReactElement {
-  const gate = useCommandGate();
   const theme = useAppTheme();
   const endSpace = useScreenEndSpace(theme.space.xxxl);
   const {
@@ -211,14 +213,8 @@ function TerminalList({
 
   let terminals: ReactElement;
   if (model.discoveryError !== null && rows.length === 0) {
-    terminals = (
-      <ErrorState
-        title="Terminal Discovery Failed"
-        message={model.discoveryError}
-        onRetry={gate.open ? model.onRetryDiscovery : undefined}
-        retryLabel="Retry Discovery"
-      />
-    );
+    // The Start section under this state offers Retry.
+    terminals = <ErrorState title="Terminal Discovery Failed" message={model.discoveryError} />;
   } else if (rows.length === 0 && !model.isSynced) {
     terminals = <TerminalListSkeleton />;
   } else if (rows.length === 0) {
@@ -259,28 +255,21 @@ function TerminalList({
       // react-doctor-disable-next-line react-doctor/rn-scrollview-dynamic-padding
       contentContainerStyle={{ paddingBottom: endSpace }}
     >
-      {/* The status strips of the desktop terminal panel, above the terminals. */}
-      {model.discoveryError !== null && rows.length > 0 ? (
+      {/*
+        The status strips of the desktop terminal panel, above the terminals. The Start section also
+        offers discovery Retry, so a dismissed failure keeps its recovery.
+      */}
+      {model.discoveryNotice !== null && rows.length > 0 ? (
         <TerminalNoticeStrip
           tone="error"
           edge="top"
           title="Terminal discovery failed."
-          message={`${model.discoveryError} The list shows the last loaded terminals.`}
-          action={
-            <Button
-              label="Retry"
-              size="sm"
-              variant="outline"
-              disabled={!gate.open || model.isLoading}
-              accessibilityLabel="Retry terminal discovery"
-              onPress={model.onRetryDiscovery}
-            />
-          }
+          message={`${model.discoveryNotice} The list shows the last loaded terminals.`}
+          action={<TerminalDiscoveryRetryButton model={model} label="Retry" />}
+          onDismiss={model.onDismissDiscoveryError}
         />
       ) : null}
-      {model.transportError !== null ? (
-        <TerminalTransportNotice message={model.transportError} />
-      ) : null}
+      <TerminalTransportNotice model={model} />
       {/* A plain box keeps an empty or error state at its content height, above Start. */}
       <View>{terminals}</View>
       <TerminalLauncher owner={owner} model={model} onStart={onStart} />

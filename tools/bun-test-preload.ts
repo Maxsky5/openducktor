@@ -110,7 +110,10 @@ if (testRoot === repoRoot || testRoot === frontendRoot) {
   const { cleanup } = await import(frontendRequire.resolve("@testing-library/react"));
 
   // Unmounting every tree after a file can exceed the 1000 ms test budget on a loaded Windows runner.
+  // Files share one window without isolation, so app writes to web storage must not reach the next test.
   afterEach((): void => {
     cleanup();
+    localStorage.clear();
+    sessionStorage.clear();
   }, 5_000);
 }

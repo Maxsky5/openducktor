@@ -19,6 +19,7 @@ import { SectionFooter, SectionHeader } from "@/ui/surfaces";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { REPO_ACTION_ICONS } from "./repo-action-icons";
+import { TerminalDiscoveryRetryButton } from "./terminal-notice-strip";
 
 /**
  * One start choice, as the desktop New tab launcher card: an icon tile, a label, one line that
@@ -87,8 +88,6 @@ export function TerminalLauncher({
   const repoActions = repoConfig.data?.actions;
   const split = useMemo(() => (repoActions ? splitRepoActions(repoActions) : null), [repoActions]);
   const blocked = model.startBlockedReason;
-  // The discovery failure shows with its own Retry above the list.
-  const blockedText = model.discoveryError === null ? blocked : null;
   const disabled = blocked !== null || !gate.open;
   const actions = split?.kind === "ready" ? [split.defaultAction, ...split.otherActions] : [];
   return (
@@ -98,12 +97,14 @@ export function TerminalLauncher({
         <LauncherCard
           icon="square-terminal"
           label="New terminal"
-          description={blockedText ?? "Run commands in a new shell."}
+          description={blocked ?? "Run commands in a new shell."}
           disabled={disabled}
           accessibilityLabel="New terminal"
           accessibilityHint={blocked ?? "Starts a shell in the working directory."}
           onPress={() => onStart()}
         />
+        {/* A failed discovery blocks new terminals until a list read succeeds. */}
+        {model.discoveryError === null ? null : <TerminalDiscoveryRetryButton model={model} />}
       </View>
       {actions.length > 0 ? (
         <>
@@ -115,7 +116,7 @@ export function TerminalLauncher({
                 icon={REPO_ACTION_ICONS[action.icon]}
                 label={action.name}
                 description={
-                  blockedText ??
+                  blocked ??
                   (split?.kind === "ready" && action.id === split.defaultAction.id
                     ? "Default action. Runs in a new terminal."
                     : "Runs in a new terminal.")

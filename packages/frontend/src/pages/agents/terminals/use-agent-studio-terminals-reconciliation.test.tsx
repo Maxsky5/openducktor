@@ -412,7 +412,7 @@ describe("useAgentStudioTerminals reconciliation", () => {
       expect(probes.get("terminal-task-b")).toEqual([taskBProbe]);
       act(() => {
         taskAProbe.input.onTitleChange("Task A title");
-        taskAProbe.input.onLifecycle("exited", { text: "Task A exited.", isFailure: true });
+        taskAProbe.input.onLifecycle("exited", "Task A exited.");
       });
 
       showTask("task-a");

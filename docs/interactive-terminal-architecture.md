@@ -75,9 +75,9 @@ Other supported shells keep the command-process flow:
 
 When the terminal closes or its process fails before the command ends, the result is `closed` or `failed`. The `failed` result has the process error. Both results have the last 20 lines of parsed output.
 
-The terminal keeps its initial command result in `TerminalSummary.initialCommandResult` until the terminal is forgotten. The command owner observes settlement even when its startup caller has left. Startup traces show each action and its available output without opening a terminal panel. A non-waiting action can finish after startup is ready; its result remains visible in the trace and terminal.
+The command owner receives the initial command result through `StartedCommandTerminal.result` and `onResult`. It observes settlement even when its startup caller has left. Terminal summaries do not carry the result, so list frames stay small. `TerminalSummary.initialCommandResult` stays optional only so that current clients accept lists from older hosts. Startup traces show each action, its result, and its available output without opening a terminal panel. A non-waiting action can finish after startup is ready; its result remains visible in the trace.
 
-The connection's startup stream applies action results to loaded terminal lists even after startup feedback expires. Open terminal tabs receive the result without another list read. An older list response cannot remove a confirmed result for the same host and terminal.
+The terminal view does not show the command result. A non-zero exit code, Ctrl+C, and Restart are normal shell behavior, and the terminal output already shows them.
 
 Each visible startup output renderer has a separate read-only transport connection and replay cursor. It sends only attachment, detachment, and parsed-output acknowledgements. It sends no input or PTY resize, joins no command recovery barrier, and closes no PTY when released.
 
@@ -142,7 +142,11 @@ A task rollback runs each Git step also after an earlier step fails. When a step
 
 The host adds an output consumer before it sends the attachment snapshot. The snapshot has lifecycle, title, first retained byte sequence, and snapshot end sequence. The host then sends retained output followed by live output. Output byte sequences increase monotonically. Exit comes after the final output sequence.
 
-An exited terminal keeps its output for reading. After the exit frame, the renderer disables xterm input and sends no more input to the host. The status line shows the exit code. A clean exit, code 0 without a signal, uses a neutral style. Another exit uses the warning style.
+An exited terminal keeps its output for reading. After the exit frame, the renderer disables xterm input and sends no more input to the host. A status strip shows the exit code in a neutral style, because a non-zero exit code is normal shell behavior. A terminal problem, such as an output overflow or a protocol failure, shows in a separate warning strip above the exit code. The user can dismiss each strip. A new terminal problem shows again. The host sends its failure and the exit again on each attach, so a dismissed problem or exit status stays hidden while its text stays the same. Only the message text of a strip is a live region, so screen readers do not read its button labels.
+
+The connection, input, and close-result notices of the web and mobile terminal views also have Dismiss. Both clients render notices with one `TerminalNoticeStrip` component each. `useDismissibleNotice` in `frontend-core/src/lib` hides a notice while its message stays the same. A new message, or the same message after the failure cleared, shows again. Dismissal does not clear the failure. The terminal model owns the transport dismissal in `transportNotice`, so every panel of the owner hides that strip together.
+
+The discovery failure strip has Retry and Dismiss. The terminal model owns this dismissal in `discoveryNotice`, so every panel of the owner hides the strip together. A failure blocks new terminals until a discovery read succeeds. While it blocks them, the start controls show the blocked reason and Retry, also after a dismissal: the terminal card `recovery` of the New tab launcher on the desktop, and the Start section on mobile. The mobile empty-list error has no Retry of its own, because the Start section is under it.
 
 The renderer tracks submitted bytes separately from parsed bytes. It submits contiguous output directly to xterm's ordered write queue. It does not wait for one chunk's callback before it submits the next chunk. After xterm parses a group of chunks, the renderer sends one ACK for that group's last byte sequence. On another attach, it sends the last parsed sequence so the host sends only missing output.
 

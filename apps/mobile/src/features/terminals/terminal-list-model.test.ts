@@ -128,7 +128,7 @@ describe("buildTerminalRows", () => {
     expect(row?.startedLabel).toBe("Started by you");
   });
 
-  test("marks a failed exit as a warning with its status", () => {
+  test("shows a nonzero exit as a neutral status", () => {
     const [row] = buildTerminalRows(
       model([
         ready({
@@ -143,9 +143,9 @@ describe("buildTerminalRows", () => {
       ]),
     );
     expect(row).toMatchObject({
-      stateTone: "warning",
+      stateTone: "neutral",
       detail: "Exited with code 1 (SIGTERM).",
-      detailIsFailure: true,
+      detailIsFailure: false,
     });
   });
 

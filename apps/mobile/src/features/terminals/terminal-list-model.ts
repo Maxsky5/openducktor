@@ -5,7 +5,7 @@ import {
   terminalTabLabel,
 } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { terminalTabLifecycleText } from "@openducktor/frontend-core/terminals/terminal-tab-presentation";
-import { terminalExitNotice } from "@openducktor/frontend-core/terminals/terminal-viewport-policy";
+import { terminalExitText } from "@openducktor/frontend-core/terminals/terminal-viewport-policy";
 import {
   MAX_SCOPE_TERMINALS,
   type TerminalSessionsModel,
@@ -69,16 +69,14 @@ const PENDING_TONES = {
 
 const rowTone = (tab: TerminalTab, runsCommand: boolean): Tone => {
   if (tab.requestState !== "ready") return PENDING_TONES[tab.requestState];
-  const exit = tabExitNotice(tab);
-  if (exit) return exit.isFailure ? "warning" : "neutral";
   if (tab.summary.lifecycle === "running" && !runsCommand) return "neutral";
   return LIFECYCLE_TONES[tab.summary.lifecycle];
 };
 
 /** The exit status of an exited terminal from its host summary. */
-export const tabExitNotice = (tab: TerminalTab) =>
+export const tabExitText = (tab: TerminalTab): string | null =>
   tab.requestState === "ready" && tab.summary.lifecycle === "exited" && tab.summary.exit
-    ? terminalExitNotice(tab.summary.exit.exitCode, tab.summary.exit.signal)
+    ? terminalExitText(tab.summary.exit.exitCode, tab.summary.exit.signal)
     : null;
 
 const toTerminalRow = (
@@ -87,7 +85,7 @@ const toTerminalRow = (
   activityStatus: TerminalSessionsModel["activityStatus"],
 ): TerminalRow => {
   const closing = tab.requestState === "ready" && tab.summary.lifecycle === "closing";
-  const exit = tabExitNotice(tab);
+  const exit = tabExitText(tab);
   const live = tab.requestState === "ready" && tab.summary.lifecycle === "running" && !closing;
   const activeCommand = live && runsCommand;
   let stateLabel = terminalTabLifecycleText(tab);
@@ -101,8 +99,8 @@ const toTerminalRow = (
     startedLabel: tab.requestState === "ready" ? startedLabel(tab.summary) : null,
     stateLabel: closing ? "Closing" : stateLabel,
     stateTone: closing ? "pending" : rowTone(tab, activeCommand),
-    detail: tab.error ?? exit?.text ?? null,
-    detailIsFailure: tab.error !== null || (exit?.isFailure ?? false),
+    detail: tab.error ?? exit,
+    detailIsFailure: tab.error !== null,
     runsCommand: activeCommand,
     closing,
     canRetry: canRetryTerminalCreation(tab),

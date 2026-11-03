@@ -17,7 +17,7 @@ const summary = (terminalId: string): TerminalSummary => ({
 });
 
 describe("terminalPresentationReducer", () => {
-  test("retains an action outcome discovered after the terminal was listed", () => {
+  test("ignores the command result that an older host sends", () => {
     const scopeKey = "/repo:task-1";
     const terminal = summary("terminal-a");
     const initial = terminalPresentationReducer(createTerminalPresentationState(), {
@@ -26,30 +26,18 @@ describe("terminalPresentationReducer", () => {
       hostInstanceId: "host-1",
       summaries: [terminal],
     });
-    const outcome = {
-      type: "exited",
-      exitCode: 1,
-      signal: null,
-      outputTail: ["Build failed"],
-    } as const;
-    const settled = terminalPresentationReducer(initial, {
-      type: "hostSynced",
-      scopeKey,
-      hostInstanceId: "host-1",
-      summaries: [{ ...terminal, initialCommandResult: outcome }],
-    });
-    expect(settled.scopes[scopeKey]?.tabs).toMatchObject([
-      { summary: { initialCommandResult: outcome } },
-    ]);
-    const repeated = terminalPresentationReducer(settled, {
+    const withResult = terminalPresentationReducer(initial, {
       type: "hostSynced",
       scopeKey,
       hostInstanceId: "host-1",
       summaries: [
-        { ...terminal, initialCommandResult: { ...outcome, outputTail: [...outcome.outputTail] } },
+        {
+          ...terminal,
+          initialCommandResult: { type: "exited", exitCode: 1, signal: null, outputTail: [] },
+        },
       ],
     });
-    expect(repeated).toBe(settled);
+    expect(withResult).toBe(initial);
   });
 
   test("preserves state identity when the host list has no material change", () => {

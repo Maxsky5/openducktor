@@ -56,7 +56,7 @@ export const createTerminalOutputSession = ({
       onForgotten: onNotice,
       onTitle: () => {},
       onLifecycle: (_lifecycle, exit) => {
-        if (exit) onNotice(exit.text);
+        if (exit) onNotice(exit);
       },
     });
     if (!handled && message.type === "output")

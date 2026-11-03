@@ -3,7 +3,7 @@ import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup
 import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/terminal-command-result";
 import { BUILTIN_ROLE_LABELS, builtinRoleId } from "@openducktor/workflows";
 import { basenameForPath } from "@openducktor/path-support";
-import { terminalCommandResultNotice } from "@/features/terminals/terminal-command-result";
+import { actionResultText } from "./action-result-text";
 import {
   startupActiveStep,
   startupTraceRows,
@@ -21,9 +21,7 @@ export function startupIssue(attempt: StartupAttempt): string | undefined {
           attempt.error === `${step.failure?.message} ${step.failure?.nextAction}`),
     );
   const result = failed?.action?.result;
-  return result && !terminalCommandSucceeded(result)
-    ? terminalCommandResultNotice(result).text
-    : attempt.error;
+  return result && !terminalCommandSucceeded(result) ? actionResultText(result) : attempt.error;
 }
 
 export function startupActivity(attempt: StartupAttempt): string | undefined {

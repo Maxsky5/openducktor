@@ -515,6 +515,49 @@ describe("SessionPanel browser tabs", () => {
     expect(screen.getByRole("tooltip").textContent).toBe("Dashboardhttp://localhost:3000/a/b?c=1");
   });
 
+  test("keeps discovery Retry in the launcher before and after the user dismisses the failure", () => {
+    const onDismissDiscoveryError = mock(() => {});
+    const onRetryDiscovery = mock(() => {});
+    const blocked = "Terminal discovery failed. Retry terminal discovery.";
+    const panel = (discoveryNotice: string | null) => (
+      <SessionPanel
+        model={createSessionPanelFixture({
+          panel: "bottom",
+          tabs: [],
+          selectedTabId: null,
+          launcher: [
+            {
+              kind: "terminal",
+              disabledReason: blocked,
+              recovery: {
+                label: "Retry terminal discovery",
+                disabled: false,
+                onRun: onRetryDiscovery,
+              },
+            },
+          ],
+          terminals: createTerminalSessionsFixture({
+            discoveryError: "The host did not answer.",
+            discoveryNotice,
+            startBlockedReason: blocked,
+            onDismissDiscoveryError,
+            onRetryDiscovery,
+          }),
+        })}
+      />
+    );
+    const view = renderWithConnection(panel("The host did not answer."));
+    expect(screen.getAllByRole("button", { name: "Retry terminal discovery" })).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss terminal discovery error" }));
+    expect(onDismissDiscoveryError).toHaveBeenCalledTimes(1);
+
+    view.rerender(panel(null));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: "Terminal" }).textContent).toContain(blocked);
+    fireEvent.click(screen.getByRole("button", { name: "Retry terminal discovery" }));
+    expect(onRetryDiscovery).toHaveBeenCalledTimes(1);
+  });
+
   test("offers a Browser card with its reason when a new browser tab cannot open", () => {
     renderWithConnection(
       <SessionPanel

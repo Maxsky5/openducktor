@@ -1,7 +1,10 @@
 import type { ReactElement, ReactNode } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
 import { useAppTheme } from "@/theme/app-theme-context";
+import { useCommandGate } from "@/host-session/active-session-context";
+import { Button } from "@/ui/button";
 import { Icon, type IconName } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { useAnnounce } from "@/ui/use-announce";
@@ -23,6 +26,7 @@ const TONE_ICONS = {
  * A full-width notice strip, as the desktop terminal status messages and exit notice. `edge`
  * places the border between the strip and the terminal: a strip above it has a bottom border, a
  * strip below it a top border. The icon and the text name the tone, so color is not the only sign.
+ * `onDismiss` adds a Dismiss button after `action`.
  */
 export function TerminalNoticeStrip({
   tone,
@@ -30,13 +34,16 @@ export function TerminalNoticeStrip({
   message,
   edge,
   action,
+  onDismiss,
 }: {
   tone: TerminalNoticeTone;
   title: string;
   message?: string | null | undefined;
   edge: "top" | "bottom";
   action?: ReactNode;
+  onDismiss?: () => void;
 }): ReactElement {
+  const hasActions = Boolean(action) || onDismiss !== undefined;
   const theme = useAppTheme();
   styles.useVariants({ tone, edge });
   useAnnounce(message ? `${title} ${message}` : title);
@@ -48,7 +55,7 @@ export function TerminalNoticeStrip({
   return (
     <View
       style={styles.strip}
-      accessible={!action}
+      accessible={!hasActions}
       accessibilityRole={tone === "error" ? "alert" : "text"}
       accessibilityLiveRegion="polite"
     >
@@ -61,19 +68,56 @@ export function TerminalNoticeStrip({
         </Text>
         {message ? ` ${message}` : null}
       </Text>
-      {action ? <View style={styles.action}>{action}</View> : null}
+      {hasActions ? (
+        <View style={styles.actions}>
+          {action}
+          {onDismiss ? (
+            <Button label="Dismiss" size="sm" variant="outline" onPress={onDismiss} />
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
 
+/**
+ * Reads the terminal list again after a discovery failure. The discovery strip names the failure
+ * in its title, so it passes the short `Retry` label to keep room for the message.
+ */
+export function TerminalDiscoveryRetryButton({
+  model,
+  label = "Retry terminal discovery",
+}: {
+  model: Pick<TerminalSessionsModel, "isLoading" | "onRetryDiscovery">;
+  label?: string;
+}): ReactElement {
+  const gate = useCommandGate();
+  return (
+    <Button
+      label={label}
+      accessibilityLabel="Retry terminal discovery"
+      size="sm"
+      variant="outline"
+      disabled={!gate.open || model.isLoading}
+      onPress={model.onRetryDiscovery}
+    />
+  );
+}
+
 /** The terminal socket failed. A terminal screen shows it once, above its list or its terminal. */
-export function TerminalTransportNotice({ message }: { message: string }): ReactElement {
+export function TerminalTransportNotice({
+  model,
+}: {
+  model: Pick<TerminalSessionsModel, "transportNotice" | "onDismissTransportError">;
+}): ReactElement | null {
+  if (model.transportNotice === null) return null;
   return (
     <TerminalNoticeStrip
       tone="error"
       edge="top"
       title="Terminal connection failed."
-      message={`${message} The app reconnects and attaches again.`}
+      message={`${model.transportNotice} The app reconnects and attaches again.`}
+      onDismiss={model.onDismissTransportError}
     />
   );
 }
@@ -101,5 +145,5 @@ const styles = StyleSheet.create((theme) => ({
   // The icon sits on the first text line.
   icon: { paddingTop: 2 },
   body: { flex: 1 },
-  action: { alignSelf: "center" },
+  actions: { flexDirection: "row", alignSelf: "center", gap: theme.space.sm },
 }));

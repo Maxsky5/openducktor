@@ -392,20 +392,12 @@ describe("InteractiveTerminal policies", () => {
   });
 
   test.each([
-    { exitCode: 0, signal: null, expected: { text: "Exited with code 0.", isFailure: false } },
-    { exitCode: 1, signal: null, expected: { text: "Exited with code 1.", isFailure: true } },
-    {
-      exitCode: 0,
-      signal: "SIGTERM",
-      expected: { text: "Exited with code 0 (SIGTERM).", isFailure: true },
-    },
-    {
-      exitCode: null,
-      signal: null,
-      expected: { text: "Exited with code unknown.", isFailure: true },
-    },
+    { exitCode: 0, signal: null, expected: "Exited with code 0." },
+    { exitCode: 1, signal: null, expected: "Exited with code 1." },
+    { exitCode: 0, signal: "SIGTERM", expected: "Exited with code 0 (SIGTERM)." },
+    { exitCode: null, signal: null, expected: "Exited with code unknown." },
   ])(
-    "reports exit code $exitCode with signal $signal as a failure only when it is not clean",
+    "reports exit code $exitCode with signal $signal as exit status text",
     ({ exitCode, signal, expected }) => {
       const exits: unknown[] = [];
       handleTerminalMetadataFrame(

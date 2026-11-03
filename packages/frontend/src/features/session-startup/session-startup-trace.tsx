@@ -27,7 +27,7 @@ import {
 import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/terminal-command-result";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { terminalCommandResultNotice } from "@/features/terminals/terminal-command-result";
+import { actionResultText } from "./action-result-text";
 import { startupPresentation, type StartupPresentation } from "./startup-presentation";
 import {
   Trace,
@@ -325,9 +325,7 @@ function StartupStepRow({
       )}
       {step.failure && !expanded ? (
         <p className="mb-1 ml-9 break-words text-xs text-destructive">
-          {step.action?.result
-            ? terminalCommandResultNotice(step.action.result).text
-            : step.failure.message}
+          {step.action?.result ? actionResultText(step.action.result) : step.failure.message}
         </p>
       ) : null}
     </li>
@@ -433,9 +431,7 @@ function StartupActionDetails({
           : "This action can continue in its terminal after the session is ready."}
       </p>
       {result ? (
-        <p className={actionFailed ? "text-destructive" : undefined}>
-          {terminalCommandResultNotice(result).text}
-        </p>
+        <p className={actionFailed ? "text-destructive" : undefined}>{actionResultText(result)}</p>
       ) : null}
       {expanded && action.terminalId ? (
         <Suspense

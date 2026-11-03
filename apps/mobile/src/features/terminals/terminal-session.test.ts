@@ -196,12 +196,32 @@ describe("createTerminalSession", () => {
     expect(view.session.read()).toMatchObject({
       inputEnabled: false,
       lifecycle: "exited",
-      exit: { text: "Exited with code 2.", isFailure: true },
+      exit: "Exited with code 2.",
     });
     view.session.receive({ type: "terminal_input", data: "ls\r" });
     await flush();
     expect(view.calls.some((call) => call.startsWith("write"))).toBe(false);
     expect(view.lifecycles).toEqual(["exited"]);
+  });
+
+  test("keeps a dismissed terminal problem hidden when the host sends it again", () => {
+    const view = setup();
+    view.attach();
+    view.emit({ version, type: "output_overflow", terminalId: TERMINAL_ID });
+    expect(view.session.read().attention).toBe("Output overflow stopped this terminal.");
+    view.session.dismissAttention();
+    expect(view.session.read().attention).toBeNull();
+
+    // A new attach clears the problem, then the host sends its failure again.
+    view.session.detachPage();
+    view.attach();
+    view.emit({ version, type: "output_overflow", terminalId: TERMINAL_ID });
+    expect(view.session.read().attention).toBeNull();
+    view.session.receive({ type: "terminal_error", message: "The terminal page failed." });
+    expect(view.session.read().attention).toBe("The terminal page failed.");
+    // After a different problem, the dismissed one is a new failure again.
+    view.emit({ version, type: "output_overflow", terminalId: TERMINAL_ID });
+    expect(view.session.read().attention).toBe("Output overflow stopped this terminal.");
   });
 
   test("takes no input for a terminal that the host forgot", async () => {

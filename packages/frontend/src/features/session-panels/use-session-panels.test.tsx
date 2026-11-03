@@ -211,6 +211,23 @@ describe("useSessionPanels", () => {
     ]);
   });
 
+  test("offers discovery Retry on the terminal card while discovery fails", () => {
+    const onRetryDiscovery = () => {};
+    const view = renderPanels(newTaskOwner(), {
+      startBlockedReason: "Terminal discovery failed. Retry terminal discovery.",
+      discoveryError: "Offline.",
+      onRetryDiscovery,
+    });
+
+    expect(view.result.current.bottom.launcher).toEqual([
+      {
+        kind: "terminal",
+        disabledReason: "Terminal discovery failed. Retry terminal discovery.",
+        recovery: { label: "Retry terminal discovery", disabled: false, onRun: onRetryDiscovery },
+      },
+    ]);
+  });
+
   test("starts a terminal in place of the right panel New tab and focuses it", () => {
     const view = renderPanels(newTaskOwner(), {});
 

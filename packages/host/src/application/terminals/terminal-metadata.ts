@@ -34,10 +34,8 @@ export const createTerminalMetadata = (sessions: ReadonlyMap<string, TerminalSes
   });
   const read = (session: TerminalSession): TerminalActivity | null => {
     if (!isLiveTerminal(session) || session.command === null) return null;
-    const summary = copyTerminalSummary(session);
-    delete summary.initialCommandResult;
     return {
-      summary,
+      summary: copyTerminalSummary(session),
       command: session.command,
       restartable: canRestartCommand(session),
     };

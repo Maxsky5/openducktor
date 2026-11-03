@@ -32,7 +32,6 @@ import {
   releaseStartupPreparations,
 } from "../sessions/startup/startup-prepared-handoff";
 import { releaseStartupTerminalOutput } from "../terminals/use-startup-terminal-output";
-import { updateTerminalCommandResults } from "../queries/terminals";
 import { createTaskEditorDraftState } from "../tasks/create/task-editor-drafts";
 
 export type ClientConnectionOptions = {
@@ -164,15 +163,11 @@ export const createClientConnection = ({
     }
   };
   let disposal: Promise<void> | null = null;
-  const startupAttempts = createStartupAttemptStore(
-    host,
-    {
-      adopt: (snapshot) => adoptStartupPreparedHandoff(queryClient, snapshot),
-      isCurrent: (id, handoff) => isStartupPreparedHandoffCurrent(queryClient, id, handoff),
-      release: (id) => releaseStartupPreparationAttempt(queryClient, id),
-    },
-    (snapshot) => updateTerminalCommandResults(queryClient, snapshot),
-  );
+  const startupAttempts = createStartupAttemptStore(host, {
+    adopt: (snapshot) => adoptStartupPreparedHandoff(queryClient, snapshot),
+    isCurrent: (id, handoff) => isStartupPreparedHandoffCurrent(queryClient, id, handoff),
+    release: (id) => releaseStartupPreparationAttempt(queryClient, id),
+  });
   const connection: ClientConnection = {
     host,
     queryClient,

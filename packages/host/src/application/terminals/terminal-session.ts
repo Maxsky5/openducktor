@@ -90,7 +90,6 @@ export const settleCommandRun = (
     };
   }
   Deferred.doneUnsafe(run.result, Effect.succeed(outcome));
-  session.summary.initialCommandResult = outcome;
   run.onResult?.(outcome);
   delete run.onResult;
 };
