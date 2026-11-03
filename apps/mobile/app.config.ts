@@ -175,7 +175,7 @@ const config: ExpoConfig = {
   ],
   // Releases ship through the stores only; the app has no over-the-air updates.
   updates: { enabled: false },
-  experiments: { typedRoutes: false },
+  experiments: { typedRoutes: false, reactCompiler: true },
 };
 
 export default config;

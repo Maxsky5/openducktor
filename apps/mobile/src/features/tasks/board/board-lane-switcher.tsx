@@ -197,6 +197,9 @@ export const BoardLaneSwitcher = memo(function BoardLaneSwitcher({
     () => laneIds.map((id) => theme.lanes[id].border),
     [laneIds, theme.lanes],
   );
+  // The worklet reads the input range as a value. The React Compiler moves a callback out of a
+  // worklet, and the worklet then calls JavaScript from the UI thread.
+  const borderStops = useMemo(() => borders.map((_, index) => index), [borders]);
   const lastIndex = Math.max(columns.length - 1, 0);
   const position = useMemo(() => ({ scrollX, pageWidth }), [pageWidth, scrollX]);
 
@@ -209,14 +212,7 @@ export const BoardLaneSwitcher = memo(function BoardLaneSwitcher({
     return {
       opacity: 1,
       width: cell,
-      borderColor:
-        count < 2
-          ? borders[0]
-          : interpolateColor(
-              progress,
-              borders.map((_, index) => index),
-              borders,
-            ),
+      borderColor: count < 2 ? borders[0] : interpolateColor(progress, borderStops, borders),
       transform: [{ translateX: progress * cell }],
     };
   });
