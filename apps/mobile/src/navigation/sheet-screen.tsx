@@ -1,5 +1,5 @@
 import { type NativeStackNavigationOptions, Stack, useNavigation } from "expo-router";
-import { useIsFocused } from "expo-router/react-navigation";
+import { StackActions, useIsFocused } from "expo-router/react-navigation";
 import { useMinimumLoader } from "@openducktor/frontend-core/lib/use-minimum-loader";
 import {
   type ComponentRef,
@@ -110,7 +110,7 @@ export function SheetScreen({
   const close = useCallback(() => {
     const handler = closeHandler.current;
     if (handler) handler();
-    else navigation.goBack();
+    else navigation.dispatchSync(StackActions.pop());
   }, [navigation]);
   const [footers, setFooters] = useState(0);
   const claimFooter = useCallback(() => {

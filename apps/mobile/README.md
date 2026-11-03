@@ -98,6 +98,7 @@ Follow these rules, or sheets and screens open and close late. React Native show
 
 - Read `useIsFocused` only in a leaf component, as `PublishVisibleSession` does. Use `useFocusEffect` when the focus only starts or stops work, as `BorderRay` does.
 - Make a session store selector return only the values that its views show.
+- Close a sheet with `navigation.dispatchSync`, as `SheetScreen` does. `goBack` and `router` calls go through the routing queue of Expo Router, which adds a render and a scan of the whole tree.
 - Give each endless CSS animation its style from `useEndlessAnimation`. Start and stop a shared-value animation in `useFocusEffect`.
 - Do not read a shared value with `get()` on the JavaScript thread on a tap path.
 - Measure a speed change on a release build with `atrace`, from the finger release to the first frame that shows the result.
