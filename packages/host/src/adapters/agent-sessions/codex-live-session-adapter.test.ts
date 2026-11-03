@@ -744,13 +744,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     );
 
     await Effect.runPromise(
-      prepared.adapter.sessionImport.inspectSession({
-        workspaceId: "workspace-1",
-        repoPath: "/repo-a",
-        runtimeKind: "codex",
-        workingDirectory: "/repo-a",
-        externalSessionId: "thread-1",
-      }),
+      prepared.adapter.sessionImport.inspectSession({ ...ref, workspaceId: "workspace-1" }),
     );
 
     const workspaceScope = { kind: "repository", workspaceId: "workspace-1" };

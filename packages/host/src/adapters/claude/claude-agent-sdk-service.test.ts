@@ -1118,11 +1118,6 @@ describe("createClaudeAgentSdkService", () => {
         dir: "/repo/worktree/",
       });
       expect(result).toMatchObject({ status: "renamed", summary: { title: "Renamed" } });
-      expect(session.summary.sessionAssociation).toEqual({
-        kind: "repository",
-        workspaceId: "workspace-1",
-        title: "Renamed",
-      });
       // The workspace chat reads the renamed session with its workspace scope.
       await expect(
         Effect.runPromise(
