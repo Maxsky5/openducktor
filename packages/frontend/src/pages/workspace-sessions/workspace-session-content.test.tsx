@@ -1,6 +1,7 @@
 import {
   SessionViewContext,
   SessionViewShownContext,
+  useOnSessionViewHide,
 } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { expect, mock, spyOn, test } from "bun:test";
 import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
@@ -190,12 +191,15 @@ function renderClosedSession(
   };
 }
 
-test("an inactive chat closes its tool confirmation and keeps it closed on return", async () => {
+test("an inactive chat keeps its tool content and closes a tool dialog on hide", async () => {
   function Tools() {
     const [open, setOpen] = useState(false);
+    // The panel keeps tool content mounted, so each tool closes its own dialog on hide.
+    useOnSessionViewHide(() => setOpen(false));
     return (
       <>
         <button onClick={() => setOpen(true)}>Discard changes</button>
+        <p data-testid="tool-dialog-open">{open ? "open" : "closed"}</p>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent>
             <DialogTitle>Discard changes</DialogTitle>
@@ -211,12 +215,15 @@ test("an inactive chat closes its tool confirmation and keeps it closed on retur
   const queryClient = newQueryClient();
   const view = renderClosedSession(queryClient, "main", undefined, record, null, undefined, true);
   try {
-    fireEvent.click(view.getByRole("button", { name: "Discard changes" }));
-    const dialog = await view.findByRole("dialog", { name: "Discard changes" });
+    const discard = view.getByRole("button", { name: "Discard changes" });
+    fireEvent.click(discard);
+    await view.findByRole("dialog", { name: "Discard changes" });
+    expect(view.getByTestId("tool-dialog-open").textContent).toBe("open");
     view.setVisible(false);
-    expect(dialog.isConnected).toBe(false);
+    expect(view.getByTestId("tool-dialog-open").textContent).toBe("closed");
     view.setVisible(true);
-    expect(view.queryByRole("dialog")).toBeNull();
+    expect(view.getByTestId("tool-dialog-open").textContent).toBe("closed");
+    expect(view.getByRole("button", { name: "Discard changes" })).toBe(discard);
   } finally {
     view.unmount();
     queryClient.clear();

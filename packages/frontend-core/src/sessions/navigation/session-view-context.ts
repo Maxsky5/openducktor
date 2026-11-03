@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useEffectEvent } from "react";
 
 /** The kept view of the content. Its content turns active after the view shows. */
 export const SessionViewContext = createContext<{
@@ -18,15 +18,16 @@ export function useSessionViewShown(): boolean {
 }
 
 /**
- * Counts how often the content of the view turned inactive. A key with this count gives content a
- * fresh state for each visit. Under `SessionViewShownActivity`, the fresh content renders while
- * the view is hidden, so it is ready when the view shows again.
+ * Runs `onHide` when the session view leaves the screen. Content stays mounted with its kept
+ * view, so a component that keeps a dialog open in its own state closes it here. A hidden
+ * `SessionViewShownActivity` stops the effects of its content, so the hide runs as the cleanup
+ * of the shown effect.
  */
-export function useSessionViewVisit(): number {
-  const isActive = useSessionViewActive();
-  const [visit, setVisit] = useState({ isActive, count: 0 });
-  if (visit.isActive === isActive) return visit.count;
-  const next = { isActive, count: visit.count + (isActive ? 0 : 1) };
-  setVisit(next);
-  return next.count;
+export function useOnSessionViewHide(onHide: () => void): void {
+  const isShown = useSessionViewShown();
+  const hide = useEffectEvent(onHide);
+  useEffect(() => {
+    if (!isShown) return;
+    return () => hide();
+  }, [isShown]);
 }

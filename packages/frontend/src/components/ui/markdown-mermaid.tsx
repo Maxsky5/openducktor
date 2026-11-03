@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { Dialog, DialogTrigger } from "./dialog";
 import { MarkdownMermaidDialog } from "./markdown-mermaid-dialog";
 import { drawMermaidSvg, peekMermaidSvg } from "./markdown-mermaid-svg-cache";
@@ -59,6 +60,8 @@ export function MarkdownMermaid({
     return svg === null ? null : { source, preview: { status: "ready", svg } };
   });
   const [openSvg, setOpenSvg] = useState<string | null>(null);
+  // A diagram dialog sits outside the hidden view, so a switch closes it.
+  useOnSessionViewHide(() => setOpenSvg(null));
   const viewportRef = useRef<HTMLDivElement>(null);
   const drawnSource = drawn?.source;
 

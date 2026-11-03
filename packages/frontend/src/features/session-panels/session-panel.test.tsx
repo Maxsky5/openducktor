@@ -143,6 +143,38 @@ describe("SessionPanel", () => {
     expect(screen.getAllByRole("tab").length).toBeGreaterThan(0);
   });
 
+  test("keeps the tool content of a kept view mounted across a switch", () => {
+    let mounts = 0;
+    function Content(): ReactElement {
+      const [mount] = useState(() => {
+        mounts += 1;
+        return mounts;
+      });
+      return <p data-testid="tool-content">Diff content, mount {mount}</p>;
+    }
+    const model = createSessionPanelFixture({
+      tabs: [{ id: "diffs", kind: "diffs" }],
+      selectedTabId: "diffs",
+    });
+    const panel = (isShown: boolean) => (
+      <SessionViewContext value={{ id: "view", isActive: isShown }}>
+        <SessionViewShownContext value={isShown}>
+          <SessionPanel model={model} toolTabs={{ diffs: { content: <Content /> } }} />
+        </SessionViewShownContext>
+      </SessionViewContext>
+    );
+    const view = renderWithConnection(panel(true));
+    const content = view.getByTestId("tool-content");
+    expect(mounts).toBe(1);
+
+    view.rerender(panel(false));
+    view.rerender(panel(true));
+
+    expect(mounts).toBe(1);
+    expect(view.getByTestId("tool-content")).toBe(content);
+    view.unmount();
+  });
+
   test("shows each tab with its label, the selected tab, and a close button", () => {
     renderWithConnection(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
 
