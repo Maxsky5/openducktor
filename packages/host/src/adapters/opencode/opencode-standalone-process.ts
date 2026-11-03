@@ -8,7 +8,6 @@ import { randomBytes } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
 import {
   assertOpenCodeV2Connection,
-  OpenCodeOperationError,
   type OpenCodeRuntimeConnection,
 } from "@openducktor/adapters-opencode-sdk";
 import { Effect } from "effect";
@@ -20,7 +19,12 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
-import { runtimeExecutableStartFailureMessage } from "../runtimes/runtime-executable-guidance";
+import {
+  incompatibleRuntimeExecutableMessage,
+  notReadyWithin,
+  type RuntimeExecutableGuidance,
+  runtimeExecutableStartError,
+} from "../runtimes/runtime-executable-guidance";
 import {
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
@@ -31,21 +35,21 @@ import {
 
 const readinessLineSchema = z.object({ url: z.string() });
 
-/** Returns the readiness URL, or null when the line is not the OpenCode 2 readiness JSON. */
-const readReadinessUrl = (line: string): string | null => {
-  try {
-    const parsed = readinessLineSchema.safeParse(JSON.parse(line));
-    return parsed.success ? parsed.data.url : null;
-  } catch {
-    return null;
-  }
+const OPENCODE_GUIDANCE: RuntimeExecutableGuidance = {
+  kind: "opencode",
+  requirement: "OpenDucktor needs OpenCode 2 or later.",
+  update: "run `opencode upgrade`",
 };
 
-/** Keeps only the reason of a failed V2 check, because the start failure message adds the next action. */
-const readinessFailureDetail = (cause: unknown): string =>
-  cause instanceof OpenCodeOperationError
-    ? (cause.failure.runtimeOperationFailure.nativeReason ?? cause.message)
-    : errorMessage(cause);
+/** The executable started, but it is not an OpenCode 2 server. */
+export class OpenCodeUnsupportedError extends HostOperationError<{ executablePath: string }> {}
+
+const unsupportedOpenCode = (executablePath: string, problem: string): OpenCodeUnsupportedError =>
+  new OpenCodeUnsupportedError({
+    operation: "opencodeStandalone.start",
+    message: incompatibleRuntimeExecutableMessage(OPENCODE_GUIDANCE, executablePath, problem),
+    details: { executablePath },
+  });
 
 type StandaloneChild = ChildProcessByStdio<Writable, Readable, Readable>;
 export type OpenCodeStandaloneOptions = {
@@ -126,37 +130,40 @@ export const acquireOpenCodeStandalone = (
         firstLine += chunk.toString("utf8");
         if (firstLine.length > 65_536) {
           parsed = true;
-          rejectReady(new Error("OpenCode returned an oversized readiness line."));
+          rejectReady(new Error("it returned an oversized readiness line"));
           return;
         }
         const end = firstLine.indexOf("\n");
         if (end < 0) return;
         parsed = true;
         const line = firstLine.slice(0, end).trim();
+        let url: URL;
         try {
-          const readinessUrl = readReadinessUrl(line);
-          if (readinessUrl === null) {
-            throw new Error(
-              `it printed "${redact(line).slice(0, 200)}" instead of the OpenCode 2 readiness line`,
-            );
-          }
-          const url = new URL(readinessUrl);
-          if (
-            url.protocol !== "http:" ||
-            url.hostname !== "127.0.0.1" ||
-            !url.port ||
-            Number(url.port) <= 0 ||
-            url.username ||
-            url.password ||
-            url.search ||
-            url.hash ||
-            url.pathname !== "/"
-          )
-            throw new Error("OpenCode did not return an owned loopback server URL.");
-          resolveReady(url.origin);
-        } catch (cause) {
-          rejectReady(cause);
+          url = new URL(readinessLineSchema.parse(JSON.parse(line)).url);
+        } catch {
+          rejectReady(
+            unsupportedOpenCode(
+              input.executablePath,
+              `printed "${redact(line).slice(0, 200)}" instead of the OpenCode 2 readiness line`,
+            ),
+          );
+          return;
         }
+        if (
+          url.protocol !== "http:" ||
+          url.hostname !== "127.0.0.1" ||
+          !url.port ||
+          Number(url.port) <= 0 ||
+          url.username ||
+          url.password ||
+          url.search ||
+          url.hash ||
+          url.pathname !== "/"
+        ) {
+          rejectReady(new Error("it did not return an owned loopback server URL"));
+          return;
+        }
+        resolveReady(url.origin);
       });
       child.once("error", (cause) => rejectReady(cause));
       child.once("close", (code, signal) => {
@@ -193,31 +200,33 @@ export const acquireOpenCodeStandalone = (
               endpoint,
               authentication: { type: "basic", username: "opencode", password },
             };
-            await assertOpenCodeV2Connection(connection, signal);
+            await assertOpenCodeV2Connection(connection, signal).catch(() => {
+              throw unsupportedOpenCode(
+                input.executablePath,
+                "did not report an authenticated OpenCode 2 server",
+              );
+            });
             return connection;
           },
           catch: (cause) =>
-            new HostOperationError({
-              operation: "opencodeStandalone.start",
-              message: runtimeExecutableStartFailureMessage(
-                "opencode",
-                input.executablePath,
-                redact(readinessFailureDetail(cause)),
-              ),
-              details: { executablePath: input.executablePath },
-            }),
+            cause instanceof OpenCodeUnsupportedError
+              ? cause
+              : runtimeExecutableStartError({
+                  guidance: OPENCODE_GUIDANCE,
+                  operation: "opencodeStandalone.start",
+                  executablePath: input.executablePath,
+                  detail: redact(errorMessage(cause)),
+                }),
         }).pipe(
           Effect.timeoutOrElse({
             duration: `${input.startupTimeoutMs ?? 30_000} millis`,
             orElse: () =>
               Effect.fail(
-                new HostOperationError({
+                runtimeExecutableStartError({
+                  guidance: OPENCODE_GUIDANCE,
                   operation: "opencodeStandalone.start",
-                  message: runtimeExecutableStartFailureMessage(
-                    "opencode",
-                    input.executablePath,
-                    `it was not ready within ${(input.startupTimeoutMs ?? 30_000) / 1000} seconds`,
-                  ),
+                  executablePath: input.executablePath,
+                  detail: notReadyWithin(input.startupTimeoutMs ?? 30_000),
                 }),
               ),
           }),

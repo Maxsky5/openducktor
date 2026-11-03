@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
+import { INLINE_CODE_CLASS_NAME } from "@/lib/inline-code";
 
 const COMMAND_PATTERN = /`([^`]+)`/g;
 
@@ -9,7 +10,7 @@ export function RuntimeMessageText({ text }: { text: string }): ReactElement {
   for (const match of text.matchAll(COMMAND_PATTERN)) {
     nodes.push(text.slice(cursor, match.index));
     nodes.push(
-      <code key={match.index} className="rounded bg-muted px-1 font-mono text-xs">
+      <code key={match.index} className={INLINE_CODE_CLASS_NAME}>
         {match[1]}
       </code>,
     );

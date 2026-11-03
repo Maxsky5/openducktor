@@ -1,11 +1,21 @@
 import type { SDKControlInitializeResponse } from "@anthropic-ai/claude-agent-sdk";
 import { RuntimeExecutableIncompatibleError } from "../../ports/runtime-executable-probe-port";
 import {
-  CLAUDE_CODE_MINIMUM_VERSION,
-  runtimeUpdateAdvice,
+  incompatibleRuntimeExecutableMessage,
+  type RuntimeExecutableGuidance,
 } from "../runtimes/runtime-executable-guidance";
 
 type Version = readonly [major: number, minor: number, patch: number];
+
+/** OpenDucktor needs this Claude Code release to track background work. */
+const CLAUDE_CODE_MINIMUM_VERSION: Version = [2, 1, 306];
+export const CLAUDE_CODE_MINIMUM_VERSION_TEXT = CLAUDE_CODE_MINIMUM_VERSION.join(".");
+
+export const CLAUDE_CODE_GUIDANCE: RuntimeExecutableGuidance = {
+  kind: "claude",
+  requirement: `OpenDucktor needs Claude Code ${CLAUDE_CODE_MINIMUM_VERSION_TEXT} or later.`,
+  update: "run `claude update`",
+};
 
 /** Returns a negative number, zero, or a positive number when `left` is older, equal, or newer. */
 const compareVersions = (left: Version, right: Version): number =>
@@ -31,6 +41,10 @@ export const getClaudeCodeCompatibilityError = (
       ? "did not report its version"
       : `reported unsupported version '${version}'`;
   return new RuntimeExecutableIncompatibleError({
-    message: `Claude Code at '${executablePath}' ${reportedVersion}. ${runtimeUpdateAdvice("claude")}`,
+    message: incompatibleRuntimeExecutableMessage(
+      CLAUDE_CODE_GUIDANCE,
+      executablePath,
+      reportedVersion,
+    ),
   });
 };

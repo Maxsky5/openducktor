@@ -109,7 +109,7 @@ describe("createRuntimeHealthProbe", () => {
     expect(calls).toEqual([["claude", executablePaths.claude]]);
   });
 
-  test("reports the found version and update steps for an incompatible executable", async () => {
+  test("keeps the guidance of an incompatible executable and the found version", async () => {
     const systemCommands = createSystemCommands({ version: "edgee 0.1.7" });
     const probe = createProbe(
       systemCommands,
@@ -130,34 +130,7 @@ describe("createRuntimeHealthProbe", () => {
 
     expect(health.ok).toBe(false);
     expect(health.version).toBe("edgee 0.1.7");
-    expect(health.error).toBe(
-      `OpenCode at '${executablePaths.opencode}' is not compatible with OpenDucktor. OpenDucktor needs OpenCode 2 or later. Run \`opencode upgrade\`, or select another OpenCode executable. Then try again.`,
-    );
-  });
-
-  test("returns a short user-facing error when the selected executable fails its runtime protocol", async () => {
-    const systemCommands = createSystemCommands({ version: "codex-cli 0.147.0" });
-    const probe = createProbe(
-      systemCommands,
-      createExecutableProbes(() =>
-        Effect.fail(
-          new RuntimeExecutableIncompatibleError({
-            message:
-              "Claude Code process exited with code 2. stderr: \u001b[31merror: unexpected argument '--output-format' found\u001b[0m",
-          }),
-        ),
-      ),
-    );
-
-    const health = await Effect.runPromise(
-      probe.getRuntimeHealth("claude", executablePaths.claude),
-    );
-
-    expect(health.error).toBe(
-      `Claude Code at '${executablePaths.claude}' is not compatible with OpenDucktor. OpenDucktor needs Claude Code 2.1.306 or later. Run \`claude update\`, or select another Claude Code executable. Then try again.`,
-    );
-    expect(health.error).not.toContain("\u001b");
-    expect(health.error).not.toContain("unexpected argument");
+    expect(health.error).toBe(`OpenCode health protocol failed for ${executablePaths.opencode}.`);
   });
 
   test("reports an operational probe failure with its own message and the found version", async () => {

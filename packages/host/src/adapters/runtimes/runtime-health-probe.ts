@@ -1,14 +1,10 @@
 import type { RuntimeHealth, RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
-import {
-  RuntimeExecutableIncompatibleError,
-  type RuntimeExecutableProbesByKind,
-} from "../../ports/runtime-executable-probe-port";
+import type { RuntimeExecutableProbesByKind } from "../../ports/runtime-executable-probe-port";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SystemCommandPort, SystemCommandRunOptions } from "../../ports/system-command-port";
 import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-discovery-port";
-import { incompatibleRuntimeExecutableMessage } from "./runtime-executable-guidance";
 
 const VERSION_TIMEOUT_MS = 2_000;
 const OPENCODE_VERSION_OPTIONS: SystemCommandRunOptions = {
@@ -19,18 +15,18 @@ const VERSION_OPTIONS_BY_KIND = {
   codex: { timeoutMs: VERSION_TIMEOUT_MS },
   opencode: OPENCODE_VERSION_OPTIONS,
 } satisfies Record<RuntimeKind, SystemCommandRunOptions>;
-const runtimeHealthFailure = (
+const runtimeHealth = (
   kind: RuntimeKind,
   executablePath: string,
   version: string | null,
-  detail: string,
+  error: string | null,
 ): RuntimeHealth => ({
   kind,
   enabled: true,
-  ok: false,
+  ok: error === null,
   executablePath,
   version,
-  error: detail,
+  error,
 });
 
 export const createRuntimeHealthProbe = (
@@ -52,12 +48,7 @@ export const createRuntimeHealthProbe = (
           validateExactToolPath(toolDiscovery, kind, executablePath),
         );
         if (validatedPath._tag === "Failure") {
-          return runtimeHealthFailure(
-            kind,
-            executablePath,
-            null,
-            errorMessage(validatedPath.failure),
-          );
+          return runtimeHealth(kind, executablePath, null, errorMessage(validatedPath.failure));
         }
         const binary = validatedPath.success.path;
         const [probeResult, version] = yield* Effect.all(
@@ -67,26 +58,13 @@ export const createRuntimeHealthProbe = (
           ] as const,
           { concurrency: 2 },
         );
-        if (probeResult._tag === "Failure") {
-          // Keep the version that the user has installed beside every probe failure.
-          const failure = probeResult.failure;
-          return runtimeHealthFailure(
-            kind,
-            binary,
-            version,
-            failure instanceof RuntimeExecutableIncompatibleError
-              ? incompatibleRuntimeExecutableMessage(kind, binary)
-              : failure.message,
-          );
-        }
-        return {
+        // Probe failures carry their own guidance. Keep the installed version beside each one.
+        return runtimeHealth(
           kind,
-          enabled: true,
-          ok: true,
-          executablePath: binary,
+          binary,
           version,
-          error: null,
-        } satisfies RuntimeHealth;
+          probeResult._tag === "Failure" ? probeResult.failure.message : null,
+        );
       });
     },
   };

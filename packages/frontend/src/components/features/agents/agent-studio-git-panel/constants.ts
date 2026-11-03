@@ -39,9 +39,6 @@ export const GIT_PANEL_TABS: Array<{ tab: GitPanelTab; label: string; testId: st
 
 export const PRELOAD_DIFF_LIMIT = 12;
 
-export const INLINE_CODE_CLASS_NAME =
-  "rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground";
-
 /**
  * Minimum height in pixels of the button in a file list row in each view. The row border adds 1px.
  * List view rows have a directory line under the file name. Tree view rows show only the name, so they are shorter.

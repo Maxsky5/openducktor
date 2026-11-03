@@ -11,11 +11,7 @@ import {
   type HostOperationErrorAggregate,
 } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
-import {
-  discoverToolFresh,
-  type ToolDiscoveryPort,
-  validateExactToolPath,
-} from "../../ports/tool-discovery-port";
+import { discoverToolFresh, type ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { RuntimeDefinitionsService } from "./runtime-definitions-service";
 
 export type RuntimeExecutableCheckService = {
@@ -36,6 +32,17 @@ const invalidRow = (
   error: errorMessage(cause),
 });
 
+const checkHealth = (runtimeHealth: RuntimeHealthPort, kind: RuntimeKind, executablePath: string) =>
+  runtimeHealth.getRuntimeHealth(kind, executablePath).pipe(
+    Effect.map((health): RuntimeExecutableCheckResult => ({
+      kind,
+      path: health.executablePath ?? executablePath,
+      ok: health.ok,
+      version: health.version,
+      error: health.error ?? null,
+    })),
+  );
+
 const checkRuntimeExecutable = ({
   input,
   kind,
@@ -48,25 +55,15 @@ const checkRuntimeExecutable = ({
   toolDiscovery: ToolDiscoveryPort;
 }) =>
   Effect.gen(function* () {
-    const suppliedPath = input.mode === "validate" ? (input.paths[kind] ?? "") : "";
-    const resolution = yield* Effect.result(
-      input.mode === "discover"
-        ? discoverToolFresh(toolDiscovery, kind)
-        : validateExactToolPath(toolDiscovery, kind, suppliedPath),
-    );
-    if (resolution._tag === "Failure") {
-      return invalidRow(kind, suppliedPath, resolution.failure);
+    // The health probe validates a supplied path, so only discovery needs a first step.
+    if (input.mode === "validate") {
+      return yield* checkHealth(runtimeHealth, kind, input.paths[kind] ?? "");
     }
-
-    const executablePath = resolution.success.path;
-    const health = yield* runtimeHealth.getRuntimeHealth(kind, executablePath);
-    return {
-      kind,
-      path: health.executablePath ?? executablePath,
-      ok: health.ok,
-      version: health.version,
-      error: health.error ?? null,
-    } satisfies RuntimeExecutableCheckResult;
+    const discovery = yield* Effect.result(discoverToolFresh(toolDiscovery, kind));
+    if (discovery._tag === "Failure") {
+      return invalidRow(kind, "", discovery.failure);
+    }
+    return yield* checkHealth(runtimeHealth, kind, discovery.success.path);
   });
 
 export const createRuntimeExecutableCheckService = ({

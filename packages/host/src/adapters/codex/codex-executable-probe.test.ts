@@ -101,7 +101,7 @@ describe("verifyCodexAppServerProtocol", () => {
     );
 
     expect(failure.message).toBe(
-      "Codex at '/usr/local/bin/codex' did not start: Error loading configuration. OpenDucktor needs a Codex version with the `codex app-server` command. Fix the reported problem, or update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`. Then try again.",
+      "Codex at '/usr/local/bin/codex' did not start: Error loading configuration. Fix the reported problem, or update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`. Then try again.",
     );
   });
 

@@ -37,12 +37,25 @@ describe("OpenCode V2 executable probe", () => {
       await fixture.cleanup();
     }
   });
-  const failureDetails = {
-    v1: "did not start: The selected executable did not provide an authenticated OpenCode V2 server. OpenDucktor needs OpenCode 2 or later.",
-    malformed:
-      'did not start: it printed "OpenCode server listening" instead of the OpenCode 2 readiness line.',
-    silent: "did not start: it was not ready within 0.08 seconds.",
-    exit: "did not start: it stopped before it was ready: native startup failed.",
+  const expectedFailures = {
+    v1: {
+      tag: "RuntimeExecutableIncompatibleError",
+      detail:
+        "did not report an authenticated OpenCode 2 server. OpenDucktor needs OpenCode 2 or later. Run `opencode upgrade`",
+    },
+    malformed: {
+      tag: "RuntimeExecutableIncompatibleError",
+      detail: 'printed "OpenCode server listening" instead of the OpenCode 2 readiness line.',
+    },
+    silent: {
+      tag: "HostOperationError",
+      detail:
+        "did not start: it was not ready within 0.08 seconds. Fix the reported problem, or run `opencode upgrade`",
+    },
+    exit: {
+      tag: "HostOperationError",
+      detail: "did not start: it stopped before it was ready: native startup failed.",
+    },
   } as const;
   for (const mode of ["v1", "malformed", "silent", "exit"] as const) {
     test(`fails with an actionable error and cleans up a ${mode} executable`, async () => {
@@ -60,8 +73,9 @@ describe("OpenCode V2 executable probe", () => {
         const failure = await Effect.runPromise(
           Effect.flip(probe.probeExecutable(fixture.executablePath)),
         );
-        expect(failure.message).toContain(failureDetails[mode]);
-        expect(failure.message).toContain("or run `opencode upgrade`. Then try again.");
+        expect(failure._tag).toBe(expectedFailures[mode].tag);
+        expect(failure.message).toContain(expectedFailures[mode].detail);
+        expect(failure.message).toEndWith("Then try again.");
         expect(child?.stdin?.writableEnded).toBe(true);
       } finally {
         child?.kill();

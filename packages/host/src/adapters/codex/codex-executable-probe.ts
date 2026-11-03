@@ -21,7 +21,11 @@ import {
   type RuntimeExecutableProbeError,
   type RuntimeExecutableProbePort,
 } from "../../ports/runtime-executable-probe-port";
-import { runtimeExecutableStartFailureMessage } from "../runtimes/runtime-executable-guidance";
+import {
+  incompatibleRuntimeExecutableMessage,
+  type RuntimeExecutableGuidance,
+  runtimeExecutableStartError,
+} from "../runtimes/runtime-executable-guidance";
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type {
@@ -37,6 +41,13 @@ type CodexProbeTransport = Pick<
   CodexAppServerChildTransport,
   "close" | "notify" | "rejectPendingRequestsForShutdown" | "request"
 >;
+
+const CODEX_GUIDANCE: RuntimeExecutableGuidance = {
+  kind: "codex",
+  requirement: "OpenDucktor needs a Codex version with the `codex app-server` command.",
+  update:
+    "update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`",
+};
 
 /** Prefers the stderr of a Codex process that closed, because it names the startup problem. */
 const codexFailureDetail = (cause: CodexTransportBaseError): string =>
@@ -70,19 +81,19 @@ export const verifyCodexAppServerProtocol = (
     Effect.mapError((cause) =>
       cause instanceof HostValidationError
         ? new RuntimeExecutableIncompatibleError({
-            message:
-              "The executable did not complete the Codex app-server initialization protocol.",
-            cause,
-          })
-        : new HostOperationError({
-            operation: "codexExecutableProbe.initialize",
-            message: runtimeExecutableStartFailureMessage(
-              "codex",
+            message: incompatibleRuntimeExecutableMessage(
+              CODEX_GUIDANCE,
               executablePath,
-              codexFailureDetail(cause),
+              "did not complete the Codex app-server initialization protocol",
             ),
             cause,
-            details: { executablePath },
+          })
+        : runtimeExecutableStartError({
+            guidance: CODEX_GUIDANCE,
+            operation: "codexExecutableProbe.initialize",
+            executablePath,
+            detail: codexFailureDetail(cause),
+            cause,
           }),
     ),
   );

@@ -1,26 +1,42 @@
 import { describe, expect, test } from "bun:test";
-import { runtimeExecutableStartFailureMessage } from "./runtime-executable-guidance";
+import {
+  incompatibleRuntimeExecutableMessage,
+  type RuntimeExecutableGuidance,
+  runtimeExecutableStartError,
+} from "./runtime-executable-guidance";
 
-describe("runtimeExecutableStartFailureMessage", () => {
-  test("shows the runtime output as one plain line", () => {
-    const message = runtimeExecutableStartFailureMessage(
-      "codex",
-      "/usr/local/bin/codex",
-      "\u001b[31mError loading configuration:\u001b[0m\nmissing field `command`\n",
+const guidance: RuntimeExecutableGuidance = {
+  kind: "codex",
+  requirement: "OpenDucktor needs Codex 9.",
+  update: "run `codex update`",
+};
+
+const startMessage = (detail: string): string =>
+  runtimeExecutableStartError({
+    guidance,
+    operation: "test.start",
+    executablePath: "/usr/local/bin/codex",
+    detail,
+  }).message;
+
+describe("runtime executable guidance", () => {
+  test("names the problem, the requirement, and the update for an incompatible executable", () => {
+    expect(incompatibleRuntimeExecutableMessage(guidance, "/usr/local/bin/codex")).toBe(
+      "Codex at '/usr/local/bin/codex' is not compatible with OpenDucktor. OpenDucktor needs Codex 9. Run `codex update`, or select another Codex executable. Then try again.",
     );
+  });
 
-    expect(message).toStartWith(
-      "Codex at '/usr/local/bin/codex' did not start: Error loading configuration: missing field `command`. ",
+  test("shows the runtime output as one plain line", () => {
+    expect(
+      startMessage("\u001b[31mError loading configuration:\u001b[0m\nmissing field `command`\n"),
+    ).toBe(
+      "Codex at '/usr/local/bin/codex' did not start: Error loading configuration: missing field `command`. Fix the reported problem, or run `codex update`. Then try again.",
     );
   });
 
   test("keeps the end of long runtime output", () => {
-    const message = runtimeExecutableStartFailureMessage(
-      "claude",
-      "/bin/claude",
-      `${"x".repeat(2_000)} fatal error`,
+    expect(startMessage(`${"x".repeat(2_000)} fatal error`)).toContain(
+      `did not start: …${"x".repeat(588)} fatal error. Fix the reported problem`,
     );
-
-    expect(message).toContain(`did not start: …${"x".repeat(588)} fatal error. OpenDucktor needs`);
   });
 });

@@ -100,23 +100,35 @@ describe("runtime executable check service", () => {
     });
   });
 
-  test("validates supplied paths without automatic discovery", async () => {
-    const result = await Effect.runPromise(
-      service.check({
+  test("checks supplied paths without automatic discovery", async () => {
+    const checkedPaths: Array<[RuntimeKind, string]> = [];
+    const recordingService = createRuntimeExecutableCheckService({
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeHealth: {
+        ...runtimeHealth,
+        getRuntimeHealth(kind, executablePath) {
+          checkedPaths.push([kind, executablePath]);
+          return runtimeHealth.getRuntimeHealth(kind, executablePath);
+        },
+      },
+      toolDiscovery: {
+        ...toolDiscovery,
+        discoverTool: () => Effect.die(new Error("Validation must not run discovery.")),
+      },
+    });
+
+    await Effect.runPromise(
+      recordingService.check({
         mode: "validate",
         paths: { opencode: "/custom/opencode", codex: "", claude: "/custom/claude" },
       }),
     );
 
-    expect(result.runtimes.find((row) => row.kind === "opencode")).toMatchObject({
-      path: "/custom/opencode",
-      ok: true,
-    });
-    expect(result.runtimes.find((row) => row.kind === "codex")).toMatchObject({
-      path: "",
-      ok: false,
-      error: "Saved codex path is empty",
-    });
+    expect(checkedPaths).toEqual([
+      ["opencode", "/custom/opencode"],
+      ["codex", ""],
+      ["claude", "/custom/claude"],
+    ]);
   });
 
   test("validates only the supplied runtime path", async () => {
