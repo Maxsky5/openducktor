@@ -18,7 +18,7 @@ const ref = {
 
 const submission = (text: string): AgentMessageSubmitInput => ({
   ...ref,
-  sessionScope: { kind: "repository" },
+  sessionScope: { kind: "repository", workspaceId: "workspace-1" },
   submissionId: `submission-${text}`,
   mode: "default",
   parts: [{ kind: "text", text }],

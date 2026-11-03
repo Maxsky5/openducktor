@@ -19,9 +19,10 @@ describe("requireWorkflowAgentSessionScope", () => {
 
   test("returns actionable validation failures through the Effect error channel", async () => {
     const repositoryResult = await Effect.runPromise(
-      requireWorkflowAgentSessionScope({ kind: "repository" }, "resolve runtime policy").pipe(
-        Effect.result,
-      ),
+      requireWorkflowAgentSessionScope(
+        { kind: "repository", workspaceId: "repo" },
+        "resolve runtime policy",
+      ).pipe(Effect.result),
     );
     const missingResult = await Effect.runPromise(
       requireWorkflowAgentSessionScope(undefined, "resolve runtime policy").pipe(Effect.result),

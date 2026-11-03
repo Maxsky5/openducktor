@@ -10,10 +10,9 @@ export const useStableAgentSessionScope = (
   const role = scope?.kind === "workflow" ? scope.role : null;
 
   return useMemo(() => {
-    if (kind === "repository") {
-      return workspaceId ? { kind: "repository", workspaceId } : { kind: "repository" };
-    }
-    if (kind === "workflow" && taskId !== null && role !== null && workspaceId !== null) {
+    if (workspaceId === null) return null;
+    if (kind === "repository") return { kind: "repository", workspaceId };
+    if (kind === "workflow" && taskId !== null && role !== null) {
       return { kind: "workflow", workspaceId, taskId, role };
     }
     return null;

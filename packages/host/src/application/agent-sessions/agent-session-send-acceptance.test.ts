@@ -90,14 +90,16 @@ describe("message acceptance through the command and live adapter modules", () =
         prepared.adapter.resumeSession({
           resumeMode: "reattach",
           ...ref,
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "workspace-1" },
         }),
       );
       const commands = createAgentSessionCommandService({
         taskWorkflows: builtinTaskWorkflows,
         turnPreparation: commandPreparationFixture,
         readSessionRootRefs: () =>
-          Effect.succeed([{ ...ref, sessionScope: { kind: "repository" as const } }]),
+          Effect.succeed([
+            { ...ref, sessionScope: { kind: "repository" as const, workspaceId: "workspace-1" } },
+          ]),
         approvalPolicy: { reply: live.replyApproval },
         pauseForStop: () => Effect.void,
         runtime: live,
@@ -136,7 +138,7 @@ describe("message acceptance through the command and live adapter modules", () =
           commands.sendUserMessage({
             delivery: "new_turn",
             ...ref,
-            sessionScope: { kind: "repository" },
+            sessionScope: { kind: "repository", workspaceId: "workspace-1" },
             parts: [{ kind: "text", text: "Hello" }],
           }),
         ),

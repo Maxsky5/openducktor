@@ -103,7 +103,7 @@ describe("useAgentSessionApprovalActions", () => {
     const parentSession = sessionIdentity("parent-session");
     const childSession = {
       ...sessionIdentity("child-session"),
-      sessionAssociation: { kind: "repository" as const },
+      sessionAssociation: { kind: "repository" as const, workspaceId: "workspace-1" },
     };
     const harness = createHookHarness(
       createBaseArgs({

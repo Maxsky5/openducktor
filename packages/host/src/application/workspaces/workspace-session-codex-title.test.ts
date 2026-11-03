@@ -71,7 +71,7 @@ describe("Codex Workspace Session title sync", () => {
       h.live.resumeSession({
         ...h.ref,
         resumeMode: "reattach",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
       }),
     );
     const renamed = await Effect.runPromise(
@@ -121,7 +121,7 @@ describe("Codex Workspace Session title sync", () => {
       h.live.resumeSession({
         ...h.ref,
         resumeMode: "reattach",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
       }),
     );
 
@@ -143,7 +143,7 @@ describe("Codex Workspace Session title sync", () => {
         h.live.resumeSession({
           ...h.ref,
           resumeMode: "reattach",
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "fairnest" },
         }),
       ),
     ).rejects.toThrow("resume failed");

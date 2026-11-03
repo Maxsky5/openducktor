@@ -176,7 +176,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const harness = createHarness(
       session({ runtimeKind: "opencode", sessionAssociation: { kind: "unbound" } }),
       readSessionHistory,
-      { kind: "repository" },
+      { kind: "repository", workspaceId: "workspace-1" },
     );
 
     try {
@@ -184,7 +184,9 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
 
       expect(readSessionHistory).toHaveBeenCalledWith(
-        expect.objectContaining({ sessionScope: { kind: "repository" } }),
+        expect.objectContaining({
+          sessionScope: { kind: "repository", workspaceId: "workspace-1" },
+        }),
       );
     } finally {
       await harness.unmount();
@@ -284,7 +286,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
           externalSessionId: "repository-thread",
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktree",
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "workspace-1" },
         },
         runtimeReadinessState: "ready" as const,
         liveSession: null,
@@ -301,7 +303,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
         externalSessionId: "repository-thread",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
         runtimePolicy: { kind: "opencode" },
       });
     } finally {

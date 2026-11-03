@@ -171,7 +171,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: started.externalSessionId,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).rejects.toThrow("does not belong to the requested scope");
@@ -179,7 +179,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
   });
 
   test("applies repository policy across start, send, fork, resume, and history", async () => {
-    const sessionScope = { kind: "repository", title: "Fairnest" } as const;
+    const sessionScope = { kind: "repository", workspaceId: "repo", title: "Fairnest" } as const;
     const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
     const model = { providerId: "openai", modelId: "gpt-5", variant: "medium" } as const;
     const { adapter, transports } = createHarness();
@@ -261,7 +261,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
   });
 
   test("renames a live repository session through the native thread name", async () => {
-    const sessionScope = { kind: "repository", title: "Fairnest" } as const;
+    const sessionScope = { kind: "repository", workspaceId: "repo", title: "Fairnest" } as const;
     const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
     const { adapter, transports } = createHarness();
     const started = await adapter.startSession({
@@ -286,7 +286,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       status: "renamed",
       summary: {
         title: "Renamed",
-        sessionAssociation: { kind: "repository", title: "Renamed" },
+        sessionAssociation: { kind: "repository", workspaceId: "repo", title: "Renamed" },
       },
     });
     const calls = transports.get("runtime-live")?.calls ?? [];
@@ -304,7 +304,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionScope: { kind: "repository", title: "Saved title" },
+      sessionScope: { kind: "repository", workspaceId: "repo", title: "Saved title" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "",
       model: { providerId: "openai", modelId: "gpt-5" },
@@ -317,7 +317,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: started.externalSessionId,
-      sessionScope: { kind: "repository", title: "Saved title" },
+      sessionScope: { kind: "repository", workspaceId: "repo", title: "Saved title" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       model: { providerId: "openai", modelId: "gpt-5" },
     });
@@ -325,7 +325,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: started.externalSessionId,
-        sessionScope: { kind: "repository", title: "Saved title" },
+        sessionScope: { kind: "repository", workspaceId: "repo", title: "Saved title" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         parts: [{ kind: "text", text: "First prompt" }],
       }),
@@ -336,7 +336,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: started.externalSessionId,
-      sessionScope: { kind: "repository", title: "Saved title" },
+      sessionScope: { kind: "repository", workspaceId: "repo", title: "Saved title" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       model: { providerId: "openai", modelId: "gpt-5" },
     });
@@ -351,7 +351,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       runtimeKind: "codex" as const,
       workingDirectory: "/repo",
       externalSessionId: "thread-resume",
-      sessionScope: { kind: "repository" as const, title: "Saved title" },
+      sessionScope: { kind: "repository" as const, workspaceId: "repo", title: "Saved title" },
       runtimePolicy: { kind: "codex" as const, policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5" },
@@ -366,7 +366,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
   test("reattaches without retry when Codex wrote the name before reporting an error", async () => {
     const transport = new NameWriteThenFailTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
-    const sessionScope = { kind: "repository", title: "Saved title" } as const;
+    const sessionScope = { kind: "repository", workspaceId: "repo", title: "Saved title" } as const;
     const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
     const started = await adapter.startSession({
       repoPath: "/repo",
@@ -428,7 +428,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
   });
 
   test("does not claim the requested title when the native thread rename fails", async () => {
-    const sessionScope = { kind: "repository", title: "Fairnest" } as const;
+    const sessionScope = { kind: "repository", workspaceId: "repo", title: "Fairnest" } as const;
     const transport = new NameFailingTransport("runtime-live", false, "Renamed");
     const adapter = createAdapterWithTransport(transport);
     const started = await adapter.startSession({
@@ -474,7 +474,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-resume",
-      sessionScope: { kind: "repository", title: "Fairnest" },
+      sessionScope: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
@@ -500,7 +500,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-resume",
-      sessionScope: { kind: "repository", title: "Fairnest" },
+      sessionScope: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
@@ -555,7 +555,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-resume",
-        sessionScope: { kind: "repository", title: "Saved title" },
+        sessionScope: { kind: "repository", workspaceId: "repo", title: "Saved title" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt,
         model: { providerId: "openai", modelId: "gpt-5" },
@@ -601,7 +601,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: "thread-resume",
-      sessionScope: { kind: "repository", title: "Saved title" },
+      sessionScope: { kind: "repository", workspaceId: "repo", title: "Saved title" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5" },
@@ -624,7 +624,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-resume",
-        sessionScope: { kind: "repository", title: "Saved title" },
+        sessionScope: { kind: "repository", workspaceId: "repo", title: "Saved title" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5" },
@@ -648,7 +648,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-resume",
-        sessionScope: { kind: "repository", title: "Fairnest" },
+        sessionScope: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5" },
@@ -675,7 +675,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread-resume",
-        sessionScope: { kind: "repository", title: "Fairnest" },
+        sessionScope: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5" },
@@ -685,7 +685,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread-resume",
-        sessionScope: { kind: "repository", title: "Fairnest" },
+        sessionScope: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         parts: [{ kind: "text", text: "Continue" }],
@@ -709,7 +709,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     await adapter.resumeSession({
       ...codexUserMessageInput({
         externalSessionId: "thread-history",
-        sessionScope: { kind: "repository", title: "Fairnest" },
+        sessionScope: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
         systemPrompt: "",
         parts: [],
       }),
@@ -717,7 +717,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread-history",
-        sessionScope: { kind: "repository", title: "Fairnest" },
+        sessionScope: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "",
         parts: [{ kind: "text", text: "Continue" }],
@@ -862,7 +862,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "repo" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -926,7 +926,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
   });
 
   test("keeps resumed and history-restored repository sessions when thread naming fails", async () => {
-    const repositoryScope = { kind: "repository", title: "Fairnest" } as const;
+    const repositoryScope = { kind: "repository", workspaceId: "repo", title: "Fairnest" } as const;
     const resumedTransport = new NameFailingTransport("runtime-live", false);
     const resumedAdapter = createAdapterWithTransport(resumedTransport);
 
@@ -1001,7 +1001,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     await expect(
       adapter.loadSessionHistory(
         codexSessionRuntimeRef("repository-history", {
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "repo" },
           runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         }),
       ),
@@ -1016,7 +1016,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       repoPath: "/repo",
       runtimeKind: "codex" as const,
       workingDirectory: "/repo",
-      sessionScope: { kind: "repository" as const },
+      sessionScope: { kind: "repository" as const, workspaceId: "repo" },
       runtimePolicy: { kind: "codex" as const, policy: defaultCodexEffectivePolicy() },
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
@@ -1045,7 +1045,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
   });
 
   test("keeps the retained model when reattaching a prepared session", async () => {
-    const sessionScope = { kind: "repository" } as const;
+    const sessionScope = { kind: "repository", workspaceId: "repo" } as const;
     const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
     const transport = new ResumeFailingTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);

@@ -80,7 +80,7 @@ describe("CodexAppServerAdapter managed MCP binding", () => {
       },
     });
     const model = { providerId: "openai", modelId: "gpt-5", variant: "medium" };
-    const repositoryScope = { kind: "repository" as const };
+    const repositoryScope = { kind: "repository" as const, workspaceId: "workspace-1" };
 
     await adapter.startSession(
       codexStartSessionInput({ repoPath: "/repo-a", workingDirectory: "/repo-a" }),
@@ -114,8 +114,8 @@ describe("CodexAppServerAdapter managed MCP binding", () => {
       "repo",
       "repo",
       "repo",
-      undefined,
-      undefined,
+      "workspace-1",
+      "workspace-1",
       "repo",
       "repo",
     ]);
@@ -175,7 +175,9 @@ describe("CodexAppServerAdapter managed MCP binding", () => {
       "Cannot configure OpenDucktor workflow tools for repository '/repo-a': The MCP host bridge is not running. Check the MCP bridge in Diagnostics.",
     );
     await expect(
-      adapter.resumeSession(sessionRef("/repo-b", "native-b", { kind: "repository" })),
+      adapter.resumeSession(
+        sessionRef("/repo-b", "native-b", { kind: "repository", workspaceId: "workspace-1" }),
+      ),
     ).rejects.toThrow("Cannot configure OpenDucktor workflow tools for repository '/repo-b'");
 
     expect(resolvedRepos).toEqual(["/repo-a", "/repo-b"]);

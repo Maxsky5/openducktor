@@ -34,13 +34,6 @@ export const resolveOwnedSessionRoot = ({
         ? owned.filter((root) => agentSessionScopesEqual(root.sessionScope, selected))
         : owned;
       if (matching.length === 1) return matching[0]!;
-      if (
-        owned.length > 0 &&
-        owned.every((root) => root.sessionScope.kind === "repository") &&
-        (selected === undefined ||
-          (selected.kind === "repository" && selected.workspaceId === undefined))
-      )
-        return { ...owned[0]!, sessionScope: { kind: "repository" } };
       if (owned.length > 0)
         return yield* invalid(
           owned.length === 1

@@ -35,7 +35,7 @@ export type AgentSessionWorkflowScope = z.infer<typeof agentSessionWorkflowScope
 export const agentSessionRepositoryScopeSchema = z
   .object({
     kind: z.literal("repository"),
-    workspaceId: workspaceIdSchema.optional(),
+    workspaceId: workspaceIdSchema,
     /**
      * Workspace Session title for the runtime session.
      * When absent, the runtime session keeps its current title.

@@ -256,7 +256,7 @@ describe("agent-orchestrator/handlers/session-actions send acceptance", () => {
           executionEpisodeId: "old",
           sessionAssociation:
             kind === "repository"
-              ? { kind }
+              ? { kind, workspaceId: "workspace-1" }
               : { kind, workspaceId: "workspace-1", taskId: "task-1", role: "build" },
         }),
       ]);

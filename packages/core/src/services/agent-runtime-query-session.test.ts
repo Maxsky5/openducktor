@@ -18,7 +18,11 @@ const scope: AgentSessionScope = {
 test("passive validation leaves unbound discovery unchanged", () => {
   const association = Object.freeze({ kind: "unbound" } as const);
   const retained = Object.freeze({ ...ref });
-  for (const sessionScope of [undefined, { kind: "repository" } as const, scope]) {
+  for (const sessionScope of [
+    undefined,
+    { kind: "repository", workspaceId: "repo" } as const,
+    scope,
+  ]) {
     expect(() =>
       assertAgentRuntimeQuerySession({ ...ref, sessionScope }, retained, association),
     ).not.toThrow();
@@ -46,7 +50,7 @@ for (const [field, value] of [
 
 test("retains and checks bound scope claims", () => {
   for (const association of [
-    { kind: "repository" },
+    { kind: "repository", workspaceId: "repo" },
     { kind: "workflow", workspaceId: "repo", taskId: "task-2", role: "build" },
     { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "qa" },
   ] as const) {

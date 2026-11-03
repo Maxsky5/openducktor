@@ -455,7 +455,7 @@ export const createPersistenceHarness = async (
       commands
         .prepareUserMessage({
           ...ref,
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "fairnest" },
           parts: [{ kind: "text", text }],
         })
         .pipe(

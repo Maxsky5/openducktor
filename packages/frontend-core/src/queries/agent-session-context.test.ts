@@ -14,7 +14,7 @@ describe("agent session context query keys", () => {
     const withoutScope = agentSessionContextQueryKeys.usage(sessionRefFixture);
     const repositoryScope = agentSessionContextQueryKeys.usage({
       ...sessionRefFixture,
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
     });
     const workflowScope = agentSessionContextQueryKeys.usage({
       ...sessionRefFixture,

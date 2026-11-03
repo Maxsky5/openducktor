@@ -124,7 +124,9 @@ describe("settings config files", () => {
           defaults: rules,
           role: draft.agentRuntimes.opencode.roleOverrides.qa!.rules,
         });
-        const repository = await Effect.runPromise(resolver.resolve({ kind: "repository" }));
+        const repository = await Effect.runPromise(
+          resolver.resolve({ kind: "repository", workspaceId: "workspace-1" }),
+        );
         expect(repository).toEqual({ defaults: rules, role: [] });
         loaded.agentRuntimes.opencode.defaults.rules = [];
         loaded.agentRuntimes.opencode.executablePath = "/new/opencode";

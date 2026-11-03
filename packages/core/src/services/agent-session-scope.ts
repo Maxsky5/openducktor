@@ -39,10 +39,6 @@ export const resolveAgentSessionAssociationTransition = (
   if (incoming.kind === "unbound") {
     return { kind: "accepted", association: previous };
   }
-  if (previous.kind === "repository" && incoming.kind === "repository") {
-    if (!incoming.workspaceId) return { kind: "accepted", association: previous };
-    if (!previous.workspaceId) return { kind: "accepted", association: incoming };
-  }
   if (agentSessionScopesEqual(previous, incoming)) {
     return { kind: "accepted", association: incoming };
   }

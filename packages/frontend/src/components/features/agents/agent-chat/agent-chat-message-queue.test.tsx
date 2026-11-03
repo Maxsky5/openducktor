@@ -59,7 +59,7 @@ const queueOf = (
     runtimeKind: "codex",
     workingDirectory: "/repo",
     externalSessionId: "session-1",
-    sessionScope: { kind: "repository" },
+    sessionScope: { kind: "repository", workspaceId: "workspace-1" },
   },
   revision: 1,
   entries,

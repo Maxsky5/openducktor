@@ -113,7 +113,7 @@ test("projects native V2 approvals through the host and replies to the native re
       if (!prepared.adapter.refreshSnapshots) throw new Error("Expected native snapshots");
       await Effect.runPromise(
         prepared.adapter.refreshSnapshots(ref.repoPath, [
-          { ...ref, sessionScope: { kind: "repository" } },
+          { ...ref, sessionScope: { kind: "repository", workspaceId: "workspace-1" } },
         ]),
       );
       expect(changes.filter((change) => change.type === "fault")).toEqual([]);

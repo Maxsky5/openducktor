@@ -117,7 +117,7 @@ const fixture = (accepted?: AcceptedAgentInput) => {
         yield* attempt.send(
           {
             ...refFor(sessionId),
-            sessionScope: { kind: "repository" },
+            sessionScope: { kind: "repository", workspaceId: "workspace" },
             parts,
             delivery: "new_turn",
           },

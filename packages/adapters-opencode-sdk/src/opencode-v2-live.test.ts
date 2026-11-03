@@ -170,7 +170,7 @@ describe("OpenCode V2 live observation", () => {
     const runtime = await fixture.prepare();
     try {
       const read = await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "repository" } },
+        { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
       ]);
       expect(read.sources).toMatchObject([
         { externalSessionId: ref.externalSessionId, title: "OpenCode" },
@@ -188,7 +188,7 @@ describe("OpenCode V2 live observation", () => {
       const failed = Promise.withResolvers<OpencodeSessionRuntimeSignal>();
       try {
         await runtime.connection.readSessionSources(ref.repoPath, [
-          { ...ref, sessionScope: { kind: "repository" } },
+          { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
         ]);
         await runtime.startForwarding((signal) => {
           if (signal.type === "fault" || signal.type === "session_fault") failed.resolve(signal);
@@ -303,7 +303,7 @@ describe("OpenCode V2 live observation", () => {
       if (scoped) updated.location = { directory: ref.workingDirectory };
       try {
         const restored = await runtime.connection.readSessionSources(ref.repoPath, [
-          { ...ref, sessionScope: { kind: "repository" } },
+          { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
         ]);
         expect(restored.failures).toEqual([]);
         expect(restored.sources).toHaveLength(1);
@@ -433,7 +433,7 @@ describe("OpenCode V2 live observation", () => {
     try {
       for (const identity of [ref, other])
         await runtime.connection.readSessionSources(identity.repoPath, [
-          { ...identity, sessionScope: { kind: "repository" } },
+          { ...identity, sessionScope: { kind: "repository", workspaceId: "repo" } },
         ]);
       expect(
         await runtime.connection.updateSessionTitle({ ...other, title: "Before failure" }),
@@ -689,7 +689,7 @@ describe("OpenCode V2 live observation", () => {
         },
       ]);
       await runtime.connection.readSessionSources(other.repoPath, [
-        { ...other, sessionScope: { kind: "repository" } },
+        { ...other, sessionScope: { kind: "repository", workspaceId: "repo" } },
       ]);
       attachingChild = true;
       await runtime.startForwarding((signal) => {
@@ -736,7 +736,7 @@ describe("OpenCode V2 live observation", () => {
       const resumed = await runtime.connection.resumeSession({
         ...other,
         runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
       });
       expect(resumed).toMatchObject({ externalSessionId: other.externalSessionId });
       expect(signals.some((signal) => signal.type === "fault")).toBe(false);
@@ -847,7 +847,7 @@ describe("OpenCode V2 live observation", () => {
       const input = {
         ...ref,
         runtimePolicy: { kind: "opencode" as const },
-        sessionScope: { kind: "repository" as const },
+        sessionScope: { kind: "repository" as const, workspaceId: "repo" },
       };
       const statuses: string[] = [];
       try {
@@ -944,7 +944,7 @@ describe("OpenCode V2 live observation", () => {
         await runtime.connection.resumeSession({
           ...ref,
           runtimePolicy: { kind: "opencode" },
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "repo" },
         });
         bridgeFailed = true;
         fixture.requests.length = 0;
@@ -963,7 +963,7 @@ describe("OpenCode V2 live observation", () => {
           runtime.connection.sendUserMessage({
             ...ref,
             runtimePolicy: { kind: "opencode" },
-            sessionScope: { kind: "repository" },
+            sessionScope: { kind: "repository", workspaceId: "repo" },
             parts: [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }],
           }),
         ).resolves.toEqual({
@@ -1150,7 +1150,9 @@ describe("OpenCode V2 live observation", () => {
       );
       const runtime = await fixture.prepare();
       const failed = Promise.withResolvers<OpencodeSessionRuntimeSignal>();
-      const roots = [{ ...ref, sessionScope: { kind: "repository" as const } }];
+      const roots = [
+        { ...ref, sessionScope: { kind: "repository" as const, workspaceId: "repo" } },
+      ];
       try {
         const initial = await runtime.connection.readSessionSources(ref.repoPath, roots);
         expect(initial.failures).toEqual([]);
@@ -1240,7 +1242,7 @@ describe("OpenCode V2 live observation", () => {
       const sessionInput = {
         ...ref,
         runtimePolicy: { kind: "opencode" as const },
-        sessionScope: { kind: "repository" as const },
+        sessionScope: { kind: "repository" as const, workspaceId: "repo" },
       };
       const started = Promise.withResolvers<void>();
       const completed = Promise.withResolvers<void>();
@@ -1394,7 +1396,7 @@ describe("OpenCode V2 live observation", () => {
     const sessionInput = {
       ...ref,
       runtimePolicy: { kind: "opencode" as const },
-      sessionScope: { kind: "repository" as const },
+      sessionScope: { kind: "repository" as const, workspaceId: "repo" },
     };
     const statuses: string[] = [];
     let preparing: ReturnType<typeof runtime.connection.sendUserMessage> | undefined;
@@ -1518,7 +1520,7 @@ describe("OpenCode V2 live observation", () => {
       const sessionInput = {
         ...ref,
         runtimePolicy: { kind: "opencode" as const },
-        sessionScope: { kind: "repository" as const },
+        sessionScope: { kind: "repository" as const, workspaceId: "repo" },
       };
       const statuses: string[] = [];
       const barriers = new Map<string, ReturnType<typeof Promise.withResolvers<void>>>();
@@ -1664,7 +1666,7 @@ describe("OpenCode V2 live observation", () => {
     const sessionInput = {
       ...ref,
       runtimePolicy: { kind: "opencode" as const },
-      sessionScope: { kind: "repository" as const },
+      sessionScope: { kind: "repository" as const, workspaceId: "repo" },
     };
     try {
       await runtime.connection.resumeSession(sessionInput);
@@ -1742,7 +1744,7 @@ describe("OpenCode V2 live observation", () => {
     const sessionInput = {
       ...ref,
       runtimePolicy: { kind: "opencode" as const },
-      sessionScope: { kind: "repository" as const },
+      sessionScope: { kind: "repository" as const, workspaceId: "repo" },
     };
     let sending: ReturnType<typeof runtime.connection.sendUserMessage> | undefined;
     try {
@@ -2023,7 +2025,7 @@ describe("OpenCode V2 live observation", () => {
           true,
         );
         const read = await runtime.connection.readSessionSources(ref.repoPath, [
-          { ...ref, sessionScope: { kind: "repository" } },
+          { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
         ]);
         expect(read.failures).toEqual([]);
         expect(read.sources[0]).toMatchObject({ contextUsage: { totalTokens: 3170 } });
@@ -2298,7 +2300,9 @@ describe("OpenCode V2 live observation", () => {
         return undefined;
       });
       const runtime = await fixture.prepare();
-      const roots = [{ ...ref, sessionScope: { kind: "repository" as const } }];
+      const roots = [
+        { ...ref, sessionScope: { kind: "repository" as const, workspaceId: "repo" } },
+      ];
       if (externalSessionId !== ref.externalSessionId) {
         const attached = await runtime.connection.readSessionSources(ref.repoPath, roots);
         expect(attached.failures).toEqual([]);
@@ -2308,7 +2312,7 @@ describe("OpenCode V2 live observation", () => {
         deferRead = true;
       }
       const reading = runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "repository" } },
+        { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
       ]);
       await Promise.race([
         started.promise,
@@ -2321,7 +2325,7 @@ describe("OpenCode V2 live observation", () => {
       const sending = runtime.connection.sendUserMessage({
         ...target,
         runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
         parts: [{ kind: "text", text: "Keep draft" }],
       });
       void sending.catch(() => undefined);
@@ -2389,7 +2393,7 @@ describe("OpenCode V2 live observation", () => {
         workingDirectory: directory,
         externalSessionId: id,
         runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
       });
     try {
       const first = resume("ses_worktree_1");
@@ -2421,7 +2425,7 @@ describe("OpenCode V2 live observation", () => {
         false,
       );
       const sources = await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "repository" } },
+        { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
       ]);
       expect(fixture.requests.every(({ method }) => method === "GET")).toBe(true);
       expect(sources.failures).toEqual([]);
@@ -2434,7 +2438,7 @@ describe("OpenCode V2 live observation", () => {
       await runtime.connection.resumeSession({
         ...ref,
         runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
       });
       const mcp = fixture.requests.find(
         (request) => request.url.pathname === "/api/experimental/mcp/openducktor",
@@ -2509,7 +2513,7 @@ describe("OpenCode V2 live observation", () => {
     const runtime = await fixture.prepare();
     try {
       const read = await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "repository" } },
+        { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
       ]);
       expect(read.sources[0]?.queuedMessages).toMatchObject([
         {
@@ -2659,7 +2663,7 @@ describe("OpenCode V2 live observation", () => {
     const runtime = await fixture.prepare();
     const signals: OpencodeSessionRuntimeSignal[] = [];
     const observed = Promise.withResolvers<void>();
-    const roots = [{ ...ref, sessionScope: { kind: "repository" as const } }];
+    const roots = [{ ...ref, sessionScope: { kind: "repository" as const, workspaceId: "repo" } }];
     try {
       const attached = await runtime.connection.readSessionSources(ref.repoPath, roots);
       expect(attached.failures).toEqual([]);
@@ -2669,7 +2673,7 @@ describe("OpenCode V2 live observation", () => {
         "ses_grandchild",
       ]);
       const otherAttached = await runtime.connection.readSessionSources(otherRef.repoPath, [
-        { ...otherRef, sessionScope: { kind: "repository" } },
+        { ...otherRef, sessionScope: { kind: "repository", workspaceId: "repo" } },
       ]);
       expect(otherAttached.failures).toEqual([]);
       await expect(
@@ -2739,7 +2743,7 @@ describe("OpenCode V2 live observation", () => {
         expect(
           (
             await runtime.connection.readSessionSources(ref.repoPath, [
-              { ...ref, sessionScope: { kind: "repository" } },
+              { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
             ])
           ).failures,
         ).toEqual([]);
@@ -2800,7 +2804,9 @@ describe("OpenCode V2 live observation", () => {
       const runtime = await fixture.prepare();
       const signals: OpencodeSessionRuntimeSignal[] = [];
       const settled = Promise.withResolvers<void>();
-      const roots = [{ ...ref, sessionScope: { kind: "repository" as const } }];
+      const roots = [
+        { ...ref, sessionScope: { kind: "repository" as const, workspaceId: "repo" } },
+      ];
       try {
         const initial = await runtime.connection.readSessionSources(ref.repoPath, roots);
         expect(initial.failures).toEqual([]);
@@ -2924,7 +2930,7 @@ describe("OpenCode V2 live observation", () => {
     const signals: OpencodeSessionRuntimeSignal[] = [];
     try {
       await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "repository" } },
+        { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
       ]);
       await runtime.startForwarding((signal) => {
         signals.push(signal);
@@ -3095,7 +3101,7 @@ describe("OpenCode V2 live observation", () => {
       const restored = Promise.withResolvers<OpencodeSessionRuntimeSignal>();
       try {
         await runtime.connection.readSessionSources(ref.repoPath, [
-          { ...ref, sessionScope: { kind: "repository" } },
+          { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
         ]);
         await runtime.startForwarding((signal) => {
           if (signal.type === "fault" && reconnecting) restored.reject(new Error(signal.message));
@@ -3193,7 +3199,7 @@ describe("OpenCode V2 live observation", () => {
     const completed = Promise.withResolvers<void>();
     try {
       await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "repository" } },
+        { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
       ]);
       await runtime.startForwarding((signal) => {
         signals.push(signal);
@@ -3284,7 +3290,7 @@ describe("OpenCode V2 live observation", () => {
       const runtime = await fixture.prepare();
       const signals: OpencodeSessionRuntimeSignal[] = [];
       await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "repository" } },
+        { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
       ]);
       let resolveNotice!: () => void;
       const noticed = new Promise<void>((resolve) => {
@@ -3362,12 +3368,12 @@ describe("OpenCode V2 live observation", () => {
       await runtime.connection.resumeSession({
         ...ref,
         runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
       });
       await runtime.connection.sendUserMessage({
         ...ref,
         runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
         parts: [{ kind: "text", text: "Verify startup" }],
       });
       await expect(
@@ -3397,7 +3403,7 @@ describe("OpenCode V2 live observation", () => {
     });
     try {
       await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "repository" } },
+        { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
       ]);
       await runtime.startForwarding((signal) => {
         if (signal.type === "fault") {
@@ -4228,7 +4234,7 @@ describe("OpenCode V2 live observation", () => {
     });
     const runtime = await fixture.prepare();
     const reading = runtime.connection.readSessionSources(ref.repoPath, [
-      { ...ref, sessionScope: { kind: "repository" } },
+      { ...ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
     ]);
     await started.promise;
     await runtime.release();
@@ -4255,7 +4261,7 @@ describe("OpenCode V2 message delivery while the agent works", () => {
     const sessionInput = {
       ...ref,
       runtimePolicy: { kind: "opencode" as const },
-      sessionScope: { kind: "repository" as const },
+      sessionScope: { kind: "repository" as const, workspaceId: "repo" },
     };
     try {
       await runtime.connection.resumeSession(sessionInput);

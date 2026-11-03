@@ -70,7 +70,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         prepared.adapter.resumeSession({
           ...ref,
           resumeMode: "reattach",
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "repo" },
           model: { providerId: "saved", modelId: "old" },
         }),
       );
@@ -131,7 +131,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
           repoPath: "/live-only",
           workingDirectory: "/live-only",
           resumeMode: "reattach",
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "repo" },
         }),
       );
       changes.length = 0;
@@ -252,7 +252,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
           prepared.adapter.resumeSession({
             ...session,
             resumeMode: "reattach",
-            sessionScope: { kind: "repository" },
+            sessionScope: { kind: "repository", workspaceId: "repo" },
           }),
         );
       await Effect.runPromise(prepared.startForwarding());
@@ -328,7 +328,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         prepared.adapter.resumeSession({
           ...ref,
           resumeMode: "reattach",
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "repo" },
         }),
       );
       await Effect.runPromise(prepared.startForwarding());
@@ -488,7 +488,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
           externalSessionId: ref.externalSessionId,
           repoPath: ref.repoPath,
           workingDirectory: ref.workingDirectory,
-          sessionAssociation: { kind: "repository" },
+          sessionAssociation: { kind: "repository", workspaceId: "repo" },
           title: "Linked conversation",
           startedAt: "2026-07-16T10:00:00.000Z",
           runtimeActivity: "idle",
@@ -547,7 +547,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         prepared.adapter.resumeSession({
           ...ref,
           resumeMode: "reattach",
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "repo" },
         }),
       );
       await Effect.runPromise(prepared.startForwarding());
@@ -555,7 +555,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         repoPath: ref.repoPath,
         externalSessionId: ref.externalSessionId,
         workingDirectory: ref.workingDirectory,
-        sessionAssociation: { kind: "repository" as const },
+        sessionAssociation: { kind: "repository" as const, workspaceId: "repo" },
         title: "Linked",
         startedAt: "2026-07-16T10:00:00.000Z",
         runtimeActivity: "idle" as const,
@@ -686,7 +686,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       ): OpencodeRuntimeSnapshotSource => {
         const result: OpencodeRuntimeSnapshotSource = {
           ...sessionRef,
-          sessionAssociation: { kind: "repository" },
+          sessionAssociation: { kind: "repository", workspaceId: "repo" },
           title: `Known ${sessionRef.externalSessionId}`,
           startedAt: "2026-07-16T10:00:00.000Z",
           runtimeActivity: "running",
@@ -1295,7 +1295,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
           prepared.adapter.resumeSession({
             ...ref,
             resumeMode: "reattach",
-            sessionScope: { kind: "repository" },
+            sessionScope: { kind: "repository", workspaceId: "repo" },
           }),
         );
         await Effect.runPromise(prepared.startForwarding());
@@ -1329,7 +1329,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       repoPath: ref.repoPath,
       externalSessionId: ref.externalSessionId,
       workingDirectory: ref.workingDirectory,
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "repo" },
       title: "Restored conversation",
       startedAt: "2026-07-16T10:02:00.000Z",
       runtimeActivity: "idle",
@@ -1365,7 +1365,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         prepared.adapter.resumeSession({
           ...ref,
           resumeMode: "reattach",
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "repo" },
         }),
       );
       expect(

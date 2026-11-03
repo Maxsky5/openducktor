@@ -20,13 +20,16 @@ describe("agent session scope helpers", () => {
   });
 
   test("does not treat repository or unbound association as workflow scope", () => {
-    expect(isWorkflowAgentSessionScope({ kind: "repository" })).toBe(false);
+    expect(isWorkflowAgentSessionScope({ kind: "repository", workspaceId: "repo" })).toBe(false);
     expect(isWorkflowAgentSessionScope({ kind: "unbound" })).toBe(false);
   });
 
   test("fails clearly for repository, unbound, and missing workflow context", () => {
     expect(() =>
-      requireWorkflowAgentSessionScope({ kind: "repository" }, "resolve runtime policy"),
+      requireWorkflowAgentSessionScope(
+        { kind: "repository", workspaceId: "repo" },
+        "resolve runtime policy",
+      ),
     ).toThrow(
       "Cannot resolve runtime policy with repository session context; workflow session context is required.",
     );

@@ -123,14 +123,14 @@ function createSession(ref: AgentSessionLiveRef): ClaudeSession {
       ...ref,
       runtimeKind: "claude",
       runtimePolicy: { kind: "claude" },
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
     },
     summary: {
       externalSessionId: ref.externalSessionId,
       runtimeKind: "claude",
       workingDirectory: ref.workingDirectory,
       startedAt: "2026-09-07T10:00:00Z",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       status: "idle",
     },
   });

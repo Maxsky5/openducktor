@@ -315,7 +315,10 @@ test.each(["before", "after"])(
   "saved OpenCode sessions notify without a browser refresh when the runtime joins %s startup",
   async (order) => {
     const savedRef = { ...ref("/beta"), runtimeKind: "opencode" as const };
-    const savedRoot = { ...savedRef, sessionScope: { kind: "repository" as const } };
+    const savedRoot = {
+      ...savedRef,
+      sessionScope: { kind: "repository" as const, workspaceId: "beta" },
+    };
     const readRoots = mock((repoPath: string) =>
       Effect.succeed(
         repoPath === savedRoot.repoPath
@@ -344,7 +347,7 @@ test.each(["before", "after"])(
           repoPath: savedRef.repoPath,
           externalSessionId: savedRef.externalSessionId,
           workingDirectory: savedRef.workingDirectory,
-          sessionAssociation: { kind: "repository" },
+          sessionAssociation: { kind: "repository", workspaceId: "beta" },
           title: "Saved session",
           startedAt: "2026-09-01T00:00:00Z",
           runtimeActivity: "running",

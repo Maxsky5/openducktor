@@ -381,7 +381,7 @@ describe("createLocalHostClient", () => {
     await expect(
       createLocalHostClient().agentSessionMessageSubmit({
         ...sessionRef,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
         submissionId: "submission-1",
         mode: "default",
         parts: [{ kind: "text", text: "Hello" }],

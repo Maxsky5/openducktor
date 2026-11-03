@@ -7,7 +7,12 @@ import {
 
 describe("Agent Session scope policy", () => {
   test("compares exact workflow identity and repository scope", () => {
-    expect(agentSessionScopesEqual({ kind: "repository" }, { kind: "repository" })).toBe(true);
+    expect(
+      agentSessionScopesEqual(
+        { kind: "repository", workspaceId: "repo" },
+        { kind: "repository", workspaceId: "repo" },
+      ),
+    ).toBe(true);
     expect(
       agentSessionScopesEqual(
         { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
@@ -23,13 +28,15 @@ describe("Agent Session scope policy", () => {
     expect(
       agentSessionScopesEqual(
         { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
-        { kind: "repository" },
+        { kind: "repository", workspaceId: "repo" },
       ),
     ).toBe(false);
   });
 
   test("describes repository and workflow scopes", () => {
-    expect(describeAgentSessionScope({ kind: "repository" })).toBe("repository scope");
+    expect(describeAgentSessionScope({ kind: "repository", workspaceId: "repo" })).toBe(
+      "repository scope",
+    );
     expect(
       describeAgentSessionScope({
         kind: "workflow",
@@ -46,8 +53,11 @@ describe("Agent Session scope policy", () => {
       association: { kind: "unbound" },
     });
     expect(
-      resolveAgentSessionAssociationTransition({ kind: "unbound" }, { kind: "repository" }),
-    ).toEqual({ kind: "accepted", association: { kind: "repository" } });
+      resolveAgentSessionAssociationTransition(
+        { kind: "unbound" },
+        { kind: "repository", workspaceId: "repo" },
+      ),
+    ).toEqual({ kind: "accepted", association: { kind: "repository", workspaceId: "repo" } });
     expect(
       resolveAgentSessionAssociationTransition(
         { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
@@ -61,17 +71,11 @@ describe("Agent Session scope policy", () => {
 
   test("retains a bound association when an observation is unbound", () => {
     expect(
-      resolveAgentSessionAssociationTransition({ kind: "repository" }, { kind: "unbound" }),
-    ).toEqual({ kind: "accepted", association: { kind: "repository" } });
-    expect(
       resolveAgentSessionAssociationTransition(
-        { kind: "repository", workspaceId: "saved-workspace" },
-        { kind: "repository" },
+        { kind: "repository", workspaceId: "repo" },
+        { kind: "unbound" },
       ),
-    ).toEqual({
-      kind: "accepted",
-      association: { kind: "repository", workspaceId: "saved-workspace" },
-    });
+    ).toEqual({ kind: "accepted", association: { kind: "repository", workspaceId: "repo" } });
   });
 
   test("reports conflicting bound associations without choosing one", () => {
@@ -83,13 +87,19 @@ describe("Agent Session scope policy", () => {
     ).toBe("conflict");
     expect(
       resolveAgentSessionAssociationTransition(
+        { kind: "repository", workspaceId: "alpha" },
+        { kind: "repository", workspaceId: "beta" },
+      ).kind,
+    ).toBe("conflict");
+    expect(
+      resolveAgentSessionAssociationTransition(
         { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
-        { kind: "repository" },
+        { kind: "repository", workspaceId: "repo" },
       ),
     ).toEqual({
       kind: "conflict",
       previous: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
-      incoming: { kind: "repository" },
+      incoming: { kind: "repository", workspaceId: "repo" },
     });
   });
 });

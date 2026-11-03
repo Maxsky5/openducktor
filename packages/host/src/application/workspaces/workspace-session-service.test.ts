@@ -453,7 +453,7 @@ describe("host-owned Workspace Session lifecycle", () => {
                     type: "live",
                     session: {
                       ref,
-                      repositoryScope: { kind: "repository" },
+                      repositoryScope: { kind: "repository", workspaceId: "fairnest" },
                       activity: "running",
                       title: "Runtime title",
                       startedAt: "2026-09-07T00:00:00Z",
@@ -990,7 +990,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(h.starts[0]).toMatchObject({
         repoPath: database.repoPath,
         workingDirectory: database.repoPath,
-        sessionScope: { kind: "repository", title: "My session" },
+        sessionScope: { kind: "repository", workspaceId: "fairnest", title: "My session" },
         systemPrompt: "Original prompt.",
         model: input().selectedModel,
       });

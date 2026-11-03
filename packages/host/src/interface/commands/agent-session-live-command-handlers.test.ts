@@ -25,7 +25,7 @@ const startInput: AgentRepositorySessionStartInput = {
   repoPath: "/repo",
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
-  sessionScope: { kind: "repository" },
+  sessionScope: { kind: "repository", workspaceId: "repo" },
   systemPrompt: "Repository chat",
 };
 
@@ -284,7 +284,7 @@ describe("createAgentSessionLiveCommandHandlers", () => {
     ).resolves.toMatchObject({ externalSessionId: "session-1", runtimeKind: "opencode" });
     expect(starts).toEqual([startInput]);
 
-    const sessionScope = { kind: "repository" } as const;
+    const sessionScope = { kind: "repository", workspaceId: "repo" } as const;
     const resumeInput = {
       repoPath: "/repo",
       runtimeKind: "opencode" as const,
@@ -394,7 +394,7 @@ describe("createAgentSessionLiveCommandHandlers", () => {
       runtimeKind: "opencode" as const,
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
-      sessionScope: { kind: "repository" as const },
+      sessionScope: { kind: "repository" as const, workspaceId: "repo" },
     };
     const attachment = {
       id: "attachment-1",

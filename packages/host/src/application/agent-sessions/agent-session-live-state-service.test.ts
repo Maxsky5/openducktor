@@ -614,7 +614,7 @@ test("a launch failure stays in session snapshots and notifies once until an acc
   await Effect.runPromise(
     service.sendUserMessage({
       ...current.ref,
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "repo" },
       parts: [{ kind: "text", text: "Continue" }],
       delivery: "new_turn",
     }),
@@ -861,7 +861,7 @@ describe("createAgentSessionLiveStateService", () => {
         repoPath: "/closed-repo",
         runtimeKind: "opencode",
         workingDirectory: "/closed-repo",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
         systemPrompt: "Work.",
       }),
     );
@@ -1116,51 +1116,41 @@ describe("createAgentSessionLiveStateService", () => {
     expect(refreshCalls).toEqual(["opencode"]);
   });
 
-  test.each([undefined, "saved-workspace"])(
-    "keeps physical repository snapshot attribution unscoped, saved workspace=%s",
-    async (workspaceId) => {
-      const { events, service } = createHarness();
-      const snapshot: AgentSessionLiveSnapshot = {
-        ...liveSnapshot("repository-session"),
-        repositoryScope: { kind: "repository" as const },
-      };
-      const physical = { ...snapshot, repositoryScope: { kind: "repository" as const } };
-      if (workspaceId) snapshot.repositoryScope = { kind: "repository", workspaceId };
-      await Effect.runPromise(
-        service.registerRuntimeAdapter(
-          fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [snapshot] }),
-        ),
-      );
+  test("publishes the workspace scope of a repository snapshot", async () => {
+    const { events, service } = createHarness();
+    const snapshot: AgentSessionLiveSnapshot = {
+      ...liveSnapshot("repository-session"),
+      repositoryScope: { kind: "repository", workspaceId: "repo" },
+    };
+    await Effect.runPromise(
+      service.registerRuntimeAdapter(
+        fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [snapshot] }),
+      ),
+    );
 
-      await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
-      await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toMatchObject([
-        physical,
-      ]);
-      await expect(Effect.runPromise(service.read(snapshot.ref))).resolves.toMatchObject({
-        type: "live",
-        session: physical,
-      });
-      expect(events).toMatchObject([
-        { type: "session_upsert", session: physical },
-        {
-          type: "snapshot",
-          messageQueues: [],
-          sessionOperations: [],
-          submissionAcknowledgements: [],
-          taskCompletions: [],
-          repoPath: "/repo",
-          sessions: [physical],
-        },
-      ]);
-    },
-  );
+    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toMatchObject([
+      snapshot,
+    ]);
+    await expect(Effect.runPromise(service.read(snapshot.ref))).resolves.toMatchObject({
+      type: "live",
+      session: snapshot,
+    });
+    expect(events).toMatchObject([
+      { type: "session_upsert", session: snapshot },
+      { type: "snapshot", repoPath: "/repo", sessions: [snapshot] },
+    ]);
+  });
 
   test("adds message queues to a repository snapshot and gives them each snapshot and batch", async () => {
     const events: AgentSessionLiveEnvelope[] = [];
     const observed: AgentSessionLiveEnvelope[][] = [];
     const queue = {
-      target: { ...sessionRef("session-1"), sessionScope: { kind: "repository" as const } },
+      target: {
+        ...sessionRef("session-1"),
+        sessionScope: { kind: "repository" as const, workspaceId: "repo" },
+      },
       revision: 3,
       entries: [],
       pause: { message: "You stopped the agent." },
@@ -2284,7 +2274,7 @@ describe("createAgentSessionLiveStateService", () => {
       runtimeKind: "codex" as const,
       workingDirectory: "/repo/persisted-session",
       externalSessionId: "persisted-session",
-      sessionScope: { kind: "repository" as const },
+      sessionScope: { kind: "repository" as const, workspaceId: "repo" },
     };
     const first = Effect.runPromise(service.continueInterruptedTurn(input));
     await Effect.runPromise(Deferred.await(continuationStarted));
@@ -2311,7 +2301,7 @@ describe("createAgentSessionLiveStateService", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo/missing-session",
         externalSessionId: "missing-session",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
       }),
     );
 
@@ -2347,7 +2337,7 @@ describe("createAgentSessionLiveStateService", () => {
         runtimeKind: "opencode",
         workingDirectory: "/repo/persisted-session",
         externalSessionId: "persisted-session",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
       }),
     );
 
@@ -2498,7 +2488,7 @@ describe("createAgentSessionLiveStateService", () => {
       runtimeKind: "codex" as const,
       workingDirectory: "/repo",
       externalSessionId: "repository-session",
-      sessionScope: { kind: "repository" as const },
+      sessionScope: { kind: "repository" as const, workspaceId: "repo" },
       resumeMode: "reattach" as const,
     };
     const expectMissingRoute = async (effect: Effect.Effect<unknown, HostError>) => {

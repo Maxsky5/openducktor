@@ -9,7 +9,7 @@ const target = {
   runtimeKind: "codex" as const,
   workingDirectory: "/repo",
   externalSessionId: "session",
-  sessionScope: { kind: "repository" as const },
+  sessionScope: { kind: "repository" as const, workspaceId: "workspace-1" },
 };
 
 test("Stop during queue Resume preparation retains the pause and prevents post-Stop delivery", async () => {

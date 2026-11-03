@@ -28,7 +28,7 @@ import {
 const repository = {
   ...ref,
   runtimePolicy: { kind: "opencode" as const },
-  sessionScope: { kind: "repository" as const },
+  sessionScope: { kind: "repository" as const, workspaceId: "repo" },
 };
 const workflow = {
   ...ref,

@@ -116,7 +116,7 @@ describe("useSelectedSessionContextLoad", () => {
     const operations = createAgentOperationsFixture({ loadAgentSessionContext });
     const repositorySession: AgentSessionState = {
       ...session("repository-thread"),
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     };
     const wrapper = createWrapper(operations);
     const harness = createHookHarness(
@@ -132,7 +132,7 @@ describe("useSelectedSessionContextLoad", () => {
         externalSessionId: "repository-thread",
         runtimeKind: "codex",
         workingDirectory: "/repo/worktree",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
       });
     } finally {
       await harness.unmount();

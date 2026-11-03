@@ -52,7 +52,7 @@ const renderTool = (
             runtimeKind: "opencode",
             workingDirectory: "/repo",
             externalSessionId: "session-1",
-            sessionScope: { kind: "repository" },
+            sessionScope: { kind: "repository", workspaceId: "workspace-1" },
           }}
         >
           {tool}

@@ -34,7 +34,7 @@ describe("OpenCode V2 message order", () => {
     const replay: OpencodeSessionRuntimeSignal[] = [];
     try {
       await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "repository" } },
+        { ...ref, sessionScope: { kind: "repository", workspaceId: "workspace-1" } },
       ]);
       await runtime.startForwarding((signal) => {
         if (signal.type === "fault" || signal.type === "session_fault")

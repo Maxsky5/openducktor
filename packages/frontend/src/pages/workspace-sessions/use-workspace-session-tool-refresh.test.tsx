@@ -28,7 +28,7 @@ test("new file-edit tool completion refreshes the selected chat once", async () 
   const session = (messages: (typeof tool)[]) =>
     createAgentSessionFixture({
       ...identity,
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       messages,
     });
   const refresh = mock(async () => {});

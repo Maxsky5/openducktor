@@ -214,7 +214,7 @@ test("a model change waits for the session start, and the first send keeps the s
     h.live
       .updateSessionModel({
         ...h.ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: database.workspaceId },
         model: { providerId: "other", modelId: "other" },
       })
       .pipe(

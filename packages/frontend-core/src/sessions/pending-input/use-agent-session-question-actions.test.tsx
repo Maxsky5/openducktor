@@ -131,7 +131,7 @@ describe("useAgentSessionQuestionActions", () => {
     const parentSession = sessionIdentity("parent-session");
     const childSession = {
       ...sessionIdentity("child-session"),
-      sessionAssociation: { kind: "repository" as const },
+      sessionAssociation: { kind: "repository" as const, workspaceId: "workspace-1" },
     };
     const harness = createHookHarness(
       useAgentSessionQuestionActions,
@@ -190,7 +190,7 @@ describe("useAgentSessionQuestionActions", () => {
           },
         ],
         answerAgentQuestion,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
       }),
     );
 
@@ -204,7 +204,7 @@ describe("useAgentSessionQuestionActions", () => {
         identity,
         expect.objectContaining({ requestId: "message-1", blocking: false }),
         [["First answer"], ["Second answer"]],
-        { kind: "repository" },
+        { kind: "repository", workspaceId: "workspace-1" },
       );
     } finally {
       await harness.unmount();

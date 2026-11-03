@@ -259,7 +259,7 @@ describe("createAgentSessionsStore session snapshots", () => {
     const store = createAgentSessionsStore("/repo");
     const session = createAgentSessionFixture({
       externalSessionId: "chat-1",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       status: "running",
     });
     replaceStoreSessions(store, [session]);
@@ -278,7 +278,7 @@ describe("createAgentSessionsStore session snapshots", () => {
     store.replaceSession(
       createAgentSessionFixture({
         externalSessionId: "child",
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
         liveParentExternalSessionId: "chat-1",
         status: "running",
       }),
@@ -504,11 +504,14 @@ describe("createAgentSessionsStore session snapshots", () => {
 
     store.updateSession(session, (current) => ({
       ...current,
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     }));
     unsubscribeSession();
 
-    expect(store.getSessionSnapshot(session)?.sessionAssociation).toEqual({ kind: "repository" });
+    expect(store.getSessionSnapshot(session)?.sessionAssociation).toEqual({
+      kind: "repository",
+      workspaceId: "workspace-1",
+    });
     expect(notificationCount).toBe(1);
   });
 
@@ -755,7 +758,7 @@ test("lists and removes task owners only in its bound workspace", () => {
     }),
     createAgentSessionFixture({
       externalSessionId: "repository",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     }),
     createAgentSessionFixture({
       externalSessionId: "foreign",

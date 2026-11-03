@@ -54,14 +54,18 @@ const workingDirectoryDependencies = {
     resolveConfiguredPath: (path: string) => path,
   },
   workspaceSettingsService: {
-    getRepoConfig: () =>
+    getRepoConfig: (workspaceId: string) =>
       Effect.succeed(
-        repoConfigSchema.parse({
-          workspaceId: "repo",
-          workspaceName: "Repo",
-          repoPath: "/repo",
-          worktreeBasePath: "/worktrees/repo",
-        }),
+        repoConfigSchema.parse(
+          workspaceId === "other-repo"
+            ? { workspaceId, workspaceName: "Other", repoPath: "/other-repo" }
+            : {
+                workspaceId: "repo",
+                workspaceName: "Repo",
+                repoPath: "/repo",
+                worktreeBasePath: "/worktrees/repo",
+              },
+        ),
       ),
     getRepoConfigByRepoPath: () =>
       Effect.succeed(
@@ -126,7 +130,7 @@ const otherSummary = {
   externalSessionId: "session-2",
   workingDirectory: "/other-repo",
   title: "Other repo session",
-  sessionAssociation: { kind: "repository" },
+  sessionAssociation: { kind: "repository", workspaceId: "other-repo" },
 } as const satisfies AgentSessionSummary;
 
 const otherSession: ClaudeSessionContext = {
@@ -136,7 +140,7 @@ const otherSession: ClaudeSessionContext = {
     ...session.input,
     repoPath: "/other-repo",
     workingDirectory: "/other-repo",
-    sessionScope: { kind: "repository" },
+    sessionScope: { kind: "repository", workspaceId: "other-repo" },
   },
   startedAt: otherSummary.startedAt,
   summary: otherSummary,
@@ -146,7 +150,7 @@ const otherStartInput = {
   repoPath: "/other-repo",
   runtimeKind: "claude" as const,
   workingDirectory: "/other-repo",
-  sessionScope: { kind: "repository" as const },
+  sessionScope: { kind: "repository" as const, workspaceId: "other-repo" },
   systemPrompt: "Help",
 };
 
@@ -987,12 +991,12 @@ describe("Claude host live-session adapter", () => {
     const harness = await createHarness();
     const repositoryInput = {
       ...startInput,
-      sessionScope: { kind: "repository" } as const,
+      sessionScope: { kind: "repository", workspaceId: "repo" } as const,
     };
     const repositorySummary = {
       ...summary,
       title: "Repository session",
-      sessionAssociation: { kind: "repository" } as const,
+      sessionAssociation: { kind: "repository", workspaceId: "repo" } as const,
     };
     const calls: Array<{ operation: string; sessionScope: unknown; runtimeId: string }> = [];
     harness.setStartSession((input, runtimeId) => {
@@ -1066,12 +1070,28 @@ describe("Claude host live-session adapter", () => {
     );
 
     expect(calls).toEqual([
-      { operation: "start", sessionScope: { kind: "repository" }, runtimeId: "runtime-1" },
-      { operation: "resume", sessionScope: { kind: "repository" }, runtimeId: "runtime-1" },
-      { operation: "fork", sessionScope: { kind: "repository" }, runtimeId: "runtime-1" },
-      { operation: "send", sessionScope: { kind: "repository" }, runtimeId: "runtime-1" },
+      {
+        operation: "start",
+        sessionScope: { kind: "repository", workspaceId: "repo" },
+        runtimeId: "runtime-1",
+      },
+      {
+        operation: "resume",
+        sessionScope: { kind: "repository", workspaceId: "repo" },
+        runtimeId: "runtime-1",
+      },
+      {
+        operation: "fork",
+        sessionScope: { kind: "repository", workspaceId: "repo" },
+        runtimeId: "runtime-1",
+      },
+      {
+        operation: "send",
+        sessionScope: { kind: "repository", workspaceId: "repo" },
+        runtimeId: "runtime-1",
+      },
     ]);
-    expect(loadContextScopes).toEqual([{ kind: "repository" }]);
+    expect(loadContextScopes).toEqual([{ kind: "repository", workspaceId: "repo" }]);
   });
 
   test("rejects session operations outside the selected workspace before calling the SDK", async () => {
@@ -2118,7 +2138,7 @@ describe("Claude host live-session adapter", () => {
     harness.setUpdateSessionModel((input, runtimeId) =>
       Effect.promise(async () => {
         expect(runtimeId).toBe("runtime-1");
-        expect(input.sessionScope).toEqual({ kind: "repository" });
+        expect(input.sessionScope).toEqual({ kind: "repository", workspaceId: "repo" });
         startedModels.push(input.model?.modelId ?? "default");
         if (startedModels.length === 1) {
           markFirstUpdateStarted?.();
@@ -2136,7 +2156,7 @@ describe("Claude host live-session adapter", () => {
     const firstUpdate = Effect.runPromise(
       harness.adapter.updateSessionModel({
         ...controlRef,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
         model: {
           providerId: "claude",
           modelId: "claude-a",
@@ -2147,7 +2167,7 @@ describe("Claude host live-session adapter", () => {
     const secondUpdate = Effect.runPromise(
       harness.adapter.updateSessionModel({
         ...controlRef,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
         model: {
           providerId: "claude",
           modelId: "claude-b",
@@ -2174,7 +2194,11 @@ describe("Claude host live-session adapter", () => {
           summary: {
             ...summary,
             title: input.title,
-            sessionAssociation: { kind: "repository" as const, title: input.title },
+            sessionAssociation: {
+              kind: "repository" as const,
+              workspaceId: "repo",
+              title: input.title,
+            },
           },
         };
       }),
@@ -2340,7 +2364,10 @@ describe("Claude host live-session adapter", () => {
         catalog,
       });
       await Effect.runPromise(
-        harness.adapter.loadContext({ ...otherSessionRef, sessionScope: { kind: "repository" } }),
+        harness.adapter.loadContext({
+          ...otherSessionRef,
+          sessionScope: { kind: "repository", workspaceId: "other-repo" },
+        }),
       );
 
       expect(harness.changes).toContainEqual({
@@ -2369,7 +2396,7 @@ describe("Claude host live-session adapter", () => {
         Effect.runPromise(
           harness.adapter.loadContext({
             ...otherSessionRef,
-            sessionScope: { kind: "repository" },
+            sessionScope: { kind: "repository", workspaceId: "other-repo" },
           }),
         ),
       ).rejects.toThrow("Publication failed.");

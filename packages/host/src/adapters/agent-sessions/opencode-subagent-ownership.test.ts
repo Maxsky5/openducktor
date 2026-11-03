@@ -147,7 +147,7 @@ describe("OpenCode subagent ownership", () => {
           refresh(ref.repoPath, [
             { ...ref, sessionScope: scope },
             ...(registration === "registered"
-              ? [{ ...other, sessionScope: { kind: "repository" as const } }]
+              ? [{ ...other, sessionScope: { kind: "repository" as const, workspaceId: "repo" } }]
               : []),
           ]),
         );

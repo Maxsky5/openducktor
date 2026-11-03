@@ -1157,7 +1157,7 @@ describe("createAgentSessionCommandService", () => {
         repoPath: workflowStart.repoPath,
         runtimeKind: workflowStart.runtimeKind,
         workingDirectory: "/repo/worktree",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
         systemPrompt: workflowStart.systemPrompt,
         model: workflowStart.model,
       }),

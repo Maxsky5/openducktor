@@ -13,7 +13,7 @@ const target = {
   runtimeKind: "codex" as const,
   workingDirectory: "/repo",
   externalSessionId: "session",
-  sessionScope: { kind: "repository" as const },
+  sessionScope: { kind: "repository" as const, workspaceId: "workspace-1" },
 };
 
 test.each(["default", "steer"] as const)(

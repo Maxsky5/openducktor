@@ -28,7 +28,7 @@ test("baseline inputs stay silent while a first owned live input is eligible", (
   const make = () =>
     createSessionOccurrenceProjector({
       repositoryLabel: "Repo",
-      resolveAssociation: () => ({ kind: "repository" }),
+      resolveAssociation: () => ({ kind: "repository", workspaceId: "workspace-1" }),
       resolveTask: () => null,
     });
   const current = snapshot({ pendingQuestions: [question] });
@@ -41,7 +41,7 @@ test("unowned live inputs survive read refreshes until association reconciliatio
   let owned = false;
   const projector = createSessionOccurrenceProjector({
     repositoryLabel: "Repo",
-    resolveAssociation: () => (owned ? { kind: "repository" } : null),
+    resolveAssociation: () => (owned ? { kind: "repository", workspaceId: "workspace-1" } : null),
     resolveTask: () => null,
   });
   const current = snapshot({ pendingQuestions: [question] });
@@ -56,7 +56,9 @@ test("association removal cancels deferred descendant questions", () => {
   const projector = createSessionOccurrenceProjector({
     repositoryLabel: "Repo",
     resolveAssociation: (candidate) =>
-      owned && candidate.externalSessionId === "root" ? { kind: "repository" } : null,
+      owned && candidate.externalSessionId === "root"
+        ? { kind: "repository", workspaceId: "workspace-1" }
+        : null,
     resolveTask: () => null,
   });
   projector.accept({ type: "session_upsert", session: snapshot() }, "baseline");
@@ -80,7 +82,9 @@ test.each([false, true])(
     const projector = createSessionOccurrenceProjector({
       repositoryLabel: "Repo",
       resolveAssociation: (candidate) =>
-        owned && candidate.externalSessionId === "root" ? { kind: "repository" } : null,
+        owned && candidate.externalSessionId === "root"
+          ? { kind: "repository", workspaceId: "workspace-1" }
+          : null,
       resolveTask: () => null,
     });
     const root = snapshot({ pendingQuestions: [{ ...question, requestId: "root-question" }] });
@@ -132,7 +136,9 @@ test.each(["pending", "resolved", "removed"] as const)(
     const projector = createSessionOccurrenceProjector({
       repositoryLabel: "Repo",
       resolveAssociation: (candidate) =>
-        owned && candidate.externalSessionId === "root" ? { kind: "repository" } : null,
+        owned && candidate.externalSessionId === "root"
+          ? { kind: "repository", workspaceId: "workspace-1" }
+          : null,
       resolveTask: () => null,
     });
     const child = snapshot({

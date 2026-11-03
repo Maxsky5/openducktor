@@ -24,7 +24,7 @@ test("a reconnect does not read a finished tool part again", async () => {
       runtimeKind: "opencode",
       workingDirectory: "/repo",
       externalSessionId: "session",
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
     },
     part,
     async () => {

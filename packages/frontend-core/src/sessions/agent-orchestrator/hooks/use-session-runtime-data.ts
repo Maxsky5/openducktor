@@ -57,7 +57,7 @@ export const useSessionRuntimeData = ({
   const selectedWorkspaceId =
     selectedSession?.sessionAssociation.kind === "workflow" ||
     selectedSession?.sessionAssociation.kind === "repository"
-      ? (selectedSession.sessionAssociation.workspaceId ?? null)
+      ? selectedSession.sessionAssociation.workspaceId
       : null;
   const selectedRole =
     selectedSession?.sessionAssociation.kind === "workflow"
@@ -80,9 +80,10 @@ export const useSessionRuntimeData = ({
         role: selectedRole,
       };
     } else if (selectedAssociationKind === "repository") {
-      sessionAssociation = selectedWorkspaceId
-        ? { kind: "repository", workspaceId: selectedWorkspaceId }
-        : { kind: "repository" };
+      if (!selectedWorkspaceId) {
+        throw new Error("Workspace session runtime data requires a workspace id.");
+      }
+      sessionAssociation = { kind: "repository", workspaceId: selectedWorkspaceId };
     } else {
       sessionAssociation = { kind: "unbound" };
     }

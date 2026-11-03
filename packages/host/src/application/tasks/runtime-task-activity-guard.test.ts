@@ -179,7 +179,7 @@ describe("createRuntimeTaskActivityGuard", () => {
               role: "build",
             },
           },
-          { ...workspace.ref, sessionScope: { kind: "repository" } },
+          { ...workspace.ref, sessionScope: { kind: "repository", workspaceId: "repo" } },
         ]),
       sessionService: {
         list: () => Effect.succeed(snapshots),

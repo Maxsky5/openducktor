@@ -12,7 +12,7 @@ export type RuntimeSessionImportSource = {
 };
 /** Names the conversation to import and the scope of the workspace that will own it. */
 export type RuntimeSessionImportRequest = SessionRef & {
-  sessionScope: AgentSessionRepositoryScope & { workspaceId: string };
+  sessionScope: AgentSessionRepositoryScope;
 };
 export type RuntimeSessionImportPort = {
   /** Scans root conversations for one workspace repository. The host still filters scope. */

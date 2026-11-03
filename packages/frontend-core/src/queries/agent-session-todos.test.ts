@@ -66,7 +66,7 @@ describe("agent session todos queries", () => {
     expect(
       agentSessionTodosQueryKeys.todos({
         ...sessionRefFixture,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
       }),
     ).toEqual([
       "agent-session-todos",
@@ -116,7 +116,7 @@ describe("agent session todos queries", () => {
     const queryClient = new QueryClient();
     const refs: PolicyBoundSessionRef[] = [
       sessionRefFixture,
-      { ...sessionRefFixture, sessionScope: { kind: "repository" } },
+      { ...sessionRefFixture, sessionScope: { kind: "repository", workspaceId: "workspace-1" } },
       {
         ...sessionRefFixture,
         sessionScope: {

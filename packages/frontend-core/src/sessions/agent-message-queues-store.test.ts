@@ -8,7 +8,10 @@ const ref = {
   workingDirectory: "/repo",
   externalSessionId: "session-1",
 };
-const target = { ...ref, sessionScope: { kind: "repository" as const } };
+const target = {
+  ...ref,
+  sessionScope: { kind: "repository" as const, workspaceId: "workspace-1" },
+};
 
 describe("createAgentMessageQueuesStore", () => {
   test("keeps the newest revision of each queue", () => {
@@ -50,7 +53,7 @@ describe("createAgentMessageQueuesStore", () => {
     store.apply(createAgentMessageQueueSnapshot({ target, revision: 5, texts: ["stale"] }));
     store.apply(
       createAgentMessageQueueSnapshot({
-        target: { ...otherRef, sessionScope: { kind: "repository" } },
+        target: { ...otherRef, sessionScope: { kind: "repository", workspaceId: "workspace-1" } },
         revision: 6,
         texts: ["other"],
       }),

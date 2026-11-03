@@ -40,7 +40,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
       const sessionsRef = createSessionsRef([
         buildSession({
           status: "idle",
-          sessionAssociation: { kind: "repository" },
+          sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
           workingDirectory: "/tmp/repo/repository-chat",
         }),
       ]);
@@ -69,7 +69,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/repository-chat",
         externalSessionId: "session-1",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
       });
       expect(sendInputs[0]).not.toHaveProperty("systemPrompt");
     },
@@ -164,7 +164,10 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
       return acceptedUserMessage(input);
     };
     const sessionsRef = createSessionsRef([
-      buildSession({ status: "idle", sessionAssociation: { kind: "repository" } }),
+      buildSession({
+        status: "idle",
+        sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
+      }),
     ]);
     const actions = createSessionActions({ adapter, sessionsRef });
 
@@ -218,7 +221,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
       const sessionsRef = createSessionsRef([
         buildSession({
           runtimeKind,
-          sessionAssociation: { kind: "repository" },
+          sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
           status: "idle",
         }),
       ]);
@@ -231,7 +234,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
       expect(sendInputs).toHaveLength(1);
       expect(sendInputs[0]).toMatchObject({
         runtimeKind,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
       });
     },
   );

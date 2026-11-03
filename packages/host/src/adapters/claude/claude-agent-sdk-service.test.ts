@@ -202,7 +202,7 @@ describe("createClaudeAgentSdkService", () => {
     expect(emit).not.toHaveBeenCalled();
   });
   test("resumes and sends through a retained repository session without a fake workflow role", async () => {
-    const repositoryScope = { kind: "repository" } as const;
+    const repositoryScope = { kind: "repository", workspaceId: "repo" } as const;
     const mcpServerStatus = mock(async () => [
       { name: "openducktor", status: "connected" as const },
     ]);
@@ -314,7 +314,7 @@ describe("createClaudeAgentSdkService", () => {
             workingDirectory: "/repo/worktree/",
             externalSessionId: "session-1",
             runtimePolicy: { kind: "claude" },
-            sessionScope: { kind: "repository", title: "Fairnest" },
+            sessionScope: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
           },
           "runtime-claude",
         ),
@@ -341,13 +341,13 @@ describe("createClaudeAgentSdkService", () => {
         workingDirectory: "/repo/worktree/",
         externalSessionId: "session-1",
         runtimePolicy: { kind: "claude" },
-        sessionScope: { kind: "repository", title: "Fairnest" },
+        sessionScope: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
       },
       summary: {
         externalSessionId: "session-1",
         runtimeKind: "claude",
         workingDirectory: "/repo/worktree/",
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId: "repo" },
         startedAt: "2026-06-25T20:00:00.000Z",
         status: "idle",
       },
@@ -365,7 +365,7 @@ describe("createClaudeAgentSdkService", () => {
             workingDirectory: "/repo/worktree/",
             externalSessionId: "session-1",
             runtimePolicy: { kind: "claude" },
-            sessionScope: { kind: "repository", title: "Fairnest" },
+            sessionScope: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
           },
           "runtime-claude",
         ),
@@ -392,13 +392,13 @@ describe("createClaudeAgentSdkService", () => {
         workingDirectory: "/repo/worktree/",
         externalSessionId: "session-1",
         runtimePolicy: { kind: "claude" },
-        sessionScope: { kind: "repository", title: "Fairnest" },
+        sessionScope: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
       },
       summary: {
         externalSessionId: "session-1",
         runtimeKind: "claude",
         workingDirectory: "/repo/worktree/",
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId: "repo" },
         startedAt: "2026-06-25T20:00:00.000Z",
         status: "idle",
       },
@@ -416,7 +416,7 @@ describe("createClaudeAgentSdkService", () => {
             workingDirectory: "/repo/worktree/",
             externalSessionId: "session-1",
             runtimePolicy: { kind: "claude" },
-            sessionScope: { kind: "repository", title: "Fairnest" },
+            sessionScope: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
           },
           "runtime-claude",
         ),
@@ -424,7 +424,10 @@ describe("createClaudeAgentSdkService", () => {
 
       expect(renameSessionSpy).toHaveBeenCalledTimes(1);
       expect(session.summary.title).toBeUndefined();
-      expect(session.summary.sessionAssociation).toEqual({ kind: "repository" });
+      expect(session.summary.sessionAssociation).toEqual({
+        kind: "repository",
+        workspaceId: "repo",
+      });
     } finally {
       await Effect.runPromise(service.dispose());
       renameSessionSpy.mockRestore();
@@ -440,14 +443,14 @@ describe("createClaudeAgentSdkService", () => {
           workingDirectory: "/repo/worktree/",
           externalSessionId: "session-1",
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "repo" },
         },
         summary: {
           externalSessionId: "session-1",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree/",
           title: "Repository session",
-          sessionAssociation: { kind: "repository" },
+          sessionAssociation: { kind: "repository", workspaceId: "repo" },
           startedAt: "2026-06-25T20:00:00.000Z",
           status: "idle",
         },
@@ -1182,7 +1185,7 @@ describe("createClaudeAgentSdkService", () => {
     async (kind, reset) => {
       const sessionScope =
         kind === "repository"
-          ? { kind: "repository" as const }
+          ? { kind: "repository" as const, workspaceId: "repo" }
           : {
               kind: "workflow" as const,
               workspaceId: "repo",
@@ -1284,7 +1287,7 @@ describe("createClaudeAgentSdkService", () => {
         workingDirectory: "/repo/worktree/",
         runtimeKind: "claude" as const,
         externalSessionId: "session-1",
-        sessionScope: { kind: "repository" as const },
+        sessionScope: { kind: "repository" as const, workspaceId: "repo" },
       };
       const store = createClaudeAgentSdkSessionStore();
       const inspect = spyOn(nativeSessions, "getClaudeSessionMetadata").mockImplementation(

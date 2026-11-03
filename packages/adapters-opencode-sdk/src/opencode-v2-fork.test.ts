@@ -30,7 +30,7 @@ const input = () => ({
   repoPath: ref.repoPath,
   runtimeKind: ref.runtimeKind,
   runtimePolicy: { kind: "opencode" as const },
-  sessionScope: { kind: "repository" as const },
+  sessionScope: { kind: "repository" as const, workspaceId: "workspace-1" },
   workingDirectory: ref.workingDirectory,
   sourceWorkingDirectory: ref.workingDirectory,
   parentExternalSessionId: ref.externalSessionId,

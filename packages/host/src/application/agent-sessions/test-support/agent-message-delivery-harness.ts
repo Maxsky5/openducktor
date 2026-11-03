@@ -30,7 +30,10 @@ export const ref = {
   workingDirectory: "/repo",
   externalSessionId: "session-1",
 };
-export const target = { ...ref, sessionScope: { kind: "repository" as const } };
+export const target = {
+  ...ref,
+  sessionScope: { kind: "repository" as const, workspaceId: "workspace-1" },
+};
 export const slashCommand: AgentSessionUserMessagePart = {
   kind: "slash_command",
   command: { id: "compact", trigger: "compact", title: "Compact", hints: [] },

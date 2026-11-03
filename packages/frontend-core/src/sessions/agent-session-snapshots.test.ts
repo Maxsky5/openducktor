@@ -42,7 +42,7 @@ describe("createAgentActivitySnapshot", () => {
         sessionAssociation:
           kind === "workflow"
             ? { kind, workspaceId: "workspace-1", taskId: "task-1", role: "build" }
-            : { kind },
+            : { kind, workspaceId: "workspace-1" },
       });
       store.replaceSession(liveSession);
       const summaries = () => {

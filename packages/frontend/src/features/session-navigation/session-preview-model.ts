@@ -69,7 +69,7 @@ export const buildSessionPreviewModel = (
           taskId: target.taskId,
           role: target.role,
         }
-      : { kind: "repository" };
+      : { kind: "repository", workspaceId: target.workspaceId };
   return {
     model,
     pending: pendingInputs(projection, identity, scope),

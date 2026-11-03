@@ -519,7 +519,7 @@ describe("handleCodexServerRequest", () => {
       const pendingInput = new CodexPendingInputState();
       const events: EmittedAgentEvent[] = [];
       const repositorySession = createSession(null, "thread-repository");
-      repositorySession.summary.sessionAssociation = { kind: "repository" };
+      repositorySession.summary.sessionAssociation = { kind: "repository", workspaceId: "repo" };
 
       await expect(
         handleCodexServerRequest(
@@ -551,7 +551,7 @@ describe("handleCodexServerRequest", () => {
     const pendingInput = new CodexPendingInputState();
     const events: EmittedAgentEvent[] = [];
     const repositorySession = createSession(null, "thread-repository");
-    repositorySession.summary.sessionAssociation = { kind: "repository" };
+    repositorySession.summary.sessionAssociation = { kind: "repository", workspaceId: "repo" };
 
     await expect(
       handleCodexServerRequest(
@@ -581,7 +581,7 @@ describe("handleCodexServerRequest", () => {
     const pendingInput = new CodexPendingInputState();
     const events: EmittedAgentEvent[] = [];
     const repositorySession = createSession(null, "thread-repository");
-    repositorySession.summary.sessionAssociation = { kind: "repository" };
+    repositorySession.summary.sessionAssociation = { kind: "repository", workspaceId: "repo" };
 
     await expect(
       handleCodexServerRequest(

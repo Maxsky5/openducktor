@@ -208,7 +208,7 @@ describe("agent runtime services", () => {
         repoPath: sessionRef.repoPath,
         runtimeKind: sessionRef.runtimeKind,
         workingDirectory: sessionRef.workingDirectory,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
         systemPrompt: "Build",
       }),
     ).resolves.toEqual(sessionSummary);
@@ -255,7 +255,7 @@ describe("agent runtime services", () => {
       repoPath: "/repo",
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktree",
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
       systemPrompt: "Build",
     });
     expect(resume).toHaveBeenCalledTimes(1);

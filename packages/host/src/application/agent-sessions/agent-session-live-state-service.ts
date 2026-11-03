@@ -75,13 +75,8 @@ export const createAgentSessionLiveStateService = ({
   // Transient admission guard that spans the probe and the native continuation for one session.
   const workflowLaunchHold = createWorkflowLaunchHold();
   const observations = createLiveWorkflowObservations();
-  const projectSnapshot = (snapshot: AgentSessionLiveSnapshot) => {
-    if (snapshot.repositoryScope?.workspaceId !== undefined) {
-      const { workspaceId: _workspaceId, ...repositoryScope } = snapshot.repositoryScope;
-      snapshot = { ...snapshot, repositoryScope };
-    }
-    return observations.project(workflowLaunchHold.project(snapshot));
-  };
+  const projectSnapshot = (snapshot: AgentSessionLiveSnapshot) =>
+    observations.project(workflowLaunchHold.project(snapshot));
   const executionEpisodes = createAgentSessionExecutionEpisodes();
   const engagement = createRuntimeSessionEngagement();
   // One publication position lets independent live consumers compare the history they applied.

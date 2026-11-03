@@ -141,7 +141,7 @@ test.each(
         }
         for (const request of [
           { ...input, sessionScope: undefined },
-          { ...input, sessionScope: { kind: "repository" } as const },
+          { ...input, sessionScope: { kind: "repository", workspaceId: "repo" } as const },
           { ...input, workingDirectory: relative(root, input.workingDirectory) },
         ]) {
           const read =

@@ -195,7 +195,11 @@ describe("agent session workflow records", () => {
   test("rejects a persisted repository-to-workflow scope change", () => {
     const projected = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
-      snapshots: [snapshot("thread-1", { repositoryScope: { kind: "repository" } })],
+      snapshots: [
+        snapshot("thread-1", {
+          repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
+        }),
+      ],
     });
 
     expect(() =>
@@ -211,7 +215,11 @@ describe("agent session workflow records", () => {
   test("preserves omitted repository scope as record-reconciliation evidence", () => {
     const current = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
-      snapshots: [snapshot("thread-1", { repositoryScope: { kind: "repository" } })],
+      snapshots: [
+        snapshot("thread-1", {
+          repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
+        }),
+      ],
     });
     const projected = buildAgentSessionLiveCollection({ current, snapshots: [] });
 
@@ -371,7 +379,9 @@ describe("agent session workflow records", () => {
     const sessions = projectAndApplyRecords({
       snapshots: [
         snapshot("live-workflow-thread"),
-        snapshot("repository-thread", { repositoryScope: { kind: "repository" } }),
+        snapshot("repository-thread", {
+          repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
+        }),
         snapshot("unbound-thread"),
       ],
       records: loadedRecords(
@@ -393,7 +403,7 @@ describe("agent session workflow records", () => {
       },
     });
     expect(byExternalId("repository-thread")).toMatchObject({
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     });
     expect(byExternalId("unbound-thread")).toMatchObject({
       sessionAssociation: { kind: "unbound" },
@@ -411,7 +421,9 @@ describe("agent session workflow records", () => {
   test("a task refresh cannot remove repository or unbound sessions", () => {
     const composed = projectAndApplyRecords({
       snapshots: [
-        snapshot("repository-thread", { repositoryScope: { kind: "repository" } }),
+        snapshot("repository-thread", {
+          repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
+        }),
         snapshot("unbound-thread"),
       ],
       records: loadedRecords(),
@@ -463,7 +475,9 @@ describe("agent session workflow records", () => {
   test("an unloaded or failed task-record read does not prune state", () => {
     const composed = projectAndApplyRecords({
       snapshots: [
-        snapshot("repository-thread", { repositoryScope: { kind: "repository" } }),
+        snapshot("repository-thread", {
+          repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
+        }),
         snapshot("unbound-thread"),
       ],
       records: loadedRecords(

@@ -74,7 +74,11 @@ const attachmentDraft = (): AgentChatComposerDraft => ({
 /** One queued follow-up with the submission ID "submission-follow-up". */
 const queuedFollowUp = () =>
   createAgentMessageQueueSnapshot({
-    target: { repoPath: "/repo", ...SESSION, sessionScope: { kind: "repository" } },
+    target: {
+      repoPath: "/repo",
+      ...SESSION,
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
+    },
     texts: ["follow-up"],
   });
 

@@ -265,7 +265,7 @@ test("keeps changes received during attachment and rejects late delivery after w
         runtimeKind: "opencode",
         externalSessionId: "native",
         workingDirectory: "/repo",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace" },
       },
       revision: 1,
       entries: [],
