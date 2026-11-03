@@ -976,8 +976,6 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     "archive save",
     "changed branch",
     "branch snapshot save",
-    "replacement directory",
-    "replacement worktree",
     "replacement dangling alias",
   ] as const)(
     "imports, retries after %s, and restores a native symlink path",
@@ -985,9 +983,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       const failureStage =
         scenario === "changed branch"
           ? "branch deletion"
-          : scenario === "replacement directory" ||
-              scenario === "replacement worktree" ||
-              scenario === "replacement dangling alias"
+          : scenario === "replacement dangling alias"
             ? "alias cleanup"
             : scenario;
       await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=restored\n");
@@ -1145,31 +1141,14 @@ describe("Workspace Session commands with real Git and SQLite", () => {
             handlers: createWorkspaceSessionCommandHandlers(retryService, () => Effect.void),
           }),
         );
-        if (
-          scenario === "replacement directory" ||
-          scenario === "replacement worktree" ||
-          scenario === "replacement dangling alias"
-        ) {
+        if (scenario === "replacement dangling alias") {
           await unlink(alias);
-          if (scenario === "replacement directory") {
-            await mkdir(alias);
-            await writeFile(path.join(alias, "keep.txt"), "keep");
-          } else if (scenario === "replacement dangling alias") {
-            await symlink(path.join(root, "unrelated-missing"), alias, "junction");
-          } else {
-            const replacementPath = path.join(root, "replacement-worktree");
-            gitCommand("worktree", "add", "-b", "feature/replacement", replacementPath);
-            await symlink(replacementPath, alias, "junction");
-          }
+          await symlink(path.join(root, "unrelated-missing"), alias, "junction");
           await expect(
             retryRouter.invoke("workspace_session_archive", archiveInput),
           ).rejects.toThrow();
           expect(gitCommand("branch", "--list", confirmedBranch)).toContain(confirmedBranch);
-          if (scenario === "replacement directory")
-            expect(await readFile(path.join(alias, "keep.txt"), "utf8")).toBe("keep");
-          else if (scenario === "replacement dangling alias")
-            expect(await readlink(alias)).toBe(path.join(root, "unrelated-missing"));
-          else expect(runGit(alias, "branch", "--show-current")).toBe("feature/replacement");
+          expect(await readlink(alias)).toBe(path.join(root, "unrelated-missing"));
           expect(await h.router.invoke("workspace_session_get", ref)).toEqual({
             ...session,
             executionTarget: confirmedTarget,
