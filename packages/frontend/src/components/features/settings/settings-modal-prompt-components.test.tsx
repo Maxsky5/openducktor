@@ -49,7 +49,7 @@ describe("PromptRoleTabs", () => {
       <PromptRoleTabs
         value="spec"
         disabled={false}
-        errorCounts={{ shared: 0, "role:openducktor@2:spec": 1, planner: 0, build: 0, qa: 0 }}
+        errorCounts={{ shared: 0, "role:spec": 1, planner: 0, build: 0, qa: 0 }}
         onChange={noop}
       />,
     );

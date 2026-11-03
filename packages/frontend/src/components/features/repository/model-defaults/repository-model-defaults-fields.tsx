@@ -130,7 +130,7 @@ export function RepositoryModelDefaultsFields({
       ) : null}
 
       <div className="grid gap-3">
-        {workflows.data.roles.map(({ role, label, definition, key }) => {
+        {workflows.data.roles.map(({ role, label, definition }) => {
           const runtimeDefinitions = filterRuntimeDefinitionsForRole(
             availableRuntimeDefinitions,
             definition,
@@ -147,7 +147,7 @@ export function RepositoryModelDefaultsFields({
 
           return (
             <div
-              key={key}
+              key={role}
               className={cn(
                 "@container grid border border-border bg-card",
                 isCreation ? "gap-3 rounded-xl p-4" : "gap-2 rounded-md p-3",

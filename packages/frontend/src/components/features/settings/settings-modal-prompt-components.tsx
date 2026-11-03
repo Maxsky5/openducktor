@@ -42,10 +42,7 @@ export function PromptRoleTabs({
     >
       {workflows.data.promptTabs.map((entry) => {
         const tabErrorCount = errorCounts[entry.id] ?? 0;
-        const isActive =
-          value === entry.id ||
-          (entry.roleId === value &&
-            workflows.data.promptTabs.filter((tab) => tab.roleId === value).length === 1);
+        const isActive = value === entry.id || entry.roleId === value;
 
         return (
           <SegmentedControlItem

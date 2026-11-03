@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { workflowIdSchema } from "./workflow-condition-schemas";
-import { workflowDefinitionSchema } from "./workflow-definition-schemas";
+import { agentRoleDefinitionSchema, workflowDefinitionSchema } from "./workflow-definition-schemas";
 import { workflowToneSchema } from "./workflow-display-schemas";
 import { agentPromptPlaceholderSchema } from "./prompt-schemas";
 
@@ -45,8 +45,10 @@ export const workflowDescriptorSchema = z.strictObject({
   templates: z.array(workflowPromptTemplateSchema),
 });
 export type WorkflowDescriptor = z.infer<typeof workflowDescriptorSchema>;
+/** The host role catalog and the workflows that bind its roles. */
 export const workflowCatalogSchema = z.strictObject({
   hostInstanceId: z.string().min(1),
+  roles: z.array(agentRoleDefinitionSchema),
   workflows: z.array(workflowDescriptorSchema),
 });
 export type WorkflowCatalog = z.infer<typeof workflowCatalogSchema>;

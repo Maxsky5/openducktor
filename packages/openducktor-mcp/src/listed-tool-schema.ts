@@ -1,4 +1,4 @@
-import { builtinWorkflow, workflowToolInputSchema } from "@openducktor/workflows";
+import { builtinTaskWorkflow, workflowToolInputSchema } from "@openducktor/workflows";
 import { z } from "zod";
 import { type ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
 
@@ -81,7 +81,7 @@ export const getListedToolInputSchema = (
   const jsonSchema = listedToolSchemaSchema.parse(
     compactListedSchema(
       jsonObjectSchema.parse(
-        z.toJSONSchema(workflowToolInputSchema(builtinWorkflow.definition, toolName), {
+        z.toJSONSchema(workflowToolInputSchema(builtinTaskWorkflow.definition, toolName), {
           io: "input",
         }),
       ),

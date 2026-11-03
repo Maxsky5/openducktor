@@ -2,6 +2,7 @@ import {
   taskCardSchema,
   type TaskCard,
   type WorkflowBoardDefinition,
+  type AgentRoleDefinition,
   type WorkflowDefinition,
 } from "@openducktor/contracts";
 import { createTaskWorkflow, type TaskWorkflow } from "../src/task-workflow/task-workflow";
@@ -10,9 +11,9 @@ import {
   resolveWorkflowBoard,
   taskWorkflowDescriptor,
   workflowReferenceKey,
+  workflowRoleCatalog,
   type WorkflowBoardLayout,
 } from "../src/workflow-catalog";
-import { reviewTaskPromptTemplates } from "./review-task-workflow";
 
 const publishingWorkflow = (prefix: "alpha" | "beta") => {
   const writer = `${prefix}_writer`;
@@ -38,24 +39,8 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
       { id: "fix", label: "Fix", icon: "bug" },
     ],
     roles: [
-      {
-        id: writer,
-        label: `${prefix} Writer`,
-        tools: ["odt_read_task", "odt_read_task_artifacts", "odt_set_task_artifact"],
-        writes: [draft],
-        workspaceAccess: "write",
-        location: "task_worktree",
-        runtimeScopes: ["build"],
-      },
-      {
-        id: editor,
-        label: `${prefix} Editor`,
-        tools: ["odt_read_task", "odt_read_task_artifacts", "odt_set_task_artifact"],
-        writes: [review],
-        workspaceAccess: "read",
-        location: "repository",
-        runtimeScopes: ["workspace"],
-      },
+      { id: writer, writes: [draft] },
+      { id: editor, writes: [review] },
     ],
     artifacts: [
       { id: draft, label: `${prefix} Draft`, kind: "document", saveEventId: `${prefix}_submit` },
@@ -233,23 +218,59 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
     actionOrder: [],
     actionPriority: [],
     launchOrder: [],
+    prompts: {
+      system: [`${prefix}.system.task`],
+      readOnlyRejection: `${prefix}.permission.read_only`,
+    },
   };
-  const templates = reviewTaskPromptTemplates.filter(
-    ({ id }) => id.startsWith("system.shared.") || id.startsWith("permission."),
-  );
-  const roleTemplates = [writer, editor].map((role) => ({
+  const templates = [
+    {
+      id: `${prefix}.system.task`,
+      purpose: "system" as const,
+      builtinVersion: 1,
+      template: `${prefix} task {{task.id}}: {{task.title}}\nTools:\n{{role.allowedTools}}`,
+    },
+    {
+      id: `${prefix}.permission.read_only`,
+      purpose: "permission" as const,
+      builtinVersion: 1,
+      template: `${prefix}: the {{role}} cannot change files.`,
+    },
+  ];
+  const systemPrompt = (role: string) => ({
     id: `system.role.${role}.base`,
-    purpose: "system" as const,
     builtinVersion: 1,
     template: `${prefix}: work on {{task.id}} as {{role}}.`,
-  }));
+    label: `${role} base`,
+    description: "",
+  });
+  const roles: AgentRoleDefinition[] = [
+    {
+      id: writer,
+      label: `${prefix} Writer`,
+      tools: ["odt_read_task", "odt_read_task_artifacts", "odt_set_task_artifact"],
+      workspaceAccess: "write",
+      location: "task_worktree",
+      runtimeScopes: ["build"],
+      systemPrompt: systemPrompt(writer),
+    },
+    {
+      id: editor,
+      label: `${prefix} Editor`,
+      tools: ["odt_read_task", "odt_read_task_artifacts", "odt_set_task_artifact"],
+      workspaceAccess: "read",
+      location: "repository",
+      runtimeScopes: ["workspace"],
+      systemPrompt: systemPrompt(editor),
+    },
+  ];
   const kickoffs = ["write_start", "write_revise", "edit_review"].map((action) => ({
     id: `${prefix}.kickoff.${action}`,
     purpose: "kickoff" as const,
     builtinVersion: 1,
     template: `${prefix}: ${action} for {{task.id}}.`,
   }));
-  return createTaskWorkflow(definition, [...templates, ...roleTemplates, ...kickoffs]);
+  return createTaskWorkflow(definition, [...templates, ...kickoffs], roles);
 };
 
 /** Two injected workflows share Review and Done, with their own roles, artifacts, and actions. */
@@ -281,7 +302,11 @@ export const createSharedBoardWorkflows = () => {
     workflows,
     layout,
     board,
-    catalog: { hostInstanceId: "mixed-host", workflows: workflows.map(taskWorkflowDescriptor) },
+    catalog: {
+      hostInstanceId: "mixed-host",
+      roles: [...workflowRoleCatalog(workflows)],
+      workflows: workflows.map(taskWorkflowDescriptor),
+    },
   };
 };
 
@@ -309,6 +334,7 @@ export const createWorkflowTaskCardFixture = (
   return resolveWorkflowTaskCards(
     {
       hostInstanceId: "fixture-host",
+      roles: workflowRoleCatalog([workflow]),
       workflows: new Map([[workflowReferenceKey(workflow.reference), workflow]]),
     },
     {

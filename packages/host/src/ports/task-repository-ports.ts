@@ -70,6 +70,7 @@ export type TaskSearchInput = {
   limit: number;
 };
 export type TaskReader = {
+  /** The tasks in a state whose workflow declares `mergeDetection`. */
   listMergeCandidates(input: {
     workspaceId: string;
     repoPath: string;

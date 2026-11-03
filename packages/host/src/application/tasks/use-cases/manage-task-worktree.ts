@@ -1,6 +1,6 @@
 import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { Effect } from "effect";
-import { isMergeDetectionCandidate } from "../../../domain/task";
+import { hasCheckableTaskBranch } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
@@ -103,10 +103,12 @@ export const createTaskWorktreeUseCases = ({
         worktreePaths,
         branchNames: relatedTips.map(localBranchName).sort(),
         uncommittedFileCount,
-        mergeCandidate: isMergeDetectionCandidate(task, {
-          taskBranch,
-          hasPendingDirectMerge: metadata.directMerge !== undefined,
-        }),
+        mergeCandidate:
+          taskWorkflows.forTask(task).detectsMerge(task.status) &&
+          hasCheckableTaskBranch({
+            taskBranch,
+            hasPendingDirectMerge: metadata.directMerge !== undefined,
+          }),
         branchOid: taskBranch.kind === "found" ? taskBranch.oid : null,
       };
     });

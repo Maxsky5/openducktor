@@ -506,7 +506,7 @@ describe("agent session transcript event consumer", () => {
             identity: liveRef,
             loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
             loadWorkflowRole: async (_taskId, roleId) =>
-              builtinTaskWorkflow.definition.roles.find(({ id }) => id === roleId)!,
+              builtinTaskWorkflow.roles.find(({ id }) => id === roleId)!,
             adapter: {
               loadSessionHistory: async () => [
                 {

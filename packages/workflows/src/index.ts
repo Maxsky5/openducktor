@@ -6,8 +6,7 @@ export {
   gitConflictPromptContext,
   resolvePullRequestTarget,
 } from "./builtin/agent-prompts";
-export { isMergeDetectionCandidateStatus } from "./builtin/merge-detection";
-export { builtinWorkflow } from "./builtin/definition";
+export { BUILTIN_ROLES } from "./builtin/roles";
 export { resolveCodexRolePolicy } from "./builtin/role-policy";
 export { BUILTIN_BOARD_LAYOUT } from "./builtin/board";
 export { BUILTIN_BOARD, builtinTaskWorkflow } from "./builtin/task-workflow";

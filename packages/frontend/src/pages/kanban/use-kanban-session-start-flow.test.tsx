@@ -4,11 +4,13 @@ import {
   resolveWorkflowBoard,
   taskWorkflowDescriptor,
   workflowAction,
+  workflowRoleCatalog,
 } from "@openducktor/workflows";
 import {
   createWorkflowTaskCardFixture,
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
+  reviewTaskRoles,
 } from "@openducktor/workflows/test-support";
 import { runTaskWorkflowAction } from "@openducktor/frontend-core/tasks/workflow/run-task-workflow-action";
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
@@ -1001,7 +1003,7 @@ describe("useKanbanSessionStartFlow", () => {
         );
         if (step?.kind === "agent") step.launchActions[1]!.context = "human_feedback";
       }
-      const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
+      const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
       const board = resolveWorkflowBoard(
         { states: definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
         [workflow],
@@ -1026,6 +1028,7 @@ describe("useKanbanSessionStartFlow", () => {
         tasksList,
         workflowCatalogGet: async () => ({
           hostInstanceId: "feedback-host",
+          roles: [...workflowRoleCatalog([task.taskWorkflow])],
           workflows: [taskWorkflowDescriptor(task.taskWorkflow)],
         }),
         workspaceWorkflowGet: async () => ({
@@ -1126,6 +1129,7 @@ describe("useKanbanSessionStartFlow", () => {
       tasksListAll: async () => [toWireTaskCard(committed)],
       workflowCatalogGet: async () => ({
         hostInstanceId: "committed-host",
+        roles: [...workflowRoleCatalog([task.taskWorkflow])],
         workflows: [taskWorkflowDescriptor(task.taskWorkflow)],
       }),
       workspaceWorkflowGet: async () => ({

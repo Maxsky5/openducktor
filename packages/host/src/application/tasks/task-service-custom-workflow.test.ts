@@ -5,6 +5,7 @@ import {
   createReviewTaskWorkflow,
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
+  reviewTaskRoles,
 } from "@openducktor/workflows/test-support";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -240,7 +241,7 @@ describe("task service with a custom task workflow", () => {
       availableWhen: { stateIn: ["backlog"] },
     });
     const taskWorkflows = singleTaskWorkflow(
-      createTaskWorkflow(definition, reviewTaskPromptTemplates),
+      createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles),
     );
     await harness.cleanup();
     harness = await createSqliteTaskStoreHarness({ taskWorkflows });

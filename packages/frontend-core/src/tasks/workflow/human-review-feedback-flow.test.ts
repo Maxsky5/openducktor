@@ -11,7 +11,7 @@ import { prepareSessionStartInstruction } from "../../sessions/start/session-sta
 import { startSessionWorkflow } from "../../sessions/start/session-start-workflow";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import { createSettingsSnapshotFixture } from "../../test-support/shared-test-fixtures";
-import { createTaskWorkflow } from "@openducktor/workflows";
+import { createTaskWorkflow, workflowRoleCatalog } from "@openducktor/workflows";
 import { createHumanReviewFeedbackState } from "./human-review-feedback-state";
 import { describe, expect, mock, test } from "bun:test";
 import { createFeedbackFake } from "../../test-support/feedback-fake";
@@ -93,7 +93,7 @@ describe("human-review-feedback-flow", () => {
       }
       const alpha = createTaskWorkflow(
         definition,
-        original.prompts.templates.map((template) =>
+        original.workflowTemplates.map((template) =>
           template.id === "alpha.kickoff.write_revise"
             ? {
                 ...template,
@@ -102,6 +102,7 @@ describe("human-review-feedback-flow", () => {
               }
             : template,
         ),
+        workflowRoleCatalog([original]),
       );
       const task = createWorkflowTaskCardFixture(alpha, board, {
         status: "alpha_work",

@@ -63,9 +63,7 @@ export function useSessionStartWorkflowRunner({
           existing.origin.scope.role !== input.request.role)
       )
         throw new Error("The session start no longer belongs to this workspace and task.");
-      const role = input.task?.taskWorkflow.definition.roles.find(
-        ({ id }) => id === input.request.role,
-      );
+      const role = input.task?.taskWorkflow.roles.find(({ id }) => id === input.request.role);
       const id =
         existing?.id ??
         startupAttempts.begin({

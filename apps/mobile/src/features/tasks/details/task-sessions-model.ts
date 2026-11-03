@@ -95,12 +95,12 @@ export const groupTaskSessions = (
     if (!entries.has(key)) entries.set(key, toEntry(summary, summary.activityState));
   }
   for (const entry of entries.values()) {
-    if (!task.taskWorkflow.definition.roles.some(({ id }) => id === entry.role))
+    if (!task.taskWorkflow.roles.some(({ id }) => id === entry.role))
       throw new Error(
         `Task "${task.id}" has a session for unavailable workflow role "${entry.role}". Reload the task workflow.`,
       );
   }
-  return task.taskWorkflow.definition.roles.flatMap(({ id: role, label }) => {
+  return task.taskWorkflow.roles.flatMap(({ id: role, label }) => {
     const roleEntries = [...entries.values()].filter((entry) => entry.role === role);
     const sessionNumbers = buildRoleSessionSequenceByIdentity(roleEntries);
     const rows = roleEntries.toSorted(compareAgentSessionRecency).map((entry, index) => {

@@ -7,7 +7,7 @@ import {
   repoConfigSchema,
 } from "@openducktor/contracts";
 import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
-import { createTaskWorkflow } from "@openducktor/workflows";
+import { createTaskWorkflow, workflowRoleCatalog } from "@openducktor/workflows";
 import type { z } from "zod";
 import { createTaskWorkflowResolver } from "../application/tasks/task-workflows";
 import { singleTaskWorkflow } from "../test-support/task-workflows";
@@ -30,7 +30,8 @@ describe("applyTaskWorkflowSettings", () => {
   test("keeps rules with equal signal IDs in separate workflows", () => {
     const second = createTaskWorkflow(
       workflowDefinitionSchema.parse({ ...review.definition, id: "another-review" }),
-      review.prompts.templates,
+      review.workflowTemplates,
+      workflowRoleCatalog([review]),
     );
     const applied = applyTaskWorkflowSettings(
       config({

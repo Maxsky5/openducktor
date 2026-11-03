@@ -2,7 +2,11 @@ import "../../test-support/dom-environment";
 import { expect, mock, test } from "bun:test";
 import { useQuery } from "@tanstack/react-query";
 import { workflowDefinitionSchema } from "@openducktor/contracts";
-import { createTaskWorkflow, taskWorkflowDescriptor } from "@openducktor/workflows";
+import {
+  createTaskWorkflow,
+  taskWorkflowDescriptor,
+  workflowRoleCatalog,
+} from "@openducktor/workflows";
 import type { PropsWithChildren } from "react";
 import {
   createSharedBoardWorkflows,
@@ -109,7 +113,11 @@ test.each([
     definition.events = definition.events.map((event) =>
       event.id === "alpha_submit" ? { ...event, effect: "status.set" } : event,
     );
-    const alpha = createTaskWorkflow(definition, original.prompts.templates);
+    const alpha = createTaskWorkflow(
+      definition,
+      original.workflowTemplates,
+      workflowRoleCatalog([original]),
+    );
     const before = createWorkflowTaskCardFixture(alpha, board, {
       id: "transition-task",
       status: "shared_review",
@@ -211,7 +219,11 @@ test.each([
     definition.events = definition.events.map((event) =>
       event.id === eventId ? { ...event, effect: "status.set" } : event,
     );
-  const alpha = createTaskWorkflow(definition, original.prompts.templates);
+  const alpha = createTaskWorkflow(
+    definition,
+    original.workflowTemplates,
+    workflowRoleCatalog([original]),
+  );
   const before = createWorkflowTaskCardFixture(alpha, board, {
     id: "draft-task",
     status: "alpha_approval",

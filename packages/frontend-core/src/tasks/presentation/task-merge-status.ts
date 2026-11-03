@@ -1,9 +1,5 @@
 import type { TaskMergeStatus, TaskMergeStatusSnapshot } from "@openducktor/contracts";
-import {
-  type ResolvedTaskCard as TaskCard,
-  isMergeDetectionCandidateStatus,
-  taskEffectAvailable,
-} from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard, taskEffectAvailable } from "@openducktor/workflows";
 import { plural } from "../../lib/plural";
 import { canonicalTargetBranch } from "../../lib/target-branch";
 import { humanDate } from "./task-display";
@@ -54,7 +50,7 @@ export const mergedTaskTarget = (
   status: TaskMergeStatus | undefined,
 ): string | null =>
   status?.result.kind === "merged" &&
-  isMergeDetectionCandidateStatus(task.status) &&
+  task.taskWorkflow.detectsMerge(task.status) &&
   taskEffectAvailable(task, "task.close")
     ? mergeTargetLabel(status)
     : null;

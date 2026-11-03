@@ -334,7 +334,7 @@ function TaskOwnerSource({
         worktree.path,
         retrySessions,
         task
-          ? (task.taskWorkflow.definition.roles.find(({ id }) =>
+          ? (task.taskWorkflow.roles.find(({ id }) =>
               task.taskWorkflow.definition.steps.some(
                 (step) =>
                   step.kind === "agent" &&

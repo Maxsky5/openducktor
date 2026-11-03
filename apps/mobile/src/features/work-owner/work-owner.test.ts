@@ -239,7 +239,7 @@ describe("task feedback target", () => {
         ready([session("b1")]),
         worktree,
         retry,
-        builtinTaskWorkflow.definition.roles.find(({ id }) => id === "build")!,
+        builtinTaskWorkflow.roles.find(({ id }) => id === "build")!,
       ),
     ).toEqual({
       session: {
@@ -257,7 +257,7 @@ describe("task feedback target", () => {
         ready([]),
         worktree,
         retry,
-        builtinTaskWorkflow.definition.roles.find(({ id }) => id === "build")!,
+        builtinTaskWorkflow.roles.find(({ id }) => id === "build")!,
       ),
     ).toEqual({
       session: null,
@@ -270,7 +270,7 @@ describe("task feedback target", () => {
         loading(),
         worktree,
         retry,
-        builtinTaskWorkflow.definition.roles.find(({ id }) => id === "build")!,
+        builtinTaskWorkflow.roles.find(({ id }) => id === "build")!,
       ),
     ).toEqual({
       session: null,
@@ -287,7 +287,7 @@ describe("task feedback target", () => {
         failed("Read failed."),
         worktree,
         retry,
-        builtinTaskWorkflow.definition.roles.find(({ id }) => id === "build")!,
+        builtinTaskWorkflow.roles.find(({ id }) => id === "build")!,
       ),
     ).toEqual({
       session: null,

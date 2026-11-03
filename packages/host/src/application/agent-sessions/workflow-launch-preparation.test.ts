@@ -5,6 +5,7 @@ import { createTaskWorkflow } from "@openducktor/workflows";
 import {
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
+  reviewTaskRoles,
 } from "@openducktor/workflows/test-support";
 import { reviewTaskWorkflows, singleTaskWorkflow } from "../../test-support/task-workflows";
 import {
@@ -428,7 +429,7 @@ test("automatic launch checks the worktree of an action that needs it without re
   definition.automations = definition.automations.map((automation) =>
     automation.id === "startRevision" ? { ...automation, startMode: "fresh" as const } : automation,
   );
-  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
   const launch = async (worktreeExists: boolean) => {
     const h = await createLaunchHarness("codex", {
       taskWorkflows: singleTaskWorkflow(workflow),
@@ -474,7 +475,7 @@ const launchCustomAutomation = async ({
   definition.automations = definition.automations.map(
     ({ startMode: _startMode, ...automation }) => automation,
   );
-  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
   const h = await createLaunchHarness("codex", {
     taskWorkflows: singleTaskWorkflow(workflow),
     task: { issueType: "article", status },

@@ -1,6 +1,6 @@
 import { gitTargetBranchSchema } from "@openducktor/contracts";
 import { validateWithSchema } from "./sqlite-task-store-validation";
-import { isMergeDetectionCandidateTask } from "../../domain/task";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { and, asc, desc, eq, notInArray, type SQL, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
@@ -106,6 +106,7 @@ export const taskCardRows = (
 export const mergeCandidates = (
   session: HostDatabaseSession,
   workspaceId: string,
+  taskWorkflows: Pick<TaskWorkflowResolver, "forTask">,
   terminalStates: readonly string[],
 ) =>
   Effect.gen(function* () {
@@ -125,7 +126,8 @@ export const mergeCandidates = (
           .orderBy(...taskLaneOrderBy),
       "sqliteTaskStore.mergeCandidates.selectTasks",
     );
-    return yield* Effect.forEach(rows.filter(isMergeDetectionCandidateTask), (row) =>
+    const checked = rows.filter((row) => taskWorkflows.forTask(row).detectsMerge(row.status));
+    return yield* Effect.forEach(checked, (row) =>
       Effect.gen(function* () {
         const targetBranch =
           row.targetBranch === null

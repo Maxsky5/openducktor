@@ -23,7 +23,7 @@ import {
   type RuntimeDescriptor,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import type { TaskWorkflowRole } from "@openducktor/workflows";
+import type { AgentRoleDefinition } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -500,13 +500,13 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
     );
   return (
     <div className="divide-y divide-border rounded-md border border-border">
-      {workflows.data.roles.map(({ role, label, definition, key }) => {
-        const roleLabelId = `codex-${field}-${key}-override-label`;
+      {workflows.data.roles.map(({ role, label, definition }) => {
+        const roleLabelId = `codex-${field}-${role}-override-label`;
         const roleOverride = config.roleOverrides[role];
 
         return (
           <div
-            key={key}
+            key={role}
             className="grid gap-2 px-3 py-2.5 @min-[28rem]:grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] @min-[28rem]:items-center"
           >
             <Label id={roleLabelId} className="text-sm font-medium text-foreground">
@@ -536,7 +536,7 @@ function RoleOverrideDropdown<Field extends CodexPolicyField>({
   onChange,
 }: {
   field: Field;
-  role: TaskWorkflowRole;
+  role: AgentRoleDefinition;
   roleOverride: CodexRoleOverride | undefined;
   disabled: boolean;
   labelId: string;
@@ -583,7 +583,7 @@ function RoleOverrideDropdown<Field extends CodexPolicyField>({
 
 function valuesForRole<Field extends CodexPolicyField>(
   field: Field,
-  role: TaskWorkflowRole,
+  role: Pick<AgentRoleDefinition, "workspaceAccess">,
 ): readonly CodexPolicyFields[Field][] {
   const values = defaultValuesForField(field);
   if (field === "sandboxMode") {

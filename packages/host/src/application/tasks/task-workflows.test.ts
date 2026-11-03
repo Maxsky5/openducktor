@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { workflowDefinitionSchema } from "@openducktor/contracts";
-import { createTaskWorkflow } from "@openducktor/workflows";
+import { createTaskWorkflow, workflowRoleCatalog } from "@openducktor/workflows";
 import { createSharedBoardWorkflows } from "@openducktor/workflows/test-support";
 import { createTaskWorkflowResolver } from "./task-workflows";
 
@@ -21,7 +21,8 @@ test("resolves exact revisions and keeps the workspace creation workflow in the 
   const f = fixture();
   const revision = createTaskWorkflow(
     workflowDefinitionSchema.parse({ ...f.alpha.definition, revision: 2 }),
-    f.alpha.prompts.templates,
+    f.alpha.workflowTemplates,
+    workflowRoleCatalog([f.alpha]),
   );
   const workflows = [...f.workflows, revision];
   const module = createTaskWorkflowResolver({
@@ -84,7 +85,11 @@ test("rejects conflicting shared workflow states when constructing the host modu
   const f = fixture();
   const definition = workflowDefinitionSchema.parse(f.beta.definition);
   definition.states.find(({ id }) => id === "shared_review")!.label = "Different review";
-  const conflicting = createTaskWorkflow(definition, f.beta.prompts.templates);
+  const conflicting = createTaskWorkflow(
+    definition,
+    f.beta.workflowTemplates,
+    workflowRoleCatalog([f.beta]),
+  );
   expect(() =>
     createTaskWorkflowResolver({ ...f.source, workflows: [f.alpha, conflicting] }),
   ).toThrow('Shared state "shared_review" conflicts');

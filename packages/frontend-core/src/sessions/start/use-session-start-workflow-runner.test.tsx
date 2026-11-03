@@ -2,6 +2,7 @@ import {
   builtinTaskWorkflow,
   createTaskWorkflow,
   taskWorkflowDescriptor,
+  workflowRoleCatalog,
 } from "@openducktor/workflows";
 import { repoConfigSchema } from "@openducktor/contracts";
 import {
@@ -637,7 +638,11 @@ test.each([
       roleIds: ["build"],
       requiredPlaceholders: [...required],
     });
-    const taskWorkflow = createTaskWorkflow(descriptor.definition, descriptor.templates);
+    const taskWorkflow = createTaskWorkflow(
+      descriptor.definition,
+      descriptor.templates,
+      workflowRoleCatalog([builtinTaskWorkflow]),
+    );
     const dispatch = mock(
       async (_request: WorkflowLaunchRequest): Promise<WorkflowLaunchResult> => {
         throw new Error("Host refused the test launch");

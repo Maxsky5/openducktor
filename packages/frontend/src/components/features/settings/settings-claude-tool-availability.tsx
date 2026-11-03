@@ -168,14 +168,14 @@ export function ClaudeToolAvailabilityEditor({
         onEnabledChange={setRoles}
       >
         <div className="divide-y divide-border rounded-md border border-border">
-          {workflows.data.roles.map(({ role, label: roleLabel, key }) => {
-            const roleId = `${id}-${key}`;
+          {workflows.data.roles.map(({ role, label: roleLabel }) => {
+            const roleId = `${id}-${role}`;
             const label = roleLabel;
             const inherits = config.roleOverrides[role]?.toolAvailability === undefined;
             const choices = resolveClaudePolicy(config, role).settings.toolAvailability;
             return (
               <div
-                key={key}
+                key={role}
                 className="grid gap-2 px-3 py-2.5 @min-[28rem]:grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] @min-[28rem]:items-center"
               >
                 <div className="flex flex-col gap-1">

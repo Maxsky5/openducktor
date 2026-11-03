@@ -45,10 +45,9 @@ export function PromptOverridesSection({
   const workflows = useWorkflowSettings();
   if (workflows.error) return <p role="alert">{workflows.error.message}</p>;
   if (!workflows.data) return <p role="status">Loading workflow prompts...</p>;
-  const matchingRoles = workflows.data.promptTabs.filter(({ roleId }) => roleId === tab);
-  const selectedTab =
-    workflows.data.promptTabs.find(({ id }) => id === tab) ??
-    (matchingRoles.length === 1 ? matchingRoles[0] : undefined);
+  const selectedTab = workflows.data.promptTabs.find(
+    ({ id, roleId }) => id === tab || roleId === tab,
+  );
   if (!selectedTab)
     return (
       <div className="p-4">
@@ -97,7 +96,7 @@ export function PromptOverridesSection({
 
           return (
             <PromptOverrideCard
-              key={builtin.key}
+              key={builtin.id}
               label={builtin.label}
               description={builtin.description}
               override={override}

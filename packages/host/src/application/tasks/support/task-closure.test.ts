@@ -2,6 +2,7 @@ import { createTaskWorkflow } from "@openducktor/workflows";
 import {
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
+  reviewTaskRoles,
 } from "@openducktor/workflows/test-support";
 import { builtinTaskWorkflows, singleTaskWorkflow } from "../../../test-support/task-workflows";
 import type { TaskCard } from "@openducktor/contracts";
@@ -215,7 +216,7 @@ test("commits the signal and source role of the closing event", async () => {
   closing.outcomes = [
     { when: true, to: "published", signal: "reviewAccepted", sourceRole: "editor" },
   ];
-  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
   const taskStore: Pick<TaskStorePort, "transitionTask"> = {
     transitionTask: (input) =>
       Effect.fromResult(

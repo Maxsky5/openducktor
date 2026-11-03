@@ -4,6 +4,7 @@ import {
   compileWorkflowCatalog,
   createTaskWorkflow,
   taskWorkflowDescriptor,
+  workflowRoleCatalog,
   type TaskWorkflow,
 } from "@openducktor/workflows";
 import type {
@@ -17,6 +18,7 @@ export const builtinWorkflowDescriptor = taskWorkflowDescriptor(builtinTaskWorkf
 /** The wire catalog of a host with the built-in workflow. */
 export const builtinWorkflowCatalogFixture: WorkflowCatalog = {
   hostInstanceId: "test-host",
+  roles: [...workflowRoleCatalog([builtinTaskWorkflow])],
   workflows: [builtinWorkflowDescriptor],
 };
 export const builtinWorkspaceWorkflowFixture: WorkspaceWorkflowContext = {
@@ -38,7 +40,11 @@ export const editBuiltinTaskWorkflow = (
 ): TaskWorkflow => {
   const descriptor = taskWorkflowDescriptor(builtinTaskWorkflow);
   edit(descriptor);
-  return createTaskWorkflow(descriptor.definition, descriptor.templates);
+  return createTaskWorkflow(
+    descriptor.definition,
+    descriptor.templates,
+    workflowRoleCatalog([builtinTaskWorkflow]),
+  );
 };
 
 /** Host presentation for a built-in state notification fixture. */

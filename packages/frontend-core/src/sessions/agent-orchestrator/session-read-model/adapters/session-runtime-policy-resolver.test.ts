@@ -46,7 +46,7 @@ test("loads settings inside the runtime-policy adapter for Codex policy", async 
         taskId: "task-1",
         role: "build",
       },
-      workflowRole: builtinTaskWorkflow.definition.roles.find(({ id }) => id === "build")!,
+      workflowRole: builtinTaskWorkflow.roles.find(({ id }) => id === "build")!,
     }),
   ).toMatchObject({ kind: "codex" });
   expect(loadSettingsSnapshot).toHaveBeenCalledTimes(1);

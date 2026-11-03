@@ -274,8 +274,7 @@ describe("session-start notifications", () => {
               { repoPath: "/tmp/repo", repositoryLabel: "OpenDucktor" },
               {
                 ...input,
-                roleLabel: builtinTaskWorkflow.definition.roles.find(({ id }) => id === input.role)!
-                  .label,
+                roleLabel: builtinTaskWorkflow.roles.find(({ id }) => id === input.role)!.label,
               },
             ),
           );

@@ -4,6 +4,7 @@ import {
   createReviewTaskWorkflow,
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
+  reviewTaskRoles,
 } from "../../test-support/review-task-workflow";
 import { builtinTaskWorkflow } from "../builtin/task-workflow";
 import type { TaskFacts } from "./task-input";
@@ -22,7 +23,7 @@ const reviewTask = (overrides: Partial<TaskFacts> = {}): TaskFacts => ({
 const withChange = (change: (definition: WorkflowDefinition) => void) => {
   const definition = reviewTaskDefinition();
   change(definition);
-  return () => createTaskWorkflow(definition, reviewTaskPromptTemplates);
+  return () => createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
 };
 
 describe("createTaskWorkflow", () => {
@@ -32,6 +33,8 @@ describe("createTaskWorkflow", () => {
     expect(review.terminalStates).toEqual(["published", "shelved"]);
     expect(review.isTerminalState("shelved")).toBe(true);
     expect(review.isTerminalState("approval")).toBe(false);
+    expect(review.detectsMerge("approval")).toBe(true);
+    expect(review.detectsMerge("reviewing")).toBe(false);
     expect(review.worktreeRoles).toEqual(["writer"]);
     expect(review.reviewArtifactCodes).toEqual(["review"]);
     expect(review.artifactSubmitEvent("review", "revise")).toBe("revise-review");
@@ -184,6 +187,7 @@ describe("createTaskWorkflow", () => {
       createTaskWorkflow(
         reviewTaskDefinition(),
         reviewTaskPromptTemplates.filter(({ id }) => id !== "kickoff.write_revise"),
+        reviewTaskRoles,
       ),
     ).toThrow(
       'Task workflow "review" has no prompt template "kickoff.write_revise" for launch action "write_revise".',

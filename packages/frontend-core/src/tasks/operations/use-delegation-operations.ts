@@ -67,7 +67,7 @@ const startDelegatedBuild = async (
     loadTaskWorkflowContext(queryClient, { workspaceId, repoPath }, taskId),
   ]);
   const buildStart = task.taskWorkflow.effectEvent("build.start");
-  const roles = task.taskWorkflow.definition.roles.filter(
+  const roles = task.taskWorkflow.roles.filter(
     (role) => buildStart !== undefined && task.taskWorkflow.roleStartEvent(role.id) === buildStart,
   );
   if (roles.length !== 1)

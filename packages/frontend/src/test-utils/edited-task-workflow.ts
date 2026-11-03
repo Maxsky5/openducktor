@@ -4,6 +4,7 @@ import {
   type ResolvedTaskCard,
   type TaskPromptTemplate,
   type TaskWorkflow,
+  workflowRoleCatalog,
 } from "@openducktor/workflows";
 
 /** A new task workflow from edited copies of the definition and prompt templates of a workflow. */
@@ -12,9 +13,9 @@ export const editTaskWorkflow = (
   edit: (definition: WorkflowDefinition, templates: TaskPromptTemplate[]) => void,
 ): TaskWorkflow => {
   const definition = workflowDefinitionSchema.parse(workflow.definition);
-  const templates = [...structuredClone(workflow.prompts.templates)];
+  const templates = [...structuredClone(workflow.workflowTemplates)];
   edit(definition, templates);
-  return createTaskWorkflow(definition, templates);
+  return createTaskWorkflow(definition, templates, workflowRoleCatalog([workflow]));
 };
 
 /** The task with its workflow rebuilt from edited copies of the definition and prompt templates. */

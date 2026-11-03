@@ -72,7 +72,7 @@ export const roleIconForHint = (hint: WorkflowIcon | undefined): LucideIcon =>
 export const roleOptionsForTask = (
   task: import("@openducktor/workflows").ResolvedTaskCard | null,
 ) =>
-  task?.taskWorkflow.definition.roles.map((role) => ({
+  task?.taskWorkflow.roles.map((role) => ({
     role: role.id,
     label: role.label,
     icon: roleIconForHint(workflowRoleIcon(task.taskWorkflow, role.id)),

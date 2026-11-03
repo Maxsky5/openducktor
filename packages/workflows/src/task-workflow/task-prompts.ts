@@ -2,6 +2,8 @@ import {
   isOdtBrowserToolName,
   validatePromptTemplatePlaceholders,
   type AgentPromptPlaceholder,
+  type AgentToolName,
+  type CompiledAgentRoleDefinition,
   type CompiledWorkflowDefinition,
   type GitTargetBranch,
   type RepoPromptOverrides,
@@ -22,15 +24,13 @@ export type PromptTemplate = {
   requiredPlaceholders?: AgentPromptPlaceholder[] | undefined;
 };
 
-/** The shared system templates, in prompt order after the role template. */
-const SHARED_SYSTEM_TEMPLATE_IDS = [
-  "system.shared.workflow_guards",
-  "system.shared.tool_protocol",
-  "system.shared.task_context",
-] as const;
-const READ_ONLY_REJECTION_TEMPLATE_ID = "permission.read_only.reject";
-/** The system template of a role. */
-const roleSystemTemplateId = (roleId: string): string => `system.role.${roleId}.base`;
+/** The role facts that prompts read. The system template comes from the role catalog. */
+type PromptRole = {
+  readonly id: string;
+  readonly tools: readonly AgentToolName[];
+  readonly writes: readonly string[];
+  readonly systemPrompt: CompiledAgentRoleDefinition["systemPrompt"];
+};
 
 export type PromptTaskContext = {
   taskId: string;
@@ -173,6 +173,7 @@ const placeholderProblem = (
 const checkTemplates = (
   definition: CompiledWorkflowDefinition,
   templatesById: ReadonlyMap<string, PromptTemplate>,
+  roles: readonly PromptRole[],
   launchTemplates: ReadonlyMap<string, LaunchTemplate>,
 ): void => {
   const requireTemplate = (id: string, purpose: PromptPurpose, user: string) => {
@@ -193,10 +194,10 @@ const checkTemplates = (
     );
     if (problem !== undefined) throw new Error(problem);
   };
-  for (const id of SHARED_SYSTEM_TEMPLATE_IDS) requireTemplate(id, "system", "the system prompt");
-  requireTemplate(READ_ONLY_REJECTION_TEMPLATE_ID, "permission", "read-only rejections");
-  for (const role of definition.roles) {
-    requireTemplate(roleSystemTemplateId(role.id), "system", `role "${role.id}"`);
+  for (const id of definition.prompts.system) requireTemplate(id, "system", "the system prompt");
+  requireTemplate(definition.prompts.readOnlyRejection, "permission", "read-only rejections");
+  for (const role of roles) {
+    requireTemplate(role.systemPrompt.id, "system", `role "${role.id}"`);
   }
   for (const [launchActionId, launch] of launchTemplates) {
     requireTemplate(launch.templateId, launch.kind, `launch action "${launchActionId}"`);
@@ -205,8 +206,18 @@ const checkTemplates = (
 
 export const createTaskPrompts = (
   definition: CompiledWorkflowDefinition,
-  templates: readonly PromptTemplate[],
+  workflowTemplates: readonly PromptTemplate[],
+  roles: readonly PromptRole[],
 ): TaskPrompts => {
+  const roleTemplates = roles.map(({ id, systemPrompt }): PromptTemplate => ({
+    ...systemPrompt,
+    purpose: "system",
+    roleIds: [id],
+    requiredPlaceholders: systemPrompt.requiredPlaceholders
+      ? [...systemPrompt.requiredPlaceholders]
+      : undefined,
+  }));
+  const templates = [...workflowTemplates, ...roleTemplates];
   const templatesById = new Map<string, PromptTemplate>();
   for (const template of templates) {
     if (templatesById.has(template.id)) {
@@ -216,7 +227,7 @@ export const createTaskPrompts = (
     }
     templatesById.set(template.id, template);
   }
-  const rolesById = new Map(definition.roles.map((role) => [role.id, role]));
+  const rolesById = new Map(roles.map((role) => [role.id, role]));
   const launchTemplates = new Map<string, LaunchTemplate>(
     definition.steps.flatMap((step) =>
       step.kind === "agent"
@@ -231,29 +242,27 @@ export const createTaskPrompts = (
         : [],
     ),
   );
-  checkTemplates(definition, templatesById, launchTemplates);
+  checkTemplates(definition, templatesById, roles, launchTemplates);
   const templateRolesById = new Map(
     templates.map((entry) => {
-      const roles =
+      const templateRoles =
         entry.roleIds ??
-        definition.roles
-          .filter(
-            (role) =>
-              entry.id === roleSystemTemplateId(role.id) ||
-              definition.steps.some(
-                (step) =>
-                  step.kind === "agent" &&
-                  step.roleId === role.id &&
-                  step.launchActions.some((launch) => launch.template.id === entry.id),
-              ),
+        roles
+          .filter((role) =>
+            definition.steps.some(
+              (step) =>
+                step.kind === "agent" &&
+                step.roleId === role.id &&
+                step.launchActions.some((launch) => launch.template.id === entry.id),
+            ),
           )
           .map(({ id }) => id);
-      for (const role of roles)
+      for (const role of templateRoles)
         if (!rolesById.has(role))
           throw new Error(
             `Prompt template "${entry.id}" names unknown role "${role}" in task workflow "${definition.id}". Fix its roleIds.`,
           );
-      return [entry.id, roles] as const;
+      return [entry.id, templateRoles] as const;
     }),
   );
 
@@ -273,6 +282,11 @@ export const createTaskPrompts = (
     return launch;
   };
 
+  const systemTemplateOf = (roleId: string): string => {
+    const role = rolesById.get(roleId);
+    if (!role) throw new Error(`Task workflow "${definition.id}" has no role "${roleId}".`);
+    return role.systemPrompt.id;
+  };
   const toolList = (roleId: string): string => {
     const role = rolesById.get(roleId);
     if (!role) throw new Error(`Task workflow "${definition.id}" has no role "${roleId}".`);
@@ -411,7 +425,7 @@ export const createTaskPrompts = (
     },
     systemPrompt: ({ role, task, overrides }) =>
       buildPrompt(
-        [roleSystemTemplateId(role), ...SHARED_SYSTEM_TEMPLATE_IDS],
+        [systemTemplateOf(role), ...definition.prompts.system],
         placeholderValues({ role, task }),
         overrides,
       ),
@@ -456,7 +470,7 @@ export const createTaskPrompts = (
     },
     readOnlyRejection: ({ role, overrides }) =>
       buildPrompt(
-        [READ_ONLY_REJECTION_TEMPLATE_ID],
+        [definition.prompts.readOnlyRejection],
         placeholderValues({ role, task: { taskId: "permission-policy" } }),
         overrides,
       ).prompt,

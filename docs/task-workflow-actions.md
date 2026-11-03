@@ -152,7 +152,7 @@ A worktree that no longer exists has nothing to remove, so its owners do not cou
 
 The host checks whether task branches are merged into their targets. It never closes a task. It only proposes Close Task.
 
-A task is a candidate when its status is `in_progress`, `blocked`, `ai_review`, or `human_review`, its local task branch exists, and it has no pending direct merge. The target is the saved task target, else the repository default target.
+A task is a candidate when its workflow sets `mergeDetection` on its current state, its local task branch exists, and it has no pending direct merge. The built-in workflow sets it on `in_progress`, `blocked`, `ai_review`, and `human_review`. The target is the saved task target, else the repository default target.
 
 The task sync loop runs a pass for each open workspace every five minutes, after its pull request sync. `task_merge_status_check` runs a pass on request: Check again in the approval modal, and Check merged tasks in the command palette for one or all open workspaces. A pass fetches each target remote through the [shared remote fetch](git-comparison.md#remote-fetch).
 

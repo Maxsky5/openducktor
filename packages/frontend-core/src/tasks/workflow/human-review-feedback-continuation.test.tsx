@@ -3,7 +3,11 @@ import { expect, mock, test } from "bun:test";
 import { useQuery } from "@tanstack/react-query";
 import { workflowDefinitionSchema } from "@openducktor/contracts";
 import type { PropsWithChildren } from "react";
-import { createTaskWorkflow, taskWorkflowDescriptor } from "@openducktor/workflows";
+import {
+  createTaskWorkflow,
+  taskWorkflowDescriptor,
+  workflowRoleCatalog,
+} from "@openducktor/workflows";
 import {
   createSharedBoardWorkflows,
   createWorkflowTaskCardFixture,
@@ -26,7 +30,11 @@ test.each([false, true])(
     definition.events = definition.events.map((event) =>
       event.id === "alpha_revise" ? { ...event, effect: "review.request_changes" } : event,
     );
-    const alpha = createTaskWorkflow(definition, original.prompts.templates);
+    const alpha = createTaskWorkflow(
+      definition,
+      original.workflowTemplates,
+      workflowRoleCatalog([original]),
+    );
     const before = createWorkflowTaskCardFixture(alpha, board, { status: "shared_review" });
     const after = toWireTaskCard(
       createWorkflowTaskCardFixture(alpha, board, {

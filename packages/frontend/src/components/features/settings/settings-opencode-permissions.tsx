@@ -63,9 +63,9 @@ export function OpenCodePermissionsSettings({
         }}
       >
         <div className="divide-y divide-border rounded-md border border-border">
-          {workflows.data.roles.map(({ role, label, key }) => (
+          {workflows.data.roles.map(({ role, label }) => (
             <PermissionRole
-              key={key}
+              key={role}
               label={label}
               rules={config.roleOverrides[role]?.rules ?? EMPTY_RULES}
               disabled={disabled}

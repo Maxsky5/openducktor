@@ -7,7 +7,7 @@ import {
 import {
   canonicalTargetBranch,
   checkoutBranch,
-  isMergeDetectionCandidate,
+  hasCheckableTaskBranch,
 } from "../../../domain/task";
 import type { GitRefTip } from "../../../ports/git-port";
 import type { TaskMergeCandidate } from "../../../ports/task-repository-ports";
@@ -54,7 +54,7 @@ export const planTaskCheck = (
 ): { kind: "entry"; entry: Entry } | { kind: "check"; check: PendingCheck } | null => {
   const taskBranch = findTaskBranch(context.relatedTips, context.taskWorktreePath);
   const { hasPendingDirectMerge, last } = context;
-  if (!isMergeDetectionCandidate(task, { taskBranch, hasPendingDirectMerge })) return null;
+  if (!hasCheckableTaskBranch({ taskBranch, hasPendingDirectMerge })) return null;
   const branch = taskBranch.kind === "found" ? taskBranch.branch : null;
   const target = task.targetBranchError ? null : (task.targetBranch ?? context.defaultTarget);
   // A result belongs to one branch and target. A changed target needs a new check.

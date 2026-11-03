@@ -1,4 +1,4 @@
-import type { WorkflowDefinition } from "@openducktor/contracts";
+import type { AgentRoleDefinition, WorkflowDefinition } from "@openducktor/contracts";
 import { createTaskWorkflow, type TaskWorkflow } from "../src/task-workflow/task-workflow";
 import type { PromptTemplate } from "../src/task-workflow/task-prompts";
 
@@ -23,31 +23,8 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
     { id: "fix", label: "Fix" },
   ],
   roles: [
-    {
-      id: "writer",
-      label: "Writer",
-      tools: [
-        "odt_read_task",
-        "odt_read_task_artifacts",
-        "odt_set_task_artifact",
-        "odt_build_blocked",
-        "odt_build_resumed",
-        "odt_build_completed",
-      ],
-      writes: ["draft"],
-      workspaceAccess: "write",
-      location: "task_worktree",
-      runtimeScopes: ["build"],
-    },
-    {
-      id: "editor",
-      label: "Editor",
-      tools: ["odt_read_task", "odt_read_task_artifacts", "odt_set_task_artifact"],
-      writes: ["review"],
-      workspaceAccess: "read",
-      location: "repository",
-      runtimeScopes: ["workspace"],
-    },
+    { id: "writer", writes: ["draft"] },
+    { id: "editor", writes: ["review"] },
   ],
   artifacts: [
     { id: "draft", label: "Draft", kind: "document", saveEventId: "submit-draft" },
@@ -81,7 +58,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
         role: "editor",
       },
     },
-    { id: "approval", label: "Approval" },
+    { id: "approval", label: "Approval", mergeDetection: true },
     {
       id: "published",
       label: "Published",
@@ -373,6 +350,10 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
   ],
   actionPriority: [],
   launchOrder: [],
+  prompts: {
+    system: ["review.system.guards", "review.system.tools", "review.system.task"],
+    readOnlyRejection: "review.permission.read_only",
+  },
 });
 
 const template = (
@@ -381,21 +362,62 @@ const template = (
   text: string,
 ): PromptTemplate => ({ id, purpose, builtinVersion: 1, template: text });
 
+const systemPrompt = (id: string, text: string) => ({
+  id,
+  builtinVersion: 1,
+  template: text,
+  label: id,
+  description: "",
+});
+
+/** The role catalog of the review workflow of the tests. */
+export const reviewTaskRoles: readonly AgentRoleDefinition[] = [
+  {
+    id: "writer",
+    label: "Writer",
+    tools: [
+      "odt_read_task",
+      "odt_read_task_artifacts",
+      "odt_set_task_artifact",
+      "odt_build_blocked",
+      "odt_build_resumed",
+      "odt_build_completed",
+    ],
+    workspaceAccess: "write",
+    location: "task_worktree",
+    runtimeScopes: ["build"],
+    systemPrompt: systemPrompt(
+      "system.role.writer.base",
+      "You are the {{role}} of task {{task.id}}.",
+    ),
+  },
+  {
+    id: "editor",
+    label: "Editor",
+    tools: ["odt_read_task", "odt_read_task_artifacts", "odt_set_task_artifact"],
+    workspaceAccess: "read",
+    location: "repository",
+    runtimeScopes: ["workspace"],
+    systemPrompt: systemPrompt(
+      "system.role.editor.base",
+      "You review task {{task.id}} as {{role}}.",
+    ),
+  },
+];
+
 export const reviewTaskPromptTemplates: readonly PromptTemplate[] = [
-  template("system.role.writer.base", "system", "You are the {{role}} of task {{task.id}}."),
-  template("system.role.editor.base", "system", "You review task {{task.id}} as {{role}}."),
-  template("system.shared.workflow_guards", "system", "Follow the review workflow."),
-  template("system.shared.tool_protocol", "system", "Tools:\n{{role.allowedTools}}"),
+  template("review.system.guards", "system", "Follow the review workflow."),
+  template("review.system.tools", "system", "Tools:\n{{role.allowedTools}}"),
   template(
-    "system.shared.task_context",
+    "review.system.task",
     "system",
     "Task {{task.id}}: {{task.title}} ({{task.issueType}}, {{task.status}})",
   ),
-  template("permission.read_only.reject", "permission", "The {{role}} cannot change files."),
+  template("review.permission.read_only", "permission", "The {{role}} cannot change files."),
   template("kickoff.write_start", "kickoff", "Write the draft for {{task.id}}."),
   template("kickoff.write_revise", "kickoff", "Revise the draft for {{task.id}}."),
   template("kickoff.edit_review", "kickoff", "Review the draft of {{task.id}}."),
 ];
 
 export const createReviewTaskWorkflow = (): TaskWorkflow =>
-  createTaskWorkflow(reviewTaskDefinition(), reviewTaskPromptTemplates);
+  createTaskWorkflow(reviewTaskDefinition(), reviewTaskPromptTemplates, reviewTaskRoles);

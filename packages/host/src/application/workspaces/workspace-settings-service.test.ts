@@ -30,7 +30,11 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "./workspace-settings-model";
-import { builtinTaskWorkflow, createTaskWorkflow } from "@openducktor/workflows";
+import {
+  builtinTaskWorkflow,
+  createTaskWorkflow,
+  workflowRoleCatalog,
+} from "@openducktor/workflows";
 import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 
 const createWorkspaceSettingsService = (
@@ -338,7 +342,8 @@ describe("createWorkspaceSettingsService", () => {
     const port = createFakeSettingsConfig({ config: initial });
     const otherWorkflow = createTaskWorkflow(
       workflowDefinitionSchema.parse({ ...builtinTaskWorkflow.definition, id: "other" }),
-      builtinTaskWorkflow.prompts.templates,
+      builtinTaskWorkflow.workflowTemplates,
+      workflowRoleCatalog([builtinTaskWorkflow]),
     );
     const service = createWorkspaceSettingsService(port, {
       ...builtinTaskWorkflows,

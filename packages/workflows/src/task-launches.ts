@@ -107,10 +107,6 @@ export const roleFocusArtifact = (role: string, workflow: TaskWorkflow): string 
 };
 export const roleDefaultPanel = (role: string, workflow: TaskWorkflow): "document" | "diffs" =>
   workflow.role(role).defaultPanel ?? "document";
-export const roleSettingsLabel = (role: string, workflow: TaskWorkflow): string => {
-  const declared = workflow.role(role);
-  return declared.settingsLabel ?? declared.label;
-};
 
 /** The extra prompt context that a launch collects before it starts. */
 export type KickoffPromptContextKind = NonNullable<TaskWorkflowLaunchAction["context"]> | "none";

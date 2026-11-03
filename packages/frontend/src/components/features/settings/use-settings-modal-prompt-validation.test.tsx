@@ -105,8 +105,8 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.promptValidationState.globalErrorCount).toBe(1);
     expect(latest.promptValidationState.repoErrorCountByWorkspaceId["repo-a"]).toBe(1);
     expect(latest.promptValidationState.totalErrorCount).toBe(2);
-    expect(latest.globalPromptRoleTabErrorCounts["role:openducktor@2:spec"]).toBe(1);
-    expect(latest.selectedRepoPromptRoleTabErrorCounts["role:openducktor@2:build"]).toBe(1);
+    expect(latest.globalPromptRoleTabErrorCounts["role:spec"]).toBe(1);
+    expect(latest.selectedRepoPromptRoleTabErrorCounts["role:build"]).toBe(1);
     expect(latest.settingsSectionErrorCountById).toEqual({
       general: 0,
       "remote-access": 0,

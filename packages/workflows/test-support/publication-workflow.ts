@@ -19,24 +19,8 @@ export const publicationDefinition = (): WorkflowDefinition => ({
     { id: "channel", type: "enum", values: ["web", "print", null] },
   ],
   roles: [
-    {
-      id: "author",
-      label: "Author",
-      tools: ["odt_read_task", "odt_set_task_artifact"],
-      writes: ["copy"],
-      workspaceAccess: "write",
-      location: "task_worktree",
-      runtimeScopes: ["build"],
-    },
-    {
-      id: "reviewer",
-      label: "Reviewer",
-      tools: ["odt_read_task", "odt_set_task_artifact"],
-      writes: ["first-review", "second-review"],
-      workspaceAccess: "read",
-      location: "repository",
-      runtimeScopes: ["workspace"],
-    },
+    { id: "author", writes: ["copy"] },
+    { id: "reviewer", writes: ["first-review", "second-review"] },
   ],
   artifacts: [
     { id: "copy", label: "Copy", kind: "document", saveEventId: "submit" },
@@ -284,6 +268,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
     { when: true, actions: ["publish", "submit", "finish-first", "view-copy"] },
   ],
   actionPriority: [{ when: { stateIn: ["draft"] }, actions: ["start-writing", "submit"] }],
+  prompts: { system: [], readOnlyRejection: "publication.permission.read_only" },
 });
 
 export type Artifacts = WorkflowInput["artifacts"];

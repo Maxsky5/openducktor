@@ -4,6 +4,7 @@ import {
   taskWorkflowDescriptor,
   validateWorkflowInventory,
   workflowReferenceKey,
+  workflowRoleCatalog,
   type TaskWorkflow,
   type WorkflowBoardLayout,
 } from "@openducktor/workflows";
@@ -24,6 +25,7 @@ export const createTaskWorkflowResolver = (source: TaskWorkflowSource): TaskWork
   const workflows = Object.freeze([...source.workflows]);
   validateWorkflowInventory(workflows);
   const descriptors = Object.freeze(workflows.map(taskWorkflowDescriptor));
+  const roles = Object.freeze(workflowRoleCatalog(workflows));
   const registeredWorkflows = new Set(workflows);
   const byReference = new Map(
     workflows.map((workflow) => [workflowReferenceKey(workflow.reference), workflow]),
@@ -48,7 +50,11 @@ export const createTaskWorkflowResolver = (source: TaskWorkflowSource): TaskWork
   };
   return {
     workflows,
-    catalog: (hostInstanceId) => ({ hostInstanceId, workflows: [...descriptors] }),
+    catalog: (hostInstanceId) => ({
+      hostInstanceId,
+      roles: [...roles],
+      workflows: [...descriptors],
+    }),
     forTask: (task) => registered(source.forTask(task)),
     forNewTask: (repoPath) => registered(source.forNewTask(repoPath)),
     forReference: (reference) => {

@@ -1,13 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "@openducktor/contracts";
-import { builtinWorkflow } from "./definition";
+import { builtinTaskWorkflow } from "./task-workflow";
 import { AGENT_ROLE_TOOL_POLICY } from "./role-policy";
 import { loadWorkflowContractFixture } from "../../test-support/workflow-contract-fixture";
 
 describe("agent orchestrator role policy contract", () => {
   test("keeps workflow code writes within each role's responsibility", () => {
     expect(
-      Object.fromEntries(builtinWorkflow.definition.roles.map(({ id, writes }) => [id, writes])),
+      Object.fromEntries(
+        builtinTaskWorkflow.definition.roles.map(({ id, writes }) => [id, writes]),
+      ),
     ).toEqual({
       spec: ["spec"],
       planner: ["plan"],

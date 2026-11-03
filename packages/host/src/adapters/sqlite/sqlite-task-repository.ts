@@ -348,7 +348,7 @@ export const createSqliteTaskRepository = ({
         input,
         "sqliteTaskRepository.listMergeCandidates",
         ({ session, workspaceId, taskWorkflows }) =>
-          mergeCandidates(session, workspaceId, hostTerminalStates(taskWorkflows)),
+          mergeCandidates(session, workspaceId, taskWorkflows, hostTerminalStates(taskWorkflows)),
       ),
     searchTasks: (input) =>
       withReadDatabase(

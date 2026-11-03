@@ -182,11 +182,15 @@ Each state change uses a named event. An event declares its source states, order
 The definition also declares the data that host and frontend code read instead of built-in names:
 
 - Artifacts. A document names the event that its submit sends. A review lists its verdicts, and each verdict names its event and tells if it accepts the work.
-- Roles. Each role lists its `odt_*` tools, the artifacts that it can write, its workspace access, and its working location.
+- Roles. A workflow binds roles by ID. Each binding lists the workflow artifacts that the role can write and its default artifact.
 - States. Each state has its labels, its notification, and its Agent Studio role.
 - Launch actions. Each agent step lists the ways to start its role: start modes, prompt template, selection condition, prompt context, target branch choice, and worktree need.
 - Signals and automations. An event outcome can raise a signal with its source role. A signal lists the automations that the user can attach to it. An automation names the launch action that Autopilot starts and its start mode. The default start mode of the launch action applies when the automation has none. A reuse start that finds no role session in the task worktree starts fresh if the launch action permits it. When `alwaysStartQaReviewsFresh` is on, a role that writes a review artifact starts fresh instead of a reuse or fork, if the launch action permits fresh.
 - Action order and priority. Task cards show actions in the declared order. The first matching priority rule selects the primary action.
+- Prompts. `prompts.system` lists the system templates that follow the role system prompt, in order. `prompts.readOnlyRejection` names the permission template that rejects a mutating tool of a read-only role. Each workflow states its own lifecycle in these templates.
+- Merge detection. A state with `mergeDetection` lets the host check the task branch for a merge.
+
+Roles are separate from workflows. The host role catalog holds the built-in roles (`BUILTIN_ROLES` in `packages/workflows/src/builtin/roles.ts`) and will hold custom roles. A catalog role (`agentRoleDefinitionSchema`) owns its label, `odt_*` tools, workspace access, working location, runtime scopes, icon, default panel, and system prompt. A workflow cannot change these. `createTaskWorkflow` merges each binding with its catalog role, and fails for an unknown role ID. The workflow catalog sends each role once. Model defaults, runtime role overrides, and the role system prompt override stay keyed by role ID. Kickoff, message, system, and permission templates belong to the workflow. The host rejects two workflows that bind one role ID to different catalog roles, or give one template ID different content.
 
 An event can name one host effect from `workflowEventEffectValues`, such as `build.start`, `task.close`, or `pull_request.merged`. Each effect has at most one event. The exception is `status.set`, which has at most one event for each target state.
 
@@ -258,7 +262,7 @@ The page does not parse chat text to create a pull request.
 | Formats of status, issue type, role, and start mode | `packages/contracts/src/task-schemas.ts`, `packages/contracts/src/agent-workflow-schemas.ts` | Contracts |
 | Built-in states, issue types, roles, and actions | `packages/workflows/src/builtin/ids.ts` | Workflows |
 | ODT tool names and schemas | `packages/contracts/src/odt-tool-names.ts`, `packages/contracts/src/odt-mcp-schemas.ts` | Contracts |
-| Role tool list | The roles of the task workflow definition | Workflows |
+| Role tool list | The host role catalog | Workflows |
 | Generic workflow definitions, display vocabularies, and decisions | `packages/contracts/src/workflow-*-schemas.ts` | Contracts |
 | Workflow evaluation and built-in rules | `packages/workflows/src/*` | Workflows |
 | Workflow execution and typed failures | `packages/host/src/domain/task/*`, `packages/host/src/application/tasks/*` | Host |

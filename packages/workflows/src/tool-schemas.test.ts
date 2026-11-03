@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import { reviewTaskDefinition } from "../test-support/review-task-workflow";
 import { createWorkflow } from "./evaluate";
-import { builtinWorkflow } from "./builtin/definition";
+import { builtinTaskWorkflow } from "./builtin/task-workflow";
 import { workflowToolInputSchema } from "./tool-schemas";
 
 const inputProperties = (schema: z.ZodType) =>
@@ -13,7 +13,7 @@ const inputProperties = (schema: z.ZodType) =>
 describe("workflowToolInputSchema", () => {
   test("lists the issue types and active states of the workflow", () => {
     const properties = inputProperties(
-      workflowToolInputSchema(builtinWorkflow.definition, "odt_search_tasks"),
+      workflowToolInputSchema(builtinTaskWorkflow.definition, "odt_search_tasks"),
     );
 
     expect(properties.issueType).toEqual({ type: "string", enum: ["feature", "bug", "task"] });

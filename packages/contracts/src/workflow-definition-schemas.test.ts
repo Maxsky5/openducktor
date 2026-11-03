@@ -3,7 +3,11 @@ import {
   workflowConditionSchema,
   workflowFactDefinitionSchema,
 } from "./workflow-condition-schemas";
-import { type WorkflowDefinition, workflowDefinitionSchema } from "./workflow-definition-schemas";
+import {
+  agentRoleDefinitionSchema,
+  type WorkflowDefinition,
+  workflowDefinitionSchema,
+} from "./workflow-definition-schemas";
 
 const createDefinition = (): WorkflowDefinition => ({
   schemaVersion: 1,
@@ -19,17 +23,8 @@ const createDefinition = (): WorkflowDefinition => ({
     { id: "comment", type: "string" },
   ],
   issueTypes: [],
-  roles: [
-    {
-      id: "reviewer",
-      label: "Reviewer",
-      tools: ["odt_read_task", "odt_set_task_artifact"],
-      writes: ["release-review"],
-      workspaceAccess: "read",
-      location: "repository",
-      runtimeScopes: ["workspace"],
-    },
-  ],
+  roles: [{ id: "reviewer", writes: ["release-review"] }],
+  prompts: { system: ["release.system.task"], readOnlyRejection: "release.permission.read_only" },
   artifacts: [
     { id: "release-notes", label: "Release notes", shortLabel: "Notes", kind: "document" },
     {
@@ -166,11 +161,35 @@ describe("workflow definition schemas", () => {
       { ...definition, actions: [{ ...sessionAction, launchActionIds: [] }] },
       { ...definition, artifacts: [{ ...review, verdicts: [] }] },
       { ...definition, artifacts: [{ ...review, kind: "document" }] },
-      { ...definition, roles: [{ ...definition.roles[0], workspaceAccess: "admin" }] },
-      { ...definition, roles: [{ ...definition.roles[0], tools: ["shell"] }] },
+      { ...definition, roles: [{ ...definition.roles[0], workspaceAccess: "read" }] },
     ]) {
       expect(workflowDefinitionSchema.safeParse(invalidDefinition).success).toBe(false);
     }
+  });
+
+  test("keeps role capabilities in the role catalog", () => {
+    const role = {
+      id: "reviewer",
+      label: "Reviewer",
+      tools: ["odt_read_task", "odt_set_task_artifact"],
+      workspaceAccess: "read",
+      location: "repository",
+      runtimeScopes: ["workspace"],
+      systemPrompt: {
+        id: "system.role.reviewer",
+        builtinVersion: 1,
+        template: "Review {{task.id}}.",
+        label: "Reviewer system prompt",
+        description: "Instructions for the reviewer.",
+      },
+    };
+    expect(agentRoleDefinitionSchema.parse(role)).toEqual(role);
+    for (const invalid of [
+      { ...role, workspaceAccess: "admin" },
+      { ...role, tools: ["shell"] },
+      { ...role, writes: ["release-review"] },
+    ])
+      expect(agentRoleDefinitionSchema.safeParse(invalid).success).toBe(false);
   });
 
   test("rejects reserved artifact IDs in declarations and conditions", () => {

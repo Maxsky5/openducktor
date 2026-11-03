@@ -1,4 +1,7 @@
 import {
+  agentRoleDefinitionSchema,
+  type AgentRoleDefinition,
+  type CompiledAgentRoleDefinition,
   workflowCatalogSchema,
   workflowDefinitionSchema,
   type BoardTaskOrder,
@@ -21,7 +24,7 @@ export const workflowReferenceKey = ({ id, revision }: WorkflowReference): strin
 
 /** The prompt templates of a workflow with their settings labels and roles. */
 export const workflowPromptTemplates = (workflow: TaskWorkflow): WorkflowDescriptor["templates"] =>
-  workflow.prompts.templates.map((template) => ({
+  workflow.workflowTemplates.map((template) => ({
     ...template,
     label: template.label ?? template.id,
     description: template.description ?? "",
@@ -33,6 +36,24 @@ export const taskWorkflowDescriptor = (workflow: TaskWorkflow): WorkflowDescript
   templates: workflowPromptTemplates(workflow),
 });
 
+/** The catalog role of a bound role, without what the workflow lets it write. */
+const catalogRole = ({
+  writes: _writes,
+  defaultArtifact: _defaultArtifact,
+  ...role
+}: TaskWorkflow["roles"][number]) => role;
+
+/** The catalog form of the roles that the workflows bind, once each, in first-use order. */
+export const workflowRoleCatalog = (
+  workflows: readonly TaskWorkflow[],
+): readonly AgentRoleDefinition[] => {
+  const roles = new Map<string, AgentRoleDefinition>();
+  for (const workflow of workflows)
+    for (const role of workflow.roles.map(catalogRole))
+      if (!roles.has(role.id)) roles.set(role.id, agentRoleDefinitionSchema.parse(role));
+  return [...roles.values()];
+};
+
 type SharedStateMetadata = Omit<SharedBoardState, "id" | "taskOrder">;
 const sharedMetadata = (state: TaskWorkflow["definition"]["states"][number]) => ({
   label: state.label,
@@ -41,57 +62,108 @@ const sharedMetadata = (state: TaskWorkflow["definition"]["states"][number]) => 
   terminal: state.terminal === true,
   tone: state.tone ?? "neutral",
 });
-const sameMetadata = (left: SharedStateMetadata, right: SharedStateMetadata) =>
-  left.label === right.label &&
-  left.title === right.title &&
-  left.shortLabel === right.shortLabel &&
-  left.terminal === right.terminal &&
-  left.tone === right.tone;
+
+/** The latest revision of each workflow, in first-use order. */
+export const latestWorkflowRevisions = (
+  workflows: readonly TaskWorkflow[],
+): readonly TaskWorkflow[] => {
+  const latest = new Map<string, TaskWorkflow>();
+  for (const workflow of workflows) {
+    const known = latest.get(workflow.reference.id);
+    if (!known || known.reference.revision < workflow.reference.revision)
+      latest.set(workflow.reference.id, workflow);
+  }
+  return [...latest.values()];
+};
+
+/** Remembers the value of each key, and fails when a second owner gives the key another value. */
+const sameValueCheck = <Value, Owner>(
+  conflict: (key: string, prior: Owner, current: Owner) => string,
+) => {
+  const values = new Map<string, { encoded: string; owner: Owner }>();
+  return (key: string, value: Value, owner: Owner): void => {
+    const encoded = JSON.stringify(value);
+    const prior = values.get(key);
+    if (prior && prior.encoded !== encoded) throw new Error(conflict(key, prior.owner, owner));
+    if (!prior) values.set(key, { encoded, owner });
+  };
+};
+
+/** The shared metadata of each state ID, from the first workflow that uses it. */
+const sharedStates = (workflows: readonly TaskWorkflow[]) => {
+  const states = new Map<string, SharedStateMetadata>();
+  for (const workflow of workflows)
+    for (const state of workflow.definition.states)
+      if (!states.has(state.id)) states.set(state.id, sharedMetadata(state));
+  return states;
+};
 
 /**
- * Checks a workflow inventory once: unique references, equal shared state metadata for each state
- * ID, and equal notification defaults for each notification kind. Returns the shared states.
+ * Checks a workflow inventory once: unique references, one catalog role for each role ID, equal
+ * shared state metadata for each state ID, and equal notification defaults for each notification
+ * kind. The latest revisions of the workflows give one prompt for each template ID, because one
+ * override applies to it. Older revisions can keep their own templates.
  */
-export const validateWorkflowInventory = (
-  workflows: readonly TaskWorkflow[],
-): ReadonlyMap<string, SharedStateMetadata> => {
+export const validateWorkflowInventory = (workflows: readonly TaskWorkflow[]): void => {
   const references = new Set<string>();
-  const states = new Map<string, { reference: string; metadata: SharedStateMetadata }>();
-  const notifications = new Map<string, { reference: string; state: string; setting: string }>();
+  const checkRole = sameValueCheck<CompiledAgentRoleDefinition, string>(
+    (id, prior, current) =>
+      `Role "${id}" differs between workflows "${prior}" and "${current}". Bind one catalog role.`,
+  );
+  const checkState = sameValueCheck<SharedStateMetadata, string>(
+    (id, prior, current) =>
+      `Shared state "${id}" conflicts between workflows "${prior}" and "${current}". Use the same label, title, short label, terminal meaning, and tone.`,
+  );
+  const checkNotification = sameValueCheck<
+    NonNullable<TaskWorkflow["definition"]["states"][number]["notification"]>["defaultSetting"],
+    { reference: string; state: string }
+  >(
+    (kind, prior, current) =>
+      `Notification "${kind}" has conflicting defaults in "${prior.reference}" state "${prior.state}" and "${current.reference}" state "${current.state}". Use distinct kinds for distinct policies.`,
+  );
+  const checkTemplate = sameValueCheck<readonly unknown[], string>(
+    (id, prior, current) =>
+      `Prompt template "${id}" differs between workflows "${prior}" and "${current}". Give each workflow template its own ID.`,
+  );
   for (const workflow of workflows) {
     const reference = workflowReferenceKey(workflow.reference);
     if (references.has(reference))
       throw new Error(`Duplicate workflow "${reference}". Fix the host inventory.`);
     references.add(reference);
+    for (const role of workflow.roles.map(catalogRole)) checkRole(role.id, role, reference);
     for (const state of workflow.definition.states) {
-      const metadata = sharedMetadata(state);
-      const previous = states.get(state.id);
-      if (previous && !sameMetadata(previous.metadata, metadata))
-        throw new Error(
-          `Shared state "${state.id}" conflicts between workflows "${previous.reference}" and "${reference}". Use the same label, title, short label, terminal meaning, and tone.`,
-        );
-      if (!previous) states.set(state.id, { reference, metadata });
-      if (state.notification) {
-        const { kind, defaultSetting } = state.notification;
-        const setting = JSON.stringify(defaultSetting);
-        const prior = notifications.get(kind);
-        if (prior && prior.setting !== setting)
-          throw new Error(
-            `Notification "${kind}" has conflicting defaults in "${prior.reference}" state "${prior.state}" and "${reference}" state "${state.id}". Use distinct kinds for distinct policies.`,
-          );
-        notifications.set(kind, { reference, state: state.id, setting });
-      }
+      checkState(state.id, sharedMetadata(state), reference);
+      if (state.notification)
+        checkNotification(state.notification.kind, state.notification.defaultSetting, {
+          reference,
+          state: state.id,
+        });
     }
   }
-  return new Map([...states].map(([id, { metadata }]) => [id, metadata]));
+  for (const workflow of latestWorkflowRevisions(workflows))
+    for (const {
+      id,
+      purpose,
+      builtinVersion,
+      template,
+      requiredPlaceholders,
+    } of workflow.workflowTemplates)
+      checkTemplate(
+        id,
+        [purpose, builtinVersion, template, requiredPlaceholders],
+        workflowReferenceKey(workflow.reference),
+      );
 };
 
-/** Resolves a board layout against the workflows of its workspace. Every state has one column. */
+/**
+ * Resolves a board layout against the workflows of its workspace. Every state has one column. The
+ * workflows come from an inventory that `validateWorkflowInventory` checked.
+ */
 export const resolveWorkflowBoard = (
   layout: WorkflowBoardLayout,
   workflows: readonly TaskWorkflow[],
 ): WorkflowBoardDefinition => {
-  const metadata = validateWorkflowInventory(workflows);
+  const metadata = sharedStates(workflows);
   const positions = new Set<string>();
   for (const { id } of layout.states) {
     if (positions.has(id))
@@ -117,6 +189,7 @@ export const resolveWorkflowBoard = (
 /** A host catalog with each definition compiled once. */
 export type CompiledWorkflowCatalog = {
   readonly hostInstanceId: string;
+  readonly roles: readonly AgentRoleDefinition[];
   readonly workflows: ReadonlyMap<string, TaskWorkflow>;
 };
 
@@ -124,11 +197,12 @@ export type CompiledWorkflowCatalog = {
 export const compileWorkflowCatalog = (source: WorkflowCatalog): CompiledWorkflowCatalog => {
   const catalog = workflowCatalogSchema.parse(source);
   const workflows = catalog.workflows.map(({ definition, templates }) =>
-    createTaskWorkflow(definition, templates),
+    createTaskWorkflow(definition, templates, catalog.roles),
   );
   validateWorkflowInventory(workflows);
   return {
     hostInstanceId: catalog.hostInstanceId,
+    roles: catalog.roles,
     workflows: new Map(
       workflows.map((workflow) => [workflowReferenceKey(workflow.reference), workflow]),
     ),

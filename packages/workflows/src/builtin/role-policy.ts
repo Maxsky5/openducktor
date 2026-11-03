@@ -6,7 +6,7 @@ import {
   resolveCodexEffectivePolicy,
   type RuntimeSupportedScope,
 } from "@openducktor/contracts";
-import { BUILTIN_ROLES, builtinRole, byRole } from "./definition";
+import { BUILTIN_ROLES, builtinRole, byRole } from "./roles";
 import type { BuiltinRoleId } from "./ids";
 
 /** The ODT tools of each role. */

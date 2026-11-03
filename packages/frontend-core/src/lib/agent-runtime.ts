@@ -1,4 +1,5 @@
 import {
+  type RuntimeSupportedScope,
   type AgentRuntimes,
   type AgentSessionStartMode,
   formatRuntimeDescriptorSchemaIssue,
@@ -8,7 +9,6 @@ import {
   type RuntimeKind,
   runtimeDescriptorSchema,
 } from "@openducktor/contracts";
-import type { TaskWorkflowRole } from "@openducktor/workflows";
 
 export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
 
@@ -216,9 +216,11 @@ export const getMissingMandatoryRuntimeCapabilities = (
   );
 };
 
+type RuntimeScopedRole = { readonly runtimeScopes: readonly RuntimeSupportedScope[] };
+
 const supportedScopesSatisfyRole = (
   supportedScopes: RuntimeDescriptor["capabilities"]["workflow"]["supportedScopes"],
-  role: TaskWorkflowRole,
+  role: RuntimeScopedRole,
 ): boolean => {
   const scopes = new Set(supportedScopes);
   return role.runtimeScopes.every((scope) => scopes.has(scope));
@@ -269,20 +271,20 @@ export const validateRuntimeDefinitionsForOpenDucktor = (
 
 export const runtimeSupportsRole = (
   runtimeDescriptor: RuntimeDescriptor,
-  role: TaskWorkflowRole,
+  role: RuntimeScopedRole,
 ): boolean => {
   return supportedScopesSatisfyRole(runtimeDescriptor.capabilities.workflow.supportedScopes, role);
 };
 
 export const filterRuntimeDefinitionsForRole = (
   runtimeDefinitions: RuntimeDescriptor[],
-  role: TaskWorkflowRole,
+  role: RuntimeScopedRole,
 ): RuntimeDescriptor[] => {
   return runtimeDefinitions.filter((definition) => runtimeSupportsRole(definition, role));
 };
 
 export const filterRuntimeDefinitionsForDefaultSelection = (
   runtimeDefinitions: RuntimeDescriptor[],
-  roles: readonly TaskWorkflowRole[] = [],
+  roles: readonly RuntimeScopedRole[] = [],
 ): RuntimeDescriptor[] =>
   runtimeDefinitions.filter((runtime) => roles.every((role) => runtimeSupportsRole(runtime, role)));

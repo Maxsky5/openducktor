@@ -2,6 +2,7 @@ export {
   createReviewTaskWorkflow,
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
+  reviewTaskRoles,
 } from "./review-task-workflow";
 
 export {

@@ -1,4 +1,6 @@
 import type {
+  AgentRoleDefinition,
+  CompiledAgentRoleDefinition,
   AgentSessionStartMode,
   AgentWorkflowState,
   AgentWorkflows,
@@ -24,7 +26,8 @@ import { createTaskInputs, taskIssueTypes, type TaskFacts } from "./task-input";
 import { createTaskPrompts, type PromptTemplate, type TaskPrompts } from "./task-prompts";
 
 type Definition = CompiledWorkflowDefinition;
-export type TaskWorkflowRole = Definition["roles"][number];
+/** A catalog role as a workflow binds it: the role and what it may do in this workflow. */
+export type TaskWorkflowRole = CompiledAgentRoleDefinition & Definition["roles"][number];
 export type TaskWorkflowState = Definition["states"][number];
 export type TaskWorkflowArtifact = Definition["artifacts"][number];
 type AgentStep = Extract<Definition["steps"][number], { kind: "agent" }>;
@@ -90,6 +93,10 @@ export type TaskWorkflow = {
   /** The compiled evaluator of the definition. */
   readonly evaluator: Workflow;
   readonly prompts: TaskPrompts;
+  /** The catalog roles that the workflow binds, merged with their bindings, in binding order. */
+  readonly roles: readonly TaskWorkflowRole[];
+  /** The prompt templates of the workflow, without the system prompts of its roles. */
+  readonly workflowTemplates: readonly PromptTemplate[];
   readonly issueTypes: readonly string[];
   readonly initialState: string;
   /** The task states that end the task. */
@@ -100,6 +107,8 @@ export type TaskWorkflow = {
   readonly worktreeRoles: readonly string[];
   usesWorktree(roleId: string): boolean;
   isTerminalState(status: string): boolean;
+  /** Whether merge detection checks the task branch of a task in this state. */
+  detectsMerge(status: string): boolean;
   state(status: string): TaskWorkflowState;
   role(roleId: string): TaskWorkflowRole;
   hasRole(roleId: string): boolean;
@@ -155,23 +164,37 @@ const lookup = <Value>(
   };
 };
 
-/** Builds the task workflow of a definition and its prompt templates. */
+/** Builds the task workflow of a definition, its prompt templates, and the role catalog. */
 export const createTaskWorkflow = (
   source: WorkflowDefinition,
   templates: readonly PromptTemplate[],
+  roleCatalog: readonly AgentRoleDefinition[],
 ): TaskWorkflow => {
   const evaluator = createWorkflow(source);
   const { definition } = evaluator;
+  const catalogRoles = new Map(roleCatalog.map((role) => [role.id, role]));
+  const roles: readonly TaskWorkflowRole[] = deepFreeze(
+    definition.roles.map((binding) => {
+      const catalogRole = catalogRoles.get(binding.id);
+      if (!catalogRole)
+        throw new WorkflowEvaluationError(
+          "invalid_definition",
+          `Task workflow "${definition.id}" binds unknown role "${binding.id}". Add the role to the role catalog.`,
+        );
+      return { ...structuredClone(catalogRole), ...binding };
+    }),
+  );
   const issueTypes = taskIssueTypes(definition);
   const inputs = createTaskInputs(definition);
-  const prompts = createTaskPrompts(definition, deepFreeze(structuredClone(templates)));
+  const workflowTemplates = deepFreeze(structuredClone([...templates]));
+  const prompts = createTaskPrompts(definition, workflowTemplates, roles);
 
   const state = lookup(
     definition.id,
     "state",
     definition.states.map((entry) => [entry.id, entry] as const),
   );
-  const rolesById = new Map(definition.roles.map((role) => [role.id, role]));
+  const rolesById = new Map(roles.map((role) => [role.id, role]));
   const role = lookup(definition.id, "role", rolesById);
   const artifactsById = new Map(definition.artifacts.map((artifact) => [artifact.id, artifact]));
   const eventsById = new Map(definition.events.map((event) => [event.id, event]));
@@ -215,8 +238,11 @@ export const createTaskWorkflow = (
   );
   const terminalStates = definition.states.filter(({ terminal }) => terminal).map(({ id }) => id);
   const terminalStateSet = new Set(terminalStates);
+  const mergeDetectionStates = new Set(
+    definition.states.filter(({ mergeDetection }) => mergeDetection).map(({ id }) => id),
+  );
   const worktreeRoleSet = new Set(
-    definition.roles.filter(({ location }) => location === "task_worktree").map(({ id }) => id),
+    roles.filter(({ location }) => location === "task_worktree").map(({ id }) => id),
   );
   const action = lookup(
     definition.id,
@@ -313,16 +339,17 @@ export const createTaskWorkflow = (
     reference: deepFreeze({ id: definition.id, revision: definition.revision }),
     evaluator,
     prompts,
+    roles,
+    workflowTemplates,
     issueTypes,
     initialState: definition.initialState,
     terminalStates,
     reviewArtifactCodes: definition.artifacts
       .filter(({ kind }) => kind === "review")
       .map(({ id }) => id),
-    worktreeRoles: definition.roles
-      .filter(({ location }) => location === "task_worktree")
-      .map(({ id }) => id),
+    worktreeRoles: [...worktreeRoleSet],
     isTerminalState: (status) => terminalStateSet.has(status),
+    detectsMerge: (status) => mergeDetectionStates.has(status),
     usesWorktree: (roleId) => worktreeRoleSet.has(roleId),
     state,
     role,

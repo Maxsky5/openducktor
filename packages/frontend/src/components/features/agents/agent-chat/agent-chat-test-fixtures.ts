@@ -46,7 +46,7 @@ const baseTask: TaskCard = {
 
 /** The label of each built-in role. */
 export const BUILTIN_ROLE_LABEL_BY_ROLE: Record<string, string> = Object.fromEntries(
-  builtinTaskWorkflow.definition.roles.map(({ id, label }) => [id, label]),
+  builtinTaskWorkflow.roles.map(({ id, label }) => [id, label]),
 );
 
 export const TEST_ROLE_OPTIONS: AgentRoleOption[] = (

@@ -1,6 +1,4 @@
 import {
-  ODT_BROWSER_TOOL_NAMES,
-  type AgentToolName,
   type WorkflowActionDefinition,
   type WorkflowArtifactDefinition,
   type WorkflowArtifactVerdict,
@@ -15,8 +13,6 @@ import {
   type WorkflowSignalDefinition,
   type WorkflowStateDefinition,
 } from "@openducktor/contracts";
-import { deepFreeze } from "../deep-freeze";
-import { createWorkflow } from "../evaluate";
 import type { AgentKickoffTemplateId, AgentMessageTemplateId } from "./agent-prompts";
 import {
   activeOrReview,
@@ -33,10 +29,8 @@ import {
   specComplete,
   specPresent,
 } from "./definition-conditions";
-import { recordBy } from "../record-by";
 import {
   BUILTIN_ISSUE_TYPE_IDS,
-  BUILTIN_ROLE_IDS,
   BUILTIN_STATE_IDS,
   type BuiltinActionId,
   type BuiltinAutomationId,
@@ -63,7 +57,6 @@ type BuiltinEvent = {
 export type BuiltinArtifactId = "spec" | "plan" | "qaReport";
 export type BuiltinRole = WorkflowRoleDefinition & {
   id: BuiltinRoleId;
-  tools: AgentToolName[];
   writes: BuiltinArtifactId[];
 };
 export type BuiltinLaunchAction = WorkflowLaunchActionDefinition & {
@@ -314,68 +307,12 @@ const builtinArtifacts = [
   verdicts?: (WorkflowArtifactVerdict & { eventId: BuiltinTaskEventId })[];
 })[];
 
-const taskTools = [
-  "odt_read_task",
-  "odt_read_task_assets",
-  "odt_read_task_artifacts",
-  "odt_set_task_artifact",
-  "odt_delete_task_artifact",
-  "odt_search_tasks",
-  "odt_create_task",
-  "odt_update_task",
-] as const satisfies readonly AgentToolName[];
-
 const builtinRoles = [
-  {
-    id: "spec",
-    label: "Spec",
-    tools: [...taskTools, ...ODT_BROWSER_TOOL_NAMES],
-    writes: ["spec"],
-    workspaceAccess: "read",
-    location: "repository",
-    runtimeScopes: ["workspace"],
-    settingsLabel: "Specification",
-    icon: "specification",
-  },
-  {
-    id: "planner",
-    label: "Planner",
-    tools: [...taskTools, ...ODT_BROWSER_TOOL_NAMES],
-    writes: ["plan"],
-    workspaceAccess: "read",
-    location: "repository",
-    runtimeScopes: ["workspace"],
-    icon: "planning",
-  },
-  {
-    id: "build",
-    label: "Builder",
-    tools: [
-      ...taskTools,
-      "odt_build_blocked",
-      "odt_build_resumed",
-      "odt_build_completed",
-      "odt_set_pull_request",
-      ...ODT_BROWSER_TOOL_NAMES,
-    ],
-    // Builder may revise the spec and plan.
-    writes: ["spec", "plan"],
-    workspaceAccess: "write",
-    location: "task_worktree",
-    runtimeScopes: ["build", "workspace"],
-    icon: "building",
-    defaultPanel: "diffs",
-  },
-  {
-    id: "qa",
-    label: "QA",
-    tools: [...taskTools, ...ODT_BROWSER_TOOL_NAMES],
-    writes: ["qaReport"],
-    workspaceAccess: "read",
-    location: "task_worktree",
-    runtimeScopes: ["task"],
-    icon: "quality",
-  },
+  { id: "spec", writes: ["spec"] },
+  { id: "planner", writes: ["plan"] },
+  // Builder may revise the spec and plan.
+  { id: "build", writes: ["spec", "plan"] },
+  { id: "qa", writes: ["qaReport"] },
 ] satisfies BuiltinRole[];
 
 type BuiltinStateNotification = NonNullable<BuiltinState["notification"]>;
@@ -446,6 +383,7 @@ const builtinStates = [
     }),
     studioRole: "build",
     tone: "warning",
+    mergeDetection: true,
     historyRoles: ["build"],
   },
   {
@@ -465,6 +403,7 @@ const builtinStates = [
     }),
     studioRole: "build",
     tone: "destructive",
+    mergeDetection: true,
     historyRoles: ["build"],
     historyLatest: true,
   },
@@ -483,6 +422,7 @@ const builtinStates = [
     }),
     studioRole: "build",
     tone: "review",
+    mergeDetection: true,
     historyRoles: ["build"],
   },
   {
@@ -500,6 +440,7 @@ const builtinStates = [
     }),
     studioRole: "build",
     tone: "approval",
+    mergeDetection: true,
     historyRoles: ["build"],
   },
   {
@@ -1008,65 +949,12 @@ export const BUILTIN_DEFINITION = {
       ],
     },
   ],
+  prompts: {
+    system: [
+      "system.shared.workflow_guards",
+      "system.shared.tool_protocol",
+      "system.shared.task_context",
+    ],
+    readOnlyRejection: "permission.read_only.reject",
+  },
 } satisfies WorkflowDefinition;
-
-export const builtinWorkflow = createWorkflow(BUILTIN_DEFINITION);
-
-/** The built-in states are the task statuses, in their contract order. */
-export const BUILTIN_STATES: readonly BuiltinState[] = deepFreeze(builtinStates);
-export const BUILTIN_ROLES: readonly BuiltinRole[] = deepFreeze(builtinRoles);
-export const BUILTIN_ARTIFACTS: readonly (typeof builtinArtifacts)[number][] =
-  deepFreeze(builtinArtifacts);
-export const BUILTIN_STEPS: readonly (typeof builtinSteps)[number][] = deepFreeze(builtinSteps);
-export const BUILTIN_LAUNCH_ACTIONS: readonly BuiltinLaunchAction[] = BUILTIN_STEPS.flatMap(
-  (step): readonly BuiltinLaunchAction[] => step.launchActions,
-);
-export const BUILTIN_ACTIONS: readonly (typeof builtinActions)[number][] =
-  deepFreeze(builtinActions);
-export const BUILTIN_EVENTS: Readonly<Record<BuiltinTaskEventId, BuiltinEvent>> =
-  deepFreeze(builtinEvents);
-export const BUILTIN_SIGNALS: readonly BuiltinSignal[] = deepFreeze(builtinSignals);
-export const BUILTIN_AUTOMATIONS: readonly BuiltinAutomation[] = deepFreeze(builtinAutomations);
-
-const stateById = new Map(BUILTIN_STATES.map((state) => [state.id, state]));
-const builtinState = (status: BuiltinStateId): BuiltinState => {
-  const state = stateById.get(status);
-  if (!state) throw new Error(`The built-in workflow has no state ${status}.`);
-  return state;
-};
-const byStatus = <Value>(
-  read: (state: BuiltinState) => Value,
-): Readonly<Record<BuiltinStateId, Value>> =>
-  deepFreeze(recordBy(BUILTIN_STATE_IDS, (status) => read(builtinState(status))));
-export const BUILTIN_STATUS_LABELS = byStatus((state) => state.label);
-export const BUILTIN_STATUS_TITLES = byStatus((state) => state.title ?? state.label);
-export const BUILTIN_STATUS_SHORT_LABELS = byStatus((state) => state.shortLabel ?? state.label);
-export const BUILTIN_TERMINAL_STATUSES: readonly BuiltinStateId[] = BUILTIN_STATES.filter(
-  (state) => state.terminal,
-).map((state) => state.id);
-
-const roleById = new Map(BUILTIN_ROLES.map((role) => [role.id, role]));
-export const builtinRole = (id: BuiltinRoleId): BuiltinRole => {
-  const role = roleById.get(id);
-  if (!role) throw new Error(`The built-in workflow has no role ${id}.`);
-  return role;
-};
-/** Builds a value for each built-in role. */
-export const byRole = <Value>(
-  read: (role: BuiltinRole) => Value,
-): Readonly<Record<BuiltinRoleId, Value>> =>
-  deepFreeze(recordBy(BUILTIN_ROLE_IDS, (id) => read(builtinRole(id))));
-export const BUILTIN_ROLE_LABELS = byRole((role) => role.label);
-
-type BuiltinArtifact = (typeof builtinArtifacts)[number];
-/** The workflow documents. People edit them. Reviews change only with their verdicts. */
-export type BuiltinDocumentCode = Extract<BuiltinArtifact, { kind: "document" }>["id"];
-const isDocument = (
-  artifact: BuiltinArtifact,
-): artifact is Extract<BuiltinArtifact, { kind: "document" }> => artifact.kind === "document";
-export const BUILTIN_DOCUMENT_CODES: readonly BuiltinDocumentCode[] = builtinArtifacts
-  .filter(isDocument)
-  .map((artifact) => artifact.id);
-/** Builds a value for each workflow document. */
-export const byDocumentCode = <Value>(read: (code: BuiltinDocumentCode) => Value) =>
-  recordBy(BUILTIN_DOCUMENT_CODES, read);

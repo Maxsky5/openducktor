@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { runtimeSupportedScopeSchema } from "./agent-runtime-schemas";
 import { agentSessionStartModeSchema, agentToolNameSchema } from "./agent-workflow-schemas";
+import { agentPromptPlaceholderSchema } from "./prompt-schemas";
 import {
   notificationKindSettingSchema,
   workflowNotificationKindSchema,
@@ -20,21 +21,41 @@ import {
   workflowIdSchema,
 } from "./workflow-condition-schemas";
 
-/** A role works in the repository or in the task worktree, and may write only there. */
-export const workflowRoleDefinitionSchema = z.strictObject({
+/** The system prompt template of an agent role. Overrides keep its required placeholders. */
+export const agentRoleSystemPromptSchema = z.strictObject({
+  id: workflowIdSchema,
+  builtinVersion: z.number().int().positive(),
+  template: z.string(),
+  requiredPlaceholders: z.array(agentPromptPlaceholderSchema).optional(),
+  label: z.string(),
+  description: z.string(),
+});
+export type AgentRoleSystemPrompt = z.infer<typeof agentRoleSystemPromptSchema>;
+
+/**
+ * An agent role of the host role catalog. Workflows bind roles by ID, so one role keeps its tools,
+ * access, prompt, and settings in every workflow that uses it.
+ */
+export const agentRoleDefinitionSchema = z.strictObject({
   id: workflowIdSchema,
   label: z.string(),
   tools: z.array(agentToolNameSchema),
-  /** Workflow artifacts that the role may save. */
-  writes: z.array(workflowArtifactIdSchema),
   workspaceAccess: z.enum(["read", "write"]),
+  /** A role works in the repository or in the task worktree, and may write only there. */
   location: z.enum(["repository", "task_worktree"]),
   runtimeScopes: z.array(runtimeSupportedScopeSchema),
-  /** The role name in settings. The default is the label. */
-  settingsLabel: z.string().optional(),
+  systemPrompt: agentRoleSystemPromptSchema,
   icon: workflowIconSchema.optional(),
   /** The Agent Studio side panel that opens first. The default is the document panel. */
   defaultPanel: z.enum(["document", "diffs"]).optional(),
+});
+export type AgentRoleDefinition = z.infer<typeof agentRoleDefinitionSchema>;
+
+/** A catalog role that a workflow uses, with what the role may do in this workflow. */
+export const workflowRoleDefinitionSchema = z.strictObject({
+  id: workflowIdSchema,
+  /** Workflow artifacts that the role may save. */
+  writes: z.array(workflowArtifactIdSchema),
   /** The document that the side panel shows first. The default is the first output of the step. */
   defaultArtifact: workflowArtifactIdSchema.optional(),
 });
@@ -107,6 +128,8 @@ export const workflowStateDefinitionSchema = z.strictObject({
   historyRoles: z.array(workflowIdSchema).optional(),
   /** Open the latest session of any role when no history role has one. The default is terminal. */
   historyLatest: z.boolean().optional(),
+  /** Merge detection checks the task branch of a task in this state. The default is false. */
+  mergeDetection: z.boolean().optional(),
 });
 export type WorkflowStateDefinition = z.infer<typeof workflowStateDefinitionSchema>;
 
@@ -339,6 +362,14 @@ export type WorkflowActionRule = z.infer<typeof workflowActionRuleSchema>;
  * schemaVersion identifies the format. The ID and revision identify the definition. actionOrder
  * gives the base order of actions. actionPriority puts its actions ahead of that order.
  */
+/** The prompt templates that the workflow adds to every role. */
+export const workflowPromptsDefinitionSchema = z.strictObject({
+  /** System templates after the role system prompt, in prompt order. */
+  system: z.array(workflowIdSchema),
+  /** The permission template that rejects a mutating tool of a read-only role. */
+  readOnlyRejection: workflowIdSchema,
+});
+
 export const workflowDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(1),
   id: workflowIdSchema,
@@ -361,6 +392,7 @@ export const workflowDefinitionSchema = z.strictObject({
   actionOrder: z.array(workflowActionRuleSchema),
   actionPriority: z.array(workflowActionRuleSchema),
   launchOrder: z.array(workflowLaunchOrderRuleSchema).default([]),
+  prompts: workflowPromptsDefinitionSchema,
 });
 export type WorkflowDefinition = z.infer<typeof workflowDefinitionSchema>;
 
@@ -369,3 +401,4 @@ type DeepReadonly<Value> = Value extends object
   : Value;
 
 export type CompiledWorkflowDefinition = DeepReadonly<WorkflowDefinition>;
+export type CompiledAgentRoleDefinition = DeepReadonly<AgentRoleDefinition>;

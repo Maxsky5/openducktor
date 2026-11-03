@@ -37,7 +37,7 @@ const ids = <Item extends { id: string }>(items: readonly Item[]) => items.map((
 
 /** The settings that every task workflow of the host defines. */
 const hostWorkflowIds = (workflows: readonly TaskWorkflow[]) => {
-  const roles = workflows.flatMap(({ definition }) => definition.roles);
+  const roles = workflows.flatMap((workflow) => workflow.roles);
   const notificationDefaults: Record<string, NotificationKindSetting> = {};
   for (const workflow of workflows) {
     for (const [kind, setting] of Object.entries(workflow.notificationDefaults())) {
