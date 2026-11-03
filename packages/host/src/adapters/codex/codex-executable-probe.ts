@@ -50,10 +50,11 @@ const CODEX_GUIDANCE: RuntimeExecutableGuidance = {
 };
 
 /** Shows what a closed Codex process wrote and how it stopped, without the internal runtime ID. */
-const codexFailureDetail = (cause: CodexTransportBaseError): string =>
-  cause instanceof CodexAppServerClosedError && cause.details?.stderr
-    ? `${cause.details.stderr} (Codex app-server ${cause.details.exit})`
-    : cause.message;
+const codexFailureDetail = (cause: CodexTransportBaseError): string => {
+  if (!(cause instanceof CodexAppServerClosedError) || !cause.details) return cause.message;
+  const status = `Codex app-server ${cause.details.exit}`;
+  return cause.details.stderr ? `${cause.details.stderr} (${status})` : status;
+};
 
 export const verifyCodexAppServerProtocol = (
   transport: CodexProbeTransport,

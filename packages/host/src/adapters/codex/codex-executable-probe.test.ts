@@ -109,6 +109,36 @@ describe("verifyCodexAppServerProtocol", () => {
     );
   });
 
+  test("reports how a silent Codex process stopped without its internal runtime ID", async () => {
+    const transport: CodexProbeTransport = {
+      request: () =>
+        Effect.fail(
+          new CodexAppServerClosedError({
+            operation: "codexAppServerTransport.childProcess",
+            message:
+              "Codex app-server closed: process exited from signal SIGKILL for runtime executable-probe-1",
+            details: {
+              runtimeId: "executable-probe-1",
+              stderr: "",
+              exit: "closed: process exited from signal SIGKILL",
+            },
+          }),
+        ),
+      notify: () => Effect.void,
+      close: () => Effect.void,
+      rejectPendingRequestsForShutdown: () => Effect.void,
+    };
+
+    const failure = await Effect.runPromise(
+      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3", "/usr/local/bin/codex")),
+    );
+
+    expect(failure.message).toContain(
+      "did not start. Codex app-server closed: process exited from signal SIGKILL. Fix",
+    );
+    expect(failure.message).not.toContain("executable-probe-1");
+  });
+
   test("keeps operational initialization failures apart from incompatible executables", async () => {
     const operationFailure = new HostOperationError({
       operation: "codexAppServerTransport.request.initialize",

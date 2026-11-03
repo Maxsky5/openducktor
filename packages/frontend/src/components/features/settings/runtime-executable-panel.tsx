@@ -54,6 +54,8 @@ function RuntimeStatusBadge({
   if (isChecking) return <Badge variant="outline">Checking</Badge>;
   if (result?.ok === true) return <Badge variant="success">Available</Badge>;
   if (showInvalidState && enabled) return <Badge variant="danger">Needs attention</Badge>;
+  // A disabled runtime with a path exists but failed its check, so it is not missing.
+  if (showInvalidState && result?.path) return <Badge variant="outline">Unavailable</Badge>;
   return <Badge variant="outline">Not found</Badge>;
 }
 

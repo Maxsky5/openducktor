@@ -684,6 +684,31 @@ describe("useOnboardingRuntimeSetup", () => {
     expect(within(opencodeSection()).getByText("Found version: 1.0.0")).toBeTruthy();
   });
 
+  test("shows a disabled runtime that fails its check as unavailable, not missing", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: false,
+        executablePath: "/tools/opencode",
+      },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
+    };
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
+
+    renderOnboarding({ client, runtimes });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
+      );
+    });
+
+    await within(opencodeSection()).findByText("Unavailable");
+    expect(within(opencodeSection()).queryByText("Not found")).toBeNull();
+  });
+
   test("blocks Continue while a changed path is being checked and rejects the new invalid path", async () => {
     const initialRuntimes: AgentRuntimes = {
       opencode: {
