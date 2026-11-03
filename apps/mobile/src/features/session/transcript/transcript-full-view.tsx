@@ -8,6 +8,7 @@ import type { DiffRow } from "@/rich-content/diff/diff-row-model";
 import { diffRowType } from "@/rich-content/diff/diff-row-model";
 import { DiffRowView } from "@/rich-content/diff/diff-rows";
 import type { TranscriptFullView } from "./transcript-rows-context";
+import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 /**
  * The full diff or file text of a file edit, in a sheet over the transcript. The list renders it
@@ -25,6 +26,7 @@ export function TranscriptFullViewSheet({
     <InPlaceSheet visible title={view.title} onClose={onClose} scrolls={false}>
       {view.kind === "diff" ? (
         <FlashList
+          overrideProps={FLASH_LIST_FIRST_RENDER}
           data={view.rows}
           renderItem={renderDiffRow}
           keyExtractor={diffRowKey}

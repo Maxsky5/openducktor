@@ -73,6 +73,7 @@ import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { IssueReviewCard } from "./issue-review-card";
 import { IssueRow, IssueRowPlaceholder } from "./issue-row";
 import { type IssueImportReads, useIssueImportReads } from "./use-issue-import-reads";
+import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 /** Mobile has no repository settings, so the texts tell where they are. */
 const SETTINGS_ELSEWHERE = "The repository settings are in the desktop or web app.";
@@ -512,6 +513,7 @@ function IssueList({
     case "list":
       return (
         <FlashList
+          overrideProps={FLASH_LIST_FIRST_RENDER}
           data={data}
           keyExtractor={keyOf}
           renderItem={renderItem}

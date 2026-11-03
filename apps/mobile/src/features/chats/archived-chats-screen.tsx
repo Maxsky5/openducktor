@@ -31,6 +31,7 @@ import { type ArchivedChatItem, archivedChatItems, startOfLocalDay } from "./cha
 import { useTabBarSpace } from "@/navigation/tab-bar/tab-bar-metrics";
 import { ListRefreshControl } from "@/ui/refresh-control";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
+import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 const keyOf = (item: ArchivedChatItem): string => item.key;
 const typeOf = (item: ArchivedChatItem): string => item.type;
@@ -160,6 +161,7 @@ function ArchivedChatList({
   }
   return (
     <FlashList
+      overrideProps={FLASH_LIST_FIRST_RENDER}
       data={items}
       keyExtractor={keyOf}
       getItemType={typeOf}

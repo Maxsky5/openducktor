@@ -44,6 +44,7 @@ import {
 import { ChecksPanelState, PullRequestChip } from "./checks-parts";
 import { CheckRow, ChecksHeaderRow, ChecksListNote, CommentsHeaderRow } from "./checks-rows";
 import { useScreenInView } from "@/navigation/use-screen-in-view";
+import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 const STATE_ACTION_LABELS = {
   retry: { label: "Retry", pendingLabel: "Retrying" },
@@ -311,6 +312,7 @@ function LoadedChecks({
   );
   return (
     <FlashList
+      overrideProps={FLASH_LIST_FIRST_RENDER}
       data={items}
       renderItem={renderItem}
       keyExtractor={keyOf}

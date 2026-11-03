@@ -42,6 +42,7 @@ import {
 } from "./file-tree-model";
 import { fileScopeOf } from "./file-scope";
 import { useScreenInView } from "@/navigation/use-screen-in-view";
+import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 const nameOf = (path: string): string => path.slice(path.lastIndexOf("/") + 1) || path;
 
@@ -172,6 +173,7 @@ function FilesContent({ owner, directory }: { owner: WorkOwner; directory: strin
   const body =
     view.kind === "ready" ? (
       <FlashList
+        overrideProps={FLASH_LIST_FIRST_RENDER}
         data={rows}
         renderItem={renderItem}
         keyExtractor={keyOf}

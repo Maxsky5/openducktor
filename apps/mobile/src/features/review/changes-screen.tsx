@@ -63,6 +63,7 @@ import { prepareFileDiff, type PreparedFileDiff } from "./prepared-diff";
 import { useOwnerDiffComments, usePendingCommentCount } from "./use-diff-comments";
 import { useGitConflictActions } from "./use-git-conflict-actions";
 import { useWarmDiffSyntax } from "./use-warm-diff-syntax";
+import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 /** The list view that the last Changes view used, so the next one opens the same way. */
 let preferredViewMode: FileListViewMode = "tree";
@@ -367,6 +368,7 @@ function ChangesContent({
       <Stack.Screen options={{ title: "Changes", headerRight }} />
       <KeyboardInsetView style={styles.screen} barSafeArea>
         <FlashList
+          overrideProps={FLASH_LIST_FIRST_RENDER}
           data={rows}
           renderItem={renderItem}
           keyExtractor={keyOf}

@@ -22,6 +22,7 @@ import { Text } from "./text";
 import { type OptionChoice, type OptionPickerRow, optionPickerRows } from "./option-picker-model";
 import { PickerRow } from "./picker-row";
 import { ModalLoadingContext } from "./modal-loading-context";
+import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 const keyOf = (row: OptionPickerRow): string => row.value;
 
@@ -117,6 +118,7 @@ function OptionList({
       </View>
       <View style={styles.list}>
         <FlashList
+          overrideProps={FLASH_LIST_FIRST_RENDER}
           data={rows}
           keyExtractor={keyOf}
           renderItem={renderItem}

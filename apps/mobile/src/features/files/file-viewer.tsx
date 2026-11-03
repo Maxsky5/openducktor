@@ -34,6 +34,7 @@ import {
   textLineCount,
 } from "./file-content-model";
 import { useScreenInView } from "@/navigation/use-screen-in-view";
+import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 /**
  * A read-only view of one file, as the desktop file preview: the code view with line numbers and
@@ -235,6 +236,7 @@ function MarkdownPreview({ path, contents }: { path: string; contents: string })
     <ViewportProvider value={viewportStore}>
       <View ref={frameRef} style={styles.fill} onLayout={onFrameLayout}>
         <FlashList
+          overrideProps={FLASH_LIST_FIRST_RENDER}
           data={rows}
           renderItem={renderItem}
           keyExtractor={markdownRowKey}
@@ -278,6 +280,7 @@ export function CodeLines({ path, contents }: { path: string; contents: string }
   return (
     <View style={styles.code}>
       <FlashList
+        overrideProps={FLASH_LIST_FIRST_RENDER}
         data={lines}
         renderItem={renderItem}
         keyExtractor={lineKey}

@@ -48,6 +48,7 @@ import { messageRowKind, type PresentToolCall } from "./transcript-row-type";
 import { type TranscriptFullView, TranscriptRowsProvider } from "./transcript-rows-context";
 import { createVisibleRowsStore, rowKeysNearViewport } from "./transcript-visibility";
 import { useTranscriptRowsContext } from "./use-transcript-rows";
+import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 export type TranscriptChatListProps = {
   kind: TranscriptListKind;
@@ -226,11 +227,11 @@ export const TranscriptChatList = memo(function TranscriptChatList({
     >
       <TranscriptRowsProvider value={context}>
         <FlashList
+          overrideProps={FLASH_LIST_FIRST_RENDER}
           ref={listRef}
           data={items}
           inverted={kind === "latest"}
           drawDistance={DRAW_DISTANCE}
-          overrideProps={FIRST_RENDER}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
@@ -268,9 +269,3 @@ const BOTTOM_SPACE = <View style={styles.bottomSpace} />;
  */
 const DRAW_DISTANCE = 1000;
 const TOP_SPACE = <View style={styles.topSpace} />;
-/**
- * The rows that the first render of a list adds in each pass. FlashList adds 2 rows in each pass by
- * default, and each pass is a render and a measure before the screen shows. A larger batch renders
- * the rows of the screen in one pass.
- */
-const FIRST_RENDER = { initialDrawBatchSize: 100 } as const;

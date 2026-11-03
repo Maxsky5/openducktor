@@ -27,6 +27,7 @@ import { LineCounts } from "./line-counts";
 import { prepareFileDiff } from "./prepared-diff";
 import { useOwnerDiffComments } from "./use-diff-comments";
 import { useWarmDiffSyntax } from "./use-warm-diff-syntax";
+import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 /**
  * The whole unified File Diff of one changed file, in the desktop diff style, with Inline Diff
@@ -137,6 +138,7 @@ export function FileDiffView({
     <KeyboardInsetView style={styles.screen} barSafeArea>
       <View style={styles.page}>
         <FlashList
+          overrideProps={FLASH_LIST_FIRST_RENDER}
           data={rows}
           renderItem={renderItem}
           keyExtractor={keyOf}

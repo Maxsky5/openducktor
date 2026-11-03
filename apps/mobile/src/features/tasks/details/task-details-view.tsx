@@ -46,6 +46,7 @@ import { TaskWorkflowRail } from "./task-workflow-rail";
 import { useTaskSessionGroups } from "./use-task-session-groups";
 import { useTaskDetailsActions } from "./use-task-details-actions";
 import { useTaskWorkspaceScope } from "./use-task-workspace-scope";
+import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 /**
  * The navigation bar takes the card color of the details header under it, so both read as one
@@ -326,6 +327,7 @@ function TaskDetailsContent({
           ) : null}
           <View style={styles.root}>
             <FlashList
+              overrideProps={FLASH_LIST_FIRST_RENDER}
               data={rows}
               renderItem={renderItem}
               keyExtractor={detailsRowKey}

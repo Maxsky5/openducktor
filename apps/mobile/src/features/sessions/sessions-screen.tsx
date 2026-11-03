@@ -53,6 +53,7 @@ import {
   useAllSessionNavigation,
   useSessionListGrouping,
 } from "./session-navigation-provider";
+import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 const keyOf = (item: SessionListItem): string => item.key;
 const typeOf = (item: SessionListItem): string => item.type;
@@ -332,6 +333,7 @@ export function SessionsScreen(): ReactElement {
         <View style={styles.column}>
           {state === "list" ? (
             <FlashList
+              overrideProps={FLASH_LIST_FIRST_RENDER}
               data={items}
               keyExtractor={keyOf}
               getItemType={typeOf}
