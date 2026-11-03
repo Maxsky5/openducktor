@@ -141,6 +141,7 @@ const useSessionOwnerResolution = ({
   });
   const resolution = resolveSessionOwner({
     identity,
+    workspaceId,
     readOnly,
     association,
     readModelLoadState: readModel.sessionReadModelLoadState,
