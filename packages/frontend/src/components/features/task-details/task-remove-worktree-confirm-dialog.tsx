@@ -50,7 +50,7 @@ export function TaskRemoveWorktreeConfirmDialog({
           {operation.error ? <p className="text-destructive-muted">{operation.error}</p> : null}
         </DialogBody>
 
-        <DialogFooter className="mt-0 flex-col-reverse justify-between gap-2 border-t border-border px-6 py-4 sm:flex-row">
+        <DialogFooter className="mt-0 flex-col-reverse gap-2 border-t border-border px-6 py-4 sm:flex-row">
           <Button type="button" variant="outline" disabled={operation.isPending} onClick={onCancel}>
             Cancel
           </Button>

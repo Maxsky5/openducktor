@@ -80,7 +80,7 @@ export const GitConflictDialog = memo(function GitConflictDialog({
           ) : null}
         </DialogBody>
 
-        <DialogFooter className="mt-0 flex flex-row items-center justify-between gap-2 border-t border-border pt-5">
+        <DialogFooter className="mt-0 flex flex-row items-center gap-2 border-t border-border pt-5">
           <Button
             type="button"
             variant="outline"

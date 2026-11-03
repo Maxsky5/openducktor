@@ -10,7 +10,6 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import type { BrowserPromptOf } from "./browser-component-types";
 import { useBrowserAsyncAction } from "./use-browser-async-action";
 
@@ -135,9 +134,7 @@ export function BrowserDialogPrompt({
               {answer.error}
             </p>
           ) : null}
-          <div
-            className={cn("flex gap-1.5", model.dismissLabel ? "justify-between" : "justify-end")}
-          >
+          <div className={`flex gap-1.5 ${model.dismissLabel ? "justify-between" : "justify-end"}`}>
             {model.dismissLabel ? (
               <Button
                 type="button"

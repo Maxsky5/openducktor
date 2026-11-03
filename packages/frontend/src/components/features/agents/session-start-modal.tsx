@@ -494,7 +494,7 @@ function SessionStartModalFooter({
   onOpenChange,
 }: SessionStartModalFooterProps): ReactElement {
   return (
-    <DialogFooter className="mt-0 flex w-full items-stretch justify-between border-t border-border pt-5 sm:items-center">
+    <DialogFooter className="mt-0 flex w-full items-stretch border-t border-border pt-5 sm:items-center">
       <Button
         type="button"
         variant="outline"

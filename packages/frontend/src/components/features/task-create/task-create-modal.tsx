@@ -350,7 +350,7 @@ export function TaskCreateModal({
             </DialogBody>
           </fieldset>
 
-          <DialogFooter className="mt-0 justify-between border-t border-border px-5 py-4">
+          <DialogFooter className="mt-0 border-t border-border px-5 py-4">
             <Button
               type="button"
               variant="outline"

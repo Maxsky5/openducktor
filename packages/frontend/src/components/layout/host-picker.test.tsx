@@ -111,14 +111,13 @@ test("keeps Cancel left and connection actions right when the footer stacks", ()
   const cancel = view.getByRole("button", { name: "Cancel" });
   const footer = cancel.closest('[data-slot="dialog-footer"]');
   expect(footer).not.toBeNull();
-  // flex-wrap-reverse flips the cross axis, so self-end is the left edge.
-  expect(cancel.className).toContain("self-end");
+  expect(footer?.className).toContain("items-end");
+  expect(footer?.className).not.toContain("flex-wrap-reverse");
+  expect(cancel.className).toContain("self-start");
   expect(cancel.className).toContain("sm:self-auto");
   const actions = footer?.lastElementChild;
   expect(actions?.tagName).toBe("DIV");
-  expect(actions?.className).toContain("self-start");
   expect(actions?.className).toContain("justify-end");
-  expect(actions?.className).toContain("sm:self-auto");
 });
 
 test("the picker connects the entered host, reports failure, and permits a local connection", async () => {

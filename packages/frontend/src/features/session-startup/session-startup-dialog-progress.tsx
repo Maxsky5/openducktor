@@ -112,8 +112,22 @@ function Footer({
       </DialogFooter>
     );
   }
+  const editChoices =
+    onEditChoices && attempt?.ownership.state === "not_saved" ? (
+      <Button type="button" size="sm" variant="secondary" onClick={onEditChoices}>
+        <Pencil data-icon="inline-start" />
+        Edit choices
+      </Button>
+    ) : null;
+  const repairSavedSession =
+    onRepairSavedSession && canRepairSavedWorkspace(attempt) ? (
+      <Button type="button" size="sm" variant="secondary" onClick={onRepairSavedSession}>
+        <RefreshCw data-icon="inline-start" />
+        Retry session preparation
+      </Button>
+    ) : null;
   return (
-    <DialogFooter className="mt-0 min-h-13 items-center justify-between border-t border-border px-4 py-2">
+    <DialogFooter className="mt-0 min-h-13 items-center border-t border-border px-4 py-2">
       <Button
         type="button"
         size="sm"
@@ -123,20 +137,12 @@ function Footer({
       >
         Close
       </Button>
-      <div className="flex flex-col items-end gap-2 self-end sm:flex-row sm:items-center sm:self-auto">
-        {onEditChoices && attempt?.ownership.state === "not_saved" ? (
-          <Button type="button" size="sm" variant="secondary" onClick={onEditChoices}>
-            <Pencil data-icon="inline-start" />
-            Edit choices
-          </Button>
-        ) : null}
-        {onRepairSavedSession && canRepairSavedWorkspace(attempt) ? (
-          <Button type="button" size="sm" variant="secondary" onClick={onRepairSavedSession}>
-            <RefreshCw data-icon="inline-start" />
-            Retry session preparation
-          </Button>
-        ) : null}
-      </div>
+      {editChoices || repairSavedSession ? (
+        <div className="flex flex-col items-end gap-2 self-end sm:flex-row sm:items-center sm:self-auto">
+          {editChoices}
+          {repairSavedSession}
+        </div>
+      ) : null}
     </DialogFooter>
   );
 }

@@ -83,29 +83,21 @@ export function HostPicker({
         <Footer
           role="group"
           aria-label="Connection actions"
-          // wrap-reverse flips the cross axis, so the left edge is the end here.
           className={
-            onCancel
-              ? "mt-0 flex-wrap-reverse items-end justify-between gap-3 border-t border-border px-6 py-4"
-              : "mt-5"
+            onCancel ? "mt-0 flex-wrap items-end gap-3 border-t border-border px-6 py-4" : "mt-5"
           }
         >
           {onCancel ? (
             <Button
               type="button"
               variant="outline"
-              className="self-end sm:self-auto"
+              className="self-start sm:self-auto"
               onClick={onCancel}
             >
               Cancel
             </Button>
           ) : null}
-          <div
-            className={cn(
-              "flex gap-2",
-              onCancel ? "flex-wrap justify-end self-start sm:self-auto" : "flex-col",
-            )}
-          >
+          <div className={cn("flex gap-2", onCancel ? "flex-wrap justify-end" : "flex-col")}>
             <HostActions selection={selection} pending={pending} run={run} />
             <ConnectButton
               currentHost={currentHost}
