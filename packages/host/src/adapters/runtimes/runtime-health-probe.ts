@@ -68,15 +68,16 @@ export const createRuntimeHealthProbe = (
           { concurrency: 2 },
         );
         if (probeResult._tag === "Failure") {
-          if (probeResult.failure instanceof RuntimeExecutableIncompatibleError) {
-            return runtimeHealthFailure(
-              kind,
-              binary,
-              version,
-              incompatibleRuntimeExecutableMessage(kind, binary),
-            );
-          }
-          return yield* Effect.fail(probeResult.failure);
+          // Keep the version that the user has installed beside every probe failure.
+          const failure = probeResult.failure;
+          return runtimeHealthFailure(
+            kind,
+            binary,
+            version,
+            failure instanceof RuntimeExecutableIncompatibleError
+              ? incompatibleRuntimeExecutableMessage(kind, binary)
+              : failure.message,
+          );
         }
         return {
           kind,

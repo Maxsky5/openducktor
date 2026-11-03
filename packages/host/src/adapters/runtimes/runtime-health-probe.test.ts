@@ -8,6 +8,8 @@ import {
   type RuntimeExecutableProbesByKind,
 } from "../../ports/runtime-executable-probe-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import { createFakeOpenCodeV2 } from "../../test-support/opencode-v2-standalone";
+import { createOpenCodeExecutableProbe } from "../opencode/opencode-executable-probe";
 import { createToolDiscoveryAdapter } from "../system/tool-discovery";
 import { createRuntimeHealthProbe } from "./runtime-health-probe";
 
@@ -158,7 +160,7 @@ describe("createRuntimeHealthProbe", () => {
     expect(health.error).not.toContain("unexpected argument");
   });
 
-  test("propagates operational probe failures instead of reporting an incompatible runtime", async () => {
+  test("reports an operational probe failure with its own message and the found version", async () => {
     const systemCommands = createSystemCommands({ version: "1.18.9" });
     const probe = createProbe(
       systemCommands,
@@ -172,15 +174,53 @@ describe("createRuntimeHealthProbe", () => {
       ),
     );
 
-    const failure = await Effect.runPromise(
-      Effect.flip(probe.getRuntimeHealth("opencode", executablePaths.opencode)),
+    const health = await Effect.runPromise(
+      probe.getRuntimeHealth("opencode", executablePaths.opencode),
     );
 
-    expect(failure).toMatchObject({
-      _tag: "HostOperationError",
-      operation: "opencodeExecutableProbe.cleanup",
-      message: "Failed to stop the probe process.",
+    expect(health).toEqual({
+      kind: "opencode",
+      enabled: true,
+      ok: false,
+      executablePath: executablePaths.opencode,
+      version: "1.18.9",
+      error: "Failed to stop the probe process.",
     });
+  });
+
+  test("keeps the found version when the OpenCode probe cannot start the executable", async () => {
+    const fixture = await createFakeOpenCodeV2("exit");
+    try {
+      const versionCalls: string[] = [];
+      const systemCommands: SystemCommandPort = {
+        ...createSystemCommands(),
+        resolveCommandPath(command) {
+          return Effect.succeed(command === fixture.executablePath ? command : null);
+        },
+        versionCommand(command) {
+          versionCalls.push(command);
+          return Effect.succeed("1.18.9");
+        },
+      };
+      const probe = createProbe(systemCommands, {
+        ...createExecutableProbes(),
+        opencode: createOpenCodeExecutableProbe({ startupTimeoutMs: 2_000 }),
+      });
+
+      const health = await Effect.runPromise(
+        probe.getRuntimeHealth("opencode", fixture.executablePath),
+      );
+
+      expect(versionCalls).toEqual([fixture.executablePath]);
+      expect(health.ok).toBe(false);
+      expect(health.version).toBe("1.18.9");
+      expect(health.error).toContain(
+        "did not start: it stopped before it was ready: native startup failed.",
+      );
+      expect(health.error).toContain("or run `opencode upgrade`. Then try again.");
+    } finally {
+      await fixture.cleanup();
+    }
   });
 
   test("keeps a protocol-ready runtime available when version display fails", async () => {
