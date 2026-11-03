@@ -2460,7 +2460,7 @@ describe("Claude host live-session adapter", () => {
       const source = await Effect.runPromise(
         harness.adapter.sessionImport.inspectSession({
           ...importedRef,
-          sessionScope: { kind: "repository", workspaceId: "workspace-1" },
+          sessionScope: { kind: "repository", workspaceId: "other-repo" },
         }),
       );
       await Effect.runPromise(source.attach);

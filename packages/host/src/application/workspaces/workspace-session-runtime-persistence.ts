@@ -25,7 +25,7 @@ import type {
   WorkspaceSessionStorePort,
   WorkspaceSessionStoreRef,
 } from "../../ports/workspace-session-store-port";
-import { createWorkspaceSessionRuntimeOwners } from "./workspace-session-runtime-owners";
+import { findWorkspaceSessionOwner } from "./workspace-session-runtime-owners";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type {
   AgentSessionOperationPolicy,
@@ -102,7 +102,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
       }
       yield* publishUpdated(known.ref.workspaceId, saved);
     });
-  const { find } = createWorkspaceSessionRuntimeOwners({ store, settings });
+  const find = (runtimeRef: ScopedAgentSessionRef) =>
+    findWorkspaceSessionOwner({ store, settings }, runtimeRef);
   const requireActive = (session: WorkspaceSession) =>
     session.archivedAt === null
       ? Effect.void

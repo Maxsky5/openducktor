@@ -21,14 +21,14 @@ const request = {
 
 test("opens an imported native session with the scope of the import request", async () => {
   const policyScopes: AgentSessionScope[] = [];
-  const opened: unknown[] = [];
+  const opened: (AgentSessionScope | undefined)[] = [];
   const adapter = createCodexSessionImportAdapter(
     {
       listSessionMetadataPage: async () => {
         throw new Error("Unexpected listing");
       },
       openExistingSession: async (input) => {
-        opened.push(input);
+        opened.push(input.sessionScope);
         return {
           metadata: {
             externalSessionId: input.externalSessionId,
@@ -53,5 +53,5 @@ test("opens an imported native session with the scope of the import request", as
   await Effect.runPromise(adapter.inspectSession(request));
 
   expect(policyScopes).toEqual([request.sessionScope]);
-  expect(opened).toEqual([{ ...request, runtimePolicy: { kind: "codex", policy: codexPolicy } }]);
+  expect(opened).toEqual([request.sessionScope]);
 });

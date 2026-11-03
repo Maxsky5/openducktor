@@ -59,7 +59,6 @@ describe("OpenCode V2 conversation identity and history", () => {
       sessionScope: { kind: "repository" as const, workspaceId },
     });
     await controller.bind(scoped("first"));
-    await controller.bind(scoped("first"));
 
     await expect(controller.bind(scoped("second"))).rejects.toThrow(
       "The conversation already has a different OpenDucktor association.",

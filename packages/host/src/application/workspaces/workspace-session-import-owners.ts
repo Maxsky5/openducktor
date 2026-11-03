@@ -14,7 +14,7 @@ import type {
 } from "../../ports/workspace-session-store-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
-/** The open workspace that registered this repository path, as a list for store queries. */
+/** The open workspaces at this repository path. A path has at most one. */
 export const openWorkspacesAtRepoPath = (
   catalog: Pick<WorkspaceCatalog, "openWorkspaces">,
   repoPath: string,

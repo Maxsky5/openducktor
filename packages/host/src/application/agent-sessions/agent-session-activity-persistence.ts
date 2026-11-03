@@ -31,12 +31,12 @@ type WorkspacePersistence = AgentSessionPersistencePort & {
 export const createAgentSessionActivityPersistence = ({
   tasks,
   workspace,
-  readTaskWorkspaces,
+  readTaskWorkspace,
   publishTaskRecords,
 }: {
   tasks: Pick<AgentSessionRepository, "recordAgentSessionActivity">;
   workspace: WorkspacePersistence;
-  readTaskWorkspaces(ref: AgentSessionLiveRef): Effect.Effect<WorkspaceRef[], HostError>;
+  readTaskWorkspace(ref: AgentSessionLiveRef): Effect.Effect<WorkspaceRef | null, HostError>;
   publishTaskRecords(
     scope: WorkspaceRef,
     records: TaskAgentSessions,
@@ -60,16 +60,14 @@ export const createAgentSessionActivityPersistence = ({
         root = { ...root, externalSessionId: parent };
       }
       yield* workspace.recordActivity(root, at);
-      for (const scope of yield* readTaskWorkspaces(root)) {
-        const saved = yield* tasks
-          .recordAgentSessionActivity({ ...scope, identity: root, occurredAt: at })
-          .pipe(
-            Effect.mapError((cause) =>
-              toHostOperationError(cause, "agent-session.persist-activity"),
-            ),
-          );
-        if (saved) yield* publishTaskRecords(scope, saved);
-      }
+      const scope = yield* readTaskWorkspace(root);
+      if (!scope) return;
+      const saved = yield* tasks
+        .recordAgentSessionActivity({ ...scope, identity: root, occurredAt: at })
+        .pipe(
+          Effect.mapError((cause) => toHostOperationError(cause, "agent-session.persist-activity")),
+        );
+      if (saved) yield* publishTaskRecords(scope, saved);
     });
   const flush = (ref: AgentSessionLiveRef, current: ObservedSession) =>
     Effect.gen(function* () {

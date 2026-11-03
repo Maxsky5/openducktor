@@ -3,7 +3,7 @@ import { createSessionModelPreparation } from "./session-model-preparation";
 import type {
   AgentSessionControlSendInput,
   AgentSessionLiveRef,
-  AgentSessionWorkflowScope,
+  AgentSessionScope,
   AgentMessageTarget,
   AgentSessionResumeIntent,
   AgentWorkflowSessionForkInput,
@@ -73,7 +73,7 @@ export const createAgentSessionCommandService = ({
     },
     resolveRoot: (ref) => owner.root(ref),
   });
-  const policyFor = (scope: { kind: "repository" } | AgentSessionWorkflowScope) =>
+  const policyFor = (scope: AgentSessionScope) =>
     scope.kind === "workflow" ? workflow.forScope(scope) : repositoryPolicy;
   const owner = createSessionOperationOwner({
     resolveRoot: (ref) =>

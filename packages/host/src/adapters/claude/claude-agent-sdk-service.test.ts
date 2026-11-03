@@ -1104,7 +1104,13 @@ describe("createClaudeAgentSdkService", () => {
       expect(renameSession).toHaveBeenCalledWith("session-1", "Renamed", {
         dir: "/repo/worktree/",
       });
-      expect(result).toMatchObject({ status: "renamed", summary: { title: "Renamed" } });
+      expect(result).toMatchObject({
+        status: "renamed",
+        summary: {
+          title: "Renamed",
+          sessionAssociation: { kind: "repository", workspaceId: "workspace-1", title: "Renamed" },
+        },
+      });
       await expect(
         Effect.runPromise(
           service.loadSessionTodos({
