@@ -97,20 +97,19 @@ export const createNodeWorkspaceSessionPersistence = ({
     ...createAgentSessionActivityPersistence({
       tasks: taskStore,
       // Saved sessions can receive activity after their task closes.
-      readTaskWorkspaces: (ref) =>
-        dependencies.settings
-          .getWorkspaceCatalog()
-          .pipe(
-            Effect.map((catalog) =>
-              catalog.openWorkspaces
-                .filter(
-                  (workspace) =>
-                    normalizePathForComparison(workspace.repoPath) ===
-                    normalizePathForComparison(ref.repoPath),
-                )
-                .map(({ workspaceId }) => ({ workspaceId, repoPath: ref.repoPath })),
-            ),
-          ),
+      readTaskWorkspace: (ref) =>
+        dependencies.settings.getWorkspaceCatalog().pipe(
+          Effect.map((catalog) => {
+            const workspace = catalog.openWorkspaces.find(
+              (candidate) =>
+                normalizePathForComparison(candidate.repoPath) ===
+                normalizePathForComparison(ref.repoPath),
+            );
+            return workspace
+              ? { workspaceId: workspace.workspaceId, repoPath: ref.repoPath }
+              : null;
+          }),
+        ),
       workspace: workspacePersistence,
       publishTaskRecords: (scope, records) =>
         Effect.try({

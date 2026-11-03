@@ -6,7 +6,7 @@ import type {
 } from "./codex-live-session-adapter-contract";
 import { createRuntimeSessionImportAdapter } from "./runtime-session-import-adapter";
 export const createCodexSessionImportAdapter = (
-  controller: CodexSessionController,
+  controller: Pick<CodexSessionController, "listSessionMetadataPage" | "openExistingSession">,
   runtimeId: string,
   resolvePolicy: CreateCodexLiveSessionAdapterPreparerInput["resolveRuntimePolicy"],
   publish: () => Effect.Effect<void, HostError>,
@@ -30,14 +30,11 @@ export const createCodexSessionImportAdapter = (
         if (pageToken) seen.add(pageToken);
       } while (pageToken);
     },
-    inspectSession: async (input) => {
-      const policy = await Effect.runPromise(
-        resolvePolicy({ repoPath: input.repoPath, sessionScope: { kind: "repository" } }),
-      );
+    inspectSession: async (request) => {
+      const policy = await Effect.runPromise(resolvePolicy(request));
       const handle = await controller.openExistingSession({
-        ...input,
+        ...request,
         runtimeKind: "codex",
-        sessionScope: { kind: "repository" },
         runtimePolicy: { kind: "codex", policy },
       });
       return {

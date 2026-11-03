@@ -300,7 +300,7 @@ describe("agent session history queries", () => {
       sessionRefFixture,
       { ...sessionRefFixture, limit: 5 },
       { ...sessionRefFixture, systemPrompt: "Read only" },
-      { ...sessionRefFixture, sessionScope: { kind: "repository" } },
+      { ...sessionRefFixture, sessionScope: { kind: "repository", workspaceId: "workspace-1" } },
     ];
     const reads = inputs.flatMap((input) => [
       client.fetchQuery(sessionHistoryQueryOptions(input, reader, client)),

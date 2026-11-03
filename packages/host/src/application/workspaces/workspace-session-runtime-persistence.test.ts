@@ -190,7 +190,7 @@ describe("Workspace Session persistence through the shared command module", () =
 
   test("uses the stored Role and Model on resume without adding settings to Send", async () => {
     const h = await setup();
-    const scope = { kind: "repository" } as const;
+    const scope = { kind: "repository", workspaceId: "fairnest" } as const;
     await Effect.runPromise(
       h.live.resumeSession({
         resumeMode: "reattach",
@@ -231,13 +231,17 @@ describe("Workspace Session persistence through the shared command module", () =
       h.live.resumeSession({
         resumeMode: "reattach",
         ...h.ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
       }),
     );
     await h.send("Continue");
     expect(h.inputs).toHaveLength(2);
     for (const input of h.inputs) {
-      expect(input.sessionScope).toEqual({ kind: "repository", title: "Renamed session" });
+      expect(input.sessionScope).toEqual({
+        kind: "repository",
+        workspaceId: "fairnest",
+        title: "Renamed session",
+      });
     }
   });
 
@@ -247,10 +251,10 @@ describe("Workspace Session persistence through the shared command module", () =
       h.live.resumeSession({
         resumeMode: "reattach",
         ...h.ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
       }),
     );
-    expect(h.inputs[0]?.sessionScope).toEqual({ kind: "repository" });
+    expect(h.inputs[0]?.sessionScope).toEqual({ kind: "repository", workspaceId: "fairnest" });
   });
 
   test("renames the runtime session when the first accepted message sets the generated title", async () => {
@@ -490,7 +494,11 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(await h.get()).toEqual(h.record);
     h.state.failModel = true;
     const model = { providerId: "provider", modelId: "new-model", variant: "low" };
-    const update = { ...h.ref, sessionScope: { kind: "repository" as const }, model };
+    const update = {
+      ...h.ref,
+      sessionScope: { kind: "repository" as const, workspaceId: "fairnest" },
+      model,
+    };
     await expect(Effect.runPromise(h.live.updateSessionModel(update))).rejects.toThrow(
       "runtime rejected model",
     );
@@ -512,7 +520,7 @@ describe("Workspace Session persistence through the shared command module", () =
         Effect.runPromise(
           h.live.updateSessionModel({
             ...h.ref,
-            sessionScope: { kind: "repository" },
+            sessionScope: { kind: "repository", workspaceId: "fairnest" },
             model,
           }),
         ),
@@ -531,7 +539,7 @@ describe("Workspace Session persistence through the shared command module", () =
       Effect.result(
         h.live.updateSessionModel({
           ...h.ref,
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "fairnest" },
           model: { providerId: "provider", modelId: "new-model" },
         }),
       ),
@@ -569,7 +577,7 @@ describe("Workspace Session persistence through the shared command module", () =
       Effect.runPromise(
         h.live.updateSessionModel({
           ...h.ref,
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "fairnest" },
           model,
         }),
       ),
@@ -598,7 +606,11 @@ describe("Workspace Session persistence through the shared command module", () =
       variant: "high",
     };
     await Effect.runPromise(
-      h.live.updateSessionModel({ ...h.ref, sessionScope: { kind: "repository" }, model }),
+      h.live.updateSessionModel({
+        ...h.ref,
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
+        model,
+      }),
     );
     expect((await h.get()).selectedModel).toEqual({ ...model, runtimeKind: "opencode" });
     expect(h.models).toEqual([model]);
@@ -625,7 +637,11 @@ describe("Workspace Session persistence through the shared command module", () =
       }),
     );
     await Effect.runPromise(
-      h.live.updateSessionModel({ ...h.ref, sessionScope: { kind: "repository" }, model }),
+      h.live.updateSessionModel({
+        ...h.ref,
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
+        model,
+      }),
     );
     const expectedModel: WorkspaceSession["selectedModel"] = {
       ...model,
@@ -637,7 +653,7 @@ describe("Workspace Session persistence through the shared command module", () =
       h.live.resumeSession({
         resumeMode: "reattach",
         ...h.ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
       }),
     );
     await h.send("Continue");
@@ -672,7 +688,11 @@ describe("Workspace Session persistence through the shared command module", () =
     const model = { providerId: "provider", modelId: "new-model" };
     await expect(
       Effect.runPromise(
-        h.live.updateSessionModel({ ...h.ref, sessionScope: { kind: "repository" }, model }),
+        h.live.updateSessionModel({
+          ...h.ref,
+          sessionScope: { kind: "repository", workspaceId: "fairnest" },
+          model,
+        }),
       ),
     ).rejects.toThrow("model save failed");
     expect(h.models).toEqual([model, previousModel]);
@@ -685,7 +705,7 @@ describe("Workspace Session persistence through the shared command module", () =
     const captured = await Effect.runPromise(
       h.live.prepareUserMessage({
         ...h.ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
         parts: [{ kind: "text", text: "Queued prompt" }],
       }),
     );
@@ -733,7 +753,7 @@ describe("Workspace Session persistence through the shared command module", () =
     const first = Effect.runPromiseExit(
       h.live.updateSessionModel({
         ...h.ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
         model: firstModel,
       }),
     );
@@ -741,7 +761,7 @@ describe("Workspace Session persistence through the shared command module", () =
     const second = Effect.runPromiseExit(
       h.live.updateSessionModel({
         ...h.ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
         model: secondModel,
       }),
     );
@@ -763,7 +783,11 @@ describe("Workspace Session persistence through the shared command module", () =
     const h = await setup();
     const model = { providerId: "provider", modelId: "new-model" };
     await Effect.runPromise(
-      h.live.updateSessionModel({ ...h.ref, sessionScope: { kind: "repository" }, model }),
+      h.live.updateSessionModel({
+        ...h.ref,
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
+        model,
+      }),
     );
     await h.emit({
       ...h.accepted(),
@@ -890,7 +914,7 @@ describe("Workspace Session persistence through the shared command module", () =
           .sendUserMessage({
             delivery: "new_turn",
             ...h.ref,
-            sessionScope: { kind: "repository" },
+            sessionScope: { kind: "repository", workspaceId: "fairnest" },
             parts: [{ kind: "text", text: "Continue" }],
           })
           .pipe(Effect.asVoid);
@@ -898,7 +922,7 @@ describe("Workspace Session persistence through the shared command module", () =
         .resumeSession({
           resumeMode: "reattach",
           ...h.ref,
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "fairnest" },
         })
         .pipe(Effect.asVoid);
     };
@@ -989,7 +1013,7 @@ describe("Workspace Session persistence through the shared command module", () =
     const h = await setup();
     const resume = {
       ...h.ref,
-      sessionScope: { kind: "repository" } as const,
+      sessionScope: { kind: "repository", workspaceId: "fairnest" } as const,
       resumeMode: "reattach" as const,
     };
     await expect(
@@ -1015,12 +1039,12 @@ describe("Workspace Session persistence through the shared command module", () =
             return h.persistence.prepareResume({
               resumeMode: "reattach",
               ...ref,
-              sessionScope: { kind: "repository" },
+              sessionScope: { kind: "repository", workspaceId: "fairnest" },
             });
           case "send":
             return h.persistence.prepareSend({
               ...ref,
-              sessionScope: { kind: "repository" },
+              sessionScope: { kind: "repository", workspaceId: "fairnest" },
               parts: [{ kind: "text", text: "Prompt" }],
             });
           case "read":
@@ -1028,7 +1052,7 @@ describe("Workspace Session persistence through the shared command module", () =
           case "model":
             return h.persistence.prepareModelUpdate({
               ...ref,
-              sessionScope: { kind: "repository" },
+              sessionScope: { kind: "repository", workspaceId: "fairnest" },
               model: null,
             });
         }

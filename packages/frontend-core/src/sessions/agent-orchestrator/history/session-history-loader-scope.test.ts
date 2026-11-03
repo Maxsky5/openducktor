@@ -79,7 +79,7 @@ describe("session history loader scope", () => {
   test("loads repository history from the active workspace", async () => {
     const repositorySession: AgentSessionState = {
       ...createSession(),
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     };
     const harness = createHistoryLoadHarness(repositorySession);
     let historyRepoPath: string | undefined;
@@ -184,7 +184,7 @@ describe("session history loader scope", () => {
   test("forwards repository scope when loading a live repository session", async () => {
     const repositorySession: AgentSessionState = {
       ...createSession(),
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     };
     const harness = createHistoryLoadHarness(repositorySession);
     const loadRepoPromptOverrides = mock(async (): Promise<RepoPromptOverrides> => ({}));
@@ -212,7 +212,7 @@ describe("session history loader scope", () => {
 
     expect(historyInput).toMatchObject({
       externalSessionId: "external-1",
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
     });
     expect(loadRepoPromptOverrides).not.toHaveBeenCalled();
   });

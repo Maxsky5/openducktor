@@ -265,7 +265,9 @@ const createRepositoryConflictRetryState = (
   duringObservation: Parameters<typeof createState>[0] = (emit) => {
     emit(
       createLiveSnapshotEnvelope({
-        sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+        sessions: [
+          snapshot({ repositoryScope: { kind: "repository", workspaceId: "workspace-1" } }),
+        ],
       }),
     );
   },
@@ -1521,7 +1523,7 @@ describe("useRepoSessionReadModel", () => {
         snapshot({
           ref: { ...snapshot().ref, workingDirectory: "/repo", externalSessionId: entry.id },
           activity: "running",
-          repositoryScope: { kind: "repository" },
+          repositoryScope: { kind: "repository", workspaceId: "workspace-a" },
         }),
       ),
     ];
@@ -1609,7 +1611,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.run(() => loaded.resolve([entry]));
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       expect(state.getSession()).toMatchObject({
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId: "workspace-a" },
         status: "idle",
         pendingQuestions: [{ requestId: "answer", questions: [] }],
       });
@@ -1637,7 +1639,9 @@ describe("useRepoSessionReadModel", () => {
       updatedAt: 1000,
       archivedAt: null,
     };
-    const correct = snapshot({ repositoryScope: { kind: "repository" } });
+    const correct = snapshot({
+      repositoryScope: { kind: "repository", workspaceId: "workspace-a" },
+    });
     const wrong = { ...correct, ref: { ...correct.ref, workingDirectory: "/wrong" } };
     const host = createTestHostConnection({
       client: { workspaceSessionListActive: async () => [entry] },
@@ -2471,7 +2475,9 @@ describe("useRepoSessionReadModel", () => {
     const state = createState((emit) => {
       emit(
         createLiveSnapshotEnvelope({
-          sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+          sessions: [
+            snapshot({ repositoryScope: { kind: "repository", workspaceId: "workspace-1" } }),
+          ],
         }),
       );
     }, []);
@@ -2480,7 +2486,10 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
 
-      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "repository",
+        workspaceId: "workspace-1",
+      });
     } finally {
       await state.harness.unmount();
     }
@@ -2490,7 +2499,9 @@ describe("useRepoSessionReadModel", () => {
     const state = createState((emit) => {
       emit(
         createLiveSnapshotEnvelope({
-          sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+          sessions: [
+            snapshot({ repositoryScope: { kind: "repository", workspaceId: "workspace-1" } }),
+          ],
         }),
       );
     }, []);
@@ -2498,7 +2509,10 @@ describe("useRepoSessionReadModel", () => {
     try {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
-      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "repository",
+        workspaceId: "workspace-1",
+      });
 
       await state.harness.run(() => {
         state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
@@ -2507,24 +2521,32 @@ describe("useRepoSessionReadModel", () => {
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
 
-      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "repository",
+        workspaceId: "workspace-1",
+      });
       expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
         kind: "failed",
         workspaceRepoPath: "/repo",
         message:
-          "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+          "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope for workspace 'workspace-1' does not match the incoming workflow scope for task 'task-1' and role 'build'.",
         source: "task-records",
       });
 
       await state.harness.run(() => {
         state.emit(
           createLiveSnapshotEnvelope({
-            sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+            sessions: [
+              snapshot({ repositoryScope: { kind: "repository", workspaceId: "workspace-1" } }),
+            ],
           }),
         );
       });
       expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("failed");
-      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "repository",
+        workspaceId: "workspace-1",
+      });
     } finally {
       await state.harness.unmount();
     }
@@ -2536,7 +2558,9 @@ describe("useRepoSessionReadModel", () => {
       (emit) => {
         emit(
           createLiveSnapshotEnvelope({
-            sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+            sessions: [
+              snapshot({ repositoryScope: { kind: "repository", workspaceId: "workspace-1" } }),
+            ],
           }),
         );
       },
@@ -2563,11 +2587,14 @@ describe("useRepoSessionReadModel", () => {
         kind: "failed",
         workspaceRepoPath: "/repo",
         message:
-          "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+          "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope for workspace 'workspace-1' does not match the incoming workflow scope for task 'task-1' and role 'build'.",
         source: "task-records",
       });
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
-      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "repository",
+        workspaceId: "workspace-1",
+      });
     } finally {
       await state.harness.unmount();
     }
@@ -2579,7 +2606,9 @@ describe("useRepoSessionReadModel", () => {
       (emit) => {
         emit(
           createLiveSnapshotEnvelope({
-            sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+            sessions: [
+              snapshot({ repositoryScope: { kind: "repository", workspaceId: "workspace-1" } }),
+            ],
           }),
         );
       },
@@ -2605,7 +2634,10 @@ describe("useRepoSessionReadModel", () => {
       expect(batchList).toHaveBeenCalledTimes(1);
       expect(batchList).toHaveBeenCalledWith(workspaceScope, ["task-1"]);
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
-      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "repository",
+        workspaceId: "workspace-1",
+      });
       expect(
         state.queryClient.getQueryData<AgentSessionRecord[]>(
           agentSessionQueryKeys.list(workspaceScope, "task-1"),
@@ -2681,7 +2713,10 @@ describe("useRepoSessionReadModel", () => {
 
       expect(batchList).toHaveBeenCalledWith(workspaceScope, ["task-1"]);
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
-      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "repository",
+        workspaceId: "workspace-1",
+      });
     } finally {
       await state.harness.unmount();
     }
@@ -2710,7 +2745,10 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
 
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
-      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "repository",
+        workspaceId: "workspace-1",
+      });
     } finally {
       await state.harness.unmount();
     }
@@ -2729,7 +2767,7 @@ describe("useRepoSessionReadModel", () => {
               ? [
                   snapshot({
                     ref: { ...snapshot().ref, repoPath },
-                    repositoryScope: { kind: "repository" },
+                    repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
                   }),
                 ]
               : [],
@@ -2798,7 +2836,9 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.run(() => {
         state.emit(
           createLiveSnapshotEnvelope({
-            sessions: [snapshot({ repositoryScope: { kind: "repository" } })],
+            sessions: [
+              snapshot({ repositoryScope: { kind: "repository", workspaceId: "workspace-1" } }),
+            ],
           }),
         );
       });
@@ -2814,7 +2854,7 @@ describe("useRepoSessionReadModel", () => {
         kind: "failed",
         workspaceRepoPath: "/repo",
         message:
-          "Failed to apply initial live-session snapshot for repo '/repo': Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+          "Failed to apply initial live-session snapshot for repo '/repo': Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope for workspace 'workspace-1'.",
         source: "live-stream",
       });
     } finally {
@@ -2839,7 +2879,9 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.run(() => {
         state.emit({
           type: "session_upsert",
-          session: snapshot({ repositoryScope: { kind: "repository" } }),
+          session: snapshot({
+            repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
+          }),
         });
       });
 
@@ -2851,7 +2893,7 @@ describe("useRepoSessionReadModel", () => {
       });
       expect(state.harness.getLatest().getSessionFault(identity)).toEqual({
         message:
-          "Failed to apply live-session update: Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+          "Failed to apply live-session update: Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope for workspace 'workspace-1'.",
       });
       expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
     } finally {

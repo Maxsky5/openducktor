@@ -33,7 +33,7 @@ const record = (): WorkspaceSession => ({
 });
 const snapshot = (entry: WorkspaceSession): AgentSessionLiveSnapshot => ({
   ref: { ...workspaceSessionIdentity(entry)!, repoPath: "/repo" },
-  repositoryScope: { kind: "repository" },
+  repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
   activity: "running",
   title: "Runtime title",
   startedAt: new Date(1000).toISOString(),
@@ -185,14 +185,13 @@ describe("Workspace Session records in the shared read model", () => {
     expect([...recovered]).toEqual([["stream-fault", { message: "Unrelated fault" }]]);
   });
 
-  test("keeps the selected workspace attribution and approvals through physical updates", () => {
+  test("keeps the workspace attribution and approvals through live updates", () => {
     const entry = record();
     const initial = applyWorkspaceSessionRecords(
       emptyAgentSessionCollection(),
       [entry],
-      "workspace-a",
+      "workspace-1",
     );
-    const selectedWorkspace = applyWorkspaceSessionRecords(initial, [entry], "workspace-b");
     const live = {
       ...snapshot(entry),
       activity: "waiting_for_permission" as const,
@@ -201,20 +200,20 @@ describe("Workspace Session records in the shared read model", () => {
       ],
     };
     const projected = applyAgentSessionLiveDelta({
-      current: selectedWorkspace,
+      current: initial,
       envelope: { type: "session_upsert", session: live },
     });
     expect(getAgentSession(projected, workspaceSessionIdentity(entry))?.sessionAssociation).toEqual(
       {
         kind: "repository",
-        workspaceId: "workspace-b",
+        workspaceId: "workspace-1",
       },
     );
     const selected = getAgentSession(
       applyWorkspaceSessionRecords(
         projected,
         [{ ...entry, manualTitle: "Renamed" }],
-        "workspace-b",
+        "workspace-1",
       ),
       workspaceSessionIdentity(entry),
     );

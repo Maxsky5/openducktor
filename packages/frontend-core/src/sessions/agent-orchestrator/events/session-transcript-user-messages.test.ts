@@ -333,7 +333,7 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
     const sessionsRef = createSessionsRef([
-      buildSession({ sessionAssociation: { kind: "repository" } }),
+      buildSession({ sessionAssociation: { kind: "repository", workspaceId: "workspace-1" } }),
     ]);
     const applySessionUpdate = createSessionUpdater(sessionsRef);
     const updateSession: SessionUpdateFn = (identity, updater) =>
@@ -347,7 +347,7 @@ describe("agent-orchestrator session transcript events", () => {
         runtimePolicy: { kind: "opencode" },
         workingDirectory: "/tmp/repo",
         externalSessionId: "session-1",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
       },
       sessionsRef,
       updateSession,

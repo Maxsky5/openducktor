@@ -24,7 +24,7 @@ export const agentSessionScopesEqual = (
 
 export const describeAgentSessionScope = (scope: AgentSessionScope): string => {
   if (scope.kind === "repository") {
-    return "repository scope";
+    return `repository scope for workspace '${scope.workspaceId}'`;
   }
   return `workflow scope for task '${scope.taskId}' and role '${scope.role}'`;
 };
@@ -38,10 +38,6 @@ export const resolveAgentSessionAssociationTransition = (
   }
   if (incoming.kind === "unbound") {
     return { kind: "accepted", association: previous };
-  }
-  if (previous.kind === "repository" && incoming.kind === "repository") {
-    if (!incoming.workspaceId) return { kind: "accepted", association: previous };
-    if (!previous.workspaceId) return { kind: "accepted", association: incoming };
   }
   if (agentSessionScopesEqual(previous, incoming)) {
     return { kind: "accepted", association: incoming };

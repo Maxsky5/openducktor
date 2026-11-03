@@ -162,14 +162,14 @@ describe("CodexAppServerAdapter manual compaction", () => {
     await adapter.resumeSession({
       ...codexUserMessageInput({
         externalSessionId: "thread-1",
-        sessionScope: { kind: "repository", title: "Fairnest" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1", title: "Fairnest" },
         parts: [compactPart()],
       }),
     });
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread-1",
-        sessionScope: { kind: "repository", title: "Fairnest" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1", title: "Fairnest" },
         parts: [compactPart()],
       }),
     );

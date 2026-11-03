@@ -55,13 +55,13 @@ describe("useStableAgentSessionScope", () => {
   });
 
   test("preserves repository scope identity across equal-value rerenders", async () => {
-    const harness = createHarness({ kind: "repository" });
+    const harness = createHarness({ kind: "repository", workspaceId: "workspace-1" });
 
     try {
       await harness.mount();
       const initialScope = harness.getLatest();
 
-      await harness.update({ kind: "repository" });
+      await harness.update({ kind: "repository", workspaceId: "workspace-1" });
       expect(harness.getLatest()).toBe(initialScope);
     } finally {
       await harness.unmount();
@@ -119,9 +119,9 @@ describe("useStableAgentSessionScope", () => {
         role: "qa",
       });
 
-      await harness.update({ kind: "repository" });
+      await harness.update({ kind: "repository", workspaceId: "workspace-1" });
       expect(harness.getLatest()).not.toBe(changedWorkflowScope);
-      expect(harness.getLatest()).toEqual({ kind: "repository" });
+      expect(harness.getLatest()).toEqual({ kind: "repository", workspaceId: "workspace-1" });
     } finally {
       await harness.unmount();
     }

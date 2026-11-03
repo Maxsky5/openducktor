@@ -68,7 +68,7 @@ class UnreachableRuntimeTransport extends RecordingTransport {
 
 describe("CodexAppServerAdapter lifecycle", () => {
   for (const sessionScope of [
-    { kind: "repository" },
+    { kind: "repository", workspaceId: "repo" },
     { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
   ] as const) {
     for (const action of ["start", "fork"] as const) {

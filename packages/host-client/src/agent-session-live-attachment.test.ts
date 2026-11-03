@@ -215,7 +215,7 @@ describe("agent session live attachment", () => {
         workingDirectory: "/repo",
         externalSessionId: "repository-thread",
       },
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       activity: "idle",
       title: "Repository session",
       startedAt: "2026-07-17T08:00:00.000Z",

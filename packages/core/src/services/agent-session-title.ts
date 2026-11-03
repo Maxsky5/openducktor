@@ -40,7 +40,7 @@ export const withSummaryTitle = (
   title,
   sessionAssociation:
     summary.sessionAssociation.kind === "repository"
-      ? { kind: "repository", title }
+      ? { ...summary.sessionAssociation, title }
       : summary.sessionAssociation,
 });
 
@@ -51,11 +51,9 @@ export const withSummaryTitle = (
  */
 export const withoutSummaryTitle = (summary: AgentSessionSummary): AgentSessionSummary => {
   const { title: _title, ...rest } = summary;
-  return {
-    ...rest,
-    sessionAssociation:
-      summary.sessionAssociation.kind === "repository"
-        ? { kind: "repository" }
-        : summary.sessionAssociation,
-  };
+  if (summary.sessionAssociation.kind !== "repository") {
+    return rest;
+  }
+  const { title: _associationTitle, ...association } = summary.sessionAssociation;
+  return { ...rest, sessionAssociation: association };
 };

@@ -129,7 +129,7 @@ describe("codex session lifecycle", () => {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "repo" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       externalSessionId: "thread-1",
     } satisfies PolicyBoundSessionRef;

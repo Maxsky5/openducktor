@@ -148,11 +148,11 @@ describe("agent-session live contracts", () => {
     expect(
       agentSessionLiveLoadContextInputSchema.parse({
         ...ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
       }),
     ).toEqual({
       ...ref,
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "repo" },
     });
 
     for (const nativeField of [

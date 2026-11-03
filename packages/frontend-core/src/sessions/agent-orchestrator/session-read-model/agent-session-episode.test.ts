@@ -7,7 +7,7 @@ import { projectSessionTranscriptActivity } from "./agent-session-live-activity"
 
 describe("ordered session execution episodes", () => {
   for (const sessionAssociation of [
-    { kind: "repository" },
+    { kind: "repository", workspaceId: "workspace-1" },
     { kind: "workflow", workspaceId: "workspace-1", taskId: "task-1", role: "build" },
   ] as const) {
     test.each(["stopped", "error"] as const)(

@@ -191,7 +191,7 @@ describe("useRuntimeTranscriptInteractions", () => {
         target,
         pendingQuestionRequests: [question],
         answerAgentQuestion,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
       }),
     );
 
@@ -210,6 +210,7 @@ describe("useRuntimeTranscriptInteractions", () => {
 
       expect(answerAgentQuestion).toHaveBeenCalledWith(target, question, [["Staging"]], {
         kind: "repository",
+        workspaceId: "workspace-1",
       });
     } finally {
       await harness.unmount();

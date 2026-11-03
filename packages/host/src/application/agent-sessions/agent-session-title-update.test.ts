@@ -9,7 +9,7 @@ const summary: AgentSessionSummary = {
   runtimeKind: "opencode",
   workingDirectory: "/repo",
   title: "Renamed",
-  sessionAssociation: { kind: "repository", title: "Renamed" },
+  sessionAssociation: { kind: "repository", workspaceId: "workspace-1", title: "Renamed" },
   startedAt: "2026-09-01T00:00:00Z",
   status: "idle",
 };

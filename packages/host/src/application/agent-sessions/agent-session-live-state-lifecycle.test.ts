@@ -17,7 +17,7 @@ import { createAgentSessionLiveStateService } from "./agent-session-live-state-s
 describe("live runtime registration lifecycle", () => {
   test.each([
     { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
-    { kind: "repository" },
+    { kind: "repository", workspaceId: "repo" },
   ] satisfies AgentSessionScope[])(
     "releases a runtime during a $kind control without blocking other repositories",
     async (sessionScope) => {

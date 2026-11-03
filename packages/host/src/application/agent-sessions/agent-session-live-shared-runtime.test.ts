@@ -77,7 +77,7 @@ const startInput: AgentSessionControlStartInput = {
   repoPath: "/repo-a",
   runtimeKind: "codex",
   workingDirectory: "/repo-a",
-  sessionScope: { kind: "repository" },
+  sessionScope: { kind: "repository", workspaceId: "workspace-1" },
   systemPrompt: "Work.",
 };
 
@@ -217,7 +217,7 @@ describe("shared live runtime across repositories", () => {
     };
     const modelInput = {
       ...sessionRef,
-      sessionScope: { kind: "repository" as const },
+      sessionScope: { kind: "repository" as const, workspaceId: "workspace-1" },
       model: null,
     };
     const titleInput = { ...sessionRef, title: "Renamed" };
@@ -315,15 +315,15 @@ describe("shared live runtime across repositories", () => {
   test("registration refreshes every repository observed before the runtime started", async () => {
     const codexRootA: AgentSessionAuthorizedRoot = {
       ...ref("/repo-a", "root-a"),
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
     };
     const opencodeRootA: AgentSessionAuthorizedRoot = {
       ...ref("/repo-a", "root-o", "opencode"),
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
     };
     const codexRootB: AgentSessionAuthorizedRoot = {
       ...ref("/repo-b", "root-b"),
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
     };
     const rootsByRepo = new Map([
       ["/repo-a", [codexRootA, opencodeRootA]],

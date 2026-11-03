@@ -28,7 +28,7 @@ import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-
 type PreparationTarget = Omit<AgentMessageTarget, "externalSessionId">;
 
 export const createSessionTurnPreparation = (deps: {
-  settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "getRepoConfigByRepoPath">;
+  settings: Pick<WorkspaceSettingsService, "getRepoConfig">;
   settingsConfig: Pick<SettingsConfigPort, "readGlobalConfig">;
   queries: Pick<AgentRuntimeQueryPort, "loadRuntimeCatalog">;
   taskReader: Pick<TaskStorePort, "getTask">;
@@ -113,10 +113,10 @@ export const createSessionTurnPreparation = (deps: {
             message:
               "The selected model belongs to another runtime. Select a model for this session's runtime.",
           });
-        const workspaceId = target.sessionScope.workspaceId;
-        const config = yield* workspaceId === undefined
-          ? deps.settings.getRepoConfigByRepoPath(target.repoPath)
-          : getScopedRepoConfig(deps.settings, { workspaceId, repoPath: target.repoPath });
+        const config = yield* getScopedRepoConfig(deps.settings, {
+          workspaceId: target.sessionScope.workspaceId,
+          repoPath: target.repoPath,
+        });
         const catalog = yield* catalogFor(target);
         const current = saved ? resolveSavedModelAlias(catalog, saved) : null;
         const decision = resolveSavedSessionModel({

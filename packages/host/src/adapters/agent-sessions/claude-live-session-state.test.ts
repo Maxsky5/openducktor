@@ -974,7 +974,7 @@ describe("Claude host live-session state", () => {
       externalSessionId: "session-2",
       workingDirectory: "/other-repo",
       title: "Other repo session",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "repo" },
     } as const satisfies AgentSessionSummary;
     const otherSession: ClaudeSessionContext = {
       ...session,
@@ -983,7 +983,7 @@ describe("Claude host live-session state", () => {
         ...session.input,
         repoPath: "/other-repo",
         workingDirectory: "/other-repo",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
       },
       startedAt: otherSummary.startedAt,
       summary: otherSummary,
@@ -1011,7 +1011,7 @@ describe("Claude host live-session state", () => {
         session: {
           ref: otherRef,
           title: "Other repo session",
-          repositoryScope: { kind: "repository" },
+          repositoryScope: { kind: "repository", workspaceId: "repo" },
         },
       });
     });

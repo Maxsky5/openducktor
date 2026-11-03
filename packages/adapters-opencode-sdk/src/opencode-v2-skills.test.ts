@@ -83,7 +83,7 @@ describe("OpenCode V2 skill references", () => {
   );
 
   test.each([
-    { label: "repository", sessionScope: { kind: "repository" } },
+    { label: "repository", sessionScope: { kind: "repository", workspaceId: "repo" } },
     {
       label: "workflow",
       sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },

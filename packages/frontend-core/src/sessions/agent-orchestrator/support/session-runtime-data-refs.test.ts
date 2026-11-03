@@ -159,7 +159,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
         repoPath: "/repo",
         selectedSession: {
           ...identityTarget(),
-          sessionAssociation: { kind: "repository" },
+          sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
         },
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
@@ -177,7 +177,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
         workingDirectory: "/repo",
         externalSessionId: "external-1",
         runtimePolicy: { kind: "opencode" },
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
       },
     });
   });

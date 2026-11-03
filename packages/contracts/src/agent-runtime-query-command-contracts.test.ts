@@ -26,7 +26,7 @@ for (const runtimeKind of ["opencode", "claude", "codex"] as const) {
               },
             }
           : { kind: runtimeKind },
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
       systemPrompt: "Context",
       model: { providerId: "native", modelId: "model" },
     };

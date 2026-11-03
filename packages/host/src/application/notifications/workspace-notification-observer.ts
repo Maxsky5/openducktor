@@ -92,7 +92,9 @@ export const createWorkspaceNotificationObserver = ({
           const key = agentSessionRefKey(ref);
           const task = state.taskOwners.get(key);
           if (task) return task.scope;
-          return state.workspaceOwners.has(key) ? { kind: "repository" } : null;
+          return state.workspaceOwners.has(key)
+            ? { kind: "repository", workspaceId: record.workspaceId }
+            : null;
         },
       }),
     };

@@ -19,7 +19,7 @@ const workflowScope = {
   taskId: "task-1",
   role: "build" as const,
 };
-const repositoryScope = { kind: "repository" as const };
+const repositoryScope = { kind: "repository" as const, workspaceId: "repo" };
 
 describe("agent session control contracts", () => {
   test("keeps completed-reply forks separate from legacy history-anchor forks", () => {

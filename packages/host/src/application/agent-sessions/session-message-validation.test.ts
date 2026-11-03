@@ -137,14 +137,6 @@ const setup = (
               repoPath: "/repo",
             }),
           ),
-        getRepoConfigByRepoPath: () =>
-          Effect.succeed(
-            repoConfigSchema.parse({
-              workspaceId: "repo",
-              workspaceName: "Workspace",
-              repoPath: "/repo",
-            }),
-          ),
       },
     }),
     runtime: {

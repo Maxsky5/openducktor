@@ -21,7 +21,7 @@ test("renders the readers of task session summaries only when those summaries ch
   });
   const chat = createAgentSessionFixture({
     externalSessionId: "chat",
-    sessionAssociation: { kind: "repository" },
+    sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     status: "idle",
   });
   store.replaceSession(build);

@@ -38,7 +38,7 @@ describe("OpenCode V2 subagent projection and history", () => {
     try {
       for (const root of [ref, other]) {
         const restored = await runtime.connection.readSessionSources(root.repoPath, [
-          { ...root, sessionScope: { kind: "repository" } },
+          { ...root, sessionScope: { kind: "repository", workspaceId: "workspace-1" } },
         ]);
         expect(restored.failures).toEqual([]);
       }
@@ -176,7 +176,7 @@ describe("OpenCode V2 subagent projection and history", () => {
       const completed = Promise.withResolvers<void>();
       try {
         await runtime.connection.readSessionSources(ref.repoPath, [
-          { ...ref, sessionScope: { kind: "repository" } },
+          { ...ref, sessionScope: { kind: "repository", workspaceId: "workspace-1" } },
         ]);
         await runtime.startForwarding((signal) => {
           if (signal.type === "fault" || signal.type === "session_fault")
@@ -369,7 +369,7 @@ describe("OpenCode V2 subagent projection and history", () => {
       const replay: OpencodeSessionRuntimeSignal[] = [];
       try {
         await runtime.connection.readSessionSources(ref.repoPath, [
-          { ...ref, sessionScope: { kind: "repository" } },
+          { ...ref, sessionScope: { kind: "repository", workspaceId: "workspace-1" } },
         ]);
         await runtime.startForwarding((signal) => {
           if (signal.type === "fault" || signal.type === "session_fault") {
@@ -534,7 +534,7 @@ describe("OpenCode V2 subagent projection and history", () => {
     const runtime = await fixture.prepare();
     try {
       await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "repository" } },
+        { ...ref, sessionScope: { kind: "repository", workspaceId: "workspace-1" } },
       ]);
       await runtime.startForwarding((signal) => {
         if (signal.type === "fault" || signal.type === "session_fault")

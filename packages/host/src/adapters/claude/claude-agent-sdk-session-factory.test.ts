@@ -81,7 +81,7 @@ describe("createClaudeAgentSdkSession", () => {
             runtimeKind: "claude",
             workingDirectory: process.cwd(),
             runtimePolicy: { kind: "claude" },
-            sessionScope: { kind: "repository" },
+            sessionScope: { kind: "repository", workspaceId: "workspace-1" },
             systemPrompt: "Help with this repository",
           },
           initialTodos: [],
@@ -788,7 +788,7 @@ describe("createClaudeAgentSdkSession", () => {
           runtimeKind: "claude",
           workingDirectory: process.cwd(),
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "repository", title: "Fairnest" },
+          sessionScope: { kind: "repository", workspaceId: "workspace-1", title: "Fairnest" },
           systemPrompt: "",
         },
         initialTodos: [],
@@ -819,7 +819,10 @@ describe("createClaudeAgentSdkSession", () => {
       expect(renameSessionSpy.mock.calls[0]?.[0]).toBe("session-1");
       expect(renameSessionSpy.mock.calls[0]?.[1]).toBe("Fairnest");
       expect(summary.title).toBeUndefined();
-      expect(summary.sessionAssociation).toEqual({ kind: "repository" });
+      expect(summary.sessionAssociation).toEqual({
+        kind: "repository",
+        workspaceId: "workspace-1",
+      });
       const session = sessionStore.get("session-1");
       if (session) sessionStore.close(session);
     } finally {

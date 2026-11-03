@@ -3,6 +3,7 @@ import {
   agentSessionTitle,
   formatWorkflowAgentSessionTitle,
   withAgentSessionTitle,
+  withSummaryTitle,
   withoutSummaryTitle,
 } from "./agent-session-title";
 
@@ -25,39 +26,58 @@ describe("formatWorkflowAgentSessionTitle", () => {
 
 describe("Agent Session scope presentation", () => {
   test("reads the repository title from the scope and formats a workflow title", () => {
-    expect(agentSessionTitle({ kind: "repository", title: "My session" })).toBe("My session");
-    expect(agentSessionTitle({ kind: "repository" })).toBeUndefined();
+    expect(
+      agentSessionTitle({ kind: "repository", workspaceId: "repo", title: "My session" }),
+    ).toBe("My session");
+    expect(agentSessionTitle({ kind: "repository", workspaceId: "repo" })).toBeUndefined();
     expect(
       agentSessionTitle({ kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" }),
     ).toBe("BUILD task-1");
   });
 
   test("adds the scope title to a value and leaves the value unchanged without one", () => {
-    const value = { kind: "repository" } as const;
-    const titled = withAgentSessionTitle(value, { kind: "repository", title: "My session" });
-    expect(titled).toEqual({ kind: "repository", title: "My session" });
+    const value = { kind: "repository", workspaceId: "repo" } as const;
+    const titled = withAgentSessionTitle(value, {
+      kind: "repository",
+      workspaceId: "repo",
+      title: "My session",
+    });
+    expect(titled).toEqual({ kind: "repository", workspaceId: "repo", title: "My session" });
     expect(titled).not.toBe(value);
-    expect(value).toEqual({ kind: "repository" });
-    expect(withAgentSessionTitle(value, { kind: "repository" })).toBe(value);
+    expect(value).toEqual({ kind: "repository", workspaceId: "repo" });
+    expect(withAgentSessionTitle(value, { kind: "repository", workspaceId: "repo" })).toBe(value);
+  });
+});
+
+const repositorySummary = {
+  externalSessionId: "session-1",
+  runtimeKind: "claude",
+  workingDirectory: "/repo",
+  title: "Fairnest",
+  sessionAssociation: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
+  startedAt: "2026-09-24T10:00:00.000Z",
+  status: "idle",
+} as const;
+
+describe("withSummaryTitle", () => {
+  test("sets the summary title and keeps the repository workspace", () => {
+    const titled = withSummaryTitle(repositorySummary, "Renamed");
+
+    expect(titled.title).toBe("Renamed");
+    expect(titled.sessionAssociation).toEqual({
+      kind: "repository",
+      workspaceId: "repo",
+      title: "Renamed",
+    });
   });
 });
 
 describe("withoutSummaryTitle", () => {
-  const repositorySummary = {
-    externalSessionId: "session-1",
-    runtimeKind: "claude",
-    workingDirectory: "/repo",
-    title: "Fairnest",
-    sessionAssociation: { kind: "repository", title: "Fairnest" },
-    startedAt: "2026-09-24T10:00:00.000Z",
-    status: "idle",
-  } as const;
-
   test("removes the summary title and the repository association title", () => {
     const cleared = withoutSummaryTitle(repositorySummary);
 
     expect(cleared.title).toBeUndefined();
-    expect(cleared.sessionAssociation).toEqual({ kind: "repository" });
+    expect(cleared.sessionAssociation).toEqual({ kind: "repository", workspaceId: "repo" });
     expect(cleared.externalSessionId).toBe("session-1");
   });
 

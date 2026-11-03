@@ -563,7 +563,9 @@ describe("createWorkspaceSettingsService", () => {
     );
     expect(port.writtenConfigs).toEqual([]);
     expect(
-      await Effect.runPromise(createOpenCodeCreationSettings(port).resolve({ kind: "repository" })),
+      await Effect.runPromise(
+        createOpenCodeCreationSettings(port).resolve({ kind: "repository", workspaceId: "repo-b" }),
+      ),
     ).toEqual({ defaults: config.agentRuntimes.opencode.defaults.rules, role: [] });
     expect(draft.agentRuntimes.opencode.defaults.rules[0]?.action).toBe("allow");
   });

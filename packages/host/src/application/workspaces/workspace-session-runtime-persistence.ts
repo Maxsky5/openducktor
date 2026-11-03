@@ -25,7 +25,7 @@ import type {
   WorkspaceSessionStorePort,
   WorkspaceSessionStoreRef,
 } from "../../ports/workspace-session-store-port";
-import { createWorkspaceSessionRuntimeOwners } from "./workspace-session-runtime-owners";
+import { findWorkspaceSessionOwner } from "./workspace-session-runtime-owners";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type {
   AgentSessionOperationPolicy,
@@ -73,7 +73,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
   reportRenameFailure: WorkspaceSessionRenameFailureReporter;
 }): AgentSessionPersistencePort &
   AgentSessionOperationPolicy & {
-    recordActivity(ref: AgentSessionLiveRef, occurredAt: number): Effect.Effect<boolean, HostError>;
+    recordActivity(ref: AgentSessionLiveRef, occurredAt: number): Effect.Effect<void, HostError>;
     isTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
     markTitleSyncPending: (ref: AgentSessionLiveRef) => void;
     /** Stops background renames and title syncs before their runtime and store close. */
@@ -102,7 +102,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
       }
       yield* publishUpdated(known.ref.workspaceId, saved);
     });
-  const { find, findAll } = createWorkspaceSessionRuntimeOwners({ store, settings });
+  const find = (runtimeRef: ScopedAgentSessionRef) =>
+    findWorkspaceSessionOwner({ store, settings }, runtimeRef);
   const requireActive = (session: WorkspaceSession) =>
     session.archivedAt === null
       ? Effect.void
@@ -261,16 +262,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
     message: AcceptedAgentUserMessage,
   ) =>
     Effect.gen(function* () {
-      const associations = yield* findAll(runtimeRef);
-      if (associations.length > 1) {
-        for (const known of associations) {
-          const plan = yield* planAcceptedMessage(known, runtimeRef, message);
-          const saved = yield* storeEffect(store.recordAcceptedMessage(plan.input));
-          yield* publishUpdated(known.ref.workspaceId, saved);
-        }
-        return;
-      }
-      const known = associations[0];
+      const known = yield* find(runtimeRef);
       if (!known) return;
       const plan = yield* planAcceptedMessage(known, runtimeRef, message);
       if (titleSyncNeedsTurn(runtimeRef.runtimeKind))
@@ -294,19 +286,15 @@ export const createWorkspaceSessionRuntimePersistence = ({
     });
   const recordActivity = (runtimeRef: AgentSessionLiveRef, occurredAt: number) =>
     Effect.gen(function* () {
-      const associations = yield* findAll(runtimeRef);
-      for (const known of associations) {
-        if (occurredAt > (known.session.lastActivityAt ?? known.session.createdAt)) {
-          const saved = yield* storeEffect(
-            store.recordActivity({
-              ...known.ref,
-              activity: { type: "session_activity", occurredAt },
-            }),
-          );
-          yield* publishUpdated(known.ref.workspaceId, saved);
-        }
-      }
-      return associations.length > 0;
+      const known = yield* find(runtimeRef);
+      if (!known || occurredAt <= (known.session.lastActivityAt ?? known.session.createdAt)) return;
+      const saved = yield* storeEffect(
+        store.recordActivity({
+          ...known.ref,
+          activity: { type: "session_activity", occurredAt },
+        }),
+      );
+      yield* publishUpdated(known.ref.workspaceId, saved);
     });
   const validateRef = (runtimeRef: ScopedAgentSessionRef) =>
     Effect.gen(function* () {

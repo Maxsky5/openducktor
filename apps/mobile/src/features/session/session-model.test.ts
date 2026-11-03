@@ -111,6 +111,7 @@ describe("resolveSessionOwner", () => {
   test("uses the task of a workflow session without reading chats", () => {
     const resolution = resolveSessionOwner({
       identity,
+      workspaceId: "ws-1",
       readOnly: false,
       association: { kind: "workflow", workspaceId: "ws-1", taskId: "task-1", role: "build" },
       readModelLoadState: LOADING,
@@ -134,13 +135,20 @@ describe("resolveSessionOwner", () => {
     const record = chatRecord();
     const resolution = resolveSessionOwner({
       identity,
+      workspaceId: "ws-1",
       readOnly: false,
-      association: { kind: "repository" },
+      association: { kind: "repository", workspaceId: "ws-1" },
       readModelLoadState: READY,
       activeChats: records([record]),
       archivedChats: records(undefined, { isPending: false }),
     });
-    expect(resolution.status === "ready" && resolution.owner).toEqual({ kind: "chat", record });
+    const scope = { kind: "repository", workspaceId: "ws-1" } as const;
+    expect(resolution).toEqual({
+      status: "ready",
+      owner: { kind: "chat", record },
+      sessionAssociation: scope,
+      sessionScope: scope,
+    });
   });
 
   test("keeps the same resolution while the chat record stays the same", () => {
@@ -149,8 +157,9 @@ describe("resolveSessionOwner", () => {
     const resolve = (active: WorkspaceSession[]) =>
       resolveSessionOwner({
         identity,
+        workspaceId: "ws-1",
         readOnly: false,
-        association: { kind: "repository" },
+        association: { kind: "repository", workspaceId: "ws-1" },
         readModelLoadState: READY,
         activeChats: records(active),
         archivedChats: records(undefined, { isPending: false }),
@@ -165,6 +174,7 @@ describe("resolveSessionOwner", () => {
     const record = chatRecord({ archivedAt: 5 });
     const resolution = resolveSessionOwner({
       identity,
+      workspaceId: "ws-1",
       readOnly: false,
       association: null,
       readModelLoadState: READY,
@@ -177,6 +187,7 @@ describe("resolveSessionOwner", () => {
   test("waits for the read model before it reports a missing session", () => {
     const resolution = resolveSessionOwner({
       identity,
+      workspaceId: "ws-1",
       readOnly: false,
       association: null,
       readModelLoadState: LOADING,
@@ -189,6 +200,7 @@ describe("resolveSessionOwner", () => {
   test("reports a session that the host does not list", () => {
     const resolution = resolveSessionOwner({
       identity,
+      workspaceId: "ws-1",
       readOnly: false,
       association: null,
       readModelLoadState: READY,
@@ -205,6 +217,7 @@ describe("resolveSessionOwner", () => {
   test("opens a read-only Subagent session without an owner", () => {
     const resolution = resolveSessionOwner({
       identity,
+      workspaceId: "ws-1",
       readOnly: true,
       association: null,
       readModelLoadState: LOADING,
@@ -222,6 +235,7 @@ describe("resolveSessionOwner", () => {
   test("shows a chat read failure with retry", () => {
     const resolution = resolveSessionOwner({
       identity,
+      workspaceId: "ws-1",
       readOnly: false,
       association: null,
       readModelLoadState: READY,

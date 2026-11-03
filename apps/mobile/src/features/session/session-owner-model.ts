@@ -30,8 +30,6 @@ export type SessionOwnerResolution =
     };
 
 const UNBOUND: AgentSessionAssociation = Object.freeze({ kind: "unbound" });
-const REPOSITORY: AgentSessionAssociation = Object.freeze({ kind: "repository" });
-const REPOSITORY_SCOPE: AgentSessionScope = Object.freeze({ kind: "repository" });
 const NO_OWNER: SessionOwnerResolution = {
   status: "ready",
   owner: { kind: "none" },
@@ -44,14 +42,16 @@ const NO_OWNER: SessionOwnerResolution = {
 const chatResolutions = new WeakMap<WorkspaceSession, SessionOwnerResolution>();
 const taskResolutions = new WeakMap<AgentSessionAssociation, SessionOwnerResolution>();
 
-const chatOwner = (record: WorkspaceSession): SessionOwnerResolution => {
+// A chat record belongs to the chat list of one workspace, so the record alone keys its resolution.
+const chatOwner = (record: WorkspaceSession, workspaceId: string): SessionOwnerResolution => {
   let resolution = chatResolutions.get(record);
   if (!resolution) {
+    const scope = { kind: "repository", workspaceId } as const;
     resolution = {
       status: "ready",
       owner: { kind: "chat", record },
-      sessionAssociation: REPOSITORY,
-      sessionScope: REPOSITORY_SCOPE,
+      sessionAssociation: scope,
+      sessionScope: scope,
     };
     chatResolutions.set(record, resolution);
   }
@@ -86,6 +86,7 @@ const taskOwner = (
  */
 export const resolveSessionOwner = ({
   identity,
+  workspaceId,
   readOnly,
   association,
   readModelLoadState,
@@ -93,6 +94,8 @@ export const resolveSessionOwner = ({
   archivedChats,
 }: {
   identity: AgentSessionIdentity;
+  /** The workspace whose chats the lists hold. */
+  workspaceId: string;
   readOnly: boolean;
   /** The association that the session store holds, or null when the store has no session. */
   association: AgentSessionAssociation | null;
@@ -104,7 +107,7 @@ export const resolveSessionOwner = ({
   if (association?.kind === "workflow") return taskOwner(association);
   if (readOnly) return NO_OWNER;
   const activeRecord = findChatRecord(activeChats.data, identity);
-  if (activeRecord) return chatOwner(activeRecord);
+  if (activeRecord) return chatOwner(activeRecord, workspaceId);
   if (activeChats.error) {
     return {
       status: "error",
@@ -115,7 +118,7 @@ export const resolveSessionOwner = ({
   }
   if (activeChats.isPending) return { status: "loading", label: "Loading session" };
   const archivedRecord = findChatRecord(archivedChats.data, identity);
-  if (archivedRecord) return chatOwner(archivedRecord);
+  if (archivedRecord) return chatOwner(archivedRecord, workspaceId);
   if (archivedChats.error) {
     return {
       status: "error",

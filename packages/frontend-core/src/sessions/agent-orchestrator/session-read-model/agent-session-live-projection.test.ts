@@ -521,7 +521,7 @@ describe("agent session live projection", () => {
     "admits an OpenDucktor repository root from a %s",
     (delivery) => {
       const repositorySession = snapshot("repository-thread", {
-        repositoryScope: { kind: "repository" },
+        repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
       });
       const sessions =
         delivery === "snapshot"
@@ -535,7 +535,7 @@ describe("agent session live projection", () => {
             });
 
       expect(getAgentSession(sessions, identity("repository-thread"))).toMatchObject({
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
         livePresence: "present",
       });
     },
@@ -722,7 +722,9 @@ describe("agent session live projection", () => {
     const sessions = build({
       snapshots: [
         snapshot("workflow-thread"),
-        snapshot("repository-thread", { repositoryScope: { kind: "repository" } }),
+        snapshot("repository-thread", {
+          repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
+        }),
         snapshot("unbound-thread"),
       ],
     });
@@ -732,6 +734,7 @@ describe("agent session live projection", () => {
     });
     expect(getAgentSession(sessions, identity("repository-thread"))?.sessionAssociation).toEqual({
       kind: "repository",
+      workspaceId: "workspace-1",
     });
     expect(getAgentSession(sessions, identity("unbound-thread"))?.sessionAssociation).toEqual({
       kind: "unbound",
@@ -749,7 +752,7 @@ describe("agent session live projection", () => {
           ref: { repoPath, runtimeKind, workingDirectory, externalSessionId },
         });
         if (repositoryScoped) {
-          liveSnapshot.repositoryScope = { kind: "repository" };
+          liveSnapshot.repositoryScope = { kind: "repository", workspaceId: "workspace-1" };
         }
         return liveSnapshot;
       };
@@ -766,7 +769,7 @@ describe("agent session live projection", () => {
       ).toMatchObject({ sessionAssociation: { kind: "unbound" } });
       expect(
         getAgentSession(sessions, identity(`${runtimeKind}-repo`, { runtimeKind })),
-      ).toMatchObject({ sessionAssociation: { kind: "repository" } });
+      ).toMatchObject({ sessionAssociation: { kind: "repository", workspaceId: "workspace-1" } });
       expect(
         getAgentSession(sessions, identity(`${runtimeKind}-unbound`, { runtimeKind })),
       ).toMatchObject({ sessionAssociation: { kind: "unbound" } });
@@ -794,10 +797,12 @@ describe("agent session live projection", () => {
     expect(() =>
       delta(initial, {
         type: "session_upsert",
-        session: snapshot("thread-1", { repositoryScope: { kind: "repository" } }),
+        session: snapshot("thread-1", {
+          repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
+        }),
       }),
     ).toThrow(
-      "Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+      "Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope for workspace 'workspace-1'.",
     );
   });
 
@@ -805,11 +810,14 @@ describe("agent session live projection", () => {
     const initial = build({ snapshots: [snapshot("thread-1")] });
     const next = delta(initial, {
       type: "session_upsert",
-      session: snapshot("thread-1", { repositoryScope: { kind: "repository" } }),
+      session: snapshot("thread-1", {
+        repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
+      }),
     });
 
     expect(getAgentSession(next, identity("thread-1"))?.sessionAssociation).toEqual({
       kind: "repository",
+      workspaceId: "workspace-1",
     });
   });
 
@@ -910,7 +918,9 @@ describe("agent session live projection", () => {
       snapshots: [
         snapshot("starting-thread"),
         snapshot("workflow-thread"),
-        snapshot("repository-thread", { repositoryScope: { kind: "repository" } }),
+        snapshot("repository-thread", {
+          repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
+        }),
         snapshot("unbound-thread"),
       ],
     });

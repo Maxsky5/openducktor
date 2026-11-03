@@ -1218,12 +1218,8 @@ export const createPrepareOpencodeSessionRuntime =
                 ...ref,
                 runtimeKind: "opencode",
                 runtimePolicy: { kind: "opencode" },
-                sessionScope: { kind: "repository" },
               });
-              admittedRoots.set(ref.externalSessionId, {
-                ...ref,
-                sessionScope: { kind: "repository" },
-              });
+              admittedRoots.set(ref.externalSessionId, ref);
             },
           };
         },

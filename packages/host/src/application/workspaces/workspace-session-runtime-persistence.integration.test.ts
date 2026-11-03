@@ -144,7 +144,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       live.resumeSession({
         resumeMode: "reattach",
         ...ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
       }),
     );
     const commands = createAgentSessionCommandService({
@@ -180,7 +180,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       commands.sendUserMessage({
         delivery: "new_turn",
         ...ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "fairnest" },
         parts: [{ kind: "text", text: "Name this chat" }],
       }),
     );

@@ -139,7 +139,7 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     };
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
         workingDirectory: "/tmp/repo/repository-chat",
       }),
     ]);

@@ -30,7 +30,7 @@ describe("session runtime policy", () => {
     expect(
       resolveAgentSessionRuntimePolicyFromSnapshot({
         runtimeKind: "codex",
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
         snapshot,
       }),
     ).toEqual({
@@ -72,13 +72,13 @@ describe("session runtime policy", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo",
         },
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
         selectedModel: null,
       },
       async () => createSettingsSnapshotFixture(),
     );
 
-    expect(ref.sessionScope).toEqual({ kind: "repository" });
+    expect(ref.sessionScope).toEqual({ kind: "repository", workspaceId: "workspace-1" });
   });
 
   test("forwards workflow scope from the session association", async () => {

@@ -41,7 +41,7 @@ describe("createClaudeSessionSummary", () => {
           runtimeKind: "claude",
           workingDirectory: "/repo",
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "repo" },
           systemPrompt: "Help with this repository",
         },
         { externalSessionId: "session-repository", title: "Repository session" },
@@ -52,7 +52,7 @@ describe("createClaudeSessionSummary", () => {
       runtimeKind: "claude",
       workingDirectory: "/repo",
       title: "Repository session",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "repo" },
       startedAt: "2026-06-25T20:00:00.000Z",
       status: "starting",
     });

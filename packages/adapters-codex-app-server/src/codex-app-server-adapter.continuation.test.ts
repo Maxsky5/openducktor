@@ -209,7 +209,9 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
       threadStatus: { type: "idle" },
       latestTurnStatus: "interrupted",
     });
-    const input = continuationInput({ sessionScope: { kind: "repository" } });
+    const input = continuationInput({
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
+    });
     const source = await adapter.openExistingSession(input);
     await source.attach();
     calls.length = 0;
@@ -238,7 +240,9 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
 
     await expect(
       adapter.continueInterruptedTurn(
-        continuationInput({ sessionScope: { kind: "repository", title: "Fairnest" } }),
+        continuationInput({
+          sessionScope: { kind: "repository", workspaceId: "workspace-1", title: "Fairnest" },
+        }),
       ),
     ).rejects.toMatchObject({ reason: "continuation_failed" });
 
@@ -254,13 +258,17 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
       threadSetNameError: () => (failRename ? renameError : undefined),
     });
     const resumed = await adapter.resumeSession(
-      continuationInput({ sessionScope: { kind: "repository", title: "Fairnest" } }),
+      continuationInput({
+        sessionScope: { kind: "repository", workspaceId: "workspace-1", title: "Fairnest" },
+      }),
     );
 
     failRename = true;
     await expect(
       adapter.continueInterruptedTurn(
-        continuationInput({ sessionScope: { kind: "repository", title: "Fairnest" } }),
+        continuationInput({
+          sessionScope: { kind: "repository", workspaceId: "workspace-1", title: "Fairnest" },
+        }),
       ),
     ).rejects.toMatchObject({ reason: "continuation_failed" });
 

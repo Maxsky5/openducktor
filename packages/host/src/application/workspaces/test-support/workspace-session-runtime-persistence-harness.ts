@@ -266,8 +266,8 @@ export const createPersistenceHarness = async (
   const persistence = {
     ...workspacePersistence,
     ...createAgentSessionActivityPersistence({
-      readTaskWorkspaces: () =>
-        Effect.succeed([{ workspaceId: database.workspaceId, repoPath: database.repoPath }]),
+      readTaskWorkspace: () =>
+        Effect.succeed({ workspaceId: database.workspaceId, repoPath: database.repoPath }),
       workspace: workspacePersistence,
       tasks: database.store,
       publishTaskRecords: (scope, records) =>
@@ -455,7 +455,7 @@ export const createPersistenceHarness = async (
       commands
         .prepareUserMessage({
           ...ref,
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "fairnest" },
           parts: [{ kind: "text", text }],
         })
         .pipe(

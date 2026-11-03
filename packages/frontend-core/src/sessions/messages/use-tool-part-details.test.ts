@@ -16,7 +16,7 @@ const session: ToolPartSession = {
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
   externalSessionId: "session-1",
-  sessionScope: { kind: "repository" },
+  sessionScope: { kind: "repository", workspaceId: "workspace-1" },
 };
 
 const cutMeta: ToolMeta = {
@@ -81,7 +81,7 @@ describe("useToolPartDetails", () => {
       runtimePolicy: { kind: "opencode" },
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
       partId: "part-1",
       callId: "call-1",
     });

@@ -764,7 +764,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const taskCalls: string[] = [];
     const sessionsRef = createSessionsRef([
       buildSession({
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       }),
     ]);
     const actions = createSessionActions({

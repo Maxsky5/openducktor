@@ -28,25 +28,14 @@ export const resolveOwnedSessionRoot = ({
           "The runtime session ancestry contains a cycle. Reload the runtime before continuing.",
         );
       seen.add(key);
-      const owned = roots.filter((root) => agentSessionRefKey(root) === key);
-      const selected = ref.sessionScope;
-      const matching = selected
-        ? owned.filter((root) => agentSessionScopesEqual(root.sessionScope, selected))
-        : owned;
-      if (matching.length === 1) return matching[0]!;
-      if (
-        owned.length > 0 &&
-        owned.every((root) => root.sessionScope.kind === "repository") &&
-        (selected === undefined ||
-          (selected.kind === "repository" && selected.workspaceId === undefined))
-      )
-        return { ...owned[0]!, sessionScope: { kind: "repository" } };
-      if (owned.length > 0)
+      const root = roots.find((value) => agentSessionRefKey(value) === key);
+      if (root) {
+        if (!ref.sessionScope || agentSessionScopesEqual(root.sessionScope, ref.sessionScope))
+          return root;
         return yield* invalid(
-          owned.length === 1
-            ? "This session belongs to another task, role, or workspace chat. Reload the chat before continuing."
-            : "The session has conflicting saved owners. Select its saved task or workspace chat before continuing.",
+          "This session belongs to another task, role, or workspace chat. Reload the chat before continuing.",
         );
+      }
       const session = sessions.find((value) => agentSessionRefKey(value.ref) === key);
       if (!session?.parentExternalSessionId)
         return yield* invalid(

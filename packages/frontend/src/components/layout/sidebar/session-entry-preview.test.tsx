@@ -472,7 +472,7 @@ describe("Sidebar session previews", () => {
         ref: childRef,
         parentExternalSessionId: "root",
         pendingQuestions: [question],
-        repositoryScope: { kind: "repository" },
+        repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
       }),
     ]);
     const preview = await openPreview(row);
@@ -502,7 +502,7 @@ describe("Sidebar session previews", () => {
       requestId: question.requestId,
       answers: [["Personal and business accounts"]],
       blocking: false,
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
     });
     expect(onOpen).not.toHaveBeenCalled();
     await act(async () =>

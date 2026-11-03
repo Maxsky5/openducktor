@@ -520,7 +520,7 @@ describe("useAgentStudioPageModels", () => {
           source,
           responseSession: {
             ...toAgentSessionIdentity(child),
-            sessionAssociation: { kind: "repository" },
+            sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
           },
         },
       ],

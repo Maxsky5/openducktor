@@ -245,7 +245,7 @@ test.each([
             externalSessionId: "ses_workspace",
             runtimeKind: "opencode",
           },
-          repositoryScope: { kind: "repository" },
+          repositoryScope: { kind: "repository", workspaceId },
         },
       ]);
       expect(

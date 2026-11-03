@@ -219,8 +219,6 @@ test("a fresh workflow session reads its catalog before native session ownership
     queries: h.service,
     settingsConfig: { readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()) },
     settings: {
-      getRepoConfigByRepoPath: () =>
-        Effect.die("Workflow preparation must use the supplied workspace ID."),
       getRepoConfig: () =>
         Effect.succeed(
           repoConfigSchema.parse({
@@ -611,7 +609,12 @@ test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
           h.worktreeReads
             .runWorktreeRead(
               workingDirectory,
-              Effect.promise(() => importPort.inspectSession(historyRef)),
+              Effect.promise(() =>
+                importPort.inspectSession({
+                  ...historyRef,
+                  sessionScope: { kind: "repository", workspaceId: "workspace-1" },
+                }),
+              ),
             )
             .pipe(Effect.timeout("2 seconds")),
         );

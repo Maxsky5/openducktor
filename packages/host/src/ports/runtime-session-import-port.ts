@@ -1,5 +1,5 @@
 import type { AgentSessionModelSelection, WorkspaceSessionExternal } from "@openducktor/contracts";
-import type { SessionRef } from "@openducktor/core";
+import type { RuntimeSessionImportRequest } from "@openducktor/core";
 import type { Effect } from "effect";
 import type { HostError } from "../effect/host-errors";
 export type HostSessionImportSource = {
@@ -12,5 +12,7 @@ export type RuntimeSessionImportPort = {
   scanSessions(input: { repoPath: string; signal: AbortSignal }): {
     next(): Effect.Effect<IteratorResult<WorkspaceSessionExternal[]>, HostError>;
   };
-  inspectSession(input: SessionRef): Effect.Effect<HostSessionImportSource, HostError>;
+  inspectSession(
+    input: RuntimeSessionImportRequest,
+  ): Effect.Effect<HostSessionImportSource, HostError>;
 };

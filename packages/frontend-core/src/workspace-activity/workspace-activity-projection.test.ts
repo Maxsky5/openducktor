@@ -69,14 +69,14 @@ describe("shared snapshot activity policy", () => {
     (status) => {
       const incoming = snapshot("opencode", {
         ref: { repoPath, workingDirectory, runtimeKind: "opencode", externalSessionId: "opencode" },
-        repositoryScope: { kind: "repository" },
+        repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
       });
       const pendingUserMessageStartedAt = status === "running" ? 42 : undefined;
       const current = createAgentSessionFixture({
         externalSessionId: incoming.ref.externalSessionId,
         runtimeKind: incoming.ref.runtimeKind,
         workingDirectory,
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
         status,
         pendingUserMessageStartedAt,
       });
@@ -185,13 +185,13 @@ describe("shared snapshot activity policy", () => {
         externalSessionId: "a",
         runtimeKind,
         workingDirectory,
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
         status,
         executionEpisodeId: "episode-1",
         runtimeStatusMessage: "Previous runtime message",
       });
       const incoming = snapshot("a", {
-        repositoryScope: { kind: "repository" },
+        repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
         executionEpisodeId: "episode-1",
         ...scenario.overrides,
       });
@@ -244,13 +244,13 @@ describe("shared snapshot activity policy", () => {
     (type) => {
       const incoming = snapshot("a", {
         activity: "running",
-        repositoryScope: { kind: "repository" },
+        repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
       });
       const current = createAgentSessionFixture({
         externalSessionId: "a",
         runtimeKind,
         workingDirectory,
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
         status: "running",
         stopRequestedAt: "2026-09-15T08:01:00.000Z",
       });

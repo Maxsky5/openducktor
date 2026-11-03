@@ -106,7 +106,7 @@ const ref = {
 };
 const sessionInput = {
   ...ref,
-  sessionScope: { kind: "repository" as const },
+  sessionScope: { kind: "repository" as const, workspaceId: "workspace-1" },
   runtimePolicy: {
     kind: "codex" as const,
     policy: { ...DEFAULT_CODEX_RUNTIME_POLICY, approvalsReviewerApplies: true },

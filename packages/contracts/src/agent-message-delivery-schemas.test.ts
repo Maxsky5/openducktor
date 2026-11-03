@@ -6,7 +6,7 @@ const target = {
   runtimeKind: "codex" as const,
   workingDirectory: "/repo",
   externalSessionId: "session-1",
-  sessionScope: { kind: "repository" as const },
+  sessionScope: { kind: "repository" as const, workspaceId: "workspace-1" },
 };
 const slashCommand = {
   kind: "slash_command" as const,

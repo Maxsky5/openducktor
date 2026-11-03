@@ -28,7 +28,7 @@ import {
 const repository = {
   ...ref,
   runtimePolicy: { kind: "opencode" as const },
-  sessionScope: { kind: "repository" as const },
+  sessionScope: { kind: "repository" as const, workspaceId: "repo" },
 };
 const workflow = {
   ...ref,
@@ -47,35 +47,22 @@ const current = session({
 });
 
 describe("OpenCode V2 conversation identity and history", () => {
-  test("controls one native repository conversation from each selected saved workspace", async () => {
-    const { controller, requests } = createController(({ url, method, body }) => {
+  test("refuses to bind a native repository conversation to a second workspace", async () => {
+    const { controller } = createController(({ url, method }) => {
       if (url.pathname.endsWith("/migration/v1")) return Response.json({ status: "completed" });
       if (method === "PATCH" || method === "PUT") return noContent();
       if (url.pathname === "/api/session/ses_saved") return response(current);
-      if (url.pathname.endsWith("/prompt"))
-        return response({
-          id: "inbox_native",
-          sessionID: ref.externalSessionId,
-          type: "user",
-          payload: { text: body.text },
-          delivery: "prompt",
-          time: { created: 8 },
-        });
       throw new Error(`Unexpected repository request ${method} ${url.pathname}`);
     });
-    for (const workspaceId of ["first", "second", "first"]) {
-      const input = { ...repository, sessionScope: { kind: "repository" as const, workspaceId } };
-      await controller.bind(input);
-      expect(
-        await controller.sendUserMessage({
-          ...input,
-          parts: [{ kind: "text", text: workspaceId }],
-        }),
-      ).toMatchObject({ type: "user_message", messageId: "inbox_native" });
-    }
-    expect(
-      requests.filter(({ url }) => url.pathname.endsWith("/prompt")).map(({ body }) => body.text),
-    ).toEqual(["first", "second", "first"]);
+    const scoped = (workspaceId: string) => ({
+      ...repository,
+      sessionScope: { kind: "repository" as const, workspaceId },
+    });
+    await controller.bind(scoped("first"));
+
+    await expect(controller.bind(scoped("second"))).rejects.toThrow(
+      "The conversation already has a different OpenDucktor association.",
+    );
   });
 
   test.each([

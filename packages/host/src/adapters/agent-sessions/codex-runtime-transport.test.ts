@@ -208,7 +208,7 @@ const assertFreshWorkspaceQueries = async (method: "thread/read" | "thread/turns
     name: null,
     turns: [],
   };
-  const scope = { kind: "repository" } as const;
+  const scope = { kind: "repository", workspaceId: "workspace-1" } as const;
   const runtimePolicy = {
     kind: "codex" as const,
     policy: { ...DEFAULT_CODEX_RUNTIME_POLICY, approvalsReviewerApplies: true },

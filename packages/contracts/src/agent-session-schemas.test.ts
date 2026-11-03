@@ -22,9 +22,11 @@ describe("agent session scope contracts", () => {
   });
 
   test("accepts strict repository and unbound associations", () => {
-    expect(agentSessionScopeSchema.parse({ kind: "repository" })).toEqual({
+    expect(agentSessionScopeSchema.parse({ kind: "repository", workspaceId: "repo" })).toEqual({
       kind: "repository",
+      workspaceId: "repo",
     });
+    expect(agentSessionScopeSchema.safeParse({ kind: "repository" }).success).toBe(false);
     expect(agentSessionAssociationSchema.parse({ kind: "unbound" })).toEqual({
       kind: "unbound",
     });
@@ -33,10 +35,13 @@ describe("agent session scope contracts", () => {
   test("keeps a durable imported title on a repository scope", () => {
     const importedTitle = "a".repeat(140);
 
-    expect(agentSessionScopeSchema.parse({ kind: "repository", title: importedTitle })).toEqual({
-      kind: "repository",
-      title: importedTitle,
-    });
+    expect(
+      agentSessionScopeSchema.parse({
+        kind: "repository",
+        workspaceId: "repo",
+        title: importedTitle,
+      }),
+    ).toEqual({ kind: "repository", workspaceId: "repo", title: importedTitle });
   });
 
   test("rejects invalid workflow field combinations", () => {

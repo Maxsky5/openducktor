@@ -418,7 +418,7 @@ The host owns the message queue. A runtime is eligible when its adapter can refu
 
 Implement `RuntimeSessionImportPort` to scan existing root conversations in bounded batches. Keep native cursors inside the adapter. Scanning must not read a transcript, send a prompt, or add a session to live state.
 
-`inspectSession` must check the exact source and keep its original ID, directory, and available settings. It returns a `RuntimeSessionImportSource`. The host saves the workspace association before it calls `attach` on that source. The adapter must not retain a live resource before the save. A failed attach must leave the saved association available for retry.
+`inspectSession` must check the exact source and keep its original ID, directory, and available settings. It returns a `RuntimeSessionImportSource`. The host saves the workspace association before it calls `attach` on that source. The adapter must not retain a live resource before the save. A failed attach must leave the saved association available for retry. `attach` must register the session with the `sessionScope` of the request, so later reads with that scope match.
 
 Only an explicit import can claim a native root. The host checks repository or registered-worktree scope and existing task or workspace ownership. The adapter must not create, fork, or move the source conversation. It must report native access failures instead of substituting another session.
 

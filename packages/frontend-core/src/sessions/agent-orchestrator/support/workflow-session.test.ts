@@ -24,7 +24,9 @@ describe("workflow session narrowing", () => {
   test.each(["repository", "unbound"] as const)(
     "reports an actionable failure for a %s session",
     (kind) => {
-      const session = createAgentSessionFixture({ sessionAssociation: { kind } });
+      const session = createAgentSessionFixture({
+        sessionAssociation: kind === "repository" ? { kind, workspaceId: "workspace-1" } : { kind },
+      });
 
       expect(() => requireWorkflowAgentSession(session, "send a message")).toThrow(
         `Cannot send a message for session '${session.externalSessionId}' because its association is ${kind}.`,

@@ -145,7 +145,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
   test("routes a UI-shaped repository approval through the active workspace", async () => {
     const request = approvalRequest("perm-repository");
     const session = buildSession({
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       pendingApprovals: [request],
     });
     const { actions, approvalReplies } = createPendingInputActionHarness([session]);
@@ -158,7 +158,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
   test("routes a mirrored subagent approval to its response session", async () => {
     const childSession = buildSession({
       externalSessionId: "session-child",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       selectedModel: { providerId: "openai", modelId: "child-model" },
     });
     const request: AgentApprovalRequest = {
@@ -216,7 +216,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       externalSessionId: "claude-child",
       runtimeKind: "claude",
       workingDirectory: "/claude/session/repository",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     });
     const request: AgentApprovalRequest = {
       ...approvalRequest("perm-claude-child"),
@@ -236,7 +236,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       externalSessionId: "claude-parent",
       runtimeKind: "claude",
       workingDirectory: "/claude/session/repository",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       pendingApprovals: [request],
     });
     const { actions, approvalReplies } = createPendingInputActionHarness([parentSession]);
@@ -291,7 +291,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     const request = { ...questionRequest("question-1"), blocking: false as const };
     const session = buildSession({
       runtimeKind: "codex",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       pendingQuestions: [request],
     });
     const sessionsRef = createSessionsRef([session]);
@@ -319,7 +319,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       externalSessionId: "grandchild-session",
       runtimeKind: "codex" as const,
       workingDirectory: "/tmp/repo/worktree",
-      sessionAssociation: { kind: "repository" as const },
+      sessionAssociation: { kind: "repository" as const, workspaceId: "workspace-1" },
     };
     const rootRequest: AgentQuestionRequest = {
       ...ownerRequest,
@@ -342,20 +342,20 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     const root = buildSession({
       externalSessionId: "root-session",
       runtimeKind: "codex",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       pendingQuestions: [rootRequest],
     });
     const child = buildSession({
       externalSessionId: "child-session",
       runtimeKind: "codex",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       liveParentExternalSessionId: "root-session",
       pendingQuestions: [childRequest],
     });
     const grandchild = buildSession({
       externalSessionId: "grandchild-session",
       runtimeKind: "codex",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       liveParentExternalSessionId: "child-session",
       pendingQuestions: [ownerRequest],
     });
@@ -380,7 +380,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     const request = { ...questionRequest("question-1"), blocking: false as const };
     const session = buildSession({
       runtimeKind: "codex",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       pendingQuestions: [request],
     });
     const sessionsRef = createSessionsRef([session]);
@@ -440,7 +440,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
   test("routes a UI-shaped repository question through the active workspace", async () => {
     const request = questionRequest("question-repository");
     const session = buildSession({
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       pendingQuestions: [request],
     });
     const { actions, questionReplies } = createPendingInputActionHarness([session]);
@@ -455,7 +455,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       externalSessionId: "session-child",
       runtimeKind: "opencode" as const,
       workingDirectory: "/tmp/repo/worktree",
-      sessionAssociation: { kind: "repository" as const },
+      sessionAssociation: { kind: "repository" as const, workspaceId: "workspace-1" },
     };
     const request: AgentQuestionRequest = {
       ...questionRequest("question-child"),
@@ -470,7 +470,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       buildSession({ externalSessionId: "session-parent", pendingQuestions: [request] }),
       buildSession({
         externalSessionId: "session-child",
-        sessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
         pendingQuestions: [request],
       }),
     ]);
@@ -501,7 +501,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       externalSessionId: "claude-child",
       runtimeKind: "claude",
       workingDirectory: "/claude/session/repository",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     });
     const request: AgentQuestionRequest = {
       ...questionRequest("question-claude-child"),
@@ -521,7 +521,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       externalSessionId: "claude-parent",
       runtimeKind: "claude",
       workingDirectory: "/claude/session/repository",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       pendingQuestions: [request],
     });
     const { actions, questionReplies } = createPendingInputActionHarness([
@@ -544,7 +544,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       externalSessionId: "claude-child",
       runtimeKind: "claude" as const,
       workingDirectory: "/claude/session/repository",
-      sessionAssociation: { kind: "repository" as const },
+      sessionAssociation: { kind: "repository" as const, workspaceId: "workspace-1" },
     };
     const request: AgentQuestionRequest = {
       ...questionRequest("question-unloaded-child"),
@@ -559,7 +559,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       externalSessionId: "claude-parent",
       runtimeKind: "claude",
       workingDirectory: "/claude/session/repository",
-      sessionAssociation: { kind: "repository" },
+      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
       pendingQuestions: [request],
     });
     const { actions, questionReplies } = createPendingInputActionHarness([parentSession]);

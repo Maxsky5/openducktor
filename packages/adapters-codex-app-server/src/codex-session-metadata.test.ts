@@ -176,7 +176,7 @@ describe("external Codex sessions", () => {
       );
       const preparation = adapter.openExistingSession({
         ...ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       });
       if (accepted) {
@@ -225,7 +225,7 @@ describe("external Codex sessions", () => {
       );
       const prepared = await adapter.openExistingSession({
         ...ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       });
       expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
@@ -242,7 +242,7 @@ describe("external Codex sessions", () => {
       ).toEqual([ref]);
       await adapter.sendUserMessage({
         ...ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "workspace-1" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         parts: [{ kind: "text", text: "Hello" }],
         delivery: "new_turn",
@@ -261,7 +261,7 @@ describe("external Codex sessions", () => {
       const adapter = createAdapterWithTransport(transport);
       const binding = {
         ...ref,
-        sessionScope: { kind: "repository" as const },
+        sessionScope: { kind: "repository" as const, workspaceId: "workspace-1" },
         runtimePolicy: { kind: "codex" as const, policy: defaultCodexEffectivePolicy() },
       };
       if (!cold) {
@@ -298,7 +298,7 @@ describe("external Codex sessions", () => {
     const adapter = createAdapterWithTransport(transport);
     await adapter.openExistingSession({
       ...ref,
-      sessionScope: { kind: "repository" },
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);

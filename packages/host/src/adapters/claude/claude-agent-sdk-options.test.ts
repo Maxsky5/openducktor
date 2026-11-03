@@ -86,14 +86,14 @@ const createRepositorySession = (): ClaudeSessionContext => {
     runtimeKind: "claude",
     workingDirectory: process.cwd(),
     runtimePolicy: { kind: "claude" },
-    sessionScope: { kind: "repository" },
+    sessionScope: { kind: "repository", workspaceId: "workspace-1" },
     systemPrompt: "Help with this repository",
   };
   session.summary = {
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: process.cwd(),
-    sessionAssociation: { kind: "repository" },
+    sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     startedAt: "2026-06-25T20:00:00.000Z",
     status: "starting",
   };

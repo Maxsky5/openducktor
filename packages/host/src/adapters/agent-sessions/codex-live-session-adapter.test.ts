@@ -498,7 +498,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       prepared.adapter.queries.loadSessionHistory({
         ...savedRef,
         workingDirectory,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
         runtimePolicy: { kind: "codex", policy: codexPolicy },
       });
     try {
@@ -558,7 +558,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
   test.each(["start", "fork"] as const)(
     "records ownership before publishing a Codex %s without a saved record",
     async (operation) => {
-      const sessionScope = { kind: "repository" as const };
+      const sessionScope = { kind: "repository" as const, workspaceId: "repo" };
       const publishedRoots: AgentSessionAuthorizedRoot[][] = [];
       const service = createAgentSessionLiveStateService({
         messageQueues: noMessageQueues,
@@ -996,7 +996,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         prepared.adapter.sendUserMessage({
           delivery: "new_turn",
           ...ref,
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "repo" },
           parts: [{ kind: "text", text: "Hello" }],
         }),
       ),
@@ -1047,7 +1047,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       Effect.result(
         prepared.adapter.replyQuestion({
           ...ref,
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "repo" },
           requestId: "question-1",
           answers: [["Answer"]],
           blocking: false,
@@ -1104,7 +1104,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       Effect.result(
         prepared.adapter.replyQuestion({
           ...ref,
-          sessionScope: { kind: "repository" },
+          sessionScope: { kind: "repository", workspaceId: "repo" },
           requestId: "question-1",
           answers: [["Answer"]],
           blocking: false,
@@ -1180,7 +1180,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
           prepared.adapter.sendUserMessage({
             delivery: "new_turn",
             ...ref,
-            sessionScope: { kind: "repository" },
+            sessionScope: { kind: "repository", workspaceId: "repo" },
             parts: [{ kind: "text", text: "Hello" }],
           }),
         ),
@@ -1363,14 +1363,14 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       prepared.adapter.sendUserMessage({
         delivery: "new_turn",
         ...ref,
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
         parts: [{ kind: "text", text: "Hello" }],
       }),
     );
-    expect(policyScopes).toEqual([{ kind: "repository" }]);
+    expect(policyScopes).toEqual([{ kind: "repository", workspaceId: "repo" }]);
     expect(harness.controlInputs.sends).toEqual([
       expect.objectContaining({
-        sessionScope: { kind: "repository" },
+        sessionScope: { kind: "repository", workspaceId: "repo" },
         runtimePolicy: { kind: "codex", policy: codexPolicy },
       }),
     ]);
@@ -2080,7 +2080,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const persistedRef = {
       ...ref,
       externalSessionId: "persisted-thread",
-      sessionScope: { kind: "repository" } as const,
+      sessionScope: { kind: "repository", workspaceId: "repo" } as const,
     };
     await expect(Effect.runPromise(prepared.adapter.loadContext(persistedRef))).resolves.toBeNull();
     expect(harness.liveContextLoads).toEqual([]);
@@ -2094,7 +2094,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       type: "session_upsert",
       snapshot: {
         ref: expect.objectContaining({ externalSessionId: "persisted-thread" }),
-        repositoryScope: { kind: "repository" },
+        repositoryScope: { kind: "repository", workspaceId: "repo" },
         contextUsage: null,
       },
     });

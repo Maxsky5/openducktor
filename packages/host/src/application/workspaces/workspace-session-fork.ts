@@ -81,7 +81,7 @@ export const createWorkspaceSessionFork = (deps: WorkspaceSessionForkDependencie
         runtimeKind: initial.session.runtimeKind,
         workingDirectory: initial.session.executionTarget.workingDirectory,
         externalSessionId: initial.session.externalSessionId,
-        sessionScope: { kind: "repository" as const },
+        sessionScope: { kind: "repository" as const, workspaceId: input.workspaceId },
       };
       return yield* deps.runForkSourceOperation(
         sourceRef,
