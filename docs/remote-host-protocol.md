@@ -6,9 +6,11 @@ A host runs workspaces, agents, sessions, and terminals. A client shows the work
 
 Electron and the normal web runner select their own local host by default. The standalone web client starts at a host picker and does not start a host.
 
-Select the host icon at the bottom of the workspace rail, left of Settings, to open Host connection. The dialog shows the selected host above the New host address field. Desktop app host and Web runner host name the host supplied by that shell. For a selected local host, the dialog shows whether remote control is on or off. Remote control settings opens that Settings section. When remote control is on, the dialog also shows the sharing address, live client count, Copy address, Show QR code, and Disable remote control. These controls use the same state, change operation, and address view as Remote control settings. A remote host shows its full address once. Paste the address from the other host's Remote control settings, then select Switch host. Use desktop host or Use web runner appears only when that shell has a local host and it is not selected. Host changes sit in the dialog footer, with Cancel on the left. Disconnect returns a remote client to the connection screen. Cancel keeps the selected host. During onboarding, the host icon sits with the header controls.
+Select the host icon at the bottom of the workspace rail, left of Settings, to open Host connection. The connection form shows the current host and a Host address field. Desktop app host and Web runner host name the host supplied by that shell. Enter the address and the pairing code that the other host shows after Add device. Typing the sixth digit connects; a change to one digit of a full code waits for Connect. Select a digit to replace it. The client first connects once to check the host, pairs and saves the access when a code is given, and releases that connection. A failure stays in the form with its reason and next action. A success shows Connected for one second, then the page opens the host with the saved access. A paired client leaves the code empty. Use desktop host or Use web runner appears only when that shell has a local host and it is not selected. Host changes sit in the dialog footer, with Cancel on the left. Disconnect returns a remote client to the connection screen. Cancel keeps the current host. During onboarding, the host icon sits with the header controls.
 
-Selecting the current host does not reload the client. Switching to a different host or disconnecting reloads the window and clears the old host's reads, events, and work state. The client stops local delivery at once and waits for pending admission cleanup before it reloads. Cleanup uses the existing setup and release deadlines. Host work keeps running. Remote drafts stay in the memory of their client connection and are lost on reload or host change. Copy any unsent draft first. Existing local drafts stay on this device.
+For a selected local host, the Remote control and Connect to a host tabs separate sharing from host selection. Remote control opens first, because the host icon shows its status. While sharing is off, the tab shows the network list with the saved or only network chosen, and Turn on remote control starts sharing on that network. While sharing is on, the tab shows the sharing switch, the live client count, Add device, and the paired devices. Network settings opens Remote control in Settings. These controls use the same host state and operations as Settings.
+
+Connecting to the current host again reloads the window, for example after a new pairing. Switching to a different host or disconnecting also reloads the window and clears the old host's reads, events, and work state. The client stops local delivery at once and waits for pending admission cleanup before it reloads. Cleanup uses the existing setup and release deadlines. Host work keeps running. Remote drafts stay in the memory of their client connection and are lost on reload or host change. Copy any unsent draft first. Existing local drafts stay on this device.
 
 The standalone client starts at the connection page on its first visit. Use `bun run browser:client` to test this mode. It reads no host settings or work until the connection is ready. The connection page has Light, Dark, and System theme choices and saves its theme in this browser.
 
@@ -25,11 +27,17 @@ Both shells use `@openducktor/remote-host` and the same command router, event jo
 Electron keeps its existing renderer and preload IPC.
 Closing the Electron window still stops its host and all remote connections.
 
-Remote access is disabled by default.
-Network reach grants access to all hosted workspaces and normal host work, without sign-in, passwords, pairing, device approval, or per-device revocation.
-The operator must restrict reach with a protected network, such as Tailscale, or a protected HTTPS proxy.
-The QR code contains the same work address that the operator can copy.
-It contains no credential and creates no trust record.
+Remote access is disabled by default. No pairing code exists until the local operator selects Add device. Add device opens a pairing window with one six-digit code that approves one new client. The window closes when a client pairs, after five minutes, after five wrong codes, when the operator selects Stop pairing, or when Remote control stops. The operator state reports why the last window closed in `pairingEnd`: `paired`, `expired`, `refused` after five wrong codes, or `stopped`. While the operator keeps the pairing view open, an expired code gets a new one at once, and the old code stays dimmed until the new one arrives. A pairing shows Device paired, and five wrong codes show why pairing stopped. A closed window refuses every code, so code guessing never outlasts one operator request. The view asks for the next code with `startPairing({ renew: true })`. A renewal of an open or expired window keeps the count of wrong codes, so a view that stays open gives no fresh guesses. Add device sends no `renew` and starts a new count. Approval needs no separate host click. The pairing view shows two numbered steps: the host address with Copy, then the code. The QR code tab shows the same address and code for the mobile app, and the QR code is created only when the operator opens that tab. Copy address copies no secret. Pairing QR codes contain the address and current code, never a saved credential.
+
+Sharing a code grants control of the host's workspaces, agents, and terminals. Unprotected HTTP can expose pairing codes, access credentials, and host data. Anyone who intercepts the codes or credentials can use this host. Use HTTPS or a protected network.
+
+The host and client save each approval. Browser and desktop clients use a separate versioned localStorage entry per canonical endpoint. Mobile uses Expo SecureStore per saved host. Reload, restart, network loss, and mobile suspension reuse saved access. Disconnecting or switching hosts keeps approval. Removing a mobile host deletes its device data and credential. Revoked or damaged access requests a new code without dropping the entered address. On browser and desktop clients, the Pair with host page uses the same code field, alert, and Connected view as the connect screen: it pairs, shows Connected for one second, and then the connection reconnects with the new saved access.
+
+Only local operator controls show codes and approved clients. Remote control settings lists connected and offline approvals. Each entry has the reported app kind, such as Mobile app or Web browser, and a unique short reference. The app kind does not verify a physical device. Remove deletes the approval before closing every admission on this host and ending its delivery. Other clients and accepted host work continue. Disablement discards codes and live admissions but retains remembered approvals.
+
+Approvals use one stable scope per shell, development instance when present, and host profile. `OPENDUCKTOR_HOST_PROFILE` defaults to `default` and accepts `[a-z0-9][a-z0-9_-]{0,63}`. Hosts of the same shell and profile share one identity and one approval list. Every admission reads its approval from disk, so a removal applies to both hosts at their next negotiation. The other host keeps the device's current connection until then. Use different profiles to keep the approvals of concurrent hosts separate.
+
+The host stores its UUID in `<config-root>/remote-access/hosts/<scope-key>/identity.json` and one immutable approval in `clients/<clientId>.json`. The approval list ignores other files in `clients`, such as `.DS_Store`. The scope key encodes the shell, development instance, and profile tuple. Approval files store the client UUID, reported app kind, and SHA-256 token hash. They contain no reusable secret. Missing or corrupt identity in a populated scope is a storage failure. General settings writes cannot restore a deleted approval.
 
 The shell owns the host, and the network adapter owns its listener and connections.
 
@@ -46,15 +54,15 @@ flowchart TD
 
 Open Settings, Remote control in the local frontend.
 This page lets other devices access the current OpenDucktor instance.
-Choose the network that the other device can reach, then select Enable remote control.
+Choose the network that the other device can reach, then turn on Enable Remote Control. Host connection can also turn it on.
 The host lists its own network addresses and uses IPv4 when that network has it, or unscoped IPv6 otherwise.
 Loopback and scoped link-local addresses do not appear in this list.
 The listener uses port `14328` unless the operator enters another port in Advanced.
 The default address is the listener origin, such as `http://192.168.1.9:14328`. Users do not add a `/remote` suffix.
-Copy the address into a compatible OpenDucktor client, or show its QR code in a separate dialog.
+Select Add device, copy the address into a compatible OpenDucktor client, and enter the pairing code. The mobile app can scan the QR code instead.
 A browser opened at the host address shows its descriptor as JSON. To use the full app, open a standalone web client and paste the host address into its picker.
 The On status means the listener started; it does not prove that a phone can reach it.
-The local host uses a laptop icon. It uses the running-session color when remote control is on and gains a small dot when external clients connect. The tooltip gives the client count. Each client with a live event, task, or terminal stream counts once. Disconnecting its last stream clears it from the count. Operator status updates use the existing live status subscription.
+The local host uses a laptop icon. It uses the running-session color when remote control is on and gains a small dot when external clients connect. The tooltip gives the client count. Each approval with a live event, task, or terminal stream counts once, including when several tabs share it. Disconnecting its last stream clears it from the count. Operator status updates use the existing live status subscription.
 Advanced contains the port, the local listen address, and the public host address.
 When another app uses the port, the page shows `port_in_use` and a "Use another port" action.
 That action asks the operating system for a free port, and the host keeps that port from then on.
@@ -62,7 +70,7 @@ The local listen address selects which network accepts connections; a wildcard o
 The public host address sets the copied address, QR code, allowed hostname and browser origin, and optional path prefix. It does not configure a proxy.
 Invalid fields show a readable error before the listener starts.
 An invalid endpoint or a bind failure leaves local host work usable and shows a configuration failure.
-Select Disable remote control to stop admission and end every remote attachment.
+Turn off Enable Remote Control to stop admission and end every remote attachment.
 Disablement also closes pending remote HTTP responses and active transfers on a shared listener.
 Accepted commands continue under the host's command lifetime.
 Terminal client cleanup detaches observers; it does not close a shared PTY.
@@ -117,7 +125,7 @@ Explicit `--host`, `--backend-port`, and `--remote-endpoint` values override `OP
 These overrides do not enable remote access in an otherwise local run without remote startup values.
 When the remote and private bind addresses and ports match, their separate request handlers share the existing private HTTP listener.
 Private app-session requests keep their existing protection and URLs.
-Explicit remote admission always selects the remote handler, even when private credentials are also present.
+Remote discovery and negotiation routes, authorization fields, connection tags, and their preflights select the remote handler, including when private credentials are present.
 Without remote admission, local app or control credentials select the protected private handler; other requests select the remote handler with the configured prefix or its stripped proxy mapping.
 Disabling remote access removes remote admissions and attachments while the private listener remains available.
 The launcher resolves an OS-assigned backend port before publishing the remote endpoint.
@@ -141,7 +149,7 @@ Native HTTP requests can omit Origin; browser headers do not identify a device.
 
 ## Compatibility
 
-The current remote protocol is `4`, as `REMOTE_PROTOCOL_VERSION` in `packages/contracts` sets. Version 4 requires full workspace references and typed settings edits, and adds workflow-qualified Autopilot outcomes. Hosts and clients must use this version together.
+The current remote protocol is `4`, as `REMOTE_PROTOCOL_VERSION` in `packages/contracts` sets. Version 4 requires full workspace references, typed settings edits, and client authorization, and adds workflow-qualified Autopilot outcomes. Hosts and clients must use this version together.
 The protocol version is independent of app release versions.
 Hosts and clients can use different app versions when they share a protocol version and the client receives all required capabilities.
 A breaking change to required behavior needs a new remote protocol version.
@@ -165,21 +173,23 @@ The heartbeat keeps the path busy.
 A client that receives `streams.heartbeat.v1` treats a stream without bytes for 45 seconds as a lost connection and reconnects.
 A client without the capability keeps a quiet stream, because an older host sends no heartbeat.
 
-Discovery returns `shell`, `appVersion`, `hostInstanceId`, `hostId`, `accessPolicy: "network_reach"`, and supported protocol versions with capability names.
+Discovery returns `shell`, `appVersion`, `hostInstanceId`, `hostId`, `accessPolicy: "pairing"`, and supported protocol versions with capability names.
 `hostInstanceId` identifies the live host run; it is not a durable trust identity.
-`hostId` identifies the host across restarts. The host creates it once in its settings file. A client uses it to know a saved host at a new address. It grants no access. Older hosts send no `hostId`.
+`hostId` identifies the host approval scope across restarts. It grants no access. Legacy descriptors can be read only to report which peer needs an update. A remote connection requires protocol 4, pairing support, and a stable scoped host ID before the client sends proof.
 Negotiation sends this client hello:
 
 ```json
 {
   "appVersion": "mobile-release",
-  "supportedProtocolVersions": [3],
+  "supportedProtocolVersions": [4],
+  "clientKind": "mobile",
+  "pairingCode": "123456",
   "requiredCapabilities": ["host.work.v1", "host.events.v1", "agent.live.v1", "terminal.v3", "work.resources.v1"],
   "optionalCapabilities": ["streams.heartbeat.v1", "history.tool_details.v1"]
 }
 ```
 
-Acceptance returns the descriptor, selected protocol, transient `connectionId`, and missing optional capabilities.
+Acceptance returns the descriptor, selected protocol, transient `connectionId`, separate live `connectionToken`, and missing optional capabilities. Code approval also returns a host-specific saved grant with `hostId`, `clientId`, and `token`. The client saves it before opening work or streams. Saved credentials serve negotiation only, through `Authorization: Bearer <saved-token>`, and never return in the response. Submit a code or a saved credential, never both. Neither proof requests code entry. A code without an open pairing window returns `pairing_refused`. The fifth wrong code closes the window. Remembered access remains usable.
 A protocol mismatch names both app versions and supported protocols and states which side needs an update.
 A missing required capability refuses admission and names that capability.
 Missing optional capabilities leave admission usable; their unsupported functions report `function_unavailable`.
@@ -190,16 +200,16 @@ Clients use host commands for runtime work; a host runtime's loopback route is n
 
 Let `R` be the complete work endpoint.
 Every work request, resource, stream, lease operation, and terminal upgrade must resolve a current negotiated connection.
-All HTTP clients send `x-openducktor-connection-id`.
+All HTTP clients send `x-openducktor-connection-id` and `Authorization: Bearer <connectionToken>`.
 Negotiation does not set a cookie, and cookies cannot select a remote connection.
 Connection IDs remain in memory and expire after 60 seconds without requests or active streams.
 The host bounds admissions to 128 and task leases to 32 per connection.
-The ID records compatibility, not device authorization; any reachable compatible client can negotiate a new one.
+The ID alone grants no access. Each live token belongs to its admission and remembered approval. A revoked saved credential remains invalid after restart. Codes and credentials never belong in request URLs, logs, or diagnostics.
 
 | Method and route | Contract |
 |---|---|
 | `GET R` | Discover the host. |
-| `POST R/connections` | Negotiate the client hello. |
+| `POST R/connections` | Check compatibility and one authorization proof. |
 | `DELETE R/connections/current` | Release this live admission. |
 | `POST R/invoke/{command}` | Use existing host command inputs and results. |
 | `GET R/events` | Combined host and notification SSE. |
@@ -223,10 +233,7 @@ Shell functions `open_external_url` and `system_open_directory_in_tool` are unav
 Remote `system_list_open_in_tools` calls return an empty list so clients do not offer host applications that they cannot launch.
 Launcher shutdown, installation, and updater controls have no remote routes.
 
-Terminal upgrades offer `openducktor-terminal.v3` and `openducktor-connection.<connectionId>`.
-The server verifies the connection tag, then selects `openducktor-terminal.v3`.
-An explicit connection header must agree with the tag.
-Browser WebSockets cannot set request headers, so each tab sends its connection ID in the tag.
+Terminal upgrades offer `openducktor-terminal.v3`, `openducktor-connection.<connectionId>`, and `openducktor-authorization.<connectionToken>`. The server verifies both tags and selects only `openducktor-terminal.v3`. HTTP connection and authorization fields, when present, must agree with the tags. Browser and native WebSockets use the live token in the tags. Saved credentials never enter subprotocols or URLs.
 Native upgrades can omit Origin or use the configured public endpoint origin.
 Use the same terminal ID and last consumed sequence to attach to a surviving PTY.
 Keep terminal protocol backpressure, replay, screen restore, overflow, and lost-handle meanings unchanged.
@@ -238,9 +245,10 @@ Each host instance assigns a monotonic revision to terminal metadata changes. Li
 | HTTP status | Meaning |
 |---|---|
 | `400` | Malformed protocol or request. |
+| `401` | Pairing or authorization is required or refused. |
 | `409` | Missing capability, expired admission, or unavailable function. |
 | `426` | No shared protocol version. |
-| `503` | Disabled or unavailable admission. |
+| `503` | Disabled admission, unavailable host, or authorization storage failure. |
 
 A structured `RemoteFailure` contains `code`, `message`, and `nextAction`, with compatibility metadata when needed.
 Host command failures preserve `HostInvokeFailure`, including accepted and partial outcomes.
