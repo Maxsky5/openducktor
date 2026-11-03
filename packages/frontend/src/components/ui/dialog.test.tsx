@@ -68,10 +68,15 @@ describe("DialogFooter", () => {
       </Dialog>,
     );
 
-    const footer = screen.getByRole("button", { name: "Cancel" }).parentElement;
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const save = screen.getByRole("button", { name: "Save" });
+    const footer = cancel.parentElement;
     expect(footer?.getAttribute("data-slot")).toBe("dialog-footer");
     expect(footer?.classList.contains("justify-between")).toBe(true);
-    expect(screen.getByRole("button", { name: "Save" }).parentElement).toBe(footer);
+    expect(footer?.classList.contains("flex-col-reverse")).toBe(true);
+    expect(footer?.classList.contains("sm:flex-row")).toBe(true);
+    expect(save.parentElement).toBe(footer);
+    expect(cancel.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
   });
 });
 

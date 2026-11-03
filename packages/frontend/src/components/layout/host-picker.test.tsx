@@ -111,6 +111,8 @@ test("keeps Cancel left and connection actions right when the footer stacks", ()
   const cancel = view.getByRole("button", { name: "Cancel" });
   const footer = cancel.closest('[data-slot="dialog-footer"]');
   expect(footer).not.toBeNull();
+  expect(footer?.className).toContain("justify-between");
+  expect(footer?.className).toContain("sm:flex-row");
   expect(footer?.className).toContain("items-end");
   expect(footer?.className).not.toContain("flex-wrap-reverse");
   expect(cancel.className).toContain("self-start");

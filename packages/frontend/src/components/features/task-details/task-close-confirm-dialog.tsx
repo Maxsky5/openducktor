@@ -58,7 +58,7 @@ export function TaskCloseConfirmDialog({
           ) : null}
         </DialogBody>
 
-        <DialogFooter className="mt-0 flex-col-reverse gap-2 border-t border-border px-6 py-4 sm:flex-row">
+        <DialogFooter className="mt-0 border-t border-border px-6 py-4">
           <Button type="button" variant="outline" disabled={operation.isPending} onClick={onCancel}>
             Cancel
           </Button>

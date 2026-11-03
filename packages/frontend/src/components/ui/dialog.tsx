@@ -165,7 +165,10 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-/** Puts the dismissal action on the left and the main action on the right. */
+/**
+ * Lays out footer children. With two children, the dismissal starts at the left and the action
+ * ends at the right. With one child, add justify-end to place it at the right.
+ */
 function DialogFooter({ className, style, ...props }: React.ComponentProps<"div">) {
   const loading = useContext(DialogLoadingContext)?.loading === true;
   return (
