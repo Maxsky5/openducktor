@@ -2529,7 +2529,7 @@ describe("useRepoSessionReadModel", () => {
         kind: "failed",
         workspaceRepoPath: "/repo",
         message:
-          "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+          "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope for workspace 'workspace-1' does not match the incoming workflow scope for task 'task-1' and role 'build'.",
         source: "task-records",
       });
 
@@ -2587,7 +2587,7 @@ describe("useRepoSessionReadModel", () => {
         kind: "failed",
         workspaceRepoPath: "/repo",
         message:
-          "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+          "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope for workspace 'workspace-1' does not match the incoming workflow scope for task 'task-1' and role 'build'.",
         source: "task-records",
       });
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
@@ -2854,7 +2854,7 @@ describe("useRepoSessionReadModel", () => {
         kind: "failed",
         workspaceRepoPath: "/repo",
         message:
-          "Failed to apply initial live-session snapshot for repo '/repo': Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+          "Failed to apply initial live-session snapshot for repo '/repo': Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope for workspace 'workspace-1'.",
         source: "live-stream",
       });
     } finally {
@@ -2893,7 +2893,7 @@ describe("useRepoSessionReadModel", () => {
       });
       expect(state.harness.getLatest().getSessionFault(identity)).toEqual({
         message:
-          "Failed to apply live-session update: Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+          "Failed to apply live-session update: Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope for workspace 'workspace-1'.",
       });
       expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
     } finally {

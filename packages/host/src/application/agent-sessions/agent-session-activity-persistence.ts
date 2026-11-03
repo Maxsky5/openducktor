@@ -24,7 +24,7 @@ type ObservedSession = {
 };
 
 type WorkspacePersistence = AgentSessionPersistencePort & {
-  recordActivity(ref: AgentSessionLiveRef, occurredAt: number): Effect.Effect<boolean, HostError>;
+  recordActivity(ref: AgentSessionLiveRef, occurredAt: number): Effect.Effect<void, HostError>;
 };
 
 /** Save activity from the ordered live stream. Baselines and streamed text never write a date. */

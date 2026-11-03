@@ -476,7 +476,9 @@ describe("createClaudeAgentSdkService", () => {
           "runtime-claude",
         ),
       ),
-    ).rejects.toThrow("registered repository scope does not match requested workflow scope");
+    ).rejects.toThrow(
+      "registered repository scope for workspace 'repo' does not match requested workflow scope",
+    );
   });
 
   test("loads persisted history for resumed and forked live sessions before a new user turn", async () => {

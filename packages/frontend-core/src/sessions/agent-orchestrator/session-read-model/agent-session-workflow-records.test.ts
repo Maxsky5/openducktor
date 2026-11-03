@@ -208,7 +208,7 @@ describe("agent session workflow records", () => {
         records: loadedRecords({ taskId: "task-1", record: record("thread-1") }),
       }),
     ).toThrow(
-      "Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+      "Cannot reconcile persisted session 'thread-1' because its registered repository scope for workspace 'workspace-1' does not match the incoming workflow scope for task 'task-1' and role 'build'.",
     );
   });
 
@@ -230,7 +230,7 @@ describe("agent session workflow records", () => {
         associationEvidence: current,
       }),
     ).toThrow(
-      "Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+      "Cannot reconcile persisted session 'thread-1' because its registered repository scope for workspace 'workspace-1' does not match the incoming workflow scope for task 'task-1' and role 'build'.",
     );
   });
 

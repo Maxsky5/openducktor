@@ -73,7 +73,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
   reportRenameFailure: WorkspaceSessionRenameFailureReporter;
 }): AgentSessionPersistencePort &
   AgentSessionOperationPolicy & {
-    recordActivity(ref: AgentSessionLiveRef, occurredAt: number): Effect.Effect<boolean, HostError>;
+    recordActivity(ref: AgentSessionLiveRef, occurredAt: number): Effect.Effect<void, HostError>;
     isTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
     markTitleSyncPending: (ref: AgentSessionLiveRef) => void;
     /** Stops background renames and title syncs before their runtime and store close. */
@@ -286,17 +286,14 @@ export const createWorkspaceSessionRuntimePersistence = ({
   const recordActivity = (runtimeRef: AgentSessionLiveRef, occurredAt: number) =>
     Effect.gen(function* () {
       const known = yield* find(runtimeRef);
-      if (!known) return false;
-      if (occurredAt > (known.session.lastActivityAt ?? known.session.createdAt)) {
-        const saved = yield* storeEffect(
-          store.recordActivity({
-            ...known.ref,
-            activity: { type: "session_activity", occurredAt },
-          }),
-        );
-        yield* publishUpdated(known.ref.workspaceId, saved);
-      }
-      return true;
+      if (!known || occurredAt <= (known.session.lastActivityAt ?? known.session.createdAt)) return;
+      const saved = yield* storeEffect(
+        store.recordActivity({
+          ...known.ref,
+          activity: { type: "session_activity", occurredAt },
+        }),
+      );
+      yield* publishUpdated(known.ref.workspaceId, saved);
     });
   const validateRef = (runtimeRef: ScopedAgentSessionRef) =>
     Effect.gen(function* () {

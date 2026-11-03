@@ -24,7 +24,7 @@ export const agentSessionScopesEqual = (
 
 export const describeAgentSessionScope = (scope: AgentSessionScope): string => {
   if (scope.kind === "repository") {
-    return "repository scope";
+    return `repository scope for workspace '${scope.workspaceId}'`;
   }
   return `workflow scope for task '${scope.taskId}' and role '${scope.role}'`;
 };

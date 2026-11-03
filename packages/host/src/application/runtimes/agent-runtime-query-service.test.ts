@@ -219,8 +219,6 @@ test("a fresh workflow session reads its catalog before native session ownership
     queries: h.service,
     settingsConfig: { readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()) },
     settings: {
-      getRepoConfigByRepoPath: () =>
-        Effect.die("Workflow preparation must use the supplied workspace ID."),
       getRepoConfig: () =>
         Effect.succeed(
           repoConfigSchema.parse({

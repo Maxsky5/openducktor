@@ -802,7 +802,7 @@ describe("agent session live projection", () => {
         }),
       }),
     ).toThrow(
-      "Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+      "Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope for workspace 'workspace-1'.",
     );
   });
 

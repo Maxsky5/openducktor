@@ -35,7 +35,7 @@ describe("Agent Session scope policy", () => {
 
   test("describes repository and workflow scopes", () => {
     expect(describeAgentSessionScope({ kind: "repository", workspaceId: "repo" })).toBe(
-      "repository scope",
+      "repository scope for workspace 'repo'",
     );
     expect(
       describeAgentSessionScope({

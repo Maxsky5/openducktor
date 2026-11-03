@@ -40,8 +40,8 @@ class NameFailingTransport extends RecordingTransport {
   }
 }
 
-test("controls one native repository conversation from each selected saved workspace", async () => {
-  const { adapter, transports } = createHarness();
+test("refuses a native repository conversation from a second workspace", async () => {
+  const { adapter } = createHarness();
   const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
   const started = await adapter.startSession({
     repoPath: "/repo",
@@ -52,28 +52,20 @@ test("controls one native repository conversation from each selected saved works
     systemPrompt: "First workspace",
     model: { providerId: "openai", modelId: "gpt-5" },
   });
-  for (const workspaceId of ["second", "first"]) {
-    await adapter.resumeSession({
+
+  await expect(
+    adapter.resumeSession({
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
       externalSessionId: started.externalSessionId,
-      sessionScope: { kind: "repository", workspaceId },
+      sessionScope: { kind: "repository", workspaceId: "second" },
       runtimePolicy,
-      systemPrompt: workspaceId,
-    });
-    await adapter.sendUserMessage(
-      codexUserMessageInput({
-        externalSessionId: started.externalSessionId,
-        sessionScope: { kind: "repository", workspaceId },
-        runtimePolicy,
-        parts: [{ kind: "text", text: workspaceId }],
-      }),
-    );
-  }
-  expect(
-    transports.get("runtime-live")?.calls.filter((call) => call.method === "turn/start"),
-  ).toHaveLength(2);
+      systemPrompt: "Second workspace",
+    }),
+  ).rejects.toThrow(
+    "registered repository scope for workspace 'first' does not match the requested repository scope for workspace 'second'",
+  );
 });
 
 class MatchingPreviewTransport extends RecordingTransport {
@@ -880,7 +872,9 @@ describe("CodexAppServerAdapter repository sessions", () => {
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
-    ).rejects.toThrow("registered repository scope does not match the requested workflow scope");
+    ).rejects.toThrow(
+      "registered repository scope for workspace 'repo' does not match the requested workflow scope",
+    );
 
     await expect(
       adapter.sendUserMessage(
@@ -890,7 +884,9 @@ describe("CodexAppServerAdapter repository sessions", () => {
           parts: [{ kind: "text", text: "Continue" }],
         }),
       ),
-    ).rejects.toThrow("registered repository scope does not match the requested workflow scope");
+    ).rejects.toThrow(
+      "registered repository scope for workspace 'repo' does not match the requested workflow scope",
+    );
     expect(transports.get("runtime-live")?.calls).toHaveLength(callCount ?? 0);
   });
 

@@ -52,9 +52,8 @@ export const useSessionRuntimeData = ({
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
   const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSession?.identity);
-  const selectedAssociation = selectedSession?.sessionAssociation ?? null;
   const stableSelectedScope = useStableAgentSessionScope(
-    selectedAssociation?.kind === "unbound" ? null : selectedAssociation,
+    selectedSession ? resolveSessionRuntimeScope(selectedSession.sessionAssociation) : null,
   );
   const selectedModel = selectedSession?.selectedModel ?? null;
   const stableSelectedSession = useMemo<SessionRuntimeDataTarget | null>(() => {
@@ -73,9 +72,9 @@ export const useSessionRuntimeData = ({
     }
     return {
       runtimeKind: stableSelectedSession.identity.runtimeKind,
-      sessionScope: resolveSessionRuntimeScope(stableSelectedSession.sessionAssociation),
+      sessionScope: stableSelectedScope,
     };
-  }, [stableSelectedSession]);
+  }, [stableSelectedScope, stableSelectedSession]);
   const settingsSnapshotQuery = useQuery({
     ...settingsSnapshotQueryOptions(),
     enabled: runtimePolicyTarget?.runtimeKind === "codex",

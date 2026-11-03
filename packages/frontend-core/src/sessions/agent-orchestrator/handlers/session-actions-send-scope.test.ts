@@ -181,7 +181,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
         },
       }),
     ).rejects.toThrow(
-      "Cannot send message for session 'session-1' because its registered repository scope does not match the requested workflow scope for task 'task-1' and role 'build'.",
+      "Cannot send message for session 'session-1' because its registered repository scope for workspace 'workspace-1' does not match the requested workflow scope for task 'task-1' and role 'build'.",
     );
     expect(sendCalls).toBe(0);
   });
