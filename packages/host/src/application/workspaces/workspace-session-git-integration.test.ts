@@ -13,6 +13,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { execFileSync } from "node:child_process";
 import {
   cp,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -32,6 +33,7 @@ import {
   type WorkspaceSession,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect, Exit } from "effect";
+import { z } from "zod";
 import { createWorktreeFileAdapter } from "../../adapters/filesystem/worktree-file-adapter";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
@@ -72,6 +74,8 @@ const runGit = (cwd: string, ...args: string[]) =>
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
+
+const missingPathErrorSchema = z.object({ code: z.literal("ENOENT") });
 
 describe("Workspace Session commands with real Git and SQLite", () => {
   let fixtureRoot: string;
@@ -118,6 +122,13 @@ describe("Workspace Session commands with real Git and SQLite", () => {
   });
   afterEach(async () => {
     await database.cleanup();
+    // Windows keeps a junction locked during a recursive delete. Remove the link first.
+    const aliasPath = path.join(root, "native-alias");
+    try {
+      if ((await lstat(aliasPath)).isSymbolicLink()) await unlink(aliasPath);
+    } catch (error) {
+      if (!missingPathErrorSchema.safeParse(error).success) throw error;
+    }
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
