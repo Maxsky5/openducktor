@@ -33,7 +33,6 @@ import {
 } from "@openducktor/frontend-core/queries/workspace";
 import { workspaceSessionListQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useFocusEffect } from "expo-router";
 import {
   createContext,
   type PropsWithChildren,
@@ -306,13 +305,11 @@ function TaskOwnerSource({
     showsDiffs,
   });
   const { diffData, worktree } = panel;
-  useFocusEffect(
-    useFocusGitRefresh({
-      enabled: showsDiffs && task !== null,
-      loaded: diffData.loadedScopesByScope.uncommitted,
-      refresh: panel.refresh,
-    }),
-  );
+  useFocusGitRefresh({
+    enabled: showsDiffs && task !== null,
+    loaded: diffData.loadedScopesByScope.uncommitted,
+    refresh: panel.refresh,
+  });
   const comparisonChoice = useTaskComparisonChoice(ownerRef, panel.comparison.target);
   const sessionsQuery = useQuery({
     ...agentSessionListQueryOptions(
@@ -489,13 +486,11 @@ function ChatGitSource({
     git: sessionGit,
     visibility: appStateVisibility,
   });
-  useFocusEffect(
-    useFocusGitRefresh({
-      enabled: showsDiffs,
-      loaded: panel.diffData.loadedScopesByScope.uncommitted,
-      refresh: panel.refresh,
-    }),
-  );
+  useFocusGitRefresh({
+    enabled: showsDiffs,
+    loaded: panel.diffData.loadedScopesByScope.uncommitted,
+    refresh: panel.refresh,
+  });
   const { target, applyTarget } = sessionGit;
   const comparisonChoice = useMemo<WorkOwnerComparisonChoice>(
     () => ({
