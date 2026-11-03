@@ -225,13 +225,13 @@ function TaskBoardContent({
         placeholder: "Search tasks",
         hideWhenScrolling: false,
         autoCapitalize: "none",
-        ref: search.bar,
+        ref: search.barRef,
         onChangeText: (event) => onSearchText(event.nativeEvent.text),
         onCancelButtonPress: () => onSearchText(""),
       };
     }
     return options;
-  }, [headerRight, onSearchText, ready, search.bar, searchColors]);
+  }, [headerRight, onSearchText, ready, search.barRef, searchColors]);
 
   const view = taskBoardView({
     state: board.state,

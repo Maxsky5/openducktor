@@ -118,6 +118,7 @@ export function AddHostForm({ onScan }: { onScan: () => void }): ReactElement {
     attempt.current = controller;
     setConnecting(true);
     setError(null);
+    // oxlint-disable-next-line react-compiler/todo -- the catch returns early and connects again, so the cleanup must stay in finally
     try {
       await owner.addHost(address, {
         signal: controller.signal,

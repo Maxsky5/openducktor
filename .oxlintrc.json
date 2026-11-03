@@ -34,6 +34,10 @@
     {
       "name": "expo-router",
       "specifier": "./tools/oxlint/anti-slop/src/expo-router/index.ts"
+    },
+    {
+      "name": "react-compiler",
+      "specifier": "eslint-plugin-react-hooks"
     }
   ],
   "rules": {
@@ -355,6 +359,16 @@
       "rules": {
         "anti-slop/no-hex-alpha-suffix": "error",
         "unistyles/no-stylesheet-dependency-aliases": "error",
+        "react-compiler/refs": "error",
+        "react-compiler/immutability": "error",
+        "react-compiler/preserve-manual-memoization": "error",
+        "react-compiler/todo": "error",
+        "react-compiler/unsupported-syntax": "error",
+        "react-compiler/globals": "error",
+        "react-compiler/purity": "error",
+        "react-compiler/set-state-in-render": "error",
+        "react-compiler/static-components": "error",
+        "react-compiler/use-memo": "error",
         "expo-router/no-queued-back": ["error", { "closeHelper": "@/navigation/close-screen" }],
         "unistyles/no-themed-colors-on-unbound-components": [
           "error",

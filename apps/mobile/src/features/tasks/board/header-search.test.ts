@@ -32,7 +32,7 @@ const renderBoard = (search: HeaderSearch, searchText: string) => {
 
 const mountedSearch = (writes: string[]): HeaderSearch => {
   const search = renderHook(() => useHeaderSearch()).result.current;
-  search.bar.current = fakeBar(writes);
+  search.barRef.current = fakeBar(writes);
   return search;
 };
 

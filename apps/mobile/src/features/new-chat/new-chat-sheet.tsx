@@ -247,6 +247,7 @@ const useClose = (edited: boolean, running: boolean) => {
   const [closing, setClosing] = useState(false);
   const closed = useRef(false);
   const allowRemoval = usePreventRemove(!closing && (edited || running), () => {
+    // oxlint-disable-next-line react-compiler/immutability -- usePreventRemove calls back into the close that needs its result; the hook memoizes by hand
     if (!running) requestClose();
   });
   const close = useCallback(() => {
@@ -256,6 +257,7 @@ const useClose = (edited: boolean, running: boolean) => {
     allowRemoval();
     closeScreen(navigation);
   }, [allowRemoval, navigation]);
+  // oxlint-disable-next-line react-compiler/preserve-manual-memoization -- usePreventRemove calls back into the close that needs its result; the hook memoizes by hand
   const requestClose = useCallback(() => {
     if (running) return;
     if (!edited) {

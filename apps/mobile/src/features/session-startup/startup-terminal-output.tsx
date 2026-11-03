@@ -61,6 +61,7 @@ export function StartupTerminalOutput({
   useEffect(() => () => session?.dispose(), [session]);
   const post = useCallback((message: TerminalPageInbound) => page.current?.post(message), []);
   const reader = useMemo(
+    // oxlint-disable-next-line react-compiler/refs -- the reader posts to the page only in its message handler, never during render
     () => createStartupOutputReader({ reading, post, onText: setOutputText }),
     [post, reading],
   );
