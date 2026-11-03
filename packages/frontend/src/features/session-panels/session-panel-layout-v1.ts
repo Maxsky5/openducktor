@@ -1,10 +1,9 @@
 import { z } from "zod";
 import { TOOL_TAB_KINDS, type ToolTabKind } from "./panel-tab-kinds";
-import {
-  type PanelTabEntry,
-  type SessionPanelLayout,
-  SESSION_PANEL_SELECTION_KEYS,
-} from "./session-panel-layout";
+import { type PanelTabEntry, type SessionPanelLayout } from "./session-panel-layout";
+
+/** The selection keys that v1 records saved: the built-in roles and chat. */
+const V1_SELECTION_KEYS = ["spec", "planner", "build", "qa", "chat"] as const;
 
 /** The key prefix of the saved layouts of app versions before browser tabs. */
 export const V1_STORAGE_PREFIX = "openducktor:session-panel-layout:v1:";
@@ -15,10 +14,7 @@ const v1LayoutSchema = z.object({
   version: z.literal(1),
   panels: z.object({ right: z.array(toolTabKindSchema), bottom: z.array(toolTabKindSchema) }),
   closedKinds: z.array(toolTabKindSchema),
-  selectedRight: z.partialRecord(
-    z.enum(SESSION_PANEL_SELECTION_KEYS),
-    toolTabKindSchema.nullable(),
-  ),
+  selectedRight: z.partialRecord(z.enum(V1_SELECTION_KEYS), toolTabKindSchema.nullable()),
 });
 
 /** Reads a v1 record. It has tool tabs only, and no bottom selection. */

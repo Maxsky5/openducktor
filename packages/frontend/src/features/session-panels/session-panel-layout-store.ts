@@ -12,7 +12,6 @@ import {
   emptySessionPanelLayout,
   type PanelTabEntry,
   type SessionPanelLayout,
-  SESSION_PANEL_SELECTION_KEYS,
   type SessionPanelOwner,
   sessionPanelOwnerKey,
 } from "./session-panel-layout";
@@ -175,7 +174,8 @@ export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPa
 const STORAGE_PREFIX = "openducktor:session-panel-layout:v2:";
 
 const toolTabKindSchema = z.enum(TOOL_TAB_KINDS);
-const selectionKeySchema = z.enum(SESSION_PANEL_SELECTION_KEYS);
+/** A task role ID, built-in or custom, or `chat`. */
+const selectionKeySchema = z.string().min(1);
 
 const persistedPanelTabSchema = z.discriminatedUnion("kind", [
   z.object({ kind: toolTabKindSchema }),
@@ -221,8 +221,7 @@ const toPersistedLayout = (layout: SessionPanelLayout): PersistedLayout => {
   const savedSelection = (entryId: string | null): string | null =>
     entryId !== null && savedIds.has(entryId) ? entryId : null;
   const selectedRight: PersistedLayout["selectedRight"] = {};
-  for (const key of SESSION_PANEL_SELECTION_KEYS) {
-    const entryId = layout.selectedRight[key];
+  for (const [key, entryId] of Object.entries(layout.selectedRight)) {
     if (entryId === undefined) continue;
     selectedRight[key] = savedSelection(entryId);
   }

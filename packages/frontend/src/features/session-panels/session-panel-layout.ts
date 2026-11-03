@@ -20,9 +20,6 @@ export type SessionPanelOwner =
 /** Each task role remembers its own selected right panel tab. A chat has one selection. */
 export type SessionPanelSelectionKey = AgentRole | "chat";
 
-/** Existing storage keys stay fixed. Custom role selections remain in memory. */
-export const SESSION_PANEL_SELECTION_KEYS = ["spec", "planner", "build", "qa", "chat"] as const;
-
 type PanelEntries = { right: PanelTabEntry[]; bottom: PanelTabEntry[] };
 
 type ToolTabEntry = { id: ToolTabKind; kind: ToolTabKind };
