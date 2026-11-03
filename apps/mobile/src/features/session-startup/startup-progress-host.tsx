@@ -111,13 +111,13 @@ function StartupStack(): ReactElement | null {
         ]}
       >
         <ScrollView
-          style={[styles.stack, empty && { height: heldSize?.viewport ?? 0 }]}
-          contentContainerStyle={[styles.content, empty && { minHeight: heldSize?.content ?? 0 }]}
+          style={[styles.stack, heldSize && { height: heldSize.viewport }]}
+          contentContainerStyle={[styles.content, heldSize && { minHeight: heldSize.content }]}
           onLayout={(event) => {
-            if (!empty) measured.current.viewport = event.nativeEvent.layout.height;
+            if (heldSize === null) measured.current.viewport = event.nativeEvent.layout.height;
           }}
           onContentSizeChange={(_width, contentHeight) => {
-            if (!empty) measured.current.content = contentHeight;
+            if (heldSize === null) measured.current.content = contentHeight;
           }}
           nestedScrollEnabled
           bounces={false}
