@@ -95,6 +95,21 @@ describe("SettingsModalFooter", () => {
     }
   });
 
+  test("keeps Cancel left and Save settings right", () => {
+    const renderer = renderFooter();
+    try {
+      const cancel = screen.getByRole("button", { name: "Cancel" });
+      const save = screen.getByRole("button", { name: "Save settings" });
+      const footer = cancel.closest('[data-slot="dialog-footer"]');
+      expect(footer).not.toBeNull();
+      expect(save.closest('[data-slot="dialog-footer"]')).toBe(footer);
+      expect(footer?.classList.contains("justify-between")).toBe(true);
+      expect(footer?.classList.contains("justify-start")).toBe(false);
+    } finally {
+      renderer.unmount();
+    }
+  });
+
   test("uses the same save and cancel controls for custom roles", () => {
     const renderer = renderFooter({
       location: { section: "custom-agent-roles", repositorySection: "configuration" },

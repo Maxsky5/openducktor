@@ -134,7 +134,7 @@ export function BrowserDialogPrompt({
               {answer.error}
             </p>
           ) : null}
-          <div className="flex justify-end gap-1.5">
+          <div className={`flex gap-1.5 ${model.dismissLabel ? "justify-between" : "justify-end"}`}>
             {model.dismissLabel ? (
               <Button
                 type="button"

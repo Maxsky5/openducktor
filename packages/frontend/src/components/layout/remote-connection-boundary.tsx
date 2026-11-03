@@ -125,7 +125,7 @@ function ConnectedWork({
               <p className="text-sm text-muted-foreground">{state.failure.nextAction}</p>
             </DialogBody>
           ) : null}
-          <DialogFooter className="mt-0 flex-wrap justify-between border-t border-border px-6 py-4">
+          <DialogFooter className="mt-0 flex-wrap border-t border-border px-6 py-4">
             {changeHost ? (
               <Button variant="outline" onClick={changeHost}>
                 Choose another host

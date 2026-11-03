@@ -260,7 +260,7 @@ function IssueImportFooter({
 }): ReactElement | null {
   if (unavailable) return null;
   return (
-    <DialogFooter className="mt-0 flex-row items-center justify-between border-t border-border px-6 py-4">
+    <DialogFooter className="mt-0 flex-row items-center border-t border-border px-6 py-4">
       {step === "review" ? (
         <Button type="button" variant="outline" disabled={busy !== null} onClick={onBack}>
           <ArrowLeft className="size-4" />

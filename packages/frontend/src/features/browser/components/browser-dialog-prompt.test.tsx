@@ -98,6 +98,22 @@ describe("BrowserDialogPrompt", () => {
     expect(onAnswer).toHaveBeenCalledWith({ kind: "dialog", accept: false });
   });
 
+  test("keeps Cancel left and the action right", () => {
+    renderDialog(dialogPrompt("confirm"));
+
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const action = screen.getByRole("button", { name: "OK" });
+    expect(cancel.parentElement).toBe(action.parentElement);
+    expect(cancel.parentElement?.className).toContain("justify-between");
+  });
+
+  test("keeps the only action right", () => {
+    renderDialog(dialogPrompt("alert"));
+
+    const action = screen.getByRole("button", { name: "OK" });
+    expect(action.parentElement?.className).toContain("justify-end");
+  });
+
   test("sends the prompt text on Enter and starts with the default text", async () => {
     const { onAnswer } = renderDialog(
       dialogPrompt("prompt", { message: "Your name?", defaultPrompt: "Ada" }),

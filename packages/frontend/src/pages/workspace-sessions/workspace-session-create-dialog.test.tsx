@@ -593,7 +593,6 @@ test("matches the task modal width and footer surface, separates actions and dis
     expect(cancel.parentElement).toBe(create.parentElement);
     expect(cancel.parentElement?.firstElementChild).toBe(cancel);
     expect(cancel.parentElement?.classList.contains("justify-between")).toBe(true);
-    expect(cancel.parentElement?.classList.contains("sm:justify-between")).toBe(true);
     // Sticky actions need the same opaque surface as the dialog in both themes.
     expect(cancel.parentElement?.classList.contains("bg-popover")).toBe(true);
   } finally {

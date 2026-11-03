@@ -165,13 +165,17 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+/**
+ * Lays out footer children. With two children, the dismissal starts at the left and the action
+ * ends at the right. With one child, add justify-end to place it at the right.
+ */
 function DialogFooter({ className, style, ...props }: React.ComponentProps<"div">) {
   const loading = useContext(DialogLoadingContext)?.loading === true;
   return (
     <div
       data-slot="dialog-footer"
       className={cn(
-        "sticky bottom-0 z-10 mt-6 flex shrink-0 flex-col-reverse justify-end gap-2 bg-popover [&_button]:min-h-11 sm:flex-row sm:[&_button]:min-h-9",
+        "sticky bottom-0 z-10 mt-6 flex shrink-0 flex-col-reverse justify-between gap-2 bg-popover [&_button]:min-h-11 sm:flex-row sm:[&_button]:min-h-9",
         className,
       )}
       {...props}

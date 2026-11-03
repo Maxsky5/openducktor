@@ -160,7 +160,7 @@ function LifecycleDialog({
             </p>
           ) : null}
         </DialogBody>
-        <DialogFooter className="mt-0 justify-between gap-2 border-t border-border pt-5">
+        <DialogFooter className="mt-0 gap-2 border-t border-border pt-5">
           <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
             Cancel
           </Button>

@@ -6,6 +6,7 @@ import {
   render as renderWithoutConnection,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { act, createElement, type ReactElement } from "react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -217,6 +218,9 @@ describe("SessionStartModal", () => {
       expect(view.queryByRole("button", { name: "Start session" })).toBeNull();
       expect(view.getByRole("list", { name: "Session startup steps" })).toBeDefined();
       expect(view.getByText("Create worktree")).toBeDefined();
+      const continueInBackground = view.getByRole("button", { name: "Continue in background" });
+      expect(continueInBackground.className).toContain("self-end");
+      expect(continueInBackground.className).toContain("sm:self-auto");
     } finally {
       view.unmount();
       await connection.dispose();
@@ -245,6 +249,12 @@ describe("SessionStartModal", () => {
       });
       const recovery = view.getByRole("region", { name: "Session startup details" });
       expect(view.getByRole("alert").textContent).toContain("The start request failed. Retry it.");
+      const footer = view.baseElement.querySelector<HTMLElement>('[data-slot="dialog-footer"]');
+      if (!footer) throw new Error("Expected the dialog footer.");
+      const close = within(footer).getByRole("button", { name: "Close" });
+      expect(close.className).toContain("self-start");
+      expect(close.className).toContain("sm:self-auto");
+      expect(view.queryByRole("button", { name: "Edit choices" })).toBeNull();
       await act(async () => {
         await connection.startupAttempts.operation(startupAttemptId, async (context) => ({
           startupProgress: {
@@ -264,6 +274,42 @@ describe("SessionStartModal", () => {
       expect(view.queryByTestId("session-start-model-picker-field")).toBeNull();
       expect(view.queryByRole("alert")).toBeNull();
       expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
+    } finally {
+      view.unmount();
+      await connection.dispose();
+    }
+  });
+
+  test("right-aligns startup actions when the attempt has unsaved choices", async () => {
+    const connection = createTestClientConnection();
+    const startupAttemptId = connection.startupAttempts.begin({
+      origin: {
+        workspaceId: "workspace",
+        repoPath: "/repo",
+        scope: { kind: "task", taskId: "task", role: "build" },
+      },
+      label: "Start Builder session",
+      presentation: "dialog",
+    });
+    const view = renderWithoutConnection(
+      <QueryProvider connection={connection}>
+        <SessionStartModal model={createModel({ phase: { kind: "progress", startupAttemptId } })} />
+      </QueryProvider>,
+    );
+    try {
+      await act(async () => {
+        connection.startupAttempts.rejectBeforeDispatch(
+          startupAttemptId,
+          "The start request failed. Retry it.",
+        );
+      });
+      const footer = view.baseElement.querySelector<HTMLElement>('[data-slot="dialog-footer"]');
+      if (!footer) throw new Error("Expected the dialog footer.");
+      const actions = footer.lastElementChild;
+      expect(actions?.textContent).toContain("Edit choices");
+      expect(actions?.className).toContain("items-end");
+      expect(actions?.className).toContain("self-end");
+      expect(actions?.className).toContain("sm:self-auto");
     } finally {
       view.unmount();
       await connection.dispose();

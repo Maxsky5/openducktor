@@ -35,7 +35,7 @@ export function TaskCreateDiscardDialog({
           <DialogDescription>Your changes to this document have not been saved.</DialogDescription>
         </DialogBody>
 
-        <DialogFooter className="mt-0 flex-row justify-end gap-2 border-t border-border pt-5">
+        <DialogFooter className="mt-0 flex-row gap-2 border-t border-border pt-5">
           <Button
             type="button"
             variant="outline"

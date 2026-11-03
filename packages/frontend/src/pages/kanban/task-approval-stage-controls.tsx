@@ -14,7 +14,7 @@ export const STAGE_CONTENT_CLASS = "space-y-6 px-6 py-6 sm:px-8";
 
 /** The footer of a stage. On small screens, the confirm actions stack above Cancel. */
 export const STAGE_ACTIONS_FOOTER_CLASS =
-  "mt-0 flex-col-reverse gap-3 border-t border-border/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8";
+  "mt-0 flex-col-reverse gap-3 border-t border-border/80 px-6 py-4 sm:flex-row sm:items-center sm:px-8";
 
 export function SegmentedTabs<TValue extends string>({
   ariaLabel,

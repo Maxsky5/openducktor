@@ -36,7 +36,7 @@ export function TerminalCloseDialog({ model }: { model: TerminalCloseDialogModel
             Stops the terminal and the processes it started. Unfinished work may be lost.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter className="justify-between border-t border-border pt-5">
+        <DialogFooter className="border-t border-border pt-5">
           <Button type="button" variant="outline" onClick={model.onCancel} disabled={isConfirming}>
             Cancel
           </Button>

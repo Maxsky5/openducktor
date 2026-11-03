@@ -84,17 +84,22 @@ export function HostPicker({
           role="group"
           aria-label="Connection actions"
           className={
-            onCancel
-              ? "mt-0 flex-wrap-reverse items-end justify-between gap-3 border-t border-border px-6 py-4"
-              : "mt-5"
+            onCancel ? "mt-0 flex-wrap items-end gap-3 border-t border-border px-6 py-4" : "mt-5"
           }
         >
           {onCancel ? (
-            <Button type="button" variant="outline" onClick={onCancel}>
+            <Button
+              type="button"
+              variant="outline"
+              className="self-start sm:self-auto"
+              onClick={onCancel}
+            >
               Cancel
             </Button>
           ) : null}
-          <div className={cn("flex gap-2", onCancel ? "flex-wrap justify-end" : "flex-col")}>
+          <div
+            className={cn("flex gap-2", onCancel ? "ml-auto flex-wrap justify-end" : "flex-col")}
+          >
             <HostActions selection={selection} pending={pending} run={run} />
             <ConnectButton
               currentHost={currentHost}

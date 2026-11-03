@@ -96,6 +96,32 @@ test("disconnect locks the form and reports its own failure", async () => {
   expect(onCancel).toHaveBeenCalledTimes(1);
 });
 
+test("keeps Cancel left and connection actions right when the footer stacks", () => {
+  const view = render(
+    <HostPicker
+      selection={{
+        target: { kind: "remote", endpoint: "https://host.test" },
+        localHost: "web",
+        select: async () => {},
+        disconnect: async () => {},
+      }}
+      onCancel={() => {}}
+    />,
+  );
+  const cancel = view.getByRole("button", { name: "Cancel" });
+  const footer = cancel.closest('[data-slot="dialog-footer"]');
+  expect(footer).not.toBeNull();
+  expect(footer?.className).toContain("justify-between");
+  expect(footer?.className).toContain("sm:flex-row");
+  expect(footer?.className).toContain("items-end");
+  expect(footer?.className).not.toContain("flex-wrap-reverse");
+  expect(cancel.className).toContain("self-start");
+  expect(cancel.className).toContain("sm:self-auto");
+  const actions = footer?.lastElementChild;
+  expect(actions?.className).toContain("ml-auto");
+  expect(actions?.className).toContain("justify-end");
+});
+
 test("the picker connects the entered host, reports failure, and permits a local connection", async () => {
   const select = mock(async (endpoint: string | null) => {
     if (endpoint !== null) throw new Error("Host is not reachable.");
