@@ -18,7 +18,6 @@ import { hostSettingsSchema, workspaces } from "./sqlite-host-settings-schema";
 import { booleanCheck, column } from "./sqlite-schema-sql";
 import { workspaceSessions } from "./sqlite-workspace-session-schema";
 export { workspaceSessions } from "./sqlite-workspace-session-schema";
-export { workspaces } from "./sqlite-host-settings-schema";
 
 export const TASK_WORKFLOW_ARTIFACT_FORMAT_PLAIN_TEXT = "plain_text";
 const TASK_WORKFLOW_ARTIFACT_FORMATS = [TASK_WORKFLOW_ARTIFACT_FORMAT_PLAIN_TEXT] as const;
