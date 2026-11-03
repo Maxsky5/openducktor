@@ -3,6 +3,7 @@ import {
   agentSessionTitle,
   formatWorkflowAgentSessionTitle,
   withAgentSessionTitle,
+  withSummaryTitle,
   withoutSummaryTitle,
 } from "./agent-session-title";
 
@@ -42,22 +43,35 @@ describe("Agent Session scope presentation", () => {
   });
 });
 
-describe("withoutSummaryTitle", () => {
-  const repositorySummary = {
-    externalSessionId: "session-1",
-    runtimeKind: "claude",
-    workingDirectory: "/repo",
-    title: "Fairnest",
-    sessionAssociation: { kind: "repository", title: "Fairnest" },
-    startedAt: "2026-09-24T10:00:00.000Z",
-    status: "idle",
-  } as const;
+const repositorySummary = {
+  externalSessionId: "session-1",
+  runtimeKind: "claude",
+  workingDirectory: "/repo",
+  title: "Fairnest",
+  sessionAssociation: { kind: "repository", workspaceId: "repo", title: "Fairnest" },
+  startedAt: "2026-09-24T10:00:00.000Z",
+  status: "idle",
+} as const;
 
+describe("withSummaryTitle", () => {
+  test("sets the summary title and keeps the repository workspace", () => {
+    const titled = withSummaryTitle(repositorySummary, "Renamed");
+
+    expect(titled.title).toBe("Renamed");
+    expect(titled.sessionAssociation).toEqual({
+      kind: "repository",
+      workspaceId: "repo",
+      title: "Renamed",
+    });
+  });
+});
+
+describe("withoutSummaryTitle", () => {
   test("removes the summary title and the repository association title", () => {
     const cleared = withoutSummaryTitle(repositorySummary);
 
     expect(cleared.title).toBeUndefined();
-    expect(cleared.sessionAssociation).toEqual({ kind: "repository" });
+    expect(cleared.sessionAssociation).toEqual({ kind: "repository", workspaceId: "repo" });
     expect(cleared.externalSessionId).toBe("session-1");
   });
 
