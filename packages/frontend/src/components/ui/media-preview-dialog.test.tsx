@@ -49,7 +49,9 @@ describe("MediaPreviewDialog", () => {
       try {
         expect(view.getByRole("dialog").hasAttribute("aria-busy")).toBe(false);
         expect(view.getByRole("img", { name: "Ready image" })).toBeDefined();
-        expect(view.getByRole("button", { name: "Copy image" })).toBeDefined();
+        const action = view.getByRole("button", { name: "Copy image" });
+        expect(action.closest('[data-slot="dialog-footer"]')).not.toBeNull();
+        expect(action.parentElement?.className).toContain("justify-end");
       } finally {
         view.unmount();
       }
