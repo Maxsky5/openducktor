@@ -287,6 +287,9 @@ export function SessionHeader({
   ).length;
   const maxWidth = titleMaxWidth(width, actionCount);
   const openTask = menu.openTask;
+  const menuTitle = details.join(" · ");
+  const menuItems = menu.items;
+  const selectMenuItem = menu.select;
   const headerTitle = useCallback(
     () => (
       <SessionHeaderTitle
@@ -299,9 +302,6 @@ export function SessionHeader({
     ),
     [accessibilityLabel, maxWidth, openTask, title],
   );
-  const menuTitle = details.join(" · ");
-  const menuItems = menu.items;
-  const selectMenuItem = menu.select;
   const headerRight = useCallback(
     () => (
       <View style={styles.actions}>

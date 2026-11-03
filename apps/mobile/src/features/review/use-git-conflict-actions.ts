@@ -173,12 +173,10 @@ export function useGitConflictActions({
       running.current = true;
       setAction(kind);
       setNotice(null);
-      try {
-        await work();
-      } finally {
+      await work().finally(() => {
         running.current = false;
         setAction(null);
-      }
+      });
     },
     [],
   );

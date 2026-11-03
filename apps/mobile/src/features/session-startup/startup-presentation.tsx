@@ -14,25 +14,23 @@ import type { StartupOutputReading } from "./startup-output-reading";
 /** Details and reading positions stay with the attempt when its progress changes windows. */
 export function StartupPresentationProvider({ children }: PropsWithChildren): ReactElement {
   const [expanded, setExpanded] = useState<Record<string, ReadonlySet<string>>>({});
-  const scroll = useRef(new Map<string, number>());
-  const notificationPresented = useRef(new Set<string>());
+  const [scroll] = useState(() => new Map<string, number>());
+  const [notificationPresented] = useState(() => new Set<string>());
   const readings = useRef(new Map<string, Map<string, StartupOutputReading>>());
-  const sheetClosers = useRef(new Map<string, () => void>());
+  const [sheetClosers] = useState(() => new Map<string, () => void>());
   const attempts = useStartupAttempts();
   useEffect(() => {
     const retained = new Set(attempts.map((attempt) => attempt.id));
-    for (const id of scroll.current.keys()) if (!retained.has(id)) scroll.current.delete(id);
-    for (const id of notificationPresented.current)
-      if (!retained.has(id)) notificationPresented.current.delete(id);
+    for (const id of scroll.keys()) if (!retained.has(id)) scroll.delete(id);
+    for (const id of notificationPresented) if (!retained.has(id)) notificationPresented.delete(id);
     for (const id of readings.current.keys()) if (!retained.has(id)) readings.current.delete(id);
-    for (const id of sheetClosers.current.keys())
-      if (!retained.has(id)) sheetClosers.current.delete(id);
+    for (const id of sheetClosers.keys()) if (!retained.has(id)) sheetClosers.delete(id);
     setExpanded((current) =>
       Object.keys(current).every((id) => retained.has(id))
         ? current
         : Object.fromEntries(Object.entries(current).filter(([id]) => retained.has(id))),
     );
-  }, [attempts]);
+  }, [attempts, notificationPresented, scroll, sheetClosers]);
   const toggle = useCallback((attemptId: string, stepId: string) => {
     setExpanded((current) => {
       const next = new Set(current[attemptId]);
@@ -59,13 +57,13 @@ export function StartupPresentationProvider({ children }: PropsWithChildren): Re
   const value = useMemo(
     () => ({
       expanded,
-      scroll: scroll.current,
-      notificationPresented: notificationPresented.current,
+      scroll,
+      notificationPresented,
       toggle,
       outputReading,
-      sheetClosers: sheetClosers.current,
+      sheetClosers,
     }),
-    [expanded, toggle, outputReading],
+    [expanded, notificationPresented, outputReading, scroll, sheetClosers, toggle],
   );
   return <StartupPresentationContext value={value}>{children}</StartupPresentationContext>;
 }

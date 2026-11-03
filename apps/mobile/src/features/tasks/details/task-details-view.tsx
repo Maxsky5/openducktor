@@ -299,11 +299,16 @@ function TaskDetailsContent({
   );
 
   // Document images and isolated pages load near this viewport.
-  const viewport = useListViewport();
+  const {
+    store: viewportStore,
+    frameRef,
+    onFrameLayout,
+    onScroll: onViewportScroll,
+  } = useListViewport();
 
   return (
-    <ViewportProvider value={viewport.store}>
-      <View ref={viewport.frameRef} style={styles.root} onLayout={viewport.onFrameLayout}>
+    <ViewportProvider value={viewportStore}>
+      <View ref={frameRef} style={styles.root} onLayout={onFrameLayout}>
         {embedded ? null : <Stack.Screen options={screenOptions} />}
         <View style={styles.split}>
           {split ? (
@@ -325,7 +330,7 @@ function TaskDetailsContent({
               renderItem={renderItem}
               keyExtractor={detailsRowKey}
               getItemType={detailsRowType}
-              onScroll={viewport.onScroll}
+              onScroll={onViewportScroll}
               scrollEventThrottle={32}
               contentInsetAdjustmentBehavior="automatic"
               // The safe area sets this end padding. It changes only on rotation and moves no row.

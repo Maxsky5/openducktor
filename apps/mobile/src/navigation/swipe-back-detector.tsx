@@ -74,6 +74,17 @@ const at = (translationX: number) => {
   };
 };
 
+type StackCallback =
+  GestureProviderProps["gestureDetectorBridge"]["current"]["stackUseEffectCallback"];
+
+/** Gives the stack the callback that it calls with its ref after each render. */
+const connectStack = (
+  bridge: GestureProviderProps["gestureDetectorBridge"],
+  callback: StackCallback,
+): void => {
+  bridge.current.stackUseEffectCallback = callback;
+};
+
 /**
  * The Android swipe back of a native stack. The finger moves the top screen on the UI thread and
  * shows the screen below. A release past a third of the width, or a flick, goes back.
@@ -99,9 +110,9 @@ function GHWrapper({
 
   // Children run their effects first, so the stack calls this callback after it is set.
   useEffect(() => {
-    gestureDetectorBridge.current.stackUseEffectCallback = (stackRef) => {
+    connectStack(gestureDetectorBridge, (stackRef) => {
       stackTag.set(findNodeHandle(stackRef.current) ?? -1);
-    };
+    });
   });
   // The stack renders again for each pushed or popped screen, so the map stays current.
   useEffect(() => {

@@ -62,7 +62,7 @@ export function StartupProgressHost(): ReactElement | null {
 
 function StartupStack(): ReactElement | null {
   // Keep the viewport open while the last native card finishes its exit.
-  const lastSize = useRef({ viewport: 0, content: 0 });
+  const [lastSize, setLastSize] = useState({ viewport: 0, content: 0 });
   const attempts = useStartupAttempts();
   const { startupAttempts } = useClientConnection();
   const hidden = useSyncExternalStore(
@@ -99,13 +99,16 @@ function StartupStack(): ReactElement | null {
         ]}
       >
         <ScrollView
-          style={[styles.stack, empty && { height: lastSize.current.viewport }]}
-          contentContainerStyle={[styles.content, empty && { minHeight: lastSize.current.content }]}
+          style={[styles.stack, empty && { height: lastSize.viewport }]}
+          contentContainerStyle={[styles.content, empty && { minHeight: lastSize.content }]}
           onLayout={(event) => {
-            if (!empty) lastSize.current.viewport = event.nativeEvent.layout.height;
+            const viewport = event.nativeEvent.layout.height;
+            if (!empty)
+              setLastSize((size) => (size.viewport === viewport ? size : { ...size, viewport }));
           }}
-          onContentSizeChange={(_width, contentHeight) => {
-            if (!empty) lastSize.current.content = contentHeight;
+          onContentSizeChange={(_width, content) => {
+            if (!empty)
+              setLastSize((size) => (size.content === content ? size : { ...size, content }));
           }}
           nestedScrollEnabled
           bounces={false}
@@ -144,9 +147,12 @@ function StartupCard({
   // The stack grows from the bottom of the screen. The card animates its own height, so the views
   // above it follow each frame and the card bottom stays in place.
   const height = useSharedValue<number | null>(null);
-  const resizeStyle = useAnimatedStyle(() =>
-    height.value === null ? {} : { height: height.value },
-  );
+  // The first layout sets the height at once. The JavaScript thread does not read the shared value.
+  const measured = useRef(false);
+  const resizeStyle = useAnimatedStyle(() => {
+    const value = height.get();
+    return value === null ? {} : { height: value };
+  });
   const entering = reducedMotion ? CARD_ENTERING_REDUCED : CARD_ENTERING;
   return (
     <Animated.View
@@ -158,7 +164,8 @@ function StartupCard({
         <View
           onLayout={(event) => {
             const next = event.nativeEvent.layout.height;
-            height.value = height.value === null ? next : withTiming(next, CARD_RESIZE);
+            height.set(measured.current ? withTiming(next, CARD_RESIZE) : next);
+            measured.current = true;
           }}
         >
           <StartupTrace

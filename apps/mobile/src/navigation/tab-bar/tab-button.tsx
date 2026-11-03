@@ -58,19 +58,26 @@ export const pressTabRoute = (
   if (!focused && !event.defaultPrevented) navigateToTab(routeKey);
 };
 
-/** The tab buttons of the navigator, in route order. */
-export const tabButtons = ({
+/**
+ * The tab buttons of the navigator from tab `from` up to tab `to`, in route order. The bar puts the
+ * create button between two ranges.
+ */
+export function TabButtons({
   state,
   descriptors,
   progress,
   placement,
   onPressTab,
+  from,
+  to,
 }: Pick<BottomTabBarProps, "state" | "descriptors"> & {
   progress: SharedValue<number>;
   placement: TabPlacement;
   onPressTab: (routeKey: string) => void;
-}): ReactElement[] =>
-  state.routes.flatMap((route, index) => {
+  from: number;
+  to?: number | undefined;
+}): ReactElement {
+  const buttons = state.routes.flatMap((route, index) => {
     const meta = tabMeta(route.name);
     if (!meta) return [];
     const tab: TabButtonProps = {
@@ -88,6 +95,8 @@ export const tabButtons = ({
       <TabButton key={route.key} {...tab} />
     );
   });
+  return <>{buttons.slice(from, to)}</>;
+}
 
 type TabButtonProps = {
   label: string;
