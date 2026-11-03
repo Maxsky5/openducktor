@@ -456,6 +456,41 @@ describe("workspace session worktree task owners", () => {
     expect(batches).toEqual([["native-first", "native-second"]]);
   });
 
+  test("a confirmation reports a Claude folder that cannot be listed, and a required read fails on it", async () => {
+    const dependencies = {
+      ...dependenciesFor({}),
+      claudeSessionMetadata: {
+        readWorkingDirectories: () =>
+          Effect.fail(
+            new HostOperationError({
+              operation: "claude.session.metadata.readWorkingDirectory",
+              message: "Cannot list the Claude transcripts: EACCES.",
+            }),
+          ),
+      },
+    };
+    dependencies.store = chatStore((workspaceId) =>
+      workspaceId === scope.workspaceId
+        ? [{ ...record("fork", "/worktrees/fork"), archivedAt: 2 }]
+        : [],
+    );
+    const read = (history: "report" | "required") =>
+      Effect.runPromise(
+        readWorktreePathOwners(dependencies, scope, ["/worktrees/shared"], {
+          source: { kind: "tasks", taskIds: ["task-1"] },
+          history,
+        }),
+      );
+
+    expect(await read("report")).toEqual({
+      owners: { checkoutWorkspaces: [], tasks: [], chats: [], historyChats: [] },
+      historyReadErrors: [
+        "Cannot check the native history of saved Claude chats. Cannot list the Claude transcripts: EACCES.",
+      ],
+    });
+    await expect(read("required")).rejects.toThrow("Cannot list the Claude transcripts: EACCES.");
+  });
+
   test("blocks removal and names each task and saved chat that needs the worktree", async () => {
     const source = record("source", "/worktrees/shared");
     const sibling = record("sibling", "/worktrees/shared");

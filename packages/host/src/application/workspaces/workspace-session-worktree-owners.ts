@@ -191,7 +191,7 @@ const readChatOwners = (
             return [{ ...candidate, externalSessionId }];
           });
     if (claudeChats.length === 0) return { chats, historyChats: [], historyReadErrors: [] };
-    const reads = yield* dependencies.claudeSessionMetadata
+    const batch = yield* dependencies.claudeSessionMetadata
       .readWorkingDirectories(claudeChats.map(({ externalSessionId }) => externalSessionId))
       .pipe(
         Effect.mapError(
@@ -202,7 +202,14 @@ const readChatOwners = (
               cause,
             }),
         ),
+        Effect.result,
       );
+    if (batch._tag === "Failure") {
+      // A confirmation only warns about history, also when no history can be read.
+      if (history === "required") return yield* batch.failure;
+      return { chats, historyChats: [], historyReadErrors: [batch.failure.message] };
+    }
+    const reads = batch.success;
     const failures = claudeChats.flatMap((candidate) => {
       const read = reads.get(candidate.externalSessionId);
       if (read?.kind !== "failed") return [];
