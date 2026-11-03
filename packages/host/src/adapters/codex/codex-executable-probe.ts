@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Cause, Effect, Exit } from "effect";
-import { z } from "zod";
 import {
   HostOperationError,
   type HostOperationErrorAggregate,
@@ -9,6 +8,7 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
+import { CodexAppServerClosedError } from "../../ports/codex-app-server-port";
 import {
   type ProcessTreePlatform,
   type ProcessTreeTerminator,
@@ -38,13 +38,11 @@ type CodexProbeTransport = Pick<
   "close" | "notify" | "rejectPendingRequestsForShutdown" | "request"
 >;
 
-const capturedStderrSchema = z.object({ stderr: z.string().min(1) });
-
 /** Prefers the stderr of a Codex process that closed, because it names the startup problem. */
-const codexFailureDetail = (cause: CodexTransportBaseError): string => {
-  const details = capturedStderrSchema.safeParse(cause.details);
-  return details.success ? details.data.stderr : cause.message;
-};
+const codexFailureDetail = (cause: CodexTransportBaseError): string =>
+  cause instanceof CodexAppServerClosedError && cause.details?.stderr
+    ? cause.details.stderr
+    : cause.message;
 
 export const verifyCodexAppServerProtocol = (
   transport: CodexProbeTransport,

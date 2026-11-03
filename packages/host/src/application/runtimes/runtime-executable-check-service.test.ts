@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeHealth, RuntimeKind } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
-import {
-  HostDependencyError,
-  HostOperationError,
-  HostValidationError,
-} from "../../effect/host-errors";
+import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createRuntimeDefinitionsService } from "./runtime-definitions-service";
@@ -139,19 +135,21 @@ describe("runtime executable check service", () => {
     ]);
   });
 
-  test("reports a failed runtime check on its row and keeps the other rows", async () => {
+  test("keeps the error and found version of a failed runtime check and the other rows", async () => {
     const failingService = createRuntimeExecutableCheckService({
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeHealth: {
         ...runtimeHealth,
         getRuntimeHealth(kind, executablePath) {
           if (kind === "claude") {
-            return Effect.fail(
-              new HostOperationError({
-                operation: "claudeExecutableProbe.initialize",
-                message: "Claude Code did not start.",
-              }),
-            );
+            return Effect.succeed({
+              kind,
+              enabled: true,
+              ok: false,
+              executablePath,
+              version: "2.1.200 (Claude Code)",
+              error: "Claude Code did not start.",
+            } satisfies RuntimeHealth);
           }
           return runtimeHealth.getRuntimeHealth(kind, executablePath);
         },
@@ -166,7 +164,7 @@ describe("runtime executable check service", () => {
       kind: "claude",
       path: "/tools/claude",
       ok: false,
-      version: null,
+      version: "2.1.200 (Claude Code)",
       error: "Claude Code did not start.",
     });
   });

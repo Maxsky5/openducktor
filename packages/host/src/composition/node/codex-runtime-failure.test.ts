@@ -21,7 +21,7 @@ import {
 } from "../../adapters/codex/codex-runtime-starter.test-support";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createSourceRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
-import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createBrowserEngineTestDouble } from "../../test-support/browser-engine-test-double";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
@@ -243,7 +243,7 @@ const createRouter = async (
       runtimeHealth: {
         readVersion: () => Effect.succeed(null),
         getRuntimeHealth: () =>
-          Effect.fail(new HostOperationError({ operation: "test.health", message: "not probed" })),
+          Effect.die(new Error("The runtime health probe must not run in this test.")),
       },
       systemCommands: stubCommands(),
       taskEventPublicationReporter: { report: () => Effect.void },

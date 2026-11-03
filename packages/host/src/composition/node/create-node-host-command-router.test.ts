@@ -82,7 +82,7 @@ const unusedRuntimeStarter: RuntimeStarterPort = {
 const runtimeHealth: RuntimeHealthPort = {
   readVersion: () => Effect.succeed(null),
   getRuntimeHealth: () =>
-    Effect.fail(new HostOperationError({ operation: "test.health", message: "not probed" })),
+    Effect.die(new Error("The runtime health probe must not run in this test.")),
 };
 
 const createMcpHostBridge = (): McpHostBridgeServer =>

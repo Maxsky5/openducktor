@@ -32,6 +32,7 @@ import {
 import { useWorkspaceCreation } from "@/components/features/repository/use-workspace-creation";
 import { useWorkspaceCreationModels } from "@/components/features/repository/use-workspace-creation-models";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
+import { RuntimeMessageText } from "@/components/features/settings/runtime-message-text";
 import { SettingsNotificationsSection } from "@/components/features/settings/settings-notifications-section";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -291,7 +292,7 @@ export function RuntimeStage({
               role="alert"
               tabIndex={-1}
             >
-              {stageError}
+              <RuntimeMessageText text={stageError} />
             </p>
           ) : null}
         </CardContent>

@@ -678,7 +678,9 @@ describe("useOnboardingRuntimeSetup", () => {
     });
 
     await within(opencodeSection()).findByText("Needs attention");
-    expect(within(opencodeSection()).getByText(error)).toBeTruthy();
+    const status = document.getElementById("runtime-executable-opencode-status");
+    expect(status?.textContent).toContain(error.replaceAll("`", ""));
+    expect(within(opencodeSection()).getByText("opencode upgrade").tagName).toBe("CODE");
     expect(within(opencodeSection()).getByText("Found version: 1.0.0")).toBeTruthy();
   });
 

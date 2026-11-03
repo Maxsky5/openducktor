@@ -2,6 +2,7 @@ import type { AgentRuntimes, RuntimeDescriptor, RuntimeKind } from "@openducktor
 import { CircleAlert, CircleCheck, FolderOpen, LoaderCircle, RefreshCw } from "lucide-react";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
+import { RuntimeMessageText } from "@/components/features/settings/runtime-message-text";
 import { FolderPickerDialog } from "@/components/features/repository/folder-picker-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -89,7 +90,11 @@ function RuntimeStatusMessage({
           aria-hidden="true"
         />
         <span className="flex flex-col gap-0.5">
-          <span>{result.error}</span>
+          {result.error ? (
+            <span>
+              <RuntimeMessageText text={result.error} />
+            </span>
+          ) : null}
           {result.version ? (
             <span className="text-muted-foreground">Found version: {result.version}</span>
           ) : null}

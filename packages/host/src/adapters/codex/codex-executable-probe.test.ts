@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { CodexAppServerClosedError } from "../../ports/codex-app-server-port";
 import type { CodexAppServerChildTransport } from "./codex-app-server-transport-types";
 import { createCodexExecutableProbe, verifyCodexAppServerProtocol } from "./codex-executable-probe";
 
@@ -83,7 +84,7 @@ describe("verifyCodexAppServerProtocol", () => {
     const transport: CodexProbeTransport = {
       request: () =>
         Effect.fail(
-          new HostOperationError({
+          new CodexAppServerClosedError({
             operation: "codexAppServerTransport.childProcess",
             message:
               "Codex app-server closed: process exited with code 1 for runtime executable-probe-1: Error loading configuration",
@@ -100,7 +101,7 @@ describe("verifyCodexAppServerProtocol", () => {
     );
 
     expect(failure.message).toBe(
-      "Codex at '/usr/local/bin/codex' did not start: Error loading configuration. OpenDucktor needs a Codex version with the `codex app-server` command. Fix the reported problem, or update Codex to the latest version, for example with `npm install -g @openai/codex@latest`. Then try again.",
+      "Codex at '/usr/local/bin/codex' did not start: Error loading configuration. OpenDucktor needs a Codex version with the `codex app-server` command. Fix the reported problem, or update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`. Then try again.",
     );
   });
 

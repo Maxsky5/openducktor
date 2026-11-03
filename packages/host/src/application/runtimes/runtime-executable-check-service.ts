@@ -59,12 +59,7 @@ const checkRuntimeExecutable = ({
     }
 
     const executablePath = resolution.success.path;
-    // A runtime that fails its check must not hide the results of the other runtimes.
-    const healthResult = yield* Effect.result(runtimeHealth.getRuntimeHealth(kind, executablePath));
-    if (healthResult._tag === "Failure") {
-      return invalidRow(kind, executablePath, healthResult.failure);
-    }
-    const health = healthResult.success;
+    const health = yield* runtimeHealth.getRuntimeHealth(kind, executablePath);
     return {
       kind,
       path: health.executablePath ?? executablePath,

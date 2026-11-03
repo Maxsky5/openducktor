@@ -1,5 +1,6 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { HostValidationError } from "../../effect/host-errors";
+import { CLAUDE_CODE_MINIMUM_VERSION_TEXT } from "../runtimes/runtime-executable-guidance";
 import { childSessions } from "./claude-agent-sdk-session-children";
 
 type TaskSnapshot = Extract<SDKMessage, { subtype: "background_tasks_changed" }>;
@@ -163,7 +164,7 @@ const taskRun = (
     if (registered || known)
       throw new HostValidationError({
         field: "claudeBackgroundTaskRun",
-        message: `Claude did not identify the run of task '${taskId}'. Update Claude Code to version 2.1.306 or later, then resume the session.`,
+        message: `Claude did not identify the run of task '${taskId}'. Update Claude Code to version ${CLAUDE_CODE_MINIMUM_VERSION_TEXT} or later with \`claude update\`, then resume the session.`,
       });
     return null;
   }

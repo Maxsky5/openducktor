@@ -1,7 +1,10 @@
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { Effect, Fiber } from "effect";
-import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server-port";
+import {
+  CodexAppServerClosedError,
+  type CodexAppServerProtocolMessage,
+} from "../../ports/codex-app-server-port";
 import type { CodexAppServerServerNotificationMethod } from "../../ports/codex-app-server-protocol";
 import { HostValidationError } from "../../effect/host-errors";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
@@ -573,6 +576,23 @@ describe("createCodexAppServerTransport", () => {
     await expect(
       Effect.runPromise(transport.request({ method: "model/list", params: {} })),
     ).rejects.not.toThrow("first-error-line");
+  });
+
+  test("reports a closed process with its stderr as a typed error", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
+
+    child.stderr.write("Error loading configuration\n");
+    await waitForStreamEvents();
+    child.emit("close", 1, null);
+
+    const failure = await Effect.runPromise(
+      Effect.flip(transport.request({ method: "model/list", params: {} })),
+    );
+    expect(failure).toBeInstanceOf(CodexAppServerClosedError);
+    expect(failure).toMatchObject({
+      details: { runtimeId: "runtime-1", stderr: "Error loading configuration" },
+    });
   });
 
   test("keeps the transport usable after a late response to an interrupted sent request", async () => {
