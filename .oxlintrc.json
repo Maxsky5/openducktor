@@ -394,6 +394,11 @@
             ],
             "paths": [
               {
+                "name": "@shopify/flash-list",
+                "importNames": ["FlashList"],
+                "message": "Import FlashList from @/ui/flash-list. It renders the first screen of rows in one or two passes."
+              },
+              {
                 "name": "react-native-unistyles",
                 "importNames": ["useUnistyles", "withUnistyles"],
                 "message": "Read the theme with useAppTheme of @/theme/app-theme-context. useUnistyles and withUnistyles add a native listener and new proxies on each render."

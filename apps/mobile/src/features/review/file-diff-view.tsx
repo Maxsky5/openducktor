@@ -1,6 +1,7 @@
 import type { GitFileDiff } from "@openducktor/contracts";
 import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { type ReactElement, useCallback, useMemo } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -27,7 +28,6 @@ import { LineCounts } from "./line-counts";
 import { prepareFileDiff } from "./prepared-diff";
 import { useOwnerDiffComments } from "./use-diff-comments";
 import { useWarmDiffSyntax } from "./use-warm-diff-syntax";
-import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 /**
  * The whole unified File Diff of one changed file, in the desktop diff style, with Inline Diff
@@ -138,7 +138,6 @@ export function FileDiffView({
     <KeyboardInsetView style={styles.screen} barSafeArea>
       <View style={styles.page}>
         <FlashList
-          overrideProps={FLASH_LIST_FIRST_RENDER}
           data={rows}
           renderItem={renderItem}
           keyExtractor={keyOf}

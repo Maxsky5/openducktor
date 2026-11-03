@@ -8,7 +8,8 @@ import {
   useHideResolvedComments,
 } from "@openducktor/frontend-core/review/pull-request-comment-filters";
 import { TASK_EXECUTION_CI_PANEL_COPY } from "@openducktor/frontend-core/review/task-execution-ci-panel-copy";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
@@ -44,7 +45,6 @@ import {
 import { ChecksPanelState, PullRequestChip } from "./checks-parts";
 import { CheckRow, ChecksHeaderRow, ChecksListNote, CommentsHeaderRow } from "./checks-rows";
 import { useScreenInView } from "@/navigation/use-screen-in-view";
-import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 const STATE_ACTION_LABELS = {
   retry: { label: "Retry", pendingLabel: "Retrying" },
@@ -312,7 +312,6 @@ function LoadedChecks({
   );
   return (
     <FlashList
-      overrideProps={FLASH_LIST_FIRST_RENDER}
       data={items}
       renderItem={renderItem}
       keyExtractor={keyOf}

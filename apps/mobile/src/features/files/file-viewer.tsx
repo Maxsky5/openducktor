@@ -2,7 +2,8 @@ import type { ChatFileScope } from "@openducktor/contracts";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { isMarkdownFile } from "@openducktor/frontend-core/lib/markdown-file";
 import { workspaceFilePreviewQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
@@ -34,7 +35,6 @@ import {
   textLineCount,
 } from "./file-content-model";
 import { useScreenInView } from "@/navigation/use-screen-in-view";
-import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 /**
  * A read-only view of one file, as the desktop file preview: the code view with line numbers and
@@ -236,7 +236,6 @@ function MarkdownPreview({ path, contents }: { path: string; contents: string })
     <ViewportProvider value={viewportStore}>
       <View ref={frameRef} style={styles.fill} onLayout={onFrameLayout}>
         <FlashList
-          overrideProps={FLASH_LIST_FIRST_RENDER}
           data={rows}
           renderItem={renderItem}
           keyExtractor={markdownRowKey}
@@ -280,7 +279,6 @@ export function CodeLines({ path, contents }: { path: string; contents: string }
   return (
     <View style={styles.code}>
       <FlashList
-        overrideProps={FLASH_LIST_FIRST_RENDER}
         data={lines}
         renderItem={renderItem}
         keyExtractor={lineKey}

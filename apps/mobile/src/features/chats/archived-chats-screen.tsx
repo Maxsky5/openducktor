@@ -9,7 +9,7 @@ import {
   filterWorkspaceSessions,
   useRestoreWorkspaceSession,
 } from "@openducktor/frontend-core/workspace-sessions/archived-workspace-sessions";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { type NativeStackNavigationOptions, Stack } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
@@ -31,7 +31,6 @@ import { type ArchivedChatItem, archivedChatItems, startOfLocalDay } from "./cha
 import { useTabBarSpace } from "@/navigation/tab-bar/tab-bar-metrics";
 import { ListRefreshControl } from "@/ui/refresh-control";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
-import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 const keyOf = (item: ArchivedChatItem): string => item.key;
 const typeOf = (item: ArchivedChatItem): string => item.type;
@@ -161,7 +160,6 @@ function ArchivedChatList({
   }
   return (
     <FlashList
-      overrideProps={FLASH_LIST_FIRST_RENDER}
       data={items}
       keyExtractor={keyOf}
       getItemType={typeOf}

@@ -8,7 +8,7 @@ import {
 } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { workspaceCatalogQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { useTerminalTransport } from "@openducktor/frontend-core/terminals/use-terminal-transport";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { type NativeStackNavigationOptions, Stack, useRouter } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
@@ -53,7 +53,6 @@ import {
   useAllSessionNavigation,
   useSessionListGrouping,
 } from "./session-navigation-provider";
-import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 const keyOf = (item: SessionListItem): string => item.key;
 const typeOf = (item: SessionListItem): string => item.type;
@@ -333,7 +332,6 @@ export function SessionsScreen(): ReactElement {
         <View style={styles.column}>
           {state === "list" ? (
             <FlashList
-              overrideProps={FLASH_LIST_FIRST_RENDER}
               data={items}
               keyExtractor={keyOf}
               getItemType={typeOf}

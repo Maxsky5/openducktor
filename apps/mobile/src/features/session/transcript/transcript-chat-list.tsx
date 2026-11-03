@@ -1,11 +1,7 @@
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
-import {
-  FlashList,
-  type FlashListRef,
-  type ListRenderItemInfo,
-  type ViewToken,
-} from "@shopify/flash-list";
+import { type FlashListRef, type ListRenderItemInfo, type ViewToken } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import {
   memo,
   type ReactElement,
@@ -48,7 +44,6 @@ import { messageRowKind, type PresentToolCall } from "./transcript-row-type";
 import { type TranscriptFullView, TranscriptRowsProvider } from "./transcript-rows-context";
 import { createVisibleRowsStore, rowKeysNearViewport } from "./transcript-visibility";
 import { useTranscriptRowsContext } from "./use-transcript-rows";
-import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 export type TranscriptChatListProps = {
   kind: TranscriptListKind;
@@ -227,7 +222,6 @@ export const TranscriptChatList = memo(function TranscriptChatList({
     >
       <TranscriptRowsProvider value={context}>
         <FlashList
-          overrideProps={FLASH_LIST_FIRST_RENDER}
           ref={listRef}
           data={items}
           inverted={kind === "latest"}

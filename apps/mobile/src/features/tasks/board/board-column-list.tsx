@@ -1,5 +1,6 @@
 import { type BuiltinTaskCard as TaskCardData } from "@openducktor/workflows";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { Fragment, memo, type ReactElement, useCallback } from "react";
 import { type DimensionValue, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -11,7 +12,6 @@ import { LaneEmpty } from "./board-lane";
 import { LaneShownContext } from "./lane-shown-context";
 import { TaskCard, type TaskCardHandlers, TaskCardPlaceholder } from "./task-card";
 import type { BoardSessionLookup } from "./use-task-board";
-import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 export type BoardColumnListProps = TaskCardHandlers & {
   column: BoardColumn;
@@ -75,7 +75,6 @@ export const BoardColumnList = memo(function BoardColumnList({
   return (
     <LaneShownContext value={active}>
       <FlashList
-        overrideProps={FLASH_LIST_FIRST_RENDER}
         // A rotation changes the column count, so the list lays out again from the start.
         key={grid ? "grid" : "list"}
         data={column.tasks}

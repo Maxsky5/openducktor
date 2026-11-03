@@ -10,7 +10,8 @@ import { loadAgentSessionListFromQuery } from "@openducktor/frontend-core/querie
 import { gitProviderReadError } from "@openducktor/frontend-core/review/git-provider-health";
 import { canDetectTaskPullRequest } from "@openducktor/frontend-core/tasks/presentation/task-display";
 import { resolveTaskPullRequestActions } from "@openducktor/frontend-core/tasks/pull-requests/pull-request-presentation";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type NativeStackNavigationOptions, Stack, useRouter } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
@@ -46,7 +47,6 @@ import { TaskWorkflowRail } from "./task-workflow-rail";
 import { useTaskSessionGroups } from "./use-task-session-groups";
 import { useTaskDetailsActions } from "./use-task-details-actions";
 import { useTaskWorkspaceScope } from "./use-task-workspace-scope";
-import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 /**
  * The navigation bar takes the card color of the details header under it, so both read as one
@@ -327,7 +327,6 @@ function TaskDetailsContent({
           ) : null}
           <View style={styles.root}>
             <FlashList
-              overrideProps={FLASH_LIST_FIRST_RENDER}
               data={rows}
               renderItem={renderItem}
               keyExtractor={detailsRowKey}

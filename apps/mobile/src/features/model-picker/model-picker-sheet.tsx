@@ -4,7 +4,7 @@ import type {
   ModelPickerRuntime,
   ModelPickerValue,
 } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { type ReactElement, useCallback, useMemo } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -28,7 +28,6 @@ import { modelPickerFavoriteDisabledReason } from "@openducktor/frontend-core/se
 import type { AgentModelFavoritesState } from "@openducktor/frontend-core/sessions/model-selection/use-agent-model-favorites";
 import { useModelFavorites } from "./use-model-favorites";
 import { useCommandGate } from "@/host-session/active-session-context";
-import { FLASH_LIST_FIRST_RENDER } from "@/ui/flash-list-first-render";
 
 const keyOf = (row: ModelPickerListRow): string => row.key;
 const INITIAL_SCROLL = { viewOffset: -120 };
@@ -241,7 +240,6 @@ function ModelPickerContent({
       <FavoriteNotice state={favoriteState} />
       <View style={styles.list}>
         <FlashList
-          overrideProps={FLASH_LIST_FIRST_RENDER}
           // A new view or search starts at the top of its own list.
           key={`${picker.view}:${picker.searching ? "search" : "browse"}`}
           data={rows}
