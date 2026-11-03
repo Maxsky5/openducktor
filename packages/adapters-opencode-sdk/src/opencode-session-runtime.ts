@@ -1194,7 +1194,7 @@ export const createPrepareOpencodeSessionRuntime =
             if (cursor) cursors.add(cursor);
           } while (cursor && !signal.aborted);
         },
-        async inspectSession({ workspaceId, ...ref }) {
+        async inspectSession(ref) {
           const detail = await controller.readNativeSession(ref, "inspect the native conversation");
           if (detail.parentID)
             throw operationError(
@@ -1214,14 +1214,12 @@ export const createPrepareOpencodeSessionRuntime =
             metadata: metadata(detail),
             selectedModel,
             attach: async () => {
-              const sessionScope = { kind: "repository", workspaceId } as const;
               await controller.bind({
                 ...ref,
                 runtimeKind: "opencode",
                 runtimePolicy: { kind: "opencode" },
-                sessionScope,
               });
-              admittedRoots.set(ref.externalSessionId, { ...ref, sessionScope });
+              admittedRoots.set(ref.externalSessionId, ref);
             },
           };
         },

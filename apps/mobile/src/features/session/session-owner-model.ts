@@ -46,7 +46,6 @@ const taskResolutions = new WeakMap<AgentSessionAssociation, SessionOwnerResolut
 const chatOwner = (record: WorkspaceSession, workspaceId: string): SessionOwnerResolution => {
   let resolution = chatResolutions.get(record);
   if (!resolution) {
-    // The host registers a chat session with its workspace, and checks the scope of each read.
     const scope = { kind: "repository", workspaceId } as const;
     resolution = {
       status: "ready",

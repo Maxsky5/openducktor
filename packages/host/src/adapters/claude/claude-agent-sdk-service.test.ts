@@ -26,7 +26,6 @@ import {
   createClaudeSession,
   openClaudeQueryWithMessages,
 } from "./claude-agent-sdk-session-io.test-support";
-import { createClaudeSessionSummary } from "./claude-agent-sdk-session-shape";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
@@ -154,15 +153,8 @@ describe("createClaudeAgentSdkService", () => {
           preserveNativeSettings: true,
           startedMessage: "Imported session",
         });
-        const session = createSession({
-          input: request.input,
-          runtimeId: request.runtimeId,
-          summary: createClaudeSessionSummary(
-            request.input,
-            { externalSessionId: "session-1" },
-            "2026-06-25T20:00:00.000Z",
-          ),
-        });
+        expect(request.input.sessionScope).toEqual(workspaceScope);
+        const session = createSession({ input: request.input, runtimeId: request.runtimeId });
         request.sessionStore.set(session);
         return session.summary;
       },
@@ -177,7 +169,7 @@ describe("createClaudeAgentSdkService", () => {
     });
     try {
       const source = await Effect.runPromise(
-        service.inspectSessionForImport({ ...ref, workspaceId: "workspace-1" }, "runtime"),
+        service.inspectSessionForImport({ ...ref, sessionScope: workspaceScope }, "runtime"),
       );
       expect(source.selectedModel?.modelId).toBe("native-claude");
       expect(create).not.toHaveBeenCalled();
@@ -185,16 +177,6 @@ describe("createClaudeAgentSdkService", () => {
       await Effect.runPromise(source.attach);
       expect(create).toHaveBeenCalledTimes(1);
       expect(store.get(ref.externalSessionId)).toBeDefined();
-      // The workspace chat reads the imported session with its workspace scope.
-      await expect(
-        Effect.runPromise(
-          service.loadSessionTodos({
-            ...ref,
-            runtimePolicy: { kind: "claude" },
-            sessionScope: workspaceScope,
-          }),
-        ),
-      ).resolves.toEqual([]);
     } finally {
       metadata.mockRestore();
       model.mockRestore();

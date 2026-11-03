@@ -612,7 +612,10 @@ test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
             .runWorktreeRead(
               workingDirectory,
               Effect.promise(() =>
-                importPort.inspectSession({ ...historyRef, workspaceId: "workspace-1" }),
+                importPort.inspectSession({
+                  ...historyRef,
+                  sessionScope: { kind: "repository", workspaceId: "workspace-1" },
+                }),
               ),
             )
             .pipe(Effect.timeout("2 seconds")),

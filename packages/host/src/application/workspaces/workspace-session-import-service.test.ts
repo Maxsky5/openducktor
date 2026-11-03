@@ -8,6 +8,7 @@ import {
 } from "@openducktor/contracts";
 import { workspaceSessionCatalog } from "../../test-support/workspace-session-ownership";
 import type { RuntimeSessionOwner } from "../../ports/workspace-session-store-port";
+import type { RuntimeSessionImportRequest } from "@openducktor/core";
 import { Deferred, Effect, Fiber } from "effect";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
@@ -32,6 +33,7 @@ const setup = async () => {
   const store = createSqliteWorkspaceSessionStore(database);
   const registry = createLiveSessionAdapterRegistry();
   const calls: string[] = [];
+  const inspected: RuntimeSessionImportRequest[] = [];
   type ImportTestState = {
     failOpen: boolean;
     failSave: boolean;
@@ -93,6 +95,7 @@ const setup = async () => {
           inspectSession: (ref) =>
             Effect.suspend(() => {
               calls.push("inspectSession");
+              inspected.push(ref);
               if (state.failOpen) return Effect.fail(failure("opening source failed"));
               return Effect.succeed({
                 metadata: {
@@ -234,6 +237,7 @@ const setup = async () => {
     state,
     row,
     calls,
+    inspected,
     input,
     list,
     registry,
@@ -360,6 +364,9 @@ describe("external workspace session import", () => {
       targetBranch: { remote: "origin", branch: "develop" },
     });
     expect(h.calls).toEqual(["inspectSession", "save", "attach", "publish"]);
+    expect(h.inspected.map((request) => request.sessionScope)).toEqual([
+      { kind: "repository", workspaceId: h.input.workspaceId },
+    ]);
     await Effect.runPromise(
       h.store.archive({
         workspaceId: "fairnest",
@@ -503,19 +510,6 @@ test("import releases the directory guard before runtime admission acquires it e
   const imported = await Effect.runPromise(h.service.importSession(h.input));
   expect(imported.openError).toBeNull();
   expect(h.calls).toEqual(["inspectSession", "save", "attach", "publish"]);
-});
-
-test("inspects the native session for the importing workspace", async () => {
-  const h = await setup();
-  await h.discover();
-  const inspectSession = h.adapter.sessionImport.inspectSession;
-  const workspaceIds: string[] = [];
-  h.adapter.sessionImport.inspectSession = (request) => {
-    workspaceIds.push(request.workspaceId);
-    return inspectSession(request);
-  };
-  await Effect.runPromise(h.service.importSession(h.input));
-  expect(workspaceIds).toEqual([h.input.workspaceId]);
 });
 
 test("returns the first import page without draining native history", async () => {

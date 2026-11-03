@@ -385,8 +385,8 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
                 return yield* invalidImport("The runtime restarted. Reload sessions.");
               const canonical = yield* git.canonicalizePath(input.workingDirectory);
               const request = {
-                workspaceId: input.workspaceId,
                 repoPath: scope.repoPath,
+                sessionScope: { kind: "repository", workspaceId: scope.workspaceId } as const,
                 runtimeKind: input.runtimeKind,
                 externalSessionId: input.externalSessionId,
                 workingDirectory: input.workingDirectory,

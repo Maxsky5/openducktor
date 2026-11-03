@@ -304,29 +304,28 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  inspectSessionForImport({ workspaceId, ...ref }: RuntimeSessionImportRequest, runtimeId: string) {
+  inspectSessionForImport(request: RuntimeSessionImportRequest, runtimeId: string) {
     return Effect.gen({ self: this }, function* () {
       const metadata = yield* fromPromise("claudeRuntime.getSessionMetadata", () =>
-        getClaudeSessionMetadata(ref),
+        getClaudeSessionMetadata(request),
       );
       const selectedModel = yield* fromPromise("claudeRuntime.readSessionModel", () =>
-        readClaudeSessionModel(ref),
+        readClaudeSessionModel(request),
       );
       return {
         metadata,
         selectedModel,
         attach: this.createSession(
           {
-            ...ref,
+            ...request,
             runtimeKind: "claude",
-            sessionScope: { kind: "repository", workspaceId },
             runtimePolicy: { kind: "claude" },
             systemPrompt: "",
           },
           runtimeId,
           {
-            externalSessionId: ref.externalSessionId,
-            options: { resume: ref.externalSessionId },
+            externalSessionId: request.externalSessionId,
+            options: { resume: request.externalSessionId },
             preserveNativeSettings: true,
             startedMessage: "Imported session",
           },
