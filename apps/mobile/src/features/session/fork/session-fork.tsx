@@ -9,7 +9,7 @@ import {
   useSessionForkRequests,
 } from "@openducktor/frontend-core/sessions/session-forks";
 import { useQueryClient } from "@tanstack/react-query";
-import { useIsFocused, useNavigation, useRouter } from "expo-router";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import {
   createContext,
   useCallback,
@@ -54,20 +54,19 @@ export function SessionForkProvider({ children }: PropsWithChildren): ReactEleme
   const navigation = useNavigation();
   const { feedback, startupAttempts } = useClientConnection();
   const visibleHandoff = useVisibleHandoff();
-  const focused = useIsFocused();
   const [startupAttemptId, setStartupAttemptId] = useState<string | null>(null);
   const startupAttempt = useStartupAttempt(startupAttemptId);
   const inlineOrigin = useRef<{ attemptId: string; sessionKey: string | null } | null>(null);
-  useEffect(() => {
-    if (!focused && inlineOrigin.current)
-      startupAttempts.continueInBackground(inlineOrigin.current.attemptId);
-  }, [focused, startupAttempts]);
-  useEffect(() => {
-    return () => {
-      if (inlineOrigin.current)
-        startupAttempts.continueInBackground(inlineOrigin.current.attemptId);
-    };
-  }, [startupAttempts]);
+  // A blur or an unmount moves the inline fork startup to the startup overlay.
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        if (inlineOrigin.current)
+          startupAttempts.continueInBackground(inlineOrigin.current.attemptId);
+      },
+      [startupAttempts],
+    ),
+  );
   const pending = useSessionForkRequests(queryClient);
   const { owner, readOnly, identity, repoPath, sessionKey } = target;
   const { workspaceId } = target.workspace;

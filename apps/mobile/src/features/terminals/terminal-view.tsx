@@ -6,7 +6,6 @@ import { useDismissibleNotice } from "@openducktor/frontend-core/lib/use-dismiss
 import { checkHttpUrl } from "@openducktor/frontend-core/terminals/terminal-url-policy";
 import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
 import * as Clipboard from "expo-clipboard";
-import { useIsFocused } from "expo-router";
 import {
   memo,
   type ReactElement,
@@ -45,6 +44,7 @@ import { INPUT_DELIVERY_UNKNOWN, type TerminalSessionState } from "./terminal-se
 import { NO_TOUCH_MODIFIERS, touchModifiersReducer } from "./touch-key-modifiers";
 import { useTerminalSession } from "./use-terminal-session";
 import { KeyboardInsetView } from "@/ui/keyboard-inset-view";
+import { useScreenInView } from "@/navigation/use-screen-in-view";
 
 /**
  * The terminal list members that one terminal view reads. The view takes them one by one, so a
@@ -86,7 +86,7 @@ export const TerminalView = memo(function TerminalView({
   const gate = useCommandGate();
   const { feedback } = useClientConnection();
   const confirm = useConfirm();
-  const focused = useIsFocused();
+  const inView = useScreenInView();
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const page = useRef<IsolatedPageHandle<TerminalPageInbound>>(null);
   const [reloads, setReloads] = useState(0);
@@ -146,7 +146,7 @@ export const TerminalView = memo(function TerminalView({
   const { session, generation, state } = useTerminalSession({
     controller,
     terminalId,
-    active: focused,
+    active: inView,
     commandsOpen: gate.open,
     handlers,
   });

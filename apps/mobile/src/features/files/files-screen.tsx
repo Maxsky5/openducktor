@@ -6,7 +6,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   type NativeStackNavigationOptions,
   Stack,
-  useIsFocused,
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
@@ -42,6 +41,7 @@ import {
   searchFileRows,
 } from "./file-tree-model";
 import { fileScopeOf } from "./file-scope";
+import { useScreenInView } from "@/navigation/use-screen-in-view";
 
 const nameOf = (path: string): string => path.slice(path.lastIndexOf("/") + 1) || path;
 
@@ -84,7 +84,7 @@ const useFileTree = (owner: WorkOwner, focused: boolean) => {
 
 function FilesContent({ owner, directory }: { owner: WorkOwner; directory: string }): ReactElement {
   const router = useRouter();
-  const focused = useIsFocused();
+  const inView = useScreenInView();
   const gate = useCommandGate();
   const theme = useAppTheme();
   const endSpace = useScreenEndSpace(theme.space.xxxl);
@@ -92,7 +92,7 @@ function FilesContent({ owner, directory }: { owner: WorkOwner; directory: strin
   const wide = useWideLayout();
   const { workingDirectory, workingDirectoryPending, workingDirectoryUnavailableReason } =
     owner.git;
-  const tree = useFileTree(owner, focused);
+  const tree = useFileTree(owner, inView);
   const rootPath = tree.data?.rootPath ?? workingDirectory;
   const entries = tree.data?.entries;
   const index = useMemo(() => fileTreeIndex(entries ?? NO_ENTRIES), [entries]);

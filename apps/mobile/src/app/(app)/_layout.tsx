@@ -6,6 +6,7 @@ import {
   fullSheetOptions,
   sheetOptions,
 } from "@/navigation/sheet-options";
+import { isPushedScreen } from "@/navigation/pushed-screens";
 import { useNativeStackTheme } from "@/navigation/stack-theme";
 import { screenLayout } from "@/navigation/screen-layout";
 import { withAndroidHeader } from "@/navigation/stack-header";
@@ -14,10 +15,6 @@ import { WorkspaceModelCatalogs } from "@/composition/workspace-model-catalogs";
 import { sessionRouteOptions } from "@/features/session/header/session-route-options";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { ConfirmDialogHost } from "@/ui/confirm-dialog";
-
-/** Sessions, tasks, and work views are pushed screens. The other routes are sheets. */
-const isPushedScreen = (name: string): boolean =>
-  name === "session" || name.startsWith("task/") || name.startsWith("work/");
 
 /** The tabs, plus sheets that open above any tab. */
 export default function AppLayout(): ReactElement {

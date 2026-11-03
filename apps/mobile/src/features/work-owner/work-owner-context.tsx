@@ -33,7 +33,7 @@ import {
 } from "@openducktor/frontend-core/queries/workspace";
 import { workspaceSessionListQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useIsFocused } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import {
   createContext,
   type PropsWithChildren,
@@ -43,6 +43,7 @@ import {
   useMemo,
 } from "react";
 import { appStateVisibility } from "@/composition/app-visibility";
+import { useScreenInView } from "@/navigation/use-screen-in-view";
 import { useFocusGitRefresh } from "./use-focus-git-refresh";
 import {
   chatFeedbackTarget,
@@ -293,7 +294,7 @@ function TaskOwnerSource({
   diffs,
   children,
 }: PropsWithChildren<{ ownerRef: TaskOwnerRef; diffs: boolean }>) {
-  const focused = useIsFocused();
+  const showsDiffs = useScreenInView() && diffs;
   const { resolution, repoPath, retry } = useTaskOwnerResolution(ownerRef);
   const resolved = resolution.status === "ready" ? resolution.owner : null;
   const task = resolved?.task ?? null;
@@ -302,14 +303,16 @@ function TaskOwnerSource({
     repoPath,
     task,
     commentOwner: resolved?.commentOwner ?? null,
-    showsDiffs: diffs && focused,
+    showsDiffs,
   });
   const { diffData, worktree } = panel;
-  useFocusGitRefresh({
-    focused: diffs && focused && task !== null,
-    loaded: diffData.loadedScopesByScope.uncommitted,
-    refresh: panel.refresh,
-  });
+  useFocusEffect(
+    useFocusGitRefresh({
+      enabled: showsDiffs && task !== null,
+      loaded: diffData.loadedScopesByScope.uncommitted,
+      refresh: panel.refresh,
+    }),
+  );
   const comparisonChoice = useTaskComparisonChoice(ownerRef, panel.comparison.target);
   const sessionsQuery = useQuery({
     ...agentSessionListQueryOptions(
@@ -455,8 +458,7 @@ function ChatGitSource({
   commentOwner: InlineCommentOwner;
   title: string;
 }>): ReactElement {
-  const focused = useIsFocused();
-  const showsDiffs = diffs && focused;
+  const showsDiffs = useScreenInView() && diffs;
   const isRepositoryRoot = record.executionTarget.kind === "local_repo_root";
   // The repository root uses the workspace checkout, as the desktop workspace branch does.
   const rootBranch = useQuery({
@@ -487,11 +489,13 @@ function ChatGitSource({
     git: sessionGit,
     visibility: appStateVisibility,
   });
-  useFocusGitRefresh({
-    focused: showsDiffs,
-    loaded: panel.diffData.loadedScopesByScope.uncommitted,
-    refresh: panel.refresh,
-  });
+  useFocusEffect(
+    useFocusGitRefresh({
+      enabled: showsDiffs,
+      loaded: panel.diffData.loadedScopesByScope.uncommitted,
+      refresh: panel.refresh,
+    }),
+  );
   const { target, applyTarget } = sessionGit;
   const comparisonChoice = useMemo<WorkOwnerComparisonChoice>(
     () => ({

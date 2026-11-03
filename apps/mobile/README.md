@@ -96,7 +96,8 @@ flowchart TD
 
 Follow these rules, or sheets and screens open and close late. React Native shows a navigation only after its JavaScript work ends, so each render that a navigation causes adds delay.
 
-- Read `useIsFocused` only in a leaf component, as `PublishVisibleSession` does. Use `useFocusEffect` when the focus only starts or stops work, as `BorderRay` does.
+- Read `useIsFocused` only in a leaf component, as `PublishVisibleSession` does. Use `useFocusEffect` when the focus only starts or stops work, as `BorderRay` does. A sheet takes the focus, so a screen that reads it renders again when a sheet opens or closes.
+- Gate the reads of a screen with `useScreenInView`, as the work views do. It changes only when a pushed screen covers or uncovers the screen, not when a sheet opens.
 - Make a session store selector return only the values that its views show.
 - Keep `experiments.reactCompiler` on in `app.config.ts`. Expo Router renders every mounted route and navigator again on each navigation. The React Compiler memoizes the elements of each component, so that render stops at the first unchanged element.
 - Do not write a callback inside a worklet, such as `items.map((item) => item.id)` in `useAnimatedStyle`. The React Compiler moves the callback out of the worklet, and the worklet then calls a JavaScript function on the UI thread, which crashes the app. Compute the value outside the worklet, as `BoardLaneSwitcher` does. The `worklets/no-functions-in-worklets` lint rule finds such a callback.
