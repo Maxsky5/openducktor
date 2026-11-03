@@ -97,7 +97,9 @@ export function HostPicker({
               Cancel
             </Button>
           ) : null}
-          <div className={cn("flex gap-2", onCancel ? "flex-wrap justify-end" : "flex-col")}>
+          <div
+            className={cn("flex gap-2", onCancel ? "ml-auto flex-wrap justify-end" : "flex-col")}
+          >
             <HostActions selection={selection} pending={pending} run={run} />
             <ConnectButton
               currentHost={currentHost}
