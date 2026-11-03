@@ -6,11 +6,13 @@ export type RuntimeSessionImportSource = {
   selectedModel: AgentSessionModelSelection | null;
   attach(): Promise<void>;
 };
+/** Names the conversation to import and the workspace that will own it. */
+export type RuntimeSessionImportRequest = SessionRef & { workspaceId: string };
 export type RuntimeSessionImportPort = {
   /** Scans root conversations for one workspace repository. The host still filters scope. */
   scanSessions(input: {
     repoPath: string;
     signal: AbortSignal;
   }): AsyncIterable<WorkspaceSessionExternal[]>;
-  inspectSession(input: SessionRef): Promise<RuntimeSessionImportSource>;
+  inspectSession(input: RuntimeSessionImportRequest): Promise<RuntimeSessionImportSource>;
 };

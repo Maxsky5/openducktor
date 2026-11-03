@@ -704,6 +704,61 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.discard());
   });
 
+  test("opens an imported native session with the workspace scope of the import", async () => {
+    const harness = createControllerHarness();
+    const opened: unknown[] = [];
+    const policies: unknown[] = [];
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
+        resolveMcpServerConfig,
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation.");
+        },
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy: (input) => {
+          policies.push(input.sessionScope);
+          return resolveRuntimePolicy(input);
+        },
+        createController: (options) => ({
+          ...harness.createController(options),
+          openExistingSession: async (input) => {
+            opened.push(input.sessionScope);
+            return {
+              metadata: {
+                externalSessionId: input.externalSessionId,
+                runtimeKind: "codex",
+                workingDirectory: input.workingDirectory,
+                title: "Imported",
+                updatedAt: null,
+              },
+              selectedModel: null,
+              attach: async () => {},
+            };
+          },
+        }),
+      })(runtime),
+    );
+
+    await Effect.runPromise(
+      prepared.adapter.sessionImport.inspectSession({
+        workspaceId: "workspace-1",
+        repoPath: "/repo-a",
+        runtimeKind: "codex",
+        workingDirectory: "/repo-a",
+        externalSessionId: "thread-1",
+      }),
+    );
+
+    const workspaceScope = { kind: "repository", workspaceId: "workspace-1" };
+    expect(policies).toEqual([workspaceScope]);
+    expect(opened).toEqual([workspaceScope]);
+    await Effect.runPromise(prepared.discard());
+  });
+
   test("shares question history when it rebuilds a runtime adapter", async () => {
     const harness = createControllerHarness();
     const histories: CodexAppServerAdapterOptions["questionHistory"][] = [];

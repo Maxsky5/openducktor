@@ -505,6 +505,19 @@ test("import releases the directory guard before runtime admission acquires it e
   expect(h.calls).toEqual(["inspectSession", "save", "attach", "publish"]);
 });
 
+test("inspects the native session for the importing workspace", async () => {
+  const h = await setup();
+  await h.discover();
+  const inspectSession = h.adapter.sessionImport.inspectSession;
+  const workspaceIds: string[] = [];
+  h.adapter.sessionImport.inspectSession = (request) => {
+    workspaceIds.push(request.workspaceId);
+    return inspectSession(request);
+  };
+  await Effect.runPromise(h.service.importSession(h.input));
+  expect(workspaceIds).toEqual([h.input.workspaceId]);
+});
+
 test("returns the first import page without draining native history", async () => {
   const h = await setup();
   h.state.rows = Array.from({ length: 3000 }, (_, index) => h.row(`external-${index}`));

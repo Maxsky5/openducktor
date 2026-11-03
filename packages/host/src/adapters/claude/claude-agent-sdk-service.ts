@@ -34,6 +34,7 @@ import type {
   SearchAgentFilesInput,
   LoadAgentRuntimeCatalogInput,
   SendAgentUserMessageInput,
+  RuntimeSessionImportRequest,
   SessionRef,
   StartAgentSessionInput,
   UpdateControlledAgentSessionModelInput,
@@ -303,29 +304,29 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  inspectSessionForImport(input: SessionRef, runtimeId: string) {
+  inspectSessionForImport({ workspaceId, ...ref }: RuntimeSessionImportRequest, runtimeId: string) {
     return Effect.gen({ self: this }, function* () {
       const metadata = yield* fromPromise("claudeRuntime.getSessionMetadata", () =>
-        getClaudeSessionMetadata(input),
+        getClaudeSessionMetadata(ref),
       );
       const selectedModel = yield* fromPromise("claudeRuntime.readSessionModel", () =>
-        readClaudeSessionModel(input),
+        readClaudeSessionModel(ref),
       );
       return {
         metadata,
         selectedModel,
         attach: this.createSession(
           {
-            ...input,
+            ...ref,
             runtimeKind: "claude",
-            sessionScope: { kind: "repository" },
+            sessionScope: { kind: "repository", workspaceId },
             runtimePolicy: { kind: "claude" },
             systemPrompt: "",
           },
           runtimeId,
           {
-            externalSessionId: input.externalSessionId,
-            options: { resume: input.externalSessionId },
+            externalSessionId: ref.externalSessionId,
+            options: { resume: ref.externalSessionId },
             preserveNativeSettings: true,
             startedMessage: "Imported session",
           },

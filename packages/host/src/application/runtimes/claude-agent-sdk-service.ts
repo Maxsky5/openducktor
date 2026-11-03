@@ -25,6 +25,7 @@ import type {
   ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
+  RuntimeSessionImportRequest,
   SearchAgentFilesInput,
   SendAgentUserMessageInput,
   SessionRef,
@@ -51,7 +52,7 @@ export type ClaudeAgentSdkService = {
     input: ClaudeToolCatalogInput,
   ): Effect.Effect<ClaudeToolCatalog, ClaudeAgentSdkServiceError>;
   inspectSessionForImport(
-    input: SessionRef,
+    input: RuntimeSessionImportRequest,
     runtimeId: string,
   ): Effect.Effect<
     {

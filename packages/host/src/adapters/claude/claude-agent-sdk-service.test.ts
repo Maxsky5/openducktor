@@ -26,6 +26,7 @@ import {
   createClaudeSession,
   openClaudeQueryWithMessages,
 } from "./claude-agent-sdk-session-io.test-support";
+import { createClaudeSessionSummary } from "./claude-agent-sdk-session-shape";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
@@ -131,6 +132,7 @@ describe("createClaudeAgentSdkService", () => {
       workingDirectory: "/repo/worktree/",
       externalSessionId: "session-1",
     };
+    const workspaceScope = { kind: "repository" as const, workspaceId: "workspace-1" };
     const store = createClaudeAgentSdkSessionStore();
     const metadata = spyOn(nativeSessions, "getClaudeSessionMetadata").mockResolvedValue({
       ...ref,
@@ -152,7 +154,15 @@ describe("createClaudeAgentSdkService", () => {
           preserveNativeSettings: true,
           startedMessage: "Imported session",
         });
-        const session = createSession({ input: request.input, runtimeId: request.runtimeId });
+        const session = createSession({
+          input: request.input,
+          runtimeId: request.runtimeId,
+          summary: createClaudeSessionSummary(
+            request.input,
+            { externalSessionId: "session-1" },
+            "2026-06-25T20:00:00.000Z",
+          ),
+        });
         request.sessionStore.set(session);
         return session.summary;
       },
@@ -166,13 +176,25 @@ describe("createClaudeAgentSdkService", () => {
         }),
     });
     try {
-      const source = await Effect.runPromise(service.inspectSessionForImport(ref, "runtime"));
+      const source = await Effect.runPromise(
+        service.inspectSessionForImport({ ...ref, workspaceId: "workspace-1" }, "runtime"),
+      );
       expect(source.selectedModel?.modelId).toBe("native-claude");
       expect(create).not.toHaveBeenCalled();
       expect(store.get(ref.externalSessionId)).toBeUndefined();
       await Effect.runPromise(source.attach);
       expect(create).toHaveBeenCalledTimes(1);
       expect(store.get(ref.externalSessionId)).toBeDefined();
+      // The workspace chat reads the imported session with its workspace scope.
+      await expect(
+        Effect.runPromise(
+          service.loadSessionTodos({
+            ...ref,
+            runtimePolicy: { kind: "claude" },
+            sessionScope: workspaceScope,
+          }),
+        ),
+      ).resolves.toEqual([]);
     } finally {
       metadata.mockRestore();
       model.mockRestore();
@@ -1058,27 +1080,30 @@ describe("createClaudeAgentSdkService", () => {
     ).rejects.toThrow();
   });
 
-  test("renames the live Claude session and its repository association", async () => {
+  test("renames the live Claude session and keeps its workspace scope readable", async () => {
     const renameSession = mock(async () => {});
     const renameSessionSpy = spyOn(realClaudeSdk, "renameSession").mockImplementation(
       renameSession,
     );
+    const ref = {
+      repoPath: "/repo/",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/worktree/",
+      externalSessionId: "session-1",
+    };
     try {
       const session = createSession({
         input: {
-          repoPath: "/repo/",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree/",
-          externalSessionId: "session-1",
+          ...ref,
           runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "repository", title: "Fairnest" },
+          sessionScope: { kind: "repository", workspaceId: "workspace-1", title: "Fairnest" },
         },
         summary: {
           externalSessionId: "session-1",
           runtimeKind: "claude",
           workingDirectory: "/repo/worktree/",
           title: "Fairnest",
-          sessionAssociation: { kind: "repository", title: "Fairnest" },
+          sessionAssociation: { kind: "repository", workspaceId: "workspace-1", title: "Fairnest" },
           startedAt: "2026-06-25T20:00:00.000Z",
           status: "idle",
         },
@@ -1086,25 +1111,28 @@ describe("createClaudeAgentSdkService", () => {
       const service = createService(session);
 
       const result = await Effect.runPromise(
-        service.updateSessionTitle({
-          repoPath: "/repo/",
-          runtimeKind: "claude",
-          workingDirectory: "/repo/worktree/",
-          externalSessionId: "session-1",
-          title: "Renamed",
-        }),
+        service.updateSessionTitle({ ...ref, title: "Renamed" }),
       );
 
       expect(renameSession).toHaveBeenCalledWith("session-1", "Renamed", {
         dir: "/repo/worktree/",
       });
-      expect(result).toMatchObject({
-        status: "renamed",
-        summary: {
-          title: "Renamed",
-          sessionAssociation: { kind: "repository", title: "Renamed" },
-        },
+      expect(result).toMatchObject({ status: "renamed", summary: { title: "Renamed" } });
+      expect(session.summary.sessionAssociation).toEqual({
+        kind: "repository",
+        workspaceId: "workspace-1",
+        title: "Renamed",
       });
+      // The workspace chat reads the renamed session with its workspace scope.
+      await expect(
+        Effect.runPromise(
+          service.loadSessionTodos({
+            ...ref,
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "repository", workspaceId: "workspace-1" },
+          }),
+        ),
+      ).resolves.toEqual([]);
     } finally {
       renameSessionSpy.mockRestore();
     }
