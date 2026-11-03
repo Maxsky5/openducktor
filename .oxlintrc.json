@@ -30,10 +30,6 @@
     {
       "name": "unistyles",
       "specifier": "./tools/oxlint/anti-slop/src/unistyles/index.ts"
-    },
-    {
-      "name": "worklets",
-      "specifier": "./tools/oxlint/anti-slop/src/worklets/index.ts"
     }
   ],
   "rules": {
@@ -355,7 +351,6 @@
       "rules": {
         "anti-slop/no-hex-alpha-suffix": "error",
         "unistyles/no-stylesheet-dependency-aliases": "error",
-        "worklets/no-functions-in-worklets": "error",
         "unistyles/no-themed-colors-on-unbound-components": [
           "error",
           { "boundModules": ["react-native", "react-native-reanimated"], "appPrefixes": ["@/"] }

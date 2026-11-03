@@ -73,9 +73,6 @@ export function BoardPager({
   const mountedLanes = useMountedLanes(columns, selectedIndex);
   const laneIds = useLaneIds(columns);
   const washes = useMemo(() => laneIds.map((id) => theme.lanes[id].wash), [laneIds, theme.lanes]);
-  // The worklet reads the input range as a value. The React Compiler moves a callback out of a
-  // worklet, and the worklet then calls JavaScript from the UI thread.
-  const washStops = useMemo(() => washes.map((_, index) => index), [washes]);
 
   useEffect(() => {
     if (width === 0 || shownIndex.current === selectedIndex) return;
@@ -91,7 +88,11 @@ export function BoardPager({
     const page = pageWidth.get();
     if (washes.length < 2 || page === 0) return { backgroundColor: washes[0] ?? "transparent" };
     return {
-      backgroundColor: interpolateColor(scrollX.get() / page, washStops, washes),
+      backgroundColor: interpolateColor(
+        scrollX.get() / page,
+        washes.map((_, index) => index),
+        washes,
+      ),
     };
   });
 
