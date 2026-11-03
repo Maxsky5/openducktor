@@ -32,7 +32,11 @@ const bootLocalHost = async (readSettings: () => Promise<SettingsSnapshot>): Pro
     await bootstrapOpenDucktorShell({
       createShellBridge: () =>
         createShellBridgeFixture({ client: { workspaceGetSettingsSnapshot: readSettings } }),
-      hosts: { localHost: "web", createRemoteBridge: noRemoteHost },
+      hosts: {
+        localHost: "web",
+        createRemoteBridge: noRemoteHost,
+        confirmRemoteAccess: noRemoteHost,
+      },
       rootElement,
     });
   });
@@ -85,7 +89,11 @@ describe("bootstrapOpenDucktorShell", () => {
           throw prepareError;
         },
         createShellBridge,
-        hosts: { localHost: "web", createRemoteBridge: noRemoteHost },
+        hosts: {
+          localHost: "web",
+          createRemoteBridge: noRemoteHost,
+          confirmRemoteAccess: noRemoteHost,
+        },
         rootElement: null,
       }),
     ).rejects.toThrow(prepareError);
@@ -98,7 +106,11 @@ describe("resolveRootElement", () => {
     resolveRootElement(
       {
         createShellBridge: createShellBridgeFixture,
-        hosts: { localHost: null, createRemoteBridge: noRemoteHost },
+        hosts: {
+          localHost: null,
+          createRemoteBridge: noRemoteHost,
+          confirmRemoteAccess: noRemoteHost,
+        },
         ...overrides,
       },
       (rootId) => document.getElementById(rootId),

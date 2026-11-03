@@ -806,6 +806,7 @@ const globalConfigSharedFields = {
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
   workspaceOrder: z.array(workspaceIdSchema).default([]),
   recentWorkspaces: z.array(workspaceIdSchema).default([]),
+  /** Not read. Older releases saved a host ID here; the approval store now owns the host identity. */
   hostId: z.string().uuid().optional(),
   remoteAccess: remoteAccessSettingsSchema.default(DEFAULT_REMOTE_ACCESS_SETTINGS),
 };

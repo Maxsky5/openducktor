@@ -40,10 +40,10 @@ export type EffectNodeHostCommandRouter = EffectHostCommandRouter & {
   readonly taskAssetReadService: TaskAssetReadService;
   readonly notificationStream: import("../../application/notifications/notification-stream").NotificationStream;
   readonly hostInstanceId: string;
-  /** The host ID and the remote control settings, which the shell's remote access keeps. */
+  /** The remote control settings, which the shell's remote access keeps. */
   readonly hostSettings: Pick<
     WorkspaceSettingsService,
-    "readHostId" | "readRemoteAccessSettings" | "saveRemoteAccessSettings"
+    "readRemoteAccessSettings" | "saveRemoteAccessSettings"
   >;
   readonly taskEventStream: import("../../events/task-event-stream").TaskEventStreamPort;
   readonly terminalService: import("../../application/terminals/terminal-service").TerminalService;

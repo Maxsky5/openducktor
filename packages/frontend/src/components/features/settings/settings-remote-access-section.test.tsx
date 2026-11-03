@@ -17,8 +17,23 @@ const configuration: RemoteAccessConfiguration = {
 const bridge = (initial: RemoteAccessState): RemoteAccessBridge => ({
   readState: async () => initial,
   readNetworks: async () => [{ name: "en0", address: "192.168.1.9" }],
-  enable: async () => ({ status: "available", configuration, connectedClients: 0 }),
-  disable: async () => ({ status: "disabled", configuration: null, connectedClients: 0 }),
+  enable: async () => ({
+    status: "available",
+    configuration,
+    pairing: null,
+    clients: [],
+    connectedClients: 0,
+  }),
+  revokeClient: async () => initial,
+  startPairing: async () => initial,
+  stopPairing: async () => initial,
+  disable: async () => ({
+    status: "disabled",
+    configuration: null,
+    pairing: null,
+    clients: [],
+    connectedClients: 0,
+  }),
   subscribeState: async () => () => {},
 });
 const show = (operator: RemoteAccessBridge) =>
@@ -31,36 +46,49 @@ const show = (operator: RemoteAccessBridge) =>
   );
 
 test("enables a detected network on the default port without typing it, and stops sharing", async () => {
-  const operator = bridge({ status: "disabled", configuration: null, connectedClients: 0 });
+  const operator = bridge({
+    status: "disabled",
+    configuration: null,
+    pairing: null,
+    clients: [],
+    connectedClients: 0,
+  });
   const enable = mock(operator.enable);
   const disable = mock(operator.disable);
   operator.enable = enable;
   operator.disable = disable;
   show(operator);
-  await screen.findByRole("radio", { name: /192.168.1.9/ });
+  await screen.findByRole("radiogroup", { name: "Network" });
   expect(screen.queryByRole("spinbutton")).toBeNull();
   expect(screen.queryByRole("textbox")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Enable remote control" }));
+  fireEvent.click(screen.getByRole("switch", { name: "Enable Remote Control" }));
   await waitFor(() =>
     expect(enable).toHaveBeenCalledWith({ listenHost: "192.168.1.9", listenPort: 14328 }),
   );
-  expect((await screen.findByLabelText<HTMLInputElement>("Host address")).value).toBe(
-    configuration.publicEndpoint,
-  );
-  expect(screen.getByText("On")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Connection settings" }));
-  const apply = screen.getByRole("button", { name: "Apply connection changes" });
+  expect(await screen.findByText(configuration.publicEndpoint)).toBeDefined();
+  expect(screen.getByRole("button", { name: "Add device" })).toBeDefined();
+  expect(
+    screen.getByRole("switch", { name: "Enable Remote Control" }).getAttribute("aria-checked"),
+  ).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "Change" }));
+  const apply = screen.getByRole("button", { name: "Apply changes" });
   expect(apply.hasAttribute("disabled")).toBe(true);
   fireEvent.click(apply);
   expect(enable).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getByRole("button", { name: "Disable remote control" }));
+  fireEvent.click(screen.getByRole("switch", { name: "Enable Remote Control" }));
   await waitFor(() => expect(disable).toHaveBeenCalledTimes(1));
-  await screen.findByText("Off");
-  expect(screen.queryByLabelText("Host address")).toBeNull();
+  await screen.findByText("Off. Other devices cannot connect.");
+  expect(screen.queryByText(configuration.publicEndpoint)).toBeNull();
 });
 
 test("requires a choice when the computer has more than one network", async () => {
-  const operator = bridge({ status: "disabled", configuration: null, connectedClients: 0 });
+  const operator = bridge({
+    status: "disabled",
+    configuration: null,
+    pairing: null,
+    clients: [],
+    connectedClients: 0,
+  });
   operator.readNetworks = async () => [
     { name: "en0", address: "192.168.1.9" },
     { name: "vpn", address: "100.64.0.1" },
@@ -68,12 +96,12 @@ test("requires a choice when the computer has more than one network", async () =
   const enable = mock(operator.enable);
   operator.enable = enable;
   show(operator);
-  const network = await screen.findByRole("radio", { name: /192.168.1.9/ });
-  fireEvent.click(screen.getByRole("button", { name: "Enable remote control" }));
+  await screen.findByRole("radiogroup", { name: "Network" });
+  fireEvent.click(screen.getByRole("switch", { name: "Enable Remote Control" }));
   expect((await screen.findByRole("alert")).textContent).toContain("Choose a network");
   expect(enable).not.toHaveBeenCalled();
-  fireEvent.click(network);
-  fireEvent.click(screen.getByRole("button", { name: "Enable remote control" }));
+  fireEvent.click(await screen.findByRole("radio", { name: /192.168.1.9/ }));
+  fireEvent.click(screen.getByRole("switch", { name: "Enable Remote Control" }));
   await waitFor(() =>
     expect(enable).toHaveBeenCalledWith({ listenHost: "192.168.1.9", listenPort: 14328 }),
   );
@@ -85,11 +113,18 @@ test.each(["65536", ""])("keeps Advanced settings and rejects invalid port %s", 
     listenPort: 14328,
     publicEndpoint: "https://machine.test/api/remote",
   };
-  const operator = bridge({ status: "available", configuration: manual, connectedClients: 0 });
+  const operator = bridge({
+    status: "available",
+    configuration: manual,
+    pairing: null,
+    clients: [],
+    connectedClients: 0,
+  });
   const enable = mock(operator.enable);
   operator.enable = enable;
   show(operator);
-  fireEvent.click(await screen.findByRole("button", { name: "Connection settings" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Change" }));
+  fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
   const port = await screen.findByLabelText("Port");
   if (!(port instanceof HTMLInputElement)) throw new Error("Port must be an input.");
   const proxy = screen.getByLabelText("Public host address");
@@ -98,26 +133,32 @@ test.each(["65536", ""])("keeps Advanced settings and rejects invalid port %s", 
   expect(port.value).toBe("14328");
   expect(proxy.value).toBe(manual.publicEndpoint);
   fireEvent.change(port, { target: { value } });
-  fireEvent.click(screen.getByRole("button", { name: "Apply connection changes" }));
+  fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
   expect((await screen.findByRole("alert")).textContent).toContain("1 to 65535");
   expect(document.activeElement).toBe(port);
   expect(enable).not.toHaveBeenCalled();
   fireEvent.change(port, { target: { value: "14329" } });
-  fireEvent.click(screen.getByRole("button", { name: "Apply connection changes" }));
+  fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
   await waitFor(() => expect(enable).toHaveBeenCalledWith({ ...manual, listenPort: 14329 }));
 });
 
 test("enables a public host address on the default port", async () => {
-  const operator = bridge({ status: "disabled", configuration: null, connectedClients: 0 });
+  const operator = bridge({
+    status: "disabled",
+    configuration: null,
+    pairing: null,
+    clients: [],
+    connectedClients: 0,
+  });
   const enable = mock(operator.enable);
   operator.enable = enable;
   show(operator);
-  await screen.findByRole("radio", { name: /192.168.1.9/ });
+  await screen.findByRole("radiogroup", { name: "Network" });
   fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
   fireEvent.change(screen.getByLabelText("Public host address"), {
     target: { value: "https://machine.test/remote" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Enable remote control" }));
+  fireEvent.click(screen.getByRole("switch", { name: "Enable Remote Control" }));
   await waitFor(() =>
     expect(enable).toHaveBeenCalledWith({
       listenHost: "192.168.1.9",
@@ -134,11 +175,13 @@ test.each([
   show(
     bridge({
       status: "available",
+      pairing: null,
+      clients: [],
       connectedClients: 0,
       configuration: { listenHost, listenPort: 51541, publicEndpoint },
     }),
   );
-  fireEvent.click(await screen.findByRole("button", { name: "Connection settings" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Change" }));
   expect(screen.queryByLabelText("Public host address") === null).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
   const proxy = screen.getByLabelText("Public host address");
@@ -151,6 +194,8 @@ test.each([
 test("enables the saved network and port again while remote control is off", async () => {
   const operator = bridge({
     status: "disabled",
+    pairing: null,
+    clients: [],
     connectedClients: 0,
     configuration: {
       listenHost: "100.64.0.1",
@@ -165,8 +210,8 @@ test("enables the saved network and port again while remote control is off", asy
   const enable = mock(operator.enable);
   operator.enable = enable;
   show(operator);
-  await screen.findByRole("radio", { name: /100.64.0.1/ });
-  fireEvent.click(screen.getByRole("button", { name: "Enable remote control" }));
+  await screen.findByRole("radiogroup", { name: "Network" });
+  fireEvent.click(screen.getByRole("switch", { name: "Enable Remote Control" }));
   await waitFor(() =>
     expect(enable).toHaveBeenCalledWith({ listenHost: "100.64.0.1", listenPort: 51541 }),
   );
@@ -175,6 +220,8 @@ test("enables the saved network and port again while remote control is off", asy
 test("offers another port when the saved port is in use", async () => {
   const operator = bridge({
     status: "failed",
+    pairing: null,
+    clients: [],
     connectedClients: 0,
     configuration: configuration,
     failure: {
@@ -196,7 +243,13 @@ test("offers another port when the saved port is in use", async () => {
 });
 
 test("shows network read failures and listener failures with a next action", async () => {
-  const operator = bridge({ status: "disabled", configuration: null, connectedClients: 0 });
+  const operator = bridge({
+    status: "disabled",
+    configuration: null,
+    pairing: null,
+    clients: [],
+    connectedClients: 0,
+  });
   operator.readNetworks = async () => {
     throw new Error("Could not read networks. Check the network connection.");
   };
@@ -206,6 +259,8 @@ test("shows network read failures and listener failures with a next action", asy
   operator.enable = async () => ({
     status: "failed",
     configuration: null,
+    pairing: null,
+    clients: [],
     connectedClients: 0,
     failure: {
       code: "unavailable",
@@ -213,9 +268,9 @@ test("shows network read failures and listener failures with a next action", asy
       nextAction: "Check the network connection and try again.",
     },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Refresh networks" }));
-  await screen.findByRole("radio", { name: /192.168.1.9/ });
-  fireEvent.click(screen.getByRole("button", { name: "Enable remote control" }));
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  await screen.findByRole("radiogroup", { name: "Network" });
+  fireEvent.click(screen.getByRole("switch", { name: "Enable Remote Control" }));
   expect((await screen.findByRole("alert")).textContent).toContain(
     "Could not open this network. Check the network connection and try again.",
   );

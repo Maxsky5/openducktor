@@ -87,7 +87,7 @@ export const createBrowserShellBridge = (): ShellBridge => {
 
   return {
     getArtifactPreviewEnvironment: () =>
-      runWebBoundary(Effect.map(getBrowserBackendUrlEffect(), browserArtifactPreviewEnvironment)),
+      Promise.resolve(browserArtifactPreviewEnvironment(window.location.origin)),
     remoteAccess: createBrowserRemoteAccessBridge(),
     client,
     subscribeWorkspaceSessionUpdates: subscribeLocalHostWorkspaceSessionUpdates,

@@ -1,3 +1,9 @@
+import { createMemoryClientStorage } from "@openducktor/frontend-core/platform/client-storage";
+import {
+  TEST_HOST_ID,
+  TEST_CONNECTION_TOKEN,
+  savedTestAuthorization,
+} from "../../host-client/src/remote/test-support/authorization";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
 import { expect, test } from "bun:test";
 import {
@@ -18,6 +24,11 @@ import { createUnavailableShellBridge } from "@openducktor/frontend/lib/shell-br
 test.each(["restored", "lost", "failure"])(
   "selected terminal recovery joins the browser connection barrier (%s)",
   async (result) => {
+    const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: createMemoryClientStorage(),
+    });
     const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
     const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
     const page = Object.assign(new EventTarget(), { location: { origin: "https://host.test" } });
@@ -27,7 +38,8 @@ test.each(["restored", "lost", "failure"])(
       shell: "web",
       appVersion: "test-host",
       hostInstanceId: "host-a",
-      accessPolicy: "network_reach",
+      hostId: TEST_HOST_ID,
+      accessPolicy: "pairing",
       protocols: [
         { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
       ],
@@ -54,6 +66,8 @@ test.each(["restored", "lost", "failure"])(
         if (url.endsWith("/connections"))
           return json({
             status: "accepted",
+            connectionToken: TEST_CONNECTION_TOKEN,
+            authorization: _headers.authorization ? undefined : savedTestAuthorization(),
             host,
             connectionId: crypto.randomUUID(),
             protocolVersion: REMOTE_PROTOCOL_VERSION,
@@ -190,6 +204,8 @@ test.each(["restored", "lost", "failure"])(
       await bridge?.dispose?.();
       bridge?.notifications.dispose();
       await Bun.sleep(0);
+      if (originalStorage) Object.defineProperty(globalThis, "localStorage", originalStorage);
+      else Reflect.deleteProperty(globalThis, "localStorage");
       if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
       else Reflect.deleteProperty(globalThis, "window");
       if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument);

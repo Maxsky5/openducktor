@@ -33,28 +33,7 @@ const startHost = (configPath: string, sharedSettings: SharedSettingsDatabase) =
 const readFileConfig = async (configPath: string) =>
   hostPreferencesSchema.parse(JSON.parse(await readFile(configPath, "utf8")));
 
-describe("host identity settings", () => {
-  test("creates the host ID once and keeps it after a restart", async () => {
-    await withConfigFile(async (configPath, sharedSettings) => {
-      const hostId = await Effect.runPromise(startHost(configPath, sharedSettings).readHostId());
-      expect(hostId).toMatch(/^[0-9a-f-]{36}$/);
-      expect((await Effect.runPromise(sharedSettings.readConfig()))?.hostId).toBe(hostId);
-      expect(await Effect.runPromise(startHost(configPath, sharedSettings).readHostId())).toBe(
-        hostId,
-      );
-    });
-  });
-
-  test("gives one host ID to concurrent first reads", async () => {
-    await withConfigFile(async (configPath, sharedSettings) => {
-      const service = startHost(configPath, sharedSettings);
-      const ids = await Effect.runPromise(
-        Effect.all([service.readHostId(), service.readHostId()], { concurrency: "unbounded" }),
-      );
-      expect(ids[0]).toBe(ids[1]);
-    });
-  });
-
+describe("host remote control settings", () => {
   test("keeps remote control settings after a restart", async () => {
     await withConfigFile(async (configPath, sharedSettings) => {
       expect(
@@ -83,7 +62,6 @@ describe("host identity settings", () => {
     await withConfigFile(async (configPath, sharedSettings) => {
       const service = startHost(configPath, sharedSettings);
       await Effect.runPromise(service.setTheme("dark"));
-      const hostId = await Effect.runPromise(service.readHostId());
       await Effect.runPromise(
         service.saveRemoteAccessSettings({
           enabled: false,
@@ -92,7 +70,6 @@ describe("host identity settings", () => {
       );
       const saved = await readFileConfig(configPath);
       expect(saved.theme).toBe("dark");
-      expect((await Effect.runPromise(sharedSettings.readConfig()))?.hostId).toBe(hostId);
     });
   });
 

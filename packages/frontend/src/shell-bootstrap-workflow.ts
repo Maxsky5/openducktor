@@ -14,6 +14,11 @@ export type OpenDucktorShellBootstrapOptions = {
       local: ShellBridge | undefined,
       queryClient: QueryClient,
     ) => ShellBridge;
+    /**
+     * Confirms that this client can use a host before the switch, and pairs it when a code is
+     * given, so the new page connects with saved access.
+     */
+    confirmRemoteAccess: (endpoint: string, pairingCode: string | undefined) => Promise<void>;
     navigate?: () => Promise<void>;
   };
   prepare?: () => void | Promise<void>;

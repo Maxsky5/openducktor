@@ -1,3 +1,7 @@
+import {
+  ARTIFACT_PREVIEW_BOOTSTRAP_PATH,
+  artifactPreviewBootstrapResponse,
+} from "@openducktor/remote-host/artifact-preview-bootstrap";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
@@ -78,6 +82,12 @@ export const startStaticFrontendServerEffect = (
                 return new Response("Host not allowed.", { status: 403 });
               }
               const requestUrl = new URL(request.url);
+              if (
+                requestUrl.pathname === ARTIFACT_PREVIEW_BOOTSTRAP_PATH &&
+                !requestUrl.search &&
+                request.method === "GET"
+              )
+                return artifactPreviewBootstrapResponse();
               if (requestUrl.pathname === RUNTIME_CONFIG_PATH) {
                 const runtimeConfig = await readBrowserRuntimeConfig(runtimeConfigState);
                 return new Response(runtimeConfig, {

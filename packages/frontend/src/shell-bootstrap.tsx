@@ -27,6 +27,7 @@ import {
   type HostSelection,
   type HostTarget,
 } from "./lib/host-location";
+import { RemoteConnectionError, isRemotePairingFailure } from "@openducktor/host-client/remote";
 import { parseRemoteHostEndpoint } from "@openducktor/frontend-core/recovery/remote-host-endpoint";
 
 const SETTINGS_PRELOAD_ERROR_MESSAGE = "Failed to preload settings snapshot before app bootstrap.";
@@ -79,7 +80,6 @@ export async function bootstrapOpenDucktorShell(
       }
     });
   const move = async (next: HostTarget) => {
-    if (sameHostTarget(target, next)) return;
     // A local draft that cannot be saved keeps this page, so the user sees why and keeps the draft.
     await saveDrafts();
     saveHostTarget(next, location.protocol);
@@ -96,6 +96,13 @@ export async function bootstrapOpenDucktorShell(
   const selection: HostSelection = {
     target,
     localHost: hosts.localHost,
+    confirm: async (endpoint, pairingCode) => {
+      const remote = parseRemoteHostEndpoint(endpoint, {
+        requireHttps: location.protocol === "https:",
+      });
+      await hosts.confirmRemoteAccess(remote, pairingCode);
+      return remote;
+    },
     select: async (endpoint) => {
       if (endpoint === null && !localAvailable) throw new Error("This client has no local host.");
       await move(
@@ -140,6 +147,7 @@ export async function bootstrapOpenDucktorShell(
         ...(local.remoteAccess && { remoteAccess: local.remoteAccess }),
         openExternalUrl: local.openExternalUrl,
         ...(local.editorClipboard && { editorClipboard: local.editorClipboard }),
+        getArtifactPreviewEnvironment: local.getArtifactPreviewEnvironment,
       };
     }
   }
@@ -160,7 +168,8 @@ export async function bootstrapOpenDucktorShell(
       const snapshot = await loadSettingsSnapshotFromQuery(queryClient);
       applyThemeToDocument(resolveThemePreference(snapshot.theme, readSystemAppearance()));
     } catch (cause) {
-      console.error(SETTINGS_PRELOAD_ERROR_MESSAGE, cause);
+      if (!(cause instanceof RemoteConnectionError && isRemotePairingFailure(cause.failure.code)))
+        console.error(SETTINGS_PRELOAD_ERROR_MESSAGE, cause);
     }
   };
   if (target.kind === "local") await loadTheme();

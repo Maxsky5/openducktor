@@ -13,6 +13,8 @@ for (const remote of [false, true]) {
               remoteConnection: {
                 readState: () => ({ status: "connected", generation: 1 }),
                 subscribeState: () => () => {},
+                connect: async () => {},
+                disconnect: async () => {},
                 retry: async () => {},
               },
             }

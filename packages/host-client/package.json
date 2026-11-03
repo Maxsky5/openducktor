@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./remote": "./src/remote/index.ts",
-    "./remote/terminal-socket": "./src/remote/terminal-socket.ts"
+    "./remote/terminal-socket": "./src/remote/terminal-socket.ts",
+    "./remote/test-support": "./src/remote/test-support/authorization.ts"
   },
   "scripts": {
     "build": "bunx tsc -p tsconfig.json",

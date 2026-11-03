@@ -1,4 +1,5 @@
-import { type ReactElement, useEffect } from "react";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { type ReactElement, useEffect, useState } from "react";
 import { AccessibilityInfo, ActivityIndicator, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
@@ -47,16 +48,27 @@ export function SwitchingHostScreen({ label }: { label: string }): ReactElement 
  */
 export function InvalidRecordScreen({ invalid }: { invalid: InvalidDeviceRecord }): ReactElement {
   const owner = useHostSessionOwner();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   return (
     <View style={styles.screen}>
       <ErrorState
         title={`${invalid.name} cannot be read`}
-        message={`${invalid.message} Reset ${invalid.name} to continue. The reset removes every saved host, and their unsent drafts do not come back. Add your hosts again after the reset.`}
+        message={`${error ?? invalid.message} Reset ${invalid.name} to continue. The reset removes every saved host, and their unsent drafts do not come back. Add your hosts again after the reset.`}
         action={
           <Button
             label={`Reset ${invalid.name}`}
             variant="destructive"
-            onPress={() => owner.resetInvalidRecord()}
+            loading={pending}
+            disabled={pending}
+            onPress={() => {
+              setPending(true);
+              setError(null);
+              void owner
+                .resetInvalidRecord()
+                .catch((cause) => setError(errorMessage(cause)))
+                .finally(() => setPending(false));
+            }}
           />
         }
       />

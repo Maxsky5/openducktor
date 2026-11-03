@@ -111,6 +111,7 @@ const config: ExpoConfig = {
     predictiveBackGestureEnabled: true,
   },
   plugins: [
+    ["expo-secure-store", { configureAndroidBackup: true }],
     // The app colors come from the Unistyles theme, so a color scheme change needs no render of
     // every screen.
     ["expo-router", { adaptiveColors: false }],

@@ -22,6 +22,8 @@ import {
   type HostEventEnvelope,
   type NotificationStreamFrame,
   type RemoteClientHello,
+  type RemoteClientKind,
+  type RemoteConnectionRequest,
   type RemoteFailure,
   type RemoteHostDescriptor,
   type TaskAssetRenderContext,
@@ -39,9 +41,17 @@ import {
   type RemoteHttpResponse,
   type RemoteTerminalConnection,
 } from "./transport";
+import { acceptedProtocol, createClientAdmission, securePairingHostId } from "./client-admission";
 import { linkSignals } from "./linked-signal";
 import { readSse } from "./sse";
 export * from "./transport";
+export * from "./authorization";
+import {
+  canonicalRemoteEndpoint,
+  isRemotePairingFailure,
+  type RemoteAuthorizationStore,
+  type RemoteConnectInput,
+} from "./authorization";
 export { readSse, type ReadSseOptions, type SseFrame } from "./sse";
 export type RemoteConnectionState = {
   status: "idle" | "connecting" | "synchronizing" | "connected" | "disconnected" | "failed";
@@ -67,7 +77,7 @@ export type RemoteTaskSubscription = {
 export interface RemoteHostClient {
   readonly client: HostClient;
   readState(): RemoteConnectionState;
-  connect(): Promise<void>;
+  connect(input?: RemoteConnectInput): Promise<void>;
   retry(): Promise<void>;
   disconnect(): Promise<void>;
   setActive(active: boolean): void;
@@ -94,6 +104,14 @@ export interface RemoteHostClient {
   readTaskAsset(context: TaskAssetRenderContext, signal: AbortSignal): Promise<Resource>;
   readStagedPreview(path: string, signal: AbortSignal): Promise<Resource>;
 }
+/** How a request proves access: the admitted connection, no proof, or a saved access token. */
+type RequestAuth = "connection" | "none" | { proof: string };
+type RequestOptions = { auth?: RequestAuth; streaming?: boolean };
+/** The headers that carry an admitted connection. */
+const admissionHeaders = (admission: RemoteAdmission) => ({
+  [REMOTE_CONNECTION_HEADER]: admission.connectionId,
+  authorization: `Bearer ${admission.connectionToken}`,
+});
 /**
  * Owns one host connection and its live handles.
  * Each attempt waits for replay and state recovery before it reports connected.
@@ -104,6 +122,7 @@ export const createRemoteHostClient = (
   hello: RemoteClientHello,
   transport: RemoteTransport,
   synchronize: RemoteSynchronizer,
+  authorization: { store: RemoteAuthorizationStore; clientKind: RemoteClientKind },
 ): RemoteHostClient => {
   const validated = remoteEndpointSchema.safeParse(endpoint);
   if (!validated.success)
@@ -112,11 +131,17 @@ export const createRemoteHostClient = (
       validated.error.message,
       "Enter a reachable complete remote work endpoint.",
     );
-  const base = new URL(validated.data).href.replace(/\/$/, "");
+  const base = canonicalRemoteEndpoint(validated.data);
   let state: RemoteConnectionState = { status: "idle", generation: 0 };
   let generation = 0;
   let owner: AbortController | null = null;
-  let connectionId: string | null = null;
+  let admission: RemoteAdmission | null = null;
+  const clientAdmission = createClientAdmission({
+    base,
+    hello,
+    store: authorization.store,
+    clientKind: authorization.clientKind,
+  });
   let selected = false;
   let active = true;
   let pending: Promise<void> | null = null;
@@ -139,17 +164,23 @@ export const createRemoteHostClient = (
     const next: RemoteConnectionState = { status, generation };
     if (state.host) next.host = state.host;
     if (failure) next.failure = failure;
+    else if (
+      (status === "connecting" || status === "synchronizing") &&
+      state.failure &&
+      isRemotePairingFailure(state.failure.code)
+    )
+      next.failure = state.failure;
     state = next;
     deliver(stateListeners, state);
   };
   const headers = () => {
-    if (!connectionId)
+    if (!admission)
       throw remoteError(
         "connection_expired",
         "There is no admitted remote connection.",
         "Connect before using host work.",
       );
-    return { [REMOTE_CONNECTION_HEADER]: connectionId };
+    return admissionHeaders(admission);
   };
   /** Host commands can outlive setup deadlines. Streams and files only need a setup deadline. */
   const request = async (
@@ -157,9 +188,9 @@ export const createRemoteHostClient = (
     path: string,
     signal: AbortSignal,
     body?: RequestBody,
-    admitted = true,
-    streaming = false,
+    { auth = "connection", streaming = false }: RequestOptions = {},
   ): Promise<RemoteHttpResponse> => {
+    const admitted = auth === "connection";
     const setup = new AbortController();
     const timer = path.startsWith("/invoke/")
       ? undefined
@@ -178,6 +209,8 @@ export const createRemoteHostClient = (
     const requestGeneration = generation;
     try {
       const requestHeaders: Record<string, string> = admitted ? headers() : {};
+      if (auth !== "connection" && auth !== "none")
+        requestHeaders.authorization = `Bearer ${auth.proof}`;
       if (cursor && path === "/events") requestHeaders["last-event-id"] = JSON.stringify(cursor);
       if (body !== undefined) requestHeaders["content-type"] = "application/json";
       const response = await waitWithAbort(
@@ -205,7 +238,10 @@ export const createRemoteHostClient = (
           const refusal = new RemoteRefusalError(negotiated.data.failure);
           // The host no longer knows this admission, so the connection is gone. A reconnect
           // negotiates a new one. The host refused the request, so it ran no work.
-          if (admitted && refusal.failure.code === "connection_expired")
+          if (
+            admitted &&
+            ["connection_expired", "authorization_rejected"].includes(refusal.failure.code)
+          )
             lost(requestGeneration, refusal);
           throw refusal;
         }
@@ -268,9 +304,9 @@ export const createRemoteHostClient = (
     path: string,
     signal: AbortSignal,
     body?: RequestBody,
-    admitted = true,
+    options: Pick<RequestOptions, "auth"> = {},
   ): Promise<JSONType> => {
-    const bytes = await readBytes(await request(method, path, signal, body, admitted), signal);
+    const bytes = await readBytes(await request(method, path, signal, body, options), signal);
     try {
       // `JSON.parse` returns only JSON values. Each command checks the shape with its own schema.
       const value: JSONType = JSON.parse(new TextDecoder().decode(bytes));
@@ -296,14 +332,15 @@ export const createRemoteHostClient = (
   const lost = (current: number, cause: unknown) => {
     if (generation !== current || owner?.signal.aborted) return;
     const error = connectionError(cause);
-    const id = connectionId;
+    const previousAdmission = admission;
+    if (error.failure.code === "authorization_rejected") clientAdmission.refuseCurrent();
     owner?.abort(error);
-    connectionId = null;
-    if (id) void release(id);
+    admission = null;
+    if (previousAdmission) void release(previousAdmission);
     publish(canRetry(error) ? "disconnected" : "failed", error.failure);
     if (canRetry(error)) schedule();
   };
-  const connect = (): Promise<void> => {
+  const connect = (input: RemoteConnectInput = {}): Promise<void> => {
     selected = true;
     if (!active) return Promise.resolve();
     if (pending) return pending;
@@ -314,12 +351,21 @@ export const createRemoteHostClient = (
     const current = ++generation;
     const abort = new AbortController();
     owner = abort;
-    connectionId = null;
+    admission = null;
+    const cancelled = () => {
+      if (owner !== abort) return;
+      selected = false;
+      abort.abort(input.signal?.reason);
+      publish("idle");
+    };
+    input.signal?.addEventListener("abort", cancelled, { once: true });
+    if (input.signal?.aborted) cancelled();
     const previousHostInstanceId = state.host?.hostInstanceId ?? null;
     const operation = (async () => {
+      let pendingAdmission: RemoteAdmission | null = null;
       try {
         const discoveredResult = remoteHostDescriptorSchema.safeParse(
-          await json("GET", "", abort.signal, undefined, false),
+          await json("GET", "", abort.signal, undefined, { auth: "none" }),
         );
         if (!discoveredResult.success)
           throw remoteError(
@@ -329,45 +375,31 @@ export const createRemoteHostClient = (
           );
         const discovered = discoveredResult.data;
         abort.signal.throwIfAborted();
-        // Read the admission ID after local cancellation so cleanup can release it.
-        const acceptedResult = remoteNegotiationResultSchema.safeParse(
-          await json("POST", "/connections", AbortSignal.timeout(SETUP_TIMEOUT_MS), hello, false),
-        );
-        if (!acceptedResult.success)
-          throw remoteError(
-            "invalid_protocol",
-            "Remote negotiation has an invalid shape.",
-            "Update the host or correct the work endpoint.",
-          );
-        const accepted = acceptedResult.data;
-        if (accepted.status === "rejected") throw new RemoteConnectionError(accepted.failure);
-        if (abort.signal.aborted) {
-          await release(accepted.connectionId);
-          abort.signal.throwIfAborted();
-        }
-        connectionId = accepted.connectionId;
-        if (accepted.host.hostInstanceId !== discovered.hostInstanceId)
-          throw remoteError(
-            "unavailable",
-            "The host restarted during negotiation.",
-            "Reconnect to synchronize the current host.",
-          );
-        const negotiatedProtocol = accepted.host.protocols.find(
-          (protocol) => protocol.version === accepted.protocolVersion,
-        );
-        if (
-          !hello.supportedProtocolVersions.includes(accepted.protocolVersion) ||
-          !negotiatedProtocol ||
-          hello.requiredCapabilities.some(
-            (capability) => !negotiatedProtocol.capabilities.includes(capability),
-          )
-        )
-          throw remoteError(
-            "invalid_protocol",
-            "The host accepted an unsupported protocol or omitted required capabilities.",
-            "Update the host to implement its advertised remote contract.",
-          );
+        const hostId = securePairingHostId(discovered, hello);
         abort.signal.throwIfAborted();
+        const admitted = await clientAdmission.negotiate({
+          hostId,
+          pairingCode: input.pairingCode,
+          // Read a late admission after local cancellation so cleanup can release it.
+          post: (payload, proof) =>
+            json("POST", "/connections", AbortSignal.timeout(SETUP_TIMEOUT_MS), payload, {
+              auth: proof === null ? "none" : { proof },
+            }),
+          aborted: () => abort.signal.aborted,
+        });
+        const { accepted } = admitted;
+        pendingAdmission = accepted;
+        abort.signal.throwIfAborted();
+        await clientAdmission.keep(admitted, hostId);
+        abort.signal.throwIfAborted();
+        const negotiatedProtocol = acceptedProtocol(accepted, discovered, hello);
+        abort.signal.throwIfAborted();
+        // Shared admission unlocks work, so publish it only after validation and device storage.
+        admission = {
+          connectionId: accepted.connectionId,
+          connectionToken: accepted.connectionToken,
+        };
+        pendingAdmission = null;
         // This client uses an optional capability only when it asked for it and the host has it.
         const uses = (capability: string): boolean =>
           hello.optionalCapabilities.includes(capability) &&
@@ -393,7 +425,9 @@ export const createRemoteHostClient = (
           replay.reject(error);
           attached.reject(error);
         }, SETUP_TIMEOUT_MS);
-        const events = await request("GET", "/events", abort.signal, undefined, true, true);
+        const events = await request("GET", "/events", abort.signal, undefined, {
+          streaming: true,
+        });
         void (async () => {
           try {
             for await (const frame of readSse(events.body, abort.signal, {
@@ -463,6 +497,12 @@ export const createRemoteHostClient = (
         attempts = 0;
         publish("connected");
       } catch (cause) {
+        if (pendingAdmission) await release(pendingAdmission);
+        if (admission && owner === abort) {
+          const previousAdmission = admission;
+          admission = null;
+          await release(previousAdmission);
+        }
         if (generation !== current || !selected || !active) throw cause;
         if (!abort.signal.aborted) lost(current, cause);
         throw connectionError(cause);
@@ -473,15 +513,16 @@ export const createRemoteHostClient = (
     publish("connecting");
     void operation
       .finally(() => {
+        input.signal?.removeEventListener("abort", cancelled);
         if (pending === operation) pending = null;
       })
       .catch(() => {});
     return operation;
   };
   const currentConnection = () => {
-    if ((!owner || owner.signal.aborted || !connectionId) && state.failure)
+    if ((!owner || owner.signal.aborted || !admission) && state.failure)
       throw new RemoteConnectionError(state.failure);
-    if (!owner || owner.signal.aborted || !connectionId)
+    if (!owner || owner.signal.aborted || !admission)
       throw remoteError(
         "connection_expired",
         "The remote host is disconnected.",
@@ -516,8 +557,7 @@ export const createRemoteHostClient = (
         else resolve();
       };
       const check = () => {
-        if (state.status === "connected" && connectionId && owner && !owner.signal.aborted)
-          settle();
+        if (state.status === "connected" && admission && owner && !owner.signal.aborted) settle();
         else if (!selected || state.status === "failed") settle(disconnectedError());
       };
       const timer = setTimeout(
@@ -533,9 +573,9 @@ export const createRemoteHostClient = (
     const read = isHostReadCommand(command);
     const deadline = Date.now() + READ_RECONNECT_WAIT_MS;
     while (true) {
-      const admitted = connectionId !== null && owner !== null && !owner.signal.aborted;
+      const admitted = admission !== null && owner !== null && !owner.signal.aborted;
       if (read && !admitted) await connected(deadline);
-      else if (!connectionId && pending) await pending;
+      else if (!admission && pending) await pending;
       const { generation: current, signal } = currentConnection();
       // Replies have a size limit, so a history read asks a host that can do it for compact history.
       const body = command === LOAD_HISTORY_COMMAND && compactHistory ? compact(args) : args;
@@ -575,10 +615,10 @@ export const createRemoteHostClient = (
   const resource = async (path: string, signal: AbortSignal) => {
     const { signal: combined, unlink } = linkSignals(owner ? [signal, owner.signal] : [signal]);
     try {
-      if (!connectionId && pending) await waitWithAbort(pending, combined);
+      if (!admission && pending) await waitWithAbort(pending, combined);
       combined.throwIfAborted();
       currentConnection();
-      const response = await request("GET", path, combined, undefined, true, true);
+      const response = await request("GET", path, combined, undefined, { streaming: true });
       return { bytes: await readBytes(response, combined), headers: response.headers };
     } finally {
       unlink();
@@ -588,26 +628,26 @@ export const createRemoteHostClient = (
   const stop = async () => {
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = null;
-    const id = connectionId;
+    const previousAdmission = admission;
     const attempt = pending;
     const oldOwner = owner;
     ++generation;
     owner = null;
-    connectionId = null;
+    admission = null;
     pending = null;
     oldOwner?.abort();
     publish("idle");
-    if (id) await release(id);
+    if (previousAdmission) await release(previousAdmission);
     await attempt?.catch(() => {});
   };
-  const release = async (id: string) => {
+  const release = async (ending: RemoteAdmission) => {
     const signal = AbortSignal.timeout(SETUP_TIMEOUT_MS);
     try {
       const response = await waitWithAbort(
         transport.request(
           "DELETE",
           `${base}/connections/current`,
-          { [REMOTE_CONNECTION_HEADER]: id },
+          admissionHeaders(ending),
           signal,
         ),
         signal,
@@ -710,7 +750,7 @@ export const createRemoteHostClient = (
       };
       let response: RemoteHttpResponse;
       try {
-        response = await request("GET", `${path}/stream`, combined, undefined, true, true);
+        response = await request("GET", `${path}/stream`, combined, undefined, { streaming: true });
       } catch (cause) {
         try {
           await unsubscribe();
@@ -862,9 +902,14 @@ export const createRemoteHostClient = (
   };
 };
 
+type RemoteAdmission = {
+  connectionId: string;
+  connectionToken: string;
+};
+
 type RequestBody =
   | HostCommandArgs
-  | RemoteClientHello
+  | RemoteConnectionRequest
   | TaskEventStreamSubscribe
   | { cursor: TaskEventCursor };
 type Resource = {
@@ -944,7 +989,8 @@ const deferred = <T>() => {
   void promise.catch(() => {});
   return { promise, resolve, reject };
 };
-const waitWithAbort = <T>(operation: Promise<T>, signal: AbortSignal): Promise<T> =>
+/** Waits for `operation`, or rejects with the abort reason when `signal` aborts first. */
+export const waitWithAbort = <T>(operation: Promise<T>, signal: AbortSignal): Promise<T> =>
   new Promise((resolve, reject) => {
     const abort = () => reject(signal.reason);
     signal.addEventListener("abort", abort, { once: true });

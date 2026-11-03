@@ -6,10 +6,19 @@ import {
   useRef,
   useState,
   type PropsWithChildren,
+  type ReactElement,
 } from "react";
 import { Laptop, Server } from "lucide-react";
-import type { RemoteConnectionState } from "@openducktor/host-client/remote";
-import type { RemoteAccessState } from "@openducktor/contracts";
+import {
+  isRemotePairingFailure,
+  type RemoteConnectionState,
+} from "@openducktor/host-client/remote";
+import {
+  ConnectionPairingForm,
+  PAIR_WITH_HOST,
+} from "@/components/features/remote-control/pairing-form";
+import { connectedDevicesLabel } from "@/components/features/remote-control/remote-control-status";
+import { type RemoteAccessState, remoteFailureText } from "@openducktor/contracts";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -53,17 +62,25 @@ export function HostConnectionProvider({
     selection.target.kind === "remote"
       ? new URL(selection.target.endpoint).host
       : localHostLabel(selection.localHost);
+  const remoteEndpoint = selection.target.kind === "remote" ? selection.target.endpoint : undefined;
+  // Pairing saves new access for the selected host. The connection then uses it.
+  const pair = async (pairingCode: string) => {
+    if (remoteEndpoint) await selection.confirm(remoteEndpoint, pairingCode);
+  };
   return (
     <HostContext value={host}>
       <RemoteConnectionBoundary
         connection={connection}
+        endpoint={remoteEndpoint}
+        pair={pair}
         changeHost={() => choose()}
         choosingHost={open}
-        initialView={(state) => (
+        initialView={(state, live) => (
           <ConnectionProgress
             state={state}
-            name={name}
-            connection={connection}
+            name={selection.target.kind === "remote" ? selection.target.endpoint : name}
+            connection={live}
+            pair={pair}
             choose={() => choose()}
           />
         )}
@@ -77,7 +94,7 @@ export function HostConnectionProvider({
         }}
       >
         <DialogContent
-          className="max-w-xl gap-0 overflow-hidden p-0"
+          className="max-w-lg gap-0 overflow-hidden p-0 outline-none"
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             trigger.current?.focus();
@@ -87,9 +104,13 @@ export function HostConnectionProvider({
             openSettings?.();
           }}
         >
-          <DialogHeader className="px-6 pb-1 pt-6">
+          <DialogHeader className="px-6 pb-2 pt-6 pr-12">
             <DialogTitle>Host connection</DialogTitle>
-            <DialogDescription>Choose the host for this window.</DialogDescription>
+            <DialogDescription>
+              {selection.target.kind === "local"
+                ? "Share this computer or connect to another host."
+                : "Choose the host for this window."}
+            </DialogDescription>
           </DialogHeader>
           <HostPicker
             selection={selection}
@@ -143,7 +164,7 @@ function LocalHostIcon({ state }: { state: RemoteAccessState | undefined }) {
       className={cn("relative inline-flex", sharing && "text-status-running-foreground")}
     >
       <Laptop className="size-5" />
-      {sharing && state.connectedClients > 0 ? (
+      {sharing && (state.connectedClients ?? 0) > 0 ? (
         <span className="absolute -right-1 -top-1 size-1.5 rounded-full bg-status-running" />
       ) : null}
     </span>
@@ -154,44 +175,59 @@ function sharingDescription(state: RemoteAccessState | undefined, error: string 
   if (error || state?.status === "failed")
     return ". Remote control status unavailable. Check Remote control settings.";
   if (state?.status !== "available") return "";
-  const clients = state.connectedClients;
-  const description =
-    clients === 0
-      ? "No clients connected."
-      : `${clients} ${clients === 1 ? "client" : "clients"} connected.`;
-  return `. Remote control is on. ${description}`;
+  return `. Remote control is on. ${connectedDevicesLabel(state.connectedClients)}.`;
 }
+
+type ConnectionProgressProps = {
+  state: RemoteConnectionState;
+  name: string;
+  connection: NonNullable<ShellBridge["remoteConnection"]>;
+  pair(pairingCode: string): Promise<void>;
+  choose(): void;
+};
 
 function ConnectionProgress({
   state,
   name,
   connection,
+  pair,
   choose,
-}: {
-  state: RemoteConnectionState;
-  name: string;
-  connection: ShellBridge["remoteConnection"];
-  choose(): void;
-}) {
+}: ConnectionProgressProps): ReactElement {
+  if (isRemotePairingFailure(state.failure?.code))
+    return (
+      <HostConnectionPage title={PAIR_WITH_HOST.title} description={PAIR_WITH_HOST.description}>
+        <ConnectionPairingForm
+          connection={connection}
+          endpoint={name}
+          failure={state.failure}
+          pair={pair}
+          onCancel={choose}
+        />
+      </HostConnectionPage>
+    );
   const failed = state.status === "failed" || state.status === "disconnected";
+  const stopped = state.status === "idle";
+  let title = "Connecting to host";
+  if (stopped) title = "Host connection stopped";
+  else if (failed) title = "Cannot connect to host";
+  let message = "Waiting for the host to be ready.";
+  if (state.failure) message = remoteFailureText(state.failure);
+  else if (stopped) message = "Retry the connection or choose another host.";
   return (
-    <HostConnectionPage
-      title={failed ? "Cannot connect to host" : "Connecting to host"}
-      description={name}
-    >
+    <HostConnectionPage title={title} description={name}>
       <div className="flex flex-col gap-5">
         <p role={failed ? "alert" : "status"} className="text-sm text-muted-foreground">
-          {state.failure
-            ? `${state.failure.message} ${state.failure.nextAction}`
-            : "Waiting for the host to be ready."}
+          {message}
         </p>
         <div className="flex flex-wrap justify-between gap-2">
           <Button variant="outline" onClick={choose}>
             Choose another host
           </Button>
-          {connection ? (
-            <HostRetryButton connection={connection} disabled={!failed} className="ml-auto" />
-          ) : null}
+          <HostRetryButton
+            connection={connection}
+            disabled={!failed && !stopped}
+            className="ml-auto"
+          />
         </div>
       </div>
     </HostConnectionPage>

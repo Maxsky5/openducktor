@@ -65,6 +65,16 @@ export const getElectronApi = (): OpenDucktorElectronApi => {
   return electronApi;
 };
 
+/**
+ * A remote host bridge in the desktop shell. Theme changes also update the native window, and
+ * artifact previews use the desktop preview protocol, because the renderer origin is `file://`.
+ */
+export const withElectronDesktopShell = (bridge: ShellBridge): ShellBridge => ({
+  ...bridge,
+  client: withElectronNativeTheme(bridge.client, (theme) => getElectronApi().setNativeTheme(theme)),
+  getArtifactPreviewEnvironment: () => getElectronApi().getArtifactPreviewEnvironment(),
+});
+
 const subscribeElectronEvent =
   (
     electronApi: OpenDucktorElectronApi,

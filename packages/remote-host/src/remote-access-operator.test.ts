@@ -1,3 +1,4 @@
+import { memoryApprovalStore } from "./remote-approval.test-support";
 import { afterAll, describe, expect, test } from "bun:test";
 import { type AddressInfo, createServer, type Server } from "node:net";
 import os from "node:os";
@@ -34,7 +35,6 @@ const createSettingsFile = (
   return {
     file,
     store: {
-      readHostId: () => Effect.succeed("stable-host-a"),
       readRemoteAccessSettings: () => Effect.sync(() => file.remoteAccess),
       saveRemoteAccessSettings: (settings: RemoteAccessSettings) =>
         file.failSaves
@@ -70,6 +70,7 @@ const startHost = async (settings: ReturnType<typeof createSettingsFile>) => {
     },
     {
       shell: "electron",
+      approvalStore: Effect.succeed(memoryApprovalStore()),
       appVersion: "host-test",
       logger: { error: () => Effect.void, info: () => Effect.void, success: () => Effect.void },
       reportFailure: () => {},
@@ -121,7 +122,9 @@ describe("remote access operator", () => {
       expect(state.status).toBe("available");
       expect(state.configuration!.publicEndpoint).toBe(address);
       const discovery = await fetch(address);
-      expect(await discovery.json()).toMatchObject({ hostId: "stable-host-a" });
+      expect(await discovery.json()).toMatchObject({
+        hostId: "20000000-0000-4000-8000-000000000001",
+      });
     } finally {
       await second.stop();
     }

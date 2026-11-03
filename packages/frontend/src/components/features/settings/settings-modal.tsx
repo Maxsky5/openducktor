@@ -250,14 +250,14 @@ function SettingsDialog({
         </DialogHeader>
 
         <DialogBody className="min-h-0 flex-1 overflow-hidden">
-          <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] sm:grid-cols-[220px_minmax(0,1fr)] sm:grid-rows-1">
+          <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1">
             <SettingsSidebar
               section={navigation.section}
               disabled={isInteractionDisabled}
               errorCountById={controller.settingsSectionErrorCountById}
               onChange={handleSectionChange}
             />
-            <div className="min-h-0 overflow-y-auto">
+            <div className="min-h-0 min-w-0 overflow-y-auto">
               <SettingsModalContent
                 section={navigation.section}
                 repositorySection={navigation.repositorySection}

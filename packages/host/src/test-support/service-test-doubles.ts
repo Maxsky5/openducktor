@@ -216,7 +216,6 @@ export const createWorkspaceSettingsServiceTestDouble = <
     "updateSidebarSessionGrouping",
   ),
   updateRepoGitConfig: unexpectedEffectCall("workspace settings service", "updateRepoGitConfig"),
-  readHostId: unexpectedEffectCall("workspace settings service", "readHostId"),
   readRemoteAccessSettings: unexpectedEffectCall(
     "workspace settings service",
     "readRemoteAccessSettings",

@@ -303,7 +303,7 @@ function DamagedHostsSection({
     if (!confirmed) return;
     setError(null);
     try {
-      owner.removeDamagedHost(entry.key);
+      await owner.removeDamagedHost(entry.key);
     } catch (cause) {
       setError(errorMessage(cause));
     }
@@ -414,23 +414,15 @@ export function SavedHostsList({
   const select = async (host: SavedHost, discardUnsavedDrafts = false) => {
     setBusy({ hostId: host.id, action: "connect" });
     setError(null);
-    // oxlint-disable-next-line react-compiler/todo -- the catch returns early and selects again, so the cleanup must stay in finally
     try {
       await owner.selectHost(host.id, { discardUnsavedDrafts });
     } catch (cause) {
-      if (cause instanceof DraftSaveBeforeSwitchError) {
-        const proceed = await confirmDraftLoss(cause);
-        if (proceed) await select(host, true);
-        return;
-      }
-      setError({
-        hostId: host.id,
-        action: "connect",
-        message: errorMessage(cause),
-      });
-    } finally {
-      setBusy(null);
+      if (!(cause instanceof DraftSaveBeforeSwitchError))
+        setError({ hostId: host.id, action: "connect", message: errorMessage(cause) });
+      else if (await confirmDraftLoss(cause)) await select(host, true);
     }
+    // The catch handles every failure, so this cleanup runs after each attempt.
+    setBusy(null);
   };
 
   const remove = async (host: SavedHost) => {

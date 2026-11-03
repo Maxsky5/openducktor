@@ -26,18 +26,52 @@ export const REMOTE_STREAM_HEARTBEAT_INTERVAL_MS = 15_000;
 export const REMOTE_CONNECTION_HEADER = "x-openducktor-connection-id";
 /** The port that remote control offers first. The host keeps the port of each enable. */
 export const DEFAULT_REMOTE_PORT = 14328;
+export const REMOTE_PAIRING_CODE_LIFETIME_MS = 300_000;
 export const REMOTE_TERMINAL_CONNECTION_PREFIX = "openducktor-connection.";
+export const REMOTE_TERMINAL_AUTHORIZATION_PREFIX = "openducktor-authorization.";
+export const REMOTE_HTTP_WARNING = "HTTP is not encrypted. Use a trusted private network or HTTPS.";
+export const REMOTE_HTTP_DETAILS =
+  "Anyone who intercepts a pairing code or access credential can control this host and read its data.";
+export const remoteClientKindSchema = z.enum(["browser", "desktop", "mobile"]);
+/** A six-digit pairing code, with leading zeroes. */
+export const remotePairingCodeSchema = z.string().regex(/^\d{6}$/);
+/** The token of one negotiated connection. */
+export const remoteConnectionTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+/** The saved access token of a paired client: its client ID, a dot, and the secret. */
+export const remoteAuthorizationTokenSchema = z
+  .string()
+  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[A-Za-z0-9_-]{43}$/);
+const BEARER_PREFIX = "Bearer ";
+/** The client ID and the secret of a saved access token, or null for another format. */
+export const parseRemoteAuthorizationToken = (
+  token: string,
+): { clientId: string; secret: string } | null => {
+  if (!remoteAuthorizationTokenSchema.safeParse(token).success) return null;
+  const dot = token.indexOf(".");
+  return { clientId: token.slice(0, dot), secret: token.slice(dot + 1) };
+};
+/** The token of a `Bearer` authorization header when it matches `schema`. */
+export const readBearerToken = (
+  header: string | null | undefined,
+  schema: z.ZodString,
+): string | undefined => {
+  if (!header?.startsWith(BEARER_PREFIX)) return undefined;
+  const parsed = schema.safeParse(header.slice(BEARER_PREFIX.length));
+  return parsed.success ? parsed.data : undefined;
+};
+export const remoteAuthorizationSchema = z.object({
+  hostId: z.string().uuid(),
+  clientId: z.string().uuid(),
+  token: remoteAuthorizationTokenSchema,
+});
 
 export const remoteHostDescriptorSchema = z.object({
   shell: z.enum(["electron", "web"]),
   appVersion: z.string().min(1),
   hostInstanceId: z.string().min(1),
-  /**
-   * The ID of this host in its settings file. It stays the same across restarts, so a client
-   * knows a saved host at a new address. Older hosts send none.
-   */
+  /** The stable identity of this host's approval scope. Legacy hosts may omit it. */
   hostId: z.string().min(1).optional(),
-  accessPolicy: z.literal("network_reach"),
+  accessPolicy: z.enum(["network_reach", "pairing"]),
   protocols: z.array(
     z.object({ version: z.number().int().positive(), capabilities: z.array(z.string()) }),
   ),
@@ -50,6 +84,10 @@ export const remoteClientHelloSchema = z
     optionalCapabilities: z.array(z.string().min(1)).max(64),
   })
   .strict();
+export const remoteConnectionRequestSchema = remoteClientHelloSchema.extend({
+  clientKind: remoteClientKindSchema,
+  pairingCode: z.string().max(128).optional(),
+});
 export const remoteFailureSchema = z.object({
   code: z.enum([
     "invalid_endpoint",
@@ -65,6 +103,10 @@ export const remoteFailureSchema = z.object({
     "outcome_unknown",
     "consumer_overflow",
     "port_in_use",
+    "authorization_required",
+    "authorization_rejected",
+    "pairing_refused",
+    "authorization_storage_failed",
   ]),
   message: z.string(),
   nextAction: z.string(),
@@ -74,11 +116,23 @@ export const remoteFailureSchema = z.object({
   missingCapabilities: z.array(z.object({ name: z.string(), reason: z.string() })).optional(),
   updateSide: z.enum(["client", "host", "both"]).optional(),
 });
+/** The reason and the next action of a remote failure, as one sentence pair. */
+export const remoteFailureText = (failure: Pick<RemoteFailure, "message" | "nextAction">): string =>
+  `${failure.message} ${failure.nextAction}`;
+const REMOTE_PAIRING_FAILURES: ReadonlySet<RemoteFailure["code"] | undefined> = new Set<
+  RemoteFailure["code"] | undefined
+>(["authorization_required", "authorization_rejected", "pairing_refused"]);
+/** True for a failure that a new pairing code can solve. */
+export const isRemotePairingFailure = (code: RemoteFailure["code"] | undefined): boolean =>
+  REMOTE_PAIRING_FAILURES.has(code);
+
 export const remoteNegotiationResultSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("accepted"),
     host: remoteHostDescriptorSchema,
     connectionId: z.string().uuid(),
+    connectionToken: remoteConnectionTokenSchema,
+    authorization: remoteAuthorizationSchema.optional(),
     protocolVersion: z.number().int().positive(),
     missingOptionalCapabilities: z.array(z.string()),
   }),
@@ -199,7 +253,20 @@ export const remoteAccessNetworksSchema = z.array(
 export const remoteAccessStateSchema = z.object({
   status: z.enum(["disabled", "starting", "available", "failed"]),
   configuration: remoteAccessConfigurationSchema.nullable(),
-  connectedClients: z.number().int().nonnegative(),
+  pairing: z.object({ code: remotePairingCodeSchema, expiresAt: z.iso.datetime() }).nullable(),
+  /** Why the last pairing window closed, while no window is open. */
+  pairingEnd: z.enum(["paired", "expired", "refused", "stopped"]).optional(),
+  clients: z
+    .array(
+      z.object({
+        clientId: z.string().uuid(),
+        kind: remoteClientKindSchema,
+        reference: z.string(),
+        status: z.enum(["connected", "offline"]),
+      }),
+    )
+    .nullable(),
+  connectedClients: z.number().int().nonnegative().nullable(),
   failure: remoteFailureSchema.optional(),
 });
 export const remoteTaskLeaseSchema = z.object({
@@ -207,6 +274,21 @@ export const remoteTaskLeaseSchema = z.object({
   replayBoundary: taskEventCursorSchema,
 });
 export type RemoteHostDescriptor = z.infer<typeof remoteHostDescriptorSchema>;
+export type RemoteAuthorization = z.infer<typeof remoteAuthorizationSchema>;
+export type RemoteClientKind = z.infer<typeof remoteClientKindSchema>;
+export type RemoteConnectionRequest = z.infer<typeof remoteConnectionRequestSchema>;
+export type RemoteApprovedClient = NonNullable<
+  z.infer<typeof remoteAccessStateSchema>["clients"]
+>[number];
+export const remotePairingQrSchema = z
+  .object({
+    type: z.literal("openducktor-pairing"),
+    version: z.literal(1),
+    endpoint: remoteEndpointSchema,
+    code: remotePairingCodeSchema,
+  })
+  .strict();
+export type RemotePairingQr = z.infer<typeof remotePairingQrSchema>;
 export type RemoteClientHello = z.infer<typeof remoteClientHelloSchema>;
 export type RemoteFailure = z.infer<typeof remoteFailureSchema>;
 export type RemoteNegotiationResult = z.infer<typeof remoteNegotiationResultSchema>;
@@ -214,12 +296,35 @@ export type RemoteAccessEnableInput = z.infer<typeof remoteAccessEnableInputSche
 export type RemoteAccessConfiguration = z.infer<typeof remoteAccessConfigurationSchema>;
 export type RemoteAccessNetwork = z.infer<typeof remoteAccessNetworksSchema>[number];
 export type RemoteAccessState = z.infer<typeof remoteAccessStateSchema>;
+/** A failed remote control: no pairing window, and devices that the host cannot report. */
+export const failedRemoteAccessState = (
+  failure: RemoteFailure,
+  configuration: RemoteAccessConfiguration | null = null,
+): RemoteAccessState => ({
+  status: "failed",
+  configuration,
+  pairing: null,
+  clients: null,
+  connectedClients: null,
+  failure,
+});
+export type RemotePairingEnd = NonNullable<RemoteAccessState["pairingEnd"]>;
 export type RemoteAccessSettings = z.infer<typeof remoteAccessSettingsSchema>;
 export type RemoteTaskLease = z.infer<typeof remoteTaskLeaseSchema>;
+export const remotePairingStartInputSchema = z.strictObject({ renew: z.boolean().optional() });
+export type RemotePairingStartInput = z.infer<typeof remotePairingStartInputSchema>;
 export interface RemoteAccessBridge {
   readState(): Promise<RemoteAccessState>;
   readNetworks(): Promise<RemoteAccessNetwork[]>;
   enable(input: RemoteAccessEnableInput): Promise<RemoteAccessState>;
   disable(): Promise<RemoteAccessState>;
+  revokeClient(clientId: string): Promise<RemoteAccessState>;
+  /**
+   * Opens a five-minute pairing window with a new single-use code. `renew` asks for the next code
+   * of an expired window: the count of wrong codes then stays.
+   */
+  startPairing(options?: RemotePairingStartInput): Promise<RemoteAccessState>;
+  /** Closes the open pairing window. */
+  stopPairing(): Promise<RemoteAccessState>;
   subscribeState(listener: (state: RemoteAccessState) => void): Promise<() => void>;
 }

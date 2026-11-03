@@ -131,11 +131,19 @@ export const startNodeFetchServer = async <Data>({
     });
   });
 
+  /** The requests of open upgraded sockets. Terminal presence follows their abort signals. */
+  const upgradedRequests = new Set<Request>();
   server.on("upgrade", (incoming, socket, head) => {
     void (async () => {
       const abort = new AbortController();
-      socket.once("close", () => abort.abort());
       const request = toRequest(incoming, hostname, abort.signal);
+      // The Request signal follows `abort` only while the Request lives. An upgraded socket outlives
+      // the handler, so the server holds the Request until the socket closes.
+      upgradedRequests.add(request);
+      socket.once("close", () => {
+        abort.abort();
+        upgradedRequests.delete(request);
+      });
       let upgraded = false;
       const requestServer = makeRequestServer(null, (options) => {
         if (!webSocketServer || !websocket) return false;

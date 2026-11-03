@@ -26,7 +26,7 @@ export type RemoteAccessSettingsStore = Pick<
  */
 export type RemoteAccessOperator = Pick<
   RemoteAccessController,
-  "readNetworks" | "enable" | "disable" | "states"
+  "readNetworks" | "enable" | "disable" | "states" | "revokeClient" | "startPairing" | "stopPairing"
 > & {
   readState(): Effect.Effect<RemoteAccessState, RemoteAccessError>;
   /**
@@ -127,6 +127,9 @@ export const createRemoteAccessOperator = (
     });
   return {
     readNetworks: () => controller.readNetworks(),
+    revokeClient: (clientId) => controller.revokeClient(clientId),
+    startPairing: (options) => controller.startPairing(options).pipe(Effect.map(withSaved)),
+    stopPairing: () => controller.stopPairing().pipe(Effect.map(withSaved)),
     states: controller.states.pipe(Stream.map(withSaved)),
     readState,
     enable: (input) =>
@@ -147,6 +150,8 @@ export const createRemoteAccessOperator = (
     restore: (environment) =>
       Effect.gen(function* () {
         const settings = yield* loadSaved;
+        const owned = yield* controller.readState();
+        if (owned.status === "failed") return;
         const fromEnvironment = [
           "OPENDUCKTOR_REMOTE_HOST",
           "OPENDUCKTOR_REMOTE_PORT",

@@ -1,5 +1,5 @@
 import { CircleAlert } from "lucide-react";
-import type { ReactElement } from "react";
+import { useId, type ReactElement } from "react";
 import { RepositorySelector } from "@/components/features/repository/repository-selector";
 import type { RepositorySelectorWorkspace } from "@/components/features/repository/repository-selector-model";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
 import { REPOSITORY_SECTIONS, SETTINGS_SECTIONS } from "./settings-modal-constants";
 import { getShellBridge } from "@/lib/shell-bridge";
+import { Combobox } from "@/components/ui/combobox";
 
 type SettingsSidebarProps = {
   section: SettingsSectionId;
@@ -21,11 +22,37 @@ export function SettingsSidebar({
   errorCountById,
   onChange,
 }: SettingsSidebarProps): ReactElement {
+  const labelId = useId();
+  const sections = SETTINGS_SECTIONS.filter(
+    (entry) => entry.id !== "remote-access" || getShellBridge().remoteAccess,
+  );
   return (
-    <aside className="min-h-0 border-b border-border bg-muted/50 p-2 sm:overflow-y-auto sm:border-b-0 sm:border-r sm:p-3">
-      <div className="flex gap-1 overflow-x-auto sm:flex-col sm:overflow-visible">
-        {SETTINGS_SECTIONS.map((entry) => {
-          if (entry.id === "remote-access" && !getShellBridge().remoteAccess) return null;
+    <aside
+      aria-label="Settings sections"
+      className="min-h-0 min-w-0 overflow-y-auto border-b border-border bg-muted/50 p-3 md:border-b-0 md:border-r"
+    >
+      <div className="md:hidden">
+        <Label id={labelId} className="sr-only">
+          Settings section
+        </Label>
+        <Combobox
+          value={section}
+          disabled={disabled}
+          searchable={false}
+          triggerAriaLabelledBy={labelId}
+          triggerClassName="w-full"
+          options={sections.map((entry) => ({
+            value: entry.id,
+            label: errorCountById[entry.id] ? `${entry.label} · Needs attention` : entry.label,
+          }))}
+          onValueChange={(value) => {
+            const entry = sections.find((entry) => entry.id === value);
+            if (entry) onChange(entry.id);
+          }}
+        />
+      </div>
+      <div className="hidden space-y-1 md:block">
+        {sections.map((entry) => {
           const Icon = entry.icon;
           const sectionErrorCount = errorCountById[entry.id] ?? 0;
           return (

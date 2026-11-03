@@ -10,11 +10,11 @@ const AppThemeContext = createContext<AppTheme | null>(null);
  * Gives the current theme to the views that need theme values outside styles, such as the
  * underlay color of a control or the color of a spinner. Only this provider follows the theme
  * with `useUnistyles`, so a list row reads the theme from context and adds no Unistyles listener.
- * The app changes the theme only by its name, so the value changes only with the name.
+ * It follows the resolved scheme, so system theme changes also update React consumers.
  */
 export function AppThemeProvider({ children }: PropsWithChildren): ReactElement {
-  const { themeName } = useUnistyles().rt;
-  const theme = useMemo(() => UnistylesRuntime.getTheme(themeName), [themeName]);
+  const { scheme } = useUnistyles().theme;
+  const theme = useMemo(() => UnistylesRuntime.getTheme(scheme), [scheme]);
   return <AppThemeContext value={theme}>{children}</AppThemeContext>;
 }
 

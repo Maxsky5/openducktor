@@ -44,9 +44,19 @@ export function RemoteAccessProvider({
       stop?.();
     };
   }, [bridge]);
-  const state = liveState ?? query.data;
+  const current = liveState ?? query.data;
   const failure = error ?? (liveState ? undefined : query.error?.message);
-  const value = useMemo(() => ({ bridge, state, error: failure }), [bridge, state, failure]);
+  const value = useMemo(
+    () => ({
+      bridge,
+      state:
+        failure && current
+          ? { ...current, pairing: null, clients: null, connectedClients: null }
+          : current,
+      error: failure,
+    }),
+    [bridge, current, failure],
+  );
   return <RemoteAccessContext value={value}>{children}</RemoteAccessContext>;
 }
 

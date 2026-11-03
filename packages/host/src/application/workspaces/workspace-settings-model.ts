@@ -50,8 +50,6 @@ export type WorkspaceSettingsError =
   | SettingsConfigError;
 
 export type WorkspaceSettingsService = {
-  /** Creates and saves a stable host ID on the first read. */
-  readHostId(): Effect.Effect<string, WorkspaceSettingsError>;
   readRemoteAccessSettings(): Effect.Effect<RemoteAccessSettings, WorkspaceSettingsError>;
   saveRemoteAccessSettings(
     settings: RemoteAccessSettings,

@@ -15,6 +15,7 @@ import { createTaskEventStream } from "../../../../packages/host/src/events/task
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 import {
   createElectronShellBridge,
+  withElectronDesktopShell,
   withElectronNativeTheme,
   ElectronPreloadBridgeUnavailableError,
 } from "./electron-shell-bridge";
@@ -651,3 +652,25 @@ test.each(["read", "write"])(
     expect(applyTheme).toHaveBeenCalledTimes(1);
   },
 );
+
+test("a remote host bridge previews artifacts through the desktop protocol", async () => {
+  const { electronApi } = createElectronApi();
+  const desktop = {
+    bootstrapUrl: "odt-artifact-preview://bootstrap",
+    scriptedHtml: { supported: true as const },
+  };
+  setElectronApi({ ...electronApi, getArtifactPreviewEnvironment: async () => desktop });
+  const remote = createElectronShellBridge();
+
+  const bridge = withElectronDesktopShell({
+    ...remote,
+    // The browser shell bridge builds this URL from the renderer origin, which is file:// here.
+    getArtifactPreviewEnvironment: async () => ({
+      bootstrapUrl: "file:///artifact-preview-bootstrap",
+      scriptedHtml: { supported: true },
+    }),
+  });
+
+  expect(await bridge.getArtifactPreviewEnvironment()).toEqual(desktop);
+  Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
+});

@@ -1,3 +1,11 @@
+import { browserRemoteAuthorizationStore } from "../../frontend/src/lib/remote/authorization-store";
+import { savedTestAuthorization } from "../../host-client/src/remote/test-support/authorization";
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  value: createMemoryClientStorage(),
+});
+import { createMemoryClientStorage } from "@openducktor/frontend-core/platform/client-storage";
+import { admittedWorkOptions } from "../../remote-host/src/remote-approval.test-support";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
 import assert from "node:assert/strict";
 import { spyOn } from "bun:test";
@@ -58,7 +66,6 @@ const work = createRemoteWorkInterface(
     ...router,
     hostInstanceId: "host-a",
     hostSettings: {
-      readHostId: () => Effect.succeed("stable-host-a"),
       readRemoteAccessSettings: () => Effect.succeed({ enabled: false, configuration: null }),
       saveRemoteAccessSettings: () => Effect.void,
     },
@@ -84,7 +91,8 @@ const work = createRemoteWorkInterface(
   {
     shell: "web",
     appVersion: "test-host",
-    hostId: "stable-host-a",
+    hostId: "20000000-0000-4000-8000-000000000001",
+    ...admittedWorkOptions(),
     listenHost: "127.0.0.1",
     publicEndpoint: "http://machine.test/remote",
     logger: { info: () => Effect.void, error: () => Effect.void, success: () => Effect.void },
@@ -157,6 +165,11 @@ const connect = async () => {
   documents.push(document);
   Object.defineProperty(globalThis, "window", { configurable: true, value: page });
   Object.defineProperty(globalThis, "document", { configurable: true, value: document });
+  await browserRemoteAuthorizationStore.save({
+    version: 1,
+    endpoint,
+    authorization: savedTestAuthorization(),
+  });
   const bridge = createRemoteShellBridge({
     endpoint,
     version: "test-browser",

@@ -26,7 +26,20 @@ test("the rail, host modal, and Settings share live client counts and host addre
     enable: async () => {
       throw new Error("This test uses the live state stream.");
     },
+    revokeClient: async () => ({
+      status: "disabled",
+      configuration: null,
+      pairing: null,
+      clients: [],
+      connectedClients: 0,
+    }),
     disable: mock(() => rejected.promise),
+    startPairing: async () => {
+      throw new Error("This test does not pair.");
+    },
+    stopPairing: async () => {
+      throw new Error("This test does not pair.");
+    },
     subscribeState: mock(async (listener: (state: RemoteAccessState) => void) => {
       publish = listener;
       return stop;
@@ -35,6 +48,7 @@ test("the rail, host modal, and Settings share live client counts and host addre
   const selection = {
     target: { kind: "local" } as const,
     localHost: "web" as const,
+    confirm: async (endpoint: string) => endpoint,
     select: async () => {},
     disconnect: async () => {},
   };
@@ -58,40 +72,65 @@ test("the rail, host modal, and Settings share live client counts and host addre
   const view = render(content(false, false));
   const control = await view.findByRole("button", { name: "Host connection: Web runner host" });
   await act(async () => {
-    publish({ status: "available", configuration, connectedClients: 0 });
+    publish({
+      status: "available",
+      configuration,
+      pairing: null,
+      clients: [],
+      connectedClients: 0,
+    });
   });
   expect(control.getAttribute("aria-label")).toContain(
-    "Remote control is on. No clients connected.",
+    "Remote control is on. No devices connected.",
   );
   expect(control.textContent).toBe("");
   fireEvent.click(control);
   const dialog = view.getByRole("dialog", { name: "Host connection" });
-  expect(within(dialog).getByRole("status").textContent).toBe("No clients connected");
-  const address = within(dialog).getByLabelText("Host address");
-  if (!(address instanceof HTMLInputElement)) throw new Error("Expected a host address input.");
-  expect(address.value).toBe(configuration.publicEndpoint);
-  expect(within(dialog).getByRole("button", { name: "Copy address" })).toBeDefined();
-  await act(async () => {
-    publish({ status: "available", configuration, connectedClients: 2 });
+  fireEvent.keyDown(within(dialog).getByRole("tab", { name: "Remote control" }), {
+    key: "Enter",
   });
-  expect(within(dialog).getByRole("status").textContent).toBe("2 clients connected");
-  expect(control.getAttribute("aria-label")).toContain("2 clients connected.");
+  expect(within(dialog).getByText("No devices connected")).toBeDefined();
+  // No pairing code exists until the operator adds a device.
+  expect(within(dialog).queryByText(/^Pairing code \d/)).toBeNull();
+  expect(within(dialog).getByRole("button", { name: "Add device" })).toBeDefined();
+  await act(async () => {
+    publish({
+      status: "available",
+      configuration,
+      pairing: null,
+      clients: [],
+      connectedClients: 2,
+    });
+  });
+  expect(within(dialog).getByText("2 devices connected")).toBeDefined();
+  expect(control.getAttribute("aria-label")).toContain("2 devices connected.");
   expect(control.getAttribute("title")).toBe(control.getAttribute("aria-label"));
   expect(control.textContent).toBe("");
   await act(async () => {
-    snapshot.resolve({ status: "disabled", configuration: null, connectedClients: 0 });
+    snapshot.resolve({
+      status: "disabled",
+      configuration: null,
+      pairing: null,
+      clients: [],
+      connectedClients: 0,
+    });
     await snapshot.promise;
   });
-  expect(control.getAttribute("aria-label")).toContain("2 clients connected.");
-  expect(within(dialog).getByRole("button", { name: "Show QR code" })).toBeDefined();
+  expect(control.getAttribute("aria-label")).toContain("2 devices connected.");
   fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
   view.rerender(content(true, false));
-  await view.findByText("On");
+  await view.findByText("On. 2 devices connected.");
   expect(bridge.subscribeState).toHaveBeenCalledTimes(1);
   await act(async () => {
-    publish({ status: "available", configuration, connectedClients: 1 });
+    publish({
+      status: "available",
+      configuration,
+      pairing: null,
+      clients: [],
+      connectedClients: 1,
+    });
   });
-  expect(control.getAttribute("aria-label")).toContain("1 client connected.");
+  expect(control.getAttribute("aria-label")).toContain("1 device connected.");
   view.rerender(content(false, true));
   const remote = view.getByRole("button", { name: "Host connection: host.test" });
   expect(remote.textContent).toBe("");
@@ -107,23 +146,30 @@ test("the rail, host modal, and Settings share live client counts and host addre
     }),
   ).toBeNull();
   view.rerender(content(false, false));
+  fireEvent.keyDown(view.getByRole("tab", { name: "Remote control" }), { key: "Enter" });
   expect(
-    within(view.getByRole("dialog", { name: "Host connection" })).getByRole("status").textContent,
-  ).toBe("1 client connected");
-  fireEvent.click(view.getByRole("button", { name: "Disable remote control" }));
-  await view.findByRole("button", { name: "Disabling…" });
-  const group = view.getByRole("button", { name: "Disabling…" }).closest("fieldset");
-  expect(group?.disabled).toBe(true);
+    within(view.getByRole("dialog", { name: "Host connection" })).getByText("1 device connected"),
+  ).toBeDefined();
+  fireEvent.click(view.getByRole("switch", { name: "Enable Remote Control" }));
+  await view.findByText("Turning off remote control...");
+  const sharingSwitch = view.getByRole("switch", { name: "Enable Remote Control" });
+  expect(sharingSwitch.hasAttribute("disabled")).toBe(true);
   await act(async () => {
     rejected.reject(new Error("Could not stop sharing. Try again."));
   });
   expect((await view.findByRole("alert")).textContent).toBe("Could not stop sharing. Try again.");
-  expect(group?.disabled).toBe(false);
+  expect(sharingSwitch.hasAttribute("disabled")).toBe(false);
   bridge.disable = mock(() => disabled.promise);
-  fireEvent.click(view.getByRole("button", { name: "Disable remote control" }));
-  await view.findByRole("button", { name: "Disabling…" });
+  fireEvent.click(view.getByRole("switch", { name: "Enable Remote Control" }));
+  await view.findByText("Turning off remote control...");
   await act(async () => {
-    const next = { status: "disabled", configuration: null, connectedClients: 0 } as const;
+    const next: RemoteAccessState = {
+      status: "disabled",
+      configuration: null,
+      pairing: null,
+      clients: [],
+      connectedClients: 0,
+    };
     publish(next);
     disabled.resolve(next);
   });
@@ -131,16 +177,13 @@ test("the rail, host modal, and Settings share live client counts and host addre
   expect(control.textContent).toBe("");
   expect(
     within(view.getByRole("dialog", { name: "Host connection" })).queryByRole("button", {
-      name: "Copy address",
+      name: "Add device",
     }),
   ).toBeNull();
   expect(
-    within(view.getByRole("dialog", { name: "Host connection" })).getByText("Off"),
-  ).toBeDefined();
-  expect(
-    within(view.getByRole("dialog", { name: "Host connection" })).getByText(
-      "Other devices cannot connect to this host.",
-    ),
+    await within(view.getByRole("dialog", { name: "Host connection" })).findByRole("button", {
+      name: "Turn on remote control",
+    }),
   ).toBeDefined();
   view.unmount();
   expect(stop).toHaveBeenCalledTimes(1);
@@ -153,12 +196,31 @@ test("opens remote control settings without changing the selected host", async (
   });
   const select = mock(async (_endpoint: string | null) => {});
   const bridge: RemoteAccessBridge = {
-    readState: async () => ({ status: "disabled", configuration: null, connectedClients: 0 }),
+    readState: async () => ({
+      status: "disabled",
+      configuration: null,
+      pairing: null,
+      clients: [],
+      connectedClients: 0,
+    }),
     readNetworks: async () => [],
     enable: async () => {
       throw new Error("Not used by this test.");
     },
+    revokeClient: async () => ({
+      status: "disabled",
+      configuration: null,
+      pairing: null,
+      clients: [],
+      connectedClients: 0,
+    }),
     disable: async () => {
+      throw new Error("Not used by this test.");
+    },
+    startPairing: async () => {
+      throw new Error("Not used by this test.");
+    },
+    stopPairing: async () => {
       throw new Error("Not used by this test.");
     },
     subscribeState: async () => () => {},
@@ -170,6 +232,7 @@ test("opens remote control settings without changing the selected host", async (
           selection={{
             target: { kind: "local" },
             localHost: "electron",
+            confirm: async (endpoint: string) => endpoint,
             select,
             disconnect: async () => {},
           }}
@@ -183,9 +246,20 @@ test("opens remote control settings without changing the selected host", async (
   const control = view.getByRole("button", { name: "Host connection: Desktop app host" });
   control.focus();
   fireEvent.click(control);
-  await view.findByText("Off");
-  expect(view.queryByRole("button", { name: "Disable remote control" })).toBeNull();
-  fireEvent.click(view.getByRole("button", { name: "Remote control settings" }));
+  // Remote control opens first, because the rail control shows its status.
+  await view.findByRole("button", { name: "Turn on remote control" });
+  fireEvent.keyDown(view.getByRole("tab", { name: "Connect to a host" }), { key: "Enter" });
+  const address = view.getByLabelText("Host address");
+  if (!(address instanceof HTMLInputElement)) throw new Error("Expected a host address input.");
+  fireEvent.change(address, { target: { value: "https://new-host.test" } });
+  fireEvent.keyDown(view.getByRole("tab", { name: "Remote control" }), { key: "Enter" });
+  fireEvent.keyDown(view.getByRole("tab", { name: "Connect to a host" }), { key: "Enter" });
+  const restoredAddress = view.getByLabelText("Host address");
+  if (!(restoredAddress instanceof HTMLInputElement))
+    throw new Error("Expected a host address input.");
+  expect(restoredAddress.value).toBe("https://new-host.test");
+  fireEvent.keyDown(view.getByRole("tab", { name: "Remote control" }), { key: "Enter" });
+  fireEvent.click(view.getByRole("button", { name: "Network settings" }));
   await waitFor(() => expect(view.queryByRole("dialog", { name: "Host connection" })).toBeNull(), {
     timeout: 500,
   });
@@ -200,6 +274,7 @@ test("keeps all host actions in the modal footer", () => {
       selection={{
         target: { kind: "remote", endpoint: "https://host.test" },
         localHost: "web",
+        confirm: async (endpoint: string) => endpoint,
         select: async () => {},
         disconnect: async () => {},
       }}
@@ -221,7 +296,13 @@ test("Cancel keeps the current host and returns keyboard focus to the rail contr
   const disconnect = mock(async () => {});
   const view = render(
     <HostConnectionProvider
-      selection={{ target: { kind: "local" }, localHost: "web", select, disconnect }}
+      selection={{
+        target: { kind: "local" },
+        localHost: "web",
+        confirm: async (endpoint: string) => endpoint,
+        select,
+        disconnect,
+      }}
       connection={undefined}
     >
       <HostSwitcher />
@@ -254,6 +335,7 @@ test("starts host work only after connection and keeps host selection in navigat
       selection={{
         target: { kind: "remote", endpoint: "https://host.test" },
         localHost: null,
+        confirm: async (endpoint: string) => endpoint,
         select: async () => {},
         disconnect: async () => {},
       }}
@@ -263,6 +345,8 @@ test("starts host work only after connection and keeps host selection in navigat
           notify = listener;
           return () => {};
         },
+        connect: async () => {},
+        disconnect: async () => {},
         retry: async () => {},
       }}
     >
@@ -291,6 +375,7 @@ test("the host picker stays usable while the current host connection changes", a
       selection={{
         target: { kind: "remote", endpoint: "https://host.test/remote" },
         localHost: "web",
+        confirm: async (endpoint: string) => endpoint,
         select,
         disconnect: async () => {},
       }}
@@ -300,6 +385,8 @@ test("the host picker stays usable while the current host connection changes", a
           notify = listener;
           return () => {};
         },
+        connect: async () => {},
+        disconnect: async () => {},
         retry: async () => {},
       }}
     >
@@ -326,3 +413,74 @@ test("the host picker stays usable while the current host connection changes", a
   });
   expect(select).toHaveBeenCalledWith(null);
 });
+
+test.each(["new", "returning"])(
+  "pairing cancellation then picker dismissal leaves an explicit retry for the %s client",
+  async (client) => {
+    const hasConnected = client === "returning";
+    const failure = {
+      code: "authorization_required" as const,
+      message: "A pairing code is required.",
+      nextAction: "Enter the code shown on the host.",
+    };
+    let state: RemoteConnectionState = {
+      status: hasConnected ? "connected" : "failed",
+      generation: 1,
+    };
+    if (!hasConnected) state.failure = failure;
+    let notify = (_state: RemoteConnectionState) => {};
+    const connect = mock(async () => {});
+    const disconnect = mock(async () => {
+      state = { status: "idle", generation: 2 };
+      notify(state);
+    });
+    const retry = mock(async () => {
+      state = { status: "failed", generation: 3, failure };
+      notify(state);
+    });
+    const view = render(
+      <HostConnectionProvider
+        selection={{
+          target: { kind: "remote", endpoint: "https://host.test" },
+          localHost: null,
+          confirm: async (endpoint: string) => endpoint,
+          select: async () => {},
+          disconnect: async () => {},
+        }}
+        connection={{
+          readState: () => state,
+          subscribeState: (listener) => {
+            notify = listener;
+            return () => {};
+          },
+          connect,
+          disconnect,
+          retry,
+        }}
+      >
+        <button type="button">Send work</button>
+      </HostConnectionProvider>,
+    );
+    if (hasConnected)
+      await act(async () => {
+        state = { status: "failed", generation: 2, failure };
+        notify(state);
+      });
+    expect(view.getByRole("textbox", { name: "Pairing code" })).toBeDefined();
+    fireEvent.click(view.getByRole("button", { name: "Cancel" }));
+    const picker = await view.findByRole("dialog", { name: "Host connection" });
+    if (hasConnected) fireEvent.keyDown(picker, { key: "Escape", code: "Escape" });
+    else fireEvent.click(within(picker).getByRole("button", { name: "Cancel" }));
+    await view.findByRole("heading", { name: "Host connection stopped" }, { timeout: 500 });
+    expect(state.status).toBe("idle");
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(connect).not.toHaveBeenCalled();
+    expect(retry).not.toHaveBeenCalled();
+    const button = view.getByRole("button", { name: "Retry connection" });
+    expect(button.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(button);
+    await view.findByRole("textbox", { name: "Pairing code" });
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(connect).not.toHaveBeenCalled();
+  },
+);

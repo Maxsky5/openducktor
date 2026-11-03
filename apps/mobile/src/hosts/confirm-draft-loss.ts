@@ -4,7 +4,7 @@ import { useConfirm } from "@/ui/confirm-dialog";
 
 /**
  * Asks whether to switch hosts when the drafts of the current host were not saved. True means
- * the user accepts to lose them, so the caller switches again with `discardUnsavedDrafts`.
+ * the user accepts to lose those unsaved drafts.
  */
 export const useConfirmDraftLoss = (): ((
   cause: DraftSaveBeforeSwitchError,

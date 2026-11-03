@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import path from "node:path";
+import { createFilesystemRemoteApprovalStore } from "@openducktor/host";
+import { admittedWorkOptions, memoryApprovalStore } from "./remote-approval.test-support";
 import { afterAll, expect, spyOn, test } from "bun:test";
 import { Effect, Fiber, Stream } from "effect";
 import { WebSocket } from "ws";
@@ -11,12 +15,13 @@ import {
   TERMINAL_PROTOCOL_SUBPROTOCOL,
   TERMINAL_PROTOCOL_VERSION,
   REMOTE_TERMINAL_CONNECTION_PREFIX,
+  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
   encodeTerminalProtocolFrame,
   decodeTerminalProtocolFrame,
   decodeTerminalListSummary,
   remoteNegotiationResultSchema,
   REMOTE_PROTOCOL_VERSION,
-  type RemoteClientHello,
+  type RemoteConnectionRequest,
 } from "@openducktor/contracts";
 import { createEffectHostCommandRouter } from "../../host/src/interface/router/host-command-router";
 import { createTaskEventStream } from "../../host/src/events/task-event-stream";
@@ -33,7 +38,8 @@ import { createRemoteAccessController } from "./remote-access-controller";
 import { createHostCommandLifetime } from "./host-command-lifetime";
 
 afterAll(removeFakeShell);
-const hello: RemoteClientHello = {
+const hello: RemoteConnectionRequest = {
+  clientKind: "mobile",
   appVersion: "mobile-8",
   supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
   requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
@@ -63,7 +69,6 @@ const fixture = async (barrier?: MutationBarrier) => {
     invoke: commands.invoke,
     hostInstanceId: "host-a",
     hostSettings: {
-      readHostId: () => Effect.succeed("stable-host-a"),
       readRemoteAccessSettings: () => Effect.succeed({ enabled: false, configuration: null }),
       saveRemoteAccessSettings: () => Effect.void,
     },
@@ -76,7 +81,9 @@ const fixture = async (barrier?: MutationBarrier) => {
   const options = {
     shell: "electron" as const,
     appVersion: "host-3",
-    hostId: "stable-host-a",
+    hostId: "20000000-0000-4000-8000-000000000001",
+    ...admittedWorkOptions(),
+    approvalStore: Effect.succeed(memoryApprovalStore()),
     listenHost: "127.0.0.1",
     publicEndpoint: "https://machine.test/api/remote",
     logger: { error: () => Effect.void, info: () => Effect.void, success: () => Effect.void },
@@ -91,13 +98,24 @@ const fixture = async (barrier?: MutationBarrier) => {
     onError: () => {},
   });
   const base = `http://127.0.0.1:${server.port}/api/remote`;
+  const tokens = new Map<string, string>();
+  const remember = (result: { connectionId: string; connectionToken: string }) => {
+    tokens.set(result.connectionId, result.connectionToken);
+    return result;
+  };
+  const headers = (id: string) => ({
+    [REMOTE_CONNECTION_HEADER]: id,
+    authorization: `Bearer ${tokens.get(id) ?? "invalid"}`,
+  });
   const negotiate = async (input = hello) => {
     const response = await fetch(`${base}/connections`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, clientKind: "mobile" }),
     });
-    return { response, result: await response.json() };
+    const result = await response.json();
+    if (result.status === "accepted") remember(result);
+    return { response, result };
   };
   let stopped = false;
   const stopNetwork = async () => {
@@ -110,6 +128,8 @@ const fixture = async (barrier?: MutationBarrier) => {
     commands,
     stopNetwork,
     services,
+    headers,
+    remember,
     options,
     base,
     work,
@@ -139,9 +159,16 @@ test("negotiates across app releases and refuses bypass, origins, missing capabi
         })
       ).status,
     ).toBe(409);
-    const mismatch = await f.negotiate({ ...hello, supportedProtocolVersions: [2] });
+    const mismatch = await f.negotiate({
+      ...hello,
+      supportedProtocolVersions: [2],
+      pairingCode: "123456",
+    });
     expect(mismatch.response.status).toBe(426);
     expect(mismatch.result.failure.updateSide).toBe("client");
+    expect(remoteNegotiationResultSchema.safeParse(mismatch.result).success).toBe(true);
+    expect(mismatch.result.failure.client.clientKind).toBeUndefined();
+    expect(mismatch.result.failure.client.pairingCode).toBeUndefined();
     const missing = await f.negotiate({ ...hello, requiredCapabilities: ["future.required"] });
     expect(missing.result.failure.missingCapabilities[0].name).toBe("future.required");
     const legacy = await f.negotiate({
@@ -186,7 +213,7 @@ test("negotiates across app releases and refuses bypass, origins, missing capabi
           method: "POST",
           headers: {
             "content-type": "application/json",
-            [REMOTE_CONNECTION_HEADER]: id,
+            ...f.headers(id),
             origin: "https://unrelated.test",
           },
           body: '{"theme":"dark"}',
@@ -195,7 +222,7 @@ test("negotiates across app releases and refuses bypass, origins, missing capabi
     ).toBe(403);
     const work = await fetch(`${f.base}/invoke/set_theme`, {
       method: "POST",
-      headers: { "content-type": "application/json", [REMOTE_CONNECTION_HEADER]: id },
+      headers: { "content-type": "application/json", ...f.headers(id) },
       body: '{"theme":"dark"}',
     });
     expect(work.status).toBe(200);
@@ -204,7 +231,7 @@ test("negotiates across app releases and refuses bypass, origins, missing capabi
       (
         await fetch(`${f.base}/invoke/open_external_url`, {
           method: "POST",
-          headers: { "content-type": "application/json", [REMOTE_CONNECTION_HEADER]: id },
+          headers: { "content-type": "application/json", ...f.headers(id) },
           body: "{}",
         })
       ).status,
@@ -213,7 +240,7 @@ test("negotiates across app releases and refuses bypass, origins, missing capabi
       (
         await fetch(`${f.base}/shutdown`, {
           method: "POST",
-          headers: { [REMOTE_CONNECTION_HEADER]: id },
+          headers: { ...f.headers(id) },
         })
       ).status,
     ).toBe(409);
@@ -230,7 +257,7 @@ test("remote Open In discovery stays empty while local discovery lists host tool
       { toolId: "zed" },
     ]);
     const id = (await f.negotiate()).result.connectionId;
-    const headers = { "content-type": "application/json", [REMOTE_CONNECTION_HEADER]: id };
+    const headers = { "content-type": "application/json", ...f.headers(id) };
     for (const forceRefresh of [false, true]) {
       const response = await fetch(`${f.base}/invoke/system_list_open_in_tools`, {
         method: "POST",
@@ -268,7 +295,7 @@ test("task leases belong to their negotiated connection and carry the captured r
     const second = (await f.negotiate()).result.connectionId;
     const response = await fetch(`${f.base}/task-events/subscriptions`, {
       method: "POST",
-      headers: { "content-type": "application/json", [REMOTE_CONNECTION_HEADER]: first },
+      headers: { "content-type": "application/json", ...f.headers(first) },
       body: '{"cursor":null}',
     });
     const lease = await response.json();
@@ -280,7 +307,7 @@ test("task leases belong to their negotiated connection and carry the captured r
     ] as const) {
       const init: RequestInit = {
         method,
-        headers: { "content-type": "application/json", [REMOTE_CONNECTION_HEADER]: second },
+        headers: { "content-type": "application/json", ...f.headers(second) },
       };
       if (method === "POST") init.body = JSON.stringify({ cursor: lease.replayBoundary });
       expect(
@@ -331,6 +358,7 @@ test("two remote terminal lists receive idle creation and close without output a
       const socket = new WebSocket(f.base.replace("http:", "ws:") + "/terminal", [
         TERMINAL_PROTOCOL_SUBPROTOCOL,
         `${REMOTE_TERMINAL_CONNECTION_PREFIX}${admission.result.connectionId}`,
+        `${REMOTE_TERMINAL_AUTHORIZATION_PREFIX}${admission.result.connectionToken}`,
       ]);
       sockets.push(socket);
       await new Promise<void>((resolve, reject) => {
@@ -409,7 +437,7 @@ test("remote terminal attachment uses the local PTY and closes only its client w
     for (const header of [otherTab.result.connectionId, "expired", ""]) {
       const response = await fetch(`${f.base}/terminal`, {
         headers: {
-          [REMOTE_CONNECTION_HEADER]: header,
+          ...f.headers(header),
           "sec-websocket-protocol": `${TERMINAL_PROTOCOL_SUBPROTOCOL}, ${REMOTE_TERMINAL_CONNECTION_PREFIX}${id}`,
         },
       });
@@ -418,7 +446,11 @@ test("remote terminal attachment uses the local PTY and closes only its client w
     }
     socket = new WebSocket(
       f.base.replace("http:", "ws:") + "/terminal",
-      [TERMINAL_PROTOCOL_SUBPROTOCOL, `${REMOTE_TERMINAL_CONNECTION_PREFIX}${id}`],
+      [
+        TERMINAL_PROTOCOL_SUBPROTOCOL,
+        `${REMOTE_TERMINAL_CONNECTION_PREFIX}${id}`,
+        `${REMOTE_TERMINAL_AUTHORIZATION_PREFIX}${f.headers(id).authorization.slice(7)}`,
+      ],
       { headers: { cookie: sharedCookie } },
     );
     const opened = new Promise<void>((resolve, reject) => {
@@ -461,7 +493,7 @@ test("remote terminal attachment uses the local PTY and closes only its client w
     const closed = new Promise<void>((resolve) => socket!.once("close", () => resolve()));
     await fetch(`${f.base}/connections/current`, {
       method: "DELETE",
-      headers: { [REMOTE_CONNECTION_HEADER]: id },
+      headers: { ...f.headers(id) },
     });
     await closed;
     expect(
@@ -528,7 +560,7 @@ test("automatic setup advertises the bound port and serves work without a manual
     expect(discovery.status).toBe(200);
     expect(await discovery.json()).toMatchObject({
       hostInstanceId: "host-a",
-      hostId: "stable-host-a",
+      hostId: "20000000-0000-4000-8000-000000000001",
     });
     // The configuration names the bound port, so the operator saves the address that clients use.
     expect(state.configuration!.listenPort).toBe(Number(url.port));
@@ -553,17 +585,21 @@ test("automatic setup advertises the bound port and serves work without a manual
       const admission = await fetch(`${endpoint}/connections`, {
         method: "POST",
         headers: { origin, "content-type": "application/json" },
-        body: JSON.stringify(hello),
+        body: JSON.stringify({
+          ...hello,
+          pairingCode: (await Effect.runPromise(controller.startPairing())).pairing!.code,
+        }),
       });
       expect(admission.status).toBe(201);
       expect(admission.headers.get("access-control-allow-origin")).toBe(origin);
-      const { connectionId } = await admission.json();
+      const { connectionId, connectionToken } = await admission.json();
+      f.remember({ connectionId, connectionToken });
       const work = await fetch(`${endpoint}/invoke/system_get_platform`, {
         method: "POST",
         headers: {
           origin,
           "content-type": "application/json",
-          [REMOTE_CONNECTION_HEADER]: connectionId,
+          ...f.headers(connectionId),
         },
         body: "{}",
       });
@@ -574,7 +610,10 @@ test("automatic setup advertises the bound port and serves work without a manual
       const denied = await fetch(`${endpoint}/connections`, {
         method: "POST",
         headers: { origin, "content-type": "application/json" },
-        body: JSON.stringify(hello),
+        body: JSON.stringify({
+          ...hello,
+          pairingCode: (await Effect.runPromise(controller.startPairing())).pairing!.code,
+        }),
       });
       expect(denied.status).toBe(403);
       expect(denied.headers.get("access-control-allow-origin")).toBeNull();
@@ -582,13 +621,17 @@ test("automatic setup advertises the bound port and serves work without a manual
     const admitted = await fetch(`${endpoint}/connections`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(hello),
+      body: JSON.stringify({
+        ...hello,
+        pairingCode: (await Effect.runPromise(controller.startPairing())).pairing!.code,
+      }),
     });
     expect(admitted.status).toBe(201);
-    const { connectionId } = await admitted.json();
+    const { connectionId, connectionToken } = await admitted.json();
+    f.remember({ connectionId, connectionToken });
     const response = await fetch(`${endpoint}/invoke/system_get_platform`, {
       method: "POST",
-      headers: { "content-type": "application/json", [REMOTE_CONNECTION_HEADER]: connectionId },
+      headers: { "content-type": "application/json", ...f.headers(connectionId) },
       body: "{}",
     });
     expect(response.status).toBe(200);
@@ -686,7 +729,7 @@ test("concurrent subscription bodies cannot exceed one connection's 32 lease lim
           headers: {
             host: new URL(f.base).host,
             "content-type": "application/json",
-            [REMOTE_CONNECTION_HEADER]: id,
+            ...f.headers(id),
           },
           body: new ReadableStream<Uint8Array>({
             start: (controller) => {
@@ -728,7 +771,7 @@ test("normal task stream replacement and deletion release idle admission ownersh
   const f = await fixture();
   try {
     const id = (await f.negotiate()).result.connectionId;
-    const headers = { [REMOTE_CONNECTION_HEADER]: id };
+    const headers = { ...f.headers(id) };
     const response = await fetch(`${f.base}/task-events/subscriptions`, {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
@@ -776,7 +819,7 @@ test("ending the listener leaves accepted HTTP work under the host command lifet
     const id = (await f.negotiate()).result.connectionId;
     const response = fetch(`${f.base}/invoke/set_theme`, {
       method: "POST",
-      headers: { "content-type": "application/json", [REMOTE_CONNECTION_HEADER]: id },
+      headers: { "content-type": "application/json", ...f.headers(id) },
       body: '{"theme":"dark"}',
     }).catch(() => null);
     await started;
@@ -815,7 +858,7 @@ test("keeps an idle event stream busy with heartbeat comments", async () => {
     if (admission.status !== "accepted") throw new Error(admission.failure.message);
     expect(admission.host.protocols[0]?.capabilities).toContain(REMOTE_STREAM_HEARTBEAT_CAPABILITY);
     const response = await fetch(`${f.base}/events`, {
-      headers: { [REMOTE_CONNECTION_HEADER]: admission.connectionId },
+      headers: { ...f.headers(admission.connectionId) },
       signal: abort.signal,
     });
     const reader = response.body!.getReader();
@@ -840,7 +883,7 @@ test("sharing status counts each live client once and clears clients on disablem
   const controller = createRemoteAccessController(f.services, f.options);
   const requests: AbortController[] = [];
   const streams: Response[] = [];
-  const observed: number[] = [];
+  const observed: Array<number | null> = [];
   const observer = Effect.runFork(
     Stream.runForEach(controller.states, (state) =>
       Effect.sync(() => {
@@ -873,17 +916,21 @@ test("sharing status counts each live client once and clears clients on disablem
       const result = await fetch(`${base}/connections`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(hello),
+        body: JSON.stringify({
+          ...hello,
+          pairingCode: (await Effect.runPromise(controller.startPairing())).pairing!.code,
+        }),
       });
       const admission = remoteNegotiationResultSchema.parse(await result.json());
       if (admission.status !== "accepted") throw new Error(admission.failure.message);
+      f.remember(admission);
       return admission.connectionId;
     };
     const openStream = async (id: string) => {
       const abort = new AbortController();
       requests.push(abort);
       const response = await fetch(`${base}/events`, {
-        headers: { [REMOTE_CONNECTION_HEADER]: id },
+        headers: { ...f.headers(id) },
         signal: abort.signal,
       });
       streams.push(response);
@@ -907,13 +954,13 @@ test("sharing status counts each live client once and clears clients on disablem
     await waitForCount(2);
     await fetch(`${base}/connections/current`, {
       method: "DELETE",
-      headers: { [REMOTE_CONNECTION_HEADER]: first },
+      headers: { ...f.headers(first) },
     });
     await waitForCount(1);
     await Effect.runPromise(controller.disable());
     await waitForCount(0);
     expect(observed.filter((count, index) => index === 0 || observed[index - 1] !== count)).toEqual(
-      [0, 1, 2, 1, 2, 1, 0],
+      [null, 0, 1, 2, 1, 2, 1, 0],
     );
   } finally {
     for (const request of requests) request.abort();
@@ -974,16 +1021,20 @@ test.each(["pending", "transferring"])(
       const negotiation = await fetch(`${base}/connections`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(hello),
+        body: JSON.stringify({
+          ...hello,
+          pairingCode: (await Effect.runPromise(controller.startPairing())).pairing!.code,
+        }),
       });
-      const { connectionId } = await negotiation.json();
+      const { connectionId, connectionToken } = await negotiation.json();
+      f.remember({ connectionId, connectionToken });
       const outcome = Promise.withResolvers<string>();
       const transferStarted = Promise.withResolvers<void>();
       let response: IncomingMessage | undefined;
       const request = get(
         `${base}/task-assets/workspace/task/description/${crypto.randomUUID()}`,
         {
-          headers: { [REMOTE_CONNECTION_HEADER]: connectionId },
+          headers: { ...f.headers(connectionId) },
         },
         (incoming) => {
           response = incoming;
@@ -1004,7 +1055,9 @@ test.each(["pending", "transferring"])(
       response?.resume();
       expect(await outcome.promise).toBe("closed");
       request.destroy();
-      const privateResponse = await fetch(base, { headers: { "x-private": "local" } });
+      const privateResponse = await fetch(new URL("/local-work", base), {
+        headers: { "x-private": "local" },
+      });
       expect(await privateResponse.text()).toBe("private");
       expect((await fetch(base)).status).toBe(503);
     } finally {
@@ -1016,17 +1069,12 @@ test.each(["pending", "transferring"])(
   },
 );
 
-test("serves only the constant preview bootstrap before connection admission and retains origin checks", async () => {
+test("keeps preview bootstrap off the work listener and retains origin checks", async () => {
   const f = await fixture();
   const invoke = spyOn(f.services, "invoke");
   try {
     const response = await fetch(`${f.base}/artifact-preview-bootstrap`);
-    expect(response.status).toBe(200);
-    expect(response.headers.get("connection-allowlist")).toBe("()");
-    expect(response.headers.get("content-security-policy")).toContain("sandbox allow-scripts");
-    expect(response.headers.get("content-security-policy")).toContain("frame-src 'none'");
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(response.headers.get("permissions-policy")).toContain("clipboard-read=()");
+    expect(response.status).toBe(409);
     expect((await fetch(`${f.base}/artifact-preview-bootstrap?artifactId=private`)).status).toBe(
       409,
     );
@@ -1042,4 +1090,234 @@ test("serves only the constant preview bootstrap before connection admission and
     invoke.mockRestore();
     await f.close();
   }
+});
+
+test.each(["electron", "web"] as const)(
+  "%s requires pairing, remembers approvals, and revokes all admissions across restart",
+  async (shell) => {
+    const f = await fixture();
+    await f.stopNetwork();
+    const root = await mkdtemp(path.join(os.tmpdir(), "odt-secure-host-"));
+    const port = Number(new URL(f.base).port);
+    const options = {
+      ...f.options,
+      shell,
+      approvalStore: createFilesystemRemoteApprovalStore(root).open({
+        shell,
+        profile: "default",
+      }),
+    };
+    let controller = createRemoteAccessController(f.services, options);
+    const input = {
+      listenHost: "127.0.0.1",
+      listenPort: port,
+      publicEndpoint: f.options.publicEndpoint,
+    };
+    const submit = async (body: RemoteConnectionRequest, token?: string) => {
+      const headers = new Headers({ "content-type": "application/json" });
+      if (token) headers.set("authorization", `Bearer ${token}`);
+      const response = await fetch(`${f.base}/connections`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+      return {
+        status: response.status,
+        body: remoteNegotiationResultSchema.parse(await response.json()),
+      };
+    };
+    const signals: AbortController[] = [];
+    const readers: ReadableStreamDefaultReader<Uint8Array>[] = [];
+    try {
+      expect((await Effect.runPromise(controller.enable(input))).pairing).toBeNull();
+      expect((await submit({ ...hello, pairingCode: "123456" })).body).toMatchObject({
+        failure: { code: "pairing_refused" },
+      });
+      const initial = await Effect.runPromise(controller.startPairing());
+      expect(initial.pairing?.code).toMatch(/^\d{6}$/);
+      const missing = await submit(hello);
+      expect(missing).toMatchObject({
+        status: 401,
+        body: { failure: { code: "authorization_required" } },
+      });
+      expect((await submit({ ...hello, pairingCode: "wrong" })).body).toMatchObject({
+        failure: { code: "pairing_refused" },
+      });
+      const paired = await submit({ ...hello, pairingCode: initial.pairing!.code });
+      if (paired.body.status !== "accepted" || !paired.body.authorization)
+        throw new Error("Pairing did not grant authorization.");
+      const grant = paired.body.authorization;
+      expect((await Effect.runPromise(controller.readState())).pairing).toBeNull();
+      expect((await submit({ ...hello, pairingCode: initial.pairing!.code })).body).toMatchObject({
+        failure: { code: "pairing_refused" },
+      });
+      const saved = await submit(hello, grant.token);
+      if (saved.body.status !== "accepted") throw new Error("Saved access was refused.");
+      expect(saved.body.authorization).toBeUndefined();
+      const a = f.headers(f.remember(paired.body).connectionId);
+      const b = f.headers(f.remember(saved.body).connectionId);
+      expect(
+        (
+          await fetch(`${f.base}/invoke/system_get_platform`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              [REMOTE_CONNECTION_HEADER]: paired.body.connectionId,
+            },
+            body: "{}",
+          })
+        ).status,
+      ).toBe(401);
+      for (const headers of [a, b]) {
+        const abort = new AbortController();
+        signals.push(abort);
+        const stream = await fetch(`${f.base}/events`, { headers, signal: abort.signal });
+        expect(stream.status).toBe(200);
+        const reader = stream.body!.getReader();
+        readers.push(reader);
+        await reader.read();
+      }
+      const state = await Effect.runPromise(controller.readState());
+      expect(state.connectedClients).toBe(1);
+      expect(state.clients).toHaveLength(1);
+      expect(state.clients![0]).toMatchObject({ clientId: grant.clientId, status: "connected" });
+      // The local operator controls remain unavailable through an admitted remote connection.
+      expect((await fetch(`${f.base}/remote-access`, { headers: a })).status).toBe(409);
+      const kicked = await Effect.runPromise(controller.revokeClient(grant.clientId));
+      expect(kicked.connectedClients).toBe(0);
+      expect(kicked.clients).toEqual([]);
+      await Promise.all(
+        readers.map(async (reader) => {
+          try {
+            while (!(await reader.read()).done) {}
+          } catch {
+            /* Kick closed the delivery socket. */
+          }
+        }),
+      );
+      for (const headers of [a, b])
+        expect(
+          (
+            await fetch(`${f.base}/invoke/system_get_platform`, {
+              method: "POST",
+              headers: { ...headers, "content-type": "application/json" },
+              body: "{}",
+            })
+          ).status,
+        ).toBe(409);
+      expect((await submit(hello, grant.token)).body).toMatchObject({
+        failure: { code: "authorization_rejected" },
+      });
+      const code = (await Effect.runPromise(controller.startPairing())).pairing!.code;
+      const remaining = await submit({ ...hello, pairingCode: code });
+      if (remaining.body.status !== "accepted" || !remaining.body.authorization)
+        throw new Error("Second pairing failed.");
+      await Effect.runPromise(controller.disable());
+      expect((await Effect.runPromise(controller.readState())).clients![0]!.status).toBe("offline");
+      expect((await Effect.runPromise(controller.readState())).pairing).toBeNull();
+      await Effect.runPromise(controller.close());
+      controller = createRemoteAccessController(f.services, options);
+      await Effect.runPromise(controller.enable(input));
+      const restored = await submit(hello, remaining.body.authorization.token);
+      expect(restored.body).toMatchObject({ status: "accepted", host: { hostId: grant.hostId } });
+      expect((await submit(hello, grant.token)).body).toMatchObject({
+        failure: { code: "authorization_rejected" },
+      });
+      await Effect.runPromise(controller.revokeClient(remaining.body.authorization.clientId));
+      expect(await Effect.runPromise(f.services.invoke("system_get_platform", {}))).toBe("linux");
+    } finally {
+      for (const signal of signals) signal.abort();
+      await Effect.runPromise(controller.close());
+      await f.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+/** A controller on the fixture network, with a code submit over HTTP. */
+const withPairingController = async (
+  body: (input: {
+    controller: ReturnType<typeof createRemoteAccessController>;
+    submit(
+      pairingCode?: string,
+      token?: string,
+    ): Promise<{
+      response: Response;
+      body: ReturnType<typeof remoteNegotiationResultSchema.parse>;
+    }>;
+  }) => Promise<void>,
+) => {
+  const f = await fixture();
+  await f.stopNetwork();
+  const controller = createRemoteAccessController(f.services, f.options);
+  const submit = async (pairingCode?: string, token?: string) => {
+    const headers = new Headers({ "content-type": "application/json" });
+    if (token) headers.set("authorization", `Bearer ${token}`);
+    const response = await fetch(`${f.base}/connections`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ...hello, pairingCode }),
+    });
+    return { response, body: remoteNegotiationResultSchema.parse(await response.json()) };
+  };
+  try {
+    await Effect.runPromise(
+      controller.enable({
+        listenHost: "127.0.0.1",
+        listenPort: Number(new URL(f.base).port),
+        publicEndpoint: f.options.publicEndpoint,
+      }),
+    );
+    await body({ controller, submit });
+  } finally {
+    await Effect.runPromise(controller.close());
+    await f.close();
+  }
+};
+
+const otherCode = (code: string) => (code === "000000" ? "111111" : "000000");
+
+test("the right code pairs one device and closes the window as paired", async () => {
+  await withPairingController(async ({ controller, submit }) => {
+    const window = await Effect.runPromise(controller.startPairing());
+    expect(window.pairingEnd).toBeUndefined();
+    const paired = (await submit(window.pairing!.code)).body;
+    expect(paired).toMatchObject({ status: "accepted", authorization: expect.any(Object) });
+    expect(await Effect.runPromise(controller.readState())).toMatchObject({
+      pairing: null,
+      pairingEnd: "paired",
+      clients: [expect.any(Object)],
+    });
+  });
+});
+
+test("five wrong codes close the window, and remembered access still connects", async () => {
+  await withPairingController(async ({ controller, submit }) => {
+    const first = await Effect.runPromise(controller.startPairing());
+    const paired = (await submit(first.pairing!.code)).body;
+    if (paired.status !== "accepted" || !paired.authorization) throw new Error("Pairing failed.");
+    const window = await Effect.runPromise(controller.startPairing());
+    for (let n = 0; n < 5; n++)
+      expect((await submit(otherCode(window.pairing!.code))).response.status).toBe(401);
+    expect(await Effect.runPromise(controller.readState())).toMatchObject({
+      pairing: null,
+      pairingEnd: "refused",
+    });
+    expect((await submit(window.pairing!.code)).body).toMatchObject({
+      failure: { code: "pairing_refused" },
+    });
+    expect((await submit(undefined, paired.authorization.token)).body.status).toBe("accepted");
+  });
+});
+
+test("Stop pairing refuses the code of the closed window", async () => {
+  await withPairingController(async ({ controller, submit }) => {
+    const window = await Effect.runPromise(controller.startPairing());
+    expect(await Effect.runPromise(controller.stopPairing())).toMatchObject({
+      pairing: null,
+      pairingEnd: "stopped",
+    });
+    expect((await submit(window.pairing!.code)).response.status).toBe(401);
+    expect((await Effect.runPromise(controller.readState())).clients).toHaveLength(0);
+  });
 });

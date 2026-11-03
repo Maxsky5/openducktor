@@ -1,3 +1,5 @@
+import * as SecureStore from "expo-secure-store";
+import { deleteDeviceAuthorization } from "./remote-authorization-store";
 import { createMMKV, deleteMMKV, type MMKV } from "react-native-mmkv";
 import type { DeviceKeyValueStore } from "./device-store";
 
@@ -22,7 +24,8 @@ export const openHostStore = (hostId: string): DeviceKeyValueStore => {
   return store;
 };
 
-export const deleteHostStore = (hostId: string): void => {
+export const deleteHostStore = async (hostId: string): Promise<void> => {
+  await deleteDeviceAuthorization(hostId, SecureStore);
   const id = hostStoreId(hostId);
   const open = openHostStores.get(id);
   if (!open) {

@@ -1,3 +1,5 @@
+import * as SecureStore from "expo-secure-store";
+import { createDeviceAuthorizationStore } from "@/device-data/remote-authorization-store";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { deleteHostStore, openAppStore, openHostStore } from "@/device-data/mmkv-stores";
 import { createFeedbackStore } from "@/feedback/feedback-store";
@@ -23,6 +25,7 @@ export const createAppServices = (): AppServices => {
     appStore,
     openHostStore,
     deleteHostStore,
+    openAuthorizationStore: (id) => createDeviceAuthorizationStore(id, SecureStore),
     createTransport: createDeviceRemoteTransport,
     createHostId: () => crypto.randomUUID(),
     // Hosts show this version in compatibility failures, such as `mobile-1.0.0 (42)`.

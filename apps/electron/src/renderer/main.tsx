@@ -4,9 +4,12 @@ import { ELECTRON_WINDOW_TITLE_BAR_HEIGHT } from "../shared/electron-bridge-cont
 import {
   createElectronShellBridge,
   getElectronApi,
-  withElectronNativeTheme,
+  withElectronDesktopShell,
 } from "./electron-shell-bridge";
-import { createRemoteShellBridge } from "@openducktor/frontend/lib/remote/shell-bridge";
+import {
+  createRemoteShellBridge,
+  confirmBrowserRemoteAccess,
+} from "@openducktor/frontend/lib/remote/shell-bridge";
 import { createBrowserRemoteTransport } from "@openducktor/frontend/lib/remote/transport";
 import { getAppVersion } from "@openducktor/frontend/lib/app-version";
 
@@ -26,19 +29,27 @@ bootstrapOpenDucktorShell({
     createRemoteBridge: (endpoint, local, queryClient) => {
       const version = getAppVersion();
       if (!version || !local) throw new Error("The desktop shell is not ready.");
-      const bridge = createRemoteShellBridge({
+      return withElectronDesktopShell(
+        createRemoteShellBridge({
+          clientKind: "desktop",
+          endpoint,
+          version,
+          transport: createBrowserRemoteTransport(),
+          notifications: local.notifications,
+          queryClient,
+        }),
+      );
+    },
+    confirmRemoteAccess: (endpoint, pairingCode) => {
+      const version = getAppVersion();
+      if (!version) throw new Error("The desktop shell is not ready.");
+      return confirmBrowserRemoteAccess({
+        clientKind: "desktop",
         endpoint,
         version,
+        pairingCode,
         transport: createBrowserRemoteTransport(),
-        notifications: local.notifications,
-        queryClient,
       });
-      return {
-        ...bridge,
-        client: withElectronNativeTheme(bridge.client, (theme) =>
-          getElectronApi().setNativeTheme(theme),
-        ),
-      };
     },
     navigate: () => getElectronApi().selectHost(),
   },

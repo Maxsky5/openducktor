@@ -54,6 +54,36 @@ const renderStream = (props: StreamProps) =>
   });
 
 describe("useHostTaskStream", () => {
+  test.each(["resolve", "reject"] as const)(
+    "keeps a replaced stream's late %s out of the current view",
+    async (result) => {
+      const log: string[] = [];
+      const start = createDeferred<void>();
+      const first = fakeFactory(log, () => start.promise);
+      const next = fakeFactory(log);
+      const props: StreamProps = {
+        openWorkspaces: workspaces("/repo-a"),
+        activeRepoPath: null,
+        activeWorkspaceId: null,
+        createController: first.createController,
+        events: recordingEvents(log),
+      };
+      const harness = renderStream(props);
+      await harness.mount();
+      try {
+        await harness.update({ ...props, createController: next.createController });
+        await harness.run(() => {
+          if (result === "reject")
+            start.reject(new DOMException("signal is aborted without reason", "AbortError"));
+          else start.resolve();
+        });
+        expect(log).toEqual(["track", "start: stopped", "stop", "track", "start: started"]);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
   test("starts one controller for the open workspaces and stops it on unmount", async () => {
     const log: string[] = [];
     const { createController, inputs } = fakeFactory(log);

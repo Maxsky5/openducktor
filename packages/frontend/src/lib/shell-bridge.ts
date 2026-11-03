@@ -73,7 +73,7 @@ export type ShellBridge = HostConnection & {
   remoteAccess?: import("@openducktor/contracts").RemoteAccessBridge;
   remoteConnection?: Pick<
     import("@openducktor/host-client/remote").RemoteHostClient,
-    "readState" | "subscribeState" | "retry"
+    "readState" | "subscribeState" | "retry" | "connect" | "disconnect"
   >;
   appUpdates: AppUpdateBridge;
   getArtifactPreviewEnvironment(): Promise<ArtifactPreviewEnvironment>;

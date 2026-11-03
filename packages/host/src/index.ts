@@ -1,3 +1,4 @@
+export { HostResourceError } from "./effect/host-errors";
 export { Effect } from "effect";
 export {
   type CodexLiveSessionAdapterPreparer,
@@ -224,3 +225,8 @@ export {
 } from "./testing/terminal-pty-conformance";
 
 export { HostOperationError } from "./effect/host-errors";
+export * from "./ports/remote-approval-store";
+export {
+  createFilesystemRemoteApprovalStore,
+  remoteHostOwnerFromEnvironment,
+} from "./adapters/node/filesystem-remote-approval-store";

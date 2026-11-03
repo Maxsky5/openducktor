@@ -1,4 +1,8 @@
 import type {
+  RemoteAuthorizationStore,
+  SavedRemoteAuthorization,
+} from "@openducktor/host-client/remote";
+import type {
   ClientFeedback,
   ClientFeedbackKind,
 } from "@openducktor/frontend-core/platform/client-feedback";
@@ -23,9 +27,18 @@ export const createMemoryDeviceStore = (
 export const createMemoryHostStores = () => {
   const stores = new Map<string, ReturnType<typeof createMemoryDeviceStore>>();
   const deleted: string[] = [];
+  const credentials = new Map<string, SavedRemoteAuthorization>();
   return {
     stores,
     deleted,
+    authorization(hostId: string): RemoteAuthorizationStore {
+      return {
+        read: async () => credentials.get(hostId) ?? null,
+        save: async (value) => {
+          credentials.set(hostId, value);
+        },
+      };
+    },
     open(hostId: string) {
       let store = stores.get(hostId);
       if (!store) {
@@ -34,7 +47,8 @@ export const createMemoryHostStores = () => {
       }
       return store;
     },
-    remove(hostId: string) {
+    async remove(hostId: string) {
+      credentials.delete(hostId);
       stores.delete(hostId);
       deleted.push(hostId);
     },

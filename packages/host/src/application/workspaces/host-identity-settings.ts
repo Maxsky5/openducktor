@@ -10,24 +10,12 @@ import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
 type HostIdentitySettingsMethods = Pick<
   WorkspaceSettingsService,
-  "readHostId" | "readRemoteAccessSettings" | "saveRemoteAccessSettings"
+  "readRemoteAccessSettings" | "saveRemoteAccessSettings"
 >;
 
 export const createHostIdentitySettingsMethods = (
   settingsConfig: SettingsConfigPort,
 ): HostIdentitySettingsMethods => ({
-  readHostId() {
-    return Effect.gen(function* () {
-      const config = yield* settingsConfig.readGlobalConfig();
-      if (config.hostId) return config.hostId;
-      const hostId = crypto.randomUUID();
-      const saved = yield* settingsConfig.updateConfig(
-        (current) => globalConfigSchema.parse({ ...current, hostId: current.hostId ?? hostId }),
-        [],
-      );
-      return yield* parseConfig(globalConfigSchema.shape.hostId.unwrap(), saved.hostId);
-    });
-  },
   readRemoteAccessSettings() {
     return settingsConfig.readGlobalConfig().pipe(Effect.map((config) => config.remoteAccess));
   },

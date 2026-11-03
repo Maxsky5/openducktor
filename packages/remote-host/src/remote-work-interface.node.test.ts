@@ -24,7 +24,7 @@ test("remote POST routes retain their bodies on Node", async () => {
     if (!result.success) throw new Error(result.logs.map(String).join("\n"));
     const output = result.outputs[0];
     if (!output) throw new Error("The Node remote test bundle is missing.");
-    await promisify(execFile)("node", [output.path], { timeout: 10_000 });
+    await promisify(execFile)("node", ["--expose-gc", output.path], { timeout: 10_000 });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

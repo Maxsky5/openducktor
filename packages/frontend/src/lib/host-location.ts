@@ -10,6 +10,12 @@ export type LocalHost = "electron" | "web";
 export type HostSelection = {
   target: HostTarget;
   localHost: LocalHost | null;
+  /**
+   * Confirms that this client can use the host at `endpoint`, pairing it first with a code.
+   * Returns the normalized address to select.
+   */
+  confirm(endpoint: string, pairingCode?: string): Promise<string>;
+  /** Opens `endpoint`, or the local host for `null`. The current host connects again. */
   select(endpoint: string | null): Promise<void>;
   disconnect(): Promise<void>;
 };

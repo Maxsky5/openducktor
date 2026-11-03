@@ -1,3 +1,8 @@
+import {
+  savedTestAuthorizationStore,
+  TEST_HOST_ID,
+  TEST_CONNECTION_TOKEN,
+} from "../../../host-client/src/remote/test-support/authorization";
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
   REMOTE_BASELINE_CAPABILITIES,
@@ -27,6 +32,8 @@ const discoveryTransport = (failure: Error | null): RemoteTransport => ({
 
 const connect = (failure: Error | null) =>
   createRemoteHostConnection({
+    authorizationStore: savedTestAuthorizationStore(),
+    clientKind: "mobile",
     endpoint: "https://host.test/remote",
     version: "mobile-release",
     transport: discoveryTransport(failure),
@@ -80,7 +87,8 @@ const descriptor = {
   shell: "web",
   appVersion: "host",
   hostInstanceId: "instance-1",
-  accessPolicy: "network_reach",
+  hostId: TEST_HOST_ID,
+  accessPolicy: "pairing",
   protocols: [
     { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
   ],
@@ -88,6 +96,7 @@ const descriptor = {
 const admission = () =>
   json({
     status: "accepted",
+    connectionToken: TEST_CONNECTION_TOKEN,
     host: descriptor,
     connectionId: crypto.randomUUID(),
     protocolVersion: REMOTE_PROTOCOL_VERSION,
@@ -198,6 +207,8 @@ describe("live sessions across a reconnect", () => {
   ] as const)("%s", async (_name, gaps, attaches) => {
     const host = scriptedHost([...gaps]);
     const connection = createRemoteHostConnection({
+      authorizationStore: savedTestAuthorizationStore(),
+      clientKind: "mobile",
       endpoint: "https://host.test/remote",
       version: "mobile-release",
       transport: host.transport,
@@ -319,6 +330,8 @@ describe("an oversized reply during recovery", () => {
     };
     const queryClient = createClientQueryClient();
     const connection = createRemoteHostConnection({
+      authorizationStore: savedTestAuthorizationStore(),
+      clientKind: "mobile",
       endpoint: "https://host.test/remote",
       version: "mobile-release",
       transport,
