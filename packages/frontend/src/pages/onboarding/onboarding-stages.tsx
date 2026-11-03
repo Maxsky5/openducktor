@@ -32,10 +32,10 @@ import {
 import { useWorkspaceCreation } from "@/components/features/repository/use-workspace-creation";
 import { useWorkspaceCreationModels } from "@/components/features/repository/use-workspace-creation-models";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
-import { RuntimeMessageText } from "@/components/features/settings/runtime-message-text";
 import { SettingsNotificationsSection } from "@/components/features/settings/settings-notifications-section";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InlineCodeText } from "@/components/ui/inline-code-text";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { RuntimeExecutableValidationResult } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
@@ -292,7 +292,7 @@ export function RuntimeStage({
               role="alert"
               tabIndex={-1}
             >
-              <RuntimeMessageText text={stageError} />
+              <InlineCodeText text={stageError} />
             </p>
           ) : null}
         </CardContent>

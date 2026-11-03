@@ -14,6 +14,7 @@ import {
 } from "../runtimes/runtime-live-session-attachment";
 import {
   acquireOpenCodeStandalone,
+  toOpenCodePathError,
   type OpenCodeStandaloneOptions,
 } from "./opencode-standalone-process";
 
@@ -102,7 +103,7 @@ export const createOpenCodeRuntimeStarter = (
         });
         return yield* restore(
           Effect.gen(function* () {
-            const connection = yield* owned.waitReady;
+            const connection = yield* owned.waitReady.pipe(Effect.mapError(toOpenCodePathError));
             const runtime = yield* createRuntimeSummary({
               kind: "opencode",
               runtimeId,

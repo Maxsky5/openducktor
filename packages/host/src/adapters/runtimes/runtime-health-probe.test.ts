@@ -188,7 +188,7 @@ describe("createRuntimeHealthProbe", () => {
       expect(health.ok).toBe(false);
       expect(health.version).toBe("1.18.9");
       expect(health.error).toContain(
-        "did not start: it stopped before it was ready: native startup failed.",
+        "did not start. OpenCode stopped before it was ready: native startup failed.",
       );
       expect(health.error).toContain("or run `opencode upgrade`. Then try again.");
     } finally {

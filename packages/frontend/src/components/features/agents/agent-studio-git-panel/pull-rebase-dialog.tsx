@@ -1,7 +1,7 @@
 import { ArrowDown } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import type { AgentStudioPendingPullRebase } from "@openducktor/frontend-core/git/contracts";
-import { INLINE_CODE_CLASS_NAME } from "@/lib/inline-code";
+import { INLINE_CODE_CLASS_NAME } from "@/components/ui/inline-code-text";
 import { GitConfirmationDialog } from "./git-confirmation-dialog";
 
 type PullRebaseDialogProps = {

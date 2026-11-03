@@ -50,11 +50,11 @@ describe("OpenCode V2 executable probe", () => {
     silent: {
       tag: "HostOperationError",
       detail:
-        "did not start: it was not ready within 0.08 seconds. Fix the reported problem, or run `opencode upgrade`",
+        "did not start. It was not ready within 0.08 seconds. Fix the reported problem, or run `opencode upgrade`",
     },
     exit: {
       tag: "HostOperationError",
-      detail: "did not start: it stopped before it was ready: native startup failed.",
+      detail: "did not start. OpenCode stopped before it was ready: native startup failed.",
     },
   } as const;
   for (const mode of ["v1", "malformed", "silent", "exit"] as const) {

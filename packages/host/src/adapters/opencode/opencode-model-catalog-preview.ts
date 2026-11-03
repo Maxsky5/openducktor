@@ -11,6 +11,7 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import {
   acquireOpenCodeStandalone,
+  toOpenCodePathError,
   type OpenCodeStandaloneOptions,
 } from "./opencode-standalone-process";
 
@@ -43,7 +44,7 @@ export const createOpenCodeModelCatalogPreview =
         const read = yield* Effect.exit(
           restore(
             Effect.gen(function* () {
-              const connection = yield* owned.waitReady;
+              const connection = yield* owned.waitReady.pipe(Effect.mapError(toOpenCodePathError));
               return yield* Effect.tryPromise({
                 try: () =>
                   (options.readModelCatalog ?? loadOpencodeModelCatalogFromConnection)(

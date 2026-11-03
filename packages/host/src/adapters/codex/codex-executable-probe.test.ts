@@ -88,7 +88,11 @@ describe("verifyCodexAppServerProtocol", () => {
             operation: "codexAppServerTransport.childProcess",
             message:
               "Codex app-server closed: process exited with code 1 for runtime executable-probe-1: Error loading configuration",
-            details: { runtimeId: "executable-probe-1", stderr: "Error loading configuration" },
+            details: {
+              runtimeId: "executable-probe-1",
+              stderr: "Error loading configuration",
+              exit: "closed: process exited with code 1",
+            },
           }),
         ),
       notify: () => Effect.void,
@@ -101,7 +105,7 @@ describe("verifyCodexAppServerProtocol", () => {
     );
 
     expect(failure.message).toBe(
-      "Codex at '/usr/local/bin/codex' did not start: Error loading configuration. Fix the reported problem, or update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`. Then try again.",
+      "Codex at '/usr/local/bin/codex' did not start. Error loading configuration (Codex app-server closed: process exited with code 1). Fix the reported problem, or update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`. Then try again.",
     );
   });
 
@@ -126,7 +130,7 @@ describe("verifyCodexAppServerProtocol", () => {
       operation: "codexExecutableProbe.initialize",
       cause: operationFailure,
     });
-    expect(failure.message).toContain("did not start: initialize request timed out.");
+    expect(failure.message).toContain("did not start. Initialize request timed out.");
   });
 });
 

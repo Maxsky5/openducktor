@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  cleanRuntimeOutput,
   incompatibleRuntimeExecutableMessage,
   type RuntimeExecutableGuidance,
   runtimeExecutableStartError,
@@ -26,17 +27,27 @@ describe("runtime executable guidance", () => {
     );
   });
 
-  test("shows the runtime output as one plain line", () => {
+  test("shows the runtime output as one plain sentence", () => {
     expect(
-      startMessage("\u001b[31mError loading configuration:\u001b[0m\nmissing field `command`\n"),
+      startMessage("\u001b[31merror loading configuration:\u001b[0m\nmissing field `command`\n"),
     ).toBe(
-      "Codex at '/usr/local/bin/codex' did not start: Error loading configuration: missing field `command`. Fix the reported problem, or run `codex update`. Then try again.",
+      "Codex at '/usr/local/bin/codex' did not start. Error loading configuration: missing field `command`. Fix the reported problem, or run `codex update`. Then try again.",
+    );
+  });
+
+  test("removes terminal codes and tabs from a printed line", () => {
+    expect(cleanRuntimeOutput("\u001b[32mopencode serve\u001b[0m\tready")).toBe(
+      "opencode serve ready",
     );
   });
 
   test("keeps the end of long runtime output", () => {
-    expect(startMessage(`${"x".repeat(2_000)} fatal error`)).toContain(
-      `did not start: …${"x".repeat(588)} fatal error. Fix the reported problem`,
-    );
+    const output = `${"x".repeat(2_000)}\tfatal error.`;
+
+    const cleaned = cleanRuntimeOutput(output);
+
+    expect(cleaned).toStartWith("…");
+    expect(cleaned).toEndWith("x fatal error");
+    expect(cleaned.length).toBeLessThan(output.length);
   });
 });

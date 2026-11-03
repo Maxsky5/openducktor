@@ -21,7 +21,7 @@ Startup, version checks, and diagnostics use the saved path. If that path is inv
 
 Onboarding and Settings call `runtime_executables_check`. The Check again action runs discovery and can replace saved paths. Normal startup does not repeat discovery.
 
-The check returns one row for each runtime. A failed check of one runtime does not stop the checks of the other runtimes. An incompatible executable gets an error that names the executable, the problem, the required version, and the next action, such as `claude update` or `opencode upgrade`. A runtime that does not start gets the output of the runtime and the same next action. The row also keeps the version that `--version` reports, so the user can see the installed version. Each runtime adapter owns its required version and next action. `packages/host/src/adapters/runtimes/runtime-executable-guidance.ts` writes the messages.
+The check returns one row for each runtime. A failed check of one runtime does not stop the checks of the other runtimes. An incompatible executable gets an error that names the executable, the problem, the required version, and the next action, such as `claude update` or `opencode upgrade`. A runtime that does not start gets the output of the runtime and the same next action. The row also keeps the version that `--version` reports, so the user can see the installed version. Each runtime adapter owns its required version and next action. `packages/host/src/adapters/runtimes/runtime-executable-guidance.ts` writes the messages. Host runtime messages put commands between backticks. The UI shows these commands as code.
 
 ## Ownership
 

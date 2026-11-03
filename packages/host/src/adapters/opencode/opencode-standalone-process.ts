@@ -14,8 +14,8 @@ import { Effect } from "effect";
 import { z } from "zod";
 import {
   errorMessage,
-  HostOperationError,
   type HostOperationErrorAggregate,
+  HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
@@ -26,7 +26,9 @@ import {
   type ProcessTreePlatform,
   type ProcessTreeTerminator,
 } from "../../infrastructure/process/process-tree";
+import { RuntimeExecutableIncompatibleError } from "../../ports/runtime-executable-probe-port";
 import {
+  cleanRuntimeOutput,
   incompatibleRuntimeExecutableMessage,
   notReadyWithin,
   type RuntimeExecutableGuidance,
@@ -42,14 +44,25 @@ const OPENCODE_GUIDANCE: RuntimeExecutableGuidance = {
 };
 
 /** The executable started, but it is not an OpenCode 2 server. */
-export class OpenCodeUnsupportedError extends HostOperationError<{ executablePath: string }> {}
-
-const unsupportedOpenCode = (executablePath: string, problem: string): OpenCodeUnsupportedError =>
-  new OpenCodeUnsupportedError({
-    operation: "opencodeStandalone.start",
+const unsupportedOpenCode = (
+  executablePath: string,
+  problem: string,
+): RuntimeExecutableIncompatibleError =>
+  new RuntimeExecutableIncompatibleError({
     message: incompatibleRuntimeExecutableMessage(OPENCODE_GUIDANCE, executablePath, problem),
-    details: { executablePath },
   });
+
+/** Reports an executable that is not OpenCode 2 on the saved path, where the user can fix it. */
+export const toOpenCodePathError = <Failure>(
+  cause: Failure | RuntimeExecutableIncompatibleError,
+): Failure | HostValidationError =>
+  cause instanceof RuntimeExecutableIncompatibleError
+    ? new HostValidationError({
+        field: "agentRuntimes.opencode.executablePath",
+        message: cause.message,
+        cause,
+      })
+    : cause;
 
 type StandaloneChild = ChildProcessByStdio<Writable, Readable, Readable>;
 export type OpenCodeStandaloneOptions = {
@@ -65,7 +78,10 @@ export type OpenCodeStandaloneOptions = {
   stopTimeoutMs?: number;
 };
 export type OpenCodeStandaloneProcess = {
-  waitReady: Effect.Effect<OpenCodeRuntimeConnection, HostOperationErrorAggregate>;
+  waitReady: Effect.Effect<
+    OpenCodeRuntimeConnection,
+    HostOperationErrorAggregate | RuntimeExecutableIncompatibleError
+  >;
   isClosed: () => boolean;
   closeDescription: () => string | null;
   onClose: (listener: () => void) => () => void;
@@ -130,7 +146,7 @@ export const acquireOpenCodeStandalone = (
         firstLine += chunk.toString("utf8");
         if (firstLine.length > 65_536) {
           parsed = true;
-          rejectReady(new Error("it returned an oversized readiness line"));
+          rejectReady(new Error("OpenCode returned a readiness line that is too long"));
           return;
         }
         const end = firstLine.indexOf("\n");
@@ -144,7 +160,7 @@ export const acquireOpenCodeStandalone = (
           rejectReady(
             unsupportedOpenCode(
               input.executablePath,
-              `printed "${redact(line).slice(0, 200)}" instead of the OpenCode 2 readiness line`,
+              `printed "${cleanRuntimeOutput(redact(line))}" instead of the OpenCode 2 readiness line`,
             ),
           );
           return;
@@ -160,7 +176,7 @@ export const acquireOpenCodeStandalone = (
           url.hash ||
           url.pathname !== "/"
         ) {
-          rejectReady(new Error("it did not return an owned loopback server URL"));
+          rejectReady(new Error("OpenCode did not return a loopback URL that it owns"));
           return;
         }
         resolveReady(url.origin);
@@ -171,7 +187,7 @@ export const acquireOpenCodeStandalone = (
         description = signal
           ? `process exited from signal ${signal}`
           : `process exited with code ${code}`;
-        rejectReady(new Error(`it stopped before it was ready: ${stderr || description}`));
+        rejectReady(new Error(`OpenCode stopped before it was ready: ${stderr || description}`));
         for (const listener of listeners) listener();
       });
       if (!child.pid || child.pid <= 0) {
@@ -194,7 +210,7 @@ export const acquireOpenCodeStandalone = (
           try: async (signal) => {
             const endpoint = await readiness;
             if (closed)
-              throw new Error(`it stopped before authentication: ${stderr || description}`);
+              throw new Error(`OpenCode stopped before authentication: ${stderr || description}`);
             const connection: OpenCodeRuntimeConnection = {
               runtimeId: input.runtimeId,
               endpoint,
@@ -209,7 +225,7 @@ export const acquireOpenCodeStandalone = (
             return connection;
           },
           catch: (cause) =>
-            cause instanceof OpenCodeUnsupportedError
+            cause instanceof RuntimeExecutableIncompatibleError
               ? cause
               : runtimeExecutableStartError({
                   guidance: OPENCODE_GUIDANCE,

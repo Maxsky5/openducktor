@@ -19,8 +19,9 @@ const runtimeLabel = (kind: RuntimeKind): string => TOOL_DISCOVERY_DESCRIPTORS[k
 
 const capitalize = (text: string): string => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
-const cleanDetail = (detail: string): string => {
-  const text = detail.replace(ANSI_ESCAPE_PATTERN, "").replace(/\s+/g, " ").trim();
+/** Makes runtime output one short plain line without terminal codes or a final period. */
+export const cleanRuntimeOutput = (output: string): string => {
+  const text = output.replace(ANSI_ESCAPE_PATTERN, "").replace(/\s+/g, " ").trim();
   // Runtimes write the error that stopped them last, so keep the end of long output.
   const shortText = text.length > MAX_DETAIL_LENGTH ? `…${text.slice(-MAX_DETAIL_LENGTH)}` : text;
   return shortText.replace(/[.:]+$/, "");
@@ -38,9 +39,12 @@ export const incompatibleRuntimeExecutableMessage = (
 
 /** The detail of a runtime that did not become ready before its startup deadline. */
 export const notReadyWithin = (timeoutMs: number): string =>
-  `it was not ready within ${timeoutMs / 1000} seconds`;
+  `It was not ready within ${timeoutMs / 1000} seconds`;
 
-/** A runtime that stopped before it was ready, with what it reported and how to fix it. */
+/**
+ * A runtime that stopped before it was ready, with what it reported and how to fix it. `detail`
+ * is a sentence, such as runtime output or an error message.
+ */
 export const runtimeExecutableStartError = ({
   guidance: { kind, update },
   operation,
@@ -56,7 +60,7 @@ export const runtimeExecutableStartError = ({
 }): HostOperationError<{ executablePath: string }> =>
   new HostOperationError({
     operation,
-    message: `${runtimeLabel(kind)} at '${executablePath}' did not start: ${cleanDetail(detail)}. Fix the reported problem, or ${update}. Then try again.`,
+    message: `${runtimeLabel(kind)} at '${executablePath}' did not start. ${capitalize(cleanRuntimeOutput(detail))}. Fix the reported problem, or ${update}. Then try again.`,
     cause,
     details: { executablePath },
   });

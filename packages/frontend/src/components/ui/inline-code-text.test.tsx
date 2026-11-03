@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, render } from "@testing-library/react";
-import { RuntimeMessageText } from "./runtime-message-text";
+import { InlineCodeText } from "./inline-code-text";
 
 afterEach(cleanup);
 
-describe("RuntimeMessageText", () => {
+describe("InlineCodeText", () => {
   test("shows each command between backticks as code", () => {
     const { container } = render(
       <p>
-        <RuntimeMessageText text="Run `claude update`, or run `opencode upgrade`." />
+        <InlineCodeText text="Run `claude update`, or run `opencode upgrade`." />
       </p>,
     );
 
@@ -22,7 +22,7 @@ describe("RuntimeMessageText", () => {
   test("keeps an unpaired backtick as text", () => {
     const { container } = render(
       <p>
-        <RuntimeMessageText text="Codex reported: missing ` quote" />
+        <InlineCodeText text="Codex reported: missing ` quote" />
       </p>,
     );
 

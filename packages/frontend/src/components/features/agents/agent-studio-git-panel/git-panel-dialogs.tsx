@@ -2,7 +2,7 @@ import { Undo2 } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import type { AgentStudioPendingDiscard } from "@openducktor/frontend-core/git/contracts";
 import { GitConflictDialog } from "@/features/git-conflict-resolution";
-import { INLINE_CODE_CLASS_NAME } from "@/lib/inline-code";
+import { INLINE_CODE_CLASS_NAME } from "@/components/ui/inline-code-text";
 import { ForcePushDialog } from "./force-push-dialog";
 import { GitConfirmationDialog } from "./git-confirmation-dialog";
 import { PullRebaseDialog } from "./pull-rebase-dialog";

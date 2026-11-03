@@ -99,7 +99,7 @@ describe("createClaudeExecutableProbe", () => {
     }
     expect(failure.operation).toBe("claudeExecutableProbe.initialize");
     expect(failure.message).toBe(
-      "Claude Code at '/usr/local/bin/claude' did not start: failed to start Claude Code. Fix the reported problem, or run `claude update`. Then try again.",
+      "Claude Code at '/usr/local/bin/claude' did not start. Failed to start Claude Code. Fix the reported problem, or run `claude update`. Then try again.",
     );
     expect(cleanupFinished).toBe(true);
   });

@@ -339,7 +339,7 @@ export const createCodexAppServerTransport = (
         stderr.length > 0
           ? `Codex app-server ${detail} for runtime ${runtimeId}: ${stderr}`
           : `Codex app-server ${detail} for runtime ${runtimeId}`,
-      details: { runtimeId, stderr },
+      details: { runtimeId, stderr, exit: detail },
     });
   };
   const lines = createInterface({ input: child.stdout });

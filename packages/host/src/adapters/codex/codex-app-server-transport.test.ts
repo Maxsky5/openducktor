@@ -591,7 +591,11 @@ describe("createCodexAppServerTransport", () => {
     );
     expect(failure).toBeInstanceOf(CodexAppServerClosedError);
     expect(failure).toMatchObject({
-      details: { runtimeId: "runtime-1", stderr: "Error loading configuration" },
+      details: {
+        runtimeId: "runtime-1",
+        stderr: "Error loading configuration",
+        exit: "closed: process exited with code 1",
+      },
     });
   });
 

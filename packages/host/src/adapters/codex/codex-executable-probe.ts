@@ -49,10 +49,10 @@ const CODEX_GUIDANCE: RuntimeExecutableGuidance = {
     "update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`",
 };
 
-/** Prefers the stderr of a Codex process that closed, because it names the startup problem. */
+/** Shows what a closed Codex process wrote and how it stopped, without the internal runtime ID. */
 const codexFailureDetail = (cause: CodexTransportBaseError): string =>
   cause instanceof CodexAppServerClosedError && cause.details?.stderr
-    ? cause.details.stderr
+    ? `${cause.details.stderr} (Codex app-server ${cause.details.exit})`
     : cause.message;
 
 export const verifyCodexAppServerProtocol = (
