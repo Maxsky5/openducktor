@@ -1,4 +1,4 @@
-import { type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowIcon } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import {
   type StyleProp,
@@ -40,7 +40,7 @@ export type ButtonProps = {
   size?: "sm" | "md" | "lg" | undefined;
   icon?: IconName | undefined;
   /** A Workflow Role whose icon replaces `icon`, as on the desktop role actions. */
-  roleIcon?: AgentRole | undefined;
+  roleIcon?: WorkflowIcon | undefined;
   /** An icon after the label, such as the chevron of a Next action. */
   trailingIcon?: IconName | undefined;
   /** Shows progress and disables the button while an action runs. */
@@ -152,7 +152,7 @@ function LeadingIcon({
   foreground,
 }: {
   loading: boolean;
-  roleIcon: AgentRole | undefined;
+  roleIcon: WorkflowIcon | undefined;
   icon: IconName | undefined;
   size: number;
   variant: ButtonVariant;
@@ -170,12 +170,12 @@ function ButtonRoleIcon({
   size,
   variant,
 }: {
-  role: AgentRole;
+  role: WorkflowIcon;
   size: number;
   variant: ButtonVariant;
 }): ReactElement {
   const theme = useAppTheme();
-  return <RoleIcon role={role} size={size} color={foregroundColor(theme, variant)} />;
+  return <RoleIcon hint={role} size={size} color={foregroundColor(theme, variant)} />;
 }
 
 /** The line height of the label of each size. */

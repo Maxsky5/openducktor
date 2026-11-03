@@ -7,7 +7,7 @@ import {
 } from "../../../queries/agent-sessions";
 import type { PersistedTaskSessionRecord } from "../support/persistence";
 import type { LoadedWorkflowSessionRecords } from "./agent-session-workflow-records";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 export type TaskSessionRecords = {
   workspaceId: string;

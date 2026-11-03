@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
@@ -92,6 +92,7 @@ describe("buildTaskCardModel", () => {
     });
     expect(model.primary?.appearance).toBe("waiting");
     expect(model.liveSession).toEqual({
+      iconHint: "building",
       role: "build",
       label: "Builder needs input",
       waitingInput: true,
@@ -111,6 +112,7 @@ describe("buildTaskCardModel", () => {
     expect(model.primary?.label).toBe("Open Builder");
     expect(model.primary?.appearance).toBe("running");
     expect(model.liveSession).toEqual({
+      iconHint: "building",
       role: "build",
       label: "Builder running",
       waitingInput: false,

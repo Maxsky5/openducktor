@@ -1,3 +1,4 @@
+import { roleDefaultPanel } from "@openducktor/workflows";
 import type { BrowserTabOwner } from "@openducktor/contracts";
 import { useBrowserPanelModel } from "@/features/browser";
 import type { SessionNavigationRecovery } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-recovery";
@@ -123,7 +124,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const { navigationPersistenceError, retryNavigationPersistence, selection } = routeSession;
 
   const taskActions = useAgentStudioShellTaskActions({
-    selectedTaskId: selection.view.selectedTask?.id ?? null,
+    selectedTask: selection.view.selectedTask,
     linkingMergedPullRequestTaskId,
     pendingMergedPullRequest,
     syncPullRequests,
@@ -179,7 +180,14 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const { canShowPullRequestReview, hasLinkedPullRequest } = orchestration.pullRequestReview;
   const panels = useSessionPanels({
     owner: panelOwner,
-    selectionKey: orchestrationSelection.view.role,
+    selectionKey: orchestrationSelection.view.role ?? JSON.stringify(null),
+    defaultRightSelection:
+      orchestrationSelection.view.selectedTask && orchestrationSelection.view.role
+        ? roleDefaultPanel(
+            orchestrationSelection.view.role,
+            orchestrationSelection.view.selectedTask.taskWorkflow,
+          )
+        : undefined,
     // CI Checks needs a linked pull request that the provider can review.
     unavailableKinds:
       canShowPullRequestReview && hasLinkedPullRequest ? NO_KINDS : WITHOUT_CI_CHECKS,
@@ -255,24 +263,10 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   );
 
   const documentsModel = orchestration.taskExecutionDocumentPanelModel;
-  const chatArtifactLinkOwner = useMemo<ChatArtifactLinkOwner | null>(
-    () =>
-      documentsModel
-        ? {
-            workspaceId: documentsModel.workspaceId,
-            repoPath: documentsModel.repoPath,
-            taskId: documentsModel.taskId,
-            ownerKey: orchestration.agentChatModel.thread.transcript.displayedSessionKey ?? "",
-            onOpenArtifact: (artifactId) => {
-              documentsModel.onSelectionChange({ kind: "artifact", artifactId });
-              panels.right.onPick("document");
-              if (panels.rightToggle && !panels.rightToggle.isOpen) {
-                panels.rightToggle.onToggle();
-              }
-            },
-          }
-        : null,
-    [documentsModel, orchestration.agentChatModel.thread.transcript.displayedSessionKey, panels],
+  const chatArtifactLinkOwner = useAgentStudioArtifactLinkOwner(
+    documentsModel,
+    orchestration.agentChatModel.thread.transcript.displayedSessionKey ?? "",
+    panels,
   );
 
   return {
@@ -286,10 +280,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     onRetryChatSettingsLoad: orchestration.retryChatSettingsLoad,
     onRetryGitProviderContext: gitProvider.retry,
     hasSelectedTask: Boolean(selection.view.taskId),
-    unavailableTaskId:
-      tasksAreCurrent && !isForegroundLoadingTasks && !selection.view.selectedTask
-        ? selection.view.taskId || null
-        : null,
+    unavailableTaskId: unavailableTaskId(selection.view, tasksAreCurrent, isForegroundLoadingTasks),
     chatHeaderModel: agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
     chatFileLinkOwner,
@@ -304,3 +295,40 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
 
 const NO_KINDS: ReadonlySet<ToolTabKind> = new Set();
 const WITHOUT_CI_CHECKS: ReadonlySet<ToolTabKind> = new Set(["ci_checks"]);
+
+function useAgentStudioArtifactLinkOwner(
+  documentsModel: ReturnType<
+    typeof useAgentStudioOrchestrationController
+  >["taskExecutionDocumentPanelModel"],
+  ownerKey: string,
+  panels: SessionPanelsModel,
+) {
+  const chatArtifactLinkOwner = useMemo<ChatArtifactLinkOwner | null>(
+    () =>
+      documentsModel
+        ? {
+            workspaceId: documentsModel.workspaceId,
+            repoPath: documentsModel.repoPath,
+            taskId: documentsModel.taskId,
+            ownerKey: ownerKey,
+            onOpenArtifact: (artifactId) => {
+              documentsModel.onSelectionChange({ kind: "artifact", artifactId });
+              panels.right.onPick("document");
+              if (panels.rightToggle && !panels.rightToggle.isOpen) {
+                panels.rightToggle.onToggle();
+              }
+            },
+          }
+        : null,
+    [documentsModel, ownerKey, panels],
+  );
+  return chatArtifactLinkOwner;
+}
+
+function unavailableTaskId(
+  view: ReturnType<typeof useAgentsPageRouteSessionModel>["selection"]["view"],
+  tasksAreCurrent: boolean,
+  isLoading: boolean,
+): string | null {
+  return tasksAreCurrent && !isLoading && !view.selectedTask ? view.taskId || null : null;
+}

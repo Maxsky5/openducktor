@@ -24,7 +24,7 @@ import {
   type WorkspaceIntent,
   type WorkspaceIntentContext,
 } from "./use-workspace-intent-runner";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const alpha = createWorkspaceRecordFixture({ workspaceId: "alpha", workspaceName: "Alpha" });
 const beta = createWorkspaceRecordFixture({
@@ -66,7 +66,6 @@ const createTasksState = (tasks: TaskCard[]): TasksStateContextValue => ({
   removeTaskWorktree: async () => {},
   resetTaskImplementation: async () => {},
   resetTask: async () => {},
-  transitionTask: async () => {},
   humanRequestChangesTask: async () => {},
 });
 

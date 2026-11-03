@@ -41,6 +41,7 @@ const skipped = (outcomeId: string, workspace: WorkspaceRecord): AutopilotOutcom
   workflowId: "openducktor",
   eventId: "taskProgressedToAiReview",
   actionId: "startQa",
+  actionLabel: "Start QA",
   occurredAt: "2026-10-10T00:00:00.000Z",
   kind: "skipped",
   reason: "The task moved on.",
@@ -341,6 +342,7 @@ describe("AutopilotProvider", () => {
           workflowId: "openducktor",
           eventId: "taskProgressedToAiReview",
           actionId: "startQa",
+          actionLabel: "Start QA",
           occurredAt: "2026-10-10T00:00:00.000Z",
           kind: "started",
           launch: {
@@ -372,6 +374,7 @@ describe("AutopilotProvider", () => {
       workflowId: "openducktor",
       eventId: "taskRejectedByQa",
       actionId: "startReviewQaFeedbacks",
+      actionLabel: "Start Review QA Feedbacks",
       occurredAt: "2026-10-10T00:00:00.000Z",
       kind: "failed",
       message: "The runtime rejected the message.",

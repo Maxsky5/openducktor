@@ -13,7 +13,7 @@ import type { RunTaskMutationWithChatDraftCleanupInput } from "./task-chat-draft
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import { requireActiveRepo, requireWorkspaceRef } from "./task-operations-model";
 import type { UseTaskOperationsResult } from "./task-operations-types";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
 
 export type TaskPullRequestHostPort = Pick<

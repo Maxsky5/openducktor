@@ -20,7 +20,7 @@ import {
   unavailableSessionDefaultModelError,
 } from "../lib/session-start-errors";
 import type { RepoSettingsInput } from "../types/session-slices";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 const toAgentModelSelection = (value: RepoAgentDefaultDraft): RuntimeBoundModelSelection | null => {
   if (!value.providerId || !value.modelId || !value.runtimeKind) {
@@ -74,18 +74,20 @@ const savedVariantAndProfileAreAvailable = (
 
 export const resolveRequiredDefaultSessionSelection = async ({
   role,
+  roleLabel,
   repoSettings,
   repoPath,
   loadRepoRuntimeCatalog,
 }: {
   role: AgentRole;
+  roleLabel: string;
   repoSettings: RepoSettingsInput | null;
   repoPath: string;
   loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 }): Promise<RuntimeBoundModelSelection> => {
   const savedDefaultSelection = defaultSessionSelectionFor(repoSettings, role);
   if (!savedDefaultSelection) {
-    throw new Error(missingSessionDefaultModelError(role));
+    throw new Error(missingSessionDefaultModelError(roleLabel));
   }
 
   const runtimeKind = savedDefaultSelection.runtimeKind;
@@ -104,7 +106,7 @@ export const resolveRequiredDefaultSessionSelection = async ({
   } catch (cause) {
     throw new Error(
       unavailableSessionDefaultCatalogError({
-        role,
+        role: roleLabel,
         runtimeKind,
         causeDetail: errorMessage(cause),
       }),
@@ -116,7 +118,7 @@ export const resolveRequiredDefaultSessionSelection = async ({
     !validatedSelection ||
     !savedVariantAndProfileAreAvailable(savedDefaultSelection, validatedSelection)
   ) {
-    throw new Error(unavailableSessionDefaultModelError({ role, runtimeKind }));
+    throw new Error(unavailableSessionDefaultModelError({ role: roleLabel, runtimeKind }));
   }
   return { ...validatedSelection, runtimeKind };
 };

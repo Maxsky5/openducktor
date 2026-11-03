@@ -1,7 +1,7 @@
 import type { TaskPriority } from "@openducktor/contracts";
 import type {
-  BuiltinIssueTypeId as IssueType,
-  BuiltinTaskCard as TaskCard,
+  WorkflowIssueTypeId as IssueType,
+  ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 
 /** The search text and the filter selections of one workspace board. */

@@ -1,5 +1,6 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
-import { workflowArtifactLabel } from "@openducktor/workflows";
+
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { createTaskService as createRealTaskService } from "../tasks/task-service";
@@ -46,6 +47,8 @@ const taskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   priority: 2,
   issueType: "feature",
   removeWorktreeOnClose: null,
+  workflow: { id: "openducktor", revision: 2 },
+  workflowSteps: [],
   availableActions: [],
   labels: ["mcp"],
   artifactSummary: {
@@ -68,7 +71,7 @@ const workflowArtifact = (taskId: string, code: string, revision = 1): WorkflowT
   taskId,
   code,
   classification: "workflow",
-  name: workflowArtifactLabel(code),
+  name: builtinTaskWorkflow.artifact(code)?.label ?? code,
   mediaType: "text/markdown",
   revision,
   updatedAt: "2026-05-10T10:01:00.000Z",

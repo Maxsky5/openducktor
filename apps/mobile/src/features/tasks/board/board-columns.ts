@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { KanbanEmptyColumnDisplay } from "@openducktor/contracts";
 import type { KanbanColumn, KanbanColumnId } from "@openducktor/workflows";
 
@@ -6,21 +6,14 @@ import type { KanbanColumn, KanbanColumnId } from "@openducktor/workflows";
  * The short name of each lane in the phone lane rail, where a lane has about 44 points. The lane
  * header under the rail shows the full desktop title.
  */
-export const LANE_SHORT_LABELS = {
-  open: "Backlog",
-  spec_ready: "Spec",
-  ready_for_dev: "Ready",
-  in_progress: "Progress",
-  blocked: "Blocked",
-  ai_review: "AI QA",
-  human_review: "Review",
-  closed: "Done",
-} as const satisfies Record<KanbanColumnId, string>;
-
 /** A board column as the app shows it. */
 export type BoardColumn = {
   id: KanbanColumnId;
   title: string;
+  shortLabel: string;
+  terminal: boolean;
+  acceptsNewTask?: boolean;
+  tone: KanbanColumn["tone"];
   tasks: TaskCard[];
   /** The host Kanban setting shows this empty column as a narrow marker. */
   collapsed: boolean;
@@ -36,6 +29,7 @@ type BuildBoardColumnsInput = {
   doneVisibleDays: number;
   /** True when the search or a filter hides tasks. */
   filterActive: boolean;
+  creationStateId?: string | null;
 };
 
 const doneEmptyMessage = (doneVisibleDays: number): string => {
@@ -54,7 +48,7 @@ const emptyMessage = (
   }: Pick<BuildBoardColumnsInput, "doneVisibleDays" | "filterActive">,
 ): string | null => {
   if (filterActive) return "No task in this lane matches the search and filters.";
-  if (column.id === "closed") return doneEmptyMessage(doneVisibleDays);
+  if (column.terminal) return doneEmptyMessage(doneVisibleDays);
   return null;
 };
 
@@ -71,6 +65,10 @@ export const buildBoardColumns = (input: BuildBoardColumnsInput): BoardColumn[] 
       {
         id: column.id,
         title: column.title,
+        shortLabel: column.shortLabel ?? column.title,
+        terminal: column.terminal === true,
+        acceptsNewTask: column.id === input.creationStateId,
+        tone: column.tone,
         tasks: column.tasks,
         collapsed: empty && input.emptyColumnDisplay === "collapsed",
         emptyMessage: empty ? emptyMessage(column, input) : null,

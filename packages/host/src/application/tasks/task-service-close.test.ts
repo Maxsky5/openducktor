@@ -53,6 +53,8 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   issueType: "task",
   removeWorktreeOnClose: null,
   labels: [],
+  workflow: { id: "openducktor", revision: 2 },
+  workflowSteps: [],
   availableActions: [],
   artifactSummary: {
     spec: { present: true },

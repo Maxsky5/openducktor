@@ -15,7 +15,7 @@ import {
 } from "@/components/features/kanban/kanban-filter-menu";
 import { PRIORITY_LEVELS } from "@openducktor/frontend-core/tasks/board/kanban-task-badge-model";
 import {
-  ISSUE_TYPE_STYLES,
+  issueTypeStyle,
   PRIORITY_STYLES,
 } from "@/components/features/kanban/kanban-task-badge-model";
 import { Button } from "@/components/ui/button";
@@ -25,10 +25,6 @@ import { isPlatformChord } from "@/lib/keyboard-shortcuts";
 import { cn } from "@/lib/utils";
 import { readDevicePlatform } from "@/lib/device-platform";
 import type { KanbanBoardFilterModel } from "@openducktor/frontend-core/tasks/board/use-kanban-board-filter-model";
-import {
-  BUILTIN_ISSUE_TYPE_IDS,
-  type BuiltinIssueTypeId as IssueType,
-} from "@openducktor/workflows";
 
 type KanbanBoardFilterBarProps = {
   filter: KanbanBoardFilterModel;
@@ -59,6 +55,15 @@ export function KanbanBoardFilterBar({ filter }: KanbanBoardFilterBarProps): Rea
     [filter.labelOptions],
   );
 
+  const issueTypeOptions = filter.issueTypeOptions.map((choice) => {
+    const style = issueTypeStyle({ id: choice.value, label: choice.label, icon: choice.icon });
+    const Icon = style.icon;
+    return {
+      ...choice,
+      icon: <Icon aria-hidden="true" className={cn("size-3.5", style.iconClassName)} />,
+    };
+  });
+
   return (
     // The search field shrinks before the header wraps, so Clear does not push the board down.
     <div className="flex min-w-64 flex-1 basis-0 flex-wrap items-center gap-2">
@@ -86,7 +91,7 @@ export function KanbanBoardFilterBar({ filter }: KanbanBoardFilterBarProps): Rea
       <KanbanFilterMenu
         name="Type"
         icon={Blocks}
-        options={ISSUE_TYPE_OPTIONS}
+        options={issueTypeOptions}
         selected={filter.value.issueTypes}
         disabled={filter.isDisabled}
         onSelectedChange={(issueTypes) => filter.onChange({ issueTypes })}
@@ -118,14 +123,6 @@ export function KanbanBoardFilterBar({ filter }: KanbanBoardFilterBarProps): Rea
     </div>
   );
 }
-
-/** The menus use the words of the card badges. */
-const ISSUE_TYPE_OPTIONS: KanbanFilterOption<IssueType>[] = BUILTIN_ISSUE_TYPE_IDS.map(
-  (issueType) => {
-    const { label, icon: Icon, iconClassName } = ISSUE_TYPE_STYLES[issueType];
-    return { value: issueType, label, icon: <Icon className={cn("size-3.5", iconClassName)} /> };
-  },
-);
 
 const PRIORITY_OPTIONS: KanbanFilterOption<TaskPriority>[] = PRIORITY_LEVELS.map((priority) => {
   const { label, hint, dotClassName } = PRIORITY_STYLES[priority];

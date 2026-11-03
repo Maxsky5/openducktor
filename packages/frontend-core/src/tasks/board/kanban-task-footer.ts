@@ -1,14 +1,11 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
-  BUILTIN_ROLE_LABELS,
-  BUILTIN_ROLE_IDS,
-  SESSION_CREATING_ACTIONS,
-  SESSION_VIEW_ACTION_BY_ROLE,
+  sessionViewActions,
   resolveTaskCardActions,
   taskHasSessionPage,
   type TaskWorkflowAction,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import {
   agentSessionIdentityKey,
@@ -42,20 +39,18 @@ export const getTaskFooter = ({
   mergedTarget,
   autoCloseFailure,
 }: FooterInputs): Footer => {
-  const workflowOptions: Parameters<typeof resolveTaskCardActions>[1] = {
-    include: TASK_CARD_WORKFLOW_ACTIONS,
+  // A merged task proposes Close Task. Session shortcuts must not change which action leads.
+  const proposesClose = mergedTarget !== undefined || autoCloseFailure !== undefined;
+  const workflowActions = resolveTaskCardActions(task, {
+    surface: "kanban",
     hasActiveSession,
     historicalSessionRoles: resolveHistoricalSessionRoles(historicalSessions),
-  };
-  if (activeSessionRole) workflowOptions.activeSessionRole = activeSessionRole;
-  // A merged task proposes Close Task.
-  if (mergedTarget !== undefined || autoCloseFailure !== undefined)
-    workflowOptions.leadingAction = "close_task";
-  // Session shortcuts must not change which action the workflow picks first.
-  const workflowActions = resolveTaskCardActions(task, workflowOptions);
-  const sessions = SESSION_ACTIONS.map((descriptor) => ({
-    ...descriptor,
-    options: resolveSessionTargetOptions(historicalSessions, taskSessions, descriptor.role),
+    activeSessionRole: activeSessionRole || undefined,
+    leadingAction: proposesClose ? task.taskWorkflow.effectActions("task.close")[0] : undefined,
+  });
+  const sessions = sessionViewActions(task).map((view) => ({
+    ...view,
+    options: resolveSessionTargetOptions(historicalSessions, taskSessions, view.role),
   }));
   const primarySession = sessions.find(
     (session) => session.action === workflowActions.primaryAction,
@@ -80,13 +75,14 @@ export const getTaskFooter = ({
   const disabledActions = workflowActions.allActions.filter((action) => {
     const session = sessions.find((entry) => entry.action === action);
     if (session) return !session.options;
-    if (SESSION_CREATING_ACTIONS.includes(action)) return pendingState?.isSessionStarting ?? false;
-    switch (action) {
-      case "human_approve":
+    if (task.taskWorkflow.action(action).kind === "session")
+      return pendingState?.isSessionStarting ?? false;
+    switch (task.taskWorkflow.actionEffect(action)) {
+      case "review.approve":
         return pendingState?.approvingTaskId === task.id;
-      case "human_request_changes":
+      case "review.request_changes":
         return pendingState?.requestingChangesTaskId === task.id;
-      case "reset_implementation":
+      case "implementation.reset":
         return pendingState?.resettingImplementationTaskId === task.id;
       default:
         return false;
@@ -152,27 +148,7 @@ export const getCardLayout = (inputs: FooterInputs): CardLayout => {
   return { contentRevision, hasSessionShortcuts: footer.shortcuts.length > 0 };
 };
 
-const TASK_CARD_WORKFLOW_ACTIONS: readonly TaskWorkflowAction[] = [
-  "set_spec",
-  "set_plan",
-  "open_spec",
-  "open_planner",
-  "qa_start",
-  "build_start",
-  "open_builder",
-  "open_qa",
-  "human_approve",
-  "human_request_changes",
-  "reset_implementation",
-];
-
-const SESSION_ACTIONS = BUILTIN_ROLE_IDS.map((role) => ({
-  role,
-  action: SESSION_VIEW_ACTION_BY_ROLE[role],
-  label: BUILTIN_ROLE_LABELS[role],
-}));
-
-type RoleSession = (typeof SESSION_ACTIONS)[number] & {
+type RoleSession = { role: string; action: string; label: string } & {
   options: ReturnType<typeof resolveSessionTargetOptions>;
 };
 

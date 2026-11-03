@@ -1,3 +1,4 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import type { ClientConnection } from "../connection/client-connection";
@@ -90,8 +91,16 @@ describe("loadEffectivePromptOverrides", () => {
     workspaceGetRepoConfigMock.mockImplementationOnce(async () => repoDeferred.promise);
     workspaceGetSettingsSnapshotMock.mockImplementationOnce(async () => settingsDeferred.promise);
 
-    const firstLoad = loadEffectivePromptOverrides("repo", connection.queryClient);
-    const secondLoad = loadEffectivePromptOverrides("repo", connection.queryClient);
+    const firstLoad = loadEffectivePromptOverrides(
+      "repo",
+      connection.queryClient,
+      builtinTaskWorkflow,
+    );
+    const secondLoad = loadEffectivePromptOverrides(
+      "repo",
+      connection.queryClient,
+      builtinTaskWorkflow,
+    );
 
     repoDeferred.resolve(createRepoConfig());
     settingsDeferred.resolve(createSettingsSnapshot());
@@ -108,8 +117,8 @@ describe("loadEffectivePromptOverrides", () => {
 
   test("normalizes workspace ids before deduplicating concurrent loads", async () => {
     const [firstResult, secondResult] = await Promise.all([
-      loadEffectivePromptOverrides("repo", connection.queryClient),
-      loadEffectivePromptOverrides(" repo ", connection.queryClient),
+      loadEffectivePromptOverrides("repo", connection.queryClient, builtinTaskWorkflow),
+      loadEffectivePromptOverrides(" repo ", connection.queryClient, builtinTaskWorkflow),
     ]);
 
     expect(workspaceGetRepoConfigMock).toHaveBeenCalledTimes(1);

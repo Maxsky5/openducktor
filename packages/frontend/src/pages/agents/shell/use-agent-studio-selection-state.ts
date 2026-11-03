@@ -12,7 +12,7 @@ import {
   createAgentStudioRouteSelectionState,
   type SelectAgentStudioSelection,
 } from "./agent-studio-selection-state";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 type UseAgentStudioSelectionStateArgs = {
   activeWorkspaceId: string | null;
@@ -24,7 +24,7 @@ type UseAgentStudioSelectionStateArgs = {
   keepSessionlessParam?: boolean;
   isNavigationPending?: boolean;
   hasExplicitRoleParam: boolean;
-  roleFromQuery: AgentRole;
+  roleFromQuery: AgentRole | null;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   requestContextTransition: (
     applyTransition: () => void,

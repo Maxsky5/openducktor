@@ -15,7 +15,7 @@ import {
 } from "../router/host-command-router";
 
 import { createWorkspaceSettingsCommandHandlers } from "./workspace-settings-command-handlers";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));

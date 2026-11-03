@@ -6,11 +6,19 @@ import type {
   NotificationKindSetting,
   TaskArtifactSummary,
   WorkflowDefinition,
+  WorkflowReference,
+  TaskWorkflowStepState,
+  WorkflowInput,
   WorkflowEventEffect,
   WorkflowNotificationKind,
 } from "@openducktor/contracts";
 import { deepFreeze } from "../deep-freeze";
-import { createWorkflow, WorkflowEvaluationError, type Workflow } from "../evaluate";
+import {
+  createWorkflow,
+  WorkflowEvaluationError,
+  type Workflow,
+  type WorkflowPredicate,
+} from "../evaluate";
 import { workflowNotificationDefaults } from "../notification-defaults";
 import { createTaskInputs, taskIssueTypes, type TaskFacts } from "./task-input";
 import { createTaskPrompts, type PromptTemplate, type TaskPrompts } from "./task-prompts";
@@ -20,6 +28,16 @@ export type TaskWorkflowRole = Definition["roles"][number];
 export type TaskWorkflowState = Definition["states"][number];
 export type TaskWorkflowArtifact = Definition["artifacts"][number];
 type AgentStep = Extract<Definition["steps"][number], { kind: "agent" }>;
+export type TaskWorkflowAction = Definition["actions"][number];
+export type TaskWorkflowAgentStep = AgentStep;
+/** A launch action that shows as an extra control on a surface, with its owning step. */
+export type TaskWorkflowSurfaceLaunch = {
+  readonly launch: TaskWorkflowLaunchAction;
+  readonly stepId: string;
+  readonly show: WorkflowPredicate;
+};
+/** A view action that opens the latest session of its step role. */
+export type TaskWorkflowSessionView = { action: string; role: string; label: string };
 export type TaskWorkflowLaunchAction = AgentStep["launchActions"][number] & { role: string };
 /** An automation with the role of its launch action and the start mode that Autopilot uses. */
 export type TaskWorkflowAutomation = Definition["automations"][number] & {
@@ -46,6 +64,8 @@ export type TaskEventDecision =
 
 /** Tasks with equal inputs share one frozen projection, so a task card can hold it as is. */
 export type TaskProjection = {
+  readonly workflow: WorkflowReference;
+  readonly workflowSteps: TaskWorkflowStepState[];
   readonly availableActions: string[];
   readonly agentWorkflows: AgentWorkflows;
 };
@@ -53,6 +73,8 @@ export type TaskProjection = {
 export type TaskStateNotification = {
   kind: WorkflowNotificationKind;
   status: string;
+  title: string;
+  body: string;
   preferredRole?: string;
   navigation: { type: "kanban_task" } | { type: "agent_studio_task"; preferredRole?: string };
 };
@@ -63,6 +85,10 @@ export type TaskStateNotification = {
  */
 export type TaskWorkflow = {
   readonly definition: Definition;
+  /** The ID and revision that identify the definition. */
+  readonly reference: WorkflowReference;
+  /** The compiled evaluator of the definition. */
+  readonly evaluator: Workflow;
   readonly prompts: TaskPrompts;
   readonly issueTypes: readonly string[];
   readonly initialState: string;
@@ -72,6 +98,7 @@ export type TaskWorkflow = {
   readonly reviewArtifactCodes: readonly string[];
   /** Roles whose sessions run in the task worktree. */
   readonly worktreeRoles: readonly string[];
+  usesWorktree(roleId: string): boolean;
   isTerminalState(status: string): boolean;
   state(status: string): TaskWorkflowState;
   role(roleId: string): TaskWorkflowRole;
@@ -91,6 +118,19 @@ export type TaskWorkflow = {
   /** Tasks with equal inputs share one frozen projection. */
   project(task: TaskFacts): TaskProjection;
   launchAction(launchActionId: string): TaskWorkflowLaunchAction;
+  action(actionId: string): TaskWorkflowAction;
+  /** The host effect of an event action, if any. */
+  actionEffect(actionId: string): WorkflowEventEffect | undefined;
+  /** The event actions whose event runs the host effect. */
+  effectActions(effect: WorkflowEventEffect): readonly string[];
+  /** The agent step of a role, if the workflow has one. */
+  agentStep(roleId: string): TaskWorkflowAgentStep | undefined;
+  /** The role whose session a view action with a step opens. */
+  viewActionRole(actionId: string): string | undefined;
+  readonly sessionViews: readonly TaskWorkflowSessionView[];
+  surfaceLaunches(surface: "studio" | "git_conflict"): readonly TaskWorkflowSurfaceLaunch[];
+  /** Whether a display rule of an agent step asks the user for input. */
+  needsInput(input: WorkflowInput): boolean;
   /** The event that a session start of the role step must admit, if any. */
   roleStartEvent(roleId: string): string | undefined;
   /** The role of the step that the event starts. */
@@ -124,7 +164,7 @@ export const createTaskWorkflow = (
   const { definition } = evaluator;
   const issueTypes = taskIssueTypes(definition);
   const inputs = createTaskInputs(definition);
-  const prompts = createTaskPrompts(definition, templates);
+  const prompts = createTaskPrompts(definition, deepFreeze(structuredClone(templates)));
 
   const state = lookup(
     definition.id,
@@ -175,6 +215,56 @@ export const createTaskWorkflow = (
   );
   const terminalStates = definition.states.filter(({ terminal }) => terminal).map(({ id }) => id);
   const terminalStateSet = new Set(terminalStates);
+  const worktreeRoleSet = new Set(
+    definition.roles.filter(({ location }) => location === "task_worktree").map(({ id }) => id),
+  );
+  const action = lookup(
+    definition.id,
+    "action",
+    definition.actions.map((entry) => [entry.id, entry] as const),
+  );
+  const actionEffects = new Map(
+    definition.actions.flatMap((entry) => {
+      const effect = entry.kind === "event" ? eventsById.get(entry.eventId)?.effect : undefined;
+      return effect ? [[entry.id, effect] as const] : [];
+    }),
+  );
+  const effectActions = new Map<WorkflowEventEffect, string[]>();
+  for (const [actionId, effect] of actionEffects)
+    effectActions.set(effect, [...(effectActions.get(effect) ?? []), actionId]);
+  const stepsById = new Map(definition.steps.map((step) => [step.id, step]));
+  const viewActionRoles = new Map(
+    definition.actions.flatMap((entry) => {
+      const step = entry.kind === "view" && entry.stepId ? stepsById.get(entry.stepId) : undefined;
+      return step?.kind === "agent" ? [[entry.id, step.roleId] as const] : [];
+    }),
+  );
+  const sessionViews = deepFreeze(
+    [...viewActionRoles].map(([actionId, roleId]) => ({
+      action: actionId,
+      role: roleId,
+      label: role(roleId).label,
+    })),
+  );
+  const surfaceLaunches = (surface: "studio" | "git_conflict") =>
+    agentSteps.flatMap((step) =>
+      step.launchActions
+        .filter((launch) => launch.surface === surface)
+        .map((launch) => ({
+          launch: launchAction(launch.id),
+          stepId: step.id,
+          show: evaluator.condition(launch.showWhen ?? true),
+        })),
+    );
+  const needsInputRules = agentSteps.flatMap((step) =>
+    (step.displayRules ?? [])
+      .filter(({ attention }) => attention === "needs_input")
+      .map(({ when }) => evaluator.condition(when)),
+  );
+  const launchesBySurface = {
+    studio: surfaceLaunches("studio"),
+    git_conflict: surfaceLaunches("git_conflict"),
+  };
 
   const agentWorkflowsOf = (input: Parameters<Workflow["steps"]>[0]): AgentWorkflows => {
     const steps = new Map(evaluator.steps(input).map((step) => [step.id, step]));
@@ -197,6 +287,10 @@ export const createTaskWorkflow = (
   };
   const project = inputs.cached((input): TaskProjection =>
     deepFreeze({
+      workflow: { id: definition.id, revision: definition.revision },
+      workflowSteps: evaluator
+        .steps(input)
+        .map(({ id, required, available, completed }) => ({ id, required, available, completed })),
       availableActions: evaluator.availableActions(input),
       agentWorkflows: agentWorkflowsOf(input),
     }),
@@ -216,6 +310,8 @@ export const createTaskWorkflow = (
 
   return {
     definition,
+    reference: deepFreeze({ id: definition.id, revision: definition.revision }),
+    evaluator,
     prompts,
     issueTypes,
     initialState: definition.initialState,
@@ -227,6 +323,7 @@ export const createTaskWorkflow = (
       .filter(({ location }) => location === "task_worktree")
       .map(({ id }) => id),
     isTerminalState: (status) => terminalStateSet.has(status),
+    usesWorktree: (roleId) => worktreeRoleSet.has(roleId),
     state,
     role,
     hasRole: (roleId) => rolesById.has(roleId),
@@ -266,6 +363,14 @@ export const createTaskWorkflow = (
     eventSourceStates: (eventId) => event(eventId).from,
     project,
     launchAction,
+    action,
+    actionEffect: (actionId) => actionEffects.get(actionId),
+    effectActions: (effect) => effectActions.get(effect) ?? [],
+    agentStep: (roleId) => stepByRole.get(roleId),
+    viewActionRole: (actionId) => viewActionRoles.get(actionId),
+    sessionViews,
+    surfaceLaunches: (surface) => launchesBySurface[surface],
+    needsInput: (input) => needsInputRules.some((test) => test(input)),
     roleStartEvent: (roleId) => stepByRole.get(roleId)?.startEventId,
     startEventRole: (eventId) => agentSteps.find((step) => step.startEventId === eventId)?.roleId,
     automation,
@@ -276,6 +381,8 @@ export const createTaskWorkflow = (
       const result: TaskStateNotification = {
         kind: notification.kind,
         status: notification.status,
+        title: notification.title,
+        body: notification.body,
         navigation:
           notification.route === "kanban" ? { type: "kanban_task" } : { type: "agent_studio_task" },
       };

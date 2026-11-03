@@ -103,7 +103,7 @@ The frontend renders `availableActions`. It does not derive transition rights fr
 
 ## Start an agent session
 
-The host owns complete workflow launches.
+The host owns complete workflow launches. The shared client launch module prepares a declared message after branch selection and before host dispatch. Task actions and Studio pass the launch intent and selected choices through that interface.
 
 1. The frontend sends one request with the requested workspace, task, action, user choices, and instruction.
 2. The host validates the request and starts an independent worker. Launches for one task run one at a time, in arrival order. A fresh workflow role creates or reuses the task worktree and runs its worktree-creation actions through terminals.
@@ -196,7 +196,9 @@ The command of an effect decides its event once and branches on the decision, so
 
 Settings follow the workflows of the host. A read adds the notification and Autopilot defaults of each workflow. A write fails for a role, prompt template, signal, automation, or notification kind outside them.
 
-`packages/workflows/src/builtin` owns the built-in definition, its prompts, and the helpers that the frontend reads. Every repository uses the built-in workflow. The host client parses task cards with the built-in schema, so the frontend shows only the built-in workflow. The MCP server names the built-in issue types and states as a hint, and the host checks values against the workflow of the task.
+`packages/workflows/src/builtin` owns the production default definition, its prompts, and its board layout. The definition is the one workflow document: its entities carry optional display fields, such as issue types, state tones, action surfaces and icons, step display rules, and launch order. Injected resolvers can serve several workflows in one workspace. `workflow_catalog_get` returns the validated host inventory and `workspace_workflow_get` returns its explicit shared board order and new-task workflow. All clients join task projections to the exact host definition through the connection-owned Query cache. Missing definitions, invalid references, and incomplete or conflicting shared boards fail with an actionable error. The MCP server names built-in issue types and states as a hint; the host validates the workflow of each task.
+
+`createTaskWorkflowResolver` in `packages/host/src/application/tasks/task-workflows.ts` owns host inventory validation, exact revision lookup, and workspace board membership. Task reads and notification projection use this same module. Clients validate received workflow data through their connection-owned queries.
 
 The evaluator returns decisions. The host applies effects and writes to SQLite:
 
@@ -209,9 +211,11 @@ flowchart TD
     D --> F[Host effects and task write]
 ```
 
+A workspace board layout owns only column order and task order. The host resolves each column from the workflows that use its state: the label, title, short label, terminal meaning, and tone. The host checks once that every workflow that uses a state ID declares equal metadata. The board covers every workflow state exactly once. Shared IDs combine cards across workflows without combining their actions or roles. State notifications and default Studio roles remain workflow-specific. Tones and icons are closed vocabularies in `packages/contracts`. Each client maps every token to its own icons and theme tokens, and keeps paint, live activity, and platform controls. Human steps show progress and actions without a role tab, composer, model picker, or agent session.
+
 Steps have their own IDs, separate from roles. The required, available, and completed flags of a step describe policy. They do not schedule work. Event guards enforce prerequisites. The built-in derives the `canSkip` flag of the task protocol from `required`.
 
-Task and session records store no workflow identity or revision. Before a task can name another workflow, the design must pin an immutable definition revision and define how existing tasks upgrade.
+Task and session records store no workflow identity or revision. Task responses and committed transition snapshots include a computed `{ id, revision }` reference from the same resolved workflow that projects steps and actions. The record schema and SQLite validation exclude these response fields. Durable workflow assignments, immutable revision storage, and upgrade policy remain future work.
 
 Task update events carry `statusChanges` with the previous status, the source role, and the task snapshot at each committed transition. The committed observer also receives the signal of the transition, and Autopilot reads it. After a transaction commits, the SQLite adapter records its local changes in memory for publication through that host's task stream. Committed changes carry the workflow ID and saved Autopilot rules. The local Autopilot observer creates launch attempts and checks their admission before starting them. These attempts stay in memory. Startup and explicit reads do not dispatch them. See [host database access](host-database.md#concurrent-database-access) for process behavior.
 
@@ -255,7 +259,7 @@ The page does not parse chat text to create a pull request.
 | Built-in states, issue types, roles, and actions | `packages/workflows/src/builtin/ids.ts` | Workflows |
 | ODT tool names and schemas | `packages/contracts/src/odt-tool-names.ts`, `packages/contracts/src/odt-mcp-schemas.ts` | Contracts |
 | Role tool list | The roles of the task workflow definition | Workflows |
-| Generic workflow definitions, decisions, and presentation | `packages/contracts/src/workflow-*-schemas.ts` | Contracts |
+| Generic workflow definitions, display vocabularies, and decisions | `packages/contracts/src/workflow-*-schemas.ts` | Contracts |
 | Workflow evaluation and built-in rules | `packages/workflows/src/*` | Workflows |
 | Workflow execution and typed failures | `packages/host/src/domain/task/*`, `packages/host/src/application/tasks/*` | Host |
 | Task state | SQLite `tasks.status` | Host SQLite adapter |

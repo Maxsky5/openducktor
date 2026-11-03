@@ -14,9 +14,8 @@ export const TASK_CLOSE_COPY = {
   retry: "Retry",
   /** What a close does not do, and what it keeps. */
   closeNotes: [
-    "Keep artifacts, session history and the pull request link.",
-    "Artifacts you added become read-only. Spec, plan and QA reports stay editable.",
     "Closing does not merge code or change a pull request.",
+    "The task moves to its workflow's terminal state. It keeps its artifacts, session history, and pull request link. Workflow rules control artifact editing.",
   ],
 } as const;
 

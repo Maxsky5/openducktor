@@ -20,6 +20,7 @@ interface TaskApprovalGitConflictState {
   taskId: string | null;
   conflict: GitConflict | null;
   conflictAction: GitConflictAction;
+  onCommitted?: (() => Promise<void>) | undefined;
 }
 
 type OpenTaskApproval = (taskId: string, options?: TaskApprovalOpenOptions) => void;
@@ -57,14 +58,18 @@ export function useTaskApprovalGitConflictFlow({
     setGitConflictState(INITIAL_GIT_CONFLICT_STATE);
   }, []);
 
-  const openGitConflictDialog = useCallback((taskId: string, conflict: GitConflict): void => {
-    setGitConflictState({
-      open: true,
-      taskId,
-      conflict,
-      conflictAction: null,
-    });
-  }, []);
+  const openGitConflictDialog = useCallback(
+    (taskId: string, conflict: GitConflict, onCommitted?: () => Promise<void>): void => {
+      setGitConflictState({
+        open: true,
+        taskId,
+        conflict,
+        onCommitted,
+        conflictAction: null,
+      });
+    },
+    [],
+  );
 
   const abortConflict = useCallback((): void => {
     if (!workspaceRepoPath || !gitConflictState.conflict || reservation.current) {
@@ -100,6 +105,7 @@ export function useTaskApprovalGitConflictFlow({
         if (taskId) {
           openTaskApproval(taskId, {
             mode: "direct_merge",
+            onCommitted: gitConflictState.onCommitted,
           });
         }
       } finally {
@@ -179,6 +185,10 @@ export function useTaskApprovalGitConflictFlow({
     openGitConflictDialog,
   } satisfies {
     taskGitConflictDialog: TaskGitConflictDialogModel | null;
-    openGitConflictDialog: (taskId: string, conflict: GitConflict) => void;
+    openGitConflictDialog: (
+      taskId: string,
+      conflict: GitConflict,
+      onCommitted?: () => Promise<void>,
+    ) => void;
   };
 }

@@ -1,12 +1,9 @@
+import { createTaskCardFixture } from "../test-support/shared-test-fixtures";
 import { describe, expect, test } from "bun:test";
-import {
-  deriveTaskProjection,
-  type BuiltinTaskCard as TaskCard,
-  builtinTaskCardSchema,
-} from "@openducktor/workflows";
+import { builtinTaskWorkflow, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { buildRoleWorkflowState, workflowStepRailState } from "./agent-workflow-state";
 
-const rejectedTask = (status: TaskCard["status"]): TaskCard => {
+const rejectedTask = (status: TaskCard["status"]) => {
   const record = {
     id: "task-1",
     title: "Task 1",
@@ -20,7 +17,8 @@ const rejectedTask = (status: TaskCard["status"]): TaskCard => {
     updatedAt: "2026-02-22T12:00:00.000Z",
     createdAt: "2026-02-22T12:00:00.000Z",
   };
-  return builtinTaskCardSchema.parse({ ...record, ...deriveTaskProjection(record) });
+  const { agentWorkflows, availableActions } = builtinTaskWorkflow.project(record);
+  return createTaskCardFixture({ ...record, agentWorkflows, availableActions });
 };
 
 describe("built-in workflow rail state", () => {

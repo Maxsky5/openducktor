@@ -1,12 +1,15 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+
 import { describe, expect, mock, test } from "bun:test";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { createTaskCardFixture } from "../test-support/shared-test-fixtures";
+import { createTaskCardFixture, toWireTaskCard } from "../test-support/shared-test-fixtures";
 import { documentQueryKeys } from "./documents";
 import { createTaskViewSync, type TaskViewSyncPorts } from "./task-view-sync";
 import { boardEvent, eventCursor } from "./task-view-sync.test-support";
 import { taskQueryKeys, type RepoTaskData } from "./tasks";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const createDeferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -26,6 +29,7 @@ const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPo
 
 const createSync = (ports: TaskViewSyncPorts) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  createTestClientConnection({ queryClient });
   return { queryClient, sync: createTaskViewSync({ queryClient, ports }) };
 };
 
@@ -99,7 +103,9 @@ describe("TaskViewSync races", () => {
       result.resolve({ tasks: [createTaskCardFixture({ id: "task-1" }), other] });
       ids.resolve(["task-1", "task-2"]);
       await Promise.all([read, idRead]);
-      expect(queryClient.getQueryData<RepoTaskData>(queryKey)?.tasks).toEqual([changed, other]);
+      expect(queryClient.getQueryData<RepoTaskData>(queryKey)?.tasks.map(toWireTaskCard)).toEqual(
+        [changed, other].map(toWireTaskCard),
+      );
       expect(queryClient.getQueryData<string[]>(idKey)).toEqual(["task-1", "task-2"]);
       expect(writes).toHaveLength(2);
       expect(new Set(writes).size).toBe(2);
@@ -158,11 +164,11 @@ describe("TaskViewSync races", () => {
           : Promise.resolve();
       const earlyChanged = Object.freeze({ ...early, title: "Changed early" });
       const firstItem = Object.freeze({ ...item, title: "First item" });
-      const moved = Object.freeze({ ...moving, status: "open" as const });
+      const moved = Object.freeze(createTaskCardFixture({ ...moving, status: "open" }));
       const marker = Object.freeze(createTaskCardFixture({ id: "marker" }));
       const lastItem = Object.freeze({ ...item, title: "Latest item" });
       const restored = Object.freeze({ ...old, title: "Recreated" });
-      const reopened = Object.freeze({ ...edge, status: "open" as const });
+      const reopened = Object.freeze(createTaskCardFixture({ ...edge, status: "open" }));
       try {
         await sync.reconcileExternalEvent(
           boardEvent(workspaceRefFixture("/repo"), [earlyChanged, firstItem, moved], {
@@ -183,15 +189,9 @@ describe("TaskViewSync races", () => {
         result.resolve({ tasks });
         ids.resolve(taskIds);
         await Promise.all([read, idRead]);
-        expect(queryClient.getQueryData<RepoTaskData>(queryKey)?.tasks).toEqual([
-          { ...earlyChanged },
-          reopened,
-          lastItem,
-          marker,
-          moved,
-          restored,
-          other,
-        ]);
+        expect(queryClient.getQueryData<RepoTaskData>(queryKey)?.tasks.map(toWireTaskCard)).toEqual(
+          [earlyChanged, reopened, lastItem, marker, moved, restored, other].map(toWireTaskCard),
+        );
         expect(queryClient.getQueryData<string[]>(idKey)).toEqual([
           "early",
           "item",
@@ -227,9 +227,20 @@ describe("TaskViewSync races", () => {
         repoPath: "/repo",
         taskIds: [queued.id],
         removedTaskIds: [],
-        taskSnapshots: [{ id: queued.id, title: queued.title, status: queued.status }],
+        taskSnapshots: [
+          {
+            workflow: builtinTaskWorkflow.reference,
+            id: queued.id,
+            title: queued.title,
+            status: queued.status,
+          },
+        ],
         statusChanges: [],
-        boardChanges: { artifactChanges: [], cards: [queued], doneVisibleDays: 1 },
+        boardChanges: {
+          artifactChanges: [],
+          cards: [toWireTaskCard(queued)],
+          doneVisibleDays: 1,
+        },
         emittedAt: "2026-04-10T13:10:00.000Z",
       },
       eventCursor(),

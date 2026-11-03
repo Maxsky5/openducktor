@@ -1,5 +1,5 @@
 import type { PullRequest } from "@openducktor/contracts";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "./task-close";
 
 export type TaskPullRequestOperations = {

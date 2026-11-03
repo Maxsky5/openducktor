@@ -1,4 +1,4 @@
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
 import type { TaskConfirmDialogState } from "./task-confirm-dialog-types";
 import { useTaskAsyncConfirmDialog } from "./use-task-async-confirm-dialog";
@@ -23,7 +23,7 @@ export type TaskCloseConfirmDialogModel = Omit<TaskConfirmDialogState, "impact">
 };
 
 export type UseTaskCloseConfirmDialogResult = {
-  openDialog: () => void;
+  openDialog: (onCommitted?: () => Promise<void>) => void;
   dialog: TaskCloseConfirmDialogModel;
 };
 
@@ -35,6 +35,7 @@ type UseTaskCloseConfirmDialogOptions = {
   /** The close. Without it, Confirm does nothing. */
   run: CloseTaskRun | undefined;
   onSucceeded: () => void;
+  onCommitted?: (() => Promise<void>) | undefined;
 };
 
 /** The shared close confirmation of a task, with its cleanup choice. */
@@ -44,6 +45,7 @@ export function useTaskCloseConfirmDialog({
   initiallyOpen = false,
   run,
   onSucceeded,
+  onCommitted,
 }: UseTaskCloseConfirmDialogOptions): UseTaskCloseConfirmDialogResult {
   const { removeWorktree, onRemoveWorktreeChange, resetChoice } = useTaskCloseChoice(
     task.removeWorktreeOnClose,
@@ -54,13 +56,14 @@ export function useTaskCloseConfirmDialog({
     scopeKey: task.id,
     run: run && removeWorktree !== null ? () => run(task.id, { removeWorktree }) : undefined,
     onSucceeded,
+    onCommitted,
   });
   const impact = useTaskCloseImpact({ task, enabled: dialog.open });
   const isPreparing = useTaskCloseLoader(impact, removeWorktree);
   return {
-    openDialog: () => {
+    openDialog: (onCommitted) => {
       resetChoice();
-      openDialog();
+      openDialog(onCommitted);
     },
     dialog: {
       ...dialog,

@@ -1,9 +1,8 @@
 import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { ListTodo } from "lucide-react";
 import type { ReactElement } from "react";
-import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
+import { issueTypeOptions } from "@/components/features/task-composer/constants";
 import {
-  issueTypeGuidance,
   REMOVE_WORKTREE_ON_CLOSE_LABEL,
   removeWorktreeOnCloseChoiceKey,
   removeWorktreeOnCloseChoices,
@@ -24,6 +23,7 @@ import type {
 } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 
 type TaskDetailsFormProps = {
+  issueTypeChoices: Parameters<typeof issueTypeOptions>[0];
   mode: ComposerMode;
   disabled: boolean;
   state: ComposerState;
@@ -40,6 +40,7 @@ type TaskDetailsFormProps = {
 };
 
 export function TaskDetailsForm({
+  issueTypeChoices,
   mode,
   disabled,
   state,
@@ -54,7 +55,9 @@ export function TaskDetailsForm({
   descriptionAssetUploads,
   descriptionAssetPreviews,
 }: TaskDetailsFormProps): ReactElement {
-  const selectedType = ISSUE_TYPE_OPTIONS.find((option) => option.value === state.issueType);
+  const selectedType = issueTypeOptions(issueTypeChoices).find(
+    (option) => option.value === state.issueType,
+  );
   const SelectedIcon = selectedType?.icon ?? ListTodo;
 
   return (
@@ -75,7 +78,9 @@ export function TaskDetailsForm({
               <p className="text-sm font-semibold text-foreground">
                 {selectedType?.label ?? state.issueType}
               </p>
-              <p className="text-xs text-muted-foreground">{issueTypeGuidance(state.issueType)}</p>
+              <p className="text-xs text-muted-foreground">
+                {selectedType?.guidance ?? selectedType?.description ?? ""}
+              </p>
             </div>
           </div>
           {mode === "create" ? (

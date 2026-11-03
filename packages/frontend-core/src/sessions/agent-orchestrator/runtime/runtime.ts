@@ -1,13 +1,6 @@
-import type {
-  RepoConfig,
-  RepoPromptOverrides,
-  RuntimeKind,
-  SettingsSnapshot,
-} from "@openducktor/contracts";
+import type { RepoConfig, RuntimeKind } from "@openducktor/contracts";
 import { type AgentModelSelection } from "@openducktor/core";
-import { mergePromptOverrides, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
-import type { QueryClient } from "@tanstack/react-query";
-import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "../../../queries/workspace";
+import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 export type RepoConfigLoader = (workspaceId: string) => Promise<RepoConfig>;
 
@@ -34,30 +27,6 @@ export const loadRepoDefaultModel = async (
     selection.profileId = roleDefault.profileId;
   }
   return selection;
-};
-
-export const loadRepoPromptOverrides = async (
-  workspaceId: string,
-  options: {
-    queryClient: QueryClient;
-    loadRepoConfig?: () => Promise<RepoConfig>;
-    loadSettingsSnapshot?: () => Promise<SettingsSnapshot>;
-  },
-): Promise<RepoPromptOverrides> => {
-  const { queryClient } = options;
-  const [repoConfig, snapshot] = await Promise.all([
-    options.loadRepoConfig
-      ? options.loadRepoConfig()
-      : loadRepoConfigFromQuery(queryClient, workspaceId),
-    options.loadSettingsSnapshot
-      ? options.loadSettingsSnapshot()
-      : loadSettingsSnapshotFromQuery(queryClient),
-  ]);
-
-  return mergePromptOverrides({
-    globalOverrides: snapshot.globalPromptOverrides,
-    repoOverrides: repoConfig.promptOverrides,
-  });
 };
 
 export const requireConfiguredRuntimeKind = (

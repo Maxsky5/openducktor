@@ -7,7 +7,7 @@ import {
   toAgentStudioSessionlessRoleSelection,
   toAgentStudioSessionSelection,
 } from "../shell/agent-studio-selection-state";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 type CanPrepareMessageFirstSession = (option: SessionCreateOption) => boolean;
 

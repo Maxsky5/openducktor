@@ -44,6 +44,6 @@ describe("artifact list model", () => {
       workflowDocumentKey("spec"),
       workflowDocumentKey("plan"),
       workflowDocumentKey("qaReport"),
-    ]).toEqual(["spec", "plan", "qa"]);
+    ]).toEqual(["spec", "plan", "qaReport"]);
   });
 });

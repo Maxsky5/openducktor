@@ -68,6 +68,7 @@ Runtime catalog reads follow these rules:
 
 | Data | Stale time |
 |---|---:|
+| Workflow catalog and workspace board | Infinity, invalidated on recovery |
 | Task list and runs | 30 sec |
 | Runs | 30 sec |
 | Agent session list | Infinity |
@@ -77,6 +78,10 @@ Runtime catalog reads follow these rules:
 | Saved Autopilot rules | Infinite, invalidated by events |
 | Task merge status | Infinite, updated by events |
 | Task worktree cleanup impact | 0 |
+
+The connection owns the workflow catalog and each workspace board in `workflows.ts`. Every task projection resolves its exact workflow ID and revision before it enters the task cache. Recovery reloads the catalog and invalidates board reads. Each workspace reloads its board within its own task recovery, so a failed board does not block the other workspaces. Closing a workspace cancels and removes its board query. Missing definitions or invalid board metadata fail the affected read without a built-in substitution.
+
+Action owners observe tasks that details or session views loaded in the complete task cache. This lets retained tasks use their declared actions without adding them to the Kanban list or starting another task read.
 
 Task details and editing use `unfilteredRepoTaskDataQueryOptions` and `tasksListAll`, with a separate cache key from the retained Kanban list. Task events carry changed cards, including closed tasks outside Done retention. Both lists apply these cards and removals without another host read; only the Kanban list applies the event cutoff. A stream gap marks the complete list incomplete before the board read starts. Later events cannot make that baseline fresh. Observed complete lists read again during recovery; inactive lists wait for their next view. A successful full read clears the incomplete state.
 

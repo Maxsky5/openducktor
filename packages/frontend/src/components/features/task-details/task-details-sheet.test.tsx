@@ -137,13 +137,10 @@ const createTaskStopImpactHookMock = () =>
   }));
 
 const createTaskWorkflowActionsValue = (): TaskWorkflowActions => ({
+  onLaunch: mock(() => {}),
+  onApplyEvent: () => {},
   onCreateTask: mock(() => {}),
-  onPlan: mock(() => {}),
-  onQaStart: mock(() => {}),
-  onQaOpen: mock(() => {}),
-  onBuild: mock(() => {}),
   onOpenSession: mock(() => {}),
-  onDelegate: mock(() => {}),
   onEdit: mock(() => {}),
   onOpenTaskDetails: mock(() => {}),
   onHumanApprove: mock(() => {}),
@@ -193,9 +190,9 @@ describe("TaskDetailsSheet", () => {
               }
             : undefined,
       });
-      task.agentWorkflows.build.completed = true;
+      task.agentWorkflows.build!.completed = true;
       const sheet = (taskId: string) => {
-        const shownTask = { ...task, id: taskId };
+        const shownTask = createTaskCardFixture({ ...task, id: taskId });
         return (
           <IsolatedProviders>
             <TaskWorkflowActionsContext.Provider value={actions}>
@@ -244,12 +241,7 @@ describe("TaskDetailsSheet", () => {
       task,
       open: true,
       onOpenChange: () => {},
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
       onOpenSession: undefined,
-      onDelegate: undefined,
       onHumanApprove: undefined,
       onHumanRequestChanges: undefined,
       onResetImplementation: undefined,
@@ -292,12 +284,7 @@ describe("TaskDetailsSheet", () => {
       task,
       open: true,
       onOpenChange: () => {},
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
       onOpenSession: undefined,
-      onDelegate: undefined,
       onHumanApprove: undefined,
       onHumanRequestChanges: undefined,
       onResetImplementation: undefined,
@@ -348,12 +335,7 @@ describe("TaskDetailsSheet", () => {
       task,
       open: true,
       onOpenChange: () => {},
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
       onOpenSession: undefined,
-      onDelegate: undefined,
       onHumanApprove: undefined,
       onHumanRequestChanges: undefined,
       onResetImplementation: undefined,
@@ -398,12 +380,7 @@ describe("TaskDetailsSheet", () => {
       task,
       open: true,
       onOpenChange: () => {},
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
       onOpenSession: undefined,
-      onDelegate: undefined,
       onHumanApprove: undefined,
       onHumanRequestChanges: undefined,
       onResetImplementation: undefined,
@@ -446,7 +423,11 @@ describe("TaskDetailsSheet", () => {
   ] as const)("closes the sheet after %s only when it opens a session", async (action, closes) => {
     const { useTaskDetailsSheetViewModel } =
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
-    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      title: "Task 1",
+      availableActions: [action],
+    });
     const onOpenChange = mock((_open: boolean) => {});
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
       task,
@@ -489,12 +470,7 @@ describe("TaskDetailsSheet", () => {
       task,
       open: true,
       onOpenChange,
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
       onOpenSession: undefined,
-      onDelegate: undefined,
       onHumanApprove: undefined,
       onHumanRequestChanges: undefined,
       onResetImplementation: undefined,
@@ -540,12 +516,7 @@ describe("TaskDetailsSheet", () => {
       task,
       open: true,
       onOpenChange: () => {},
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
       onOpenSession: undefined,
-      onDelegate: undefined,
       onHumanApprove: undefined,
       onHumanRequestChanges: undefined,
       onResetImplementation: undefined,
@@ -939,7 +910,7 @@ describe("TaskDetailsSheet", () => {
 
     fireEvent.click(screen.getByText("Start Builder"));
 
-    expect(actions.onDelegate).toHaveBeenCalledWith("TASK-1");
+    expect(actions.onLaunch).toHaveBeenCalledWith("TASK-1", "build_implementation_start");
 
     unmount();
   });

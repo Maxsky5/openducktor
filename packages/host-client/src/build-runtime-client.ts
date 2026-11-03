@@ -44,7 +44,7 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn, InvokeOptions } from "./invoke-utils";
 import { arrayResultSchema, booleanResultSchema, okResultSchema } from "./invoke-utils";
-import { type BuiltinTaskCard as TaskCard, builtinTaskCardSchema } from "@openducktor/workflows";
+import { type TaskCard, taskCardSchema } from "@openducktor/contracts";
 
 const taskStoreCheck = async (
   invokeFn: InvokeFn,
@@ -128,7 +128,7 @@ const buildBlocked = async (
   return invokeFn(
     "build_blocked",
     { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, reason },
-    builtinTaskCardSchema,
+    taskCardSchema,
   );
 };
 
@@ -140,7 +140,7 @@ const buildResumed = async (
   return invokeFn(
     "build_resumed",
     { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
-    builtinTaskCardSchema,
+    taskCardSchema,
   );
 };
 
@@ -153,7 +153,7 @@ const buildCompleted = async (
   return invokeFn(
     "build_completed",
     { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, input: { summary } },
-    builtinTaskCardSchema,
+    taskCardSchema,
   );
 };
 
@@ -166,7 +166,7 @@ const humanRequestChanges = async (
   return invokeFn(
     "human_request_changes",
     { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, note },
-    builtinTaskCardSchema,
+    taskCardSchema,
   );
 };
 
@@ -212,7 +212,7 @@ const taskDirectMergeComplete = async (
       removeWorktree,
       publicationConsent,
     }),
-    builtinTaskCardSchema,
+    taskCardSchema,
   );
 };
 
@@ -267,7 +267,7 @@ const taskPullRequestLinkMerged = async (
       pullRequest,
       removeWorktree,
     },
-    builtinTaskCardSchema,
+    taskCardSchema,
   );
 };
 

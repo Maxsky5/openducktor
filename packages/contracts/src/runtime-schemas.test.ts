@@ -246,6 +246,8 @@ describe("runtime schemas", () => {
 
   const stepState = { required: false, canSkip: true, available: false, completed: false };
   const projection = {
+    workflow: { id: "openducktor", revision: 2 },
+    workflowSteps: [],
     availableActions: [],
     agentWorkflows: { spec: stepState, planner: stepState, build: stepState, qa: stepState },
   };
@@ -273,24 +275,27 @@ describe("runtime schemas", () => {
     expect(taskCardSchema.safeParse(payload).success).toBe(false);
   });
 
-  test("task card rejects unsupported issue types", () => {
-    expect(() =>
-      taskCardSchema.parse({
-        id: "task-2",
-        title: "Legacy type",
-        description: "",
-        status: "open",
-        priority: 2,
-        issueType: "decision",
-        labels: [],
-        updatedAt: "2026-01-01T00:00:00.000Z",
-        createdAt: "2026-01-01T00:00:00.000Z",
-      }),
-    ).toThrow();
+  test("task card preserves unfamiliar issue types for host workflow validation", () => {
+    const parsed = taskCardSchema.parse({
+      ...projection,
+      id: "task-2",
+      title: "Custom type",
+      description: "",
+      status: "open",
+      priority: 2,
+      issueType: "decision",
+      labels: [],
+      artifactSummary: {},
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(parsed.issueType).toBe("decision");
+    expect(taskCardSchema.safeParse({ ...parsed, issueType: "" }).success).toBe(false);
   });
 
   test("task card parses document summary flags and updated timestamps", () => {
     const parsed = taskCardSchema.parse({
+      ...projection,
       id: "task-3",
       title: "Docs",
       status: "open",

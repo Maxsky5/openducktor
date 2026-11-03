@@ -17,7 +17,11 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
   revision: 1,
   label: "Review",
   initialState: "backlog",
-  facts: [{ id: "issueType", type: "enum", values: ["article", "fix"] }],
+  facts: [],
+  issueTypes: [
+    { id: "article", label: "Article" },
+    { id: "fix", label: "Fix" },
+  ],
   roles: [
     {
       id: "writer",
@@ -368,6 +372,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
     { when: true, actions: ["start_write", "request_review", "approve", "shelve", "restart"] },
   ],
   actionPriority: [],
+  launchOrder: [],
 });
 
 const template = (

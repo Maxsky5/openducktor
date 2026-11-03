@@ -1,6 +1,7 @@
 import { workspaceScopeValue } from "./workspace-scope";
 import { queryMatchesWorkspace } from "./workspace-scope";
 import { type WorkspaceRef } from "@openducktor/contracts";
+import { unfilteredRepoTaskDataQueryOptions } from "./tasks";
 import type {
   ArtifactSaveResult,
   ArtifactDeleteResult,
@@ -16,7 +17,7 @@ import {
   queryOptions,
   replaceEqualDeep,
 } from "@tanstack/react-query";
-import { roleFocusArtifact, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import { roleFocusArtifact, type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import { connectionHost } from "../connection/client-connection";
 import { taskDocumentQueryOptions } from "./documents";
 
@@ -55,7 +56,16 @@ export const prefetchTaskArtifacts = async (
   const refresh = queryClient.prefetchQuery(
     taskArtifactsQueryOptions(queryClient, repoPath, taskId),
   );
-  const code = role ? roleFocusArtifact(role) : undefined;
+  const options = unfilteredRepoTaskDataQueryOptions(repoPath);
+  // A warm task cache lets the document read start at once.
+  if (!queryClient.getQueryData(options.queryKey)) await queryClient.prefetchQuery(options);
+  // The destination query owns workflow errors; this read only warms its cache.
+  const task = queryClient.getQueryData(options.queryKey)?.tasks.find(({ id }) => id === taskId);
+  if (!task) {
+    await refresh;
+    return;
+  }
+  const code = role ? roleFocusArtifact(role, task.taskWorkflow) : undefined;
   const read = code
     ? queryClient.prefetchQuery(taskDocumentQueryOptions(queryClient, repoPath, taskId, code))
     : undefined;

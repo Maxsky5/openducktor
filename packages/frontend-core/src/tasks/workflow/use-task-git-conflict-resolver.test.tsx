@@ -204,11 +204,15 @@ describe("useTaskGitConflictResolver", () => {
       expect(request?.existingSessionOptions?.map((option) => option.value)).toEqual([
         agentSessionIdentityKey(builder),
       ]);
-      expect(openBuilderSession).toHaveBeenCalledWith("task-1", {
-        externalSessionId: "build-1",
-        runtimeKind: "opencode",
-        workingDirectory: CONFLICT_DIRECTORY,
-      });
+      expect(openBuilderSession).toHaveBeenCalledWith(
+        "task-1",
+        {
+          externalSessionId: "build-1",
+          runtimeKind: "opencode",
+          workingDirectory: CONFLICT_DIRECTORY,
+        },
+        "build",
+      );
 
       request?.assertBeforeLaunch?.();
       await harness.update({

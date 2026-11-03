@@ -242,7 +242,11 @@ export function useSessionStartModalRunner({
       );
       if (
         targetBranchValidationError &&
-        supportsTaskTargetBranchSelection(request.role, request.launchActionId)
+        supportsTaskTargetBranchSelection(
+          request.role,
+          request.launchActionId,
+          request.taskWorkflow,
+        )
       ) {
         feedback.show("error", INVALID_TASK_TARGET_BRANCH_LABEL, {
           description: targetBranchValidationError,
@@ -327,13 +331,15 @@ export function useSessionStartModalRunner({
 
         if (!workspaceRepoPath || !workspaceId)
           throw new Error("Select a workspace before starting the session.");
+        const roleLabel = requestContext.taskWorkflow.role(requestContext.role).label;
         const attemptId = startupAttempts.begin({
           origin: {
             workspaceId,
             repoPath: workspaceRepoPath,
             scope: { kind: "task", taskId: requestContext.taskId, role: requestContext.role },
           },
-          label: requestContext.title ?? `Start ${requestContext.role} session`,
+          label: requestContext.title ?? `Start ${roleLabel} session`,
+          roleLabel,
           presentation: input.runInBackground ? "notification" : "dialog",
           instructionRequired: requestContext.postStartAction !== "none",
         });

@@ -1,97 +1,111 @@
+import type { TaskWorkflowContinuation } from "./task-workflow-continuation";
 import {
+  resolveWorkflowAction,
   sessionRoleForViewAction,
-  type SessionRoleViewAction,
+  type ResolvedTaskCard,
   type TaskWorkflowAction,
-  type BuiltinRoleId as AgentRole,
+  type WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
 import type { TaskWorkflowActions } from "./task-workflow-actions-context";
 
 type TaskWorkflowCallbacks = {
-  onPlan: TaskWorkflowActions["onPlan"] | undefined;
-  onQaStart: TaskWorkflowActions["onQaStart"] | undefined;
-  onQaOpen: TaskWorkflowActions["onQaOpen"] | undefined;
-  onBuild: TaskWorkflowActions["onBuild"] | undefined;
-  onOpenSession?: TaskWorkflowActions["onOpenSession"] | undefined;
-  onDelegate: TaskWorkflowActions["onDelegate"] | undefined;
-  onHumanApprove: TaskWorkflowActions["onHumanApprove"] | undefined;
-  onHumanRequestChanges: TaskWorkflowActions["onHumanRequestChanges"] | undefined;
-  onResetImplementation: TaskWorkflowActions["onResetImplementation"] | undefined;
-  // The details sheet passes its confirmation dialogs here, not the handlers of the context.
-  onResetTask?: ((taskId: string) => void) | undefined;
-  onCloseTask?: ((taskId: string) => void) | undefined;
+  [
+    Key in keyof Pick<
+      TaskWorkflowActions,
+      | "onOpenSession"
+      | "onHumanApprove"
+      | "onHumanRequestChanges"
+      | "onResetImplementation"
+      | "onOpenTaskDetails"
+      | "onLaunch"
+      | "onApplyEvent"
+    >
+  ]?: TaskWorkflowActions[Key] | undefined;
+} & {
+  onResetTask?: ((taskId: string, continuation?: TaskWorkflowContinuation) => void) | undefined;
+  onCloseTask?: ((taskId: string, continuation?: TaskWorkflowContinuation) => void) | undefined;
   onRemoveTaskWorktree?: ((taskId: string) => void) | undefined;
 };
-
 type TaskWorkflowActionContext = {
+  task: ResolvedTaskCard;
   resolveSessionOptions?: ((role: AgentRole) => SessionTargetOptions | undefined) | undefined;
 };
 
-/** Run one workflow action of a task through its handler in `callbacks`. */
+/** Resolve declared behavior and use the existing operation or confirmation. */
 export const runTaskWorkflowAction = (
   action: TaskWorkflowAction,
   taskId: string | null,
   callbacks: TaskWorkflowCallbacks,
-  context?: TaskWorkflowActionContext,
+  context: TaskWorkflowActionContext,
 ): void => {
-  if (!taskId) {
+  if (!taskId || taskId !== context.task.id)
+    throw new Error("Workflow action task does not match its context. Reload the task.");
+  const role = sessionRoleForViewAction(action, context.task);
+  const sessionOptions = role ? context.resolveSessionOptions?.(role) : undefined;
+  const operation = resolveWorkflowAction(context.task, action, sessionOptions ? role : undefined);
+  const requireHandler = <Args extends unknown[]>(
+    handler: ((...args: Args) => void) | undefined,
+    ...args: Args
+  ) => {
+    if (!handler)
+      throw new Error(
+        `Action "${action}" needs a host capability that this client does not support. Update the client.`,
+      );
+    handler(...args);
+  };
+  if (operation.kind === "session") {
+    requireHandler(callbacks.onLaunch, taskId, operation.launchActionId);
     return;
   }
-
-  switch (action) {
-    case "set_spec":
-    case "set_plan":
-      callbacks.onPlan?.(taskId, action);
+  if (operation.kind === "view") {
+    switch (operation.target) {
+      case "session":
+        requireHandler(callbacks.onOpenSession, taskId, operation.role!, sessionOptions);
+        return;
+      case "task_details":
+        requireHandler(callbacks.onOpenTaskDetails, taskId);
+        return;
+      case "worktree_cleanup":
+        requireHandler(callbacks.onRemoveTaskWorktree, taskId);
+        return;
+    }
+  }
+  const continuation: TaskWorkflowContinuation | undefined = operation.launchActionIds.length
+    ? { workflow: context.task.workflow, launchActionIds: operation.launchActionIds }
+    : undefined;
+  switch (operation.effect) {
+    // A status.set event has no host effect beyond its transition, so the event command runs it.
+    case undefined:
+    case "status.set":
+      requireHandler(callbacks.onApplyEvent, taskId, operation.eventId, operation.launchActionIds);
       return;
-    case "qa_start":
-      callbacks.onQaStart?.(taskId);
+    case "review.approve":
+      requireHandler(callbacks.onHumanApprove, taskId, ...(continuation ? [continuation] : []));
       return;
-    case "open_spec":
-    case "open_planner":
-    case "open_qa":
-    case "open_builder":
-      openRoleSession(action, taskId, callbacks, context);
+    case "review.request_changes":
+      requireHandler(
+        callbacks.onHumanRequestChanges,
+        taskId,
+        ...(continuation ? [continuation] : []),
+      );
       return;
-    case "build_start":
-      callbacks.onDelegate?.(taskId);
+    case "implementation.reset": {
+      const options = continuation
+        ? { closeDetailsAfterReset: true, continuation }
+        : { closeDetailsAfterReset: true };
+      requireHandler(callbacks.onResetImplementation, taskId, options);
       return;
-    case "human_approve":
-      callbacks.onHumanApprove?.(taskId);
+    }
+    case "task.reset":
+      requireHandler(callbacks.onResetTask, taskId, ...(continuation ? [continuation] : []));
       return;
-    case "human_request_changes":
-      callbacks.onHumanRequestChanges?.(taskId);
-      return;
-    case "reset_implementation":
-      callbacks.onResetImplementation?.(taskId, { closeDetailsAfterReset: true });
-      return;
-    case "reset_task":
-      callbacks.onResetTask?.(taskId);
-      return;
-    case "close_task":
-      callbacks.onCloseTask?.(taskId);
-      return;
-    case "remove_worktree":
-      callbacks.onRemoveTaskWorktree?.(taskId);
+    case "task.close":
+      requireHandler(callbacks.onCloseTask, taskId, ...(continuation ? [continuation] : []));
       return;
     default:
-      return;
+      throw new Error(
+        `Action "${action}" uses unsupported host effect "${operation.effect}". Update the client to use this action.`,
+      );
   }
-};
-
-const openRoleSession = (
-  action: SessionRoleViewAction,
-  taskId: string,
-  callbacks: TaskWorkflowCallbacks,
-  context: TaskWorkflowActionContext | undefined,
-): void => {
-  const role = sessionRoleForViewAction(action);
-  if (role === undefined) return;
-
-  if (callbacks.onOpenSession) {
-    callbacks.onOpenSession(taskId, role, context?.resolveSessionOptions?.(role));
-    return;
-  }
-
-  if (action === "open_qa") callbacks.onQaOpen?.(taskId);
-  if (action === "open_builder") callbacks.onBuild?.(taskId);
 };

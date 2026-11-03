@@ -1,8 +1,7 @@
 import {
-  resolveTaskCardActions,
   type TaskWorkflowAction,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import { PencilLine, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
@@ -19,26 +18,6 @@ export type TaskDetailsSheetFooterProps = {
   historicalSessionRoles?: readonly AgentRole[];
   onWorkflowAction?: (action: TaskWorkflowAction) => void;
   onDeleteSelect?: () => void;
-};
-
-type WorkflowActionOptions = NonNullable<Parameters<typeof resolveTaskCardActions>[1]>;
-
-const workflowActionOptions = ({
-  hasActiveSession,
-  includeActions,
-  activeSessionRole,
-  historicalSessionRoles,
-}: {
-  hasActiveSession: boolean;
-  includeActions: readonly TaskWorkflowAction[] | undefined;
-  activeSessionRole: AgentRole | undefined;
-  historicalSessionRoles: readonly AgentRole[] | undefined;
-}): WorkflowActionOptions => {
-  const options: WorkflowActionOptions = { hasActiveSession };
-  if (includeActions) options.include = includeActions;
-  if (activeSessionRole) options.activeSessionRole = activeSessionRole;
-  if (historicalSessionRoles) options.historicalSessionRoles = historicalSessionRoles;
-  return options;
 };
 
 const deleteMenuActions = (onDeleteSelect: (() => void) | undefined) =>
@@ -67,18 +46,6 @@ export function TaskDetailsSheetFooter({
   onWorkflowAction,
   onDeleteSelect,
 }: TaskDetailsSheetFooterProps): ReactElement {
-  const hasWorkflowAction =
-    includeActions !== undefined &&
-    onWorkflowAction !== undefined &&
-    resolveTaskCardActions(
-      task,
-      workflowActionOptions({
-        hasActiveSession,
-        includeActions,
-        activeSessionRole,
-        historicalSessionRoles,
-      }),
-    ).allActions.length > 0;
   const extraMenuActions = deleteMenuActions(onDeleteSelect);
 
   return (
@@ -95,7 +62,7 @@ export function TaskDetailsSheetFooter({
         ) : null}
       </div>
 
-      {includeActions && onWorkflowAction && (hasWorkflowAction || onDeleteSelect) ? (
+      {includeActions && onWorkflowAction ? (
         <TaskWorkflowActionGroup
           task={task}
           includeActions={includeActions}

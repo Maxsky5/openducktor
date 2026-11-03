@@ -9,7 +9,7 @@ import {
 import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 import { createTaskWorkflow } from "@openducktor/workflows";
 import type { z } from "zod";
-import { createTaskWorkflowResolver } from "../composition/node/task-workflow-composition";
+import { createTaskWorkflowResolver } from "../application/tasks/task-workflows";
 import { singleTaskWorkflow } from "../test-support/task-workflows";
 import { applyTaskWorkflowSettings } from "./workflow-settings";
 import { repoConfigFixture } from "../test-support/repo-config-fixture";
@@ -46,6 +46,11 @@ describe("applyTaskWorkflowSettings", () => {
         },
       }),
       createTaskWorkflowResolver({
+        forWorkspace: () => ({
+          workflows: [review, second],
+          board: singleTaskWorkflow(review).forWorkspace({ workspaceId: "repo", repoPath: "/repo" })
+            .board,
+        }),
         forTask: () => review,
         forNewTask: () => review,
         workflows: [review, second],

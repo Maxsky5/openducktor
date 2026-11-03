@@ -1,4 +1,4 @@
-import { getSessionLaunchAction, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "../../lib/agent-session-identity";
@@ -35,7 +35,7 @@ type BuildSessionStartModalRequestArgs = {
   selectedModel: AgentModelSelection | null;
   taskSessions: AgentSessionSummary[];
   preferredSourceSession?: SessionStartContextSession | null | undefined;
-  selectedTask?: Pick<TaskCard, "targetBranch" | "targetBranchError"> | null;
+  selectedTask?: TaskCard | null;
 };
 
 export type RunSessionStartWorkflowInput = {
@@ -56,6 +56,7 @@ export type SessionStartNotificationInput = {
   taskId: string;
   taskTitle?: string;
   role: SessionStartFlowRequest["role"];
+  roleLabel: string;
   session?: AgentSessionIdentity;
   errorAttentionId?: string;
   inAppFeedbackHandled?: boolean;
@@ -128,12 +129,16 @@ export const createSessionStartWorkflowRunner = ({
   launchAttemptId,
 }: CreateSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow => {
   return async (input) => {
+    if (!input.task)
+      throw new Error("The task is unavailable. Reload the task before starting a session.");
+    const role = input.task.taskWorkflow.role(input.request.role);
     const notificationInput: SessionStartNotificationInput = {
       launchAttemptId,
       workspaceId,
       taskId: input.request.taskId,
       role: input.request.role,
       inAppFeedbackHandled: true,
+      roleLabel: role.label,
     };
     if (input.task?.title) notificationInput.taskTitle = input.task.title;
     const reportNotificationFailure = (cause: unknown): void => {
@@ -200,7 +205,21 @@ export const buildSessionStartModalRequest = ({
   preferredSourceSession,
   selectedTask,
 }: BuildSessionStartModalRequestArgs): SessionStartModalOpenRequest => {
-  const existingSessionOptions = resolveExistingSessionOptions(request, taskSessions);
+  if (!selectedTask)
+    throw new Error("Task workflow is unavailable. Reload the task before starting a session.");
+  const launch = selectedTask.taskWorkflow.launchAction(request.launchActionId);
+  const step = selectedTask.workflowSteps.find(
+    (step) => step.kind === "agent" && step.roleId === request.role,
+  );
+  if (!step?.available || launch.role !== request.role)
+    throw new Error(
+      `Workflow step for role "${request.role}" is unavailable for task "${selectedTask.id}".`,
+    );
+  const existingSessionOptions = resolveExistingSessionOptions(
+    request,
+    taskSessions,
+    selectedTask.taskWorkflow,
+  );
   const initialSourceSession = resolveInitialSourceSession({
     request,
     existingSessionOptions,
@@ -211,6 +230,7 @@ export const buildSessionStartModalRequest = ({
     request.initialTargetBranchError ?? selectedTask?.targetBranchError ?? null;
   const modalRequest: SessionStartModalOpenRequest = {
     source,
+    taskWorkflow: selectedTask.taskWorkflow,
     taskId: request.taskId,
     role: request.role,
     launchActionId: request.launchActionId,
@@ -250,27 +270,30 @@ export const buildSessionStartModalRequest = ({
 
 const launchActionSupportsReusableSessions = (
   launchActionId: SessionStartFlowRequest["launchActionId"],
+  taskWorkflow: import("@openducktor/workflows").TaskWorkflow,
 ): boolean => {
-  return getSessionLaunchAction(launchActionId).startModes.some(
-    (mode) => mode === "reuse" || mode === "fork",
-  );
+  return taskWorkflow
+    .launchAction(launchActionId)
+    .startModes.some((mode) => mode === "reuse" || mode === "fork");
 };
 
 const resolveExistingSessionOptions = (
   request: SessionStartFlowRequest,
   taskSessions: AgentSessionSummary[],
+  taskWorkflow: import("@openducktor/workflows").TaskWorkflow,
 ) => {
   if (request.existingSessionOptions) {
     return request.existingSessionOptions;
   }
 
-  if (!launchActionSupportsReusableSessions(request.launchActionId)) {
+  if (!launchActionSupportsReusableSessions(request.launchActionId, taskWorkflow)) {
     return [];
   }
 
   return buildReusableSessionOptions({
     sessions: taskSessions.filter((session) => session.taskId === request.taskId),
     role: request.role,
+    roleLabel: taskWorkflow.role(request.role).label,
   });
 };
 

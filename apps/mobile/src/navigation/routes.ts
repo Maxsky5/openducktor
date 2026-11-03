@@ -1,4 +1,12 @@
-import type { BuiltinLaunchActionId as SessionLaunchActionId } from "@openducktor/workflows";
+import type { TaskWorkflowContinuation } from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
+type RequestChangesParams = {
+  workspaceId: string;
+  taskId: string;
+  launch?: string;
+  action?: string;
+  continuation?: string;
+};
+import type { WorkflowLaunchActionId as SessionLaunchActionId } from "@openducktor/workflows";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { ChangedFileGroup } from "@/features/review/changes-model";
 import type { ChangesFocus } from "@/features/review/changes-view-state";
@@ -82,7 +90,7 @@ export const routes = {
   file: (owner: WorkOwnerParams, path: string) =>
     ({ pathname: "/work/file", params: { ...owner, path } }) as const,
   /** The task documents, opened on `document` when given. */
-  documents: (workspaceId: string, taskId: string, document?: "spec" | "plan" | "qa") =>
+  documents: (workspaceId: string, taskId: string, document?: string) =>
     ({
       pathname: "/work/documents",
       params: document ? { workspaceId, taskId, document } : { workspaceId, taskId },
@@ -118,10 +126,27 @@ export const routes = {
   /** The start sheet of a desktop quick action, which names its session launch action. */
   quickAction: (workspaceId: string, taskId: string, launch: SessionLaunchActionId) =>
     ({ pathname: "/start-session", params: { workspaceId, taskId, launch } }) as const,
-  approveTask: (workspaceId: string, taskId: string) =>
-    ({ pathname: "/approve-task", params: { workspaceId, taskId } }) as const,
-  requestChanges: (workspaceId: string, taskId: string) =>
-    ({ pathname: "/request-changes", params: { workspaceId, taskId } }) as const,
+  approveTask: (workspaceId: string, taskId: string, continuation?: TaskWorkflowContinuation) => {
+    const params: Pick<RequestChangesParams, "workspaceId" | "taskId" | "continuation"> = {
+      workspaceId,
+      taskId,
+    };
+    if (continuation) params.continuation = JSON.stringify(continuation);
+    return { pathname: "/approve-task", params } as const;
+  },
+  requestChanges: (
+    workspaceId: string,
+    taskId: string,
+    launch?: string,
+    requestChangesBeforeStart = false,
+    continuation?: TaskWorkflowContinuation,
+  ) => {
+    const params: RequestChangesParams = { workspaceId, taskId };
+    if (launch) params.launch = launch;
+    if (continuation) params.continuation = JSON.stringify(continuation);
+    if (requestChangesBeforeStart) params.action = "human_request_changes";
+    return { pathname: "/request-changes", params } as const;
+  },
   // Model, runtime profile, effort, and speed of the session that the composer sends to.
   composerOptions: (params: ComposerOptionsParams) =>
     ({ pathname: "/composer-options", params }) as const,
@@ -136,7 +161,7 @@ export const routes = {
 };
 
 /** The task workflow actions that the start sheet runs. */
-export type StartSessionSheetAction = "set_spec" | "set_plan" | "build_start" | "qa_start";
+export type StartSessionSheetAction = string;
 
 /** The session whose message options the composer options sheet changes. */
 export type ComposerOptionsParams = Pick<

@@ -1,8 +1,8 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type {
   TaskWorkflowAction,
-  BuiltinRoleId as AgentRole,
-  BuiltinTaskCard as TaskCard,
+  WorkflowRoleId as AgentRole,
+  ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import { type ComponentProps, type ReactElement, useEffect, useRef, useState } from "react";
 import type {
@@ -115,7 +115,7 @@ export function TaskDetailsSheetContent(
   const footerProps = getTaskDetailsFooterProps({
     task,
     onOpenChange,
-    detailActions: taskDetailsWorkflowActions(viewModel.removeWorktreeConfirm.isAvailable),
+    detailActions: taskDetailsWorkflowActions(viewModel.removeWorktreeConfirm.isAvailable, task),
     hasActiveSession,
     activeSessionRole,
     historicalSessionRoles,

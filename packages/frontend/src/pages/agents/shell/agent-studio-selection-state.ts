@@ -7,13 +7,13 @@ import {
   AGENT_STUDIO_QUERY_KEYS,
   type AgentStudioQueryUpdate,
 } from "../query-sync/agent-studio-navigation";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 export type AgentStudioSelectionState = {
   taskId: string;
   sessionExternalId: string | null;
   sessionIdentity: AgentSessionIdentity | null;
-  role: AgentRole;
+  role: AgentRole | null;
   hasExplicitRoleSelection: boolean;
   keepSessionless: boolean;
 };
@@ -24,7 +24,7 @@ export const emptyAgentStudioSelectionState = (): AgentStudioSelectionState => (
   taskId: "",
   sessionExternalId: null,
   sessionIdentity: null,
-  role: "spec",
+  role: null,
   hasExplicitRoleSelection: false,
   keepSessionless: false,
 });
@@ -63,7 +63,7 @@ export const createAgentStudioRouteSelectionState = ({
   taskIdParam: string;
   sessionExternalIdParam: string | null;
   hasExplicitRoleParam: boolean;
-  roleFromQuery: AgentRole;
+  roleFromQuery: AgentRole | null;
   routeSessionIdentity?: AgentSessionIdentity | null;
   keepSessionlessParam?: boolean;
 }): AgentStudioSelectionState => {
@@ -75,7 +75,7 @@ export const createAgentStudioRouteSelectionState = ({
     taskId: taskIdParam,
     sessionExternalId: sessionExternalIdParam,
     sessionIdentity: routeSessionIdentity,
-    role: roleFromQuery,
+    role: hasExplicitRoleParam || sessionExternalIdParam ? roleFromQuery : null,
     hasExplicitRoleSelection: hasExplicitRoleParam,
     keepSessionless: keepSessionlessParam,
   };
@@ -85,7 +85,7 @@ export const toAgentStudioTaskSelection = (taskId: string): AgentStudioSelection
   taskId,
   sessionExternalId: null,
   sessionIdentity: null,
-  role: "spec",
+  role: null,
   hasExplicitRoleSelection: false,
   keepSessionless: false,
 });
@@ -106,7 +106,7 @@ export const toAgentStudioSessionlessRoleSelection = ({
   role,
 }: {
   taskId: string;
-  role: AgentRole;
+  role: AgentRole | null;
 }): AgentStudioSelectionState => ({
   taskId,
   sessionExternalId: null,
@@ -124,7 +124,7 @@ export const buildAgentStudioSelectionQueryUpdateFromState = (
     [AGENT_STUDIO_QUERY_KEYS.session]:
       agentStudioSelectionSessionExternalId(selection) ?? undefined,
     [AGENT_STUDIO_QUERY_KEYS.agent]: selection.hasExplicitRoleSelection
-      ? selection.role
+      ? (selection.role ?? undefined)
       : undefined,
   };
   update.keepSessionless = selection.keepSessionless;

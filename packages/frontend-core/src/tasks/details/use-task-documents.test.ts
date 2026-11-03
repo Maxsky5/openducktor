@@ -1,5 +1,6 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { workspaceRefFixture } from "../../test-support/workspace-ref-fixture";
+import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,7 +29,11 @@ const document = (markdown: string, updatedAt = "2026-05-07T20:00:00.000Z") => (
 const renderDocuments = (connection: ClientConnection, initiallyOpen = true) =>
   renderHook(
     ({ taskId, repo, open }) => ({
-      documents: useTaskDocuments(taskId, open, workspaceRefFixture(repo)),
+      documents: useTaskDocuments(
+        createTaskCardFixture({ id: taskId }),
+        open,
+        workspaceRefFixture(repo),
+      ),
       queryClient: useQueryClient(),
     }),
     {
@@ -58,7 +63,19 @@ const withDocuments = async (
 const waitForDocuments = (
   view: DocumentView,
   expected: Partial<Record<"specDoc" | "planDoc" | "qaDoc", Partial<TaskDocumentState>>>,
-) => waitFor(() => expect(view.result.current.documents).toMatchObject(expected), { timeout: 500 });
+) =>
+  waitFor(
+    () =>
+      expect(view.result.current.documents.documents).toMatchObject(
+        Object.fromEntries(
+          Object.entries(expected).map(([key, state]) => [
+            key === "specDoc" ? "spec" : key === "planDoc" ? "plan" : "qaReport",
+            state,
+          ]),
+        ),
+      ),
+    { timeout: 500 },
+  );
 
 const cachedSpec = (view: DocumentView, repo = REPO, taskId = TASK_ID) =>
   view.result.current.queryClient.getQueryData<TaskDocumentPayload>(
@@ -103,7 +120,7 @@ describe("useTaskDocuments", () => {
     const optimistic = document("# Saved spec", "2026-05-07T20:05:00.000Z");
     await withDocuments(read, async (view) => {
       expect(read).toHaveBeenCalledWith(workspaceRefFixture(REPO), TASK_ID, "spec");
-      expect(view.result.current.documents.specDoc.isLoading).toBe(true);
+      expect(view.result.current.documents.documents.spec!.isLoading).toBe(true);
       act(() => view.result.current.documents.applyDocumentUpdate("spec", optimistic));
       await waitForDocuments(view, { specDoc: optimistic });
       // An empty document has no timestamp, so cancellation must protect the saved update.
@@ -111,7 +128,7 @@ describe("useTaskDocuments", () => {
         pendingRead.resolve({ markdown: "", updatedAt: null });
         await pendingRead.promise;
       });
-      expect(view.result.current.documents.specDoc).toEqual({
+      expect(view.result.current.documents.documents.spec!).toEqual({
         ...optimistic,
         loaded: true,
         isLoading: false,
@@ -135,7 +152,7 @@ describe("useTaskDocuments", () => {
     const fresh = document("# Reloaded spec", "2026-05-07T20:05:00.000Z");
     await withDocuments(read, async (view) => {
       expect(specReads).toBe(1);
-      expect(view.result.current.documents.specDoc.isLoading).toBe(true);
+      expect(view.result.current.documents.documents.spec!.isLoading).toBe(true);
       act(() => {
         expect(view.result.current.documents.reloadDocument("spec")).toBe(true);
       });
@@ -150,10 +167,10 @@ describe("useTaskDocuments", () => {
         initialRead.resolve(document("# Canceled read", "2026-05-07T20:10:00.000Z"));
         await initialRead.promise;
       });
-      expect(view.result.current.documents.specDoc.markdown).toBe(fresh.markdown);
+      expect(view.result.current.documents.documents.spec!.markdown).toBe(fresh.markdown);
       expect(cachedSpec(view)).toEqual(fresh);
-      expect(view.result.current.documents.planDoc.markdown).toBe("plan content");
-      expect(view.result.current.documents.qaDoc.markdown).toBe("qaReport content");
+      expect(view.result.current.documents.documents.plan!.markdown).toBe("plan content");
+      expect(view.result.current.documents.documents.qaReport!.markdown).toBe("qaReport content");
     });
   });
 
@@ -180,8 +197,8 @@ describe("useTaskDocuments", () => {
     await withDocuments(read, async (view) => {
       await waitForDocuments(view, { planDoc: { markdown: "plan old" } });
       view.rerender({ repo: next.repo, taskId: next.taskId, open: true });
-      expect(view.result.current.documents.specDoc.markdown).toBe("");
-      expect(view.result.current.documents.specDoc.isLoading).toBe(true);
+      expect(view.result.current.documents.documents.spec!.markdown).toBe("");
+      expect(view.result.current.documents.documents.spec!.isLoading).toBe(true);
       await act(async () => {
         nextRead.resolve(nextDocument);
         await nextRead.promise;
@@ -196,7 +213,7 @@ describe("useTaskDocuments", () => {
         await oldRead.promise;
       });
       expect(cachedSpec(view)).toEqual(oldDocument);
-      expect(view.result.current.documents.specDoc.markdown).toBe(nextDocument.markdown);
+      expect(view.result.current.documents.documents.spec!.markdown).toBe(nextDocument.markdown);
       reloading = true;
       act(() => {
         expect(view.result.current.documents.reloadDocument("spec")).toBe(true);
@@ -222,7 +239,7 @@ describe("useTaskDocuments", () => {
         act(() => view.result.current.documents.reloadDocument("spec"));
         await act(async () => failedRead.reject(new Error(failure)));
         await waitForDocuments(view, { specDoc: { error: failure } });
-        expect(view.result.current.documents.specDoc).toEqual({
+        expect(view.result.current.documents.documents.spec!).toEqual({
           ...cached,
           loaded: true,
           isLoading: false,

@@ -1,5 +1,6 @@
 import { workspaceRefSchema } from "./workspace-id-schemas";
 import { z } from "zod";
+import { workflowReferenceSchema } from "./workflow-reference-schemas";
 import {
   gitConflictSchema,
   gitMergeMethodSchema,
@@ -55,7 +56,7 @@ export type AgentWorkflowState = z.infer<typeof agentWorkflowStateSchema>;
 const agentWorkflowsSchema = z.record(workflowIdSchema, agentWorkflowStateSchema);
 export type AgentWorkflows = z.infer<typeof agentWorkflowsSchema>;
 
-export const taskCardSchema = z.object({
+export const taskRecordDataSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string().optional().default(""),
@@ -63,7 +64,6 @@ export const taskCardSchema = z.object({
   priority: taskPrioritySchema.default(2),
   issueType: issueTypeSchema,
   removeWorktreeOnClose: taskRemoveWorktreeOnCloseSchema.default(null),
-  availableActions: z.array(taskActionSchema),
   labels: z.array(z.string()).default([]),
   targetBranch: z.preprocess(
     (value) => (value === null ? undefined : value),
@@ -82,9 +82,23 @@ export const taskCardSchema = z.object({
     sourceIssueReferenceSchema.optional(),
   ),
   artifactSummary: taskArtifactSummarySchema,
-  agentWorkflows: agentWorkflowsSchema,
   updatedAt: z.string(),
   createdAt: z.string(),
+});
+export type TaskRecordData = z.infer<typeof taskRecordDataSchema>;
+/** The evaluated flags of one step. The definition holds the step kind, label, and role. */
+const taskWorkflowStepStateSchema = z.strictObject({
+  id: workflowIdSchema,
+  required: z.boolean(),
+  available: z.boolean(),
+  completed: z.boolean(),
+});
+export type TaskWorkflowStepState = z.infer<typeof taskWorkflowStepStateSchema>;
+export const taskCardSchema = taskRecordDataSchema.extend({
+  workflow: workflowReferenceSchema,
+  workflowSteps: z.array(taskWorkflowStepStateSchema),
+  availableActions: z.array(taskActionSchema),
+  agentWorkflows: agentWorkflowsSchema,
 });
 export type TaskCard = z.infer<typeof taskCardSchema>;
 

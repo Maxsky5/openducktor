@@ -1,4 +1,5 @@
 import { requireWorkspaceRef } from "../operations/task-operations-model";
+import { resolveTaskCards } from "../../queries/workflows";
 import { taskStatusSchema } from "@openducktor/contracts";
 import type { TaskApprovalContext } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
@@ -68,8 +69,8 @@ export async function submitDirectMergeApproval({
     repoPath,
     workspaceId,
     taskIds: [approval.taskId],
-    mutation: async () =>
-      host.taskDirectMerge(scope, approval.taskId, {
+    mutation: async () => {
+      const result = await host.taskDirectMerge(scope, approval.taskId, {
         expected: {
           taskStatus: taskStatusSchema.parse(approvalContext.taskStatus),
           sourceBranch: approvalContext.sourceBranch,
@@ -81,8 +82,12 @@ export async function submitDirectMergeApproval({
             ? approval.squashCommitMessage.trim() || undefined
             : undefined,
         removeWorktree,
-      }),
-    shouldCleanup: (result) => result.outcome !== "conflicts" && result.task.status === "closed",
+      });
+      if (result.outcome === "conflicts") return result;
+      const [task] = await resolveTaskCards(queryClient, scope, [result.task]);
+      return { ...result, task: task! };
+    },
+    shouldCleanup: (result) => result.outcome !== "conflicts" && result.task.sharedState.terminal,
   });
 
   if (directMergeResult.outcome === "conflicts") {
@@ -92,7 +97,7 @@ export async function submitDirectMergeApproval({
     };
   }
 
-  if (directMergeResult.task.status === "closed") {
+  if (directMergeResult.task.sharedState.terminal) {
     await refreshTasks();
     return {
       outcome: "task_closed",

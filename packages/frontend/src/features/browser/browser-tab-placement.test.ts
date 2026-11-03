@@ -108,10 +108,7 @@ describe("browser tab placement", () => {
     );
     expect(ids(placed.panels.right)).toEqual([...TOOL_TAB_IDS, entryId]);
     expect(placed.selectedRight).toEqual({
-      spec: entryId,
-      planner: entryId,
       build: entryId,
-      qa: entryId,
     });
     expect(placeBrowserTab(placed, agentTab)).toBe(placed);
 

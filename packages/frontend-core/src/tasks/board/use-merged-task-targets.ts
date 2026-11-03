@@ -1,5 +1,5 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { workspaceTaskMergeStatusQueryOptions } from "../../queries/task-merge-status";
@@ -22,7 +22,7 @@ export const useMergedTaskTargets = (
 /** The target that the branch of one task is merged into, or null. Close Task then leads. */
 export const useMergedTaskTarget = (
   repoPath: WorkspaceRef | null,
-  task: Pick<TaskCard, "id" | "status" | "availableActions"> | null,
+  task: Pick<TaskCard, "id" | "status" | "availableActions" | "taskWorkflow"> | null,
 ): string | null => {
   const mergeStatus = useQuery(workspaceTaskMergeStatusQueryOptions(repoPath));
   return task ? mergedTaskTarget(task, findTaskMergeStatus(mergeStatus.data, task.id)) : null;
@@ -40,7 +40,7 @@ export const useAutoCloseFailures = (
 /** Why the pull request sync could not close one task, or null. */
 export const useAutoCloseFailure = (
   repoPath: WorkspaceRef | null,
-  task: Pick<TaskCard, "id" | "availableActions"> | null,
+  task: Pick<TaskCard, "id" | "availableActions" | "taskWorkflow"> | null,
 ): string | null => {
   const mergeStatus = useQuery(workspaceTaskMergeStatusQueryOptions(repoPath));
   return task ? (buildAutoCloseFailures([task], mergeStatus.data).get(task.id) ?? null) : null;

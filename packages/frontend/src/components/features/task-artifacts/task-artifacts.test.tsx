@@ -1,5 +1,7 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
+import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { describe, expect, mock, test } from "bun:test";
 import type {
   FreeTaskArtifact,
@@ -24,7 +26,7 @@ import {
   type TaskArtifactsProps,
   TaskArtifactsView,
 } from "./task-artifacts";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 /** The session panel with local selection, as its page model owns it. */
 function StatefulPanel(props: TaskArtifactsProps) {
@@ -98,6 +100,12 @@ const setup = (
       taskArtifactDelete: remove,
     },
   });
+  connection.queryClient.setQueryData(
+    taskQueryKeys.unfilteredRepoData({ workspaceId: "workspace-1", repoPath: "/repo" }),
+    {
+      tasks: [createTaskCardFixture({ id: "task-1" })],
+    },
+  );
   const ownProps: TaskArtifactsProps = {
     workspaceId: "workspace-1",
     repoPath: "/repo",
@@ -228,6 +236,12 @@ describe("task artifacts collection", () => {
           onSelectionChange: () => {},
         }),
       );
+    connection.queryClient.setQueryData(
+      taskQueryKeys.unfilteredRepoData({ workspaceId: "workspace-1", repoPath: "/repo" }),
+      {
+        tasks: [createTaskCardFixture({ id: "task-1" })],
+      },
+    );
     const view = render(selectedView("spec"));
     try {
       expect(screen.getByText("hello")).toBeTruthy();
@@ -391,6 +405,12 @@ describe("task artifacts collection", () => {
           onSelectionChange,
         }),
       );
+    connection.queryClient.setQueryData(
+      taskQueryKeys.unfilteredRepoData({ workspaceId: "workspace-1", repoPath: "/repo" }),
+      {
+        tasks: [createTaskCardFixture({ id: "task-1" })],
+      },
+    );
     const view = render(selectedView(false));
     try {
       expect(screen.getByText("Implementation Plan has not been created yet.")).toBeTruthy();

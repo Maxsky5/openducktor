@@ -13,12 +13,7 @@ import {
   type NotificationActionOccurrence,
   type WorkflowLaunchResult,
 } from "@openducktor/contracts";
-import {
-  type BuiltinTaskEventId,
-  getAutopilotAction,
-  workflowArtifactSubmitEvent,
-  createBuiltinNotificationSettings,
-} from "@openducktor/workflows";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 import { Deferred, Effect, Fiber, Result } from "effect";
 import { withConfigCommit } from "../../adapters/config/config-commit";
 import {
@@ -92,7 +87,7 @@ const launchResult = (
   workspaceId: request.workspaceId,
   repoPath: request.repoPath,
   taskId: request.taskId,
-  role: getAutopilotAction(request.policy.actionId).role,
+  role: builtinTaskWorkflow.automation(request.policy.actionId).role,
   status: "completed",
   ...patch,
 });
@@ -152,7 +147,7 @@ const createAutopilotHarness = async ({
         })
         .pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task)));
   const decided =
-    (eventId: BuiltinTaskEventId, prepare: (task: TaskRecord) => TaskRecord = (task) => task) =>
+    (eventId: string, prepare: (task: TaskRecord) => TaskRecord = (task) => task) =>
     (input: { workspaceId: string; repoPath: string; taskId: string }) =>
       store(input.repoPath)
         .transitionTask({
@@ -187,7 +182,7 @@ const createAutopilotHarness = async ({
     listTaskIds: (input) =>
       taskIdsGate.pipe(Effect.andThen(store(input.repoPath).listTaskIds(input))),
     workflowArtifactSave: (input) => {
-      const eventId = workflowArtifactSubmitEvent(input.code, input.verdict);
+      const eventId = builtinTaskWorkflow.artifactSubmitEvent(input.code, input.verdict);
       if (eventId === undefined) throw new Error(`No test event for ${input.code}.`);
       return decided(eventId)(input).pipe(
         Effect.as({

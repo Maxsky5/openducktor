@@ -1,4 +1,4 @@
-import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/workflows";
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import {
   codexSessionRef,
@@ -75,7 +75,7 @@ describe("CodexAppServerAdapter context loading", () => {
     expect(resumeCalls?.[0]?.params).toMatchObject({
       config: {
         "mcp_servers.openducktor.enabled": true,
-        "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
+        "mcp_servers.openducktor.enabled_tools": [...builtinTaskWorkflow.role("build").tools],
       },
     });
   });

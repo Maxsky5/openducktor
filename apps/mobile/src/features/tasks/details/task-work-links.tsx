@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { useRouter } from "expo-router";
 import { memo, type ReactElement } from "react";
 import { View } from "react-native";
@@ -89,7 +89,7 @@ export const TaskWorkLinks = memo(function TaskWorkLinks({
           first={false}
           title="Artifacts"
           icon="files"
-          value={taskDocumentsSummary(task.artifactSummary)}
+          value={taskDocumentsSummary(task)}
           onPress={() => router.push(routes.artifacts(workspaceId, task.id))}
         />
         <WorkRow

@@ -16,7 +16,7 @@ describe("workflowToolInputSchema", () => {
       workflowToolInputSchema(builtinWorkflow.definition, "odt_search_tasks"),
     );
 
-    expect(properties.issueType).toEqual({ type: "string", enum: ["task", "feature", "bug"] });
+    expect(properties.issueType).toEqual({ type: "string", enum: ["feature", "bug", "task"] });
     expect(properties.status).toMatchObject({
       enum: [
         "open",

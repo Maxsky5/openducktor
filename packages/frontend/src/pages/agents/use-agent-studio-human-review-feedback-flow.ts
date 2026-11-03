@@ -1,13 +1,16 @@
 import {
-  getSessionLaunchAction,
-  type BuiltinLaunchActionId as SessionLaunchActionId,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowLaunchActionId as SessionLaunchActionId,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { sonnerFeedback } from "@/lib/sonner-feedback";
-import { submitHumanReviewFeedback } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-flow";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  requestHumanReviewChanges,
+  submitHumanReviewFeedback,
+} from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-flow";
 import {
   buildHumanReviewFeedbackModalModel,
   createHumanReviewFeedbackState,
@@ -25,6 +28,8 @@ import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agen
 
 type UseAgentStudioHumanReviewFeedbackFlowArgs = {
   taskId: string;
+  workspaceRepoPath: string | null;
+  workspaceId: string | null;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
   startSessionRequest: (
@@ -33,7 +38,7 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
 };
 
 type HumanReviewSessionStartRequest = SessionStartLaunchRequest & {
-  role: "build";
+  role: string;
   launchActionId: SessionLaunchActionId;
   existingSessionOptions: SessionStartExistingSessionOption[];
   initialSourceSession?: AgentSessionIdentity | null;
@@ -43,15 +48,18 @@ type HumanReviewSessionStartRequest = SessionStartLaunchRequest & {
 type UseAgentStudioHumanReviewFeedbackFlowResult = {
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   shouldInterceptCreateSession: (option: SessionCreateOption) => boolean;
-  openHumanReviewFeedback: () => void;
+  openHumanReviewFeedback: (launchActionId: string) => void;
 };
 
 export function useAgentStudioHumanReviewFeedbackFlow({
   taskId,
+  workspaceRepoPath,
+  workspaceId,
   sessionsForTask,
   selectedTask,
   startSessionRequest,
 }: UseAgentStudioHumanReviewFeedbackFlowArgs): UseAgentStudioHumanReviewFeedbackFlowResult {
+  const queryClient = useQueryClient();
   const selectedTaskRef = useRef(selectedTask);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
@@ -65,16 +73,24 @@ export function useAgentStudioHumanReviewFeedbackFlow({
     openHumanReviewFeedback,
     setHumanReviewFeedbackState,
   } = useHumanReviewFeedbackController({
-    createState: (feedbackTaskId) =>
+    createState: (feedbackTaskId, launchActionId, requestChangesBeforeStart) =>
       createHumanReviewFeedbackState(
         selectedTaskRef.current ? [selectedTaskRef.current] : [],
         feedbackTaskId,
+        launchActionId,
+        requestChangesBeforeStart,
       ),
   });
 
-  const shouldInterceptCreateSession = useCallback((option: SessionCreateOption): boolean => {
-    return getSessionLaunchAction(option.launchActionId).context === "human_feedback";
-  }, []);
+  const shouldInterceptCreateSession = useCallback(
+    (option: SessionCreateOption): boolean => {
+      return (
+        selectedTask !== null &&
+        selectedTask.taskWorkflow.launchAction(option.launchActionId).context === "human_feedback"
+      );
+    },
+    [selectedTask],
+  );
 
   const dismissHumanReviewFeedback = useCallback((): void => {
     if (isSubmittingHumanReviewFeedback) {
@@ -84,13 +100,16 @@ export function useAgentStudioHumanReviewFeedbackFlow({
     clearHumanReviewFeedback();
   }, [clearHumanReviewFeedback, isSubmittingHumanReviewFeedback]);
 
-  const openHumanReviewFeedbackForCurrentTask = useCallback((): void => {
-    if (!taskId) {
-      return;
-    }
+  const openHumanReviewFeedbackForCurrentTask = useCallback(
+    (launchActionId: string): void => {
+      if (!taskId) {
+        return;
+      }
 
-    openHumanReviewFeedback(taskId);
-  }, [openHumanReviewFeedback, taskId]);
+      openHumanReviewFeedback(taskId, launchActionId);
+    },
+    [openHumanReviewFeedback, taskId],
+  );
 
   const confirmHumanReviewFeedback = useCallback(async (): Promise<void> => {
     if (!humanReviewFeedbackState) {
@@ -102,6 +121,13 @@ export function useAgentStudioHumanReviewFeedbackFlow({
       const result = await submitHumanReviewFeedback({
         feedback: sonnerFeedback,
         state: humanReviewFeedbackState,
+        requestChangesTask: (taskId, note) =>
+          requestHumanReviewChanges(
+            queryClient,
+            workspaceId && workspaceRepoPath ? { workspaceId, repoPath: workspaceRepoPath } : null,
+            taskId,
+            note,
+          ),
         builderSessions: sessionsForTask,
         startRequestChangesSession: async (request) => {
           const startRequest: HumanReviewSessionStartRequest = {
@@ -110,8 +136,7 @@ export function useAgentStudioHumanReviewFeedbackFlow({
             launchActionId: request.launchActionId,
             existingSessionOptions: request.existingSessionOptions,
             postStartAction: request.postStartAction,
-            message: request.message,
-            beforeStartAction: request.beforeStartAction,
+            humanFeedback: request.humanFeedback,
           };
           if (request.initialSourceSession !== undefined) {
             startRequest.initialSourceSession = request.initialSourceSession;
@@ -123,17 +148,25 @@ export function useAgentStudioHumanReviewFeedbackFlow({
           return startSessionRequest(startRequest);
         },
       });
-      if (result.outcome === "started") {
+      if (result.outcome !== "cancelled") {
         clearHumanReviewFeedback();
       }
     } catch (error) {
-      toast.error("Failed to prepare the Builder session.", {
+      toast.error("Failed to submit feedback.", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     } finally {
       setIsSubmittingHumanReviewFeedback(false);
     }
-  }, [clearHumanReviewFeedback, humanReviewFeedbackState, sessionsForTask, startSessionRequest]);
+  }, [
+    clearHumanReviewFeedback,
+    humanReviewFeedbackState,
+    sessionsForTask,
+    startSessionRequest,
+    queryClient,
+    workspaceRepoPath,
+    workspaceId,
+  ]);
 
   const humanReviewFeedbackModal = useMemo<HumanReviewFeedbackModalModel | null>(() => {
     if (!humanReviewFeedbackState) {

@@ -1,9 +1,8 @@
 import {
-  getSessionLaunchAction,
   isRoleAvailableForTask,
-  type BuiltinLaunchActionId as SessionLaunchActionId,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowLaunchActionId as SessionLaunchActionId,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 
 type AgentStudioSessionStartRoleInput = {
@@ -15,8 +14,9 @@ type AgentStudioSessionStartRoleInput = {
 };
 
 type AgentStudioKickoffAvailabilityInput = {
-  launchActionId: SessionLaunchActionId;
+  launchActionId: SessionLaunchActionId | null;
   canStartSession: boolean;
+  selectedTask: TaskCard | null;
 };
 
 export const canStartAgentStudioSessionRole = ({
@@ -37,7 +37,9 @@ export const canStartAgentStudioSessionRole = ({
 export const canUseAgentStudioKickoffPrompt = ({
   launchActionId,
   canStartSession,
+  selectedTask,
 }: AgentStudioKickoffAvailabilityInput): boolean => {
-  const selectedLaunchAction = getSessionLaunchAction(launchActionId);
+  if (!selectedTask || !launchActionId) return false;
+  const selectedLaunchAction = selectedTask.taskWorkflow.launchAction(launchActionId);
   return canStartSession && selectedLaunchAction.template.kind === "kickoff";
 };

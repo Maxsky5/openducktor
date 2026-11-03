@@ -9,6 +9,7 @@ const record = (id: string, status: string, previousStatus: string) =>
     task: { id, title: id, status } as TaskCard,
     previousStatus,
     workflowId: "openducktor",
+    workflow: { id: "openducktor", revision: 1 },
     autopilotSettings: { alwaysStartQaReviewsFresh: false, rules: [] },
     workspace: { repoPath: "/repo", workspaceName: "Repo" },
   });

@@ -64,10 +64,11 @@ type UseTaskAsyncConfirmDialogOptions = {
   scopeKey: string | null;
   run: (() => Promise<void>) | undefined;
   onSucceeded: () => void;
+  onCommitted?: (() => Promise<void>) | undefined;
 };
 
 export type TaskAsyncConfirmDialog = {
-  openDialog: () => void;
+  openDialog: (onCommitted?: () => Promise<void>) => void;
   dialog: Omit<TaskConfirmDialogState, "impact">;
 };
 
@@ -78,11 +79,13 @@ export function useTaskAsyncConfirmDialog({
   scopeKey,
   run,
   onSucceeded,
+  onCommitted,
 }: UseTaskAsyncConfirmDialogOptions): TaskAsyncConfirmDialog {
   const [state, dispatch] = useReducer(asyncConfirmDialogReducer, {
     ...CLOSED_STATE,
     isOpen: initiallyOpen,
   });
+  const continuationRef = useRef(onCommitted);
   const requestInFlightRef = useRef(false);
   const previousScopeKeyRef = useRef(scopeKey);
   const requestTokenRef = useRef(0);
@@ -104,7 +107,8 @@ export function useTaskAsyncConfirmDialog({
     }
   }, [enabled]);
 
-  const openDialog = useCallback((): void => {
+  const openDialog = useCallback((onCommitted?: () => Promise<void>): void => {
+    continuationRef.current = onCommitted;
     dispatch({ type: "opened" });
   }, []);
 
@@ -129,14 +133,16 @@ export function useTaskAsyncConfirmDialog({
     }
 
     const requestToken = requestTokenRef.current;
+    const continuation = continuationRef.current;
     requestInFlightRef.current = true;
     dispatch({ type: "started" });
 
     void run()
-      .then(() => {
+      .then(async () => {
         if (requestToken !== requestTokenRef.current) {
           return;
         }
+        await continuation?.();
         dispatch({ type: "succeeded" });
         onSucceeded();
       })

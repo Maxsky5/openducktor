@@ -15,7 +15,7 @@ import {
 import type { AgentSessionState } from "../../types/agent-orchestrator";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 import { createLiveSnapshotEnvelope } from "../../test-support/agent-session-live-fixture";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 export type OrchestratorDependencies = NonNullable<
   Parameters<typeof useAgentOrchestratorOperations>[0]["dependencies"]

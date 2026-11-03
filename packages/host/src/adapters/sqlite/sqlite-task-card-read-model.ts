@@ -2,7 +2,7 @@ import { sqliteValues } from "./sqlite-parameters";
 import {
   gitTargetBranchSchema,
   type TaskArtifactSummary,
-  taskCardSchema,
+  taskRecordDataSchema,
 } from "@openducktor/contracts";
 import { type SQL, eq, inArray, gte, or, notInArray } from "drizzle-orm";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
@@ -18,7 +18,7 @@ import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type HostDatabaseSession, tasks } from "./sqlite-host-database-schema";
 import { pullRequestFromRow } from "./sqlite-task-delivery-rows";
 
-const taskRecordSchema = taskCardSchema.omit({ availableActions: true, agentWorkflows: true });
+const taskRecordSchema = taskRecordDataSchema;
 
 export const getTaskRecord = (
   session: HostDatabaseSession,

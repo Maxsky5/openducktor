@@ -1,12 +1,14 @@
 import {
-  SESSION_VIEW_ACTIONS,
+  sessionRoleForViewAction,
   type TaskWorkflowAction,
   taskHasSessionPage,
   taskActionLabel,
-  BUILTIN_ROLE_LABELS,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
-  builtinRoleId,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
+  workflowRoleIcon,
+  workflowAction as workflowActionDefinition,
+  actionEmphasis,
+  taskEffectAction,
 } from "@openducktor/workflows";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Copy, History, PanelRightOpen, Pencil, RotateCcw, Trash2 } from "lucide-react";
@@ -22,9 +24,9 @@ import {
   compareActiveSessionForPrimary,
   type SessionTargetOptions,
 } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
-import { TASK_ACTION_ICON } from "@/components/features/kanban/task-action-ui";
+import { taskActionIcon } from "@/components/features/kanban/task-action-ui";
 import type { WorkspaceSessionLiveState } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
-import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
+import { roleIconForHint } from "@/lib/agent-role-presentation";
 import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
@@ -105,7 +107,7 @@ export const buildPaletteTaskView = ({
   for (const { role, label, options } of footer.sessions) {
     if (!options) continue;
     sessionOptionsByRole[role] = options;
-    const RoleIcon = AGENT_ROLE_ICONS[role];
+    const RoleIcon = roleIconForHint(workflowRoleIcon(task.taskWorkflow, role));
     sessionActions.push({
       key: `session:${role}`,
       label: `Open ${label} session`,
@@ -119,7 +121,7 @@ export const buildPaletteTaskView = ({
   const disabledActions = new Set(footer.disabledActions);
   // The session actions already open the session of each role.
   const workflowActions = allActions.flatMap((action): PaletteTaskAction[] =>
-    SESSION_VIEW_ACTIONS.has(action)
+    sessionRoleForViewAction(action, task)
       ? []
       : [workflowAction(task, action, disabledActions.has(action))],
   );
@@ -128,7 +130,7 @@ export const buildPaletteTaskView = ({
         {
           key: "latest",
           label: "Open latest session",
-          detail: BUILTIN_ROLE_LABELS[latest.role],
+          detail: task.taskWorkflow.role(latest.role).label,
           keywords: ["session", "resume", "continue"],
           icon: <History />,
           destructive: false,
@@ -172,7 +174,7 @@ const liveTaskSessions = (
       return [
         {
           ...toAgentSessionIdentity(record),
-          role: builtinRoleId(record.role),
+          role: record.role,
           startedAt: record.startedAt,
           activityState: facts.activityState,
         },
@@ -205,7 +207,7 @@ const latestTaskSession = (
       latestRecord = record;
   }
   return latestRecord
-    ? { role: builtinRoleId(latestRecord.role), identity: toAgentSessionIdentity(latestRecord) }
+    ? { role: latestRecord.role, identity: toAgentSessionIdentity(latestRecord) }
     : null;
 };
 
@@ -223,8 +225,9 @@ const workflowAction = (
   key: `workflow:${action}`,
   label: taskActionLabel(action, task),
   keywords: ["workflow", "start", "run"],
-  icon: TASK_ACTION_ICON[action],
-  destructive: action === "reset_implementation",
+  icon: taskActionIcon(action, task),
+  destructive:
+    actionEmphasis(workflowActionDefinition(task.taskWorkflow, action)) === "destructive",
   disabled,
   command: { kind: "workflow", action },
 });
@@ -258,11 +261,11 @@ const taskActions = (task: TaskCard): PaletteTaskAction[] => [
     disabled: false,
     command: { kind: "copy_id" },
   },
-  ...(task.availableActions.includes("reset_task")
+  ...(taskResetAction(task)
     ? [
         {
           key: "reset-task",
-          label: taskActionLabel("reset_task", task),
+          label: taskActionLabel(taskResetAction(task)!, task),
           keywords: ["reset", "restart", "clear"],
           icon: <RotateCcw />,
           destructive: true,
@@ -281,3 +284,5 @@ const taskActions = (task: TaskCard): PaletteTaskAction[] => [
     command: { kind: "delete" },
   },
 ];
+
+const taskResetAction = (task: TaskCard) => taskEffectAction(task, "task.reset");

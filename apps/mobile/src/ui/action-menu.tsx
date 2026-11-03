@@ -1,4 +1,4 @@
-import { type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowIcon } from "@openducktor/contracts";
 import {
   Fragment,
   type PropsWithChildren,
@@ -33,7 +33,7 @@ export type ActionMenuItem = {
   title: string;
   icon?: IconName | undefined;
   /** A Workflow Role whose icon replaces `icon`, as on the desktop role actions. */
-  role?: AgentRole | undefined;
+  role?: WorkflowIcon | undefined;
   destructive?: boolean | undefined;
   disabled?: boolean | undefined;
   /** A second line under the title, such as the date of a document. */
@@ -231,7 +231,7 @@ function MenuItems({
             >
               {item.role ? (
                 <RoleIcon
-                  role={item.role}
+                  hint={item.role}
                   size={17}
                   color={item.destructive ? color : theme.colors.secondaryLabel}
                 />

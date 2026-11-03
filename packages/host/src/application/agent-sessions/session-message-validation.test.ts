@@ -9,7 +9,7 @@ import {
   type AgentSessionModelSelection,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import { emptyArtifactSummary } from "@openducktor/workflows";
+import { emptyArtifactSummary } from "@openducktor/workflows/test-support";
 import { createClaudeLiveSessionState } from "../../adapters/agent-sessions/claude-live-session-state";
 import { handleClaudeSdkMessage } from "../../adapters/claude/claude-agent-sdk-events";
 import { createClaudeSession } from "../../adapters/claude/claude-agent-sdk-session-io.test-support";

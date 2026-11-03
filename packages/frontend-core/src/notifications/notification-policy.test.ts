@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { type NotificationOccurrence } from "@openducktor/contracts";
 import { createNotificationPolicy } from "./notification-policy";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 
 const occurrence: NotificationOccurrence = {
   occurrenceId: "agent.permission_requested:/repo:session-1:permission-1",
@@ -10,7 +10,7 @@ const occurrence: NotificationOccurrence = {
   repositoryLabel: "Repo",
   task: { id: "task-1", title: "Build notifications" },
   role: "build",
-  sessionLabel: "Builder session",
+  sessionLabel: "Builder",
   status: "Permission Prompt is waiting for input.",
   navigationTarget: {
     type: "pending_input",

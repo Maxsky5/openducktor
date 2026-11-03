@@ -1,3 +1,4 @@
+import { useToolTaskWorkflow } from "../use-tool-task-workflow";
 import type { PublicTaskSummaryTask } from "@openducktor/contracts";
 import {
   buildTaskToolSummary,
@@ -7,7 +8,6 @@ import {
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-task-tool-model";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import type { AgentChatTaskToolName } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
-import { builtinIssueTypeId, builtinStateId } from "@openducktor/workflows";
 import { memo, type ReactElement, useCallback, useMemo } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -86,6 +86,11 @@ function TaskResultCard({
   task: PublicTaskSummaryTask;
   rowKey: string;
 }): ReactElement {
+  const workflow = useToolTaskWorkflow(task.id);
+  const issueType = workflow.task?.taskWorkflow.definition.issueTypes.find(
+    ({ id }) => id === task.issueType,
+  );
+  const status = workflow.board?.states.find(({ id }) => id === task.status);
   const theme = useAppTheme();
   const { onOpenTask } = useTranscriptRows();
   const copyTaskId = useCopyTaskId();
@@ -135,10 +140,29 @@ function TaskResultCard({
       </View>
       <View style={styles.content}>
         <View style={styles.badges}>
-          <IssueTypeBadge issueType={builtinIssueTypeId(task.issueType)} />
+          {issueType ? (
+            <IssueTypeBadge issueType={issueType} />
+          ) : (
+            <Text variant="caption2">{task.issueType}</Text>
+          )}
           <PriorityBadge priority={task.priority} />
-          <TaskStatusBadge status={builtinStateId(task.status)} />
+          {status ? (
+            <TaskStatusBadge status={status} />
+          ) : (
+            <Text variant="caption2">{task.status}</Text>
+          )}
         </View>
+        {workflow.error ? (
+          <Text variant="footnote" tone="secondary">
+            {workflow.error}
+          </Text>
+        ) : !workflow.task ? (
+          <Text variant="footnote">Loading task workflow...</Text>
+        ) : !issueType || !status ? (
+          <Text variant="footnote" tone="secondary">
+            The task result uses unavailable workflow metadata. Reload the task.
+          </Text>
+        ) : null}
         {task.description ? (
           <DescriptionPreview description={task.description} revision={`${rowKey}:${task.id}`} />
         ) : null}

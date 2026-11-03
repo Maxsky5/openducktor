@@ -90,7 +90,7 @@ describe("conflict assistance", () => {
       buildTaskConflictPrompt({
         conflict: { ...conflict, operation: null },
         taskId: "task-1",
-        task: null,
+        task: createTaskCardFixture({ id: "task-1" }),
         overrides: {},
       }),
     ).toThrow("Restore the Git conflict operation and working directory");

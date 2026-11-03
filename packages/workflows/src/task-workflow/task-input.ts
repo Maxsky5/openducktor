@@ -1,11 +1,9 @@
 import {
-  workflowIdSchema,
   type CompiledWorkflowDefinition,
   type TaskArtifactSummary,
   type TaskCard,
   type WorkflowInput,
 } from "@openducktor/contracts";
-import { z } from "zod";
 import { WorkflowEvaluationError } from "../evaluate";
 
 /** The task fields that a task workflow reads. */
@@ -24,24 +22,15 @@ export type TaskInputs = {
   emptyArtifactSummary(): TaskArtifactSummary;
 };
 
-const issueTypesSchema = z.array(workflowIdSchema).min(1);
-
-/**
- * The issue types of a task workflow. Tasks supply only the issue type, so the definition declares
- * one fact: the `issueType` enum.
- */
+/** The issue types of a task workflow. Tasks supply only the issue type, so it declares no facts. */
 export const taskIssueTypes = (definition: CompiledWorkflowDefinition): readonly string[] => {
-  const [fact, ...others] = definition.facts;
-  const issueTypes = issueTypesSchema.safeParse(
-    fact?.id === "issueType" && fact.type === "enum" ? fact.values : undefined,
-  );
-  if (!issueTypes.success || others.length > 0) {
+  if (definition.issueTypes.length === 0 || definition.facts.length > 0) {
     throw new WorkflowEvaluationError(
       "invalid_definition",
-      `Task workflow "${definition.id}" must declare one fact: the issueType enum with non-blank string values.`,
+      `Task workflow "${definition.id}" must declare its issueTypes and no facts.`,
     );
   }
-  return issueTypes.data;
+  return definition.issueTypes.map(({ id }) => id);
 };
 
 export const createTaskInputs = (definition: CompiledWorkflowDefinition): TaskInputs => {

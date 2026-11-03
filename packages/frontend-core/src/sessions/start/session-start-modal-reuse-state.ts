@@ -1,7 +1,4 @@
-import {
-  getSessionLaunchAction,
-  type BuiltinLaunchActionId as SessionLaunchActionId,
-} from "@openducktor/workflows";
+import { type WorkflowLaunchActionId as SessionLaunchActionId } from "@openducktor/workflows";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import {
   type AgentModelCatalog,
@@ -88,13 +85,15 @@ const resolveInitialStartState = ({
   initialSourceSession,
   initialStartMode,
   launchActionId,
+  taskWorkflow,
 }: {
   existingSessionOptions: SessionStartExistingSessionOption[];
   initialSourceSession: AgentSessionIdentity | null | undefined;
   initialStartMode: AgentSessionStartMode | undefined;
   launchActionId: SessionLaunchActionId;
+  taskWorkflow: import("@openducktor/workflows").TaskWorkflow;
 }) => {
-  const allowedStartModes = getSessionLaunchAction(launchActionId).startModes;
+  const allowedStartModes = taskWorkflow.launchAction(launchActionId).startModes;
   const hasExistingSession = existingSessionOptions.length > 0;
   let selectedStartMode: AgentSessionStartMode;
 
@@ -110,6 +109,7 @@ const resolveInitialStartState = ({
   } else {
     selectedStartMode = resolveLaunchStartMode({
       launchActionId,
+      taskWorkflow,
       existingSessionOptions,
     });
   }
@@ -199,7 +199,8 @@ export function useSessionStartModalReuseState({
   const [selectedSourceSessionValue, setSelectedSourceSessionValue] = useState("");
 
   const availableStartModes = useMemo<AgentSessionStartMode[]>(
-    () => (intent ? [...getSessionLaunchAction(intent.launchActionId).startModes] : ["fresh"]),
+    () =>
+      intent ? [...intent.taskWorkflow.launchAction(intent.launchActionId).startModes] : ["fresh"],
     [intent],
   );
 
@@ -247,6 +248,7 @@ export function useSessionStartModalReuseState({
     } => {
       const nextState = resolveInitialStartState({
         launchActionId: nextIntent.launchActionId,
+        taskWorkflow: nextIntent.taskWorkflow,
         existingSessionOptions: nextIntent.existingSessionOptions ?? [],
         initialStartMode: nextIntent.initialStartMode,
         initialSourceSession: nextIntent.initialSourceSession,

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type NotificationOccurrence } from "@openducktor/contracts";
 import { createUnavailableShellBridge } from "./shell-bridge";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 
 const occurrence: NotificationOccurrence = {
   occurrenceId: "workflow.closed:/repo:task-1:event-1",

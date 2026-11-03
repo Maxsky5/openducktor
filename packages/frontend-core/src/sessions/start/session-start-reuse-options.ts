@@ -1,4 +1,4 @@
-import { BUILTIN_ROLE_LABELS, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "../../lib/agent-session-identity";
 import {
   buildRoleSessionSequenceByIdentity,
@@ -12,9 +12,11 @@ import type { SessionStartExistingSessionOption } from "./session-start-types";
 export const buildReusableSessionOptions = ({
   sessions,
   role,
+  roleLabel,
 }: {
   sessions: AgentSessionSummary[];
   role: AgentRole;
+  roleLabel: string;
 }): SessionStartExistingSessionOption[] => {
   const roleSessions = sessions.filter((session) => session.role === role);
   const roleSessionNumberByIdentity = buildRoleSessionSequenceByIdentity(roleSessions);
@@ -29,7 +31,7 @@ export const buildReusableSessionOptions = ({
         session,
         sessionNumber:
           roleSessionNumberByIdentity.get(agentSessionIdentityKey(session)) ?? index + 1,
-        roleLabelByRole: BUILTIN_ROLE_LABELS,
+        roleLabelByRole: { [role]: roleLabel },
       }),
       description: formatAgentSessionOptionDescription(session),
       selectedModel: session.selectedModel

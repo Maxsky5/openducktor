@@ -5,17 +5,10 @@ import { issueItemsQueryKeys } from "../../queries/issue-items";
 import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "../../queries/skipped-query";
 import type { IssueImportProvider } from "./issue-import-provider";
 import { issueImportProviderCopy, issueImportSourceLabel } from "./issue-import-provider";
-import type { ImportOutcome, IssueReview } from "./issue-import-state";
+import type { ImportOutcome } from "./issue-import-state";
 
 /** The import first selects source items, then reviews each task before import. */
 export type IssueImportStep = "select" | "review";
-
-/** The issue types that an imported task can have, in display order. */
-export const ISSUE_IMPORT_ISSUE_TYPES = [
-  "feature",
-  "bug",
-  "task",
-] as const satisfies readonly IssueReview["issueType"][];
 
 export const ISSUE_IMPORT_LABELS = {
   back: "Back",

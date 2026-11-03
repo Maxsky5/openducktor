@@ -42,11 +42,12 @@ import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
 import { ArtifactToolMessage } from "./agent-chat-artifact-tool-message";
 import { AssistantRoleIcon } from "./agent-role-icon";
+import { useChatWorkflowTask } from "./agent-chat-workflow-context";
 import { formatAgentDuration } from "@openducktor/frontend-core/sessions/transcript/format-agent-duration";
 import type { ParentSessionRuntimeContext } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 import { buildToolSummary } from "@openducktor/frontend-core/sessions/messages/tool-summary";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 type MessageHeaderProps = {
   message: AgentChatMessage;
@@ -63,6 +64,7 @@ export const MessageHeader = ({
   assistantRole,
   compactPadding,
 }: MessageHeaderProps): ReactElement | null => {
+  const task = useChatWorkflowTask();
   if (!showHeader) {
     return null;
   }
@@ -81,7 +83,10 @@ export const MessageHeader = ({
         {message.role === "assistant" && assistantRole ? (
           <AssistantRoleIcon role={assistantRole} />
         ) : null}
-        {roleLabel(message.role, message)}
+        {message.role === "assistant" && assistantRole
+          ? (task?.taskWorkflow.definition.roles.find(({ id }) => id === assistantRole)?.label ??
+            roleLabel(message.role, message))
+          : roleLabel(message.role, message)}
       </span>
       {timeLabel ? <span className="font-normal normal-case">{timeLabel}</span> : null}
     </header>

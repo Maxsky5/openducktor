@@ -103,7 +103,7 @@ describe("useGitConflictResolution", () => {
         await harness.mount();
         const result = harness.getLatest().handleResolveGitConflict(createConflict(), {
           taskId: "task-1",
-          task: null,
+          task: createTaskCardFixture({ id: "task-1" }),
           builderSessions: [],
           currentViewSession: null,
           onOpenSession: opened,

@@ -139,6 +139,7 @@ export type SessionPanelsModel = {
 type SessionPanelsInput = {
   owner: SessionPanelOwner | null;
   selectionKey: SessionPanelSelectionKey;
+  defaultRightSelection?: ToolTabKind | undefined;
   /** Kinds that the rules allow but that the page cannot show now. */
   unavailableKinds?: ReadonlySet<ToolTabKind>;
   terminals: TerminalSessionsModel;
@@ -349,6 +350,7 @@ const useOwnerLayout = (owner: SessionPanelOwner | null, context: SessionPanelCo
 export function useSessionPanels({
   owner,
   selectionKey,
+  defaultRightSelection,
   unavailableKinds = NO_UNAVAILABLE_KINDS,
   terminals,
   shortcutsEnabled = true,
@@ -368,6 +370,11 @@ export function useSessionPanels({
     () => ({
       ownerKind: owner?.kind ?? "task",
       selectionKey,
+      ...(defaultRightSelection
+        ? { defaultRightSelection }
+        : owner?.kind === "chat"
+          ? { defaultRightSelection: "diffs" as const }
+          : {}),
       unavailableKinds: allUnavailableKinds,
       hostTabs: {
         terminal: {
@@ -392,6 +399,7 @@ export function useSessionPanels({
       ownerBrowser?.openingTabIds,
       ownerBrowser?.tabs,
       selectionKey,
+      defaultRightSelection,
       allUnavailableKinds,
       terminals.closingTabIds,
       terminals.isSynced,

@@ -14,7 +14,7 @@ import { statusBadgeClassName } from "@/lib/task-status-presentation";
 import { statusLabel } from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
 import { formatElapsedAgo, useMinuteClock } from "@openducktor/frontend-core/lib/relative-time";
 import { humanDate } from "@openducktor/frontend-core/tasks/presentation/task-display";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 type TaskDetailsSheetHeaderProps = {
   task: TaskCard;
@@ -157,8 +157,8 @@ export function TaskDetailsSheetHeader({
             <TaskDates createdAt={task.createdAt} updatedAt={task.updatedAt} />
           </div>
         </div>
-        <Badge variant="outline" className={statusBadgeClassName(task.status)}>
-          {statusLabel(task.status)}
+        <Badge variant="outline" className={statusBadgeClassName(task.sharedState)}>
+          {statusLabel(task.sharedState)}
         </Badge>
       </div>
 

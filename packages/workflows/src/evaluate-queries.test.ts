@@ -19,6 +19,14 @@ describe("generic workflow launch, label, and order queries", () => {
     expect(workflow.actionLaunchAction(draft("changes"), "start-writing")).toBe("revise-draft");
     expect(workflow.actionLaunchAction(draft(), "start-writing")).toBe("write-draft");
     expect(workflow.stepLaunchAction(draft(), "review-second")).toBe("review-second");
+    expect(workflow.selectLaunchAction(draft("changes"), ["write-draft", "revise-draft"])).toBe(
+      "revise-draft",
+    );
+    expect(workflow.selectLaunchAction(draft(), ["revise-draft", "write-draft"])).toBe(
+      "revise-draft",
+    );
+    expect(workflow.selectLaunchAction(draft("changes"), ["write-draft"])).toBe("write-draft");
+    expect(workflow.selectLaunchAction(draft(), [])).toBeNull();
   });
 
   test("reports steps and actions that start no session", () => {
@@ -32,6 +40,9 @@ describe("generic workflow launch, label, and order queries", () => {
     );
     expect(() => workflow.actionLaunchAction(input, "missing")).toThrow(
       expect.objectContaining({ code: "unknown_action" }),
+    );
+    expect(() => workflow.selectLaunchAction(input, ["missing"])).toThrow(
+      expect.objectContaining({ code: "missing_launch_action" }),
     );
   });
 

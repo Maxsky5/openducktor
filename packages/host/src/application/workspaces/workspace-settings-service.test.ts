@@ -30,11 +30,8 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "./workspace-settings-model";
-import {
-  builtinTaskWorkflow,
-  createBuiltinNotificationSettings,
-  createTaskWorkflow,
-} from "@openducktor/workflows";
+import { builtinTaskWorkflow, createTaskWorkflow } from "@openducktor/workflows";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 
 const createWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,

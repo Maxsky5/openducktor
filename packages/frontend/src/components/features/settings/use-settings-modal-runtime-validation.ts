@@ -11,7 +11,6 @@ import {
 } from "@openducktor/frontend-core/lib/agent-runtime";
 import { runtimeExecutableResultForPath } from "@/state/operations/runtime-executables/runtime-executable-validation";
 import type { RuntimeExecutableValidationResult } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
-import { ROLE_DEFAULTS } from "./settings-modal-model";
 
 export type RuntimeAvailabilityValidationState = {
   warningsByWorkspaceId: Record<string, string[]>;
@@ -123,13 +122,13 @@ const getRepoWarnings = ({
     );
   }
 
-  for (const { role, label } of ROLE_DEFAULTS) {
+  for (const role of Object.keys(repoConfig.agentDefaults)) {
     const runtimeKind = repoConfig.agentDefaults[role]?.runtimeKind;
     if (!runtimeKind || availableKinds.has(runtimeKind)) {
       continue;
     }
     warnings.push(
-      `${label} agent runtime "${runtimeLabelFor({ runtimeDefinitions: allRuntimeDefinitions, runtimeKind })}" is disabled.`,
+      `${role} agent runtime "${runtimeLabelFor({ runtimeDefinitions: allRuntimeDefinitions, runtimeKind })}" is disabled.`,
     );
   }
   return warnings;

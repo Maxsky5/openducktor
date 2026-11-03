@@ -1,7 +1,6 @@
 import type { StartupAttempt } from "./startup-attempt-store";
 import type { StartupOwnership } from "@openducktor/contracts";
 import type { SessionNavigationTarget } from "../navigation/session-navigation-target";
-import { builtinRoleId } from "@openducktor/workflows";
 
 export function startupIsPending(attempt: StartupAttempt | null | undefined): boolean {
   if (!attempt) return false;
@@ -29,7 +28,7 @@ export function startupNavigationTarget(
     kind: "task_session",
     workspaceId: attempt.origin.workspaceId,
     taskId: attempt.origin.scope.taskId,
-    role: builtinRoleId(attempt.origin.scope.role),
+    role: attempt.origin.scope.role,
     identity: ownership.target.record,
   };
 }

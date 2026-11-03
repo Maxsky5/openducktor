@@ -1,24 +1,25 @@
+import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { describe, expect, test } from "bun:test";
 import { CircleCheckBig } from "lucide-react";
-import {
-  TASK_ACTION_ICON,
-  taskMenuActionVariant,
-  taskPrimaryActionVariant,
-} from "./task-action-ui";
+import { taskActionIcon, taskMenuActionVariant, taskPrimaryActionVariant } from "./task-action-ui";
 
 describe("task action controls", () => {
   test("keeps request changes as a non-destructive workflow action", () => {
-    expect(taskPrimaryActionVariant("build_start")).toBe("default");
-    expect(taskPrimaryActionVariant("human_request_changes")).toBe("outline");
-    expect(taskPrimaryActionVariant("reset_implementation")).toBe("destructive");
-    expect(taskPrimaryActionVariant("reset_task")).toBe("destructive");
-    expect(taskPrimaryActionVariant("close_task")).toBe("warning");
-    expect(taskMenuActionVariant("close_task")).toBe("warningGhost");
-    expect(taskMenuActionVariant("reset_task")).toBe("destructiveGhost");
-    expect(taskMenuActionVariant("human_request_changes")).toBe("ghost");
+    expect(taskPrimaryActionVariant("build_start", createTaskCardFixture())).toBe("default");
+    expect(taskPrimaryActionVariant("human_request_changes", createTaskCardFixture())).toBe(
+      "outline",
+    );
+    expect(taskPrimaryActionVariant("reset_implementation", createTaskCardFixture())).toBe(
+      "destructive",
+    );
+    expect(taskPrimaryActionVariant("reset_task", createTaskCardFixture())).toBe("destructive");
+    expect(taskPrimaryActionVariant("close_task", createTaskCardFixture())).toBe("warning");
+    expect(taskMenuActionVariant("close_task", createTaskCardFixture())).toBe("warningGhost");
+    expect(taskMenuActionVariant("reset_task", createTaskCardFixture())).toBe("destructiveGhost");
+    expect(taskMenuActionVariant("human_request_changes", createTaskCardFixture())).toBe("ghost");
   });
 
   test("uses the approval-style icon for manual close", () => {
-    expect(TASK_ACTION_ICON.close_task.type).toBe(CircleCheckBig);
+    expect(taskActionIcon("close_task", createTaskCardFixture()).type).toBe(CircleCheckBig);
   });
 });

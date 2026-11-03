@@ -338,6 +338,7 @@ export function useSessionStartModalState({
   const showTargetBranchSelector = supportsTaskTargetBranchSelection(
     intent?.role,
     intent?.launchActionId,
+    intent?.taskWorkflow,
   );
   const targetBranchChoices = useMemo(
     () => resolveSessionStartTargetBranchChoices(branches, selectedInitialTargetBranch),

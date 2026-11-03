@@ -1,6 +1,7 @@
+import { WorkflowTestProvider } from "@/test-utils/workflow-provider";
 import { expect, test } from "bun:test";
 import type { PublicTaskSummaryTask } from "@openducktor/contracts";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { createMessageCardElement } from "./agent-chat-message-card-test-harness";
 
@@ -329,3 +330,6 @@ test.each(["not JSON", JSON.stringify({ task: { id: "fake", title: "Incomplete" 
     expect(html).not.toContain("data-task-id");
   },
 );
+
+const renderToStaticMarkup = (element: Parameters<typeof renderMarkup>[0]) =>
+  renderMarkup(<WorkflowTestProvider>{element}</WorkflowTestProvider>);

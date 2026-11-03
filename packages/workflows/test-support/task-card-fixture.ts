@@ -1,20 +1,16 @@
-import { emptyArtifactSummary } from "../src/builtin/facts";
-import { builtinTaskCardSchema, type BuiltinTaskCard } from "../src/builtin/task-card";
-import { deriveTaskProjection } from "../src/builtin/task-projection";
+import type { TaskCard } from "@openducktor/contracts";
+import { builtinTaskWorkflow, BUILTIN_BOARD } from "../src/builtin/task-workflow";
+import type { ResolvedTaskCard } from "../src/task-workflow-view";
+import { createWorkflowTaskCardFixture } from "./shared-board-workflows";
 
-/** A task card with the workflow projection of its fields. Explicit actions or role states win. */
-export const createTaskCardFixture = (
-  overrides: Partial<BuiltinTaskCard> = {},
-): BuiltinTaskCard => {
-  const fields = {
+/** A built-in task card with the workflow projection of its fields. Explicit fields win. */
+export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): ResolvedTaskCard =>
+  createWorkflowTaskCardFixture(builtinTaskWorkflow, BUILTIN_BOARD, {
     id: "task-1",
     title: "Task 1",
-    issueType: "task" as const,
-    status: "open" as const,
+    issueType: "task",
+    status: "open",
     updatedAt: "2026-02-22T12:00:00.000Z",
     createdAt: "2026-02-22T12:00:00.000Z",
-    artifactSummary: emptyArtifactSummary(),
     ...overrides,
-  };
-  return builtinTaskCardSchema.parse({ ...deriveTaskProjection(fields), ...fields });
-};
+  });

@@ -6,7 +6,7 @@ import { getProductionTaskViewSync } from "../../queries/task-view-sync";
 import { getTaskReadLoadingState } from "./task-read-loading-state";
 import { useTaskQueryReadModel } from "./use-task-query-read-model";
 import { useTaskRefreshFlow } from "./use-task-refresh-flow";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 type UseTaskReadFlowArgs = {
   activeWorkspaceId: string | null;

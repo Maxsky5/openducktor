@@ -5,6 +5,7 @@ import {
 } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import type { TasksStateContextValue } from "@openducktor/frontend-core/types/state-slices";
+import { BUILTIN_BOARD, type KanbanColumn, type ResolvedTaskCard } from "@openducktor/workflows";
 import type {
   ChecksStateContextValue,
   WorkspacePresenceContextValue,
@@ -13,17 +14,25 @@ import type {
 
 export * from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 
+/** A column of the built-in board with its tasks. Explicit fields win. */
+export const createKanbanColumnFixture = (
+  id: string,
+  tasks: ResolvedTaskCard[] = [],
+  overrides: Partial<Omit<KanbanColumn, "id" | "tasks">> = {},
+): KanbanColumn => {
+  const state = BUILTIN_BOARD.states.find((candidate) => candidate.id === id);
+  if (!state) throw new Error(`The built-in board has no state "${id}".`);
+  return { ...state, ...overrides, id, tasks };
+};
+
 /** Task workflow actions that do nothing, for views that only need the action context. */
 export const createTaskWorkflowActionsFixture = (
   overrides: Partial<TaskWorkflowActions> = {},
 ): TaskWorkflowActions => ({
+  onLaunch: () => {},
+  onApplyEvent: () => {},
   onCreateTask: () => {},
-  onPlan: () => {},
-  onQaStart: () => {},
-  onQaOpen: () => {},
-  onBuild: () => {},
   onOpenSession: () => {},
-  onDelegate: () => {},
   onEdit: () => {},
   onOpenTaskDetails: () => {},
   onHumanApprove: () => {},
@@ -85,7 +94,6 @@ export const createTasksStateFixture = (
   removeTaskWorktree: async () => undefined,
   resetTaskImplementation: async () => undefined,
   resetTask: async () => undefined,
-  transitionTask: async () => undefined,
   humanRequestChangesTask: async () => undefined,
   ...overrides,
 });

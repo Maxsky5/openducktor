@@ -1,20 +1,28 @@
+import type {
+  WorkspaceRef,
+  WorkflowBoardDefinition,
+  WorkflowReference,
+  WorkflowCatalog,
+} from "@openducktor/contracts";
 import type { TaskWorkflow } from "@openducktor/workflows";
-import type { Effect } from "effect";
-import type { HostValidationError } from "../effect/host-errors";
 
 /** A task that the task store holds. Pass the task record when the code has read it. */
 export type StoredTask = { readonly id: string };
 
-/** Finds the task workflow of a stored task, and the task workflow of a new task. */
+/** The validated host workflow inventory and its task and workspace resolution. */
 export type TaskWorkflowResolver = {
   /** The workflow that a stored task follows. */
   readonly forTask: (task: StoredTask) => TaskWorkflow;
   /** The workflow that a new task of the repository follows. */
   readonly forNewTask: (repoPath: string) => TaskWorkflow;
-  /** The host workflow with this ID. Fails when the host has no such workflow. */
-  readonly forWorkflowId: (
-    workflowId: string,
-  ) => Effect.Effect<TaskWorkflow, HostValidationError<{ workflowId: string }>>;
-  /** The task workflows of the host. Settings and reads of many tasks cover each of them. */
+  /** The exact registered revision. No latest-revision substitution. */
+  readonly forReference: (reference: WorkflowReference) => TaskWorkflow;
+  readonly catalog: (hostInstanceId: string) => WorkflowCatalog;
+  /** A validated board and its registered workflows, including the creation default. */
+  readonly forWorkspace: (scope: WorkspaceRef) => {
+    board: WorkflowBoardDefinition;
+    workflows: readonly TaskWorkflow[];
+    newTaskWorkflow: TaskWorkflow;
+  };
   readonly workflows: readonly TaskWorkflow[];
 };

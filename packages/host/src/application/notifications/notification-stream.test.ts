@@ -3,7 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import { type NotificationStreamFrame, type SelectedNotification } from "@openducktor/contracts";
 import { createControlledScheduler } from "../../effect/test-support/controlled-scheduler";
 import { createNotificationStream } from "./notification-stream";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 const selected = (id: string): SelectedNotification => ({
   occurrence: {
     occurrenceId: id,

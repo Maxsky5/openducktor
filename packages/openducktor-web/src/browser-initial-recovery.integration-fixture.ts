@@ -8,6 +8,7 @@ import {
   TEST_CONNECTION_TOKEN,
   savedTestAuthorization,
 } from "../../host-client/src/remote/test-support/authorization";
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import assert from "node:assert/strict";
 import {
   HOST_CHANNEL_SUBPROTOCOL,
@@ -303,7 +304,12 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
           workspaceId: workspace.workspaceId,
           repoPath: "/repo",
           taskId: "task",
-          taskSnapshot: { id: "task", title: "After retry", status: "open" },
+          taskSnapshot: {
+            workflow: builtinTaskWorkflow.reference,
+            id: "task",
+            title: "After retry",
+            status: "open",
+          },
           emittedAt: "2026-10-14T12:00:00.000Z",
         };
         assert.ok(ackedSubscription);

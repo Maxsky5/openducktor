@@ -6,9 +6,9 @@ export class TaskAssetError extends Data.TaggedError("TaskAssetError")<
 > {}
 
 export class TaskCreatedAssetError extends TaskAssetError {
-  readonly createdTask: TaskEventTaskSnapshot;
+  readonly createdTask: Omit<TaskEventTaskSnapshot, "workflow">;
 
-  constructor(failure: TaskAssetFailure, createdTask: TaskEventTaskSnapshot) {
+  constructor(failure: TaskAssetFailure, createdTask: Omit<TaskEventTaskSnapshot, "workflow">) {
     super(failure);
     this.createdTask = createdTask;
   }

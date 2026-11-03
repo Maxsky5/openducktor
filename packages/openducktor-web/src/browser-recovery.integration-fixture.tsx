@@ -81,6 +81,7 @@ const held: AutopilotState = {
       task: { id: "task", title: "Task" },
       eventId: "taskProgressedToAiReview",
       actionId: "startQa",
+      actionLabel: "Start QA",
       occurredAt: "2026-10-10T00:00:00.000Z",
       kind: "skipped",
       reason: "The task moved on.",

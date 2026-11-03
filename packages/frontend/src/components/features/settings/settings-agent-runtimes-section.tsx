@@ -1,10 +1,8 @@
 import {
-  BUILTIN_ROLE_LABELS,
-  BUILTIN_ROLE_IDS,
-  isCodexSandboxModeSelectableForRole,
-  resolveCodexRolePolicy,
-  type BuiltinRoleId as AgentRole,
-} from "@openducktor/workflows";
+  useWorkflowSettings,
+  type WorkflowSettingsData,
+} from "@openducktor/frontend-core/queries/workflow-settings";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import { ClaudePolicySection } from "./settings-claude-policy-section";
 import {
   RuntimePolicyCard,
@@ -14,6 +12,7 @@ import {
 } from "./settings-runtime-policy-layout";
 import {
   type AgentRuntimes,
+  resolveCodexEffectivePolicy,
   CODEX_APPROVAL_POLICY_VALUES,
   CODEX_APPROVALS_REVIEWER_VALUES,
   CODEX_SANDBOX_MODE_VALUES,
@@ -24,6 +23,7 @@ import {
   type RuntimeDescriptor,
   type RuntimeKind,
 } from "@openducktor/contracts";
+import type { TaskWorkflowRole } from "@openducktor/workflows";
 import type { ReactElement } from "react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -199,7 +199,7 @@ const policyValueFromOption = <T extends string | boolean>(
 };
 
 const hasRoleOverrideForField = (config: CodexRuntimeConfig, field: CodexPolicyField): boolean =>
-  BUILTIN_ROLE_IDS.some((role) => config.roleOverrides[role]?.[field] !== undefined);
+  Object.values(config.roleOverrides).some((override) => override?.[field] !== undefined);
 
 function PolicyValueDropdown<T extends string | boolean>({
   value,
@@ -302,7 +302,7 @@ function CodexSettings({
     onUpdate((current) => {
       const nextRoleOverrides = { ...current.roleOverrides };
 
-      for (const role of BUILTIN_ROLE_IDS) {
+      for (const role of Object.keys(current.roleOverrides)) {
         const draftRoleOverride = { ...nextRoleOverrides[role] };
         delete draftRoleOverride[field];
 
@@ -491,23 +491,30 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
     value: CodexPolicyFields[ChangeField] | undefined,
   ) => void;
 }): ReactElement {
+  const workflows = useWorkflowSettings();
+  if (!workflows.data || workflows.error)
+    return (
+      <p role={workflows.error ? "alert" : "status"}>
+        {workflows.error?.message ?? "Loading workflow roles..."}
+      </p>
+    );
   return (
     <div className="divide-y divide-border rounded-md border border-border">
-      {BUILTIN_ROLE_IDS.map((role) => {
-        const roleLabelId = `codex-${field}-${role}-override-label`;
+      {workflows.data.roles.map(({ role, label, definition, key }) => {
+        const roleLabelId = `codex-${field}-${key}-override-label`;
         const roleOverride = config.roleOverrides[role];
 
         return (
           <div
-            key={role}
+            key={key}
             className="grid gap-2 px-3 py-2.5 @min-[28rem]:grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] @min-[28rem]:items-center"
           >
             <Label id={roleLabelId} className="text-sm font-medium text-foreground">
-              {BUILTIN_ROLE_LABELS[role]}
+              {label}
             </Label>
             <RoleOverrideDropdown
               field={field}
-              role={role}
+              role={definition}
               roleOverride={roleOverride}
               disabled={disabled}
               labelId={roleLabelId}
@@ -529,7 +536,7 @@ function RoleOverrideDropdown<Field extends CodexPolicyField>({
   onChange,
 }: {
   field: Field;
-  role: AgentRole;
+  role: TaskWorkflowRole;
   roleOverride: CodexRoleOverride | undefined;
   disabled: boolean;
   labelId: string;
@@ -576,28 +583,36 @@ function RoleOverrideDropdown<Field extends CodexPolicyField>({
 
 function valuesForRole<Field extends CodexPolicyField>(
   field: Field,
-  role: AgentRole,
+  role: TaskWorkflowRole,
 ): readonly CodexPolicyFields[Field][] {
   const values = defaultValuesForField(field);
   if (field === "sandboxMode") {
-    return values.filter((value) => isCodexSandboxModeSelectableForRole(role, value));
+    return values.filter((value) => role.workspaceAccess === "read" || value !== "read-only");
   }
   return values;
 }
 
-const effectivePolicyNotes = (config: CodexRuntimeConfig, field: CodexPolicyField) => {
+const effectivePolicyNotes = (
+  config: CodexRuntimeConfig,
+  field: CodexPolicyField,
+  roles: WorkflowSettingsData["roles"],
+) => {
   const notes: string[] = [];
   const errors: string[] = [];
   let reviewerIsInactive = false;
 
-  for (const role of BUILTIN_ROLE_IDS) {
+  for (const { role, label, definition } of roles) {
     try {
-      const effective = resolveCodexRolePolicy(config, role);
+      const effective = resolveCodexEffectivePolicy(
+        config,
+        role,
+        definition.workspaceAccess === "write",
+      );
       const effectiveValue = effective[field] ?? false;
 
       if (field === "sandboxMode" && effective.adjustmentReason) {
         notes.push(
-          `Effective for ${BUILTIN_ROLE_LABELS[role]}: ${policyValueDisplay(effectiveValue).label}. ${effective.adjustmentReason}`,
+          `Effective for ${label}: ${policyValueDisplay(effectiveValue).label}. ${effective.adjustmentReason}`,
         );
       }
       if (field === "approvalsReviewer" && !effective.approvalsReviewerApplies) {
@@ -605,7 +620,7 @@ const effectivePolicyNotes = (config: CodexRuntimeConfig, field: CodexPolicyFiel
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      errors.push(`${BUILTIN_ROLE_LABELS[role]}: ${message}`);
+      errors.push(`${label}: ${message}`);
     }
   }
 
@@ -623,7 +638,8 @@ function EffectivePolicyNotes({
   config: CodexRuntimeConfig;
   field: CodexPolicyField;
 }): ReactElement | null {
-  const { notes, errors } = effectivePolicyNotes(config, field);
+  const workflows = useWorkflowSettings();
+  const { notes, errors } = effectivePolicyNotes(config, field, workflows.data?.roles ?? []);
 
   if (notes.length === 0 && errors.length === 0) {
     return null;

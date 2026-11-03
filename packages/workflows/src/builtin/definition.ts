@@ -9,6 +9,7 @@ import {
   type WorkflowDefinition,
   type WorkflowEventEffect,
   type WorkflowEventGuard,
+  type WorkflowIssueTypeDefinition,
   type WorkflowLaunchActionDefinition,
   type WorkflowRoleDefinition,
   type WorkflowSignalDefinition,
@@ -287,6 +288,7 @@ const builtinArtifacts = [
     shortLabel: "Spec",
     kind: "document",
     saveEventId: "set-spec",
+    placeholder: "# Purpose\n\nDescribe expected outcome...",
   },
   {
     id: "plan",
@@ -294,6 +296,7 @@ const builtinArtifacts = [
     shortLabel: "Plan",
     kind: "document",
     saveEventId: "set-plan",
+    placeholder: "## Milestones\n\n- ...",
   },
   {
     id: "qaReport",
@@ -331,6 +334,8 @@ const builtinRoles = [
     workspaceAccess: "read",
     location: "repository",
     runtimeScopes: ["workspace"],
+    settingsLabel: "Specification",
+    icon: "specification",
   },
   {
     id: "planner",
@@ -340,6 +345,7 @@ const builtinRoles = [
     workspaceAccess: "read",
     location: "repository",
     runtimeScopes: ["workspace"],
+    icon: "planning",
   },
   {
     id: "build",
@@ -357,6 +363,8 @@ const builtinRoles = [
     workspaceAccess: "write",
     location: "task_worktree",
     runtimeScopes: ["build", "workspace"],
+    icon: "building",
+    defaultPanel: "diffs",
   },
   {
     id: "qa",
@@ -366,6 +374,7 @@ const builtinRoles = [
     workspaceAccess: "read",
     location: "task_worktree",
     runtimeScopes: ["task"],
+    icon: "quality",
   },
 ] satisfies BuiltinRole[];
 
@@ -387,7 +396,7 @@ const notification = (
 });
 
 const builtinStates = [
-  { id: "open", label: "Backlog", title: "Backlog" },
+  { id: "open", label: "Backlog", title: "Backlog", tone: "neutral" },
   {
     id: "spec_ready",
     label: "Spec ready",
@@ -402,6 +411,8 @@ const builtinStates = [
       role: "spec",
     }),
     studioRole: "spec",
+    tone: "pending",
+    historyRoles: ["spec"],
   },
   {
     id: "ready_for_dev",
@@ -417,6 +428,8 @@ const builtinStates = [
       role: "planner",
     }),
     studioRole: "planner",
+    tone: "info",
+    historyRoles: ["planner", "spec"],
   },
   {
     id: "in_progress",
@@ -432,6 +445,8 @@ const builtinStates = [
       role: "build",
     }),
     studioRole: "build",
+    tone: "warning",
+    historyRoles: ["build"],
   },
   {
     id: "blocked",
@@ -449,6 +464,9 @@ const builtinStates = [
       defaultSetting: { sound: "bloom" },
     }),
     studioRole: "build",
+    tone: "destructive",
+    historyRoles: ["build"],
+    historyLatest: true,
   },
   {
     id: "ai_review",
@@ -464,6 +482,8 @@ const builtinStates = [
       role: "build",
     }),
     studioRole: "build",
+    tone: "review",
+    historyRoles: ["build"],
   },
   {
     id: "human_review",
@@ -479,6 +499,8 @@ const builtinStates = [
       role: "qa",
     }),
     studioRole: "build",
+    tone: "approval",
+    historyRoles: ["build"],
   },
   {
     id: "closed",
@@ -495,6 +517,8 @@ const builtinStates = [
       defaultSetting: { target: "in_app" },
     }),
     studioRole: "build",
+    tone: "success",
+    historyRoles: ["build"],
   },
 ] satisfies BuiltinState[];
 
@@ -506,6 +530,10 @@ const freshOrReuse = (): Pick<BuiltinLaunchAction, "startModes" | "defaultStartM
   startModes: ["fresh", "reuse"],
   defaultStartMode: "reuse",
 });
+
+const implementationComplete = {
+  stateIn: ["ai_review", "human_review", "closed"],
+} satisfies WorkflowCondition;
 
 const builtinSteps = [
   {
@@ -556,7 +584,21 @@ const builtinSteps = [
     outputs: [],
     requiredWhen: true,
     availableWhen: buildAvailable,
-    completedWhen: { stateIn: ["ai_review", "human_review", "closed"] },
+    completedWhen: implementationComplete,
+    displayRules: [
+      { when: qaRejected, completion: "done" },
+      {
+        when: { stateIn: ["blocked"] },
+        session: ["none", "idle", "stopped", "waiting_input"],
+        attention: "needs_input",
+      },
+      // A stopped Builder session pauses the implementation; it does not reset it.
+      {
+        when: { all: [buildAvailable, { not: implementationComplete }] },
+        session: ["stopped"],
+        completion: "in_progress",
+      },
+    ],
     launchActions: [
       {
         id: "build_implementation_start",
@@ -581,6 +623,9 @@ const builtinSteps = [
         selectWhen: { stateIn: ["human_review"] },
         context: "human_feedback",
         requiresWorktree: true,
+        surface: "studio",
+        showWhen: false,
+        description: "Address human review feedback.",
       },
       {
         id: "build_pull_request_generation",
@@ -591,6 +636,9 @@ const builtinSteps = [
         context: "pull_request",
         targetBranch: true,
         requiresWorktree: true,
+        surface: "studio",
+        showWhen: { stateIn: ["human_review"] },
+        description: "Generate or update the pull request.",
       },
       {
         id: "build_rebase_conflict_resolution",
@@ -598,6 +646,7 @@ const builtinSteps = [
         ...freshOrReuse(),
         template: { kind: "message", id: "message.build_rebase_conflict_resolution" },
         requiresWorktree: true,
+        surface: "git_conflict",
       },
     ],
   },
@@ -611,6 +660,15 @@ const builtinSteps = [
     requiredWhen: true,
     availableWhen: qaAvailable,
     completedWhen: qaApproved,
+    displayRules: [
+      { when: qaRejected, session: ["none", "idle", "stopped"], completion: "rejected" },
+      { when: { all: [{ stateIn: ["in_progress"] }, qaRejected] }, completion: "rejected" },
+      {
+        when: { all: [{ stateIn: ["ai_review"] }, { artifact: "qaReport", verdict: "rejected" }] },
+        session: ["none", "idle", "stopped"],
+        completion: "rejected",
+      },
+    ],
     launchActions: [
       {
         id: "qa_review",
@@ -627,9 +685,9 @@ const builtinSteps = [
   startEventId?: BuiltinTaskEventId;
 })[];
 
-/** Action labels are the default UI labels. Presentation adds only surface-specific variants. */
+/** Action labels are the default UI labels. Label variants and the Studio label adapt them. */
 const builtinActions = [
-  { id: "view_details", kind: "view", label: "View details", availableWhen: true },
+  { id: "view_details", kind: "view", label: "View details", availableWhen: true, surfaces: [] },
   {
     id: "set_spec",
     kind: "session",
@@ -639,6 +697,7 @@ const builtinActions = [
     launchActionIds: ["spec_initial"],
     // A ready spec continues in its session through open_spec.
     availableWhen: { not: { stateIn: ["spec_ready"] } },
+    icon: "specification",
   },
   {
     id: "set_plan",
@@ -648,6 +707,7 @@ const builtinActions = [
     eventId: "set-plan",
     launchActionIds: ["planner_initial"],
     availableWhen: true,
+    icon: "planning",
   },
   {
     id: "qa_start",
@@ -656,6 +716,8 @@ const builtinActions = [
     stepId: "quality-review",
     launchActionIds: ["qa_review"],
     availableWhen: qaAvailable,
+    icon: "quality",
+    emphasis: "prominent",
   },
   {
     id: "build_start",
@@ -665,6 +727,9 @@ const builtinActions = [
     stepId: "implementation",
     launchActionIds: ["build_implementation_start", "build_after_qa_rejected"],
     availableWhen: { any: [qaRejected, { all: [{ not: activeOrReview }, buildAvailable] }] },
+    icon: "building",
+    emphasis: "prominent",
+    studioLabel: "Start Implementation",
   },
   {
     id: "open_spec",
@@ -672,6 +737,7 @@ const builtinActions = [
     label: "Open Spec",
     stepId: "specification",
     availableWhen: { stateIn: ["spec_ready"] },
+    icon: "open",
   },
   // A task card also shows a session view action when its role has a session.
   {
@@ -680,6 +746,7 @@ const builtinActions = [
     label: "Open Planner",
     stepId: "planning",
     availableWhen: false,
+    icon: "open",
   },
   {
     id: "open_builder",
@@ -687,6 +754,7 @@ const builtinActions = [
     label: "Open Builder",
     stepId: "implementation",
     availableWhen: activeOrReview,
+    icon: "open",
   },
   {
     id: "reset_implementation",
@@ -694,6 +762,8 @@ const builtinActions = [
     label: "Reset Implementation",
     eventId: "reset-implementation",
     availableWhen: true,
+    icon: "reset",
+    emphasis: "destructive",
   },
   {
     id: "reset_task",
@@ -701,6 +771,9 @@ const builtinActions = [
     label: "Reset Task",
     eventId: "reset-task",
     availableWhen: true,
+    icon: "reset",
+    emphasis: "destructive",
+    surfaces: ["details", "palette"],
   },
   {
     id: "open_qa",
@@ -708,6 +781,7 @@ const builtinActions = [
     label: "Open QA",
     stepId: "quality-review",
     availableWhen: qaRejected,
+    icon: "open",
   },
   {
     id: "human_request_changes",
@@ -716,6 +790,7 @@ const builtinActions = [
     eventId: "human-request-changes",
     launchActionIds: ["build_after_human_request_changes"],
     availableWhen: humanReview,
+    icon: "undo",
   },
   {
     id: "human_approve",
@@ -723,6 +798,8 @@ const builtinActions = [
     label: "Approve Task",
     eventId: "human-approve",
     availableWhen: humanReview,
+    icon: "complete",
+    emphasis: "prominent",
   },
   {
     id: "close_task",
@@ -730,12 +807,19 @@ const builtinActions = [
     label: "Close Task",
     eventId: "close-task",
     availableWhen: nonClosed,
+    icon: "complete",
+    emphasis: "warning",
+    surfaces: ["details", "palette"],
   },
   {
     id: "remove_worktree",
     kind: "view",
     label: "Remove Worktree",
     availableWhen: { stateIn: ["closed"] },
+    icon: "remove_worktree",
+    emphasis: "destructive",
+    surfaces: ["details", "palette"],
+    target: "worktree_cleanup",
   },
 ] satisfies BuiltinAction[];
 
@@ -811,6 +895,32 @@ const builtinAutomations = [
   },
 ] satisfies BuiltinAutomation[];
 
+const automationGuidance =
+  "Define enough detail for Planner/Builder automation to execute with minimal ambiguity.";
+const builtinIssueTypes = [
+  {
+    id: "feature",
+    label: "Feature",
+    description: "User-facing capability or workflow improvement.",
+    guidance: automationGuidance,
+    icon: "feature",
+  },
+  {
+    id: "bug",
+    label: "Bug",
+    description: "Unexpected behavior, regression, or production defect.",
+    guidance: "Capture reproduction context, impact, and a concrete fix target.",
+    icon: "bug",
+  },
+  {
+    id: "task",
+    label: "Task",
+    description: "Standard implementation work item.",
+    guidance: automationGuidance,
+    icon: "task",
+  },
+] satisfies (WorkflowIssueTypeDefinition & { id: (typeof BUILTIN_ISSUE_TYPE_IDS)[number] })[];
+
 const secondaryActions: BuiltinActionId[] = [
   "open_spec",
   "open_planner",
@@ -831,7 +941,9 @@ export const BUILTIN_DEFINITION = {
   revision: 2,
   label: "OpenDucktor",
   initialState: "open",
-  facts: [{ id: "issueType", type: "enum", values: [...BUILTIN_ISSUE_TYPE_IDS] }],
+  facts: [],
+  issueTypes: builtinIssueTypes,
+  defaultIssueType: "task",
   roles: builtinRoles,
   artifacts: builtinArtifacts,
   states: builtinStates,
@@ -867,6 +979,32 @@ export const BUILTIN_DEFINITION = {
         "qa_start",
         "open_builder",
         "build_start",
+      ],
+    },
+  ],
+  launchOrder: [
+    {
+      when: { stateIn: ["human_review"] },
+      pullRequest: true,
+      order: [
+        "build_after_human_request_changes",
+        "qa_review",
+        "build_implementation_start",
+        "spec_initial",
+        "planner_initial",
+        "build_pull_request_generation",
+      ],
+    },
+    {
+      when: { stateIn: ["human_review"] },
+      pullRequest: false,
+      order: [
+        "build_pull_request_generation",
+        "build_after_human_request_changes",
+        "qa_review",
+        "build_implementation_start",
+        "spec_initial",
+        "planner_initial",
       ],
     },
   ],

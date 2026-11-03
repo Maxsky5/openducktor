@@ -94,12 +94,13 @@ describe("useTaskResetFlow", () => {
 
   test("resets the task once for a double tap that comes before the busy state renders", async () => {
     const resetTaskImplementation = mock(async (_taskId: string) => {});
+    const continuation = mock(async () => {});
     const harness = createHookHarness(createArgs({ resetTaskImplementation }));
 
     try {
       await harness.mount();
       await harness.run((model) => {
-        model.openResetImplementation("task-1");
+        model.openResetImplementation("task-1", { onCommitted: continuation });
       });
       await harness.run((model) => {
         model.resetImplementationModal?.onConfirm();
@@ -108,6 +109,7 @@ describe("useTaskResetFlow", () => {
 
       await waitFor(() => expect(harness.getLatest().resetImplementationModal).toBeNull());
       expect(resetTaskImplementation).toHaveBeenCalledTimes(1);
+      expect(continuation).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

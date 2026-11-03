@@ -2,7 +2,7 @@ import { builtinTaskWorkflowResolver, workflowRolePolicies } from "./task-workfl
 import { createNodeWorkflowCommandHandlers } from "./node-workflow-command-handlers";
 import {
   createWorkflowWorkspaceObservation,
-  initializeWorkflowObservation,
+  createWorkflowObservationInitializer,
   createWorkflowLiveObserver,
   workflowShutdown,
 } from "./workflow-workspace-observation";
@@ -257,6 +257,7 @@ export const assembleNodeEffectHostCommandRouter = (
     worktreeFiles,
   });
   const taskSessions = createNodeTaskSessionServices({
+    hostInstanceId,
     runtimeAdmission,
     taskServiceInput: {
       terminalService,
@@ -375,14 +376,11 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceChats.workspaceSessionLaunchService,
   ]);
   const hostRouterLifecycle = createNodeHostRouterLifecycle({
-    initializeAdmission: () =>
-      workspaceAdmissionService
-        .initialize()
-        .pipe(
-          Effect.andThen(
-            initializeWorkflowObservation(workspaceSettingsService, agentSessionLiveStateService),
-          ),
-        ),
+    initializeAdmission: createWorkflowObservationInitializer(
+      workspaceAdmissionService,
+      workspaceSettingsService,
+      agentSessionLiveStateService,
+    ),
     shutdownWorkspaceImports: workspaceChats.workspaceSessionImports.shutdown,
     shutdownWorkspaceSessionPersistence: workspaceSessions.persistence.shutdown,
     shutdownMessageDeliveries: messageDelivery.shutdown,

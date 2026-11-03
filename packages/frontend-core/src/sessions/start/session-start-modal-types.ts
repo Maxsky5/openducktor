@@ -5,14 +5,15 @@ import type { SessionStartExistingSessionOption } from "./session-start-types";
 import type { SessionStartPostAction } from "./session-start-workflow";
 import type { SessionStartKickoffInput } from "./session-start-kickoff";
 import type {
-  BuiltinLaunchActionId as SessionLaunchActionId,
-  BuiltinRoleId as AgentRole,
+  WorkflowLaunchActionId as SessionLaunchActionId,
+  WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 
 /** Where the start began: an Agent Studio session view, or a task action on any task view. */
 export type SessionStartModalSource = "agent_studio" | "task_action";
 
 export type SessionStartModalIntent = {
+  taskWorkflow: import("@openducktor/workflows").TaskWorkflow;
   source: SessionStartModalSource;
   requestId?: string;
   kickoff?: SessionStartKickoffInput;

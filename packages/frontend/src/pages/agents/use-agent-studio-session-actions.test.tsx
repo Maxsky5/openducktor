@@ -16,6 +16,7 @@ import {
   toAgentSessionIdentity,
 } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { QueryProvider } from "@/test-utils/query-provider";
+import { withEditedTaskWorkflow } from "@/test-utils/edited-task-workflow";
 import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { ChecksOperationsContext, ChecksStateContext } from "@/state/app-state-contexts";
@@ -740,7 +741,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("request changes quick action submits feedback and mutation intent to the host", async () => {
+  test("feedback launch submits feedback without adding an undeclared task effect", async () => {
     let submitted: import("@openducktor/contracts").WorkflowLaunchRequest | undefined;
     const calls: string[] = [];
     const startAgentSession = mock(async () => {
@@ -829,10 +830,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
-    expect(submitted?.beforeStartAction).toEqual({
-      action: "human_request_changes",
-      note: "Please address the review comments.",
-    });
+    expect(submitted?.beforeStartAction).toBeUndefined();
     expect(submitted?.instruction).toMatchObject({
       kind: "kickoff",
       feedback: "Please address the review comments.",
@@ -1361,6 +1359,64 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.unmount();
   });
+
+  test.each(["start", "create"] as const)(
+    "Studio %s forwards an ordinary message launch through the shared launch interface",
+    async (entry) => {
+      const task = withEditedTaskWorkflow(createTask(), (definition, templates) => {
+        const launch = definition.steps
+          .flatMap((step) => (step.kind === "agent" ? step.launchActions : []))
+          .find(({ id }) => id === "spec_initial")!;
+        launch.template.kind = "message";
+        const template = templates.find(({ id }) => id === launch.template.id)!;
+        template.purpose = "message";
+        template.template = "Inspect {{task.id}} for {{role}}";
+        template.requiredPlaceholders = [];
+      });
+      const launch = task.taskWorkflow.launchAction("spec_initial");
+      let submitted: Parameters<HookArgs["runSessionStartWorkflow"]>[0] | undefined;
+      const harness = createHookHarness({
+        ...createBaseArgs(),
+        selectedTask: task,
+        runSessionStartWorkflow: async (input) => {
+          submitted = input;
+          return { ...sessionIdentity("session-new"), postStartActionError: null };
+        },
+      });
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          if (entry === "start") void state.startLaunchKickoff();
+          else
+            state.handleCreateSession({
+              id: "message-create",
+              launchActionId: launch.id,
+              role: "spec",
+              label: "Inspect",
+              description: "Inspect task",
+              disabled: false,
+            });
+        });
+        await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
+        await harness.run(async (state) => {
+          await state.sessionStartModal?.onConfirm({
+            runInBackground: false,
+            startMode: "fresh",
+            sourceSessionOptionValue: null,
+          });
+        });
+        expect(submitted?.request).toMatchObject({
+          taskId: task.id,
+          role: "spec",
+          launchActionId: launch.id,
+          postStartAction: "send_message",
+        });
+        expect(submitted?.task?.taskWorkflow).toBe(task.taskWorkflow);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("handleCreateSession does not switch query before creating another session for the same role", async () => {
     const deferredStart = createDeferred<ReturnType<typeof sessionIdentity>>();

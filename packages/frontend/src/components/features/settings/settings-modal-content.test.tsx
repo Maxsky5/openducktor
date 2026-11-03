@@ -1,3 +1,4 @@
+import { WorkflowTestProvider } from "@/test-utils/workflow-provider";
 import { describe, expect, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
@@ -8,7 +9,7 @@ import {
 } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act, createElement, useState } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -802,3 +803,6 @@ describe("settings modal content", () => {
     expect(html).toContain("Failed to load settings");
   });
 });
+
+const renderToStaticMarkup = (element: Parameters<typeof renderMarkup>[0]) =>
+  renderMarkup(<WorkflowTestProvider>{element}</WorkflowTestProvider>);

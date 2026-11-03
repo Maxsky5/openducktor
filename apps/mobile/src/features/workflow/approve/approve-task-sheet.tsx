@@ -1,3 +1,5 @@
+import { HumanFeedbackSheet, useFeedbackSheetClose } from "../request-changes/human-feedback-sheet";
+import type { TaskWorkflowContinuation } from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
 import { getGitConflictTitle } from "@openducktor/frontend-core/git/conflicts/conflict-copy";
 import type { PullRequest, WorkspaceRecord } from "@openducktor/contracts";
 import {
@@ -32,24 +34,36 @@ const TITLE = "Approve task";
 
 /** Approve Task: Direct Merge, Pull Request, or Close Task, with the conflict and publish steps. */
 export function ApproveTaskRoute(): ReactElement {
-  const { workspaceId, taskId } = useWorkflowSheetParams();
+  const { workspaceId, taskId, continuation } = useWorkflowSheetParams();
   return (
     <WorkflowSheetFrame title={TITLE} workspaceId={workspaceId} taskId={taskId}>
-      {(workspace, id) => <ApproveTaskContent workspace={workspace} taskId={id} />}
+      {(workspace, id) => (
+        <ApproveTaskContent workspace={workspace} taskId={id} continuation={continuation} />
+      )}
     </WorkflowSheetFrame>
   );
 }
 
 function ApproveTaskContent({
+  continuation,
   workspace,
   taskId,
 }: {
+  continuation: TaskWorkflowContinuation | undefined;
   workspace: WorkspaceRecord;
   taskId: string;
 }): ReactElement {
   const { feedback } = useClientConnection();
-  const { flow, navigation, tasks, sessions, settings, branchesFailure, gitProvider } =
-    useTaskStartFlow(workspace);
+  const {
+    flow,
+    navigation,
+    tasks,
+    sessions,
+    settings,
+    branchesFailure,
+    gitProvider,
+    backgroundAttemptId,
+  } = useTaskStartFlow(workspace);
   const { refreshTasks, closeTask, resetTaskImplementation } = useRequiredContext(
     TasksStateContext,
     "ApproveTaskContent",
@@ -108,15 +122,24 @@ function ApproveTaskContent({
   });
 
   const start = flow.sessionStartModal;
+  const humanFeedback = flow.humanReviewFeedbackModal;
+  const closeFeedback = useFeedbackSheetClose(humanFeedback, start, backgroundAttemptId !== null);
   const conflict = approval.taskGitConflictDialog;
   const modal = approval.taskApprovalModal;
   useWorkflowSheetLifecycle({
     ready: task !== null,
     run: () => {
-      if (task) approval.openTaskApproval(task.id);
+      if (task)
+        approval.openTaskApproval(
+          task.id,
+          continuation
+            ? { onCommitted: () => flow.continueTaskWorkflow(task.id, continuation) }
+            : undefined,
+        );
     },
     anyOpen:
       start?.open === true ||
+      humanFeedback !== null ||
       resetImplementationModal !== null ||
       conflict?.open === true ||
       modal !== null,
@@ -149,6 +172,9 @@ function ApproveTaskContent({
         }
       />
     );
+  }
+  if (humanFeedback) {
+    return <HumanFeedbackSheet task={task} feedback={humanFeedback} onClose={closeFeedback} />;
   }
   if (resetImplementationModal) {
     // The confirmation opens above the sheet; the sheet keeps its frame below it.

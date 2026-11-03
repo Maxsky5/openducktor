@@ -1,5 +1,6 @@
 import type {
   AutopilotSettings,
+  WorkflowReference,
   TaskArtifactChange,
   TaskChangeSet,
   TaskEventStatusChange,
@@ -19,6 +20,7 @@ export type CommittedWorkspaceState = {
 
 export type TaskStatusMetadata = {
   workflowId: string;
+  workflow: WorkflowReference;
   autopilotSettings: AutopilotSettings;
   workspace: CommittedWorkspaceState;
 };
@@ -41,6 +43,7 @@ export const collectTaskStatusChanges = <A, E, R>(
 export const recordCommittedTaskStatusChange = ({
   task,
   previousStatus,
+  workflow,
   cause,
   ...metadata
 }: TaskStatusMetadata & {
@@ -53,11 +56,11 @@ export const recordCommittedTaskStatusChange = ({
     if (collection && previousStatus !== task.status) {
       const change: TaskEventStatusChange = {
         previousStatus,
-        task: { id: task.id, title: task.title, status: task.status },
+        task: { id: task.id, title: task.title, status: task.status, workflow },
       };
       if (cause?.sourceRole !== undefined) change.sourceRole = cause.sourceRole;
       collection.changes.push(change);
-      collection.committed(change, cause?.signal, metadata);
+      collection.committed(change, cause?.signal, { ...metadata, workflow });
     }
     return task;
   });

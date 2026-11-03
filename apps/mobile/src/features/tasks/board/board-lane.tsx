@@ -1,4 +1,5 @@
-import type { KanbanColumnId } from "@openducktor/workflows";
+import type { WorkflowTone } from "@openducktor/contracts";
+import { laneColors } from "./lane-colors";
 import { memo, type ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -14,12 +15,12 @@ const laneCountLabel = (count: number): string => (count === 1 ? "1 task" : `${c
 
 /** The task count of a lane in a capsule of the lane colors, as the desktop column headers. */
 export const LaneCount = memo(function LaneCount({
-  columnId,
+  tone,
   count,
   long = false,
   maxFontSizeMultiplier,
 }: {
-  columnId: KanbanColumnId;
+  tone: WorkflowTone;
   count: number;
   /** "3 tasks" instead of "3", for a column header with room for it. */
   long?: boolean;
@@ -27,7 +28,7 @@ export const LaneCount = memo(function LaneCount({
   maxFontSizeMultiplier?: number;
 }): ReactElement {
   const theme = useAppTheme();
-  const lane = theme.lanes[columnId];
+  const lane = laneColors(theme, tone);
   return (
     <View style={[styles.count, { borderColor: lane.border }]}>
       <Text
@@ -45,15 +46,15 @@ export const LaneCount = memo(function LaneCount({
 
 /** A lane count for a first load: the capsule of the lane colors with a bar in place of "3 tasks". */
 export function LaneCountPlaceholder({
-  columnId,
+  tone,
   maxFontSizeMultiplier,
 }: {
-  columnId: KanbanColumnId;
+  tone: WorkflowTone;
   maxFontSizeMultiplier?: number;
 }): ReactElement {
   const theme = useAppTheme();
   return (
-    <View style={[styles.count, { borderColor: theme.lanes[columnId].border }]}>
+    <View style={[styles.count, { borderColor: laneColors(theme, tone).border }]}>
       <TextPlaceholder variant="caption2" width={38} maxFontScale={maxFontSizeMultiplier} />
     </View>
   );
@@ -68,12 +69,12 @@ export const LaneEmpty = memo(function LaneEmpty({
   column,
   onNewTask,
 }: {
-  column: Pick<BoardColumn, "id" | "title" | "emptyMessage">;
+  column: Pick<BoardColumn, "id" | "title" | "emptyMessage" | "tone" | "acceptsNewTask">;
   /** Shows New Task in Backlog. Null when the workspace cannot create tasks now. */
   onNewTask: (() => void) | null;
 }): ReactElement {
   const theme = useAppTheme();
-  const lane = theme.lanes[column.id];
+  const lane = laneColors(theme, column.tone);
   return (
     <View style={[styles.empty, { borderColor: lane.border }]}>
       <View style={styles.emptyIcon}>
@@ -87,7 +88,7 @@ export const LaneEmpty = memo(function LaneEmpty({
           {column.emptyMessage}
         </Text>
       ) : null}
-      {column.id === "open" && onNewTask ? (
+      {column.acceptsNewTask && onNewTask ? (
         <View style={styles.action}>
           <Button label="New Task" icon="plus" size="sm" variant="outline" onPress={onNewTask} />
         </View>

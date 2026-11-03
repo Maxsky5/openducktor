@@ -1,4 +1,3 @@
-import { WORKTREE_AGENT_ROLES } from "@openducktor/workflows";
 import { useMemo } from "react";
 import type { DiffDataState } from "@openducktor/frontend-core/git/contracts";
 import type { GitPanelReads } from "@openducktor/frontend-core/git/reads/use-git-panel-reads";
@@ -197,7 +196,8 @@ function taskGitContext(
     sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
   });
   const usesTaskWorktree =
-    (selectedView.role !== null && WORKTREE_AGENT_ROLES.includes(selectedView.role)) ||
+    (selectedView.role !== null &&
+      selectedView.selectedTask?.taskWorkflow.usesWorktree(selectedView.role)) ||
     sessionWorktreePath != null;
   const gitPanelContextMode: TaskGitContextMode = usesTaskWorktree ? "worktree" : "repository";
   const repositoryBranchIdentityKey =
@@ -209,8 +209,10 @@ function taskGitContext(
     viewSelectedTaskId: selectedView.selectedTask?.id ?? null,
   });
   const hasSelectedTask = selectedTaskId != null;
-  const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask;
-  const hasGitContext = buildToolsBootstrap.repoPath != null && hasSelectedTask;
+  const hasWorkflowContext = selectedView.selectedTask !== null || sessionWorktreePath !== null;
+  const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask && hasWorkflowContext;
+  const hasGitContext =
+    buildToolsBootstrap.repoPath != null && hasSelectedTask && hasWorkflowContext;
   const repoPath = hasGitContext ? buildToolsBootstrap.repoPath : null;
   const taskId = hasGitContext ? selectedTaskId : null;
   const taskWorktreeVersion = selectedView.selectedTask?.updatedAt ?? null;

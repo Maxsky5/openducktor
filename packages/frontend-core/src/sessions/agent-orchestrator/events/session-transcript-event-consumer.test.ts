@@ -1,3 +1,5 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
 import { describe, expect, test } from "bun:test";
 import { agentSessionIdentityKey } from "../../../lib/agent-session-identity";
 import type { AgentSessionLiveEnvelope, AgentSessionTranscriptEvent } from "@openducktor/contracts";
@@ -503,6 +505,8 @@ describe("agent session transcript event consumer", () => {
             repoPath: liveRef.repoPath,
             identity: liveRef,
             loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+            loadWorkflowRole: async (_taskId, roleId) =>
+              builtinTaskWorkflow.definition.roles.find(({ id }) => id === roleId)!,
             adapter: {
               loadSessionHistory: async () => [
                 {

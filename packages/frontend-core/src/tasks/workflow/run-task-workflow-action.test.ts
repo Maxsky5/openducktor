@@ -1,204 +1,124 @@
 import { describe, expect, mock, test } from "bun:test";
+import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
+import { editBuiltinTaskWorkflow } from "../../test-support/workflow-fixtures";
 import { runTaskWorkflowAction } from "./run-task-workflow-action";
 
-type WorkflowCallbacks = Parameters<typeof runTaskWorkflowAction>[2];
-
-const makeWorkflowCallbacks = (overrides: Partial<WorkflowCallbacks> = {}): WorkflowCallbacks => ({
-  onPlan: undefined,
-  onQaStart: undefined,
-  onQaOpen: undefined,
-  onBuild: undefined,
-  onOpenSession: undefined,
-  onDelegate: undefined,
-  onHumanApprove: undefined,
-  onHumanRequestChanges: undefined,
-  onResetImplementation: undefined,
-  ...overrides,
-});
 describe("runTaskWorkflowAction", () => {
-  test("routes workflow actions to matching callbacks", () => {
-    const onPlan = mock(() => {});
-    const onQaStart = mock(() => {});
-    const onQaOpen = mock(() => {});
-    const onBuild = mock(() => {});
-    const onOpenSession = mock(() => {});
-    const onDelegate = mock(() => {});
+  test("starts the task-declared launch", () => {
+    const task = createTaskCardFixture({
+      id: "T-1",
+      availableActions: ["set_spec"],
+      issueType: "feature",
+    });
+    const onLaunch = mock(() => {});
+    runTaskWorkflowAction("set_spec", task.id, { onLaunch }, { task });
+    expect(onLaunch).toHaveBeenCalledWith(task.id, "spec_initial");
+  });
+
+  test("routes an unfamiliar effect action to the existing approval flow", () => {
+    const taskWorkflow = editBuiltinTaskWorkflow(({ definition }) => {
+      const action = definition.actions.find(({ id }) => id === "human_approve")!;
+      definition.actions.push({ ...action, id: "accept_review" });
+    });
+    const task = {
+      ...createTaskCardFixture({
+        id: "T-1",
+        status: "human_review",
+        availableActions: ["accept_review"],
+      }),
+      taskWorkflow,
+    };
     const onHumanApprove = mock(() => {});
+    runTaskWorkflowAction("accept_review", task.id, { onHumanApprove }, { task });
+    expect(onHumanApprove).toHaveBeenCalledWith(task.id);
+  });
+
+  test("keeps all Request Changes candidates for selection after commit", () => {
+    const launchActionIds = ["build_after_human_request_changes", "after_committed_changes"];
+    const taskWorkflow = editBuiltinTaskWorkflow(({ definition }) => {
+      const action = definition.actions.find(({ id }) => id === "human_request_changes")!;
+      if (action.kind !== "event") throw new Error("Expected a Request Changes event.");
+      action.launchActionIds = [...launchActionIds];
+      const step = definition.steps.find(
+        (step) => step.kind === "agent" && step.roleId === "build",
+      )!;
+      if (step.kind !== "agent") throw new Error("Expected Builder step.");
+      step.launchActions.push({
+        ...step.launchActions[0]!,
+        id: "after_committed_changes",
+        selectWhen: { stateIn: ["in_progress"] },
+      });
+    });
+    const task = {
+      ...createTaskCardFixture({
+        id: "T-1",
+        status: "human_review",
+        availableActions: ["human_request_changes"],
+      }),
+      taskWorkflow,
+    };
     const onHumanRequestChanges = mock(() => {});
-    const onResetImplementation = mock(() => {});
-    const onResetTask = mock(() => {});
-    const onCloseTask = mock(() => {});
-
-    runTaskWorkflowAction("set_spec", "T-1", {
-      onPlan,
-      onQaStart,
-      onQaOpen,
-      onBuild,
-      onOpenSession,
-      onDelegate,
-      onHumanApprove,
-      onHumanRequestChanges,
-      onResetImplementation,
+    runTaskWorkflowAction("human_request_changes", task.id, { onHumanRequestChanges }, { task });
+    expect(onHumanRequestChanges).toHaveBeenCalledWith(task.id, {
+      workflow: task.workflow,
+      launchActionIds,
     });
-    runTaskWorkflowAction("open_builder", "T-1", {
-      onPlan,
-      onQaStart,
-      onQaOpen,
-      onBuild,
-      onOpenSession,
-      onDelegate,
-      onHumanApprove,
-      onHumanRequestChanges,
-      onResetImplementation,
-    });
-
-    expect(onPlan).toHaveBeenCalledWith("T-1", "set_spec");
-    expect(onOpenSession).toHaveBeenCalledWith("T-1", "build", undefined);
-    expect(onBuild).not.toHaveBeenCalled();
-
-    runTaskWorkflowAction("open_spec", "T-1", {
-      onPlan,
-      onQaStart,
-      onQaOpen,
-      onBuild,
-      onOpenSession,
-      onDelegate,
-      onHumanApprove,
-      onHumanRequestChanges,
-      onResetImplementation,
-    });
-    runTaskWorkflowAction("open_planner", "T-1", {
-      onPlan,
-      onQaStart,
-      onQaOpen,
-      onBuild,
-      onOpenSession,
-      onDelegate,
-      onHumanApprove,
-      onHumanRequestChanges,
-      onResetImplementation,
-    });
-    expect(onOpenSession).toHaveBeenCalledWith("T-1", "spec", undefined);
-    expect(onOpenSession).toHaveBeenCalledWith("T-1", "planner", undefined);
-
-    runTaskWorkflowAction("set_plan", null, {
-      onPlan,
-      onQaStart,
-      onQaOpen,
-      onBuild,
-      onOpenSession,
-      onDelegate,
-      onHumanApprove,
-      onHumanRequestChanges,
-      onResetImplementation,
-    });
-    expect(onPlan).toHaveBeenCalledTimes(1);
-
-    runTaskWorkflowAction("qa_start", "T-1", {
-      onPlan,
-      onQaStart,
-      onQaOpen,
-      onBuild,
-      onOpenSession,
-      onDelegate,
-      onHumanApprove,
-      onHumanRequestChanges,
-      onResetImplementation,
-    });
-    expect(onQaStart).toHaveBeenCalledWith("T-1");
-
-    runTaskWorkflowAction("open_qa", "T-1", {
-      onPlan,
-      onQaStart,
-      onQaOpen,
-      onBuild,
-      onOpenSession,
-      onDelegate,
-      onHumanApprove,
-      onHumanRequestChanges,
-      onResetImplementation,
-    });
-    expect(onOpenSession).toHaveBeenCalledWith("T-1", "qa", undefined);
-    expect(onQaOpen).not.toHaveBeenCalled();
-
-    runTaskWorkflowAction("reset_implementation", "T-1", {
-      onPlan,
-      onQaStart,
-      onQaOpen,
-      onBuild,
-      onOpenSession,
-      onDelegate,
-      onHumanApprove,
-      onHumanRequestChanges,
-      onResetImplementation,
-    });
-    expect(onResetImplementation).toHaveBeenCalledWith("T-1", {
-      closeDetailsAfterReset: true,
-    });
-
-    runTaskWorkflowAction("reset_task", "T-1", makeWorkflowCallbacks({ onResetTask }));
-    runTaskWorkflowAction("close_task", "T-1", makeWorkflowCallbacks({ onCloseTask }));
-
-    expect(onResetTask).toHaveBeenCalledWith("T-1");
-    expect(onCloseTask).toHaveBeenCalledWith("T-1");
-  });
-  test("falls back to opening QA when no shared session opener exists", () => {
-    const onQaOpen = mock(() => {});
-    const onBuild = mock(() => {});
-
-    runTaskWorkflowAction("open_qa", "T-1", makeWorkflowCallbacks({ onQaOpen, onBuild }));
-
-    expect(onQaOpen).toHaveBeenCalledWith("T-1");
-    expect(onBuild).not.toHaveBeenCalled();
   });
 
-  test("falls back to starting builder when no shared session opener exists", () => {
-    const onQaOpen = mock(() => {});
-    const onBuild = mock(() => {});
-
-    runTaskWorkflowAction("open_builder", "T-1", makeWorkflowCallbacks({ onQaOpen, onBuild }));
-
-    expect(onBuild).toHaveBeenCalledWith("T-1");
-    expect(onQaOpen).not.toHaveBeenCalled();
+  test("dispatches a declared plain event without treating its ID as a built-in command", () => {
+    const taskWorkflow = editBuiltinTaskWorkflow(({ definition }) => {
+      definition.events.push({
+        id: "inspection.requested",
+        from: ["open"],
+        guards: [],
+        outcomes: [{ to: "ai_review", when: true }],
+      });
+      definition.actions.push({
+        id: "send_for_inspection",
+        label: "Inspect",
+        kind: "event",
+        availableWhen: true,
+        eventId: "inspection.requested",
+      });
+    });
+    const task = {
+      ...createTaskCardFixture({ id: "T-1", availableActions: ["send_for_inspection"] }),
+      taskWorkflow,
+    };
+    const onApplyEvent = mock(() => {});
+    runTaskWorkflowAction("send_for_inspection", task.id, { onApplyEvent }, { task });
+    expect(onApplyEvent).toHaveBeenCalledWith(task.id, "inspection.requested", []);
   });
 
-  test("forwards role-specific session options to onOpenSession", () => {
+  test("opens the requested historical session even when its role cannot start", () => {
+    const task = createTaskCardFixture({ id: "T-1", status: "closed" });
+    const session = {
+      externalSessionId: "build-session",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+    };
     const onOpenSession = mock(() => {});
-
     runTaskWorkflowAction(
       "open_builder",
-      "T-1",
-      {
-        onPlan: undefined,
-        onQaStart: undefined,
-        onQaOpen: undefined,
-        onBuild: undefined,
-        onOpenSession,
-        onDelegate: undefined,
-        onHumanApprove: undefined,
-        onHumanRequestChanges: undefined,
-        onResetImplementation: undefined,
-      },
-      {
-        resolveSessionOptions: (role) =>
-          role === "build"
-            ? {
-                session: {
-                  externalSessionId: "session-build",
-                  runtimeKind: "opencode",
-                  workingDirectory: "/repo/worktrees/build",
-                },
-              }
-            : undefined,
-      },
+      task.id,
+      { onOpenSession },
+      { task, resolveSessionOptions: (role) => (role === "build" ? { session } : undefined) },
     );
+    expect(onOpenSession).toHaveBeenCalledWith(task.id, "build", { session });
+  });
 
-    expect(onOpenSession).toHaveBeenCalledWith("T-1", "build", {
-      session: {
-        externalSessionId: "session-build",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/worktrees/build",
-      },
-    });
+  test("rejects missing support, unavailable actions, and a different task before dispatch", () => {
+    const task = createTaskCardFixture({ id: "T-1", availableActions: ["close_task"] });
+    expect(() => runTaskWorkflowAction("close_task", task.id, {}, { task })).toThrow(
+      "host capability",
+    );
+    const onLaunch = mock(() => {});
+    expect(() => runTaskWorkflowAction("set_spec", task.id, { onLaunch }, { task })).toThrow(
+      "unavailable",
+    );
+    expect(() => runTaskWorkflowAction("close_task", "T-2", {}, { task })).toThrow(
+      "does not match",
+    );
+    expect(onLaunch).not.toHaveBeenCalled();
   });
 });

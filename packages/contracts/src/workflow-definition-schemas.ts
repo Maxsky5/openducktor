@@ -7,6 +7,13 @@ import {
   workflowNotificationKindSchema,
 } from "./notification-schemas";
 import {
+  workflowActionEmphasisSchema,
+  workflowActionSurfaceSchema,
+  workflowIconSchema,
+  workflowSessionActivitySchema,
+  workflowToneSchema,
+} from "./workflow-display-schemas";
+import {
   workflowArtifactIdSchema,
   workflowConditionSchema,
   workflowFactDefinitionSchema,
@@ -23,6 +30,13 @@ export const workflowRoleDefinitionSchema = z.strictObject({
   workspaceAccess: z.enum(["read", "write"]),
   location: z.enum(["repository", "task_worktree"]),
   runtimeScopes: z.array(runtimeSupportedScopeSchema),
+  /** The role name in settings. The default is the label. */
+  settingsLabel: z.string().optional(),
+  icon: workflowIconSchema.optional(),
+  /** The Agent Studio side panel that opens first. The default is the document panel. */
+  defaultPanel: z.enum(["document", "diffs"]).optional(),
+  /** The document that the side panel shows first. The default is the first output of the step. */
+  defaultArtifact: workflowArtifactIdSchema.optional(),
 });
 export type WorkflowRoleDefinition = z.infer<typeof workflowRoleDefinitionSchema>;
 
@@ -46,6 +60,8 @@ export const workflowArtifactDefinitionSchema = z.discriminatedUnion("kind", [
     kind: z.literal("document"),
     /** The event that a save sends. Without it, a save changes only the document. */
     saveEventId: workflowIdSchema.optional(),
+    /** The editor text before the user writes. */
+    placeholder: z.string().optional(),
   }),
   z.strictObject({
     id: workflowArtifactIdSchema,
@@ -82,9 +98,15 @@ export const workflowStateDefinitionSchema = z.strictObject({
   /** A compact label for narrow lists. The default is the label. */
   shortLabel: z.string().optional(),
   terminal: z.boolean().optional(),
+  /** The column and badge tone. The default is neutral. */
+  tone: workflowToneSchema.optional(),
   notification: workflowStateNotificationSchema.optional(),
   /** The default Agent Studio role. Without it, the first required and available step decides. */
   studioRole: workflowIdSchema.optional(),
+  /** The roles whose latest session Agent Studio opens first. The default is the Studio role. */
+  historyRoles: z.array(workflowIdSchema).optional(),
+  /** Open the latest session of any role when no history role has one. The default is terminal. */
+  historyLatest: z.boolean().optional(),
 });
 export type WorkflowStateDefinition = z.infer<typeof workflowStateDefinitionSchema>;
 
@@ -108,6 +130,11 @@ export const workflowLaunchActionDefinitionSchema = z.strictObject({
   targetBranch: z.boolean().optional(),
   /** An automatic continuation needs an existing task worktree. */
   requiresWorktree: z.boolean().optional(),
+  /** An extra control in Agent Studio or in the Git conflict panel. Without it, only the step shows it. */
+  surface: z.enum(["studio", "git_conflict"]).optional(),
+  /** When the extra control shows. The default is always. */
+  showWhen: workflowConditionSchema.optional(),
+  description: z.string().optional(),
 });
 export type WorkflowLaunchActionDefinition = z.infer<typeof workflowLaunchActionDefinitionSchema>;
 
@@ -123,8 +150,21 @@ const workflowStepDefinitionFields = {
 };
 
 /** The launch actions are the candidates for the default continuation of the step. */
+/**
+ * A progress display rule of an agent step. The first matching rule decides each display property.
+ * A rule matches when its condition matches and the live session of the step role is in `session`.
+ */
+export const workflowStepDisplayRuleSchema = z.strictObject({
+  when: workflowConditionSchema,
+  session: z.array(workflowSessionActivitySchema).optional(),
+  completion: z.enum(["not_started", "in_progress", "done", "rejected"]).optional(),
+  attention: z.enum(["none", "needs_input"]).optional(),
+});
+export type WorkflowStepDisplayRule = z.infer<typeof workflowStepDisplayRuleSchema>;
+
 export const workflowAgentStepDefinitionSchema = z.strictObject({
   ...workflowStepDefinitionFields,
+  displayRules: z.array(workflowStepDisplayRuleSchema).optional(),
   kind: z.literal("agent"),
   roleId: workflowIdSchema,
   launchActions: z.array(workflowLaunchActionDefinitionSchema).min(1),
@@ -158,6 +198,13 @@ const workflowActionDefinitionFields = {
   labels: z.array(workflowLabelVariantSchema).optional(),
   stepId: workflowIdSchema.optional(),
   availableWhen: workflowConditionSchema,
+  /** The surfaces that show the action. The default is every surface. */
+  surfaces: z.array(workflowActionSurfaceSchema).optional(),
+  /** The default is neutral. */
+  emphasis: workflowActionEmphasisSchema.optional(),
+  icon: workflowIconSchema.optional(),
+  /** The base label in Agent Studio. Label variants still apply. */
+  studioLabel: z.string().optional(),
 };
 
 /**
@@ -182,6 +229,8 @@ export const workflowActionDefinitionSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     ...workflowActionDefinitionFields,
     kind: z.literal("view"),
+    /** The destination of a view action without a step. The default is the task details. */
+    target: z.enum(["task_details", "worktree_cleanup"]).optional(),
   }),
 ]);
 export type WorkflowActionDefinition = z.infer<typeof workflowActionDefinitionSchema>;
@@ -257,6 +306,28 @@ export const workflowAutomationDefinitionSchema = z.strictObject({
 });
 export type WorkflowAutomationDefinition = z.infer<typeof workflowAutomationDefinitionSchema>;
 
+/** A task issue type and its display. The task workflow derives the `issueType` fact from them. */
+export const workflowIssueTypeDefinitionSchema = z.strictObject({
+  id: workflowIdSchema,
+  label: z.string(),
+  description: z.string().optional(),
+  /** Writing advice in the task form. */
+  guidance: z.string().optional(),
+  icon: workflowIconSchema.optional(),
+});
+export type WorkflowIssueTypeDefinition = z.infer<typeof workflowIssueTypeDefinitionSchema>;
+
+/**
+ * The display order of launch candidates. The first rule whose condition and pull request
+ * presence match orders the candidates; other candidates follow in declaration order.
+ */
+export const workflowLaunchOrderRuleSchema = z.strictObject({
+  when: workflowConditionSchema,
+  pullRequest: z.boolean().optional(),
+  order: z.array(workflowIdSchema),
+});
+export type WorkflowLaunchOrderRule = z.infer<typeof workflowLaunchOrderRuleSchema>;
+
 /** The first rule whose condition matches gives the action list. */
 export const workflowActionRuleSchema = z.strictObject({
   when: workflowConditionSchema,
@@ -273,7 +344,11 @@ export const workflowDefinitionSchema = z.strictObject({
   id: workflowIdSchema,
   revision: z.number().int().positive(),
   label: z.string(),
-  facts: z.array(workflowFactDefinitionSchema),
+  /** Facts of a generic workflow. A task workflow declares `issueTypes` instead. */
+  facts: z.array(workflowFactDefinitionSchema).default([]),
+  issueTypes: z.array(workflowIssueTypeDefinitionSchema).default([]),
+  /** The issue type that a new task form or an import proposes. The default is the first one. */
+  defaultIssueType: workflowIdSchema.optional(),
   roles: z.array(workflowRoleDefinitionSchema),
   artifacts: z.array(workflowArtifactDefinitionSchema),
   states: z.array(workflowStateDefinitionSchema),
@@ -285,6 +360,7 @@ export const workflowDefinitionSchema = z.strictObject({
   automations: z.array(workflowAutomationDefinitionSchema),
   actionOrder: z.array(workflowActionRuleSchema),
   actionPriority: z.array(workflowActionRuleSchema),
+  launchOrder: z.array(workflowLaunchOrderRuleSchema).default([]),
 });
 export type WorkflowDefinition = z.infer<typeof workflowDefinitionSchema>;
 

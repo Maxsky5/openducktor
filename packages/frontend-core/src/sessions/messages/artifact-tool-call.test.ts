@@ -1,3 +1,5 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
 import { describe, expect, test } from "bun:test";
 import type { McpTaskArtifact } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
@@ -29,6 +31,7 @@ describe("readArtifactToolCall", () => {
     expect(
       readArtifactToolCall(
         call({ status: "running", input: { code: "qaReport", verdict: "approved" } }),
+        builtinTaskWorkflow,
       ),
     ).toEqual({ heading: "review_passed", title: "Approve QA", code: "qaReport", saved: null });
   });
@@ -39,7 +42,7 @@ describe("readArtifactToolCall", () => {
       output: JSON.stringify({ artifact: qaReport }),
     });
 
-    expect(readArtifactToolCall(meta)).toEqual({
+    expect(readArtifactToolCall(meta, builtinTaskWorkflow)).toEqual({
       heading: "review_failed",
       title: "Reject QA",
       code: "qaReport",
@@ -52,7 +55,7 @@ describe("readArtifactToolCall", () => {
       "Set Artifact · Login",
     );
     expect(readArtifactToolCall(call({ output: "not json" }))).toEqual({
-      heading: "free",
+      heading: "artifact",
       title: "Set Artifact",
       code: null,
       saved: null,

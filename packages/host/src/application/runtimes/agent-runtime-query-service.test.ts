@@ -13,7 +13,7 @@ import {
   type RuntimeKind,
   type AgentModelCatalog,
 } from "@openducktor/contracts";
-import { emptyArtifactSummary } from "@openducktor/workflows";
+import { emptyArtifactSummary } from "@openducktor/workflows/test-support";
 import { Effect } from "effect";
 import { once } from "node:events";
 import { createServer } from "node:http";

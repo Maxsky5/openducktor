@@ -24,8 +24,8 @@ import type { AgentSessionReadModelLoadState } from "../../types/agent-session-r
 import type { AgentSessionTransientFault } from "../../types/agent-session-transient-fault";
 import type { RepoSettingsInput } from "../../types/session-slices";
 import type {
-  BuiltinRoleId as AgentRole,
-  BuiltinTaskCard as TaskCard,
+  WorkflowRoleId as AgentRole,
+  ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 
 export type SelectedSessionViewProjection = {
@@ -44,7 +44,7 @@ export const deriveSelectedSessionRuntimeTarget = ({
 }: {
   selectedSessionIdentity: AgentSessionIdentity | null;
   selectedTask: TaskCard | null;
-  role: AgentRole;
+  role: AgentRole | null;
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
 }): RuntimeReadinessTarget => {
@@ -52,7 +52,7 @@ export const deriveSelectedSessionRuntimeTarget = ({
     return runtimeReadinessTargetForRuntime(selectedSessionIdentity.runtimeKind);
   }
 
-  if (selectedTask) {
+  if (selectedTask && role) {
     return isLoadingRepoSettings
       ? resolvingRuntimeReadinessTarget
       : runtimeReadinessTargetForRuntime(resolveConfiguredAgentRuntimeKind(repoSettings, role));

@@ -5,7 +5,7 @@ import { useClientConnection } from "../../connection/client-connection-react";
 import { summarizeTaskLoadError } from "../task-load-errors";
 import { repoTaskDataQueryOptions, taskQueryKeys, type RepoTaskData } from "../../queries/tasks";
 import { settingsSnapshotQueryOptions } from "../../queries/workspace";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 type UseTaskQueryReadModelArgs = {
   activeWorkspaceId: string | null;

@@ -7,7 +7,7 @@ import { useTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflo
 import { unfilteredRepoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 import { TaskDetailsSheet } from "./task-details-sheet";
 import type { TaskDetailsSheetProps } from "./task-details-sheet-types";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 export type TaskDetailsSheetControllerHandle = {
   openTask: (taskId: string) => void;

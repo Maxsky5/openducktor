@@ -1,3 +1,5 @@
+import { workflowQueryKeys } from "@openducktor/frontend-core/queries/workflows";
+import { builtinCompiledCatalogFixture } from "@openducktor/frontend-core/test-support/workflow-fixtures";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
@@ -159,6 +161,7 @@ const providerSetupWrapper = (client: Partial<HostClient> = {}) => {
   const connection = createTestClientConnection({
     client: { ...localOnlyProviderSetupClient(), ...client },
   });
+  connection.queryClient.setQueryData(workflowQueryKeys.catalog, builtinCompiledCatalogFixture);
   return ({ children }: PropsWithChildren): ReactElement => (
     <QueryProvider connection={connection}>{children}</QueryProvider>
   );

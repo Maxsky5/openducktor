@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stack, useRouter } from "expo-router";
 import { type ReactElement, useMemo } from "react";
 import { ScrollView } from "react-native";
-import { qaVerdictPresentation } from "@/features/tasks/presentation/task-document-paint";
+import { workflowArtifactVerdict, type ResolvedTaskCard } from "@openducktor/workflows";
 import type { WorkOwner } from "@/features/work-owner/work-owner-context";
 import { WorkHeaderTitle } from "@/features/work-owner/work-header-title";
 import { WorkOwnerScreen } from "@/features/work-owner/work-owner-screen";
@@ -74,8 +74,11 @@ function TaskArtifactList({ owner, taskId }: { owner: WorkOwner; taskId: string 
     ),
   );
   const groups = useMemo(
-    () => (collection.data ? groupTaskArtifacts(collection.data.artifacts) : null),
-    [collection.data],
+    () =>
+      collection.data
+        ? groupTaskArtifacts(collection.data.artifacts, owner.task!.taskWorkflow)
+        : null,
+    [collection.data, owner.task],
   );
   if (!groups) {
     return collection.error ? (
@@ -111,6 +114,7 @@ function TaskArtifactList({ owner, taskId }: { owner: WorkOwner; taskId: string 
             <ArtifactRow
               key={artifact.artifactId}
               artifact={artifact}
+              task={owner.task!}
               href={routes.documents(workspaceId, taskId, workflowDocumentKey(artifact.code))}
             />
           ))}
@@ -134,7 +138,9 @@ function TaskArtifactList({ owner, taskId }: { owner: WorkOwner; taskId: string 
 function ArtifactRow({
   artifact,
   href,
+  task,
 }: {
+  task?: ResolvedTaskCard;
   artifact: TaskArtifact;
   href: ReturnType<typeof routes.documents> | ReturnType<typeof routes.artifact>;
 }): ReactElement {
@@ -142,15 +148,19 @@ function ArtifactRow({
   const now = useMinuteClock();
   const detail = artifactDetail(artifact, now);
   const verdict =
-    artifact.classification === "workflow" && artifact.verdict
-      ? qaVerdictPresentation(artifact.verdict)
+    artifact.classification === "workflow" && artifact.verdict && task
+      ? workflowArtifactVerdict(artifact.code, artifact.verdict, task.taskWorkflow)
       : null;
   return (
     <ListRow
       title={artifact.name}
       subtitle={detail}
       icon={artifactIcon(artifact.mediaType)}
-      trailing={verdict ? <Badge label={verdict.label} tone={verdict.tone} /> : undefined}
+      trailing={
+        verdict ? (
+          <Badge label={verdict.label} tone={verdict.passes ? "success" : "rejected"} />
+        ) : undefined
+      }
       accessory="chevron"
       accessibilityLabel={[artifact.name, detail, verdict?.label].filter(Boolean).join(", ")}
       accessibilityHint="Opens the artifact."

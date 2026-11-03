@@ -1,5 +1,6 @@
+import type { WorkflowBoardDefinition } from "@openducktor/contracts";
 import {
-  type BuiltinTaskCard as TaskCard,
+  type ResolvedTaskCard as TaskCard,
   type KanbanColumn,
   mapToKanbanColumns,
 } from "@openducktor/workflows";
@@ -17,9 +18,10 @@ export type KanbanBoardColumns = {
 export const buildKanbanBoardColumns = (
   tasks: TaskCard[],
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>,
+  board: WorkflowBoardDefinition | undefined,
 ): KanbanBoardColumns => {
   const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
-  const columns = mapToKanbanColumns(tasks).map((column) => ({
+  const columns = (board ? mapToKanbanColumns(tasks, board) : []).map((column) => ({
     ...column,
     tasks: sortTasksByActivityState(column.tasks, taskActivityStateByTaskId),
   }));
@@ -30,8 +32,9 @@ export const buildKanbanBoardColumns = (
 export const useKanbanBoardColumns = (
   tasks: TaskCard[],
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>,
+  board: WorkflowBoardDefinition | undefined,
 ): KanbanBoardColumns =>
   useMemo(
-    () => buildKanbanBoardColumns(tasks, taskSessionsByTaskId),
-    [tasks, taskSessionsByTaskId],
+    () => buildKanbanBoardColumns(tasks, taskSessionsByTaskId, board),
+    [tasks, taskSessionsByTaskId, board],
   );

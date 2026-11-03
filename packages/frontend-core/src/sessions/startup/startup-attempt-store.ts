@@ -33,6 +33,7 @@ export type StartupAttempt = {
   id: string;
   origin: { workspaceId: string; repoPath: string; scope: StartupScope };
   label: string;
+  roleLabel?: string;
   status: StartupAttemptStatus;
   operations: readonly StartupOperationSnapshot[];
   ownership: StartupOwnership;
@@ -260,6 +261,7 @@ export const createStartupAttemptStore = (
     begin(input: {
       origin: StartupAttempt["origin"];
       label: string;
+      roleLabel?: string;
       presentation: StartupPresentation;
       instructionRequired?: boolean;
     }): string {
@@ -270,6 +272,7 @@ export const createStartupAttemptStore = (
           id,
           origin: input.origin,
           label: input.label,
+          ...(input.roleLabel && { roleLabel: input.roleLabel }),
           presentation: input.presentation,
           status: { phase: "submitting", confirmation: "current" },
           operations: [],

@@ -1,7 +1,6 @@
-import {
-  type BuiltinIssueTypeId as IssueType,
-  type BuiltinTaskCard as TaskCard,
-} from "@openducktor/workflows";
+import { taskReviewRejection } from "@openducktor/workflows";
+import type { WorkflowIssueTypeDefinition } from "@openducktor/contracts";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { PullRequest, SourceIssueReference } from "@openducktor/contracts";
 import { sourceIssueLabel } from "@openducktor/frontend-core/git/git-provider-label";
 import { memo, type ReactElement } from "react";
@@ -20,7 +19,7 @@ export const IssueTypeBadge = memo(function IssueTypeBadge({
   issueType,
   size = "md",
 }: {
-  issueType: IssueType;
+  issueType: WorkflowIssueTypeDefinition;
   size?: ChipSize;
 }): ReactElement {
   const paint = issueTypePaint(issueType);
@@ -28,7 +27,7 @@ export const IssueTypeBadge = memo(function IssueTypeBadge({
     <TaskChip
       label={paint.label}
       icon={paint.icon}
-      paint={issueTypeChipPaint(issueType)}
+      paint={issueTypeChipPaint(issueType.icon)}
       size={size}
       accessibilityLabel={`Issue type ${paint.label}`}
     />
@@ -110,16 +109,20 @@ export const SourceIssueBadge = memo(function SourceIssueBadge({
 
 /** The desktop QA Rejected badge: QA rejected the previous implementation. */
 export const QaRejectedBadge = memo(function QaRejectedBadge({
+  task,
   size = "md",
 }: {
   size?: ChipSize;
-}): ReactElement {
+  task: TaskCard;
+}): ReactElement | null {
+  const rejection = taskReviewRejection(task);
+  if (!rejection) return null;
   return (
     <TaskChip
-      label="QA Rejected"
+      label={rejection.label}
       paint="rose"
       size={size}
-      accessibilityLabel="QA rejected the previous implementation"
+      accessibilityLabel={rejection.description}
     />
   );
 });
@@ -184,7 +187,7 @@ export const TaskStatusChips = memo(function TaskStatusChips({
   mergedTarget,
   size = "md",
 }: {
-  task: Pick<TaskCard, "pullRequest" | "sourceIssue">;
+  task: TaskCard;
   qaRejected: boolean;
   /** The target that the task branch is merged into. */
   mergedTarget?: string | undefined;
@@ -195,7 +198,7 @@ export const TaskStatusChips = memo(function TaskStatusChips({
   }
   return (
     <View pointerEvents="box-none" style={styles.row}>
-      {qaRejected ? <QaRejectedBadge size={size} /> : null}
+      {qaRejected ? <QaRejectedBadge task={task} size={size} /> : null}
       {task.pullRequest ? <PullRequestBadge pullRequest={task.pullRequest} size={size} /> : null}
       {task.sourceIssue ? <SourceIssueBadge sourceIssue={task.sourceIssue} size={size} /> : null}
       {mergedTarget !== undefined ? <MergedBadge target={mergedTarget} size={size} /> : null}

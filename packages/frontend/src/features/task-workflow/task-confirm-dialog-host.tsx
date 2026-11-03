@@ -11,7 +11,7 @@ import { useTaskCloseConfirmDialog } from "@openducktor/frontend-core/tasks/deta
 import { useTaskConfirmDialog } from "@openducktor/frontend-core/tasks/details/use-task-confirm-dialog";
 import { useLastKnownTask } from "@openducktor/frontend-core/tasks/details/use-last-known-task";
 import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 type TaskConfirmWorkspaceIdentity = { workspaceId: string; repoPath: string };
 
@@ -25,6 +25,7 @@ export type TaskConfirmRequest = TaskConfirmWorkspaceIdentity & {
   action: TaskConfirmRequestAction;
   /** The element that had focus when the request started. The dialog has no trigger. */
   returnFocus: HTMLElement | null;
+  onCommitted?: (() => Promise<void>) | undefined;
 };
 
 /** The tasks and handlers of the active workspace. */
@@ -44,7 +45,11 @@ export type TaskConfirmDialogHostModel = TaskConfirmWorkspace & {
 };
 
 type TaskConfirmDialogHostState = {
-  onConfirmTaskAction: (taskId: string, action: TaskConfirmRequestAction) => void;
+  onConfirmTaskAction: (
+    taskId: string,
+    action: TaskConfirmRequestAction,
+    onCommitted?: () => Promise<void>,
+  ) => void;
   model: TaskConfirmDialogHostModel | null;
 };
 
@@ -66,7 +71,7 @@ export function useTaskConfirmDialogHost({
     request.repoPath === workspaceIdentity?.repoPath;
   if (request && !isWorkspaceCurrent) setRequest(null);
   const onConfirmTaskAction = useCallback(
-    (taskId: string, action: TaskConfirmRequestAction): void => {
+    (taskId: string, action: TaskConfirmRequestAction, onCommitted?: () => Promise<void>): void => {
       if (!workspaceIdentity) {
         toast.error("Unable to open the confirmation", {
           description: `No workspace is active for task ${taskId}. Select its workspace and try again.`,
@@ -83,6 +88,7 @@ export function useTaskConfirmDialogHost({
         action,
         returnFocus,
         ...workspaceIdentity,
+        onCommitted,
       });
     },
     [workspaceIdentity],
@@ -129,6 +135,7 @@ function RequestedTaskCloseDialog({
     <TaskCloseDialogForTask
       task={task}
       onCloseTask={onCloseTask}
+      onCommitted={request.onCommitted}
       onSucceeded={() => onSucceeded(request.taskId)}
       onCloseAutoFocus={restoreFocusOnClose(request, onClosed)}
     />
@@ -139,11 +146,13 @@ function TaskCloseDialogForTask({
   task,
   onCloseTask,
   onSucceeded,
+  onCommitted,
   onCloseAutoFocus,
 }: {
   task: TaskCard;
   onCloseTask: TaskWorkflowActions["onCloseTask"];
   onSucceeded: () => void;
+  onCommitted?: (() => Promise<void>) | undefined;
   onCloseAutoFocus: (event: Event) => void;
 }): ReactElement {
   const { dialog } = useTaskCloseConfirmDialog({
@@ -152,6 +161,7 @@ function TaskCloseDialogForTask({
     initiallyOpen: true,
     run: onCloseTask,
     onSucceeded,
+    onCommitted,
   });
   return <TaskCloseConfirmDialog {...dialog} onCloseAutoFocus={onCloseAutoFocus} />;
 }
@@ -174,6 +184,7 @@ function RequestedTaskConfirmDialog({
     initiallyOpen: true,
     run: request.action === "delete" ? onDelete : onResetTask,
     onSucceeded: () => onSucceeded(request.taskId),
+    onCommitted: request.onCommitted,
   });
   const dialogProps = {
     ...dialog,

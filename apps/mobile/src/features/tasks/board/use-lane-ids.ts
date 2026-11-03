@@ -8,10 +8,10 @@ import type { BoardColumn } from "./board-columns";
  * worklet to the UI thread again.
  */
 export const useLaneIds = (columns: readonly BoardColumn[]): readonly KanbanColumnId[] => {
-  const key = columns.map((column) => column.id).join(" ");
+  const key = JSON.stringify(columns.map((column) => column.id));
   return useMemo(
     // SAFETY: the key joins the lane ids of the columns.
-    () => (key === "" ? [] : (key.split(" ") as KanbanColumnId[])),
+    () => JSON.parse(key) as KanbanColumnId[],
     [key],
   );
 };

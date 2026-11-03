@@ -1,4 +1,5 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
+import { loadTaskWorkflowContext } from "../../queries/task-workflow-context";
 import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import { useCallback } from "react";
 import { resolveRequiredDefaultSessionSelection } from "../../sessions/session-start-selection";
@@ -61,9 +62,22 @@ const startDelegatedBuild = async (
   workspaceId: string,
   loadRepoRuntimeCatalog: RepoRuntimeCatalogLoader,
 ): Promise<void> => {
-  const repoConfig = await loadRepoConfigFromQuery(queryClient, workspaceId);
+  const [repoConfig, task] = await Promise.all([
+    loadRepoConfigFromQuery(queryClient, workspaceId),
+    loadTaskWorkflowContext(queryClient, { workspaceId, repoPath }, taskId),
+  ]);
+  const buildStart = task.taskWorkflow.effectEvent("build.start");
+  const roles = task.taskWorkflow.definition.roles.filter(
+    (role) => buildStart !== undefined && task.taskWorkflow.roleStartEvent(role.id) === buildStart,
+  );
+  if (roles.length !== 1)
+    throw new Error(
+      "This workflow does not declare one build-start role. Start a session from its workflow actions.",
+    );
+  const role = roles[0]!;
   const builderSelection = await resolveRequiredDefaultSessionSelection({
-    role: "build",
+    role: role.id,
+    roleLabel: role.label,
     repoSettings: toRepoSettingsInput(repoConfig),
     repoPath,
     loadRepoRuntimeCatalog: (runtimeRef) =>

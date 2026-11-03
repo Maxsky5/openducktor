@@ -5,7 +5,7 @@ import type { SessionHistoryFreshnessTracker } from "../../../queries/agent-sess
 import { normalizeWorkingDirectory } from "../../../lib/working-directory";
 import { markSessionHistoriesUnverified } from "../history/session-history-freshness";
 import { createSessionTurnState, type SessionTurnState } from "../support/session-turn-state";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 type UseOrchestratorSessionStateArgs = {
   workspaceRepoPath: string | null;

@@ -46,7 +46,10 @@ const roleIcon = (index: number) => {
 
 const noPullRequest: PullRequest | null = null;
 
-type BuiltinWorkflowFixture = Omit<AgentWorkflowStep, "id" | "hint" | "attentionVariant">;
+type BuiltinWorkflowFixture = Omit<
+  AgentWorkflowStep,
+  "id" | "hint" | "attentionVariant" | "role"
+> & { role: string };
 
 const presentWorkflowStep = (step: BuiltinWorkflowFixture): AgentWorkflowStep => ({
   ...step,
@@ -197,7 +200,7 @@ const renderWorkflow = (
       disabled: !model.agentStudioReady,
       onStepSelect: model.onWorkflowStepSelect,
       ...props,
-      steps: (props.steps ?? model.workflowSteps).map(presentWorkflowStep),
+      steps: props.steps ? props.steps.map(presentWorkflowStep) : model.workflowSteps,
     }),
   );
 };
@@ -667,6 +670,7 @@ describe("AgentStudioHeader", () => {
       id: "quick:build_rebase_conflict_resolution",
       role: "build" as const,
       launchActionId: "build_rebase_conflict_resolution" as const,
+      surface: "git_conflict" as const,
       label: "Resolve Git Conflict",
       description: "Ask Builder to resolve the active git conflict.",
       postStartAction: "send_message" as const,
@@ -895,6 +899,7 @@ describe("AgentStudioHeader", () => {
               id: "quick:build_rebase_conflict_resolution",
               role: "build" as const,
               launchActionId: "build_rebase_conflict_resolution" as const,
+              surface: "git_conflict" as const,
               label: "Resolve Git Conflict",
               description: "Ask Builder to resolve the active git conflict.",
               postStartAction: "send_message" as const,
@@ -906,6 +911,7 @@ describe("AgentStudioHeader", () => {
             id: "quick:build_rebase_conflict_resolution",
             role: "build" as const,
             launchActionId: "build_rebase_conflict_resolution" as const,
+            surface: "git_conflict" as const,
             label: "Resolve Git Conflict",
             description: "Ask Builder to resolve the active git conflict.",
             postStartAction: "send_message" as const,
@@ -934,6 +940,7 @@ describe("AgentStudioHeader", () => {
         null,
         createElement(QuickActionsMenu, {
           canOpenActionsMenu: true,
+          workflowSteps: buildModel().workflowSteps,
           isOpen: true,
           onOpenChange: () => {},
           agentStudioReady: true,
@@ -944,6 +951,7 @@ describe("AgentStudioHeader", () => {
               id: "quick:build_rebase_conflict_resolution",
               role: "build" as const,
               launchActionId: "build_rebase_conflict_resolution" as const,
+              surface: "git_conflict" as const,
               label: "Resolve Git Conflict",
               description: "Ask Builder to resolve the active git conflict.",
               postStartAction: "send_message" as const,
@@ -955,6 +963,7 @@ describe("AgentStudioHeader", () => {
             id: "quick:build_rebase_conflict_resolution",
             role: "build" as const,
             launchActionId: "build_rebase_conflict_resolution" as const,
+            surface: "git_conflict" as const,
             label: "Resolve Git Conflict",
             description: "Ask Builder to resolve the active git conflict.",
             postStartAction: "send_message" as const,

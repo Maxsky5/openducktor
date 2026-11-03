@@ -1,4 +1,4 @@
-import { builtinRoleId, type BuiltinRoleId } from "@openducktor/workflows";
+import type { WorkflowRoleId } from "@openducktor/workflows";
 import { getAgentSessionActivityStateFromSession } from "../lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "../lib/agent-session-identity";
 import type { AgentSessionCollection } from "./agent-session-collection";
@@ -15,7 +15,7 @@ export type AgentSessionSummary = AgentSessionIdentity &
   Pick<WorkflowAgentSessionState, "title" | "startedAt" | "statusUnavailableReason"> & {
     workspaceId: string;
     taskId: WorkflowAgentSessionState["sessionAssociation"]["taskId"];
-    role: BuiltinRoleId;
+    role: WorkflowRoleId;
     activityState: AgentSessionActivityState;
     pendingApprovalCount: number;
     pendingQuestionCount: number;
@@ -92,7 +92,7 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
     ...toSummary(session),
     workspaceId: session.sessionAssociation.workspaceId,
     taskId: session.sessionAssociation.taskId,
-    role: builtinRoleId(session.sessionAssociation.role),
+    role: session.sessionAssociation.role,
   };
 }
 

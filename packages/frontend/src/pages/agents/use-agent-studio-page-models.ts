@@ -1,7 +1,7 @@
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { roleFocusArtifact, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import { roleFocusArtifact, type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import { useCallback, useMemo, useState } from "react";
 import type { TaskExecutionDocumentPanelModel } from "@/components/features/agents/task-execution-document-panel";
 import type {
@@ -100,9 +100,12 @@ export function useAgentStudioPageModels({
 
   const identity = selectedSession.selectedSession.identity;
   const defaultArtifactSelection = useMemo<ArtifactSelection>(() => {
-    const code = roleFocusArtifact(selectedSession.role);
+    const code =
+      selectedSession.selectedTask && selectedSession.role
+        ? roleFocusArtifact(selectedSession.role, selectedSession.selectedTask.taskWorkflow)
+        : undefined;
     return code ? { kind: "workflow", code } : { kind: "collection" };
-  }, [selectedSession.role]);
+  }, [selectedSession.role, selectedSession.selectedTask]);
   const roleSessionKey = JSON.stringify([
     artifactScope?.workspaceId ?? null,
     artifactScope?.repoPath ?? null,

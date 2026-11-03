@@ -8,7 +8,10 @@ import { ClientConnectionProvider } from "../../connection/client-connection-rea
 import { runtimeCatalogQueryKeys } from "../../queries/runtime-catalog";
 import { createHookHarness } from "../../test-support/react-hook-harness";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
-import { createRuntimeCatalogFixture } from "../../test-support/shared-test-fixtures";
+import {
+  createRuntimeCatalogFixture,
+  createWireTaskCardFixture,
+} from "../../test-support/shared-test-fixtures";
 import { useDelegationOperations } from "./use-delegation-operations";
 
 const activeWorkspace = {
@@ -70,7 +73,9 @@ const createDelegationHarness = ({
   Parameters<typeof useDelegationOperations>[0],
   "refreshTaskData" | "loadRepoRuntimeCatalog"
 >) => {
-  const connection = createTestClientConnection({ client });
+  const connection = createTestClientConnection({
+    client: { tasksListAll: async () => [createWireTaskCardFixture({ id: "task-1" })], ...client },
+  });
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
     <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
   );

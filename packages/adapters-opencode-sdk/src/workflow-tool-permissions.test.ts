@@ -9,7 +9,7 @@ import {
   buildRepositoryScopedPermissionRules,
   buildRoleScopedPermissionRules,
 } from "./workflow-tool-permissions";
-import { BUILTIN_ROLE_IDS } from "@openducktor/workflows";
+import { BUILTIN_ROLE_IDS } from "@openducktor/workflows/test-support";
 import { testWorkflowRolePolicy } from "./opencode-v2.test-support";
 
 const rolePolicy = (role: string) => testWorkflowRolePolicy({ repoPath: "/repo", role });

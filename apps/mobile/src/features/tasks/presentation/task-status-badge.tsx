@@ -1,4 +1,4 @@
-import { type BuiltinStateId as TaskStatus } from "@openducktor/workflows";
+import type { SharedBoardState } from "@openducktor/contracts";
 import { memo, type ReactElement } from "react";
 import { StatusLabel } from "@/ui/badge";
 import { TaskChip } from "./task-chip";
@@ -14,7 +14,7 @@ export const TaskStatusBadge = memo(function TaskStatusBadge({
   quiet = false,
   size = "md",
 }: {
-  status: TaskStatus;
+  status: SharedBoardState;
   /** A dot and a word instead of a colored badge, for dense rows. */
   quiet?: boolean;
   size?: "sm" | "md";

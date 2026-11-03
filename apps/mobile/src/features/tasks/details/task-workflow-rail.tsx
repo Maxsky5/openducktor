@@ -46,7 +46,7 @@ export const TaskWorkflowRail = memo(function TaskWorkflowRail({
             {step.working ? (
               <ActivityIndicator size="small" color={colors.icon} style={styles.spinner} />
             ) : (
-              <RoleIcon role={step.role} size={13} color={colors.icon} />
+              <RoleIcon hint={step.iconHint} size={13} color={colors.icon} />
             )}
             <Text
               variant="caption1"
@@ -59,7 +59,7 @@ export const TaskWorkflowRail = memo(function TaskWorkflowRail({
           </>
         );
         return (
-          <Fragment key={step.role}>
+          <Fragment key={step.id}>
             {index > 0 ? (
               <View style={styles.connector}>
                 <Icon

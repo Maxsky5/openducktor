@@ -41,9 +41,14 @@ describe("autopilot-catalog", () => {
       eventId: "taskProgressedToSpecReady",
       actionIds: ["startQa"],
     };
-    expect(getAutopilotSelectedValue(foreign)).toBe("disabled");
+    expect(getAutopilotSelectedValue(foreign)).toBe("action:startQa");
     settings.rules.unshift(foreign);
-    const updated = setAutopilotRuleAction(settings, "taskProgressedToSpecReady", "startBuilder");
+    const updated = setAutopilotRuleAction(
+      settings,
+      "openducktor",
+      "taskProgressedToSpecReady",
+      "action:startBuilder",
+    );
     expect(updated.rules.find((rule) => rule.workflowId === "other")).toEqual(foreign);
     expect(
       updated.rules.find(
@@ -54,8 +59,9 @@ describe("autopilot-catalog", () => {
   test("preserves secondary actions when updating the selected action", () => {
     const nextSettings = setAutopilotRuleAction(
       createAutopilotSettings(),
+      "openducktor",
       "taskProgressedToSpecReady",
-      "startBuilder",
+      "action:startBuilder",
     );
 
     expect(nextSettings.rules[0]).toEqual({
@@ -68,18 +74,23 @@ describe("autopilot-catalog", () => {
     if (!updatedRule) {
       throw new Error("Expected spec-ready Autopilot rule to exist.");
     }
-    expect(getAutopilotSelectedValue(updatedRule)).toBe("startBuilder");
+    expect(getAutopilotSelectedValue(updatedRule)).toBe("action:startBuilder");
   });
 
   test("returns the original settings object when the selected action is unchanged", () => {
     const settings = createAutopilotSettings();
 
-    expect(setAutopilotRuleAction(settings, "taskProgressedToSpecReady", "startPlanner")).toBe(
-      settings,
-    );
+    expect(
+      setAutopilotRuleAction(
+        settings,
+        "openducktor",
+        "taskProgressedToSpecReady",
+        "action:startPlanner",
+      ),
+    ).toBe(settings);
   });
 
-  test("preserves default-backed rules when updating a partial settings payload", () => {
+  test("preserves only the supplied rules when updating a partial settings payload", () => {
     const nextSettings = setAutopilotRuleAction(
       {
         alwaysStartQaReviewsFresh: false,
@@ -91,16 +102,18 @@ describe("autopilot-catalog", () => {
           },
         ],
       },
+      "openducktor",
       "taskProgressedToSpecReady",
-      "startBuilder",
+      "action:startBuilder",
     );
 
-    expect(nextSettings.rules).toHaveLength(5);
-    expect(nextSettings.rules[1]).toEqual({
-      workflowId: "openducktor",
-      eventId: "taskProgressedToReadyForDev",
-      actionIds: [],
-    });
+    expect(nextSettings.rules).toEqual([
+      {
+        workflowId: "openducktor",
+        eventId: "taskProgressedToSpecReady",
+        actionIds: ["startBuilder", "startPlanner"],
+      },
+    ]);
     expect(nextSettings.alwaysStartQaReviewsFresh).toBe(false);
   });
 });

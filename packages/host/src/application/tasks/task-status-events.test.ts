@@ -370,7 +370,15 @@ test("records QA transitions only after the entire SQLite transaction commits", 
     );
     expect(completed.result._tag).toBe("Success");
     expect(completed.statusChanges).toEqual([
-      { previousStatus: "open", task: { id: task.id, title: "Task", status: "human_review" } },
+      {
+        previousStatus: "open",
+        task: {
+          workflow: { id: "openducktor", revision: 2 },
+          id: task.id,
+          title: "Task",
+          status: "human_review",
+        },
+      },
     ]);
   } finally {
     await harness.cleanup();

@@ -53,7 +53,7 @@ import {
   createSelectedSessionTranscriptStateFixture,
   createTaskCardFixture,
 } from "./agent-studio-test-utils";
-import { ROLE_OPTIONS } from "./agents-page-constants";
+import { TEST_ROLE_OPTIONS as ROLE_OPTIONS } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import {
@@ -236,13 +236,13 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgentProfile);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
     expect(mapped.chatSettings).toEqual(baseArgs.chatSettings);
-    expect(mapped.composer.draftScope).toEqual({
+    expect(mapped.composer!.draftScope).toEqual({
       taskId: "task-1",
       role: "planner",
       session: sessionIdentity,
     });
     expect(
-      agentStudioChatDraftScopeKey(mapped.composer.workspaceId, mapped.composer.draftScope),
+      agentStudioChatDraftScopeKey(mapped.composer!.workspaceId, mapped.composer!.draftScope),
     ).toBe(`workspace-repo:task-1:planner:${agentSessionIdentityKey(sessionIdentity)}`);
   });
 
@@ -307,7 +307,7 @@ const createControllerArgs = (
       },
     },
     composer: {
-      ...base.composer,
+      ...base.composer!,
       draftScope: {
         taskId: "task-1",
         role: "planner",
@@ -400,11 +400,11 @@ describe("task chat speed", () => {
     const args = createControllerArgs(base, runtime, selectedSession);
     const Composer = () => {
       const { agentChatModel } = useAgentStudioOrchestrationController(args);
-      if (label === null) expect(agentChatModel.composer.speed).toBeNull();
+      if (label === null) expect(agentChatModel.composer!.speed).toBeNull();
       return createElement(
         AgentChatSettingsProvider,
         { value: agentChatModel.chatSettings },
-        createElement(AgentChatComposer, { model: agentChatModel.composer }),
+        createElement(AgentChatComposer, { model: agentChatModel.composer! }),
       );
     };
     const html = renderToStaticMarkup(
@@ -489,7 +489,7 @@ describe("task chat drafts", () => {
       return createElement(
         AgentChatSettingsProvider,
         { value: current.agentChatModel.chatSettings },
-        createElement(AgentChatComposer, { model: current.agentChatModel.composer }),
+        createElement(AgentChatComposer, { model: current.agentChatModel.composer! }),
       );
     };
     const view = render(
@@ -514,29 +514,29 @@ describe("task chat drafts", () => {
       expect(view.getByRole("button", { name: /^Select model/ }).hasAttribute("disabled")).toBe(
         false,
       );
-      await act(async () => current.agentChatModel.composer.modelPicker.onOpenChange(true));
+      await act(async () => current.agentChatModel.composer!.modelPicker.onOpenChange(true));
       await waitFor(() =>
         expect(
-          current.agentChatModel.composer.modelPicker.runtimes.find(
+          current.agentChatModel.composer!.modelPicker.runtimes.find(
             (runtime) => runtime.descriptor.kind === "codex",
           )?.resource.status,
         ).toBe("ready"),
       );
       await act(async () =>
-        current.agentChatModel.composer.modelPicker.onValueChange({
+        current.agentChatModel.composer!.modelPicker.onValueChange({
           runtimeKind: "codex",
           providerId: "openai",
           modelId: "chosen-model",
         }),
       );
-      await waitFor(() => expect(current.agentChatModel.composer.isInteractionEnabled).toBe(true));
+      await waitFor(() => expect(current.agentChatModel.composer!.isInteractionEnabled).toBe(true));
       expect(current.agentChatModel.thread.transcript).toEqual(
         expect.objectContaining({ kind: "empty", notice: null }),
       );
       expect(
         view.getByRole("combobox", { name: "Message composer" }).getAttribute("contenteditable"),
       ).toBe("true");
-      expect(current.agentChatModel.composer.selectedModelSelection).toEqual({
+      expect(current.agentChatModel.composer!.selectedModelSelection).toEqual({
         runtimeKind: "codex",
         providerId: "openai",
         modelId: "chosen-model",

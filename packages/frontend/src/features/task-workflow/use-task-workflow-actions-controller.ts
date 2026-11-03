@@ -1,3 +1,6 @@
+import type { TaskWorkflowContinuation } from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
+import { useTaskActionTasks } from "@openducktor/frontend-core/queries/use-task-action-tasks";
+import { useWorkflowEventActions } from "@openducktor/frontend-core/tasks/workflow/use-workflow-event-actions";
 import type { PullRequest } from "@openducktor/contracts";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useCallback, useMemo, useRef } from "react";
@@ -78,7 +81,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     [allSessions, activeWorkspace?.workspaceId],
   );
   const {
-    tasks,
+    tasks: boardTasks,
     refreshTasks,
     deleteTask,
     closeTask,
@@ -90,6 +93,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     resetTask,
     resetTaskImplementation,
   } = useTasksState();
+  const tasks = useTaskActionTasks(activeWorkspace, boardTasks);
   const { sessionStartNotifications } = useNotificationContext();
   const runSessionStartWorkflow = useSessionStartWorkflowRunner({
     workspaceId: activeWorkspaceId,
@@ -128,16 +132,13 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
 
   const {
     humanReviewFeedbackModal,
+    continueTaskWorkflow,
     sessionStartModal,
     isSessionStarting,
     startSessionIntent,
+    onLaunch,
     onPullRequestGenerate,
-    onDelegate,
     onOpenSession,
-    onPlan,
-    onQaStart,
-    onQaOpen,
-    onBuild,
     onHumanRequestChanges,
   } = useKanbanSessionStartFlow({
     activeWorkspaceId,
@@ -167,7 +168,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
   });
 
   const openBuilderSession = useCallback(
-    (taskId: string, identity: AgentSessionIdentity): void => {
+    (taskId: string, identity: AgentSessionIdentity, role: string): void => {
       if (!activeWorkspaceId) {
         throw new Error("No active workspace is selected.");
       }
@@ -176,7 +177,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
           kind: "task_session",
           workspaceId: activeWorkspaceId,
           taskId,
-          role: "build",
+          role,
           identity,
         }),
       );
@@ -214,15 +215,31 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
   });
 
   const onDelete = deleteTask;
-  const { onConfirmTaskAction, model: taskConfirmDialog } = useTaskConfirmDialogHost({
-    workspaceIdentity,
-    tasks,
-    onResetTask: resetTask,
-    onDelete,
-    onCloseTask: closeTask,
-    // A details sheet of the task also closes, as after a confirmation in the sheet.
-    onSucceeded: closeTaskDetails,
-  });
+  const { onConfirmTaskAction: openConfirmation, model: taskConfirmDialog } =
+    useTaskConfirmDialogHost({
+      workspaceIdentity,
+      tasks,
+      onResetTask: resetTask,
+      onDelete,
+      onCloseTask: closeTask,
+      // A details sheet of the task also closes, as after a confirmation in the sheet.
+      onSucceeded: closeTaskDetails,
+    });
+
+  const onConfirmTaskAction = useCallback(
+    (
+      taskId: string,
+      action: Parameters<typeof openConfirmation>[1],
+      continuation?: TaskWorkflowContinuation,
+    ) => {
+      openConfirmation(
+        taskId,
+        action,
+        continuation ? () => continueTaskWorkflow(taskId, continuation) : undefined,
+      );
+    },
+    [openConfirmation, continueTaskWorkflow],
+  );
 
   const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(sessions), [sessions]);
   const activeTaskSessionContextByTaskId = useMemo(
@@ -257,22 +274,36 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     [isSessionStarting, approvingTaskId, requestingChangesTaskId, resettingImplementationTaskId],
   );
 
+  const { onApplyEvent } = useWorkflowEventActions(
+    workspaceRepoPath,
+    tasks,
+    onLaunch,
+    activeWorkspaceId,
+  );
   const actions = useMemo<TaskWorkflowActions>(
     () => ({
       kanbanPendingState,
+      onLaunch,
+      onApplyEvent,
       onCreateTask,
-      onPlan,
-      onQaStart,
-      onQaOpen,
-      onBuild,
       onOpenSession,
-      onDelegate,
       onEdit,
       onOpenTaskDetails,
-      onHumanApprove: openTaskApproval,
+      onHumanApprove: (taskId, continuation) =>
+        openTaskApproval(
+          taskId,
+          continuation
+            ? { onCommitted: () => continueTaskWorkflow(taskId, continuation) }
+            : undefined,
+        ),
       onHumanRequestChanges,
       onResetImplementation: (taskId, options) => {
-        openResetImplementation(taskId, options);
+        openResetImplementation(taskId, {
+          ...options,
+          onCommitted: options?.continuation
+            ? () => continueTaskWorkflow(taskId, options.continuation)
+            : undefined,
+        });
       },
       onResetTask: resetTask,
       onCloseTask: closeTask,
@@ -296,23 +327,21 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     }),
     [
       kanbanPendingState,
+      onLaunch,
+      onApplyEvent,
       activeTaskSessionContextByTaskId,
       closeTask,
       detectingPullRequestTaskIds,
       gitProvider.context,
       gitProvider.error,
-      onBuild,
       onConfirmTaskAction,
       onCreateTask,
-      onDelegate,
       onDelete,
       onEdit,
       onHumanRequestChanges,
+      continueTaskWorkflow,
       onOpenSession,
       onOpenTaskDetails,
-      onPlan,
-      onQaOpen,
-      onQaStart,
       openResetImplementation,
       openTaskApproval,
       registerTaskDetailsClose,

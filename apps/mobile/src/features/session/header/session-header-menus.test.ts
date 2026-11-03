@@ -1,3 +1,4 @@
+import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type {
@@ -25,20 +26,21 @@ const NOW = Date.parse("2026-10-02T12:00:00.000Z");
 describe("sessionHistoryItems", () => {
   test("names each session as the desktop selector, newest first, and checks the open one", () => {
     const groups = groupTaskSessions(
-      { workspaceId: "ws-1", taskId: "TASK-1" },
+      createTaskCardFixture({ id: "TASK-1" }),
       [
         record("b-old", "build", "2026-10-02T09:00:00.000Z"),
         record("s-1", "spec", "2026-10-01T12:00:00.000Z"),
         record("b-new", "build", "2026-10-02T11:00:00.000Z"),
       ],
       [],
+      "ws-1",
     );
     const current = groups[1]?.rows[1]?.key ?? "";
     const items = sessionHistoryItems(groups, current, NOW);
     expect(items.map((item) => [item.title, item.role, item.checked])).toEqual([
-      ["Spec #1", "spec", false],
-      ["Builder #2", "build", false],
-      ["Builder #1", "build", true],
+      ["Spec #1", "specification", false],
+      ["Builder #2", "building", false],
+      ["Builder #1", "building", true],
     ]);
     expect(items[1]?.detail).toBe("1h ago · Saved");
   });
@@ -64,19 +66,22 @@ describe("quickActionItems", () => {
       if (disabledReason) built.disabledReason = disabledReason;
       return built;
     };
-    const items = quickActionItems([
-      option("Start Builder", "build_implementation_start"),
-      option(
-        "Generate Pull Request",
-        "build_pull_request_generation",
-        "Requires an existing Builder session.",
-      ),
-    ]);
+    const items = quickActionItems(
+      [
+        option("Start Builder", "build_implementation_start"),
+        option(
+          "Generate Pull Request",
+          "build_pull_request_generation",
+          "Requires an existing Builder session.",
+        ),
+      ],
+      createTaskCardFixture(),
+    );
     expect(items).toEqual([
       {
         id: "Start Builder",
         title: "Start Builder",
-        role: "build",
+        role: "building",
         disabled: false,
         detail: undefined,
         command: true,
@@ -93,17 +98,20 @@ describe("quickActionItems", () => {
   });
 
   test("shows the workflow icon of a task action", () => {
-    const items = quickActionItems([
-      {
-        kind: "task_action",
-        id: "task:human_approve",
-        taskAction: "human_approve",
-        placement: "trailing",
-        label: "Approve Task",
-        description: "",
-        disabled: false,
-      },
-    ]);
+    const items = quickActionItems(
+      [
+        {
+          kind: "task_action",
+          id: "task:human_approve",
+          taskAction: "human_approve",
+          placement: "trailing",
+          label: "Approve Task",
+          description: "",
+          disabled: false,
+        },
+      ],
+      createTaskCardFixture(),
+    );
     expect(items).toEqual([
       {
         id: "task:human_approve",

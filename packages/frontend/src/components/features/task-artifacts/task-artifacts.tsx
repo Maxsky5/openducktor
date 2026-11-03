@@ -1,3 +1,4 @@
+import { TaskArtifactWorkflowScope, useArtifactWorkflow } from "./task-artifact-workflow-context";
 import type {
   TaskArtifact,
   TaskArtifactCollection,
@@ -7,7 +8,7 @@ import { workflowArtifactId } from "@openducktor/contracts";
 import {
   workflowArtifactLabel,
   workflowArtifactVerdict,
-  type BuiltinTaskCard as TaskCard,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import {
   taskArtifactContentQueryOptions,
@@ -57,6 +58,7 @@ export type TaskArtifactsProps = {
   repoPath: string;
   taskId: string;
   workspaceId: string;
+  task?: TaskCard | undefined;
   artifactSummary?: TaskCard["artifactSummary"];
 };
 
@@ -77,7 +79,14 @@ const scopeKey = (props: TaskArtifactsProps): string =>
 export function TaskArtifactsView(props: TaskArtifactsViewProps): ReactElement {
   return (
     <TooltipProvider>
-      <ArtifactPanel key={scopeKey(props)} {...props} />
+      <TaskArtifactWorkflowScope
+        workspaceId={props.workspaceId}
+        repoPath={props.repoPath}
+        taskId={props.taskId}
+        task={props.task}
+      >
+        <ArtifactPanel key={scopeKey(props)} {...props} />
+      </TaskArtifactWorkflowScope>
     </TooltipProvider>
   );
 }
@@ -86,7 +95,14 @@ export function TaskArtifactsView(props: TaskArtifactsViewProps): ReactElement {
 export function TaskArtifactsSection(props: TaskArtifactsProps): ReactElement {
   return (
     <TooltipProvider>
-      <ArtifactSection key={scopeKey(props)} {...props} />
+      <TaskArtifactWorkflowScope
+        workspaceId={props.workspaceId}
+        repoPath={props.repoPath}
+        taskId={props.taskId}
+        task={props.task}
+      >
+        <ArtifactSection key={scopeKey(props)} {...props} />
+      </TaskArtifactWorkflowScope>
     </TooltipProvider>
   );
 }
@@ -188,6 +204,7 @@ function ArtifactBrowser({
   state: ArtifactCollectionState;
   children: ReactNode;
 }): ReactElement {
+  const taskWorkflow = useArtifactWorkflow();
   const { selection } = view;
   return (
     <>
@@ -197,7 +214,7 @@ function ArtifactBrowser({
           repoPath={view.repoPath}
           taskId={view.taskId}
           artifactId={state.selectedId}
-          title={state.selected?.name ?? selectionTitle(selection)}
+          title={state.selected?.name ?? selectionTitle(selection, taskWorkflow)}
           workspaceId={view.workspaceId}
           artifact={state.selected}
           workflowCode={selection.kind === "workflow" ? selection.code : undefined}
@@ -355,11 +372,14 @@ function CollectionHeader({
   onBack: () => void;
   onAction: (action: ArtifactAction, trigger: HTMLElement) => void;
 }): ReactElement {
+  const taskWorkflow = useArtifactWorkflow();
   const hasSelection = selection.kind !== "collection";
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
       {hasSelection ? <BackButton onClick={onBack} /> : null}
-      <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{selectionTitle(selection)}</h2>
+      <h2 className="min-w-0 flex-1 truncate text-sm font-medium">
+        {selectionTitle(selection, taskWorkflow)}
+      </h2>
       {canManage && !hasSelection ? <AddArtifactButton size="sm" onAction={onAction} /> : null}
     </div>
   );
@@ -431,10 +451,11 @@ function CollectionBody({
 }
 
 function UnavailableSelection({ selection }: { selection: ArtifactSelection }): ReactElement {
+  const taskWorkflow = useArtifactWorkflow();
   return (
     <p role="status" className="py-3 text-sm text-muted-foreground">
       {selection.kind === "workflow"
-        ? `${workflowArtifactLabel(selection.code)} has not been created yet.`
+        ? `${workflowArtifactLabel(selection.code, taskWorkflow)} has not been created yet.`
         : "This artifact is no longer available. Return to All artifacts to select another item."}
     </p>
   );
@@ -455,8 +476,9 @@ function ArtifactList({
   density: ListDensity;
   onSelect: (id: string) => void;
 }): ReactElement {
+  const taskWorkflow = useArtifactWorkflow();
   const classes = listDensityClasses[density];
-  const { workflow, files } = groupTaskArtifacts(artifacts);
+  const { workflow, files } = groupTaskArtifacts(artifacts, taskWorkflow);
   const groups: { name: string; items: TaskArtifact[] }[] = [
     { name: "Workflow", items: workflow },
     { name: "Files", items: files },
@@ -570,6 +592,7 @@ function WorkflowArtifactContent({
   workflowCode,
   onBack,
 }: ArtifactContentProps & { workflowCode: string }): ReactElement {
+  const taskWorkflow = useArtifactWorkflow();
   const queryClient = useQueryClient();
   const content = useQuery(
     taskDocumentQueryOptions(queryClient, { workspaceId, repoPath }, taskId, workflowCode),
@@ -597,7 +620,7 @@ function WorkflowArtifactContent({
     if (isAbsent) {
       preview = (
         <p role="status" className="p-4 text-sm text-muted-foreground">
-          {workflowArtifactLabel(workflowCode)} has not been created yet.
+          {workflowArtifactLabel(workflowCode, taskWorkflow)} has not been created yet.
         </p>
       );
     } else {
@@ -751,14 +774,17 @@ function findArtifact(
   }
 }
 
-function selectionTitle(selection: ArtifactSelection): string {
+function selectionTitle(
+  selection: ArtifactSelection,
+  taskWorkflow: import("@openducktor/workflows").TaskWorkflow,
+): string {
   switch (selection.kind) {
     case "collection":
       return "Artifacts";
     case "artifact":
       return "Artifact unavailable";
     case "workflow":
-      return workflowArtifactLabel(selection.code);
+      return workflowArtifactLabel(selection.code, taskWorkflow);
   }
 }
 
@@ -795,7 +821,8 @@ function ArtifactMetadata({ artifact }: { artifact: TaskArtifact }): ReactElemen
 }
 
 function VerdictBadge({ code, verdict }: { code: string; verdict: string }): ReactElement {
-  const declared = workflowArtifactVerdict(code, verdict);
+  const taskWorkflow = useArtifactWorkflow();
+  const declared = workflowArtifactVerdict(code, verdict, taskWorkflow);
   return (
     <Badge variant={declared?.passes ? "success" : "danger"}>{declared?.label ?? verdict}</Badge>
   );

@@ -176,9 +176,19 @@ describe("taskDocumentsSummary", () => {
   };
 
   test("names the documents that exist", () => {
-    expect(taskDocumentsSummary(summary(false, false, false))).toBeNull();
-    expect(taskDocumentsSummary(summary(true, false, false))).toBe("Spec");
-    expect(taskDocumentsSummary(summary(true, true, false))).toBe("Spec and Plan");
-    expect(taskDocumentsSummary(summary(true, true, true))).toBe("Spec, Plan and QA report");
+    expect(
+      taskDocumentsSummary(
+        createTaskCardFixture({ artifactSummary: summary(false, false, false) }),
+      ),
+    ).toBeNull();
+    expect(
+      taskDocumentsSummary(createTaskCardFixture({ artifactSummary: summary(true, false, false) })),
+    ).toBe("Spec");
+    expect(
+      taskDocumentsSummary(createTaskCardFixture({ artifactSummary: summary(true, true, false) })),
+    ).toBe("Spec and Plan");
+    expect(
+      taskDocumentsSummary(createTaskCardFixture({ artifactSummary: summary(true, true, true) })),
+    ).toBe("Spec, Plan and QA");
   });
 });

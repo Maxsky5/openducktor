@@ -1,9 +1,14 @@
-import type { ExternalTaskSyncEvent, WorkspaceRef } from "@openducktor/contracts";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type {
+  ExternalTaskSyncEvent,
+  TaskCard as WireTaskCard,
+  WorkspaceRef,
+} from "@openducktor/contracts";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+import { toWireTaskCard } from "../test-support/shared-test-fixtures";
 
 export const boardEvent = (
   scope: WorkspaceRef,
-  cards: TaskCard[],
+  cards: readonly (TaskCard | WireTaskCard)[],
   options: { removedTaskIds?: string[]; doneVisibleDays?: number } = {},
 ): ExternalTaskSyncEvent => ({
   kind: "tasks_updated",
@@ -12,8 +17,12 @@ export const boardEvent = (
   taskIds: [...new Set([...cards.map((card) => card.id), ...(options.removedTaskIds ?? [])])],
   removedTaskIds: options.removedTaskIds ?? [],
   statusChanges: [],
-  taskSnapshots: cards.map(({ id, title, status }) => ({ id, title, status })),
-  boardChanges: { artifactChanges: [], cards, doneVisibleDays: options.doneVisibleDays ?? 1 },
+  taskSnapshots: cards.map(({ id, title, status, workflow }) => ({ id, title, status, workflow })),
+  boardChanges: {
+    artifactChanges: [],
+    cards: cards.map(toWireTaskCard),
+    doneVisibleDays: options.doneVisibleDays ?? 1,
+  },
   emittedAt: "2026-04-10T13:10:00.000Z",
 });
 

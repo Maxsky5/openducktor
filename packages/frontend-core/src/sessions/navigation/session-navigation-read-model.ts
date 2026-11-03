@@ -2,8 +2,7 @@ import {
   taskHasSessionPage,
   taskNeedsInput,
   roleWorkflowForTask,
-  type BuiltinTaskCard as TaskCard,
-  builtinRoleId,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import {
   DEFAULT_APPEARANCE_SETTINGS,
@@ -231,7 +230,7 @@ const taskBlockTarget = (
         kind: "task_session",
         workspaceId: sources.workspace.workspaceId,
         taskId: task.id,
-        role: builtinRoleId(record.role),
+        role: record.role,
         identity: toAgentSessionIdentity(record),
       }
     : { kind: "task", workspaceId: sources.workspace.workspaceId, taskId: task.id, role: null };
@@ -376,7 +375,7 @@ const taskEntries = (
           kind: "task_session",
           workspaceId: workspace.workspaceId,
           taskId: task.id,
-          role: builtinRoleId(record.role),
+          role: record.role,
           identity,
         },
         {
@@ -385,8 +384,8 @@ const taskEntries = (
           runtimeKind: record.runtimeKind,
           workflowTone: buildRoleWorkflowState({
             task,
-            role: builtinRoleId(record.role),
-            workflow: roleWorkflowForTask(task, builtinRoleId(record.role)),
+            role: record.role,
+            workflow: roleWorkflowForTask(task, record.role),
             liveSession: facts?.activityState ?? "none",
           }).tone,
           attention,

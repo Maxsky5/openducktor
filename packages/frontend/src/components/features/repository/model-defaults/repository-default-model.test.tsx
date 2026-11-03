@@ -1,3 +1,4 @@
+import { WorkflowTestProvider } from "@/test-utils/workflow-provider";
 import { describe, expect, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
@@ -7,7 +8,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
 import { RepositoryDefaultModelBlock } from "./repository-default-model";
 
 const repoConfig: SettingsRepoConfig = {
@@ -191,3 +192,6 @@ describe("RepositoryDefaultModelBlock", () => {
     expect(profileTriggerTag(html)).toMatch(/ disabled=""/);
   });
 });
+
+const renderToStaticMarkup = (element: Parameters<typeof renderMarkup>[0]) =>
+  renderMarkup(<WorkflowTestProvider>{element}</WorkflowTestProvider>);

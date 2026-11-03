@@ -1,9 +1,8 @@
 import {
-  getSessionLaunchAction,
-  type BuiltinLaunchActionId as SessionLaunchActionId,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
-  builtinRoleId,
+  type WorkflowLaunchActionId as SessionLaunchActionId,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
+  launchSessionCommand,
 } from "@openducktor/workflows";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import { useSessionStartContext } from "@openducktor/frontend-core/sessions/start/use-session-start-context";
@@ -48,8 +47,8 @@ type UseAgentStudioSessionStartFlowArgs = {
   branches?: GitBranch[];
   favoriteState: SessionStartModalModel["favoriteState"];
   taskId: string;
-  role: AgentRole;
-  launchActionId: SessionLaunchActionId;
+  role: AgentRole | null;
+  launchActionId: SessionLaunchActionId | null;
   selectedSessionIdentity: AgentSessionIdentity | null;
   loadedSession: AgentSessionState | null;
   sessionsForTask: AgentSessionSummary[];
@@ -139,7 +138,7 @@ export function useAgentStudioSessionStartFlow({
             ? {
                 ...loadedSession,
                 taskId: loadedSession.sessionAssociation.taskId,
-                role: builtinRoleId(loadedSession.sessionAssociation.role),
+                role: loadedSession.sessionAssociation.role,
               }
             : null,
           selectedTask: request.taskId === taskId ? selectedTask : null,
@@ -182,7 +181,7 @@ export function useAgentStudioSessionStartFlow({
       ): Promise<SessionStartWorkflowResult | undefined> => {
         const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
           startupAttemptId,
-          request,
+          request: request,
           decision,
           task: request.taskId === taskId ? selectedTask : null,
         };
@@ -249,7 +248,7 @@ export function useAgentStudioSessionStartFlow({
     async (params: {
       postStartAction: SessionStartPostAction;
     }): Promise<SessionStartWorkflowResult | undefined> => {
-      if (!canStartRole(role)) {
+      if (!role || !launchActionId || !canStartRole(role)) {
         return undefined;
       }
 
@@ -286,28 +285,38 @@ export function useAgentStudioSessionStartFlow({
 
   const { humanReviewFeedbackModal, shouldInterceptCreateSession, openHumanReviewFeedback } =
     useAgentStudioHumanReviewFeedbackFlow({
+      workspaceId,
       taskId,
+      workspaceRepoPath,
       sessionsForTask,
       selectedTask,
       startSessionRequest,
     });
 
   const startLaunchKickoff = useCallback(async (): Promise<void> => {
-    if (!canStartRole(role)) {
+    if (!role || !launchActionId || !canStartRole(role)) {
       return;
     }
-    if (getSessionLaunchAction(launchActionId).context === "human_feedback") {
-      openHumanReviewFeedback();
+    if (
+      selectedTask &&
+      selectedTask.taskWorkflow.launchAction(launchActionId).context === "human_feedback"
+    ) {
+      openHumanReviewFeedback(launchActionId);
       return;
     }
 
     const workflow = await runSessionStart({
-      postStartAction: "kickoff",
+      postStartAction:
+        selectedTask &&
+        launchSessionCommand(selectedTask.taskWorkflow.launchAction(launchActionId)) ===
+          "send_message"
+          ? "send_message"
+          : "kickoff",
     });
     if (!workflow) {
       return;
     }
-  }, [canStartRole, openHumanReviewFeedback, launchActionId, role, runSessionStart]);
+  }, [canStartRole, openHumanReviewFeedback, launchActionId, role, runSessionStart, selectedTask]);
 
   const handleCreateSession = useCallback(
     (option: SessionCreateOption): void => {
@@ -324,10 +333,22 @@ export function useAgentStudioSessionStartFlow({
         taskId,
         role: nextRole,
         launchActionId: nextLaunchActionId,
-        postStartAction: "kickoff",
+        postStartAction:
+          selectedTask &&
+          launchSessionCommand(selectedTask.taskWorkflow.launchAction(nextLaunchActionId)) ===
+            "send_message"
+            ? "send_message"
+            : "kickoff",
       });
     },
-    [canStartRole, isSessionWorking, runGatedSessionStartRequest, selectedSessionIdentity, taskId],
+    [
+      canStartRole,
+      isSessionWorking,
+      runGatedSessionStartRequest,
+      selectedSessionIdentity,
+      taskId,
+      selectedTask,
+    ],
   );
 
   const handleCreateSessionWithHumanFeedback = useCallback(
@@ -336,7 +357,7 @@ export function useAgentStudioSessionStartFlow({
         if (!canStartRole(option.role)) {
           return;
         }
-        openHumanReviewFeedback();
+        openHumanReviewFeedback(option.launchActionId);
         return;
       }
       handleCreateSession(option);
@@ -356,7 +377,7 @@ export function useAgentStudioSessionStartFlow({
         return;
       }
       if (option.requiresHumanFeedback) {
-        openHumanReviewFeedback();
+        openHumanReviewFeedback(option.launchActionId);
         return;
       }
 

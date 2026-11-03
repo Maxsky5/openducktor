@@ -1,14 +1,18 @@
+import {
+  defaultIssueType,
+  issueTypeChoices,
+} from "@openducktor/frontend-core/tasks/create/task-composer-options";
 import { type SourceIssue } from "@openducktor/contracts";
-import { builtinIssueTypeId } from "@openducktor/workflows";
+import { useTaskFormWorkflow } from "@openducktor/frontend-core/queries/use-task-form-workflow";
 import { ChevronDown, CircleAlert, CircleCheck, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
-import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
+import { issueTypeOptions } from "@/components/features/task-composer/constants";
 import { toPrioritySelectOptions } from "@openducktor/frontend-core/tasks/create/task-composer-options";
 import { Button } from "@/components/ui/button";
 import { Collapsible } from "@/components/ui/collapsible-root";
 import { CollapsibleContent } from "@/components/ui/collapsible-content";
 import { CollapsibleTrigger } from "@/components/ui/collapsible-trigger";
-import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { IssueMarkdownRenderer } from "@/components/features/issue-source/issue-markdown-renderer";
 import { TagSelector } from "@/components/ui/tag-selector";
@@ -24,15 +28,6 @@ import {
   type IssueReview,
 } from "@openducktor/frontend-core/tasks/issue-import/issue-import-state";
 
-const ISSUE_TYPE_COMBOBOX_OPTIONS: ComboboxOption[] = ISSUE_TYPE_OPTIONS.map((option) => {
-  const Icon = option.icon;
-  return {
-    value: option.value,
-    label: option.label,
-    description: option.description,
-    icon: <Icon className="size-4" />,
-  };
-});
 const PRIORITY_COMBOBOX_OPTIONS = toPrioritySelectOptions();
 const LABEL_COMMIT_KEYS = ["Enter"] as const;
 
@@ -63,15 +58,22 @@ export function IssueReviewStep({
   changeReview,
   refreshItem,
 }: IssueReviewStepProps): ReactElement {
+  const workflow = useTaskFormWorkflow(null, { workspaceId, repoPath }, true);
+  const issueTypes = issueTypeOptions(issueTypeChoices(workflow.taskWorkflow));
+  const proposedIssueType = defaultIssueType(workflow.taskWorkflow);
   return (
     <div className="flex flex-col gap-4">
       {selectedItems.map((item) => (
         <IssueReviewCard
           workspaceId={workspaceId}
+          issueTypes={issueTypes}
           repoPath={repoPath}
           key={item.sourceId}
           item={item}
-          review={reviews.get(item.sourceId) ?? initialReview(item)}
+          review={withProposedIssueType(
+            reviews.get(item.sourceId) ?? initialReview(item),
+            proposedIssueType,
+          )}
           outcome={outcomes.get(item.sourceId)}
           isSubmitting={isSubmitting}
           isRefreshing={refreshingId === item.sourceId}
@@ -89,8 +91,14 @@ export function IssueReviewStep({
   );
 }
 
+const withProposedIssueType = (review: IssueReview, proposed: string | undefined): IssueReview => {
+  const issueType = review.issueType ?? proposed;
+  return issueType ? { ...review, issueType } : review;
+};
+
 function IssueReviewCard({
   workspaceId,
+  issueTypes,
   repoPath,
   item,
   review,
@@ -102,6 +110,7 @@ function IssueReviewCard({
   onRefresh,
 }: {
   workspaceId: string;
+  issueTypes: ReturnType<typeof issueTypeOptions>;
   repoPath: string;
   item: SourceIssue;
   review: IssueReview;
@@ -172,11 +181,15 @@ function IssueReviewCard({
           <Label id={`issue-type-label-${item.sourceId}`}>{ISSUE_IMPORT_LABELS.issueType}</Label>
           <Combobox
             disabled={fieldsDisabled}
-            value={review.issueType}
-            options={ISSUE_TYPE_COMBOBOX_OPTIONS}
+            value={review.issueType ?? ""}
+            options={issueTypes.map((option) => ({
+              value: option.value,
+              label: option.label,
+              description: option.description,
+            }))}
             searchable={false}
             triggerAriaLabelledBy={`issue-type-label-${item.sourceId}`}
-            onValueChange={(value) => onChange({ issueType: builtinIssueTypeId(value) })}
+            onValueChange={(value) => onChange({ issueType: value })}
           />
         </div>
         <div className="grid gap-2">

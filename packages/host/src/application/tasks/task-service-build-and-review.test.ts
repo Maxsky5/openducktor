@@ -506,7 +506,12 @@ describe("createTaskService build and review", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "getTask", input });
-            return task({ id: "task-1", title: "Task 1", status: "ready_for_dev" });
+            return task({
+              workflow: { id: "openducktor", revision: 2 },
+              id: "task-1",
+              title: "Task 1",
+              status: "ready_for_dev",
+            });
           },
           catch: (cause) =>
             new HostOperationError({
@@ -679,7 +684,12 @@ describe("createTaskService build and review", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "getTask", input });
-            return task({ id: "task-1", title: "Task 1", status: "ready_for_dev" });
+            return task({
+              workflow: { id: "openducktor", revision: 2 },
+              id: "task-1",
+              title: "Task 1",
+              status: "ready_for_dev",
+            });
           },
           catch: (cause) =>
             new HostOperationError({

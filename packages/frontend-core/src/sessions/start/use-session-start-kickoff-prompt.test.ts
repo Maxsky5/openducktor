@@ -4,6 +4,7 @@ import { type RepoConfig, type SettingsSnapshot } from "@openducktor/contracts";
 import { workspaceQueryKeys } from "../../queries/workspace";
 import { createRuntimeHookHarness } from "../../test-support/runtime-hook-harness";
 import {
+  createTaskCardFixture,
   createDeferred,
   createSettingsSnapshotFixture,
 } from "../../test-support/shared-test-fixtures";
@@ -26,7 +27,7 @@ const inputFor = (workspaceId: string | null = "a"): PromptRequest => ({
   selectedTargetBranch: "",
   kickoff: {
     workspaceId,
-    task: null,
+    task: createTaskCardFixture({ id: "TASK-1" }),
     request: { taskId: "TASK-1", role: "spec", launchActionId: "spec_initial" },
   },
 });

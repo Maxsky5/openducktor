@@ -1,4 +1,4 @@
-import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/workflows";
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import {
   codexSessionRef,
@@ -275,7 +275,7 @@ describe("CodexContextUsageLoader", () => {
         expect.objectContaining({
           method: "thread/resume",
           params: expect.objectContaining({
-            config: expectedThreadConfig("/repo", AGENT_ROLE_TOOL_POLICY.build),
+            config: expectedThreadConfig("/repo", builtinTaskWorkflow.role("build").tools),
             threadId: "grandchild-thread",
             cwd: "/repo",
             excludeTurns: false,

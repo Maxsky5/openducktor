@@ -1,4 +1,4 @@
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 

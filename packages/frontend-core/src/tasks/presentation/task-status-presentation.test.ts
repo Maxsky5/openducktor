@@ -1,21 +1,10 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { BUILTIN_BOARD } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import { statusLabel, statusTone } from "./task-status-presentation";
 
-const STATUSES: TaskCard["status"][] = [
-  "open",
-  "spec_ready",
-  "ready_for_dev",
-  "in_progress",
-  "blocked",
-  "ai_review",
-  "human_review",
-  "closed",
-];
-
 describe("task status presentation", () => {
   test("gives each status the label that both clients show", () => {
-    expect(STATUSES.map(statusLabel)).toEqual([
+    expect(BUILTIN_BOARD.states.map(statusLabel)).toEqual([
       "Backlog",
       "Spec ready",
       "Ready for dev",
@@ -28,7 +17,7 @@ describe("task status presentation", () => {
   });
 
   test("gives each status one tone, with separate tones for the two review statuses", () => {
-    expect(STATUSES.map(statusTone)).toEqual([
+    expect(BUILTIN_BOARD.states.map((state) => statusTone(state))).toEqual([
       "neutral",
       "pending",
       "info",

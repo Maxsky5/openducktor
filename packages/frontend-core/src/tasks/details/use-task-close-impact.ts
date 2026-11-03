@@ -3,7 +3,7 @@ import type {
   TaskWorktreeCleanupImpact,
   TerminalListResponse,
 } from "@openducktor/contracts";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { errorMessage } from "../../lib/errors";
 import { useMinimumLoader } from "../../lib/use-minimum-loader";
 import { workspaceTaskMergeStatusQueryOptions } from "../../queries/task-merge-status";

@@ -1,10 +1,6 @@
-import {
-  BUILTIN_PROMPT_IDS_BY_ROLE,
-  BUILTIN_PROMPT_TEMPLATE_DESCRIPTIONS,
-  BUILTIN_PROMPT_TEMPLATE_LABELS,
-  type BuiltinPromptTemplateId as AgentPromptTemplateId,
-} from "@openducktor/workflows";
-import type { BuiltinPromptRoleTabId } from "@openducktor/workflows";
+type AgentPromptTemplateId = string;
+type WorkflowPromptRoleTabId = string;
+import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow-settings";
 import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import {
@@ -14,19 +10,18 @@ import {
   togglePromptOverrideEnabled,
   updatePromptOverrideTemplate,
 } from "@/components/features/settings";
-import { BUILTIN_PROMPTS_BY_ID } from "./settings-modal-constants";
 import { PromptOverrideCard, PromptRoleTabs } from "./settings-modal-prompt-components";
 import type { PromptInheritedPreview } from "./settings-prompt-inheritance";
 
 type PromptOverridesSectionProps = {
   title: string;
   description: string;
-  tab: BuiltinPromptRoleTabId;
-  errorCountsByTab: Record<BuiltinPromptRoleTabId, number>;
+  tab: WorkflowPromptRoleTabId;
+  errorCountsByTab: Record<WorkflowPromptRoleTabId, number>;
   overrides: RepoPromptOverrides;
   validationErrors: Partial<Record<AgentPromptTemplateId, string>>;
   disabled: boolean;
-  onTabChange: (next: BuiltinPromptRoleTabId) => void;
+  onTabChange: (next: WorkflowPromptRoleTabId) => void;
   onUpdateOverrides: (updater: (current: RepoPromptOverrides) => RepoPromptOverrides) => void;
   resolveInheritedPreview: (
     templateId: AgentPromptTemplateId,
@@ -47,10 +42,26 @@ export function PromptOverridesSection({
   onUpdateOverrides,
   resolveInheritedPreview,
 }: PromptOverridesSectionProps): ReactElement {
-  const promptIds = BUILTIN_PROMPT_IDS_BY_ROLE[tab];
-  const visibleErrorCount = promptIds.filter((templateId) =>
-    Boolean(validationErrors[templateId]),
-  ).length;
+  const workflows = useWorkflowSettings();
+  if (workflows.error) return <p role="alert">{workflows.error.message}</p>;
+  if (!workflows.data) return <p role="status">Loading workflow prompts...</p>;
+  const matchingRoles = workflows.data.promptTabs.filter(({ roleId }) => roleId === tab);
+  const selectedTab =
+    workflows.data.promptTabs.find(({ id }) => id === tab) ??
+    (matchingRoles.length === 1 ? matchingRoles[0] : undefined);
+  if (!selectedTab)
+    return (
+      <div className="p-4">
+        <PromptRoleTabs
+          value={tab}
+          onChange={onTabChange}
+          errorCounts={errorCountsByTab}
+          disabled={disabled}
+        />
+        <p role="alert">Choose a workflow role to view its prompts.</p>
+      </div>
+    );
+  const visibleErrorCount = selectedTab.templates.filter(({ id }) => validationErrors[id]).length;
 
   return (
     <div className="grid gap-4 p-4">
@@ -60,7 +71,7 @@ export function PromptOverridesSection({
       </div>
 
       <PromptRoleTabs
-        value={tab}
+        value={selectedTab.id}
         onChange={onTabChange}
         errorCounts={errorCountsByTab}
         disabled={disabled}
@@ -74,11 +85,8 @@ export function PromptOverridesSection({
       ) : null}
 
       <div className="grid gap-3">
-        {promptIds.map((templateId) => {
-          const builtin = BUILTIN_PROMPTS_BY_ID.get(templateId);
-          if (!builtin) {
-            throw new Error(`Missing built-in prompt definition for '${templateId}'.`);
-          }
+        {selectedTab.templates.map((builtin) => {
+          const templateId = builtin.id;
           const override = overrides[templateId];
           const inheritedPreview = resolveInheritedPreview(templateId, builtin.template, override);
           const canClearOverride = canClearPromptOverride(override);
@@ -89,9 +97,9 @@ export function PromptOverridesSection({
 
           return (
             <PromptOverrideCard
-              key={templateId}
-              label={BUILTIN_PROMPT_TEMPLATE_LABELS[templateId]}
-              description={BUILTIN_PROMPT_TEMPLATE_DESCRIPTIONS[templateId]}
+              key={builtin.key}
+              label={builtin.label}
+              description={builtin.description}
               override={override}
               inheritedPreview={inheritedPreview}
               disabled={disabled}

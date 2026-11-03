@@ -70,7 +70,7 @@ export const startSessionWorkflow = async ({
   if (request.postStartAction === "kickoff") {
     launch.instruction = { kind: "kickoff" };
     if (decision.kickoffPrompt !== undefined) launch.instruction.text = decision.kickoffPrompt;
-    if (request.message) launch.instruction.feedback = request.message;
+    if (request.humanFeedback) launch.instruction.feedback = request.humanFeedback;
   }
   if (decision.targetBranch) launch.targetBranch = decision.targetBranch;
   if (request.beforeStartAction) launch.beforeStartAction = request.beforeStartAction;

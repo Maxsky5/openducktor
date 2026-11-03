@@ -45,7 +45,7 @@ import {
 } from "../../sessions/workspace-agent-sessions";
 import { WorkspaceSessionLiveSourceContext } from "../../workspace-activity/workspace-session-live-source";
 import { useActiveSessionHistoryKeeper } from "../../sessions/agent-orchestrator/history/active-session-history-keeper";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const EMPTY_TASKS: TaskCard[] = [];
 

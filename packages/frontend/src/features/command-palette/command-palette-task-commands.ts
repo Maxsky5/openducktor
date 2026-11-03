@@ -34,32 +34,17 @@ export const taskCommandIntent = (
           return;
         case "workflow": {
           // Only actions with their own confirmation or modal. Reset Task and Close Task stay out.
-          const {
-            onPlan,
-            onQaStart,
-            onQaOpen,
-            onBuild,
-            onOpenSession,
-            onDelegate,
-            onHumanApprove,
-            onHumanRequestChanges,
-            onResetImplementation,
-          } = workflow;
           runTaskWorkflowAction(
             command.action,
             taskId,
             {
-              onPlan,
-              onQaStart,
-              onQaOpen,
-              onBuild,
-              onOpenSession,
-              onDelegate,
-              onHumanApprove,
-              onHumanRequestChanges,
-              onResetImplementation,
+              ...workflow,
+              onCloseTask: (id, continuation) =>
+                workflow.onConfirmTaskAction(id, "close", continuation),
+              onResetTask: (id, continuation) =>
+                workflow.onConfirmTaskAction(id, "reset_task", continuation),
             },
-            { resolveSessionOptions: (role) => taskView.sessionOptionsByRole[role] },
+            { task, resolveSessionOptions: (role) => taskView.sessionOptionsByRole[role] },
           );
           return;
         }

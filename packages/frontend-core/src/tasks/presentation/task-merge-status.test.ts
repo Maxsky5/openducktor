@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskMergeStatus } from "@openducktor/contracts";
+import { editBuiltinTaskWorkflow } from "../../test-support/workflow-fixtures";
 import { buildAutoCloseFailures, taskMergeCheckResultText } from "./task-merge-status";
 
 const status = (overrides: Partial<TaskMergeStatus> = {}): TaskMergeStatus => ({
@@ -49,28 +50,37 @@ describe("taskMergeCheckResultText", () => {
 });
 
 describe("buildAutoCloseFailures", () => {
-  test("shows the failure only for a task that can still close", () => {
-    const failure = (taskId: string) => ({
-      taskId,
-      message: "Archive the chat first.",
-      failedAt: "2026-11-03T10:00:00.000Z",
-    });
+  test.each(["close_task", "finish_custom"])(
+    "shows the failure only for a task that can still close with %s",
+    (closeActionId) => {
+      const rename = (id: string) => (id === "close_task" ? closeActionId : id);
+      const taskWorkflow = editBuiltinTaskWorkflow(({ definition }) => {
+        definition.actions.find(({ id }) => id === "close_task")!.id = closeActionId;
+        for (const rule of [...definition.actionOrder, ...definition.actionPriority])
+          rule.actions = rule.actions.map(rename);
+      });
+      const failure = (taskId: string) => ({
+        taskId,
+        message: "Archive the chat first.",
+        failedAt: "2026-11-03T10:00:00.000Z",
+      });
 
-    const failures = buildAutoCloseFailures(
-      [
-        { id: "open", availableActions: ["close_task"] },
-        { id: "closed", availableActions: [] },
-      ],
-      {
-        workspaceId: "workspace-1",
-        repoPath: "/repo",
-        tasks: [],
-        autoCloseFailures: [failure("open"), failure("closed"), failure("unknown")],
-      },
-    );
+      const failures = buildAutoCloseFailures(
+        [
+          { id: "open", availableActions: [closeActionId], taskWorkflow },
+          { id: "closed", availableActions: [], taskWorkflow },
+        ],
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          tasks: [],
+          autoCloseFailures: [failure("open"), failure("closed"), failure("unknown")],
+        },
+      );
 
-    expect([...failures]).toEqual([
-      ["open", "Pull request merged, but the task did not close. Archive the chat first."],
-    ]);
-  });
+      expect([...failures]).toEqual([
+        ["open", "Pull request merged, but the task did not close. Archive the chat first."],
+      ]);
+    },
+  );
 });

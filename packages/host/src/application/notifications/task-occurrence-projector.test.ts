@@ -7,6 +7,7 @@ const event = (
   eventId: string,
   status: string,
   previousStatus: string = "open",
+  workflow = { id: "openducktor", revision: 2 },
 ): Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }> => ({
   eventId,
   kind: "tasks_updated",
@@ -15,8 +16,8 @@ const event = (
   repoPath: "/repo",
   taskIds: ["task-1"],
   removedTaskIds: [],
-  statusChanges: [{ previousStatus, task: { id: "task-1", title: "Task", status } }],
-  taskSnapshots: [{ id: "task-1", title: "Task", status }],
+  statusChanges: [{ previousStatus, task: { workflow, id: "task-1", title: "Task", status } }],
+  taskSnapshots: [{ workflow, id: "task-1", title: "Task", status }],
   emittedAt: "2026-08-31T10:00:00.000Z",
 });
 
@@ -121,9 +122,33 @@ test("keeps repeated destinations within one mutation distinct and suppresses re
   });
   const update = event("multi-change", "blocked");
   update.statusChanges = [
-    { previousStatus: "in_progress", task: { id: "task-1", title: "Task", status: "blocked" } },
-    { previousStatus: "blocked", task: { id: "task-1", title: "Task", status: "in_progress" } },
-    { previousStatus: "in_progress", task: { id: "task-1", title: "Task", status: "blocked" } },
+    {
+      previousStatus: "in_progress",
+      task: {
+        workflow: { id: "openducktor", revision: 2 },
+        id: "task-1",
+        title: "Task",
+        status: "blocked",
+      },
+    },
+    {
+      previousStatus: "blocked",
+      task: {
+        workflow: { id: "openducktor", revision: 2 },
+        id: "task-1",
+        title: "Task",
+        status: "in_progress",
+      },
+    },
+    {
+      previousStatus: "in_progress",
+      task: {
+        workflow: { id: "openducktor", revision: 2 },
+        id: "task-1",
+        title: "Task",
+        status: "blocked",
+      },
+    },
   ];
   const { accepted, occurrences } = projector.projectChange(update);
   expect(accepted).toBe(true);
@@ -155,7 +180,8 @@ test("projects the state notifications of a custom workflow", () => {
   });
 
   expect(
-    projector.projectChange(event("review", "reviewing", "writing")).occurrences,
+    projector.projectChange(event("review", "reviewing", "writing", { id: "review", revision: 1 }))
+      .occurrences,
   ).toMatchObject([
     {
       kind: "workflow.reviewing",
@@ -165,9 +191,14 @@ test("projects the state notifications of a custom workflow", () => {
     },
   ]);
   expect(
-    projector.projectChange(event("publish", "published", "approval")).occurrences,
+    projector.projectChange(
+      event("publish", "published", "approval", { id: "review", revision: 1 }),
+    ).occurrences,
   ).toMatchObject([
     { kind: "workflow.published", navigationTarget: { type: "kanban_task", taskId: "task-1" } },
   ]);
-  expect(projector.projectChange(event("shelve", "shelved", "backlog")).occurrences).toEqual([]);
+  expect(
+    projector.projectChange(event("shelve", "shelved", "backlog", { id: "review", revision: 1 }))
+      .occurrences,
+  ).toEqual([]);
 });

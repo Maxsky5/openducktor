@@ -1,3 +1,4 @@
+import type { createWorkflowReadCommandHandlers } from "../commands/workflow-read-command-handlers";
 import type { createWorkspaceSessionLaunchCommandHandlers } from "../commands/workspace-session-launch-command-handlers";
 import type { createNotificationCommandHandlers } from "../commands/notification-command-handlers";
 import type { createAutopilotCommandHandlers } from "../commands/autopilot-command-handlers";
@@ -38,7 +39,8 @@ import type { createWorkspaceSettingsCommandHandlers } from "../commands/workspa
 import type { createWorkspaceSessionCommandHandlers } from "../commands/workspace-session-command-handlers";
 import type { HostCommandName } from "../commands/host-command-registry";
 
-type AllHostCommandHandlers = ReturnType<typeof createWorkspaceSessionLaunchCommandHandlers> &
+type AllHostCommandHandlers = ReturnType<typeof createWorkflowReadCommandHandlers> &
+  ReturnType<typeof createWorkspaceSessionLaunchCommandHandlers> &
   ReturnType<typeof createNotificationCommandHandlers> &
   ReturnType<typeof createAutopilotCommandHandlers> &
   ReturnType<typeof createBrowserCommandHandlers> &

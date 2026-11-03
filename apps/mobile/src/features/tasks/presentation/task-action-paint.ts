@@ -1,39 +1,50 @@
-import { type TaskWorkflowAction, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowIcon } from "@openducktor/contracts";
+import {
+  type TaskWorkflowAction,
+  type ResolvedTaskCard,
+  workflowRoleIcon,
+  workflowAction,
+} from "@openducktor/workflows";
 import type { IconName } from "@/ui/icon";
 
 /**
  * The role of an action that starts a role session. The desktop shows the role icon on these
  * actions, in place of the action icon.
  */
-export const taskActionRole = (action: TaskWorkflowAction): AgentRole | null => {
-  switch (action) {
-    case "set_spec":
-      return "spec";
-    case "set_plan":
-      return "planner";
-    case "build_start":
-      return "build";
-    case "qa_start":
-      return "qa";
-    default:
-      return null;
-  }
+export const taskActionRole = (
+  actionId: TaskWorkflowAction,
+  task: ResolvedTaskCard,
+): string | null => {
+  const action = workflowAction(task.taskWorkflow, actionId);
+  if (action.kind !== "session") return null;
+  const step = task.workflowSteps.find(({ id }) => id === action.stepId);
+  return step?.kind === "agent" ? step.roleId : null;
+};
+export const taskActionRoleIcon = (
+  action: string,
+  task: ResolvedTaskCard,
+): WorkflowIcon | undefined => {
+  const role = taskActionRole(action, task);
+  return role ? workflowRoleIcon(task.taskWorkflow, role) : undefined;
+};
+export const taskActionIcon = (action: string, task: ResolvedTaskCard): IconName => {
+  const hint = workflowAction(task.taskWorkflow, action).icon;
+  return hint ? TASK_ACTION_ICONS[hint] : "arrow-right";
 };
 
 /** The icon of each workflow action, on its button and in the actions menu, after the desktop. */
 export const TASK_ACTION_ICONS = {
-  set_spec: "file-pen",
-  set_plan: "route",
-  open_spec: "square-arrow-out-up-right",
-  open_planner: "square-arrow-out-up-right",
-  open_builder: "square-arrow-out-up-right",
-  open_qa: "square-arrow-out-up-right",
-  build_start: "hammer",
-  qa_start: "search-check",
-  human_approve: "circle-check-big",
-  human_request_changes: "undo-2",
-  reset_implementation: "rotate-ccw",
-  reset_task: "rotate-ccw",
-  close_task: "circle-check-big",
+  specification: "file-pen",
+  planning: "route",
+  building: "hammer",
+  quality: "search-check",
+  agent: "bot",
+  open: "square-arrow-out-up-right",
+  reset: "rotate-ccw",
+  complete: "circle-check-big",
+  undo: "undo-2",
   remove_worktree: "folder-x",
-} as const satisfies Record<TaskWorkflowAction, IconName>;
+  feature: "sparkles",
+  bug: "bug",
+  task: "list-todo",
+} as const satisfies Record<WorkflowIcon, IconName>;

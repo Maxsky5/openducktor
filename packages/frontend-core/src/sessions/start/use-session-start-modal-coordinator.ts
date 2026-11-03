@@ -1,8 +1,7 @@
 import {
-  BUILTIN_ROLE_LABELS,
-  getSessionLaunchAction,
-  type BuiltinLaunchActionId as SessionLaunchActionId,
-  type BuiltinRoleId as AgentRole,
+  type WorkflowLaunchActionId as SessionLaunchActionId,
+  type WorkflowRoleId as AgentRole,
+  workflowRoleLabel,
 } from "@openducktor/workflows";
 import type { GitBranch } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
@@ -17,17 +16,22 @@ const startModeLabelFor = (startMode: "fresh" | "reuse" | "fork"): string => {
   return "Fork an existing session";
 };
 
-export const buildSessionStartModalTitle = (role: AgentRole): string => {
-  const roleLabel = BUILTIN_ROLE_LABELS[role] ?? role.toUpperCase();
+export const buildSessionStartModalTitle = (
+  role: AgentRole,
+  taskWorkflow: import("@openducktor/workflows").TaskWorkflow,
+): string => {
+  const roleLabel = workflowRoleLabel(taskWorkflow, role);
   return `Start ${roleLabel} session`;
 };
 
 export const buildSessionStartModalDescription = ({
   launchActionId,
+  taskWorkflow,
 }: {
   launchActionId: SessionLaunchActionId;
+  taskWorkflow: import("@openducktor/workflows").TaskWorkflow;
 }): string => {
-  const action = getSessionLaunchAction(launchActionId);
+  const action = taskWorkflow.launchAction(launchActionId);
   if (action.startModes.length > 1) return "Choose how to start this session.";
   return `${startModeLabelFor(action.defaultStartMode)}.`;
 };
@@ -77,11 +81,12 @@ export function useSessionStartModalCoordinator({
     (request: SessionStartModalOpenRequest): void => {
       openRawStartModal({
         ...request,
-        title: request.title ?? buildSessionStartModalTitle(request.role),
+        title: request.title ?? buildSessionStartModalTitle(request.role, request.taskWorkflow),
         description:
           request.description ??
           buildSessionStartModalDescription({
             launchActionId: request.launchActionId,
+            taskWorkflow: request.taskWorkflow,
           }),
       });
     },

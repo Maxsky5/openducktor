@@ -38,6 +38,7 @@ export class WorkflowEvaluationError extends Error {
 }
 
 export type WorkflowPredicate = (input: WorkflowInput) => boolean;
+export type CompiledWorkflowCondition = CompiledWorkflowDefinition["steps"][number]["requiredWhen"];
 
 /** The ID types that a definition declares. */
 export type WorkflowIdsOf<Definition extends WorkflowDefinition> = {
@@ -60,7 +61,13 @@ export type Workflow<Ids extends WorkflowIds = WorkflowIds> = {
   isEventAvailable(input: WorkflowInput, eventId: Ids["event"]): boolean;
   decide(input: WorkflowInput, eventId: Ids["event"]): WorkflowDecision<Ids>;
   /** Checks an extra condition against this definition once and returns its predicate. */
-  condition(condition: WorkflowCondition): WorkflowPredicate;
+  /** Compiles a condition once per condition object. */
+  condition(condition: WorkflowCondition | CompiledWorkflowCondition): WorkflowPredicate;
+  /** Selects from retained launch choices after their originating action commits. */
+  selectLaunchAction(
+    input: WorkflowInput,
+    launchActionIds: readonly Ids["launchAction"][],
+  ): Ids["launchAction"] | null;
   /** The default launch action of an agent step. */
   stepLaunchAction(input: WorkflowInput, stepId: Ids["step"]): Ids["launchAction"];
   /** The launch action that an action starts. */
@@ -107,13 +114,16 @@ export const createWorkflow = <const Definition extends WorkflowDefinition>(
   source: Definition,
 ): Workflow<WorkflowIdsOf<Definition>> => {
   const definition = parseDefinition(source);
+  // An object condition is cached by identity, so a temporary object does not stay in memory.
+  const compiledConditions = new WeakMap<object, WorkflowPredicate>();
+  const constantConditions = new Map<boolean, WorkflowPredicate>();
   const identity = { workflowId: definition.id, definitionRevision: definition.revision };
   const states = new Set(definition.states.map((state) => state.id));
   const terminalStates = new Set(
     definition.states.filter((state) => state.terminal).map((state) => state.id),
   );
   const facts = new Map(
-    definition.facts.map((fact) => [fact.id, { fact, accepts: valueTest(fact) }] as const),
+    declaredFacts(definition).map((fact) => [fact.id, { fact, accepts: valueTest(fact) }] as const),
   );
   const artifacts = new Map(definition.artifacts.map((artifact) => [artifact.id, artifact]));
   checkDefinition(definition);
@@ -260,6 +270,11 @@ export const createWorkflow = <const Definition extends WorkflowDefinition>(
       );
     },
     condition(condition) {
+      const constant = condition === true || condition === false;
+      const cached = constant
+        ? constantConditions.get(condition)
+        : compiledConditions.get(condition);
+      if (cached) return cached;
       const parsed = workflowConditionSchema.safeParse(condition);
       if (!parsed.success) {
         throw new WorkflowEvaluationError(
@@ -274,10 +289,25 @@ export const createWorkflow = <const Definition extends WorkflowDefinition>(
         );
       })(parsed.data, "condition");
       const test = compile(parsed.data);
-      return (input) => {
+      const predicate: WorkflowPredicate = (input) => {
         checkInput(input);
         return test(input);
       };
+      if (constant) constantConditions.set(condition, predicate);
+      else compiledConditions.set(condition, predicate);
+      return predicate;
+    },
+    selectLaunchAction(input, launchActionIds) {
+      checkInput(input);
+      for (const id of launchActionIds) {
+        if (!launchSelectors.has(id))
+          throw new WorkflowEvaluationError(
+            "missing_launch_action",
+            `Workflow "${definition.id}" has no launch action "${id}". Use a declared launch action ID.`,
+          );
+      }
+      const candidates = launchCandidates(launchActionIds);
+      return candidates ? selectLaunchAction(input, candidates) : null;
     },
     stepLaunchAction(input, stepId) {
       checkInput(input);
@@ -500,6 +530,15 @@ const artifactStateDescription = (artifact: WorkflowArtifactDefinition): string 
     ? `{ present } and, for a present review, a verdict from ${artifact.verdicts.map((verdict) => JSON.stringify(verdict.id)).join(", ")}`
     : "{ present } without a verdict";
 
+/** Declared issue types make the `issueType` enum fact. */
+const declaredFacts = (definition: WorkflowDefinition): WorkflowDefinition["facts"] =>
+  definition.issueTypes.length === 0
+    ? definition.facts
+    : [
+        ...definition.facts,
+        { id: "issueType", type: "enum", values: definition.issueTypes.map(({ id }) => id) },
+      ];
+
 const parseDefinition = (source: WorkflowDefinition): WorkflowDefinition => {
   const parsed = workflowDefinitionSchema.safeParse(source);
   if (!parsed.success) {
@@ -525,7 +564,7 @@ const createConditionCheck = (
   definition: WorkflowDefinition,
   invalid: (message: string) => never,
 ): ConditionCheck => {
-  const facts = new Map(definition.facts.map((fact) => [fact.id, fact]));
+  const facts = new Map(declaredFacts(definition).map((fact) => [fact.id, fact]));
   const artifacts = new Map(definition.artifacts.map((artifact) => [artifact.id, artifact]));
   const states = new Set(definition.states.map((state) => state.id));
   const check: ConditionCheck = (condition, path) => {
@@ -611,7 +650,10 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
     );
   };
 
-  checkIds(definition.facts, "facts");
+  checkIds(declaredFacts(definition), "facts");
+  const issueTypes = checkIds(definition.issueTypes, "issueTypes");
+  if (definition.defaultIssueType !== undefined)
+    checkReference(definition.defaultIssueType, issueTypes, "issueTypes", "defaultIssueType");
   const roles = checkIds(definition.roles, "roles");
   const artifacts = checkIds(definition.artifacts, "artifacts");
   const states = checkIds(definition.states, "states");
@@ -655,6 +697,18 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
       checkReference(state.notification.role, roles, "roles", `${path}.notification.role`);
     if (state.studioRole !== undefined)
       checkReference(state.studioRole, roles, "roles", `${path}.studioRole`);
+    state.historyRoles?.forEach((id, roleIndex) =>
+      checkReference(id, roles, "roles", `${path}.historyRoles[${roleIndex}]`),
+    );
+  });
+  definition.roles.forEach((role, index) => {
+    if (role.defaultArtifact !== undefined)
+      checkReference(
+        role.defaultArtifact,
+        artifacts,
+        "artifacts",
+        `roles[${index}].defaultArtifact`,
+      );
   });
   definition.steps.forEach((step, index) => {
     const path = `steps[${index}]`;
@@ -679,7 +733,11 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
         );
       if (launch.selectWhen !== undefined)
         checkCondition(launch.selectWhen, `${launchPath}.selectWhen`);
+      if (launch.showWhen !== undefined) checkCondition(launch.showWhen, `${launchPath}.showWhen`);
     });
+    step.displayRules?.forEach((rule, ruleIndex) =>
+      checkCondition(rule.when, `${path}.displayRules[${ruleIndex}].when`),
+    );
   });
   definition.actions.forEach((action, index) => {
     const path = `actions[${index}]`;
@@ -689,7 +747,14 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
     action.labels?.forEach((variant, variantIndex) =>
       checkCondition(variant.when, `${path}.labels[${variantIndex}].when`),
     );
-    if (action.kind === "view") return;
+    if (action.kind === "view") {
+      if (action.stepId === undefined) return;
+      if (action.target !== undefined)
+        invalid(`The view action at ${path} has a step and a target. Keep one of them.`);
+      if (definition.steps.find(({ id }) => id === action.stepId)?.kind !== "agent")
+        invalid(`The view action at ${path} opens a session, so its step must be an agent step.`);
+      return;
+    }
     if (action.eventId !== undefined)
       checkReference(action.eventId, events, "events", `${path}.eventId`);
     action.launchActionIds?.forEach((id, launchIndex) =>
@@ -781,6 +846,17 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
   definition.actionPriority.forEach((rule, index) =>
     checkRule(rule, `actionPriority[${index}]`, actions),
   );
+  definition.launchOrder.forEach((rule, index) => {
+    checkCondition(rule.when, `launchOrder[${index}].when`);
+    rule.order.forEach((id, orderIndex) =>
+      checkReference(
+        id,
+        launchActions,
+        "launch actions",
+        `launchOrder[${index}].order[${orderIndex}]`,
+      ),
+    );
+  });
 };
 
 const valueTest = (

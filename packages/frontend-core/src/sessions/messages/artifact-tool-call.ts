@@ -10,6 +10,7 @@ import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
 
 /** What an `odt_set_task_artifact` call saves: a workflow document, a review, or a free file. */
 export type ArtifactToolHeading =
+  | "artifact"
   | "document"
   | "review_passed"
   | "review_failed"
@@ -29,17 +30,24 @@ export type ArtifactToolCall = {
 };
 
 /** Reads an `odt_set_task_artifact` call from its result, or from its input until it completes. */
-export const readArtifactToolCall = (meta: ToolMeta): ArtifactToolCall => {
+export const readArtifactToolCall = (
+  meta: ToolMeta,
+  taskWorkflow?: import("@openducktor/workflows").TaskWorkflow,
+): ArtifactToolCall => {
   const saved = getToolLifecyclePhase(meta) === "completed" ? readSavedArtifact(meta.output) : null;
   const code = saved?.code ?? readInputText(meta, "code");
   const verdict =
     saved?.classification === "workflow" ? saved.verdict : readInputText(meta, "verdict");
-  const artifact = code ? workflowArtifact(code) : undefined;
-  if (code && artifact) return { ...workflowHeading(code, artifact.kind, verdict), code, saved };
+  const artifact = code && taskWorkflow ? workflowArtifact(code, taskWorkflow) : undefined;
+  if (code && artifact)
+    return { ...workflowHeading(code, artifact.kind, verdict, taskWorkflow!), code, saved };
   const name = saved?.name ?? readInputText(meta, "name") ?? code;
   const title = name ? `Set Artifact · ${name}` : "Set Artifact";
-  return { heading: "free", title, code, saved };
+  return { heading: saved?.classification === "free" ? "free" : "artifact", title, code, saved };
 };
+
+export const readArtifactToolTaskId = (meta: ToolMeta): string | null =>
+  readInputText(meta, "taskId");
 
 const readInputText = (meta: ToolMeta, field: string): string | null => {
   const value = meta.input?.[field];
@@ -61,11 +69,12 @@ const workflowHeading = (
   code: string,
   kind: "document" | "review",
   verdict: string | null | undefined,
+  taskWorkflow: import("@openducktor/workflows").TaskWorkflow,
 ): WorkflowArtifactHeading => {
-  const name = workflowArtifactShortLabel(code);
+  const name = workflowArtifactShortLabel(code, taskWorkflow);
   if (kind === "document") return { heading: "document", title: `Set ${name}` };
-  const declared = verdict ? workflowArtifactVerdict(code, verdict) : undefined;
+  const declared = verdict ? workflowArtifactVerdict(code, verdict, taskWorkflow) : undefined;
   if (declared?.passes === false) return { heading: "review_failed", title: `Reject ${name}` };
   if (declared?.passes) return { heading: "review_passed", title: `Approve ${name}` };
-  return { heading: "review", title: `Set ${workflowArtifactLabel(code)}` };
+  return { heading: "review", title: `Set ${workflowArtifactLabel(code, taskWorkflow)}` };
 };

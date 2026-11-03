@@ -1,5 +1,6 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskStoreCheck } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -22,6 +23,7 @@ import { createHookHarness } from "@openducktor/frontend-core/test-support/react
 import {
   createTaskCardFixture,
   createTaskStoreCheckFixture,
+  toWireTaskCard,
 } from "@/test-utils/shared-test-fixtures";
 import type { TaskStreamControllerFactory } from "@openducktor/frontend-core/tasks/use-host-task-stream";
 import { useAppLifecycle } from "./use-app-lifecycle";
@@ -659,7 +661,7 @@ describe("useAppLifecycle open workspaces", () => {
 
   test("keeps an inactive open workspace current past its cache time and shows it at once", async () => {
     // Without an observer, an unused list leaves the cache at once.
-    const queryClient = new QueryClient({
+    const queryClient = createConnectedQueryClient({
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
     });
     const tasksList = mock(async ({ repoPath }: WorkspaceRef) => [
@@ -720,9 +722,10 @@ describe("useAppLifecycle open workspaces", () => {
         eventCursor(),
       );
       expect(
-        queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(lifecycleScope("/repo-b")))
-          ?.tasks,
-      ).toEqual([changed]);
+        queryClient
+          .getQueryData<RepoTaskData>(taskQueryKeys.repoData(lifecycleScope("/repo-b")))
+          ?.tasks.map(toWireTaskCard),
+      ).toEqual([toWireTaskCard(changed)]);
 
       await harness.update({
         ...initialArgs,
@@ -736,9 +739,10 @@ describe("useAppLifecycle open workspaces", () => {
         expect(loadWorkspaceTasks).toHaveBeenCalledWith(lifecycleScope("/repo-b")),
       );
       expect(
-        queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(lifecycleScope("/repo-b")))
-          ?.tasks,
-      ).toEqual([changed]);
+        queryClient
+          .getQueryData<RepoTaskData>(taskQueryKeys.repoData(lifecycleScope("/repo-b")))
+          ?.tasks.map(toWireTaskCard),
+      ).toEqual([toWireTaskCard(changed)]);
       // The first workspace lost focus before its first load. It now loads as an inactive one.
       await waitFor(() =>
         expect(tasksList.mock.calls).toEqual([
@@ -763,7 +767,9 @@ describe("useAppLifecycle open workspaces", () => {
   };
 
   test("releases the task data of a workspace that closes", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryClient = createConnectedQueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     queryClient.setQueryData(taskQueryKeys.repoData(lifecycleScope("/repo-b")), { tasks: [] });
     const { factory, releaseWorkspace } = releasingController();
     const initialArgs: Parameters<typeof useAppLifecycle>[0] = {
@@ -801,7 +807,9 @@ describe("useAppLifecycle open workspaces", () => {
   });
 
   test("keeps a closed active workspace until another workspace becomes active", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryClient = createConnectedQueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     const { factory, releaseWorkspace } = releasingController();
     const initialArgs: Parameters<typeof useAppLifecycle>[0] = {
       ...lifecycleArgs,
@@ -832,7 +840,9 @@ describe("useAppLifecycle open workspaces", () => {
   });
 
   test("leaves an inactive workspace to the stream snapshot that reads it", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryClient = createConnectedQueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     const loadWorkspaceTasks = mock(async () => {});
     const factory: TaskStreamControllerFactory = ({ onSnapshotFinished, onSnapshotStarted }) => ({
       start: async () => {
@@ -867,7 +877,9 @@ describe("useAppLifecycle open workspaces", () => {
   });
 
   test("does not read a failed inactive list again when the workspace records change", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryClient = createConnectedQueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     await queryClient
       .fetchQuery({
         queryKey: taskQueryKeys.repoData(lifecycleScope("/repo-b")),
@@ -910,7 +922,9 @@ describe("useAppLifecycle open workspaces", () => {
   });
 
   test("loads an inactive workspace when the task stream cannot start", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryClient = createConnectedQueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     const loadWorkspaceTasks = mock(async () => {});
     const factory: TaskStreamControllerFactory = ({ onSnapshotStarted }) => ({
       start: async () => {
@@ -944,7 +958,9 @@ describe("useAppLifecycle open workspaces", () => {
   });
 
   test("loads a reopened workspace whose earlier snapshot failed", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryClient = createConnectedQueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     queryClient.setQueryData(taskQueryKeys.repoData(lifecycleScope("/repo-a")), { tasks: [] });
     const loadWorkspaceTasks = mock(async () => {});
     const factory: TaskStreamControllerFactory = ({ onSnapshotFinished, onSnapshotStarted }) => ({
@@ -991,3 +1007,7 @@ describe("useAppLifecycle open workspaces", () => {
     }
   });
 });
+
+function createConnectedQueryClient(options?: ConstructorParameters<typeof QueryClient>[0]) {
+  return createTestClientConnection({ queryClient: new QueryClient(options) }).queryClient;
+}

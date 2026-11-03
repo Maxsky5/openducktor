@@ -1,19 +1,11 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
+import type { ResolvedTaskCard } from "@openducktor/workflows";
 import { resolveLatestDocumentPayload } from "../../queries/document-utils";
 import { fetchFreshTaskDocumentFromQuery, taskDocumentQueryOptions } from "../../queries/documents";
 import type { TaskDocumentPayload } from "../../types/task-documents";
 import { ensureTaskDocumentQueryData } from "./task-document-query-data";
-
-export type DocumentSectionKey = "spec" | "plan" | "qa";
-
-/** The workflow artifact code of each document section. */
-const SECTION_CODES = {
-  spec: "spec",
-  plan: "plan",
-  qa: "qaReport",
-} as const satisfies Record<DocumentSectionKey, string>;
 
 export type TaskDocumentState = {
   markdown: string;
@@ -23,127 +15,80 @@ export type TaskDocumentState = {
   loaded: boolean;
 };
 
-const DISABLED_TASK_ID = "__disabled__";
-
-const createTaskDocumentState = (input?: {
-  markdown?: string;
-  updatedAt?: string | null;
-  isLoading?: boolean;
-  error?: string | null;
-  loaded?: boolean;
-}): TaskDocumentState => ({
-  markdown: input?.markdown ?? "",
-  updatedAt: input?.updatedAt ?? null,
-  isLoading: input?.isLoading ?? false,
-  error: input?.error ?? null,
-  loaded: input?.loaded ?? false,
+const toTaskDocumentState = (query: UseQueryResult<TaskDocumentPayload>): TaskDocumentState => ({
+  markdown: query.data?.markdown ?? "",
+  updatedAt: query.data?.updatedAt ?? null,
+  isLoading: query.isFetching && query.data === undefined,
+  error: query.error?.message ?? query.data?.error ?? null,
+  loaded: query.data !== undefined || query.isSuccess || query.isError,
 });
 
-const toErrorMessage = (cause: unknown): string =>
-  cause instanceof Error ? cause.message : "Unable to load document.";
-
-const toTaskDocumentState = (
-  query: ReturnType<typeof useQuery<TaskDocumentPayload>>,
-  enabled: boolean,
-): TaskDocumentState => {
-  const hasResolved = query.data !== undefined || query.isSuccess || query.isError;
-  return createTaskDocumentState({
-    markdown: query.data?.markdown ?? "",
-    updatedAt: query.data?.updatedAt ?? null,
-    isLoading: enabled && query.isFetching && query.data === undefined,
-    error: query.error ? toErrorMessage(query.error) : (query.data?.error ?? null),
-    loaded: hasResolved,
-  });
-};
-
-export function useTaskDocuments(taskId: string | null, open: boolean, cacheScope: WorkspaceRef) {
+export function useTaskDocuments(
+  task: ResolvedTaskCard | null,
+  open: boolean,
+  repoPath: WorkspaceRef,
+) {
   const queryClient = useQueryClient();
-
-  const enabled = open && taskId !== null;
-  const activeTaskId = taskId ?? DISABLED_TASK_ID;
-  const queryOptionsBySection = useMemo(
-    () => ({
-      spec: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, SECTION_CODES.spec),
-      plan: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, SECTION_CODES.plan),
-      qa: taskDocumentQueryOptions(queryClient, cacheScope, activeTaskId, SECTION_CODES.qa),
-    }),
-    [activeTaskId, cacheScope, queryClient],
+  const codes = useMemo(
+    () => task?.taskWorkflow.definition.artifacts.map(({ id }) => id) ?? [],
+    [task?.taskWorkflow],
   );
-
-  const specQuery = useQuery({
-    ...queryOptionsBySection.spec,
-    enabled,
+  const options = useMemo(
+    () =>
+      codes.map((code) => taskDocumentQueryOptions(queryClient, repoPath, task?.id ?? "", code)),
+    [codes, queryClient, repoPath, task?.id],
+  );
+  const queries = useQueries({
+    queries: options.map((option) => ({ ...option, enabled: open && task !== null })),
   });
-  const planQuery = useQuery({
-    ...queryOptionsBySection.plan,
-    enabled,
-  });
-  const qaQuery = useQuery({
-    ...queryOptionsBySection.qa,
-    enabled,
-  });
-
+  const requireDocument = useCallback(
+    (code: string) => {
+      const index = codes.indexOf(code);
+      const option = options[index];
+      if (!option)
+        throw new Error(
+          `Task "${task?.id}" has no workflow artifact "${code}". Reload its workflow.`,
+        );
+      return option;
+    },
+    [codes, options, task?.id],
+  );
   const ensureDocumentLoaded = useCallback(
-    (section: DocumentSectionKey): boolean => {
-      if (!enabled) {
-        return false;
-      }
-
-      void ensureTaskDocumentQueryData(queryClient, queryOptionsBySection[section]).catch(
+    (code: string) => {
+      if (!open || !task) return false;
+      void ensureTaskDocumentQueryData(queryClient, requireDocument(code)).catch(() => undefined);
+      return true;
+    },
+    [open, task, queryClient, requireDocument],
+  );
+  const reloadDocument = useCallback(
+    (code: string) => {
+      if (!open || !task) return false;
+      const option = requireDocument(code);
+      void queryClient.cancelQueries({ queryKey: option.queryKey, exact: true });
+      void fetchFreshTaskDocumentFromQuery(queryClient, repoPath, task.id, code).catch(
         () => undefined,
       );
       return true;
     },
-    [enabled, queryClient, queryOptionsBySection],
+    [open, task, requireDocument, queryClient, repoPath],
   );
-
-  const reloadDocument = useCallback(
-    (section: DocumentSectionKey): boolean => {
-      if (!enabled || !taskId) {
-        return false;
-      }
-
-      const options = queryOptionsBySection[section];
-      void queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
-      void fetchFreshTaskDocumentFromQuery(
-        queryClient,
-        cacheScope,
-        taskId,
-        SECTION_CODES[section],
-      ).catch(() => undefined);
-      return true;
-    },
-    [cacheScope, enabled, queryClient, queryOptionsBySection, taskId],
-  );
-
   const applyDocumentUpdate = useCallback(
-    (section: DocumentSectionKey, payload: TaskDocumentPayload): void => {
-      if (!taskId) {
-        return;
-      }
-
-      const queryKey = queryOptionsBySection[section].queryKey;
-      void queryClient.cancelQueries({ queryKey, exact: true });
-      queryClient.setQueryData<TaskDocumentPayload>(queryKey, (current) =>
+    (code: string, payload: TaskDocumentPayload) => {
+      const option = requireDocument(code);
+      void queryClient.cancelQueries({ queryKey: option.queryKey, exact: true });
+      queryClient.setQueryData<TaskDocumentPayload>(option.queryKey, (current) =>
         resolveLatestDocumentPayload(current, payload),
       );
     },
-    [queryClient, queryOptionsBySection, taskId],
+    [requireDocument, queryClient],
   );
-
   return {
-    specDoc: toTaskDocumentState(specQuery, enabled),
-    planDoc: toTaskDocumentState(planQuery, enabled),
-    qaDoc: toTaskDocumentState(qaQuery, enabled),
+    documents: Object.fromEntries(
+      codes.map((code, index) => [code, toTaskDocumentState(queries[index]!)]),
+    ),
     ensureDocumentLoaded,
     reloadDocument,
     applyDocumentUpdate,
-  } satisfies {
-    specDoc: TaskDocumentState;
-    planDoc: TaskDocumentState;
-    qaDoc: TaskDocumentState;
-    ensureDocumentLoaded: (section: DocumentSectionKey) => boolean;
-    reloadDocument: (section: DocumentSectionKey) => boolean;
-    applyDocumentUpdate: (section: DocumentSectionKey, payload: TaskDocumentPayload) => void;
   };
 }

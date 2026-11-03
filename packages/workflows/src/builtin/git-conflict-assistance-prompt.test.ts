@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { buildGitConflictAssistancePrompt, type GitConflictRequestContext } from "./agent-prompts";
+import {
+  buildGitConflictAssistancePrompt,
+  gitConflictPromptContext,
+  type GitConflictRequestContext,
+} from "./agent-prompts";
 
 const git: GitConflictRequestContext = {
   operation: "pull_rebase",
@@ -33,24 +37,21 @@ test.each([
   },
 );
 
-test("active custom task text retains the required directory and evidence", () => {
+test("custom instructions retain the required directory and evidence", () => {
   const prompt = buildGitConflictAssistancePrompt({
     git: { ...git, conflictedFiles: [], conflictOutput: "Git diagnostic" },
-    task: {
-      context: { taskId: "task-1" },
-      overrides: {
-        "message.build_rebase_conflict_resolution": {
-          enabled: true,
-          baseVersion: 1,
-          template: "Custom instructions for {{task.id}}",
-        },
-      },
-    },
+    instructions: "Custom instructions",
   });
-  expect(prompt).toContain("Custom instructions for task-1");
+  expect(prompt).toContain("Custom instructions");
   expect(prompt).toContain("Working directory: /repo/saved-worktree/");
   expect(prompt).toContain("Conflicted files:\n  Unavailable");
   expect(prompt).toContain("Git diagnostic");
+});
+
+test("message template context uses the readable operation label", () => {
+  expect(gitConflictPromptContext({ ...git, operation: "pull_rebase" }).operationLabel).toBe(
+    "pull with rebase",
+  );
 });
 
 test("missing conflict directory blocks prompt construction", () => {

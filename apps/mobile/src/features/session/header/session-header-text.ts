@@ -2,7 +2,7 @@ import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeKind } from "@openducktor/cont
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { agentModelInfoParts } from "@openducktor/frontend-core/lib/agent-model-presentation";
 import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
-import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
+import type { ResolvedTaskCard } from "@openducktor/workflows";
 import type { SessionOwner } from "../session-target";
 
 /** The title of the session header, its details, and what a screen reader hears. */
@@ -20,8 +20,13 @@ const ownerKindLabel = (owner: SessionOwner, readOnly: boolean): string => {
 };
 
 /** The role of the session, or the kind of session when it has no role. */
-const roleLabel = (owner: SessionOwner, readOnly: boolean): string | null => {
-  if (owner.kind === "task") return BUILTIN_ROLE_LABELS[owner.role];
+const roleLabel = (
+  owner: SessionOwner,
+  readOnly: boolean,
+  task: ResolvedTaskCard | null,
+): string | null => {
+  if (owner.kind === "task")
+    return task?.taskWorkflow.definition.roles.find(({ id }) => id === owner.role)?.label ?? null;
   if (owner.kind === "chat") return owner.record.roleSnapshot?.name ?? "Chat";
   return readOnly ? "Read only" : null;
 };
@@ -43,6 +48,7 @@ export const sessionHeaderText = ({
   readOnly,
   sessionTitle,
   taskTitle,
+  task,
   runtimeKind,
   selectedModel,
   modelCatalog,
@@ -53,6 +59,7 @@ export const sessionHeaderText = ({
   sessionTitle: string | null;
   /** The title of the task of a task session, or null while it loads. */
   taskTitle: string | null;
+  task: ResolvedTaskCard | null;
   runtimeKind: RuntimeKind;
   selectedModel: AgentModelSelection | null;
   modelCatalog: AgentModelCatalog | null;
@@ -62,7 +69,7 @@ export const sessionHeaderText = ({
     ? agentModelInfoParts(selectedModel, modelCatalog).join(" · ") || null
     : null;
   const details = [
-    roleLabel(owner, readOnly),
+    roleLabel(owner, readOnly, task),
     RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].label,
     modelLabel,
   ].filter((part) => part !== null);

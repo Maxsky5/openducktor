@@ -11,7 +11,7 @@ import {
   createDeliveryAdapters,
   workflowClosedOccurrence,
 } from "@openducktor/frontend-core/notifications/notification-runtime.test-support";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
 

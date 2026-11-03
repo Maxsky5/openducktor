@@ -1,3 +1,4 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { createAuthorizedRemoteTestClient as createRemoteHostClient } from "../../../host-client/src/remote/test-support/authorization";
 import {
   createFakeHostChannel,
@@ -140,7 +141,12 @@ test("restores task delivery after disconnect during acknowledgement and after i
       boardChanges: null,
       repoPath: "/repo",
       taskId: "task",
-      taskSnapshot: { id: "task", title: "After foreground", status: "open" },
+      taskSnapshot: {
+        workflow: builtinTaskWorkflow.reference,
+        id: "task",
+        title: "After foreground",
+        status: "open",
+      },
       emittedAt: "2026-10-13T12:00:00.000Z",
     };
     const lease = leases.at(-1);

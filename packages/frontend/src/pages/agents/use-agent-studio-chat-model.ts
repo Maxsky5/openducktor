@@ -6,7 +6,10 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { AgentChatInterruptedTurnResumeModel } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
-import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import type {
+  AgentChatSurfaceModel,
+  AgentChatModel,
+} from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatDraftScope } from "@openducktor/frontend-core/sessions/send/agent-chat-draft-scope";
 import { useFailedTranscriptAction } from "@openducktor/frontend-core/sessions/transcript/use-failed-transcript-action";
 import { deriveAgentChatReadiness } from "@openducktor/frontend-core/sessions/send/agent-chat-readiness";
@@ -135,7 +138,7 @@ export function useAgentStudioChatModel({
   chatSettings,
   runtimeDefinitions,
   composer,
-}: UseAgentStudioChatModelArgs): AgentChatModel {
+}: UseAgentStudioChatModelArgs): AgentChatSurfaceModel {
   const activeWorkspace = useActiveWorkspace();
   const repoPath = activeWorkspace?.repoPath ?? null;
   const { loadAgentSessionHistory } = sessionActions;
@@ -466,14 +469,15 @@ export function useAgentStudioChatModel({
     repoPath,
     workspaceId: activeWorkspace?.workspaceId ?? null,
     identity: selectedSessionIdentity,
-    scope: activeWorkspace
-      ? {
-          kind: "workflow",
-          workspaceId: activeWorkspace.workspaceId,
-          taskId: selectedSession.taskId,
-          role: selectedSession.role,
-        }
-      : null,
+    scope:
+      activeWorkspace && selectedSession.role
+        ? {
+            kind: "workflow",
+            workspaceId: activeWorkspace.workspaceId,
+            taskId: selectedSession.taskId,
+            role: selectedSession.role,
+          }
+        : null,
     disabledReason: sessionForkDisabledReason({
       runtimeReadiness,
       interactionEnabled: chatReadiness.interactionEnabled,
@@ -483,7 +487,7 @@ export function useAgentStudioChatModel({
     }),
   });
 
-  const surfaceModel = useAgentChatSurfaceModel({
+  const surfaceInput: Parameters<typeof useAgentChatSurfaceModel>[0] = {
     modelCatalog: selectedSessionRuntimeData.modelCatalog,
     transcript,
     chatSettings,
@@ -496,7 +500,9 @@ export function useAgentStudioChatModel({
     }),
     interactionEnabled: chatReadiness.interactionEnabled,
     runtimePresentation,
-    emptyState: surfaceState.emptyState,
+    emptyState: selectedSession.role
+      ? surfaceState.emptyState
+      : { title: "This step needs a person. Use the task actions above." },
     pendingApprovalRequests,
     pendingQuestionRequests,
     todos: selectedSessionRuntimeData.todos,
@@ -504,27 +510,26 @@ export function useAgentStudioChatModel({
     pendingQuestions,
     approvals,
     interruptedTurnResume,
-    composer: composerConfig,
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,
-  });
+  };
+  if (selectedSession.role) surfaceInput.composer = composerConfig;
+  const surfaceModel = useAgentChatSurfaceModel(surfaceInput);
   const forkThread = useMemo(
-    () => ({ ...surfaceModel.thread, forkActions: fork.actions }),
-    [surfaceModel.thread, fork.actions],
+    () => ({
+      ...surfaceModel.thread,
+      forkActions: fork.actions,
+      workflowTask: selectedSession.selectedTask,
+    }),
+    [surfaceModel.thread, fork.actions, selectedSession.selectedTask],
   );
-  const composerModel = surfaceModel.composer;
-
-  if (!composerModel) {
-    throw new Error("Interactive Agent Studio chat is missing a composer model.");
-  }
 
   return useMemo(
     () =>
       ({
         ...surfaceModel,
         thread: forkThread,
-        composer: composerModel,
-      }) satisfies AgentChatModel,
-    [composerModel, surfaceModel, forkThread],
+      }) satisfies AgentChatSurfaceModel,
+    [surfaceModel, forkThread],
   );
 }

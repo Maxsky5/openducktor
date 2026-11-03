@@ -25,7 +25,8 @@ import {
   createGitProviderContextFixture,
   createRepoSettingsConfigFixture,
   createSettingsSnapshotFixture,
-  createTaskCardFixture,
+  createWireTaskCardFixture,
+  toWireTaskCard,
 } from "@/test-utils/shared-test-fixtures";
 import { checksQueryKeys } from "@openducktor/frontend-core/queries/checks";
 import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
@@ -44,7 +45,7 @@ import {
 } from "@openducktor/frontend-core/queries/workspace";
 import { customAgentRolesQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
-import { BUILTIN_PROMPT_TEMPLATE_IDS } from "@openducktor/workflows";
+import { BUILTIN_PROMPT_TEMPLATE_IDS } from "@openducktor/workflows/test-support";
 
 /**
  * The host of every harness in this file. Its commands fail until a test sets them. Each harness
@@ -589,7 +590,7 @@ describe("use-repo-settings-operations", () => {
   test("replaces an in-flight task read after the retention setting changes", async () => {
     const firstTaskRead = createDeferred<Awaited<ReturnType<typeof host.tasksList>>>();
     const firstTaskReadStarted = createDeferred<void>();
-    const refreshedTasks = [createTaskCardFixture({ title: "New retention" })];
+    const refreshedTasks = [createWireTaskCardFixture({ title: "New retention" })];
     const tasksList = mock(async () => {
       if (tasksList.mock.calls.length === 1) {
         firstTaskReadStarted.resolve();
@@ -632,28 +633,24 @@ describe("use-repo-settings-operations", () => {
 
       expect(tasksList).toHaveBeenCalledTimes(2);
       expect(
-        queryClient.getQueryData<RepoTaskData>(
-          taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")),
-        ),
-      ).toEqual({
-        tasks: refreshedTasks,
-      });
+        queryClient
+          .getQueryData<RepoTaskData>(taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")))
+          ?.tasks.map(toWireTaskCard),
+      ).toEqual(refreshedTasks);
       expect(
         queryClient.getQueryState(taskQueryKeys.repoData(createWorkspaceRecord("/repo-b")))
           ?.isInvalidated,
       ).toBe(true);
 
-      firstTaskRead.resolve([createTaskCardFixture({ title: "Old retention" })]);
+      firstTaskRead.resolve([createWireTaskCardFixture({ title: "Old retention" })]);
       await Promise.allSettled([pendingTaskRead]);
       expect(
-        queryClient.getQueryData<RepoTaskData>(
-          taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")),
-        ),
-      ).toEqual({
-        tasks: refreshedTasks,
-      });
+        queryClient
+          .getQueryData<RepoTaskData>(taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")))
+          ?.tasks.map(toWireTaskCard),
+      ).toEqual(refreshedTasks);
     } finally {
-      firstTaskRead.resolve([createTaskCardFixture({ title: "Old retention" })]);
+      firstTaskRead.resolve([createWireTaskCardFixture({ title: "Old retention" })]);
       await harness.unmount();
       host.tasksList = original.tasksList;
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;

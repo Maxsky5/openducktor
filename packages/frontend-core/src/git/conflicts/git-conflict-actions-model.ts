@@ -1,4 +1,3 @@
-import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import type { GitConflictAction, GitConflictOperation } from "../contracts";
 import { getGitConflictCopy, UNIDENTIFIED_GIT_CONFLICT_ASK_BLOCKED_REASON } from "./conflict-copy";
 
@@ -17,7 +16,7 @@ export const createGitConflictActionsModel = ({
   conflictAction,
   onAbort,
   onAsk,
-  recipientLabel = BUILTIN_ROLE_LABELS.build,
+  recipientLabel = "agent",
   blockedReason = null,
   isStarting = false,
 }: {

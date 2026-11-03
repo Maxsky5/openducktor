@@ -82,6 +82,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const agentRuntimeQueryClient = new HostAgentRuntimeQueryClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
   const hostClient = {
+    workflowCatalogGet: taskClient.workflowCatalogGet.bind(taskClient),
+    workspaceWorkflowGet: taskClient.workspaceWorkflowGet.bind(taskClient),
     notificationPublishAction: (occurrence: NotificationOccurrence) =>
       invokeFn("notification_publish_action", occurrence, selectedNotificationSchema),
     autopilotStateRead: (input: AutopilotStateReadInput) =>

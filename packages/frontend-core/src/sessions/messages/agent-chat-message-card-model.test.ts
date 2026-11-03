@@ -92,7 +92,7 @@ describe("agent-chat-message-card-model", () => {
       expect(roleLabel("assistant", noMetaMessage)).toBe("Assistant");
     });
 
-    test("keeps planner assistant labels when metadata includes the planner role", () => {
+    test("keeps the declared role ID for the workflow label owner", () => {
       const plannerMessage = createMessage({
         meta: {
           kind: "assistant",
@@ -101,7 +101,7 @@ describe("agent-chat-message-card-model", () => {
       });
 
       expect(assistantRoleFromMessage(plannerMessage)).toBe("planner");
-      expect(roleLabel("assistant", plannerMessage)).toBe("Planner");
+      expect(roleLabel("assistant", plannerMessage)).toBe("planner");
     });
 
     test("returns non-assistant role labels", () => {

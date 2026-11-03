@@ -1,4 +1,4 @@
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { useState } from "react";
 
 /** A task that leaves the task list while its dialog closes, as after a delete, stays shown. */

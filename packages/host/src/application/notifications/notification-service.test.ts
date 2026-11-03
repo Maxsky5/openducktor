@@ -15,7 +15,7 @@ import {
   type NotificationStreamFrame,
   type WorkspaceSession,
 } from "@openducktor/contracts";
-import { emptyArtifactSummary } from "@openducktor/workflows";
+import { emptyArtifactSummary } from "@openducktor/workflows/test-support";
 import { Stream, Effect } from "effect";
 import { HostOperationError, HostPathAccessError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
@@ -100,7 +100,15 @@ const transition = (
   removedTaskIds: [],
   taskSnapshots: [],
   statusChanges: [
-    { previousStatus: "in_progress", task: { id: "task", title: "Task", status: "blocked" } },
+    {
+      previousStatus: "in_progress",
+      task: {
+        workflow: { id: "openducktor", revision: 2 },
+        id: "task",
+        title: "Task",
+        status: "blocked",
+      },
+    },
   ],
   emittedAt: "2026-09-01T00:00:00Z",
 });
@@ -247,6 +255,31 @@ test("routes committed task changes by workspace when repository paths and task 
         }),
       ),
     ).rejects.toThrow("Notification navigation does not match its workspace");
+  } finally {
+    await Effect.runPromise(h.service.dispose());
+  }
+});
+
+test("a task change with an unavailable workflow reports health and keeps notifying", async () => {
+  const h = harness();
+  try {
+    await Effect.runPromise(h.service.initialize());
+    await flush();
+    const unknown = transition("unknown-workflow");
+    unknown.statusChanges[0]!.task.workflow = { id: "openducktor", revision: 999 };
+    h.service.acceptTask(unknown);
+    await flush();
+    expect(
+      h.frames.some(
+        (frame) =>
+          frame.type === "health" &&
+          frame.health.scope === "/alpha" &&
+          frame.health.message?.includes("openducktor@999"),
+      ),
+    ).toBe(true);
+    h.service.acceptTask(transition("known-workflow"));
+    await flush();
+    expect(occurrences(h.frames)).toHaveLength(1);
   } finally {
     await Effect.runPromise(h.service.dispose());
   }
@@ -481,8 +514,24 @@ test("two browsers add no notification baseline reads and share ordered committe
     const event = transition("mutation");
     if (event.kind === "tasks_updated")
       event.statusChanges.push(
-        { previousStatus: "blocked", task: { id: "task", title: "Task", status: "in_progress" } },
-        { previousStatus: "in_progress", task: { id: "task", title: "Task", status: "blocked" } },
+        {
+          previousStatus: "blocked",
+          task: {
+            workflow: { id: "openducktor", revision: 2 },
+            id: "task",
+            title: "Task",
+            status: "in_progress",
+          },
+        },
+        {
+          previousStatus: "in_progress",
+          task: {
+            workflow: { id: "openducktor", revision: 2 },
+            id: "task",
+            title: "Task",
+            status: "blocked",
+          },
+        },
       );
     h.service.acceptTask(event);
     h.service.acceptTask(event);
@@ -512,8 +561,24 @@ test("delivers the state notifications of a custom workflow with its default set
     const event = transition("review");
     if (event.kind === "tasks_updated")
       event.statusChanges = [
-        { previousStatus: "writing", task: { id: "task", title: "Task", status: "reviewing" } },
-        { previousStatus: "approval", task: { id: "task", title: "Task", status: "published" } },
+        {
+          previousStatus: "writing",
+          task: {
+            workflow: { id: "review", revision: 1 },
+            id: "task",
+            title: "Task",
+            status: "reviewing",
+          },
+        },
+        {
+          previousStatus: "approval",
+          task: {
+            workflow: { id: "review", revision: 1 },
+            id: "task",
+            title: "Task",
+            status: "published",
+          },
+        },
       ];
     h.service.acceptTask(event);
     await flush();
@@ -695,7 +760,14 @@ test.each(["baseline", "committed"] as const)(
       if (source === "committed") {
         h.service.acceptTask({
           ...transition("task-renamed"),
-          taskSnapshots: [{ id: task.id, title: "Updated task", status: task.status }],
+          taskSnapshots: [
+            {
+              workflow: { id: "openducktor", revision: 2 },
+              id: task.id,
+              title: "Updated task",
+              status: task.status,
+            },
+          ],
           statusChanges: [],
         });
         await flush();

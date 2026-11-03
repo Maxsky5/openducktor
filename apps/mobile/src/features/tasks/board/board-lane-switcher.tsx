@@ -1,6 +1,16 @@
+import { laneColors } from "./lane-colors";
 import type { KanbanColumnId } from "@openducktor/workflows";
-import { memo, type ReactElement, type ReactNode, useMemo } from "react";
-import { View } from "react-native";
+import {
+  type ComponentRef,
+  memo,
+  type ReactElement,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { ScrollView, View } from "react-native";
 import Animated, {
   Extrapolation,
   interpolate,
@@ -15,8 +25,7 @@ import { useAppTheme } from "@/theme/app-theme-context";
 import { TextPlaceholder } from "@/ui/placeholders";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
-import { type BoardColumn, columnChoiceLabel, LANE_SHORT_LABELS } from "./board-columns";
-import { useLaneIds } from "./use-lane-ids";
+import { type BoardColumn, columnChoiceLabel } from "./board-columns";
 import { LaneCount, LaneCountPlaceholder } from "./board-lane";
 
 /** The inset of the lane cells in the rail, so the selection pill has room for its shadow. */
@@ -61,7 +70,7 @@ const LaneCell = memo(function LaneCell({
   onSelect: (id: KanbanColumnId) => void;
 }): ReactElement {
   const theme = useAppTheme();
-  const lane = theme.lanes[column.id];
+  const lane = laneColors(theme, column.tone);
   const count = column.tasks.length;
   return (
     <Touchable
@@ -96,7 +105,7 @@ const LaneCell = memo(function LaneCell({
         allowFontScaling={false}
         style={[styles.cellLabel, selected && styles.cellLabelSelected]}
       >
-        {LANE_SHORT_LABELS[column.id]}
+        {column.shortLabel}
       </Text>
     </Touchable>
   );
@@ -121,7 +130,7 @@ const LaneTitle = memo(function LaneTitle({
 }): ReactElement {
   const theme = useAppTheme();
   const reducedMotion = useReducedMotion();
-  const lane = theme.lanes[column.id];
+  const lane = laneColors(theme, column.tone);
   const { scrollX, pageWidth } = position;
   const motionStyle = useAnimatedStyle(() => {
     const progress = pagerProgress(scrollX.get(), pageWidth.get(), fallbackIndex, lastIndex);
@@ -153,10 +162,10 @@ const LaneTitle = memo(function LaneTitle({
         {column.title}
       </Text>
       {loading ? (
-        <LaneCountPlaceholder columnId={column.id} maxFontSizeMultiplier={MAX_TEXT_SCALE} />
+        <LaneCountPlaceholder tone={column.tone} maxFontSizeMultiplier={MAX_TEXT_SCALE} />
       ) : (
         <LaneCount
-          columnId={column.id}
+          tone={column.tone}
           count={column.tasks.length}
           long
           maxFontSizeMultiplier={MAX_TEXT_SCALE}
@@ -167,8 +176,8 @@ const LaneTitle = memo(function LaneTitle({
 });
 
 /**
- * The lane switcher of the phone board. The rail shows every lane at once: its task count over
- * its desktop accent bar. A tap selects a lane. Under the rail, the desktop lane header names the
+ * The lane switcher of the phone board. The rail scrolls when the lanes need more room: each task
+ * count sits over its desktop accent bar. A tap selects a lane. Under the rail, the lane header names the
  * shown lane. The selection pill, its outline color, and the lane title follow the pager offset on
  * the UI thread, so they move with the finger during a swipe. `trailing` holds the board filter
  * control at the end of the title row. While the tasks load, placeholders take the place of the
@@ -191,11 +200,21 @@ export const BoardLaneSwitcher = memo(function BoardLaneSwitcher({
   loading?: boolean;
 }): ReactElement {
   const theme = useAppTheme();
+  const railScroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const contentWidth = Math.max(viewportWidth, columns.length * theme.touchTarget + RAIL_INSET * 2);
   const railWidth = useSharedValue(0);
-  const laneIds = useLaneIds(columns);
+  useEffect(() => {
+    if (viewportWidth === 0 || columns.length === 0) return;
+    const cellWidth = (contentWidth - RAIL_INSET * 2) / columns.length;
+    railScroll.current?.scrollTo({
+      x: Math.max(0, RAIL_INSET + (selectedIndex + 0.5) * cellWidth - viewportWidth / 2),
+      animated: false,
+    });
+  }, [columns.length, contentWidth, selectedIndex, viewportWidth]);
   const borders = useMemo(
-    () => laneIds.map((id) => theme.lanes[id].border),
-    [laneIds, theme.lanes],
+    () => columns.map((column) => laneColors(theme, column.tone).border),
+    [columns, theme],
   );
   const lastIndex = Math.max(columns.length - 1, 0);
   const position = useMemo(() => ({ scrollX, pageWidth }), [pageWidth, scrollX]);
@@ -223,23 +242,30 @@ export const BoardLaneSwitcher = memo(function BoardLaneSwitcher({
 
   return (
     <View style={styles.root}>
-      <View
-        style={styles.rail}
-        onLayout={(event) => railWidth.set(event.nativeEvent.layout.width)}
-        accessibilityRole="tablist"
-        accessibilityLabel="Board lanes"
+      <ScrollView
+        ref={railScroll}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        onLayout={(event) => setViewportWidth(event.nativeEvent.layout.width)}
       >
-        <Animated.View pointerEvents="none" style={[styles.pill, pill]} />
-        {columns.map((column, index) => (
-          <LaneCell
-            key={column.id}
-            column={column}
-            selected={index === selectedIndex}
-            loading={loading}
-            onSelect={onSelect}
-          />
-        ))}
-      </View>
+        <View
+          style={[styles.rail, { width: contentWidth }]}
+          onLayout={(event) => railWidth.set(event.nativeEvent.layout.width)}
+          accessibilityRole="tablist"
+          accessibilityLabel="Board lanes"
+        >
+          <Animated.View pointerEvents="none" style={[styles.pill, pill]} />
+          {columns.map((column, index) => (
+            <LaneCell
+              key={column.id}
+              column={column}
+              selected={index === selectedIndex}
+              loading={loading}
+              onSelect={onSelect}
+            />
+          ))}
+        </View>
+      </ScrollView>
       <View style={styles.titleRow}>
         <View style={styles.titles}>
           {columns.map((column, index) => (

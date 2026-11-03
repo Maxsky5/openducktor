@@ -1,3 +1,4 @@
+import { taskIssueType } from "@openducktor/workflows";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type {
@@ -6,14 +7,13 @@ import type {
 } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import {
   type TaskWorkflowAction,
-  type BuiltinTaskCard as TaskCardData,
-  type BuiltinRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCardData,
+  type WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { memo, type ReactElement, use, useCallback, useMemo, useRef } from "react";
 import { type DimensionValue, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { taskActionSendsCommand } from "@/features/workflow/task-action-routing";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { withAlpha } from "@/theme/color-alpha";
 import { ActionMenu, type ActionMenuHandle, type ActionMenuItem } from "@/ui/action-menu";
@@ -31,7 +31,6 @@ import {
 } from "../presentation/task-badges";
 import { IssueTypeMark } from "../presentation/task-chip";
 import { useCopyTaskId } from "../presentation/use-copy-task-id";
-import { taskActionRole } from "../presentation/task-action-paint";
 import {
   CardActionsPlaceholder,
   CardMenuButton,
@@ -78,10 +77,10 @@ const menuItems = (model: TaskCardModel): ActionMenuItem[] => [
     id: item.id,
     title: item.title,
     icon: item.icon,
-    role: taskActionRole(item.id) ?? undefined,
+
     destructive: item.destructive,
     disabled: item.disabled,
-    command: taskActionSendsCommand(item.id),
+    command: item.command,
   })),
   ...model.shortcuts.map((shortcut): ActionMenuItem => ({
     id: `${SHORTCUT_PREFIX}${shortcut.role}`,
@@ -172,7 +171,7 @@ export const TaskCard = memo(function TaskCard({
   const { primary, liveSession } = model;
   const primaryShowsSession = primary !== null && primary.activeSession !== null;
   const hasWorkflowMenu = model.menu.length > 0 || model.shortcuts.length > 0;
-  const paint = issueTypePaint(task.issueType);
+  const paint = issueTypePaint(taskIssueType(task));
   return (
     <View style={[styles.card, frame]}>
       {/* The press layer fills the card under its content, so the action controls stay apart. */}
@@ -241,7 +240,7 @@ export const TaskCard = memo(function TaskCard({
             importantForAccessibility="no-hide-descendants"
             style={styles.meta}
           >
-            <IssueTypeMark issueType={task.issueType} icon={paint.icon} />
+            <IssueTypeMark hint={taskIssueType(task).icon} icon={paint.icon} />
             {/* The ID gives way first, so the priority always reads. */}
             <View style={styles.fixed}>
               <PriorityBadge priority={task.priority} size="sm" />

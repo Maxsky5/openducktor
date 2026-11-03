@@ -1,3 +1,13 @@
+import {
+  builtinTaskWorkflow,
+  createTaskWorkflow,
+  taskWorkflowDescriptor,
+} from "@openducktor/workflows";
+import { repoConfigSchema } from "@openducktor/contracts";
+import {
+  createSettingsSnapshotFixture,
+  createTaskCardFixture,
+} from "../../test-support/shared-test-fixtures";
 import "../../test-support/dom-environment";
 import { expect, mock, test } from "bun:test";
 import { act, renderHook } from "@testing-library/react";
@@ -70,7 +80,7 @@ test("a local launch guard leaves confirmed unsaved feedback without dispatch", 
     await act(async () => {
       try {
         await view.result.current({
-          task: null,
+          task: createTaskCardFixture({ id: "task" }),
           request: {
             taskId: "task",
             role: "build",
@@ -183,7 +193,7 @@ test.each([
     try {
       await act(async () => {
         await view.result.current({
-          task: null,
+          task: createTaskCardFixture({ id: "task" }),
           request: {
             taskId: "task",
             role: "build",
@@ -344,7 +354,7 @@ test.each(["completed", "failed", "disconnected"] as const)(
       await act(async () => {
         try {
           await view.result.current({
-            task: null,
+            task: createTaskCardFixture({ id: "task-1" }),
             request: {
               taskId: "task",
               role: "build",
@@ -448,7 +458,7 @@ test.each(["acknowledged", "uncertain", "refused", "not_sent"] as const)(
     try {
       await act(async () => {
         const started = await view.result.current({
-          task: null,
+          task: createTaskCardFixture({ id: "task" }),
           request: {
             taskId: "task",
             role: "build",
@@ -577,6 +587,118 @@ test.each(["acknowledged", "uncertain", "refused", "not_sent"] as const)(
     } finally {
       sent.resolve(null);
       await retry;
+      view.unmount();
+      await connection.dispose();
+    }
+  },
+);
+
+test.each([
+  { context: "none" as const, override: false },
+  { context: "none" as const, override: true },
+  { context: "human_feedback" as const, override: false },
+  { context: "human_feedback" as const, override: true },
+  { context: "pull_request" as const, override: false },
+  { context: "pull_request" as const, override: true },
+])(
+  "renders declared message instructions at the shared launch interface: %j",
+  async ({ context, override }) => {
+    const descriptor = taskWorkflowDescriptor(builtinTaskWorkflow);
+    const step = descriptor.definition.steps.find(
+      (step) => step.kind === "agent" && step.roleId === "build",
+    );
+    if (step?.kind !== "agent") throw new Error("Missing Builder fixture step");
+    const launch = step.launchActions.find(({ id }) => id === "build_implementation_start");
+    if (!launch) throw new Error("Missing Builder fixture launch");
+    launch.template = { kind: "message", id: "message.custom_feedback" };
+    if (context === "none") delete launch.context;
+    else launch.context = context;
+    const samples = {
+      none: { contents: "{{role}}", required: [] as const, expected: "build" },
+      human_feedback: {
+        contents: "{{humanFeedback}}",
+        required: ["humanFeedback"] as const,
+        expected: "Revise the introduction.",
+      },
+      pull_request: {
+        contents: "{{git.targetBranch}}",
+        required: ["git.targetBranch"] as const,
+        expected: "chosen",
+      },
+    };
+    const { contents, required, expected } = samples[context];
+    descriptor.templates.push({
+      id: "message.custom_feedback",
+      purpose: "message",
+      builtinVersion: 1,
+      template: `Default {{task.id}}: ${contents}`,
+      label: "Custom feedback",
+      description: "Custom feedback",
+      roleIds: ["build"],
+      requiredPlaceholders: [...required],
+    });
+    const taskWorkflow = createTaskWorkflow(descriptor.definition, descriptor.templates);
+    const dispatch = mock(
+      async (_request: WorkflowLaunchRequest): Promise<WorkflowLaunchResult> => {
+        throw new Error("Host refused the test launch");
+      },
+    );
+    const connection = createConnection({
+      agentSessionWorkflowLaunch: dispatch,
+      workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+      workspaceGetRepoConfig: async () =>
+        repoConfigSchema.parse({
+          workspaceId: workspace.workspaceId,
+          workspaceName: "Workspace",
+          repoPath: workspace.repoPath,
+          branchPrefix: "odt",
+          promptOverrides: override
+            ? {
+                "message.custom_feedback": {
+                  template: `Override {{task.id}}: ${contents}`,
+                  baseVersion: 1,
+                  enabled: true,
+                },
+              }
+            : {},
+        }),
+    });
+    const view = renderHook(() => useSessionStartWorkflowRunner(workspace), {
+      wrapper: createWrapper(connection),
+    });
+    try {
+      await act(async () => {
+        try {
+          await view.result.current({
+            task: { ...createTaskCardFixture({ id: "task" }), taskWorkflow },
+            request: {
+              taskId: "task",
+              role: "build",
+              launchActionId: launch.id,
+              postStartAction: "send_message",
+              humanFeedback: "  Revise the introduction.  ",
+            },
+            decision: {
+              startMode: "fresh",
+              targetBranch: { remote: "origin", branch: "chosen" },
+              selectedModel: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+            },
+          });
+        } catch (cause) {
+          expect(cause).toMatchObject({ message: "Host refused the test launch" });
+        }
+      });
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(dispatch.mock.calls[0]?.[0].instruction).toEqual({
+        kind: "message",
+        parts: [
+          {
+            kind: "text",
+            text: `${override ? "Override" : "Default"} task: ${expected}`,
+          },
+        ],
+      });
+    } finally {
       view.unmount();
       await connection.dispose();
     }

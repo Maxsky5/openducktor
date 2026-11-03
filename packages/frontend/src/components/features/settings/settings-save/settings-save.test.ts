@@ -11,7 +11,7 @@ import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
 import { preparePromptOverridesForSave } from "./prompt-overrides";
 import { prepareRepoConfigForSave } from "./repo-config";
 import { prepareSettingsSnapshotForSave } from "./settings-snapshot";
-import { BUILTIN_PROMPT_TEMPLATE_IDS } from "@openducktor/workflows";
+import { BUILTIN_PROMPT_TEMPLATE_IDS } from "@openducktor/workflows/test-support";
 
 const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): SettingsRepoConfig => ({
   workspaceId: "repo-a",
@@ -334,7 +334,7 @@ describe("settings save transforms", () => {
         },
       }),
     ).toThrow(
-      "Specification agent default runtime kind is required when provider and model are configured.",
+      "spec agent default runtime kind is required when provider and model are configured.",
     );
   });
 

@@ -1,3 +1,9 @@
+import {
+  useTaskWorkflowContinuation,
+  type TaskWorkflowContinuation,
+} from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
+import { useTaskActionTasks } from "@openducktor/frontend-core/queries/use-task-action-tasks";
+import { useWorkflowEventActions } from "@openducktor/frontend-core/tasks/workflow/use-workflow-event-actions";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import {
   TasksStateContext,
@@ -6,8 +12,8 @@ import {
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import {
   type TaskWorkflowAction,
-  type BuiltinTaskCard as TaskCard,
-  type BuiltinRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { useTaskResetFlow } from "@openducktor/frontend-core/tasks/workflow/use-task-reset-flow";
@@ -53,20 +59,45 @@ export type ConfirmedTaskAction = { taskId: string; action: TaskConfirmationActi
  */
 export function useTaskActions({
   workspace,
-  tasks,
+  tasks: visibleTasks,
   outcome = NO_OUTCOME_LISTENER,
+  onRemoveWorktree,
 }: {
   workspace: WorkspaceRecord;
   tasks: TaskCard[];
   outcome?: ConfirmationOutcomeListener<ConfirmedTaskAction> | undefined;
+  onRemoveWorktree?: (() => void) | undefined;
 }): TaskActions {
   const router = useRouter();
   const { feedback } = useClientConnection();
   const { resetTaskImplementation } = useRequiredContext(TasksStateContext, "useTaskActions");
   const { workspaceId, repoPath } = workspace;
+  const tasks = useTaskActionTasks(workspace, visibleTasks);
   const [request, setRequest] = useState<TaskConfirmationRequest | null>(null);
   const nextRequestId = useRef(0);
   const workspaceIdentity = useMemo(() => ({ workspaceId, repoPath }), [repoPath, workspaceId]);
+  const openSession = useCallback(
+    (_task: TaskCard, _role: AgentRole, options: SessionTargetOptions) => {
+      router.push(routes.session(sessionParams(workspaceId, options.session)));
+    },
+    [router, workspaceId],
+  );
+
+  const launch = useCallback(
+    (taskId: string, launchActionId: string, committedTask?: TaskCard) => {
+      const task = committedTask ?? tasks.find(({ id }) => id === taskId);
+      if (!task) throw new Error("Task workflow is unavailable. Reload the task.");
+      const choice = task.taskWorkflow.launchAction(launchActionId);
+      router.push(
+        choice.context === "human_feedback"
+          ? routes.requestChanges(workspaceId, taskId, choice.id)
+          : routes.quickAction(workspaceId, taskId, choice.id),
+        SINGLE_SHEET,
+      );
+    },
+    [router, workspaceId, tasks],
+  );
+  const continueTaskWorkflow = useTaskWorkflowContinuation(workspaceIdentity, launch);
   const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
     tasks,
     workspaceIdentity,
@@ -80,48 +111,86 @@ export function useTaskActions({
     openReset.current = openResetImplementation;
   }, [openResetImplementation]);
 
-  const confirm = useCallback((task: TaskCard, action: TaskConfirmationAction) => {
-    if (action === "reset_implementation") {
-      openReset.current(task.id, { closeDetailsAfterReset: true });
-      return;
-    }
-    nextRequestId.current += 1;
-    setRequest({ id: nextRequestId.current, taskId: task.id, action });
-  }, []);
-
-  const openSession = useCallback(
-    (_task: TaskCard, _role: AgentRole, options: SessionTargetOptions) => {
-      router.push(routes.session(sessionParams(workspaceId, options.session)));
+  const confirm = useCallback(
+    (task: TaskCard, action: TaskConfirmationAction, continuation?: TaskWorkflowContinuation) => {
+      if (action === "reset_implementation") {
+        openReset.current(task.id, {
+          closeDetailsAfterReset: true,
+          onCommitted: continuation ? () => continueTaskWorkflow(task.id, continuation) : undefined,
+        });
+        return;
+      }
+      nextRequestId.current += 1;
+      setRequest({
+        id: nextRequestId.current,
+        taskId: task.id,
+        action,
+        onCommitted: continuation ? () => continueTaskWorkflow(task.id, continuation) : undefined,
+      });
     },
-    [router, workspaceId],
+    [continueTaskWorkflow],
   );
 
+  const events = useWorkflowEventActions(repoPath, tasks, launch, workspaceId);
   const runAction = useCallback<TaskActions["runAction"]>(
     (task, action, sessionOptionsOf) => {
-      const destination = resolveTaskActionDestination(action, task.id, sessionOptionsOf);
-      if (!destination) return;
-      switch (destination.kind) {
-        case "start_session":
-          router.push(routes.startSession(workspaceId, task.id, destination.action), SINGLE_SHEET);
-          return;
-        case "open_session":
-          openSession(task, destination.role, destination.options);
-          return;
-        case "no_session":
-          showNoSession(feedback, task.id, destination.role);
-          return;
-        case "approve":
-          router.push(routes.approveTask(workspaceId, task.id), SINGLE_SHEET);
-          return;
-        case "request_changes":
-          router.push(routes.requestChanges(workspaceId, task.id), SINGLE_SHEET);
-          return;
-        case "confirm":
-          confirm(task, destination.action);
-          return;
+      try {
+        const destination = resolveTaskActionDestination(action, task, sessionOptionsOf);
+        if (!destination) return;
+        switch (destination.kind) {
+          case "launch":
+            launch(task.id, destination.launchActionId);
+            return;
+          case "event":
+            events.onApplyEvent(task.id, destination.eventId, destination.launchActionIds);
+            return;
+          case "details":
+            router.push(routes.task(workspaceId, task.id));
+            return;
+          case "cleanup":
+            if (onRemoveWorktree) {
+              onRemoveWorktree();
+              return;
+            }
+            feedback.show("error", "Workflow action failed", {
+              description: "Open the task details to remove its worktree.",
+            });
+            return;
+          case "open_session":
+            openSession(task, destination.role, destination.options);
+            return;
+          case "no_session":
+            showNoSession(feedback, task, destination.role);
+            return;
+          case "approve":
+            router.push(
+              routes.approveTask(workspaceId, task.id, destination.continuation),
+              SINGLE_SHEET,
+            );
+            return;
+          case "request_changes":
+            router.push(
+              routes.requestChanges(
+                workspaceId,
+                task.id,
+                undefined,
+                true,
+                destination.continuation,
+              ),
+              SINGLE_SHEET,
+            );
+            return;
+          case "confirm":
+            confirm(task, destination.action, destination.continuation);
+            return;
+        }
+      } catch (cause) {
+        feedback.show("error", "Workflow action failed", {
+          description: cause instanceof Error ? cause.message : String(cause),
+        });
       }
     },
-    [confirm, feedback, openSession, router, workspaceId],
+    [confirm, feedback, openSession, router, workspaceId, events, launch, onRemoveWorktree],
   );
 
   // A Delete from the task details pops the details. The confirmation is its own native window, so

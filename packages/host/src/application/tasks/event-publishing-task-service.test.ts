@@ -24,6 +24,8 @@ const taskCard = (): TaskCard => ({
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
+  workflow: { id: "openducktor", revision: 2 },
+  workflowSteps: [],
   availableActions: [],
   labels: [],
   artifactSummary: {
@@ -413,7 +415,12 @@ describe("createEventPublishingTaskService", () => {
         createTask: () =>
           Effect.fail(
             new TaskCreationProgressFailure(
-              { id: "task-1", title: "Created", status: "open" },
+              {
+                workflow: { id: "openducktor", revision: 2 },
+                id: "task-1",
+                title: "Created",
+                status: "open",
+              },
               failure,
             ),
           ),

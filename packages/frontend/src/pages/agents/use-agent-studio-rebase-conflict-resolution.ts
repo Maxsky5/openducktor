@@ -1,3 +1,4 @@
+import { taskGitConflictLaunch } from "@openducktor/workflows";
 import type { RepoPromptOverrides } from "@openducktor/contracts";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
@@ -42,8 +43,8 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   startSessionRequest: (
     request: SessionStartLaunchRequest & {
-      role: "build";
-      launchActionId: "build_rebase_conflict_resolution";
+      role: string;
+      launchActionId: string;
       postStartAction: "send_message";
       message: string;
       targetWorkingDirectory?: string | null;
@@ -106,7 +107,13 @@ export function useAgentStudioRebaseConflictResolution({
         throw new Error("Cannot resolve a git conflict because no task is selected.");
       }
 
+      const launch = view.selectedTask && taskGitConflictLaunch(view.selectedTask);
+      if (!launch)
+        throw new Error(
+          "This task has no available conflict-resolution launch. Open its workflow actions.",
+        );
       const builderSessions = resolveAgentStudioBuilderSessionsForTask({
+        role: launch.role,
         taskId: view.taskId,
         candidateSessions: [view.selectedSession.loadedSession, ...view.sessionsForTask],
       });
@@ -118,7 +125,7 @@ export function useAgentStudioRebaseConflictResolution({
           taskId: view.taskId,
           task: view.selectedTask,
           builderSessions,
-          currentViewSession: view.role === "build" ? view.selectedSession.identity : null,
+          currentViewSession: view.role === launch.role ? view.selectedSession.identity : null,
           onOpenSession: (session) => {
             assertCurrent();
             const identity = toAgentSessionIdentity(session);
@@ -130,7 +137,7 @@ export function useAgentStudioRebaseConflictResolution({
               buildAgentStudioSelectionQueryUpdate({
                 taskId: view.taskId,
                 sessionExternalId: identity.externalSessionId,
-                role: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
+                role: builderSession?.role ?? defaultBuilderSession?.role ?? launch.role,
               }),
             );
           },

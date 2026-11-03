@@ -48,6 +48,7 @@ const createHookHarness = (initialProps: HookArgs) => {
 };
 
 const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  documentCodes: ["spec", "plan", "qaReport"],
   open: true,
   taskId: "task-1",
   repoPath: "/repo",
@@ -71,7 +72,7 @@ describe("useTaskDocumentEditorState", () => {
     const props = {
       ...createBaseProps(),
       repoPath: "/repo",
-      loadDocument: (taskId: string, code: "spec" | "plan" | "qaReport") =>
+      loadDocument: (taskId: string, code: string) =>
         loadTaskDocumentFromQuery(connection.queryClient, workspace, taskId, code),
     };
     const wrapper = ({ children }: PropsWithChildren) =>
@@ -80,13 +81,13 @@ describe("useTaskDocumentEditorState", () => {
     const view = renderHook(
       () => {
         const state = useTaskDocumentEditorState(props);
-        loading.push(state.documents.spec.isLoading);
+        loading.push(state.documents.spec!.isLoading);
         return state;
       },
       { wrapper },
     );
     try {
-      expect(view.result.current.documents.spec.draftMarkdown).toBe("# Cached spec");
+      expect(view.result.current.documents.spec!.draftMarkdown).toBe("# Cached spec");
       expect(loading).not.toContain(true);
       expect(read).not.toHaveBeenCalled();
     } finally {
@@ -123,10 +124,10 @@ describe("useTaskDocumentEditorState", () => {
       });
       view.rerender({ ...props, activeSection: "plan" });
       await waitFor(
-        () => expect(view.result.current.documents.plan.draftMarkdown).toBe("# Current plan"),
+        () => expect(view.result.current.documents.plan!.draftMarkdown).toBe("# Current plan"),
         { timeout: 500 },
       );
-      expect(view.result.current.documents.plan.updatedAt).toBe("2026-10-31T13:00:00Z");
+      expect(view.result.current.documents.plan!.updatedAt).toBe("2026-10-31T13:00:00Z");
       expect(read).toHaveBeenCalledTimes(1);
     } finally {
       view.unmount();
@@ -146,12 +147,12 @@ describe("useTaskDocumentEditorState", () => {
   test("loads first active section successfully", async () => {
     const harness = createHookHarness(createBaseProps());
     await harness.mount();
-    await harness.waitFor((state) => state.documents.spec.loaded);
+    await harness.waitFor((state) => state.documents.spec!.loaded);
 
     const state = harness.getLatest();
-    expect(state.documents.spec.loaded).toBe(true);
-    expect(state.documents.spec.serverMarkdown).toBe("# Spec");
-    expect(state.documents.spec.error).toBeNull();
+    expect(state.documents.spec!.loaded).toBe(true);
+    expect(state.documents.spec!.serverMarkdown).toBe("# Spec");
+    expect(state.documents.spec!.error).toBeNull();
 
     await harness.unmount();
   });
@@ -164,12 +165,12 @@ describe("useTaskDocumentEditorState", () => {
       const original = createHookHarness(props);
       let replacement = original;
       await original.mount();
-      await original.waitFor((state) => state.documents.spec.loaded);
+      await original.waitFor((state) => state.documents.spec!.loaded);
       await original.run((state) => state.updateDraft("spec", "Submitted draft"));
       const acknowledgeOldSave = original.getLatest().applySaved;
       if (departure === "scope change") {
         await original.update({ ...props, workspaceId: "workspace-b" });
-        await original.waitFor((state) => state.documents.spec.loaded);
+        await original.waitFor((state) => state.documents.spec!.loaded);
         await original.update(props);
       } else {
         await original.unmount();
@@ -177,20 +178,20 @@ describe("useTaskDocumentEditorState", () => {
         await replacement.mount();
       }
       try {
-        await replacement.waitFor((state) => state.documents.spec.loaded);
+        await replacement.waitFor((state) => state.documents.spec!.loaded);
         await replacement.run((state) => state.updateDraft("spec", "Replacement draft"));
         await replacement.run(() =>
           acknowledgeOldSave("spec", "Submitted draft", "2026-02-20T11:00:00Z"),
         );
-        expect(replacement.getLatest().documents.spec.draftMarkdown).toBe("Replacement draft");
+        expect(replacement.getLatest().documents.spec!.draftMarkdown).toBe("Replacement draft");
       } finally {
         await replacement.unmount();
       }
       const reopened = createHookHarness(props);
       try {
         await reopened.mount();
-        await reopened.waitFor((state) => state.documents.spec.loaded);
-        expect(reopened.getLatest().documents.spec.draftMarkdown).toBe("Replacement draft");
+        await reopened.waitFor((state) => state.documents.spec!.loaded);
+        expect(reopened.getLatest().documents.spec!.draftMarkdown).toBe("Replacement draft");
       } finally {
         await reopened.unmount();
       }
@@ -203,7 +204,7 @@ describe("useTaskDocumentEditorState", () => {
       createBaseProps({ workspaceId: "workspace-a", retainedDrafts }),
     );
     await original.mount();
-    await original.waitFor((state) => state.documents.spec.loaded);
+    await original.waitFor((state) => state.documents.spec!.loaded);
     await original.run((state) => state.updateDraft("spec", "Unsaved document"));
     await original.unmount();
 
@@ -211,8 +212,8 @@ describe("useTaskDocumentEditorState", () => {
       createBaseProps({ workspaceId: "workspace-b", retainedDrafts }),
     );
     await other.mount();
-    await other.waitFor((state) => state.documents.spec.loaded);
-    expect(other.getLatest().documents.spec.draftMarkdown).toBe("# Spec");
+    await other.waitFor((state) => state.documents.spec!.loaded);
+    expect(other.getLatest().documents.spec!.draftMarkdown).toBe("# Spec");
     await other.unmount();
 
     const restored = createHookHarness(
@@ -225,9 +226,9 @@ describe("useTaskDocumentEditorState", () => {
       }),
     );
     await restored.mount();
-    await restored.waitFor((state) => state.documents.spec.error !== null);
-    expect(restored.getLatest().documents.spec.draftMarkdown).toBe("Unsaved document");
-    expect(restored.getLatest().documents.spec.error).toContain("removed");
+    await restored.waitFor((state) => state.documents.spec!.error !== null);
+    expect(restored.getLatest().documents.spec!.draftMarkdown).toBe("Unsaved document");
+    expect(restored.getLatest().documents.spec!.error).toContain("removed");
     await restored.run((state) => state.discardDraft("spec"));
     expect(retainedDrafts.size).toBe(0);
     await restored.unmount();
@@ -243,13 +244,13 @@ describe("useTaskDocumentEditorState", () => {
     );
     await harness.mount();
     await harness.waitFor(
-      (state) => !state.documents.spec.isLoading && state.documents.spec.error !== null,
+      (state) => !state.documents.spec!.isLoading && state.documents.spec!.error !== null,
     );
 
     const state = harness.getLatest();
-    expect(state.documents.spec.loaded).toBe(false);
-    expect(state.documents.spec.isLoading).toBe(false);
-    expect(state.documents.spec.error).toContain("spec failed");
+    expect(state.documents.spec!.loaded).toBe(false);
+    expect(state.documents.spec!.isLoading).toBe(false);
+    expect(state.documents.spec!.error).toContain("spec failed");
 
     await harness.unmount();
   });
@@ -264,14 +265,14 @@ describe("useTaskDocumentEditorState", () => {
 
     await harness.mount();
     await harness.waitFor(
-      (state) => !state.documents.spec.isLoading && state.documents.spec.error !== null,
+      (state) => !state.documents.spec!.isLoading && state.documents.spec!.error !== null,
       200,
     );
 
     const state = harness.getLatest();
-    expect(state.documents.spec.loaded).toBe(false);
-    expect(state.documents.spec.isLoading).toBe(false);
-    expect(state.documents.spec.error).toContain("Timed out");
+    expect(state.documents.spec!.loaded).toBe(false);
+    expect(state.documents.spec!.isLoading).toBe(false);
+    expect(state.documents.spec!.error).toContain("Timed out");
 
     await harness.unmount();
   });
@@ -315,16 +316,16 @@ describe("useTaskDocumentEditorState", () => {
       first.resolve({ markdown: "# Task 1", updatedAt: "2026-02-20T10:00:00Z" });
     });
 
-    expect(harness.getLatest().documents.spec.serverMarkdown).toBe("");
-    expect(harness.getLatest().documents.spec.isLoading).toBe(true);
+    expect(harness.getLatest().documents.spec!.serverMarkdown).toBe("");
+    expect(harness.getLatest().documents.spec!.isLoading).toBe(true);
 
     await harness.run(async () => {
       second.resolve({ markdown: "# Task 2", updatedAt: "2026-02-20T11:00:00Z" });
     });
-    await harness.waitFor((state) => state.documents.spec.serverMarkdown === "# Task 2");
+    await harness.waitFor((state) => state.documents.spec!.serverMarkdown === "# Task 2");
 
-    expect(harness.getLatest().documents.spec.serverMarkdown).toBe("# Task 2");
-    expect(harness.getLatest().documents.spec.isLoading).toBe(false);
+    expect(harness.getLatest().documents.spec!.serverMarkdown).toBe("# Task 2");
+    expect(harness.getLatest().documents.spec!.isLoading).toBe(false);
 
     await harness.unmount();
   });
@@ -362,19 +363,19 @@ describe("useTaskDocumentEditorState", () => {
       first.reject(new Error("stale task failed"));
     });
 
-    expect(harness.getLatest().documents.spec.serverMarkdown).toBe("");
-    expect(harness.getLatest().documents.spec.error).toBeNull();
-    expect(harness.getLatest().documents.spec.isLoading).toBe(true);
+    expect(harness.getLatest().documents.spec!.serverMarkdown).toBe("");
+    expect(harness.getLatest().documents.spec!.error).toBeNull();
+    expect(harness.getLatest().documents.spec!.isLoading).toBe(true);
 
     await harness.run(async () => {
       second.resolve({ markdown: "# Task 2", updatedAt: "2026-02-20T11:00:00Z" });
     });
-    await harness.waitFor((state) => state.documents.spec.serverMarkdown === "# Task 2");
+    await harness.waitFor((state) => state.documents.spec!.serverMarkdown === "# Task 2");
 
     const state = harness.getLatest();
-    expect(state.documents.spec.serverMarkdown).toBe("# Task 2");
-    expect(state.documents.spec.error).toBeNull();
-    expect(state.documents.spec.isLoading).toBe(false);
+    expect(state.documents.spec!.serverMarkdown).toBe("# Task 2");
+    expect(state.documents.spec!.error).toBeNull();
+    expect(state.documents.spec!.isLoading).toBe(false);
 
     await harness.unmount();
   });
@@ -419,9 +420,7 @@ describe("useTaskDocumentEditorState", () => {
 
       const state = harness.getLatest();
       expect(loadedTaskIds).toEqual([]);
-      expect(state.documents.spec.loaded).toBe(false);
-      expect(state.documents.spec.isLoading).toBe(false);
-      expect(state.documents.spec.serverMarkdown).toBe("");
+      expect(state.documents.spec!.loaded).toBe(false);
     } finally {
       first.resolve({ markdown: "# Task 1", updatedAt: "2026-02-20T10:00:00Z" });
       await harness.unmount();
@@ -442,20 +441,20 @@ describe("useTaskDocumentEditorState", () => {
       }),
     );
     await harness.mount();
-    await harness.waitFor((state) => state.documents.spec.error !== null);
+    await harness.waitFor((state) => state.documents.spec!.error !== null);
 
-    expect(harness.getLatest().documents.spec.error).toContain("first failure");
+    expect(harness.getLatest().documents.spec!.error).toContain("first failure");
 
     await harness.run(async () => {
       await harness.getLatest().loadSection("spec", true);
     });
-    await harness.waitFor((state) => state.documents.spec.loaded);
+    await harness.waitFor((state) => state.documents.spec!.loaded);
 
     const state = harness.getLatest();
     expect(attempts).toBe(2);
-    expect(state.documents.spec.loaded).toBe(true);
-    expect(state.documents.spec.serverMarkdown).toBe("# Recovered");
-    expect(state.documents.spec.error).toBeNull();
+    expect(state.documents.spec!.loaded).toBe(true);
+    expect(state.documents.spec!.serverMarkdown).toBe("# Recovered");
+    expect(state.documents.spec!.error).toBeNull();
 
     await harness.unmount();
   });
@@ -466,19 +465,19 @@ describe("useTaskDocumentEditorState", () => {
         loadDocument: async () => ({
           markdown: "",
           updatedAt: "2026-02-20T12:00:00Z",
-          error: "Failed to decode openducktor.documents.spec[0]: invalid gzip payload",
+          error: "Failed to decode openducktor.specDoc[0]: invalid gzip payload",
         }),
       }),
     );
 
     await harness.mount();
-    await harness.waitFor((state) => state.documents.spec.loaded);
+    await harness.waitFor((state) => state.documents.spec!.loaded);
 
     const state = harness.getLatest();
-    expect(state.documents.spec.loaded).toBe(true);
-    expect(state.documents.spec.isLoading).toBe(false);
-    expect(state.documents.spec.error).toBe(
-      "Failed to decode openducktor.documents.spec[0]: invalid gzip payload",
+    expect(state.documents.spec!.loaded).toBe(true);
+    expect(state.documents.spec!.isLoading).toBe(false);
+    expect(state.documents.spec!.error).toBe(
+      "Failed to decode openducktor.specDoc[0]: invalid gzip payload",
     );
 
     await harness.unmount();

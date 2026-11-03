@@ -1,3 +1,4 @@
+import { builtinNotificationPresentation } from "../test-support/workflow-fixtures";
 import { describe, expect, mock, test } from "bun:test";
 import { type NotificationOsDeliveryRequest } from "@openducktor/contracts";
 import {
@@ -6,7 +7,7 @@ import {
   createNotificationRuntime,
   workflowClosedOccurrence,
 } from "./notification-runtime.test-support";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 
 /** The built-in notification settings always hold the Closed kind. */
 const closedKind = (settings: ReturnType<typeof createBuiltinNotificationSettings>) => {
@@ -299,6 +300,7 @@ describe("notification delivery and previews", () => {
     await runtime.publishAndWait({
       occurrenceId: "workflow.closed:/repo:task-1:event-focus-failure",
       kind: "workflow.closed",
+      ...builtinNotificationPresentation("workflow.closed"),
       repoPath: "/repo",
       repositoryLabel: "Repo",
       task: { id: "task-1", title: "Build notifications" },

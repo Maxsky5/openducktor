@@ -1,3 +1,5 @@
+import { builtinTaskWorkflow, workflowPromptTemplates } from "@openducktor/workflows";
+
 import { describe, expect, test } from "bun:test";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -329,7 +331,9 @@ describe("settings-modal-model", () => {
       },
     } satisfies RepoPromptOverrides;
 
-    expect(buildPromptOverrideValidationErrors(overrides)).toEqual({
+    expect(
+      buildPromptOverrideValidationErrors(overrides, workflowPromptTemplates(builtinTaskWorkflow)),
+    ).toEqual({
       "kickoff.build_pull_request_generation":
         "Unsupported placeholders: {{task.foo}}, {{unknown.value}}, {{git.pullRequestBaseBranch}}.",
     });
@@ -344,7 +348,9 @@ describe("settings-modal-model", () => {
       },
     } satisfies RepoPromptOverrides;
 
-    expect(buildPromptOverrideValidationErrors(overrides)).toEqual({
+    expect(
+      buildPromptOverrideValidationErrors(overrides, workflowPromptTemplates(builtinTaskWorkflow)),
+    ).toEqual({
       "kickoff.build_after_human_request_changes":
         "Missing required placeholder: {{humanFeedback}}.",
     });
@@ -364,7 +370,9 @@ describe("settings-modal-model", () => {
       },
     } satisfies RepoPromptOverrides;
 
-    expect(buildPromptOverrideValidationErrors(overrides)).toEqual({});
+    expect(
+      buildPromptOverrideValidationErrors(overrides, workflowPromptTemplates(builtinTaskWorkflow)),
+    ).toEqual({});
   });
 
   test("enables prompt override and creates missing entries from fallback values", () => {

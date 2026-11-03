@@ -25,7 +25,7 @@ import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { WorkspaceStateContext } from "../app-state-contexts";
 import { useNotificationContext } from "../notifications/notification-context";
 import { NotificationProvider } from "./notification-provider";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 import { createWorkspaceRecordFixture } from "@/test-utils/shared-test-fixtures";
 
 test("startup feedback suppresses only its in-app Started toast through publication echoes", async () => {
@@ -95,6 +95,7 @@ test("startup feedback suppresses only its in-app Started toast through publicat
           workspaceId: record.workspaceId,
           taskId: "task-1",
           role: "build",
+          roleLabel: "Builder",
           inAppFeedbackHandled,
           session: {
             externalSessionId: "session-1",

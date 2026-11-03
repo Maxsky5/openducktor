@@ -6,11 +6,11 @@ import {
 import type { AgentChatDraftStore } from "../../drafts/agent-chat-draft-store";
 import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 export type AgentStudioChatDraftScope = {
   taskId: string;
-  role: AgentRole;
+  role: AgentRole | null;
   session: AgentSessionIdentity | null;
 };
 

@@ -123,7 +123,12 @@ const createHost = (overrides: Partial<HostChannelOptions> = {}) => {
         workspaceId: "repo",
         repoPath: "/repo",
         taskId: `task-${sequence}`,
-        taskSnapshot: { id: `task-${sequence}`, title: "Task", status: "open" },
+        taskSnapshot: {
+          workflow: { id: "test-workflow", revision: 1 },
+          id: `task-${sequence}`,
+          title: "Task",
+          status: "open",
+        },
         emittedAt: "2026-07-23T12:00:00.000Z",
       });
     },

@@ -1,5 +1,5 @@
 import { isAgentSessionActivityActive } from "../../lib/agent-session-activity-state";
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import {
   type ActiveTaskSessionContext,
   isKanbanActiveTaskSession,

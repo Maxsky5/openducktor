@@ -1,4 +1,4 @@
-import type { BuiltinPromptRoleTabId } from "@openducktor/workflows";
+import type { WorkflowPromptRoleTabId } from "@openducktor/workflows";
 import {
   resolveSettingsDeepLink,
   type SettingsContentFocusRequest,
@@ -34,8 +34,8 @@ export function getOpenState(
 export type Navigation = {
   section: SettingsSectionId;
   repositorySection: RepositorySectionId;
-  globalPromptRoleTab: BuiltinPromptRoleTabId;
-  repoPromptRoleTab: BuiltinPromptRoleTabId;
+  globalPromptRoleTab: WorkflowPromptRoleTabId;
+  repoPromptRoleTab: WorkflowPromptRoleTabId;
   selectedReusablePromptId: string | null;
   selectedCustomAgentRoleId: string | null;
 };

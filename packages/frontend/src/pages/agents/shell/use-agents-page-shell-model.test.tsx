@@ -237,7 +237,6 @@ let tasksState: TasksStateContextValue = {
   removeTaskWorktree: mock(async () => {}),
   resetTaskImplementation: mock(async () => undefined),
   resetTask: mock(async () => undefined),
-  transitionTask: mock(async () => undefined),
   humanRequestChangesTask: mock(async () => undefined),
   detectingPullRequestTaskIds: new Set<string>(),
   linkingMergedPullRequestTaskId: null,
@@ -333,6 +332,8 @@ let selectionState: SelectionState = {
   sessionsForTask: [toAgentSessionSummary(initialSelectionSession)],
 };
 const baseHumanReviewFeedbackModal: HumanReviewFeedbackModalModel = {
+  confirmLabel: "Request Changes",
+  roleLabel: "Builder",
   open: true,
   taskId: "task-1",
   message: "Please address review feedback.",
@@ -393,7 +394,9 @@ let orchestrationState: OrchestrationState = {
   repoSettings: null,
   chatSettingsLoadError: new Error("chat settings failed"),
   retryChatSettingsLoad,
-  humanReviewFeedbackModal: { ...baseHumanReviewFeedbackModal },
+  humanReviewFeedbackModal: {
+    ...baseHumanReviewFeedbackModal,
+  },
   sessionStartModal: { ...baseSessionStartModal },
   startSessionRequest: async () => undefined,
   agentStudioHeaderModel,
@@ -684,7 +687,6 @@ beforeEach(async () => {
     removeTaskWorktree: mock(async () => {}),
     resetTaskImplementation: mock(async () => undefined),
     resetTask: mock(async () => undefined),
-    transitionTask: mock(async () => undefined),
     humanRequestChangesTask: mock(async () => undefined),
     detectingPullRequestTaskIds: new Set<string>(),
     linkingMergedPullRequestTaskId: null,

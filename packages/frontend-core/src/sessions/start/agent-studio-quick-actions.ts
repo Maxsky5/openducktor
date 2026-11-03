@@ -1,19 +1,18 @@
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import { type AgentSessionStartMode } from "@openducktor/core";
 import {
-  WORKFLOW_QUICK_ACTIONS,
-  assertAgentStudioWorkflowQuickAction,
-  canShowPullRequestWorkflowQuickAction,
-  orderAgentStudioQuickActions,
-  resolveTaskCardActions,
+  actionEffect,
+  actionShowsOn,
+  launchSessionCommand,
+  taskLaunchOrder,
+  taskSurfaceLaunches,
+  taskWorkflowInput,
   taskActionLabel,
-  getSessionLaunchAction,
-  AGENT_STUDIO_SESSION_START_ACTIONS,
-  type AgentStudioWorkflowQuickAction,
-  type BuiltinLaunchActionId as SessionLaunchActionId,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
-  buildRoleWorkflowMapForTask,
+  taskGitConflictLaunch,
+  workflowAction,
+  type WorkflowRoleId as AgentRole,
+  type WorkflowLaunchActionId as SessionLaunchActionId,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import { buildReusableSessionOptions } from "./session-start-reuse-options";
 import { type SessionStartExistingSessionOption } from "./session-start-types";
@@ -23,15 +22,10 @@ import type { AgentSessionSummary } from "../agent-sessions-store";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 
 /** The workflow roles that a task can start now. */
-export const buildRoleEnabledMapForTask = (task: TaskCard | null) => {
-  const workflowsByRole = buildRoleWorkflowMapForTask(task);
-  return {
-    spec: workflowsByRole.spec.available,
-    planner: workflowsByRole.planner.available,
-    build: workflowsByRole.build.available,
-    qa: workflowsByRole.qa.available,
-  } satisfies Record<AgentRole, boolean>;
-};
+export const buildRoleEnabledMapForTask = (task: TaskCard | null): Record<AgentRole, boolean> =>
+  Object.fromEntries(
+    Object.entries(task?.agentWorkflows ?? {}).map(([role, state]) => [role, state.available]),
+  );
 
 /** A quick action that starts or continues a role session. */
 export type AgentStudioSessionQuickActionOption = {
@@ -48,9 +42,10 @@ export type AgentStudioSessionQuickActionOption = {
   existingSessionOptions?: SessionStartExistingSessionOption[];
   initialSourceSession?: AgentSessionIdentity | null;
   requiresHumanFeedback?: boolean;
+  surface?: "studio" | "git_conflict";
 };
 
-export type AgentStudioTaskQuickAction = "human_approve" | "close_task";
+export type AgentStudioTaskQuickAction = string;
 
 /** A quick action that opens a task workflow, such as the approval modal. */
 export type AgentStudioTaskQuickActionOption = {
@@ -71,162 +66,181 @@ export type AgentStudioQuickActionOption =
   | AgentStudioSessionQuickActionOption
   | AgentStudioTaskQuickActionOption;
 
-const AUXILIARY_QUICK_ACTIONS = {
-  build_pull_request_generation: {
-    role: "build",
-    description: "Reuse or fork a Builder session to create or update a pull request.",
-    postStartAction: "kickoff",
-  },
-  build_rebase_conflict_resolution: {
-    role: "build",
-    description: "Ask Builder to resolve the active git conflict.",
-    postStartAction: "send_message",
-  },
-} as const;
-
 export const SESSION_BUSY_REASON = "Wait for the current session to finish.";
 
-const createQuickActionDisabledReason = (createSessionDisabled: boolean): string | null => {
-  return createSessionDisabled ? SESSION_BUSY_REASON : null;
-};
-
-const canShowPullRequestQuickAction = (
-  task: TaskCard,
-  gitProviderContext: RepositoryGitProviderContext | undefined,
-  gitProviderReadError: string | null | undefined,
-): boolean => {
-  const readFailedWithoutContext = gitProviderContext == null && gitProviderReadError != null;
-  return (
-    canShowPullRequestWorkflowQuickAction(task) &&
-    (gitProviderContext?.descriptor.capabilities.supportsPullRequests === true ||
-      readFailedWithoutContext)
-  );
-};
-
-export const buildAgentStudioQuickActions = (params: {
+type QuickActionParams = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   roleEnabledByTask: Record<AgentRole, boolean>;
   createSessionDisabled: boolean;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
   gitProviderReadError?: string | null;
-  /** The target that the task branch is merged into. Close Task then leads. */
   mergedTarget?: string | null;
-}): AgentStudioQuickActionOption[] => {
-  const task = params.selectedTask;
-  if (!task) {
-    return [];
-  }
-
-  const workflowActionOrder = resolveTaskCardActions(task, {
-    include: AGENT_STUDIO_SESSION_START_ACTIONS,
-    surface: "agent_studio_quick_actions",
-  }).allActions.map(assertAgentStudioWorkflowQuickAction);
-  const disabledReason = createQuickActionDisabledReason(params.createSessionDisabled);
-  const createLifecycleOption = (
-    action: AgentStudioWorkflowQuickAction,
-  ): AgentStudioSessionQuickActionOption | null => {
-    const definition = WORKFLOW_QUICK_ACTIONS[action];
-    const launchActionId = definition.resolveLaunchActionId(task);
-    const role = definition.role;
-    if (!params.roleEnabledByTask[role]) {
-      return null;
-    }
-    const option: AgentStudioSessionQuickActionOption = {
-      kind: "session_start",
-      id: `quick:${launchActionId}`,
-      role,
-      launchActionId,
-      label: taskActionLabel(action, task, { surface: "agent_studio" }),
-      description: definition.description,
-      postStartAction: "kickoff",
-      disabled: disabledReason !== null,
-    };
-    if (disabledReason) {
-      option.disabledReason = disabledReason;
-    }
-    if ("requiresHumanFeedback" in definition && definition.requiresHumanFeedback) {
-      option.requiresHumanFeedback = true;
-    }
-    return option;
-  };
-  const options = workflowActionOrder.reduce<AgentStudioSessionQuickActionOption[]>(
-    (nextOptions, action) => {
-      const option = createLifecycleOption(action);
-      if (option) {
-        nextOptions.push(option);
-      }
-      return nextOptions;
-    },
-    [],
-  );
-
-  if (
-    canShowPullRequestQuickAction(task, params.gitProviderContext, params.gitProviderReadError) &&
-    params.roleEnabledByTask.build
-  ) {
-    const builderSessionOptions = buildReusableSessionOptions({
-      sessions: params.sessionsForTask.filter((session) => session.taskId === task.id),
-      role: "build",
-    });
-    const hasBuilderSource = builderSessionOptions.length > 0;
-    const pullRequestDisabledReason =
-      params.gitProviderReadError ??
-      pullRequestHealthError(params.gitProviderContext) ??
-      disabledReason ??
-      (hasBuilderSource ? null : "Requires an existing Builder session.");
-    const option: AgentStudioSessionQuickActionOption = {
-      kind: "session_start",
-      id: "quick:build_pull_request_generation",
-      ...AUXILIARY_QUICK_ACTIONS.build_pull_request_generation,
-      launchActionId: "build_pull_request_generation",
-      label: getSessionLaunchAction("build_pull_request_generation").label,
-      disabled: pullRequestDisabledReason !== null,
-    };
-    if (pullRequestDisabledReason) {
-      option.disabledReason = pullRequestDisabledReason;
-    }
-    if (hasBuilderSource) {
-      option.initialStartMode = getSessionLaunchAction(
-        "build_pull_request_generation",
-      ).defaultStartMode;
-      option.existingSessionOptions = builderSessionOptions;
-      option.initialSourceSession = builderSessionOptions[0]?.sourceSession ?? null;
-    }
-    options.push(option);
-  }
-
-  return withTaskQuickActions(
-    task,
-    orderAgentStudioQuickActions(task, options, workflowActionOrder),
-    params,
-  );
 };
 
-/**
- * Builds the action that asks Builder to resolve an active git conflict.
- * The page shell adds it to the header, because the git state comes after the workflow model.
- */
+export const buildAgentStudioQuickActions = (
+  params: QuickActionParams,
+): AgentStudioQuickActionOption[] => {
+  const task = params.selectedTask;
+  if (!task) return [];
+  const { evaluator } = task.taskWorkflow;
+  const input = taskWorkflowInput(task);
+  const availableActions = new Set(task.availableActions);
+  const options: AgentStudioSessionQuickActionOption[] = [];
+  const availableSteps = new Set(
+    task.workflowSteps.filter(({ available }) => available).map(({ id }) => id),
+  );
+  const append = (launchId: string, label?: string) => {
+    if (options.some((option) => option.launchActionId === launchId)) return;
+    const launch = task.taskWorkflow.launchAction(launchId);
+    if (!params.roleEnabledByTask[launch.role]) return;
+    const sources = buildReusableSessionOptions({
+      sessions: params.sessionsForTask.filter((session) => session.taskId === task.id),
+      role: launch.role,
+      roleLabel: task.taskWorkflow.role(launch.role).label,
+    });
+    let reason = params.createSessionDisabled ? SESSION_BUSY_REASON : null;
+    if (launch.context === "pull_request") {
+      if (
+        params.gitProviderContext?.descriptor.capabilities.supportsPullRequests === false ||
+        (!params.gitProviderContext && !params.gitProviderReadError)
+      )
+        return;
+      reason =
+        params.gitProviderReadError ??
+        pullRequestHealthError(params.gitProviderContext) ??
+        reason ??
+        (sources.length || launch.startModes.includes("fresh")
+          ? null
+          : `Requires an existing ${task.taskWorkflow.role(launch.role).label} session.`);
+    }
+    const option: AgentStudioSessionQuickActionOption = {
+      kind: "session_start",
+      id: `quick:${launch.id}`,
+      role: launch.role,
+      launchActionId: launch.id,
+      label: label ?? launch.label,
+      description: launch.description ?? launch.label,
+      postStartAction: launchSessionCommand(launch),
+      disabled: reason !== null,
+      requiresHumanFeedback: launch.context === "human_feedback",
+      surface: "studio",
+    };
+    if (reason) option.disabledReason = reason;
+    if (sources.length && launch.startModes.some((mode) => mode !== "fresh")) {
+      option.existingSessionOptions = sources;
+      option.initialSourceSession = sources[0]!.sourceSession;
+      option.initialStartMode = launch.defaultStartMode;
+    }
+    options.push(option);
+  };
+  const launchActions = task.taskWorkflow.definition.actions.filter(
+    (action) =>
+      action.kind === "session" && action.stepId !== undefined && availableSteps.has(action.stepId),
+  );
+  const actionById = new Map(launchActions.map((action) => [action.id, action]));
+  const launchActionIds = new Set(actionById.keys());
+  for (const id of evaluator.orderActions(input, [...launchActionIds])) {
+    append(
+      evaluator.actionLaunchAction(input, id),
+      taskActionLabel(id, task, { surface: "studio" }),
+    );
+  }
+  const effectLaunches = new Set(
+    task.taskWorkflow.definition.actions.flatMap((action) =>
+      action.kind === "event" &&
+      availableActions.has(action.id) &&
+      actionEffect(task.taskWorkflow, action) === "review.request_changes"
+        ? (action.launchActionIds ?? [])
+        : [],
+    ),
+  );
+  for (const step of task.taskWorkflow.definition.steps) {
+    if (step.kind !== "agent" || !availableSteps.has(step.id)) continue;
+    const launch = evaluator.stepLaunchAction(input, step.id);
+    if (!effectLaunches.has(launch)) append(launch);
+  }
+  for (const launch of taskSurfaceLaunches(task, "studio")) append(launch.id);
+  const launchOrder = taskLaunchOrder(task);
+  const taskOptions = evaluator
+    .orderActions(input, task.availableActions)
+    .flatMap((id): AgentStudioTaskQuickActionOption[] => {
+      const action = workflowAction(task.taskWorkflow, id);
+      const effect = actionEffect(task.taskWorkflow, action);
+      const merged = effect === "task.close" && !!params.mergedTarget;
+      if (launchActionIds.has(id) || (!actionShowsOn(action, "studio") && !merged)) return [];
+      const approvalLeads =
+        effect === "review.approve" &&
+        hasNoEnabledGitProvider(params.gitProviderContext, params.gitProviderReadError);
+      const option: AgentStudioTaskQuickActionOption = {
+        kind: "task_action",
+        id: `task:${id}`,
+        taskAction: id,
+        placement:
+          merged || approvalLeads || effect === "review.request_changes" ? "leading" : "trailing",
+        label: taskActionLabel(id, task, { surface: "studio" }),
+        description: merged
+          ? `The task branch is merged into ${params.mergedTarget}.`
+          : action.label,
+        disabled:
+          effect === "review.request_changes" &&
+          action.kind === "event" &&
+          !!action.launchActionIds?.length &&
+          params.createSessionDisabled,
+      };
+      if (merged) option.mergedTarget = params.mergedTarget!;
+      return [option];
+    });
+  const followsEffect = (option: AgentStudioTaskQuickActionOption) => {
+    const action = workflowAction(task.taskWorkflow, option.taskAction);
+    return (
+      action.kind === "event" &&
+      !!action.launchActionIds?.length &&
+      actionEffect(task.taskWorkflow, action) === "review.request_changes"
+    );
+  };
+  const ordered: AgentStudioQuickActionOption[] = [
+    ...options,
+    ...taskOptions.filter(followsEffect),
+  ];
+  const rank = (option: AgentStudioQuickActionOption) => {
+    const id =
+      option.kind === "session_start"
+        ? option.launchActionId
+        : evaluator.actionLaunchAction(input, option.taskAction);
+    const index = launchOrder.indexOf(id);
+    return index < 0 ? launchOrder.length : index;
+  };
+  ordered.sort((left, right) => rank(left) - rank(right));
+  return [
+    ...taskOptions.filter((option) => option.placement === "leading" && !followsEffect(option)),
+    ...ordered,
+    ...taskOptions.filter((option) => option.placement === "trailing" && !followsEffect(option)),
+  ];
+};
+
 export const buildGitConflictQuickAction = (params: {
   selectedTask: TaskCard | null;
   roleEnabledByTask: Record<AgentRole, boolean>;
   createSessionDisabled: boolean;
 }): AgentStudioSessionQuickActionOption | null => {
-  if (!params.selectedTask || !params.roleEnabledByTask.build) {
-    return null;
-  }
-  const disabledReason = createQuickActionDisabledReason(params.createSessionDisabled);
+  const task = params.selectedTask;
+  if (!task) return null;
+  const launch = taskGitConflictLaunch(task);
+  if (!launch) return null;
+  if (!params.roleEnabledByTask[launch.role]) return null;
   const option: AgentStudioSessionQuickActionOption = {
     kind: "session_start",
-    id: "quick:build_rebase_conflict_resolution",
-    ...AUXILIARY_QUICK_ACTIONS.build_rebase_conflict_resolution,
-    launchActionId: "build_rebase_conflict_resolution",
-    label: getSessionLaunchAction("build_rebase_conflict_resolution").label,
-    disabled: disabledReason !== null,
+    surface: "git_conflict",
+    id: `quick:${launch.id}`,
+    role: launch.role,
+    launchActionId: launch.id,
+    label: launch.label,
+    description: launch.description ?? launch.label,
+    postStartAction: "send_message",
+    disabled: params.createSessionDisabled,
   };
-  if (disabledReason) {
-    option.disabledReason = disabledReason;
-  }
+  if (params.createSessionDisabled) option.disabledReason = SESSION_BUSY_REASON;
   return option;
 };
 
@@ -255,66 +269,6 @@ export const selectPrimaryAgentStudioQuickAction = (
   const candidates = leadingOptions.length > 0 ? leadingOptions : options;
   return candidates.find((option) => !option.disabled) ?? candidates[0] ?? null;
 };
-
-/**
- * Adds the task actions. Close Task leads for a merged task branch. Approve Task leads a human
- * review without an enabled Git provider, and otherwise follows the session actions.
- */
-const withTaskQuickActions = (
-  task: TaskCard,
-  sessionOptions: AgentStudioSessionQuickActionOption[],
-  params: Pick<
-    Parameters<typeof buildAgentStudioQuickActions>[0],
-    "mergedTarget" | "gitProviderContext" | "gitProviderReadError"
-  >,
-): AgentStudioQuickActionOption[] => {
-  const taskOptions: AgentStudioTaskQuickActionOption[] = [];
-  if (params.mergedTarget) {
-    taskOptions.push({
-      ...taskQuickAction(
-        task,
-        "close_task",
-        "leading",
-        `The task branch is merged into ${params.mergedTarget}.`,
-      ),
-      mergedTarget: params.mergedTarget,
-    });
-  }
-  // The host offers human_approve only for review tasks.
-  if (task.availableActions.includes("human_approve")) {
-    const leadsReview =
-      task.status === "human_review" &&
-      hasNoEnabledGitProvider(params.gitProviderContext, params.gitProviderReadError);
-    taskOptions.push(
-      taskQuickAction(
-        task,
-        "human_approve",
-        leadsReview ? "leading" : "trailing",
-        "Open the approval flow to merge, open a pull request, or close the task.",
-      ),
-    );
-  }
-  return [
-    ...taskOptions.filter((option) => option.placement === "leading"),
-    ...sessionOptions,
-    ...taskOptions.filter((option) => option.placement === "trailing"),
-  ];
-};
-
-const taskQuickAction = (
-  task: TaskCard,
-  taskAction: AgentStudioTaskQuickActionOption["taskAction"],
-  placement: AgentStudioTaskQuickActionOption["placement"],
-  description: string,
-): AgentStudioTaskQuickActionOption => ({
-  kind: "task_action",
-  id: `task:${taskAction}`,
-  taskAction,
-  placement,
-  label: taskActionLabel(taskAction, task),
-  description,
-  disabled: false,
-});
 
 /** A loaded repository without an enabled Git provider has no pull request flow. */
 const hasNoEnabledGitProvider = (

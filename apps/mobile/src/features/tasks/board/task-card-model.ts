@@ -1,19 +1,20 @@
+import type { WorkflowIcon } from "@openducktor/contracts";
+import { taskIssueType, workflowRoleIcon } from "@openducktor/workflows";
+import { taskReviewRejection } from "@openducktor/workflows";
+import { taskActionSendsCommand } from "@/features/workflow/task-action-routing";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
-  isQaRejectedTask,
+  isReviewRejectedTask,
   taskActionLabel,
-  type BuiltinTaskCard as TaskCard,
-  type BuiltinRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import { getTaskFooter } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
-import {
-  ISSUE_TYPE_LABELS,
-  getPriorityLabel,
-} from "@openducktor/frontend-core/tasks/board/kanban-task-badge-model";
+import { getPriorityLabel } from "@openducktor/frontend-core/tasks/board/kanban-task-badge-model";
 import type { TaskWorkflowAction } from "@openducktor/workflows";
 import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import {
@@ -23,9 +24,8 @@ import {
   taskSessionStatusLabel,
 } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { toDisplayTaskLabels } from "@openducktor/frontend-core/tasks/presentation/task-labels";
-import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import type { IconName } from "@/ui/icon-names";
-import { TASK_ACTION_ICONS } from "../presentation/task-action-paint";
+import { taskActionIcon, taskActionRoleIcon } from "../presentation/task-action-paint";
 
 /** The most labels that a card shows before it counts the rest. */
 const CARD_VISIBLE_LABEL_COUNT = 2;
@@ -42,6 +42,8 @@ export type TaskCardPrimary = {
   label: string;
   icon: IconName;
   appearance: TaskCardPrimaryAppearance;
+  command: boolean;
+  roleIconHint?: WorkflowIcon | undefined;
   disabled: boolean;
   /** The active session that the primary control opens, with its state label. */
   activeSession: { roleLabel: string; statusLabel: string; waitingInput: boolean } | null;
@@ -53,6 +55,7 @@ type TaskCardMenuItem = {
   icon: IconName;
   destructive: boolean;
   disabled: boolean;
+  command: boolean;
 };
 
 type TaskCardShortcut = {
@@ -64,6 +67,7 @@ type TaskCardShortcut = {
 /** The live session that the card shows in its status strip, such as "Builder running". */
 export type TaskCardLiveSession = {
   role: AgentRole;
+  iconHint?: WorkflowIcon | undefined;
   label: string;
   waitingInput: boolean;
 };
@@ -133,12 +137,12 @@ export const buildTaskCardModel = ({
     autoCloseFailure,
   });
   const disabled = new Set(footer.disabledActions);
-  const closed = task.status === "closed";
+  const closed = task.sharedState.terminal;
   const activeSession = hasActiveSession ? footer.primaryActiveSession : null;
   const waitingInput = footer.primarySessionIsWaitingInput;
   const session = activeSession
     ? {
-        roleLabel: BUILTIN_ROLE_LABELS[activeSession.role] ?? activeSession.role,
+        roleLabel: task.taskWorkflow.role(activeSession.role).label,
         statusLabel: taskSessionStatusLabel({
           session: activeSession,
           isWaitingInput: waitingInput,
@@ -150,6 +154,7 @@ export const buildTaskCardModel = ({
     activeSession && session
       ? {
           role: activeSession.role,
+          iconHint: workflowRoleIcon(task.taskWorkflow, activeSession.role),
           label: liveSessionLabel(session.roleLabel, session.statusLabel, waitingInput),
           waitingInput,
         }
@@ -157,13 +162,16 @@ export const buildTaskCardModel = ({
   const primaryAction = closed ? null : footer.actions.primaryAction;
   let primary: TaskCardPrimary | null = null;
   if (primaryAction) {
-    let appearance: TaskCardPrimaryAppearance = PRIMARY_APPEARANCES[taskActionTone(primaryAction)];
+    let appearance: TaskCardPrimaryAppearance =
+      PRIMARY_APPEARANCES[taskActionTone(primaryAction, task)];
     if (session) appearance = session.waitingInput ? "waiting" : "running";
     primary = {
       action: primaryAction,
       label: taskActionLabel(primaryAction, task),
-      icon: TASK_ACTION_ICONS[primaryAction],
+      icon: taskActionIcon(primaryAction, task),
       appearance,
+      command: taskActionSendsCommand(primaryAction, task),
+      roleIconHint: taskActionRoleIcon(primaryAction, task),
       disabled: disabled.has(primaryAction),
       activeSession: session,
     };
@@ -173,9 +181,10 @@ export const buildTaskCardModel = ({
     : footer.actions.secondaryActions.map((action) => ({
         id: action,
         title: taskActionLabel(action, task),
-        icon: TASK_ACTION_ICONS[action],
-        destructive: taskActionIsDestructive(action),
+        icon: taskActionIcon(action, task),
+        destructive: taskActionIsDestructive(action, task),
         disabled: disabled.has(action),
+        command: taskActionSendsCommand(action, task),
       }));
   const shortcuts = footer.shortcuts.map((shortcut) => ({
     role: shortcut.role,
@@ -188,13 +197,13 @@ export const buildTaskCardModel = ({
   }
   const priority = getPriorityLabel(task.priority);
   const labels = toDisplayTaskLabels(task.labels);
-  const qaRejected = isQaRejectedTask(task);
+  const qaRejected = isReviewRejectedTask(task);
   const summary = [
     task.title,
     task.id,
-    ISSUE_TYPE_LABELS[task.issueType],
+    taskIssueType(task).label,
     `Priority ${priority.label}, ${priority.hint}`,
-    qaRejected ? "QA rejected" : null,
+    taskReviewRejection(task)?.label ?? null,
     mergedTarget === undefined ? null : `Branch merged into ${mergedTarget}`,
     autoCloseFailure ?? null,
     labels.length > 0 ? `Labels ${labels.join(", ")}` : null,

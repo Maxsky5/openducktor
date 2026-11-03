@@ -1,19 +1,20 @@
 import {
-  BUILTIN_DOCUMENT_CODES,
-  type BuiltinDocumentCode,
+  type WorkflowDocumentCode,
   workflowArtifactRole,
   workflowArtifactShortLabel,
+  workflowRoleIcon,
 } from "@openducktor/workflows";
-import { ClipboardList, FileText } from "lucide-react";
+import { ClipboardList, FileText, type LucideIcon } from "lucide-react";
 import type { ReactElement } from "react";
-import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
+import { roleIconForHint } from "@/lib/agent-role-presentation";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
 import type { EditTaskSection } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 
 type TaskEditSectionSwitcherProps = {
+  taskWorkflow: import("@openducktor/workflows").TaskWorkflow;
   section: EditTaskSection;
-  dirtyDocuments: Record<BuiltinDocumentCode, boolean>;
+  dirtyDocuments: Record<WorkflowDocumentCode, boolean>;
   disabled?: boolean;
   onSectionChange: (section: EditTaskSection) => void;
 };
@@ -21,11 +22,12 @@ type TaskEditSectionSwitcherProps = {
 type SectionItem = {
   id: EditTaskSection;
   label: string;
-  icon: typeof ClipboardList | (typeof AGENT_ROLE_ICONS)[keyof typeof AGENT_ROLE_ICONS];
+  icon: LucideIcon;
   hasUnsaved: boolean;
 };
 
 export function TaskEditSectionSwitcher({
+  taskWorkflow,
   section,
   dirtyDocuments,
   disabled = false,
@@ -39,25 +41,30 @@ export function TaskEditSectionSwitcher({
       hasUnsaved: false,
     },
     // Each document shows the icon of the role that writes it.
-    ...BUILTIN_DOCUMENT_CODES.map((code): SectionItem => {
-      const role = workflowArtifactRole(code);
-      return {
-        id: code,
-        label: workflowArtifactShortLabel(code),
-        icon: role ? AGENT_ROLE_ICONS[role] : FileText,
-        hasUnsaved: dirtyDocuments[code],
-      };
-    }),
+    ...taskWorkflow.definition.artifacts
+      .filter((artifact) => artifact.kind === "document")
+      .map(({ id: code }): SectionItem => {
+        const role = workflowArtifactRole(code, taskWorkflow);
+        return {
+          id: { artifactCode: code },
+          label: workflowArtifactShortLabel(code, taskWorkflow),
+          icon: role ? roleIconForHint(workflowRoleIcon(taskWorkflow, role)) : FileText,
+          hasUnsaved: dirtyDocuments[code] === true,
+        };
+      }),
   ];
 
   return (
     <SegmentedControlRoot size="md" className="w-full">
       {sections.map((item) => {
-        const isActive = item.id === section;
+        const isActive =
+          item.id === "details"
+            ? section === "details"
+            : section !== "details" && item.id.artifactCode === section.artifactCode;
         const Icon = item.icon;
         return (
           <SegmentedControlItem
-            key={item.id}
+            key={item.id === "details" ? "details" : `artifact:${item.id.artifactCode}`}
             active={isActive}
             size="md"
             disabled={disabled}

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const REMOTE_PROTOCOL_VERSION = 6;
+export const REMOTE_PROTOCOL_VERSION = 7;
 export const REMOTE_BASELINE_CAPABILITIES = [
   "host.work.v1",
   "host.channel.v1",

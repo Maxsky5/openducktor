@@ -8,10 +8,11 @@ import { createHookHarness } from "@openducktor/frontend-core/test-support/react
 import {
   createTaskCardFixture,
   createWorkspaceRecordFixture,
+  toWireTaskCard,
 } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useTaskWorkflowComposer } from "./use-task-workflow-composer";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 type Props = { activeWorkspace: ActiveWorkspace | null; tasks: TaskCard[] };
 
@@ -29,7 +30,10 @@ let harness: ReturnType<
 let connection: ReturnType<typeof createTestClientConnection>;
 const mount = async (props: Props, storedTasks: TaskCard[] = []) => {
   connection = createTestClientConnection({
-    client: { tasksList: async () => [], tasksListAll: async () => storedTasks },
+    client: {
+      tasksList: async () => [],
+      tasksListAll: async () => storedTasks.map(toWireTaskCard),
+    },
   });
   harness = createHookHarness(useTaskWorkflowComposer, props, {
     wrapper: ({ children }: PropsWithChildren) =>
@@ -70,7 +74,7 @@ describe("useTaskWorkflowComposer", () => {
   });
 
   test("edits a closed task outside the board list", async () => {
-    const closedTask = { ...task, status: "closed" as const };
+    const closedTask = createTaskCardFixture({ ...task, status: "closed" });
     const hook = await mount({ ...inA, tasks: [] }, [closedTask]);
     await hook.run((state) => state.onEdit(task.id));
     await hook.waitFor((state) => state.composer.open);

@@ -18,6 +18,7 @@ const createDefinition = (): WorkflowDefinition => ({
     { id: "decision", type: "enum", values: ["approved", "rejected"] },
     { id: "comment", type: "string" },
   ],
+  issueTypes: [],
   roles: [
     {
       id: "reviewer",
@@ -151,6 +152,7 @@ const createDefinition = (): WorkflowDefinition => ({
   ],
   actionOrder: [{ when: true, actions: ["approve", "start-review", "view-notes"] }],
   actionPriority: [{ when: { stateIn: ["draft"] }, actions: ["start-review"] }],
+  launchOrder: [],
 });
 
 describe("workflow definition schemas", () => {

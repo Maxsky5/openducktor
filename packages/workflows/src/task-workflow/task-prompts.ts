@@ -12,11 +12,14 @@ export type PromptPurpose = "system" | "kickoff" | "message" | "permission";
 
 export type PromptTemplate = {
   id: string;
+  label?: string;
+  description?: string;
+  roleIds?: string[];
   purpose: PromptPurpose;
   builtinVersion: number;
   template: string;
   /** An override must keep each of these placeholders. */
-  requiredPlaceholders?: AgentPromptPlaceholder[];
+  requiredPlaceholders?: AgentPromptPlaceholder[] | undefined;
 };
 
 /** The shared system templates, in prompt order after the role template. */
@@ -85,7 +88,9 @@ export type KickoffPromptInput = {
 export type MessagePromptInput = {
   launchActionId: string;
   task: PromptTaskContext;
-  git: AgentPromptGitContext;
+  git?: AgentPromptGitContext | undefined;
+  humanFeedback?: string | undefined;
+  targetBranch?: GitTargetBranch | undefined;
   overrides?: RepoPromptOverrides | undefined;
 };
 
@@ -98,6 +103,8 @@ export type MergePromptOverridesInput = {
 export type TaskPrompts = {
   readonly templates: readonly PromptTemplate[];
   template(id: string): PromptTemplate;
+  /** The roles that use a template. No role marks shared prompt information. */
+  templateRoles(id: string): readonly string[];
   systemPrompt(input: SystemPromptInput): BuiltAgentPrompt;
   kickoffPrompt(input: KickoffPromptInput): BuiltAgentPrompt;
   messagePrompt(input: MessagePromptInput): BuiltAgentPrompt;
@@ -225,6 +232,30 @@ export const createTaskPrompts = (
     ),
   );
   checkTemplates(definition, templatesById, launchTemplates);
+  const templateRolesById = new Map(
+    templates.map((entry) => {
+      const roles =
+        entry.roleIds ??
+        definition.roles
+          .filter(
+            (role) =>
+              entry.id === roleSystemTemplateId(role.id) ||
+              definition.steps.some(
+                (step) =>
+                  step.kind === "agent" &&
+                  step.roleId === role.id &&
+                  step.launchActions.some((launch) => launch.template.id === entry.id),
+              ),
+          )
+          .map(({ id }) => id);
+      for (const role of roles)
+        if (!rolesById.has(role))
+          throw new Error(
+            `Prompt template "${entry.id}" names unknown role "${role}" in task workflow "${definition.id}". Fix its roleIds.`,
+          );
+      return [entry.id, roles] as const;
+    }),
+  );
 
   const template = (id: string): PromptTemplate => {
     const found = templatesById.get(id);
@@ -262,7 +293,7 @@ export const createTaskPrompts = (
     task: PromptTaskContext;
     humanFeedback?: string | undefined;
     pullRequestTarget?: string | undefined;
-    git?: AgentPromptGitContext;
+    git?: AgentPromptGitContext | undefined;
   }) => {
     const { role, task, git, pullRequestTarget } = input;
     const humanFeedback = input.humanFeedback?.trim();
@@ -374,6 +405,10 @@ export const createTaskPrompts = (
   return {
     templates,
     template,
+    templateRoles: (id) => {
+      template(id);
+      return templateRolesById.get(id)!;
+    },
     systemPrompt: ({ role, task, overrides }) =>
       buildPrompt(
         [roleSystemTemplateId(role), ...SHARED_SYSTEM_TEMPLATE_IDS],
@@ -397,16 +432,25 @@ export const createTaskPrompts = (
         overrides,
       );
     },
-    messagePrompt: ({ launchActionId, task, git, overrides }) => {
+    messagePrompt: ({ launchActionId, task, git, humanFeedback, targetBranch, overrides }) => {
       const launch = launchTemplate(launchActionId, "message");
-      if (!git.operationLabel?.trim()) {
+      if (git && !git.operationLabel?.trim()) {
         throw new Error(
           `Missing required git conflict context for "${launch.templateId}": operationLabel.`,
         );
       }
       return buildPrompt(
         [launch.templateId],
-        placeholderValues({ role: roleOfLaunch(launchActionId), task, git }),
+        placeholderValues({
+          role: roleOfLaunch(launchActionId),
+          task,
+          git,
+          humanFeedback,
+          pullRequestTarget:
+            launch.context === "pull_request"
+              ? requirePullRequestTarget(launch.templateId, targetBranch)
+              : undefined,
+        }),
         overrides,
       );
     },

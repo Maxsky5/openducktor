@@ -1,16 +1,20 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
-import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
+import { builtinTaskWorkflow, createTaskWorkflow } from "@openducktor/workflows";
+import {
+  createReviewTaskWorkflow,
+  reviewTaskDefinition,
+  reviewTaskPromptTemplates,
+} from "@openducktor/workflows/test-support";
 import { Effect } from "effect";
 import { z } from "zod";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
-import { createTaskWorkflowResolver } from "../../composition/node/task-workflow-composition";
+import { createTaskWorkflowResolver } from "./task-workflows";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
-import { reviewTaskWorkflows } from "../../test-support/task-workflows";
+import { reviewTaskWorkflows, singleTaskWorkflow } from "../../test-support/task-workflows";
 import type { WorkflowArtifactSaveInput } from "./task-inputs";
 import {
   createBuildSettingsConfig,
@@ -226,6 +230,35 @@ describe("task service with a custom task workflow", () => {
     expect(await status(id)).toBe("reviewing");
   });
 
+  test("applies a status.set event that an event action sends", async () => {
+    const definition = reviewTaskDefinition();
+    definition.actions.push({
+      id: "move_to_writing",
+      kind: "event",
+      label: "Move to writing",
+      eventId: "move-writing",
+      availableWhen: { stateIn: ["backlog"] },
+    });
+    const taskWorkflows = singleTaskWorkflow(
+      createTaskWorkflow(definition, reviewTaskPromptTemplates),
+    );
+    await harness.cleanup();
+    harness = await createSqliteTaskStoreHarness({ taskWorkflows });
+    const tasks = service(taskWorkflows);
+    const { id } = await Effect.runPromise(
+      tasks.createTask({
+        ...harness.scope,
+        task: { title: "Launch post", issueType: "article", priority: 2 },
+      }),
+    );
+
+    const card = await Effect.runPromise(
+      tasks.applyTaskEvent({ ...harness.scope, taskId: id, eventId: "move-writing" }),
+    );
+
+    expect(card.status).toBe("writing");
+  });
+
   test.each([
     ["approve-copy", "review.approve host effect"],
     ["move-writing", "not sent by an event action"],
@@ -334,6 +367,14 @@ describe("task service with a workflow for each task", () => {
         task.issueType === "article" ? review : builtinTaskWorkflow,
       forNewTask: () => builtinTaskWorkflow,
       workflows: [builtinTaskWorkflow, review],
+      forWorkspace: () => ({
+        workflows: [builtinTaskWorkflow, review],
+        board: {
+          states: [...builtinTaskWorkflow.definition.states, ...review.definition.states].map(
+            ({ id }) => ({ id, taskOrder: "updated" as const }),
+          ),
+        },
+      }),
     });
     await harness.cleanup();
     harness = await createSqliteTaskStoreHarness({ taskWorkflows });

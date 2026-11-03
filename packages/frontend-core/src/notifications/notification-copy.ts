@@ -1,9 +1,4 @@
-import {
-  BUILTIN_ROLE_LABELS,
-  BUILTIN_WORKFLOW_NOTIFICATION_COPY,
-  builtinRoleId,
-} from "@openducktor/workflows";
-import type { NotificationKind, NotificationOccurrence } from "@openducktor/contracts";
+import type { NotificationOccurrence } from "@openducktor/contracts";
 import { NOTIFICATION_KIND_LABELS } from "./catalogue";
 
 export type NotificationCopy = {
@@ -19,23 +14,18 @@ const toPlainNotificationText = (text: string): string =>
     .replace(/\s+/g, " ")
     .trim();
 
-const isWorkflowKind = (
-  kind: NotificationKind,
-): kind is keyof typeof BUILTIN_WORKFLOW_NOTIFICATION_COPY =>
-  Object.hasOwn(BUILTIN_WORKFLOW_NOTIFICATION_COPY, kind);
-
 export const buildNotificationCopy = (occurrence: NotificationOccurrence): NotificationCopy => {
-  const workflowCopy = isWorkflowKind(occurrence.kind)
-    ? BUILTIN_WORKFLOW_NOTIFICATION_COPY[occurrence.kind]
-    : undefined;
-  const agentLabel = occurrence.role
-    ? BUILTIN_ROLE_LABELS[builtinRoleId(occurrence.role)]
-    : occurrence.sessionLabel;
-  const label =
+  if (occurrence.kind.startsWith("workflow.") && (!occurrence.workflow || !occurrence.copy))
+    throw new Error(
+      "Workflow notification is missing its committed presentation. Reconnect to an updated host.",
+    );
+  const workflowCopy = occurrence.copy;
+  const label = toPlainNotificationText(
     workflowCopy?.title ??
-    (occurrence.kind === "task.auto_close_blocked"
-      ? NOTIFICATION_KIND_LABELS["task.auto_close_blocked"]
-      : toPlainNotificationText(agentLabel ?? "Agent"));
+      (occurrence.kind === "task.auto_close_blocked"
+        ? NOTIFICATION_KIND_LABELS["task.auto_close_blocked"]
+        : (occurrence.sessionLabel ?? occurrence.role ?? "Agent")),
+  );
   const taskTitle = toPlainNotificationText(occurrence.task?.title ?? "");
   const body =
     workflowCopy?.body ??

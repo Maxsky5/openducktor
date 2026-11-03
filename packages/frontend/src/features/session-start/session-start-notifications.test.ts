@@ -1,4 +1,5 @@
-import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { describe, expect, mock, test } from "bun:test";
 import { type NotificationOccurrence } from "@openducktor/contracts";
@@ -71,6 +72,7 @@ describe("session-start notifications", () => {
         taskTitle: "Build notifications",
         role: "build",
         inAppFeedbackHandled: true,
+        roleLabel: "Builder",
         session,
       });
       expect(notifications.publishSessionError).not.toHaveBeenCalled();
@@ -125,6 +127,7 @@ describe("session-start notifications", () => {
         taskTitle: "Build notifications",
         role: "build",
         inAppFeedbackHandled: true,
+        roleLabel: "Builder",
       },
       startFailure.message,
     );
@@ -269,7 +272,11 @@ describe("session-start notifications", () => {
           occurrences.push(
             buildSessionStartErrorOccurrence(
               { repoPath: "/tmp/repo", repositoryLabel: "OpenDucktor" },
-              { ...input, roleLabel: BUILTIN_ROLE_LABELS[input.role] },
+              {
+                ...input,
+                roleLabel: builtinTaskWorkflow.definition.roles.find(({ id }) => id === input.role)!
+                  .label,
+              },
             ),
           );
           return true;

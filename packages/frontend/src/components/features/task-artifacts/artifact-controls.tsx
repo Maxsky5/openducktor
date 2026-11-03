@@ -1,3 +1,4 @@
+import { useArtifactWorkflow } from "./task-artifact-workflow-context";
 import type { FreeTaskArtifact, TaskAssetRenderContext } from "@openducktor/contracts";
 import type { TaskArtifactContent } from "@openducktor/frontend-core/queries/artifacts";
 import { isEditableWorkflowDocument } from "@openducktor/workflows";
@@ -153,11 +154,15 @@ export function WorkflowArtifactControls({
   const modalPresence = useDialogPresence(expanded);
   // The panel keeps its state with the kept view, so a switch closes the preview.
   useOnSessionViewHide(() => setExpanded(false));
-  const editSection = isEditableWorkflowDocument(workflowCode) ? workflowCode : null;
+  const taskWorkflow = useArtifactWorkflow();
+  const editSection = isEditableWorkflowDocument(workflowCode, taskWorkflow) ? workflowCode : null;
   return (
     <>
       {editSection && workflowActions ? (
-        <ToolButton label="Edit" onClick={() => workflowActions.onEdit(taskId, editSection)}>
+        <ToolButton
+          label="Edit"
+          onClick={() => workflowActions.onEdit(taskId, { artifactCode: editSection })}
+        >
           <Pencil aria-hidden="true" />
         </ToolButton>
       ) : null}

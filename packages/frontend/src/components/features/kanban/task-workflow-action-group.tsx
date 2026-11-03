@@ -2,19 +2,15 @@ import {
   resolveTaskCardActions,
   type TaskWorkflowAction,
   taskActionLabel,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 import { type ReactElement, type ReactNode, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import {
-  TASK_ACTION_ICON,
-  taskMenuActionVariant,
-  taskPrimaryActionVariant,
-} from "./task-action-ui";
+import { taskActionIcon, taskMenuActionVariant, taskPrimaryActionVariant } from "./task-action-ui";
 
 const EMPTY_EXTRA_MENU_ACTIONS: readonly ExtraTaskMenuAction[] = [];
 const EMPTY_DISABLED_ACTIONS: readonly TaskWorkflowAction[] = [];
@@ -98,7 +94,7 @@ export function TaskWorkflowActionGroup(props: TaskWorkflowActionGroupProps): Re
         <Button
           type="button"
           size={size}
-          variant={taskPrimaryActionVariant(primary)}
+          variant={taskPrimaryActionVariant(primary, task)}
           className={cn(expandPrimary ? "min-w-0 flex-1" : "", primaryClassName)}
           data-kanban-control={actions ? "primary" : undefined}
           disabled={disabledActions.includes(primary)}
@@ -109,7 +105,7 @@ export function TaskWorkflowActionGroup(props: TaskWorkflowActionGroupProps): Re
         >
           {primaryContent ?? (
             <>
-              {TASK_ACTION_ICON[primary]}
+              {taskActionIcon(primary, task)}
               {taskActionLabel(primary, task)}
             </>
           )}
@@ -143,11 +139,13 @@ const getActions = ({
   historicalSessionRoles,
 }: TaskWorkflowActionGroupProps): ReturnType<typeof resolveTaskCardActions> => {
   if (actions) return actions;
-  const options: Parameters<typeof resolveTaskCardActions>[1] = { hasActiveSession };
-  if (includeActions) options.include = includeActions;
-  if (activeSessionRole) options.activeSessionRole = activeSessionRole;
-  if (historicalSessionRoles) options.historicalSessionRoles = historicalSessionRoles;
-  return resolveTaskCardActions(task, options);
+  return resolveTaskCardActions(task, {
+    hasActiveSession,
+    surface: "details",
+    include: includeActions,
+    activeSessionRole,
+    historicalSessionRoles,
+  });
 };
 
 type TaskWorkflowActionMenuProps = Required<
@@ -231,7 +229,7 @@ function TaskWorkflowActionMenu({
             <Button
               key={action}
               type="button"
-              variant={taskMenuActionVariant(action)}
+              variant={taskMenuActionVariant(action, task)}
               size="sm"
               className="h-8 w-full justify-start border border-transparent"
               data-kanban-control={isKanbanCard ? "menu" : undefined}
@@ -242,7 +240,7 @@ function TaskWorkflowActionMenu({
                 setMenuOpen(false);
               }}
             >
-              {TASK_ACTION_ICON[action]}
+              {taskActionIcon(action, task)}
               {taskActionLabel(action, task)}
             </Button>
           ))}

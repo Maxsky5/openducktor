@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "@openducktor/frontend-core/types/task-close";
 import {
   TasksStateContext,
@@ -29,6 +29,7 @@ import { TaskConfirmView } from "./task-confirm-view";
  */
 export type TaskConfirmationRequest = {
   id: number;
+  onCommitted?: (() => Promise<void>) | undefined;
   taskId: string;
   action: Exclude<TaskConfirmationAction, "reset_implementation">;
 };
@@ -84,6 +85,7 @@ function RequestedCloseConfirm({
     initiallyOpen: true,
     run,
     onSucceeded: () => onSucceeded(request),
+    onCommitted: request.onCommitted,
   });
   return <TaskCloseConfirm dialog={dialog} onDismiss={() => onClosed(request.id)} />;
 }
@@ -116,6 +118,7 @@ function RequestedTaskConfirm({
     initiallyOpen: true,
     run,
     onSucceeded: () => onSucceeded(request),
+    onCommitted: request.onCommitted,
   });
   // Keep the confirmed impact while the command changes task data. A failed command shows the
   // current impact.

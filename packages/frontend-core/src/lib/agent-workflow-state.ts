@@ -4,11 +4,9 @@ import {
   isAgentSessionActivityWorking,
 } from "./agent-session-activity-state";
 import {
-  isQaRejectedTask,
-  workflowArtifactRole,
-  workflowArtifactVerdict,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  taskWorkflowInput,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import type {
   WorkflowStepAttentionVariant,
@@ -17,15 +15,6 @@ import type {
   WorkflowStepPresentation,
   WorkflowStepRailState,
 } from "../types/agent-workflow";
-
-/** A review that the role writes has a verdict that does not accept the work. */
-const hasFailingReview = (task: TaskCard, role: AgentRole): boolean =>
-  Object.entries(task.artifactSummary).some(
-    ([code, state]) =>
-      state.verdict !== undefined &&
-      workflowArtifactRole(code) === role &&
-      workflowArtifactVerdict(code, state.verdict)?.passes === false,
-  );
 
 export const buildRoleWorkflowState = ({
   task,
@@ -40,37 +29,45 @@ export const buildRoleWorkflowState = ({
 }): WorkflowStepPresentation => {
   const availability = workflowAvailability(workflow);
   const active = isActive(liveSession);
-  const qaRejected = isQaRejectedTask(task);
-  const taskStatus = task?.status;
-  const qaReviewRejected = task?.status === "ai_review" && hasFailingReview(task, role);
-  let completion: WorkflowStepPresentation["completion"] = "not_started";
-
-  if (role === "build" && qaRejected) {
-    completion = "done";
-  } else if (role === "qa" && qaRejected && (taskStatus !== "blocked" || !active)) {
-    completion = "rejected";
-  } else if (role === "qa" && qaReviewRejected && !active) {
-    completion = "rejected";
-  } else if (workflow.completed) {
-    completion = "done";
-  } else if (
-    active ||
-    (liveSession === "idle" && workflow.available) ||
-    (role === "build" && liveSession === "stopped" && workflow.available)
-  ) {
-    completion = "in_progress";
+  const step = task?.taskWorkflow.agentStep(role);
+  const input = task ? taskWorkflowInput(task) : null;
+  const rules =
+    (step &&
+      task &&
+      input &&
+      step.displayRules?.filter(
+        (rule) =>
+          task.taskWorkflow.evaluator.condition(rule.when)(input) &&
+          (!rule.session || rule.session.includes(liveSession)),
+      )) ||
+    [];
+  let completion: WorkflowStepPresentation["completion"] =
+    rules.find((rule) => rule.completion !== undefined)?.completion ?? "not_started";
+  if (!rules.some((rule) => rule.completion !== undefined)) {
+    if (workflow.completed) completion = "done";
+    else if (active || (liveSession === "idle" && workflow.available)) completion = "in_progress";
   }
-
-  const blockedBuild =
-    role === "build" &&
-    taskStatus === "blocked" &&
-    !isWorking(liveSession) &&
-    liveSession !== "error";
+  const needsInput =
+    rules.find((rule) => rule.attention !== undefined)?.attention === "needs_input";
   return {
-    tone: blockedBuild ? "waiting_input" : workflowTone({ availability, completion, liveSession }),
+    tone: needsInput ? "waiting_input" : workflowTone({ availability, completion, liveSession }),
     availability,
     completion,
     liveSession,
+  };
+};
+
+export const buildHumanWorkflowState = (step: {
+  required: boolean;
+  available: boolean;
+  completed: boolean;
+}): WorkflowStepPresentation => {
+  const availability = step.available ? (step.required ? "available" : "optional") : "blocked";
+  return {
+    availability,
+    completion: step.completed ? "done" : "not_started",
+    tone: step.completed ? "done" : availability,
+    liveSession: "none",
   };
 };
 
@@ -91,7 +88,7 @@ const workflowStepAttentionVariant = (entry: WorkflowRailEntry): WorkflowStepAtt
     return "session_waiting_input";
   }
 
-  if (entry.role === "build" && entry.state.tone === "waiting_input") {
+  if (entry.state.tone === "waiting_input") {
     return "blocked_task";
   }
 

@@ -1,4 +1,4 @@
-import type { BuiltinPromptRoleTabId } from "@openducktor/workflows";
+import type { WorkflowPromptRoleTabId } from "@openducktor/workflows";
 import type { ReactElement } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,16 +22,16 @@ import { SettingsCustomAgentRolesSection } from "./settings-custom-agent-roles-s
 type SettingsModalContentProps = {
   section: SettingsSectionId;
   repositorySection: RepositorySectionId;
-  globalPromptRoleTab: BuiltinPromptRoleTabId;
-  repoPromptRoleTab: BuiltinPromptRoleTabId;
+  globalPromptRoleTab: WorkflowPromptRoleTabId;
+  repoPromptRoleTab: WorkflowPromptRoleTabId;
   selectedReusablePromptId: string | null;
   selectedCustomAgentRoleId: string | null;
   onSelectedCustomAgentRoleIdChange: (next: string | null) => void;
   isInteractionDisabled: boolean;
   controller: SettingsModalController;
   onRepositorySectionChange: (next: RepositorySectionId) => void;
-  onGlobalPromptRoleTabChange: (next: BuiltinPromptRoleTabId) => void;
-  onRepoPromptRoleTabChange: (next: BuiltinPromptRoleTabId) => void;
+  onGlobalPromptRoleTabChange: (next: WorkflowPromptRoleTabId) => void;
+  onRepoPromptRoleTabChange: (next: WorkflowPromptRoleTabId) => void;
   onSelectedReusablePromptIdChange: (next: string | null) => void;
   contentFocusRequest?: SettingsContentFocusRequest | null;
   onContentFocusRequestHandled?: (request: SettingsContentFocusRequest) => void;

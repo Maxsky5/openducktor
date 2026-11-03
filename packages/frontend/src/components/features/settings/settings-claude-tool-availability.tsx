@@ -1,8 +1,5 @@
-import {
-  BUILTIN_ROLE_LABELS,
-  BUILTIN_ROLE_IDS,
-  type BuiltinRoleId as AgentRole,
-} from "@openducktor/workflows";
+import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow-settings";
+import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import {
   resolveClaudePolicy,
   type ClaudeRuntimeConfig,
@@ -81,7 +78,14 @@ export function ClaudeToolAvailabilityEditor({
 }: EditorProps): ReactElement {
   const id = useId();
   const [showRoles, setShowRoles] = useState(false);
-  const hasOverride = BUILTIN_ROLE_IDS.some(
+  const workflows = useWorkflowSettings();
+  if (!workflows.data || workflows.error)
+    return (
+      <p role={workflows.error ? "alert" : "status"}>
+        {workflows.error?.message ?? "Loading workflow roles..."}
+      </p>
+    );
+  const hasOverride = Object.keys(config.roleOverrides).some(
     (role) => config.roleOverrides[role]?.toolAvailability !== undefined,
   );
   const defaults = resolveClaudePolicy(config).settings.toolAvailability;
@@ -96,7 +100,7 @@ export function ClaudeToolAvailabilityEditor({
     if (enabled || !hasOverride) return;
 
     const roleOverrides = { ...config.roleOverrides };
-    for (const role of BUILTIN_ROLE_IDS) {
+    for (const role of Object.keys(config.roleOverrides)) {
       const policy = roleOverrides[role];
       if (policy?.toolAvailability === undefined) continue;
       const next = { ...policy };
@@ -164,14 +168,14 @@ export function ClaudeToolAvailabilityEditor({
         onEnabledChange={setRoles}
       >
         <div className="divide-y divide-border rounded-md border border-border">
-          {BUILTIN_ROLE_IDS.map((role) => {
-            const roleId = `${id}-${role}`;
-            const label = BUILTIN_ROLE_LABELS[role];
+          {workflows.data.roles.map(({ role, label: roleLabel, key }) => {
+            const roleId = `${id}-${key}`;
+            const label = roleLabel;
             const inherits = config.roleOverrides[role]?.toolAvailability === undefined;
             const choices = resolveClaudePolicy(config, role).settings.toolAvailability;
             return (
               <div
-                key={role}
+                key={key}
                 className="grid gap-2 px-3 py-2.5 @min-[28rem]:grid-cols-[minmax(7rem,9rem)_minmax(0,1fr)] @min-[28rem]:items-center"
               >
                 <div className="flex flex-col gap-1">

@@ -240,7 +240,11 @@ test("a task created before cancellation publishes its saved identity exactly on
         kind: "external_task_created",
         workspaceId: harness.workspaceId,
         taskId: created!.id,
-        taskSnapshot: { id: created!.id, title: created!.title, status: created!.status },
+        taskSnapshot: expect.objectContaining({
+          id: created!.id,
+          title: created!.title,
+          status: created!.status,
+        }),
       }),
     ]);
     expect(await run(harness.store.listTasks(harness.scope))).toHaveLength(2);

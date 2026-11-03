@@ -1,3 +1,4 @@
+import { resolveRuntimeKindSelection } from "@openducktor/frontend-core/lib/agent-runtime";
 import {
   type SettingsRepoConfig,
   type RepoPromptOverrides,
@@ -7,7 +8,6 @@ import {
 } from "@openducktor/contracts";
 import {
   ensureDraftAgentDefault,
-  ROLE_DEFAULTS,
   resolveRepoAgentDefaultRuntimeKind,
   type RepoAgentDefaultsInput,
   type RepoDefaultRole,
@@ -17,16 +17,12 @@ import type {
   ModelDefaultDraft,
 } from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
-import {
-  BUILTIN_PROMPT_TEMPLATE_IDS,
-  type BuiltinPromptTemplateId as AgentPromptTemplateId,
-  builtinPromptTemplate,
-} from "@openducktor/workflows";
+import type { WorkflowPromptTemplate } from "@openducktor/contracts";
+type AgentPromptTemplateId = string;
 
 export {
   ensureDraftAgentDefault,
   findCatalogModel,
-  ROLE_DEFAULTS,
   resolveRepoAgentDefaultRuntimeKind,
   selectedModelKey,
   selectedModelKeyForRole,
@@ -89,7 +85,12 @@ export const getNeededCatalogRuntimeKinds = (
   }
 
   const runtimeKinds = new Set<RuntimeKind>();
-  for (const { role } of ROLE_DEFAULTS) {
+  const defaultRuntime = resolveRuntimeKindSelection({
+    runtimeDefinitions,
+    requestedRuntimeKind: selectedRepoConfig.defaultModel?.runtimeKind ?? null,
+  });
+  if (defaultRuntime) runtimeKinds.add(defaultRuntime);
+  for (const role of Object.keys(selectedRepoConfig.agentDefaults)) {
     const resolvedRuntimeKind = resolveRepoAgentDefaultRuntimeKind({
       selectedRepoConfig,
       runtimeDefinitions,
@@ -181,20 +182,21 @@ const formatPlaceholders = (placeholders: string[]): string => {
   return placeholders.map((placeholder) => `{{${placeholder}}}`).join(", ");
 };
 
-export const buildPromptOverrideValidationErrors = (overrides: RepoPromptOverrides) => {
+export const buildPromptOverrideValidationErrors = (
+  overrides: RepoPromptOverrides,
+  templates: readonly WorkflowPromptTemplate[],
+) => {
   const errors: PromptOverrideValidationErrors = {};
 
-  for (const templateId of BUILTIN_PROMPT_TEMPLATE_IDS) {
+  for (const template of templates) {
+    const templateId = template.id;
     const override = overrides[templateId];
     if (!override || override.enabled === false) {
       continue;
     }
 
     const { unsupportedPlaceholders, missingRequiredPlaceholders } =
-      validatePromptTemplatePlaceholders(
-        override.template,
-        builtinPromptTemplate(templateId).requiredPlaceholders,
-      );
+      validatePromptTemplatePlaceholders(override.template, template.requiredPlaceholders);
     if (unsupportedPlaceholders.length === 0 && missingRequiredPlaceholders.length === 0) {
       continue;
     }

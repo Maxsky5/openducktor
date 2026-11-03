@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { codexAppServerRequestParamsSchemas } from "@openducktor/contracts";
 import { AgentRuntimeQueryError, type AgentRole } from "@openducktor/core";
-import { AGENT_ROLE_TOOL_POLICY, resolveCodexRolePolicy } from "@openducktor/workflows";
+import { builtinTaskWorkflow, resolveCodexRolePolicy } from "@openducktor/workflows";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
@@ -31,7 +31,7 @@ const expectedThreadPolicy = {
   sandbox: "workspace-write",
 };
 const workflowThreadConfig = (role: AgentRole, repoPath = "/repo") =>
-  expectedThreadConfig(repoPath, AGENT_ROLE_TOOL_POLICY[role]);
+  expectedThreadConfig(repoPath, builtinTaskWorkflow.role(role).tools);
 const expectedTurnPolicy = (workingDirectory: string) => ({
   approvalPolicy: "on-request",
   approvalsReviewer: "auto_review",

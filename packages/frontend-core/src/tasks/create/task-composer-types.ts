@@ -1,10 +1,11 @@
-import type { BuiltinDocumentCode, BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
+import type { WorkflowIcon } from "@openducktor/contracts";
+import type { WorkflowIssueTypeId as IssueType } from "@openducktor/workflows";
 
 export type ComposerMode = "create" | "edit";
 
 export type ComposerStep = "type" | "details";
 
-export type EditTaskSection = "details" | BuiltinDocumentCode;
+export type EditTaskSection = "details" | { artifactCode: string };
 
 export type DocumentEditorView = "write" | "split" | "preview";
 
@@ -23,6 +24,8 @@ export type IssueTypeChoice = {
   value: IssueType;
   label: string;
   description: string;
+  icon?: WorkflowIcon | undefined;
+  guidance?: string | undefined;
   disabled?: boolean;
   disabledText?: string;
 };

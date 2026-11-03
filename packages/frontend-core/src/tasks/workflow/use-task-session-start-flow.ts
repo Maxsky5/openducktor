@@ -1,11 +1,18 @@
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useTaskWorkflowContinuation,
+  type ContinueTaskWorkflow,
+  type TaskWorkflowContinuation,
+} from "./task-workflow-continuation";
 import type { SessionStartWorkflowResult } from "../../sessions/start/session-start-workflow";
 import { useSessionStartContext } from "../../sessions/start/use-session-start-context";
 import type { GitBranch } from "@openducktor/contracts";
 import {
   defaultSessionLaunchActionForRole,
-  resolveSessionContinuationLaunchAction,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
+  taskPullRequestLaunch,
+  launchSessionCommand,
 } from "@openducktor/workflows";
 import { useCallback, useMemo, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
@@ -13,7 +20,7 @@ import type { SessionStartModalModel } from "../../sessions/start/session-start-
 import { isKanbanActiveTaskSession, toKanbanTaskSession } from "../board/kanban-task-activity";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
 import { resolvePreferredActiveSession } from "../board/session-target-resolution";
-import { submitHumanReviewFeedback } from "./human-review-feedback-flow";
+import { requestHumanReviewChanges, submitHumanReviewFeedback } from "./human-review-feedback-flow";
 import {
   buildHumanReviewFeedbackModalModel,
   createHumanReviewFeedbackState,
@@ -68,15 +75,18 @@ export type UseTaskSessionStartFlowResult = {
   sessionStartModal: SessionStartModalModel | null;
   startSessionIntent: (
     intent: SessionStartFlowRequest,
+    committedTask?: TaskCard,
   ) => Promise<SessionStartWorkflowResult | undefined>;
-  onPullRequestGenerate: (taskId: string) => Promise<string | undefined>;
-  onDelegate: (taskId: string) => void;
+  onPullRequestGenerate: (taskId: string, launchActionId?: string) => Promise<string | undefined>;
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
-  onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
-  onQaStart: (taskId: string) => void;
-  onQaOpen: (taskId: string) => void;
-  onBuild: (taskId: string) => void;
-  onHumanRequestChanges: (taskId: string) => void;
+  onHumanRequestChanges: (taskId: string, continuation?: TaskWorkflowContinuation) => void;
+  continueTaskWorkflow: ContinueTaskWorkflow;
+  onLaunch: (
+    taskId: string,
+    launchActionId: string,
+    committedTask?: TaskCard,
+    humanFeedback?: string,
+  ) => void;
 };
 
 const findLatestSessionByRoleForTask = (
@@ -141,6 +151,14 @@ export function useTaskSessionStartFlow({
   onBackgroundTransfer,
 }: UseTaskSessionStartFlowArgs): UseTaskSessionStartFlowResult {
   const { feedback, startupAttempts } = useClientConnection();
+  const queryClient = useQueryClient();
+  const workflowScope = useMemo(
+    () =>
+      activeWorkspaceId && workspaceRepoPath
+        ? { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath }
+        : null,
+    [activeWorkspaceId, workspaceRepoPath],
+  );
   const isCurrentContext = useSessionStartContext(activeWorkspaceId);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
@@ -161,7 +179,14 @@ export function useTaskSessionStartFlow({
     openHumanReviewFeedback,
     setHumanReviewFeedbackState,
   } = useHumanReviewFeedbackController({
-    createState: (taskId) => createHumanReviewFeedbackState(tasks, taskId),
+    createState: (taskId, launchActionId, requestChangesBeforeStart, continuation) =>
+      createHumanReviewFeedbackState(
+        tasks,
+        taskId,
+        launchActionId,
+        requestChangesBeforeStart,
+        continuation,
+      ),
   });
 
   const openAgents = useCallback(
@@ -190,8 +215,13 @@ export function useTaskSessionStartFlow({
     [activeWorkspaceId, openTaskView],
   );
   const startSessionIntent = useCallback(
-    async (intent: SessionStartFlowRequest): Promise<SessionStartWorkflowResult | undefined> => {
-      const selectedTask = tasks.find((task) => task.id === intent.taskId) ?? null;
+    async (
+      intent: SessionStartFlowRequest,
+      committedTask?: TaskCard,
+    ): Promise<SessionStartWorkflowResult | undefined> => {
+      const selectedTask = committedTask ?? tasks.find((task) => task.id === intent.taskId) ?? null;
+      if (selectedTask && selectedTask.id !== intent.taskId)
+        throw new Error("The committed task does not match this session request.");
       const taskSessions = sessions.filter((session) => session.taskId === intent.taskId);
       return runSessionStartRequest(
         buildSessionStartModalRequest({
@@ -213,7 +243,9 @@ export function useTaskSessionStartFlow({
             decision,
             startInBackground: runInBackground,
             isCurrent: isCurrentContext,
-            tasks,
+            tasks: committedTask
+              ? [...tasks.filter((task) => task.id !== committedTask.id), committedTask]
+              : tasks,
             runSessionStartWorkflow,
             openStartedSession: (request, session) => {
               const attempt = startupAttempts.getAttempt(startupAttemptId);
@@ -250,44 +282,70 @@ export function useTaskSessionStartFlow({
     clearHumanReviewFeedback();
   }, [clearHumanReviewFeedback, isSubmittingHumanReviewFeedback]);
 
+  const onLaunch = useCallback(
+    (
+      taskId: string,
+      launchActionId: string,
+      committedTask?: TaskCard,
+      humanFeedback?: string,
+    ): void => {
+      const task = committedTask ?? tasks.find((task) => task.id === taskId);
+      if (!task) throw new Error("Task workflow is unavailable. Reload the task.");
+      const launch = task.taskWorkflow.launchAction(launchActionId);
+      if (launch.context === "human_feedback" && humanFeedback === undefined) {
+        setHumanReviewFeedbackState(createHumanReviewFeedbackState([task], taskId, launchActionId));
+        return;
+      }
+      const request: SessionStartFlowRequest = {
+        taskId,
+        role: launch.role,
+        launchActionId,
+        postStartAction: launchSessionCommand(launch),
+      };
+      if (humanFeedback !== undefined) request.humanFeedback = humanFeedback;
+      void startSessionIntent(request, task).catch((cause) =>
+        feedback.show("error", "Failed to start session", {
+          description: cause instanceof Error ? cause.message : String(cause),
+        }),
+      );
+    },
+    [tasks, startSessionIntent, setHumanReviewFeedbackState, feedback],
+  );
+
+  const continueTaskWorkflow = useTaskWorkflowContinuation(workflowScope, onLaunch);
+
   const onPullRequestGenerate = useCallback(
-    async (taskId: string): Promise<string | undefined> => {
-      const builderSessions = findSessionsByRoleForTask(sessions, taskId, "build");
-      if (builderSessions.length === 0) {
-        throw new Error(`No Builder session is available to fork or reuse for task "${taskId}".`);
+    async (taskId: string, launchActionId?: string): Promise<string | undefined> => {
+      const task = tasks.find((task) => task.id === taskId);
+      if (!task) throw new Error("Task workflow is unavailable. Reload the task.");
+      const launch = taskPullRequestLaunch(task, launchActionId);
+      if (!launch) throw new Error(`Task "${taskId}" declares no pull request launch.`);
+      const { role } = launch;
+      const roleLabel = task.taskWorkflow.role(role).label;
+      const builderSessions = findSessionsByRoleForTask(sessions, taskId, role);
+      if (builderSessions.length === 0 && !launch.startModes.includes("fresh")) {
+        throw new Error(
+          `No ${roleLabel} session is available to fork or reuse for task "${taskId}".`,
+        );
       }
 
       const session = await startSessionIntent({
         taskId,
-        role: "build",
-        launchActionId: "build_pull_request_generation",
+        role,
+        launchActionId: launch.id,
         initialSourceSession: builderSessions[0]
           ? toAgentSessionIdentity(builderSessions[0])
           : null,
         existingSessionOptions: buildReusableSessionOptions({
           sessions: builderSessions,
-          role: "build",
+          role,
+          roleLabel: task.taskWorkflow.role(role).label,
         }),
-        postStartAction: "kickoff",
+        postStartAction: launchSessionCommand(launch),
       });
       return session?.externalSessionId;
     },
-    [sessions, startSessionIntent],
-  );
-
-  const onDelegate = useCallback(
-    (taskId: string): void => {
-      void startSessionIntent({
-        taskId,
-        role: "build",
-        launchActionId: resolveSessionContinuationLaunchAction(
-          "build",
-          tasks.find((entry) => entry.id === taskId) ?? null,
-        ),
-        postStartAction: "kickoff",
-      });
-    },
-    [startSessionIntent, tasks],
+    [tasks, sessions, startSessionIntent],
   );
 
   const onOpenSession = useCallback(
@@ -319,11 +377,18 @@ export function useTaskSessionStartFlow({
       const fallbackLatestSessionByRole = findLatestSessionByRoleForTask(sessions, taskId, role);
       const sessionToOpen = preferredSessionByRole ?? fallbackLatestSessionByRole;
       if (sessionToOpen) {
+        const task = tasks.find((task) => task.id === taskId);
+        if (!task) {
+          feedback.show("error", "Failed to open the session.", {
+            description: "Task workflow is unavailable. Reload the task.",
+          });
+          return;
+        }
         openStartedSession(
           {
             taskId,
             role,
-            launchActionId: defaultSessionLaunchActionForRole(role),
+            launchActionId: defaultSessionLaunchActionForRole(role, task.taskWorkflow),
             postStartAction: "none",
           },
           sessionToOpen,
@@ -340,52 +405,14 @@ export function useTaskSessionStartFlow({
       openAgents,
       openStartedSession,
       sessions,
+      tasks,
       workspaceRepoPath,
     ],
   );
 
-  const onPlan = useCallback(
-    (taskId: string, action: "set_spec" | "set_plan"): void => {
-      const role: AgentRole = action === "set_spec" ? "spec" : "planner";
-      void startSessionIntent({
-        taskId,
-        role,
-        launchActionId: defaultSessionLaunchActionForRole(role),
-        postStartAction: "kickoff",
-      });
-    },
-    [startSessionIntent],
-  );
-
-  const onBuild = useCallback(
-    (taskId: string): void => {
-      onOpenSession(taskId, "build");
-    },
-    [onOpenSession],
-  );
-
-  const onQaStart = useCallback(
-    (taskId: string): void => {
-      void startSessionIntent({
-        taskId,
-        role: "qa",
-        launchActionId: "qa_review",
-        postStartAction: "kickoff",
-      });
-    },
-    [startSessionIntent],
-  );
-
-  const onQaOpen = useCallback(
-    (taskId: string): void => {
-      onOpenSession(taskId, "qa");
-    },
-    [onOpenSession],
-  );
-
   const onHumanRequestChanges = useCallback(
-    (taskId: string): void => {
-      openHumanReviewFeedback(taskId);
+    (taskId: string, continuation?: TaskWorkflowContinuation): void => {
+      openHumanReviewFeedback(taskId, undefined, true, continuation);
     },
     [openHumanReviewFeedback],
   );
@@ -400,11 +427,16 @@ export function useTaskSessionStartFlow({
       const result = await submitHumanReviewFeedback({
         feedback,
         state: humanReviewFeedbackState,
-        builderSessions: findSessionsByRoleForTask(
-          sessions,
-          humanReviewFeedbackState.taskId,
-          "build",
-        ),
+        continueTaskWorkflow,
+        requestChangesTask: (taskId, note) =>
+          requestHumanReviewChanges(queryClient, workflowScope, taskId, note),
+        builderSessions: humanReviewFeedbackState.launch
+          ? findSessionsByRoleForTask(
+              sessions,
+              humanReviewFeedbackState.taskId,
+              humanReviewFeedbackState.launch.role,
+            )
+          : [],
         startRequestChangesSession: (request) => {
           const input: Parameters<typeof startSessionIntent>[0] = {
             taskId: request.taskId,
@@ -412,8 +444,7 @@ export function useTaskSessionStartFlow({
             launchActionId: request.launchActionId,
             existingSessionOptions: request.existingSessionOptions,
             postStartAction: request.postStartAction,
-            message: request.message,
-            beforeStartAction: request.beforeStartAction,
+            humanFeedback: request.humanFeedback,
           };
           if (request.initialStartMode) {
             input.initialStartMode = request.initialStartMode;
@@ -424,17 +455,26 @@ export function useTaskSessionStartFlow({
           return startSessionIntent(input);
         },
       });
-      if (result.outcome === "started") {
+      if (result.outcome !== "cancelled") {
         clearHumanReviewFeedback();
       }
     } catch (error) {
-      feedback.show("error", "Failed to prepare the Builder session.", {
+      feedback.show("error", "Failed to submit feedback.", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     } finally {
       setIsSubmittingHumanReviewFeedback(false);
     }
-  }, [clearHumanReviewFeedback, feedback, humanReviewFeedbackState, sessions, startSessionIntent]);
+  }, [
+    clearHumanReviewFeedback,
+    feedback,
+    humanReviewFeedbackState,
+    sessions,
+    startSessionIntent,
+    queryClient,
+    workflowScope,
+    continueTaskWorkflow,
+  ]);
 
   const humanReviewFeedbackModal = useMemo<HumanReviewFeedbackModalModel | null>(() => {
     if (!humanReviewFeedbackState) {
@@ -459,17 +499,14 @@ export function useTaskSessionStartFlow({
   ]);
 
   return {
+    continueTaskWorkflow,
     humanReviewFeedbackModal,
     isSessionStarting,
     sessionStartModal,
     startSessionIntent,
+    onLaunch,
     onPullRequestGenerate,
-    onDelegate,
     onOpenSession,
-    onPlan,
-    onQaStart,
-    onQaOpen,
-    onBuild,
     onHumanRequestChanges,
   };
 }

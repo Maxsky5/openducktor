@@ -1,10 +1,6 @@
 import { type WorkspaceAgentStudioState } from "@openducktor/contracts";
 import { TASK_SESSION_QUERY_KEYS } from "@/features/session-navigation/sessions-route";
-import {
-  BUILTIN_ROLE_IDS,
-  type BuiltinRoleId as AgentRole,
-  builtinRoleId,
-} from "@openducktor/workflows";
+import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 const AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY = "openducktor:agent-studio:right-panel";
 
@@ -31,10 +27,8 @@ export type AgentStudioNavigationState = {
   keepSessionless?: boolean;
 };
 
-const AGENT_ROLE_SET = new Set<string>(BUILTIN_ROLE_IDS);
-
 const isRole = (value: string | null): value is AgentRole =>
-  value != null && AGENT_ROLE_SET.has(value);
+  value != null && value.trim().length > 0;
 
 const readOptionalString = (value: string | null | undefined): string | undefined => {
   if (value === null || value === undefined) {
@@ -166,7 +160,7 @@ export const restoreNavigationFromWorkspaceState = (
   state: WorkspaceAgentStudioState,
 ): AgentStudioNavigationState => {
   const activeTask = state.activeTask;
-  const role = current.role ?? (activeTask?.role ? builtinRoleId(activeTask.role) : null);
+  const role = current.role ?? (activeTask?.role ? activeTask.role : null);
   const taskId = current.taskId || activeTask?.taskId || "";
   const sessionExternalId =
     current.sessionExternalId ??

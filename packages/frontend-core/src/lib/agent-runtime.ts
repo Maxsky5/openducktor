@@ -1,11 +1,4 @@
 import {
-  getMissingRequiredRuntimeSupportedScopes,
-  runtimeRequiredScopesByRole,
-  SESSION_LAUNCH_ACTIONS,
-  type BuiltinRoleId as AgentRole,
-  BUILTIN_ROLE_IDS,
-} from "@openducktor/workflows";
-import {
   type AgentRuntimes,
   type AgentSessionStartMode,
   formatRuntimeDescriptorSchemaIssue,
@@ -15,10 +8,9 @@ import {
   type RuntimeKind,
   runtimeDescriptorSchema,
 } from "@openducktor/contracts";
+import type { TaskWorkflowRole } from "@openducktor/workflows";
 
 export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
-
-const agentRoles: readonly AgentRole[] = BUILTIN_ROLE_IDS;
 
 export const isRuntimeEnabled = (agentRuntimes: AgentRuntimes, runtimeKind: RuntimeKind): boolean =>
   agentRuntimes[runtimeKind]?.enabled === true;
@@ -160,11 +152,7 @@ export const runtimeSupportsCapability = (
     case "workflow.supportsOdtWorkflowTools":
       return runtimeDescriptor.capabilities.workflow.supportsOdtWorkflowTools;
     case "workflow.supportedScopes":
-      return (
-        getMissingRequiredRuntimeSupportedScopes(
-          runtimeDescriptor.capabilities.workflow.supportedScopes,
-        ).length === 0
-      );
+      return runtimeDescriptor.capabilities.workflow.supportedScopes.length > 0;
     case "approvals.readOnlyAutoRejectSafe":
       return runtimeDescriptor.capabilities.approvals.readOnlyAutoRejectSafe;
     case "sessionLifecycle.supportedStartModes":
@@ -230,87 +218,25 @@ export const getMissingMandatoryRuntimeCapabilities = (
 
 const supportedScopesSatisfyRole = (
   supportedScopes: RuntimeDescriptor["capabilities"]["workflow"]["supportedScopes"],
-  role: AgentRole,
+  role: TaskWorkflowRole,
 ): boolean => {
   const scopes = new Set(supportedScopes);
-  return runtimeRequiredScopesByRole[role].every((scope) => scopes.has(scope));
+  return role.runtimeScopes.every((scope) => scopes.has(scope));
 };
 
-const roleScopeRequirementsDescription = (): string => {
-  return agentRoles
-    .map((role) => `${role} requires ${runtimeRequiredScopesByRole[role].join(", ")}`)
-    .join("; ");
-};
-
+/**
+ * The workflow compatibility of a runtime. Role scopes and launch start modes are checked when a
+ * session starts, against the workflow of its task.
+ */
 export const getRuntimeDescriptorCapabilityConfigErrors = (
   runtimeDescriptor: RuntimeDescriptor,
 ): string[] => {
   const errors: string[] = [];
-  const missingWorkflowScopes = getMissingRequiredRuntimeSupportedScopes(
-    runtimeDescriptor.capabilities.workflow.supportedScopes,
-  );
-
-  if (!runtimeDescriptor.capabilities.workflow.supportsOdtWorkflowTools) {
+  if (!runtimeDescriptor.capabilities.workflow.supportsOdtWorkflowTools)
     errors.push("[workflow] missing OpenDucktor workflow tool support");
-  }
-
-  if (!runtimeDescriptor.capabilities.approvals.readOnlyAutoRejectSafe) {
+  if (!runtimeDescriptor.capabilities.approvals.readOnlyAutoRejectSafe)
     errors.push("[workflow] read-only roles must auto-reject mutating approval requests");
-  }
-
-  if (missingWorkflowScopes.length > 0) {
-    errors.push(
-      `[role_scoped] missing required workflow scopes: ${missingWorkflowScopes.join(", ")}`,
-    );
-  }
-
-  const unsupportedRoles = agentRoles.filter(
-    (role) =>
-      !supportedScopesSatisfyRole(runtimeDescriptor.capabilities.workflow.supportedScopes, role),
-  );
-  if (unsupportedRoles.length > 0) {
-    errors.push(
-      `[role_scoped] unsupported agent roles: ${unsupportedRoles.join(", ")} (${roleScopeRequirementsDescription()})`,
-    );
-  }
-
-  const launchErrors = getRuntimeDescriptorLaunchConfigErrors(runtimeDescriptor);
-  errors.push(...launchErrors);
-
   return errors;
-};
-
-const launchStartModeRequirements = SESSION_LAUNCH_ACTIONS;
-
-const formatStartModes = (startModes: readonly AgentSessionStartMode[]): string => {
-  return startModes.length > 0 ? startModes.join(", ") : "none";
-};
-
-const runtimeSupportsAnyLaunchStartMode = (
-  runtimeDescriptor: RuntimeDescriptor,
-  allowedStartModes: readonly AgentSessionStartMode[],
-): boolean => {
-  return allowedStartModes.some((startMode) =>
-    runtimeSupportsStartMode(runtimeDescriptor, startMode),
-  );
-};
-
-export const getRuntimeDescriptorLaunchConfigErrors = (
-  runtimeDescriptor: RuntimeDescriptor,
-): string[] => {
-  return launchStartModeRequirements.flatMap((launch) => {
-    if (!runtimeSupportsRole(runtimeDescriptor, launch.role)) {
-      return [];
-    }
-    if (runtimeSupportsAnyLaunchStartMode(runtimeDescriptor, launch.startModes)) {
-      return [];
-    }
-
-    const supportedStartModes = runtimeDescriptor.capabilities.sessionLifecycle.supportedStartModes;
-    return [
-      `[launch_scoped] launch ${launch.id} has no supported start mode (allowed: ${formatStartModes(launch.startModes)}; runtime supports: ${formatStartModes(supportedStartModes)})`,
-    ];
-  });
 };
 
 export const validateRuntimeDefinitionForOpenDucktor = (
@@ -343,28 +269,20 @@ export const validateRuntimeDefinitionsForOpenDucktor = (
 
 export const runtimeSupportsRole = (
   runtimeDescriptor: RuntimeDescriptor,
-  role: AgentRole,
+  role: TaskWorkflowRole,
 ): boolean => {
   return supportedScopesSatisfyRole(runtimeDescriptor.capabilities.workflow.supportedScopes, role);
 };
 
 export const filterRuntimeDefinitionsForRole = (
   runtimeDefinitions: RuntimeDescriptor[],
-  role: AgentRole,
+  role: TaskWorkflowRole,
 ): RuntimeDescriptor[] => {
   return runtimeDefinitions.filter((definition) => runtimeSupportsRole(definition, role));
 };
 
-const runtimeSupportsAllRoles = (runtimeDescriptor: RuntimeDescriptor): boolean => {
-  return (
-    getMissingRequiredRuntimeSupportedScopes(
-      runtimeDescriptor.capabilities.workflow.supportedScopes,
-    ).length === 0
-  );
-};
-
 export const filterRuntimeDefinitionsForDefaultSelection = (
   runtimeDefinitions: RuntimeDescriptor[],
-): RuntimeDescriptor[] => {
-  return runtimeDefinitions.filter(runtimeSupportsAllRoles);
-};
+  roles: readonly TaskWorkflowRole[] = [],
+): RuntimeDescriptor[] =>
+  runtimeDefinitions.filter((runtime) => roles.every((role) => runtimeSupportsRole(runtime, role)));

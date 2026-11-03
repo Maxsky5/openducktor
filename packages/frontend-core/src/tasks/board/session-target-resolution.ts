@@ -6,7 +6,7 @@ import {
 } from "../../lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
-import { type BuiltinRoleId as AgentRole, builtinRoleId } from "@openducktor/workflows";
+import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 export type SessionTargetOptions = {
   session: AgentSessionIdentity;
@@ -94,7 +94,7 @@ export const resolveHistoricalSessionRoles = (
   const seenRoles = new Set<AgentRole>();
 
   for (const session of sortedTaskAgentSessions) {
-    const role = builtinRoleId(session.role);
+    const role = session.role;
     if (seenRoles.has(role)) {
       continue;
     }

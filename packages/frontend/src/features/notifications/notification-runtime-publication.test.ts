@@ -1,3 +1,4 @@
+import { builtinNotificationPresentation } from "@openducktor/frontend-core/test-support/workflow-fixtures";
 import { describe, expect, mock, test } from "bun:test";
 import {
   type NotificationOccurrence,
@@ -12,7 +13,7 @@ import {
   createNotificationRuntime,
   workflowClosedOccurrence,
 } from "@openducktor/frontend-core/notifications/notification-runtime.test-support";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 
 describe("notification publication and coordination", () => {
   test("shows the local start error once without putting it in the shared or OS payload", async () => {
@@ -313,6 +314,7 @@ describe("notification publication and coordination", () => {
     await runtime.publishAndWait({
       occurrenceId: "workflow.closed:/repo:task-1:event-1",
       kind: "workflow.closed",
+      ...builtinNotificationPresentation("workflow.closed"),
       repoPath: "/repo",
       repositoryLabel: "Repo",
       task: { id: "task-1", title: "Build notifications" },
@@ -518,6 +520,7 @@ describe("notification publication and coordination", () => {
     const item: NotificationOccurrence = {
       occurrenceId: `workflow.closed:${longPath}:task-1:event-1`,
       kind: "workflow.closed",
+      ...builtinNotificationPresentation("workflow.closed"),
       repoPath: longPath,
       repositoryLabel: "Repo",
       status: "Closed",
@@ -542,6 +545,7 @@ describe("notification publication and coordination", () => {
     const item: NotificationOccurrence = {
       occurrenceId: "invalid-occurrence",
       kind: "workflow.closed",
+      ...builtinNotificationPresentation("workflow.closed"),
       repoPath: "",
       repositoryLabel: "Repo",
       status: "Closed",

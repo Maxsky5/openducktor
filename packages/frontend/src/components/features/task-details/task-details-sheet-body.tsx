@@ -3,7 +3,7 @@ import { CircleHelp } from "lucide-react";
 import type { ReactElement } from "react";
 import { TaskArtifactsSection } from "@/components/features/task-artifacts/task-artifacts";
 import { TaskDetailsDocumentSection } from "./task-details-document-section";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const DESCRIPTION_ICON = <CircleHelp className="size-3.5" />;
 type TaskDetailsSheetBodyProps = {
@@ -51,6 +51,7 @@ export function TaskDetailsSheetBody({
       />
       {repoPath && workspaceId ? (
         <TaskArtifactsSection
+          task={task}
           repoPath={repoPath}
           taskId={task.id}
           artifactSummary={task.artifactSummary}

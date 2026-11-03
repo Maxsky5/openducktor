@@ -14,10 +14,8 @@ import {
 } from "@/state/notifications/notification-context";
 import { SettingsNotificationsSection } from "./settings-notifications-section";
 import { createCuelumeNotificationSoundAdapter } from "@/features/notifications/notification-delivery";
-import {
-  createBuiltinNotificationSettings,
-  BUILTIN_NOTIFICATION_KINDS,
-} from "@openducktor/workflows";
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 
 afterEach(cleanup);
 
@@ -327,7 +325,7 @@ describe("SettingsNotificationsSection", () => {
     expect(screen.getAllByRole("switch")).toHaveLength(
       AGENT_NOTIFICATION_KIND_VALUES.length +
         TASK_NOTIFICATION_KIND_VALUES.length +
-        BUILTIN_NOTIFICATION_KINDS.length,
+        Object.keys(builtinTaskWorkflow.notificationDefaults()).length,
     );
     const delivery = screen.getByRole("radiogroup", {
       name: "Delivery for Permission request",

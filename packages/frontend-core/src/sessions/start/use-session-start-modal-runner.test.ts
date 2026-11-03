@@ -1,3 +1,5 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
@@ -8,7 +10,10 @@ import {
   createRuntimeDefinitionsContextValue,
 } from "../../test-support/runtime-hook-harness";
 import { createFeedbackFake } from "../../test-support/feedback-fake";
-import { createRuntimeCatalogFixture } from "../../test-support/shared-test-fixtures";
+import {
+  createTaskCardFixture,
+  createRuntimeCatalogFixture,
+} from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import { createStartupLiveSourceFake } from "../../test-support/startup-live-source-fake";
 import {
@@ -291,6 +296,7 @@ describe("useSessionStartModalRunner", () => {
     );
     const request = {
       source: "agent_studio",
+      taskWorkflow: builtinTaskWorkflow,
       taskId: "TASK-1",
       role: "build",
       launchActionId: "build_implementation_start",
@@ -347,6 +353,7 @@ describe("useSessionStartModalRunner", () => {
     );
     const request = {
       source: "agent_studio",
+      taskWorkflow: builtinTaskWorkflow,
       taskId: "TASK-1",
       role: "build",
       launchActionId: "build_implementation_start",
@@ -413,6 +420,7 @@ describe("useSessionStartModalRunner failures", () => {
       );
       const request = {
         source: "agent_studio",
+        taskWorkflow: builtinTaskWorkflow,
         taskId: "TASK-1",
         role: "build",
         launchActionId: "build_implementation_start",
@@ -554,6 +562,7 @@ test.each([
       callerPromise = runner.runSessionStartRequest(
         {
           source: "agent_studio",
+          taskWorkflow: builtinTaskWorkflow,
           taskId: "TASK-1",
           role: "build",
           launchActionId: "build_implementation_start",
@@ -634,6 +643,7 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("accepts a runtime that supports the concrete selected start mode", () => {
     expect(() =>
       assertRuntimeSupportsSelectedStartMode({
+        taskWorkflow: builtinTaskWorkflow,
         launchActionId: "build_pull_request_generation",
         role: "build",
         runtimeDescriptor: FORKLESS_RUNTIME,
@@ -647,6 +657,7 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("fails fast before launch when the selected runtime does not support the selected mode", () => {
     expect(() =>
       assertRuntimeSupportsSelectedStartMode({
+        taskWorkflow: builtinTaskWorkflow,
         launchActionId: "build_pull_request_generation",
         role: "build",
         runtimeDescriptor: FORKLESS_RUNTIME,
@@ -662,6 +673,7 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("requires an available runtime for concrete non-reuse starts", () => {
     expect(() =>
       assertRuntimeSupportsSelectedStartMode({
+        taskWorkflow: builtinTaskWorkflow,
         launchActionId: "build_implementation_start",
         role: "build",
         runtimeDescriptor: null,
@@ -737,6 +749,7 @@ test("ignores replaced requests and confirmation holds a synchronous lease", asy
     },
   );
   const request = {
+    taskWorkflow: builtinTaskWorkflow,
     source: "agent_studio",
     taskId: "TASK-1",
     role: "build",
@@ -753,7 +766,7 @@ test("ignores replaced requests and confirmation holds a synchronous lease", asy
         ...request,
         kickoff: {
           workspaceId: null,
-          task: null,
+          task: createTaskCardFixture({ id: "TASK-1" }),
           request: { ...request, kickoffPrompt: "old prompt" },
         },
       },
@@ -767,7 +780,7 @@ test("ignores replaced requests and confirmation holds a synchronous lease", asy
         ...request,
         kickoff: {
           workspaceId: null,
-          task: null,
+          task: createTaskCardFixture({ id: "TASK-1" }),
           request: { ...request, kickoffPrompt: "current prompt" },
         },
       },
@@ -836,6 +849,7 @@ test("blocks confirmation while prompt settings load and uses the current branch
     },
   );
   const request = {
+    taskWorkflow: builtinTaskWorkflow,
     source: "agent_studio",
     taskId: "TASK-1",
     role: "build",
@@ -852,7 +866,10 @@ test("blocks confirmation while prompt settings load and uses the current branch
   try {
     await harness.run((runner) => {
       void runner.runSessionStartRequest(
-        { ...request, kickoff: { workspaceId: "a", task: null, request } },
+        {
+          ...request,
+          kickoff: { workspaceId: "a", task: createTaskCardFixture({ id: "TASK-1" }), request },
+        },
         execute,
       );
     });
@@ -930,6 +947,7 @@ for (const changedScope of ["task", "workspace", "role"] as const) {
     });
     const request = {
       source: "agent_studio",
+      taskWorkflow: builtinTaskWorkflow,
       taskId: "TASK-1",
       role: "build",
       launchActionId: "build_implementation_start",
@@ -1070,6 +1088,7 @@ test.each(["submit", "continue"] as const)(
     );
     const request = {
       source: "task_action",
+      taskWorkflow: builtinTaskWorkflow,
       taskId: "TASK-1",
       role: "build",
       launchActionId: "build_implementation_start",

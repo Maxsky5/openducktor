@@ -48,12 +48,7 @@ export type RepoSettingsInput = {
   actions: RepoActions;
   /** Paths copied from the main repo into a new worktree on creation. */
   worktreeCopyPaths: string[];
-  agentDefaults: {
-    spec: RepoAgentDefaultInput | null;
-    planner: RepoAgentDefaultInput | null;
-    build: RepoAgentDefaultInput | null;
-    qa: RepoAgentDefaultInput | null;
-  };
+  agentDefaults: Record<string, RepoAgentDefaultInput | null>;
 };
 
 /** The health of live host runtime updates. */

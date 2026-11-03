@@ -3,7 +3,7 @@ import {
   type BrowserTabOwner,
   type BrowserTabSummary,
 } from "@openducktor/contracts";
-import { emptyArtifactSummary } from "@openducktor/workflows";
+import { emptyArtifactSummary } from "@openducktor/workflows/test-support";
 import { Effect } from "effect";
 import { HostOperationError, HostResourceError } from "../../../effect/host-errors";
 import type { BrowserAutomationPort } from "../../../ports/browser-automation-port";

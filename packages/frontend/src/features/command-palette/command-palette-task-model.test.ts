@@ -8,7 +8,7 @@ import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-se
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 import { buildPaletteTaskView } from "./command-palette-task-model";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const record = (
   externalSessionId: string,

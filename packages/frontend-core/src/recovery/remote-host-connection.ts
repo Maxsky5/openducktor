@@ -1,3 +1,4 @@
+import { refreshWorkflowMetadata, workflowQueryKeys } from "../queries/workflows";
 import {
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_PROTOCOL_VERSION,
@@ -135,6 +136,8 @@ export const createRemoteHostConnection = ({
     return restoring;
   };
   const synchronize = async (context: RemoteSynchronizationContext) => {
+    if (queryClient.getQueryData(workflowQueryKeys.catalog))
+      await refreshWorkflowMetadata(queryClient);
     // State owners must apply stream snapshots before current-state reads.
     await taskOwners.synchronize();
     // The replay ran before this step. When it has every missed live change of a repository, its

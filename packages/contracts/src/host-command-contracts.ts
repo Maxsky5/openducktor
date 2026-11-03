@@ -155,6 +155,7 @@ export const HOST_COMMAND_NAMES = [
   "terminal_run_action",
   "workflow_artifact_get",
   "workflow_artifact_save",
+  "workflow_catalog_get",
   "workspace_apply_agent_studio_state_action",
   "workspace_cancel_azure_devops_sign_in",
   "workspace_catalog_get",
@@ -215,6 +216,7 @@ export const HOST_COMMAND_NAMES = [
   "workspace_update_agent_model_favorites",
   "workspace_update_kanban_task_card_view",
   "workspace_update_sidebar_session_grouping",
+  "workspace_workflow_get",
 ] as const;
 
 export type HostCommandName = (typeof HOST_COMMAND_NAMES)[number];

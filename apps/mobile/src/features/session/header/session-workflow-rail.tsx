@@ -1,6 +1,6 @@
 import {
-  type BuiltinTaskCard as TaskCard,
-  type BuiltinRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 import { isAgentSessionActivityWorking } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import type { WorkflowStepTone } from "@openducktor/frontend-core/types/agent-workflow";
@@ -17,12 +17,7 @@ import {
   type TaskWorkflowStep,
   taskWorkflowSteps,
 } from "@/features/tasks/details/task-workflow-model";
-import {
-  routes,
-  SINGLE_SHEET,
-  type StartSessionSheetAction,
-  switchedSessionParams,
-} from "@/navigation/routes";
+import { routes, SINGLE_SHEET, switchedSessionParams } from "@/navigation/routes";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { withAlpha } from "@/theme/color-alpha";
 import { type AppTheme, sansWeight } from "@/theme/tokens";
@@ -70,14 +65,6 @@ export function SessionWorkflowRail({
   );
 }
 
-/** The task action that starts the first session of each role. */
-const ROLE_START_ACTIONS = {
-  spec: "set_spec",
-  planner: "set_plan",
-  build: "build_start",
-  qa: "qa_start",
-} as const satisfies Record<AgentRole, StartSessionSheetAction>;
-
 /** What a press on a step does, and how a screen reader names it. */
 type StepPress = { hint: string; run: () => void };
 
@@ -98,7 +85,6 @@ function WorkflowRailSteps({
   const router = useRouter();
   const { groups } = useTaskSessionGroups({ workspaceId, repoPath }, task.id);
   const steps = useMemo(() => taskWorkflowSteps(task, groups), [groups, task]);
-  const availableActions = new Set(task.availableActions);
   return (
     <View
       style={column ? styles.columnBand : styles.band}
@@ -111,22 +97,27 @@ function WorkflowRailSteps({
         const selected = step.role === role;
         // As on desktop, a step opens its newest session. A step without a session starts one when
         // the host allows that action now.
-        const startAction = ROLE_START_ACTIONS[step.role];
+        const startAction = step.launchActionId;
         let press: StepPress | null = null;
         if (session && !selected) {
           press = {
             hint: `Opens the newest ${step.label} session.`,
             run: () => router.setParams(switchedSessionParams(workspaceId, session)),
           };
-        } else if (!session && availableActions.has(startAction)) {
+        } else if (!session && startAction !== null) {
           press = {
             hint: `Starts a ${step.label} session.`,
             run: () =>
-              router.push(routes.startSession(workspaceId, task.id, startAction), SINGLE_SHEET),
+              router.push(
+                task.taskWorkflow.launchAction(startAction).context === "human_feedback"
+                  ? routes.requestChanges(workspaceId, task.id, startAction)
+                  : routes.quickAction(workspaceId, task.id, startAction),
+                SINGLE_SHEET,
+              ),
           };
         }
         return (
-          <Fragment key={step.role}>
+          <Fragment key={step.id}>
             <WorkflowStep step={step} selected={selected} press={press} column={column} />
             {next ? (
               <View
@@ -165,7 +156,7 @@ const stateMark = (step: TaskWorkflowStep): IconName | "spinner" | null => {
   if (tone === "optional") return "circle-dashed";
   if (tone === "rejected" || tone === "failed") return "triangle-alert";
   // A Builder step that waits for the user marks a blocked task.
-  if (tone === "waiting_input" && step.role === "build") return "triangle-alert";
+  if (tone === "waiting_input") return "triangle-alert";
   return null;
 };
 
@@ -197,7 +188,7 @@ const WorkflowStep = memo(function WorkflowStep({
     ) : null;
   const content = column ? (
     <View style={[styles.step, styles.columnStep, tone === "optional" && styles.dashed]}>
-      <RoleIcon role={step.role} size={16} color={colors.icon} />
+      <RoleIcon hint={step.iconHint} size={16} color={colors.icon} />
       <View style={styles.columnText}>
         <Text numberOfLines={1} style={[styles.label, { color: colors.text }]}>
           {step.label}
@@ -211,7 +202,7 @@ const WorkflowStep = memo(function WorkflowStep({
   ) : (
     <View style={[styles.step, tone === "optional" && styles.dashed]}>
       <View style={styles.marks}>
-        <RoleIcon role={step.role} size={14} color={colors.icon} />
+        <RoleIcon hint={step.iconHint} size={14} color={colors.icon} />
         {markView}
       </View>
       <Text numberOfLines={1} style={[styles.label, { color: colors.text }]}>

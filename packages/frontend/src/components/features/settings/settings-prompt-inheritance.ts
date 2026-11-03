@@ -1,5 +1,5 @@
 import type { RepoPromptOverrides } from "@openducktor/contracts";
-import type { BuiltinPromptTemplateId as AgentPromptTemplateId } from "@openducktor/workflows";
+import type { WorkflowPromptTemplateId as AgentPromptTemplateId } from "@openducktor/workflows";
 
 export type PromptInheritedPreview = {
   sourceLabel: string;

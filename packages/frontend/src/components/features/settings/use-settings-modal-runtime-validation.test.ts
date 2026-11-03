@@ -65,7 +65,7 @@ describe("settings runtime availability validation", () => {
     expect(validation.warningsByWorkspaceId).toEqual({
       repo: [
         'Default Model runtime "Codex" is disabled.',
-        'Builder agent runtime "Codex" is disabled.',
+        'build agent runtime "Codex" is disabled.',
       ],
     });
     expect(validation.totalErrorCount).toBe(0);
@@ -92,7 +92,7 @@ describe("settings runtime availability validation", () => {
     expect(validation.warningsByWorkspaceId).toEqual({
       repo: [
         'Default Model runtime "Codex" is disabled.',
-        'Builder agent runtime "Codex" is disabled.',
+        'build agent runtime "Codex" is disabled.',
       ],
     });
     expect(validation.totalErrorCount).toBe(0);

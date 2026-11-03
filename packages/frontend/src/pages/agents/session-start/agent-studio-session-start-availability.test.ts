@@ -59,6 +59,7 @@ describe("agent studio session start availability", () => {
   test("uses kickoff only for startable launch actions with kickoff prompts", () => {
     expect(
       canUseAgentStudioKickoffPrompt({
+        selectedTask: createTaskCardFixture(),
         canStartSession: true,
         launchActionId: "build_after_human_request_changes",
       }),
@@ -66,12 +67,14 @@ describe("agent studio session start availability", () => {
 
     expect(
       canUseAgentStudioKickoffPrompt({
+        selectedTask: createTaskCardFixture(),
         canStartSession: true,
         launchActionId: "build_rebase_conflict_resolution",
       }),
     ).toBe(false);
     expect(
       canUseAgentStudioKickoffPrompt({
+        selectedTask: createTaskCardFixture(),
         canStartSession: false,
         launchActionId: "build_after_human_request_changes",
       }),

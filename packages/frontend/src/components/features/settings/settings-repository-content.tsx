@@ -1,4 +1,4 @@
-import type { BuiltinPromptRoleTabId } from "@openducktor/workflows";
+import type { WorkflowPromptRoleTabId } from "@openducktor/workflows";
 import {
   gitRepositoryKey,
   type GitProviderRepository,
@@ -30,14 +30,14 @@ import type { GitProviderState } from "./use-repository-git-section-model";
 
 type SettingsRepositoryContentProps = {
   repositorySection: RepositorySectionId;
-  repoPromptRoleTab: BuiltinPromptRoleTabId;
+  repoPromptRoleTab: WorkflowPromptRoleTabId;
   isInteractionDisabled: boolean;
   controller: SettingsModalController;
   globalPromptOverrides: NonNullable<
     SettingsModalController["snapshotDraft"]
   >["globalPromptOverrides"];
   onRepositorySectionChange: (next: RepositorySectionId) => void;
-  onRepoPromptRoleTabChange: (next: BuiltinPromptRoleTabId) => void;
+  onRepoPromptRoleTabChange: (next: WorkflowPromptRoleTabId) => void;
   contentFocusRequest?: SettingsContentFocusRequest | null | undefined;
   onContentFocusRequestHandled?: ((request: SettingsContentFocusRequest) => void) | undefined;
 };

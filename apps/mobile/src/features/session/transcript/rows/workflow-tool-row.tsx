@@ -12,13 +12,14 @@ import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agen
 import {
   type ArtifactToolHeading,
   readArtifactToolCall,
+  readArtifactToolTaskId,
 } from "@openducktor/frontend-core/sessions/messages/artifact-tool-call";
 import { memo, type ReactElement, type ReactNode, useMemo } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { workflowDocumentKey } from "@/features/tasks/artifacts/artifact-list-model";
 import type { HostDocumentKey } from "@/features/tasks/documents/document-rows";
-import { DOCUMENT_PANEL_COPY } from "@/features/tasks/documents/documents-panel-model";
+import { useToolTaskWorkflow } from "../use-tool-task-workflow";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { withAlpha } from "@/theme/color-alpha";
 import { type AppTheme, sansWeight } from "@/theme/tokens";
@@ -224,6 +225,8 @@ function WorkflowToolDetails({
 }
 
 const HEADING_ICONS = {
+  artifact: "file-text",
+
   document: "file-text",
   review_passed: "shield-check",
   review_failed: "shield-x",
@@ -245,9 +248,15 @@ export const ArtifactToolRow = memo(function ArtifactToolRow({
   timeLabel: string;
   rowKey: string;
 }): ReactElement {
-  const call = useMemo(
+  const rawCall = useMemo(
     () => (operation === "set" ? readArtifactToolCall(meta) : null),
     [meta, operation],
+  );
+  const taskId = rawCall?.saved?.taskId ?? readArtifactToolTaskId(meta);
+  const workflow = useToolTaskWorkflow(taskId);
+  const call = useMemo(
+    () => (operation === "set" ? readArtifactToolCall(meta, workflow.task?.taskWorkflow) : null),
+    [meta, operation, workflow.task?.taskWorkflow],
   );
   if (!call) {
     return (
@@ -262,18 +271,33 @@ export const ArtifactToolRow = memo(function ArtifactToolRow({
   }
   const { saved } = call;
   return (
-    <WorkflowToolRow
-      {...props}
-      meta={meta}
-      displayName={call.title}
-      icon={HEADING_ICONS[call.heading]}
-      document={call.heading === "free" || !call.code ? null : workflowDocumentKey(call.code)}
-      action={
-        saved?.classification === "free" ? (
-          <OpenArtifactButton name={saved.name} taskId={saved.taskId} code={saved.code} />
-        ) : null
-      }
-    />
+    <>
+      <WorkflowToolRow
+        {...props}
+        meta={meta}
+        displayName={call.title}
+        icon={HEADING_ICONS[call.heading]}
+        document={
+          call.heading === "free" ||
+          !call.code ||
+          !workflow.task?.taskWorkflow.definition.artifacts.some(({ id }) => id === call.code)
+            ? null
+            : workflowDocumentKey(call.code)
+        }
+        action={
+          saved?.classification === "free" ? (
+            <OpenArtifactButton name={saved.name} taskId={saved.taskId} code={saved.code} />
+          ) : null
+        }
+      />
+      {workflow.error ? (
+        <Text variant="footnote" accessibilityRole="alert">
+          {workflow.error}
+        </Text>
+      ) : taskId && !workflow.task ? (
+        <Text variant="footnote">Loading task workflow...</Text>
+      ) : null}
+    </>
   );
 });
 
@@ -301,12 +325,6 @@ function OpenArtifactButton({
 }
 
 /** The short labels of the Open button, which shares its row with the tool name. */
-const OPEN_LABELS = {
-  spec: "Open Spec",
-  plan: "Open Plan",
-  qa: "Open QA Report",
-} as const satisfies Record<HostDocumentKey, string>;
-
 /** Opens the saved document with the eye of a preview, as the other buttons of the app. */
 function OpenDocumentButton({
   document,
@@ -317,11 +335,11 @@ function OpenDocumentButton({
 }): ReactElement {
   return (
     <Button
-      label={OPEN_LABELS[document]}
+      label="Open"
       icon="eye"
       variant="outline"
       size="sm"
-      accessibilityLabel={`Open the ${DOCUMENT_PANEL_COPY[document].title}`}
+      accessibilityLabel={`Open document ${document}`}
       onPress={onPress}
     />
   );

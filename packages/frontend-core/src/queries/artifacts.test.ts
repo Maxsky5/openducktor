@@ -7,7 +7,7 @@ import {
 } from "@openducktor/contracts";
 import { QueryObserver, queryOptions } from "@tanstack/react-query";
 import { createTestClientConnection } from "../test-support/test-client-connection";
-import { createTaskCardFixture } from "../test-support/shared-test-fixtures";
+import { createTaskCardFixture, toWireTaskCard } from "../test-support/shared-test-fixtures";
 import {
   artifactQueryKeys,
   createArtifactSaveGuard,
@@ -215,7 +215,7 @@ describe("task artifact queries", () => {
     });
     const connection = createTestClientConnection({
       client: {
-        tasksList: async () => [currentTask],
+        tasksList: async () => [toWireTaskCard(currentTask)],
         taskArtifactsList: list,
         taskArtifactRead: read,
       },

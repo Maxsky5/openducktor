@@ -1,6 +1,7 @@
+import { renderWithWorkflow as render } from "@/test-utils/workflow-provider";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { type AutopilotSettings, createDefaultAutopilotSettings } from "@openducktor/contracts";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { act } from "react";
 import { setAutopilotRuleAction } from "@/features/autopilot/autopilot-catalog";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
@@ -129,8 +130,9 @@ describe("settings Autopilot section", () => {
   test("keeps a saved global Pull Request action visible", async () => {
     const autopilot = setAutopilotRuleAction(
       createDefaultAutopilotSettings(),
+      "openducktor",
       "taskProgressedToHumanReview",
-      "startGeneratePullRequest",
+      "action:startGeneratePullRequest",
     );
     renderSection(autopilot);
 

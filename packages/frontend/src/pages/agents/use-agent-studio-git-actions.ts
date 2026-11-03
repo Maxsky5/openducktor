@@ -1,4 +1,3 @@
-import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import type { ResolveGitConflict } from "@openducktor/frontend-core/git/conflicts/conflict-assistance";
 import type { CommitsAheadBehind, GitLocalChanges } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -103,7 +102,7 @@ export function useAgentStudioGitActions({
   applyLocalChanges,
   onResolveGitConflict,
   assistanceContextKey = "",
-  conflictRecipientLabel = BUILTIN_ROLE_LABELS.build,
+  conflictRecipientLabel = "agent",
   conflictAssistanceBlockedReason = null,
   conflictAssistanceIsStarting = false,
 }: UseAgentStudioGitActionsInput): AgentStudioGitActionState {

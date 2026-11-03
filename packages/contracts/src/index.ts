@@ -19,6 +19,7 @@ export type {
   WorkflowCondition,
 } from "./workflow-condition-schemas";
 export * from "./workflow-definition-schemas";
+export * from "./workflow-display-schemas";
 export type * from "./workflow-evaluation";
 export * from "./agent-session-schemas";
 export * from "./agent-workflow-schemas";
@@ -171,3 +172,4 @@ export * from "./artifact-preview-schemas";
 export * from "./odt-artifact-schemas";
 
 export * from "./session-startup-schemas";
+export * from "./workflow-client-schemas";

@@ -106,12 +106,16 @@ describe("createTaskWorkflow", () => {
     expect(review.stateNotification("reviewing")).toEqual({
       kind: "workflow.reviewing",
       status: "Task moved to Reviewing.",
+      title: "Ready for review",
+      body: "Review the draft.",
       preferredRole: "editor",
       navigation: { type: "agent_studio_task", preferredRole: "editor" },
     });
     expect(review.stateNotification("published", "writer")).toEqual({
       kind: "workflow.published",
       status: "Task moved to Published.",
+      title: "Published",
+      body: "The task is published.",
       preferredRole: "writer",
       navigation: { type: "kanban_task" },
     });
@@ -150,14 +154,14 @@ describe("createTaskWorkflow", () => {
   test("rejects a definition that a task workflow cannot run", () => {
     expect(
       withChange((definition) => {
-        definition.facts = [];
+        definition.issueTypes = [];
       }),
-    ).toThrow('Task workflow "review" must declare one fact: the issueType enum');
+    ).toThrow('Task workflow "review" must declare its issueTypes and no facts.');
     expect(
       withChange((definition) => {
         definition.facts.push({ id: "priority", type: "enum", values: ["high", "low"] });
       }),
-    ).toThrow('Task workflow "review" must declare one fact: the issueType enum');
+    ).toThrow('Task workflow "review" must declare its issueTypes and no facts.');
     expect(
       withChange((definition) => {
         const edit = definition.steps.find(({ id }) => id === "edit");

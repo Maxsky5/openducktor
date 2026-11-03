@@ -1,4 +1,5 @@
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
+import { createTaskCardFixture, toWireTaskCard } from "@/test-utils/shared-test-fixtures";
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskArtifactCollection } from "@openducktor/contracts";
 import { artifactQueryKeys } from "@openducktor/frontend-core/queries/artifacts";
@@ -76,7 +77,14 @@ describe("useAgentStudioSelectionState", () => {
       updatedAt: null,
     }));
     const connection = createTestClientConnection({
-      client: { taskArtifactsList: list, workflowArtifactGet: read },
+      client: {
+        tasksListAll: async () => [
+          toWireTaskCard(createTaskCardFixture({ id: "task-1" })),
+          toWireTaskCard(createTaskCardFixture({ id: "task-2" })),
+        ],
+        taskArtifactsList: list,
+        workflowArtifactGet: read,
+      },
     });
     const h = createSharedHookHarness(
       useAgentStudioSelectionState,
@@ -121,7 +129,14 @@ describe("useAgentStudioSelectionState", () => {
         }),
       );
       const connection = createTestClientConnection({
-        client: { taskArtifactsList: list, workflowArtifactGet: read },
+        client: {
+          tasksListAll: async () => [
+            toWireTaskCard(createTaskCardFixture({ id: "task-1" })),
+            toWireTaskCard(createTaskCardFixture({ id: "task-2" })),
+          ],
+          taskArtifactsList: list,
+          workflowArtifactGet: read,
+        },
       });
       let apply: (() => void) | undefined;
       let readStartedBeforeRoute = false;
@@ -133,7 +148,9 @@ describe("useAgentStudioSelectionState", () => {
           },
           scheduleQueryUpdate: () => {
             readStartedBeforeRoute =
-              read.mock.calls.length === 1 &&
+              connection.queryClient.isFetching({
+                queryKey: ["tasks", "repo-data", workspaceRefFixture("/repo"), "unfiltered"],
+              }) === 1 &&
               connection.queryClient.getQueryState(
                 artifactQueryKeys.collection(workspaceRefFixture("/repo"), "task-2"),
               )?.fetchStatus === "fetching";
@@ -476,7 +493,7 @@ describe("useAgentStudioSelectionState", () => {
       taskId: "task-1",
       sessionExternalId: null,
       sessionIdentity: null,
-      role: "spec",
+      role: null,
       hasExplicitRoleSelection: false,
       keepSessionless: false,
     });

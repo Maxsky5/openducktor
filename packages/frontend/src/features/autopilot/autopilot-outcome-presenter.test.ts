@@ -38,6 +38,7 @@ const fields = {
   workflowId: "openducktor",
   eventId: "taskRejectedByQa" as const,
   actionId: "startReviewQaFeedbacks" as const,
+  actionLabel: "Start Review QA Feedbacks",
   occurredAt: "2026-10-10T00:00:00.000Z",
 };
 const skipped = (outcomeId = "skipped-1", workspaceId = "alpha"): AutopilotOutcome => ({

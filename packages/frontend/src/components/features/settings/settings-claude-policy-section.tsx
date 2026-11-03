@@ -1,4 +1,3 @@
-import { BUILTIN_ROLE_IDS } from "@openducktor/workflows";
 import { claudeRuntimeConfigSchema, type ClaudeRuntimeConfig } from "@openducktor/contracts";
 import { ChevronDown } from "lucide-react";
 import { useId, useState } from "react";
@@ -74,7 +73,7 @@ function ClaudePolicyGroup({
   const defaultCount = group.fields.filter(
     (field) => readClaudePolicyField(config.defaults, field.path) !== undefined,
   ).length;
-  const roleCount = BUILTIN_ROLE_IDS.reduce(
+  const roleCount = Object.keys(config.roleOverrides).reduce(
     (count, role) =>
       count +
       group.fields.filter(

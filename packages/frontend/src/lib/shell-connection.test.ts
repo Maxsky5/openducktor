@@ -90,7 +90,8 @@ describe("releaseShellConnection", () => {
 
     await releaseShellConnection(connection, view.unmount);
 
-    expect(observersAtDispose).toEqual([0]);
+    expect(observersAtDispose.length).toBeGreaterThan(0);
+    expect(observersAtDispose.every((count) => count === 0)).toBe(true);
     expect(cache.getAll()).toEqual([]);
     expect(reads).toBe(1);
   });

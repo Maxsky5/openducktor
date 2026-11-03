@@ -1,5 +1,7 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
 import { type AgentUserMessagePart } from "@openducktor/core";
-import { getSessionLaunchAction, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import {
   type WorkflowLaunchDecision,
   type WorkflowLaunchRequest,
@@ -54,7 +56,7 @@ export const createWorkflowLaunchClient = (args: FixtureArgs): WorkflowLaunchCli
     if (request.policy.kind !== "manual")
       throw new Error("This UI fixture requires a manual request.");
     args.onRequest?.(request);
-    const role = getSessionLaunchAction(request.policy.actionId).role;
+    const role = builtinTaskWorkflow.launchAction(request.policy.actionId).role;
     const base: WorkflowLaunchResult = {
       workspaceId: request.workspaceId,
       repoPath: request.repoPath,

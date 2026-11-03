@@ -114,6 +114,7 @@ describe("session-start-orchestration", () => {
         launchActionId: "build_pull_request_generation",
         postStartAction: "kickoff",
       },
+      selectedTask: createTaskCardFixture({ id: "TASK-1" }),
       selectedModel: null,
       taskSessions: [latestSession, olderSession],
     });
@@ -124,6 +125,7 @@ describe("session-start-orchestration", () => {
   test("does not auto-build reusable options for fresh-only launch actions and preserves overrides", () => {
     const request = buildSessionStartModalRequest({
       source: "agent_studio",
+      selectedTask: createTaskCardFixture({ id: "TASK-1" }),
       request: {
         taskId: "TASK-1",
         role: "spec",
@@ -185,6 +187,7 @@ describe("session-start-orchestration", () => {
         initialSourceSession: sessionIdentity("builder-session-2"),
         postStartAction: "kickoff",
       },
+      selectedTask: createTaskCardFixture({ id: "TASK-1" }),
       selectedModel: null,
       taskSessions: [latestSession, preferredSourceSession],
       preferredSourceSession,

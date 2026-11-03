@@ -1,3 +1,5 @@
+import { useTaskFormWorkflow } from "../../queries/use-task-form-workflow";
+import { defaultIssueType, issueTypeChoices } from "../create/task-composer-options";
 import type {
   IssueItemsImportResult,
   RepositoryGitProviderContext,
@@ -13,7 +15,8 @@ import { useSingleFlight } from "../../lib/use-single-flight";
 import { invalidateRepoIssueItemsQueries } from "../../queries/issue-items";
 
 export type IssueReview = {
-  issueType: "task" | "feature" | "bug";
+  /** Absent until the user picks one: the import uses the default issue type of the workflow. */
+  issueType?: string;
   priority: number;
   labels: string[];
 };
@@ -21,7 +24,6 @@ export type IssueReview = {
 export type ImportOutcome = IssueItemsImportResult["results"][number];
 
 export const initialReview = (item: SourceIssue): IssueReview => ({
-  issueType: "task",
   priority: 2,
   labels: [...item.tags],
 });
@@ -143,12 +145,25 @@ export function useIssueImportSubmission({
   const pendingItems = selectedItems.filter(
     (item) => !item.linkedTaskId && outcomes.get(item.sourceId)?.outcome !== "created",
   );
+  const workflowRead = useTaskFormWorkflow(null, { workspaceId, repoPath }, true);
+  const choices = issueTypeChoices(workflowRead.taskWorkflow);
+  const reviewIssueType = (review: IssueReview | undefined) =>
+    review?.issueType ?? defaultIssueType(workflowRead.taskWorkflow);
   const importPendingItems = async (): Promise<void> => {
     setIsSubmitting(true);
     setSubmitError(null);
     setSubmitErrorOutcomeUnknown(false);
     let completedCount = 0;
     try {
+      if (!workflowRead.taskWorkflow || workflowRead.error)
+        throw new Error(workflowRead.error ?? "Task workflow is loading. Wait before importing.");
+      if (
+        pendingItems.some(
+          (item) =>
+            !choices.some(({ value }) => value === reviewIssueType(reviews.get(item.sourceId))),
+        )
+      )
+        throw new Error("Select a declared issue type for each item before importing.");
       const result = await host.issueItemsImport({
         workspaceId,
         repoPath,
@@ -157,7 +172,7 @@ export function useIssueImportSubmission({
           return {
             sourceId: item.sourceId,
             revision: item.revision,
-            issueType: review.issueType,
+            issueType: reviewIssueType(review)!,
             priority: review.priority,
             labels: review.labels.map((label) => label.trim()).filter(Boolean),
           };
@@ -229,6 +244,9 @@ export function useIssueImportSubmission({
     }
   };
   return {
+    /** The declared issue types of the new-task workflow, and the one that it proposes. */
+    issueTypeChoices: choices,
+    defaultIssueType: defaultIssueType(workflowRead.taskWorkflow),
     outcomes,
     isSubmitting,
     refreshingId,

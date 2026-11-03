@@ -1,3 +1,8 @@
+import {
+  createKanbanColumnFixture,
+  createTaskWorkflowActionsFixture,
+} from "@/test-utils/shared-test-fixtures";
+import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { describe, expect, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { act, type ComponentProps, createElement } from "react";
@@ -13,7 +18,13 @@ import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-su
 import { KanbanColumn } from "./kanban-column";
 
 const renderColumnMarkup = (element: Parameters<typeof renderToStaticMarkup>[0]): string =>
-  renderToStaticMarkup(createElement(TooltipProvider, null, element));
+  renderToStaticMarkup(
+    createElement(
+      TaskWorkflowActionsContext,
+      { value: createTaskWorkflowActionsFixture() },
+      createElement(TooltipProvider, null, element),
+    ),
+  );
 
 const noop = (): void => {};
 
@@ -29,7 +40,7 @@ describe("KanbanColumn", () => {
       );
       const firstTask = tasks[0]!;
       const props: ComponentProps<typeof KanbanColumn> = {
-        column: { id: "ready_for_dev", title: "Ready for Dev", tasks },
+        column: createKanbanColumnFixture("ready_for_dev", tasks, { title: "Ready for Dev" }),
         taskSessionsByTaskId: new Map(),
         historicalSessionsByTaskId: new Map(),
         mergedTargetByTaskId: new Map(),
@@ -37,14 +48,14 @@ describe("KanbanColumn", () => {
         activeTaskSessionContextByTaskId: new Map(),
         taskActivityStateByTaskId: new Map(tasks.map((task) => [task.id, "idle"])),
         onOpenDetails: noop,
-        onDelegate: noop,
-        onPlan: noop,
         onOpenSession: noop,
       };
       const view = render(
         <MemoryRouter>
           <TooltipProvider>
-            <KanbanColumn {...props} />
+            <TaskWorkflowActionsContext value={createTaskWorkflowActionsFixture()}>
+              <KanbanColumn {...props} />
+            </TaskWorkflowActionsContext>
           </TooltipProvider>
         </MemoryRouter>,
       );
@@ -86,7 +97,12 @@ describe("KanbanColumn", () => {
           view.rerender(
             <MemoryRouter>
               <TooltipProvider>
-                <KanbanColumn {...props} historicalSessionsByTaskId={historicalSessionsByTaskId} />
+                <TaskWorkflowActionsContext value={createTaskWorkflowActionsFixture()}>
+                  <KanbanColumn
+                    {...props}
+                    historicalSessionsByTaskId={historicalSessionsByTaskId}
+                  />
+                </TaskWorkflowActionsContext>
               </TooltipProvider>
             </MemoryRouter>,
           ),
@@ -98,11 +114,13 @@ describe("KanbanColumn", () => {
           view.rerender(
             <MemoryRouter>
               <TooltipProvider>
-                <KanbanColumn
-                  {...props}
-                  taskCardView="compact"
-                  historicalSessionsByTaskId={historicalSessionsByTaskId}
-                />
+                <TaskWorkflowActionsContext value={createTaskWorkflowActionsFixture()}>
+                  <KanbanColumn
+                    {...props}
+                    taskCardView="compact"
+                    historicalSessionsByTaskId={historicalSessionsByTaskId}
+                  />
+                </TaskWorkflowActionsContext>
               </TooltipProvider>
             </MemoryRouter>,
           ),
@@ -155,11 +173,9 @@ describe("KanbanColumn", () => {
         MemoryRouter,
         { initialEntries: ["/kanban"] },
         createElement(KanbanColumn, {
-          column: {
-            id: "in_progress",
+          column: createKanbanColumnFixture("in_progress", [waitingTask, activeTask, idleTask], {
             title: "In Progress",
-            tasks: [waitingTask, activeTask, idleTask],
-          },
+          }),
           taskSessionsByTaskId,
           historicalSessionsByTaskId: new Map(),
           mergedTargetByTaskId: new Map(),
@@ -167,8 +183,6 @@ describe("KanbanColumn", () => {
           taskActivityStateByTaskId,
           activeTaskSessionContextByTaskId: new Map(),
           onOpenDetails: noop,
-          onDelegate: noop,
-          onPlan: noop,
           onOpenSession: noop,
         }),
       ),

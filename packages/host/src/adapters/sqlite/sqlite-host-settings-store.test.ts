@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { repoConfigSchema, type GlobalConfig } from "@openducktor/contracts";
-import { BUILTIN_PROMPT_TEMPLATE_IDS, BUILTIN_ROLE_IDS } from "@openducktor/workflows";
+import { BUILTIN_PROMPT_TEMPLATE_IDS, BUILTIN_ROLE_IDS } from "@openducktor/workflows/test-support";
 import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../../config/global-config";

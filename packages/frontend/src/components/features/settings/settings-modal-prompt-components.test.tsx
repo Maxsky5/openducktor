@@ -1,5 +1,6 @@
+import { WorkflowTestProvider } from "@/test-utils/workflow-provider";
 import { describe, expect, test } from "bun:test";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
 import { PromptOverrideCard, PromptRoleTabs } from "./settings-modal-prompt-components";
 
 const noop = () => undefined;
@@ -48,7 +49,7 @@ describe("PromptRoleTabs", () => {
       <PromptRoleTabs
         value="spec"
         disabled={false}
-        errorCounts={{ shared: 0, spec: 1, planner: 0, build: 0, qa: 0 }}
+        errorCounts={{ shared: 0, "role:openducktor@2:spec": 1, planner: 0, build: 0, qa: 0 }}
         onChange={noop}
       />,
     );
@@ -59,3 +60,6 @@ describe("PromptRoleTabs", () => {
     expect(markup).toContain("1 prompt placeholder error");
   });
 });
+
+const renderToStaticMarkup = (element: Parameters<typeof renderMarkup>[0]) =>
+  renderMarkup(<WorkflowTestProvider>{element}</WorkflowTestProvider>);

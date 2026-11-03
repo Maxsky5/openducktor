@@ -1,20 +1,10 @@
-import { SESSION_DOCUMENT_PANEL_COPY } from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
 import { markdownBlockGap } from "@/rich-content/markdown/markdown-spacing";
 import type {
   MarkdownBlock,
   MarkdownDefinitions,
   TaskImageContext,
 } from "@/rich-content/markdown/markdown-view";
-import { buildDocumentRows, type DocumentSource, type HostDocumentKey } from "./document-rows";
-
-/** The documents of the Documents view, in workflow order. */
-export const DOCUMENT_KINDS = ["spec", "plan", "qa"] as const satisfies readonly HostDocumentKey[];
-
-/** The title and empty text of each document, as the desktop document panel shows them. */
-export const DOCUMENT_PANEL_COPY = SESSION_DOCUMENT_PANEL_COPY satisfies Record<
-  HostDocumentKey,
-  { title: string; empty: string }
->;
+import { buildDocumentRows, type DocumentSource } from "./document-rows";
 
 const MONTHS = [
   "Jan",
@@ -95,3 +85,11 @@ export const documentPanelState = (source: DocumentSource): DocumentPanelState =
     markdown: rows.map((row) => row.block.source).join("\n\n"),
   };
 };
+
+export const documentMenuItems = (sources: ReadonlyMap<string, DocumentSource>, selected: string) =>
+  Array.from(sources.values(), (source) => ({
+    id: source.key,
+    title: source.title,
+    detail: formatDocumentUpdatedAt(source.updatedAt) ?? "Not set",
+    checked: source.key === selected,
+  }));

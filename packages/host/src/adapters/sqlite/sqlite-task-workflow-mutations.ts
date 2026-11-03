@@ -110,6 +110,10 @@ export const createSqliteTaskWorkflowMutations = ({
                   task,
                   previousStatus: current.status,
                   workflowId: decision.success.workflowId,
+                  workflow: {
+                    id: context.taskWorkflows.forTask(current).definition.id,
+                    revision: context.taskWorkflows.forTask(current).definition.revision,
+                  },
                   cause: decision.success.cause,
                   ...metadata,
                 },
@@ -160,6 +164,10 @@ export const createSqliteTaskWorkflowMutations = ({
                   task,
                   previousStatus: current.status,
                   workflowId: decision.success.workflowId,
+                  workflow: {
+                    id: context.taskWorkflows.forTask(current).definition.id,
+                    revision: context.taskWorkflows.forTask(current).definition.revision,
+                  },
                   cause: decision.success.cause,
                   ...metadata,
                 },

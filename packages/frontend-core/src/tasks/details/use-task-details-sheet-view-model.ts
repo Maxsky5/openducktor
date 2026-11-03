@@ -1,7 +1,8 @@
+import { useTaskWorkflowContinuation } from "../workflow/task-workflow-continuation";
 import {
-  SESSION_VIEW_ACTIONS,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  sessionRoleForViewAction,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
   type TaskWorkflowAction,
 } from "@openducktor/workflows";
 import { useCallback, useMemo } from "react";
@@ -40,13 +41,10 @@ export type UseTaskDetailsSheetViewModelOptions = {
   open: boolean;
   /** Called with false after a confirmed action succeeds or a session view opens. */
   onOpenChange: (open: boolean) => void;
-  onPlan?: TaskWorkflowActions["onPlan"] | undefined;
-  onQaStart?: TaskWorkflowActions["onQaStart"] | undefined;
-  onQaOpen?: TaskWorkflowActions["onQaOpen"] | undefined;
-  onBuild?: TaskWorkflowActions["onBuild"] | undefined;
+  onLaunch?: TaskWorkflowActions["onLaunch"] | undefined;
+  onApplyEvent?: TaskWorkflowActions["onApplyEvent"] | undefined;
   onOpenSession?: TaskWorkflowActions["onOpenSession"] | undefined;
   resolveSessionOptionsByRole?: ((role: AgentRole) => SessionTargetOptions | undefined) | undefined;
-  onDelegate?: TaskWorkflowActions["onDelegate"] | undefined;
   onHumanApprove?: TaskWorkflowActions["onHumanApprove"] | undefined;
   onHumanRequestChanges?: TaskWorkflowActions["onHumanRequestChanges"] | undefined;
   onResetImplementation?: TaskWorkflowActions["onResetImplementation"] | undefined;
@@ -60,16 +58,14 @@ export type UseTaskDetailsSheetViewModelOptions = {
 };
 
 export function useTaskDetailsSheetViewModel({
+  activeWorkspace,
   task,
   open,
   onOpenChange,
-  onPlan,
-  onQaStart,
-  onQaOpen,
-  onBuild,
+  onLaunch,
+  onApplyEvent,
   onOpenSession,
   resolveSessionOptionsByRole,
-  onDelegate,
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
@@ -81,6 +77,7 @@ export function useTaskDetailsSheetViewModel({
   taskStopImpactHook = useTaskStopImpact,
   taskWorktreeOwnersHook = useTaskWorktreeOwners,
 }: UseTaskDetailsSheetViewModelOptions): TaskDetailsSheetViewModel {
+  const continueTaskWorkflow = useTaskWorkflowContinuation(activeWorkspace ?? null, onLaunch);
   const taskId = task.id;
   const taskLabels = useMemo(() => toTaskLabels(task.labels), [task.labels]);
 
@@ -122,42 +119,45 @@ export function useTaskDetailsSheetViewModel({
         action,
         taskId,
         {
-          onPlan,
-          onQaStart,
-          onQaOpen,
-          onBuild,
+          onLaunch,
+          onApplyEvent,
           onOpenSession,
-          onDelegate,
           onHumanApprove,
           onHumanRequestChanges,
           onResetImplementation,
-          onResetTask: openResetDialog,
-          onCloseTask: openCloseDialog,
+          onResetTask: (_id, continuation) =>
+            openResetDialog(
+              continuation ? () => continueTaskWorkflow(task.id, continuation) : undefined,
+            ),
+          onCloseTask: (_id, continuation) =>
+            openCloseDialog(
+              continuation ? () => continueTaskWorkflow(task.id, continuation) : undefined,
+            ),
           onRemoveTaskWorktree: openRemoveWorktreeDialog,
         },
         {
+          task,
           resolveSessionOptions: resolveSessionOptionsByRole,
         },
       );
       // The session opens in place of the current view, so the sheet must not stay over it.
-      if (SESSION_VIEW_ACTIONS.has(action)) onOpenChange(false);
+      if (sessionRoleForViewAction(action, task)) onOpenChange(false);
     },
     [
       onOpenChange,
-      onBuild,
-      onDelegate,
       onOpenSession,
       resolveSessionOptionsByRole,
       onHumanApprove,
       onHumanRequestChanges,
-      onPlan,
-      onQaOpen,
-      onQaStart,
+      onLaunch,
+      onApplyEvent,
+      task,
       onResetImplementation,
       openResetDialog,
       openCloseDialog,
       openRemoveWorktreeDialog,
       taskId,
+      continueTaskWorkflow,
     ],
   );
 

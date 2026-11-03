@@ -27,7 +27,7 @@ describe("listed MCP tool input schema", () => {
       getListedToolInputSchema("odt_search_tasks", { hideWorkspaceId: true }),
     );
 
-    expect(create.issueType).toMatchObject({ enum: ["task", "feature", "bug"] });
+    expect(create.issueType).toMatchObject({ enum: ["feature", "bug", "task"] });
     expect(search.status).toMatchObject({
       enum: [
         "open",

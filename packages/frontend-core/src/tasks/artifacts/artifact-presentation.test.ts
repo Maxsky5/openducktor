@@ -1,3 +1,5 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
 import { describe, expect, test } from "bun:test";
 import type { FreeTaskArtifact, WorkflowTaskArtifact } from "@openducktor/contracts";
 import {
@@ -33,13 +35,10 @@ const file = (name: string): FreeTaskArtifact => ({
 
 describe("artifact presentation", () => {
   test("lists workflow artifacts in workflow order and files by name", () => {
-    const groups = groupTaskArtifacts([
-      file("Notes"),
-      workflow("qaReport"),
-      file("Diagram"),
-      workflow("spec"),
-      workflow("plan"),
-    ]);
+    const groups = groupTaskArtifacts(
+      [file("Notes"), workflow("qaReport"), file("Diagram"), workflow("spec"), workflow("plan")],
+      builtinTaskWorkflow,
+    );
 
     expect(groups.workflow.map((item) => item.code)).toEqual(["spec", "plan", "qaReport"]);
     expect(groups.files.map((item) => item.name)).toEqual(["Diagram", "Notes"]);

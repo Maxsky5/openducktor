@@ -1,8 +1,9 @@
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
+import { WorkflowTestProvider } from "@/test-utils/workflow-provider";
+import { TaskArtifactWorkflowScope } from "@/components/features/task-artifacts/task-artifact-workflow-context";
 import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { QueryProvider } from "@/test-utils/query-provider";
 import {
   type TaskWorkflowTaskComposerModel,
   useTaskWorkflowComposer,
@@ -102,7 +103,6 @@ const createTasksState = (
   removeTaskWorktree: async () => {},
   resetTaskImplementation: async () => {},
   resetTask: async () => {},
-  transitionTask: async () => {},
   humanRequestChangesTask: async () => {},
 });
 
@@ -110,8 +110,8 @@ type Controller = ReturnType<typeof useTaskCreateModalController>;
 
 describe("workflow artifact editor shortcuts", () => {
   test.each([
-    { section: "spec", label: "Spec", markdown: "# Saved specification" },
-    { section: "plan", label: "Plan", markdown: "# Saved implementation plan" },
+    { section: { artifactCode: "spec" }, label: "Spec", markdown: "# Saved specification" },
+    { section: { artifactCode: "plan" }, label: "Plan", markdown: "# Saved implementation plan" },
   ] as const)(
     "opens $label directly and returns ordinary Edit to Details",
     async ({ section, label, markdown }) => {
@@ -136,13 +136,20 @@ describe("workflow artifact editor shortcuts", () => {
         return (
           <TaskWorkflowActionsContext.Provider value={createTaskWorkflowActionsFixture(workflow)}>
             <TooltipProvider>
-              <WorkflowArtifactControls
+              <TaskArtifactWorkflowScope
+                workspaceId="workspace-1"
+                repoPath="/repo"
                 taskId={task.id}
-                workflowCode={section}
-                name={label}
-                markdown={undefined}
-                taskAssetContext={undefined}
-              />
+                task={task}
+              >
+                <WorkflowArtifactControls
+                  taskId={task.id}
+                  workflowCode={section.artifactCode}
+                  name={label}
+                  markdown={undefined}
+                  taskAssetContext={undefined}
+                />
+              </TaskArtifactWorkflowScope>
             </TooltipProvider>
             <button type="button" onClick={() => workflow.onEdit(task.id)}>
               Edit task
@@ -152,7 +159,7 @@ describe("workflow artifact editor shortcuts", () => {
         );
       };
       const view = render(
-        <QueryProvider>
+        <WorkflowTestProvider>
           <WorkspaceStateContext.Provider value={workspaceState}>
             <ActiveWorkspaceContext.Provider
               value={{ activeWorkspace: workspace, setActiveWorkspace: () => {} }}
@@ -164,12 +171,12 @@ describe("workflow artifact editor shortcuts", () => {
               </TasksStateContext.Provider>
             </ActiveWorkspaceContext.Provider>
           </WorkspaceStateContext.Provider>
-        </QueryProvider>,
+        </WorkflowTestProvider>,
       );
       try {
         await act(async () => fireEvent.click(view.getByRole("button", { name: "Edit" })));
-        expect(getController().editSection).toBe(section);
-        expect(getController().activeDocumentSection).toBe(section);
+        expect(getController().editSection).toEqual(section);
+        expect(getController().activeDocumentSection).toBe(section.artifactCode);
         expect(getController().activeDraft).toBe(markdown);
 
         await act(async () => getController().close());
@@ -219,7 +226,7 @@ describe("task workflow editor save ownership", () => {
         ) : null;
       };
       const tree = (workspace: typeof workspaceA, task: typeof taskA): ReactElement => (
-        <QueryProvider>
+        <WorkflowTestProvider>
           <WorkspaceStateContext.Provider value={{ ...workspaceState, activeWorkspace: workspace }}>
             <ActiveWorkspaceContext.Provider
               value={{ activeWorkspace: workspace, setActiveWorkspace: () => {} }}
@@ -233,7 +240,7 @@ describe("task workflow editor save ownership", () => {
               </TasksStateContext.Provider>
             </ActiveWorkspaceContext.Provider>
           </WorkspaceStateContext.Provider>
-        </QueryProvider>
+        </WorkflowTestProvider>
       );
       const view = render(tree(workspaceA, taskA));
       try {

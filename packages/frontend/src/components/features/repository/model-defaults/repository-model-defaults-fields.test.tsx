@@ -1,3 +1,4 @@
+import { renderWithWorkflow as render } from "@/test-utils/workflow-provider";
 import { expect, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
@@ -5,7 +6,7 @@ import {
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { act } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { RepositoryModelDefaultsFields } from "./repository-model-defaults-fields";

@@ -1,11 +1,20 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
 import { describe, expect, test } from "bun:test";
 import { issueTypePaint, priorityPaint, pullRequestPaint } from "./task-badge-paint";
 
 describe("task badge paint", () => {
   test("uses the desktop colors and icons for the issue types", () => {
-    expect(issueTypePaint("feature")).toEqual({ label: "Feature", tone: "info", icon: "sparkles" });
-    expect(issueTypePaint("bug")).toEqual({ label: "Bug", tone: "destructive", icon: "bug" });
-    expect(issueTypePaint("task").tone).toBe("neutral");
+    expect(
+      issueTypePaint(builtinTaskWorkflow.definition.issueTypes.find(({ id }) => id === "feature")!),
+    ).toEqual({ label: "Feature", tone: "info", icon: "sparkles" });
+    expect(
+      issueTypePaint(builtinTaskWorkflow.definition.issueTypes.find(({ id }) => id === "bug")!),
+    ).toEqual({ label: "Bug", tone: "destructive", icon: "bug" });
+    expect(
+      issueTypePaint(builtinTaskWorkflow.definition.issueTypes.find(({ id }) => id === "task")!)
+        .tone,
+    ).toBe("neutral");
   });
 
   test("colors the priorities from rose to neutral and keeps out-of-range values readable", () => {

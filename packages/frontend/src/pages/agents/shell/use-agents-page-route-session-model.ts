@@ -211,7 +211,7 @@ export function useAgentsPageRouteSessionModel({
   const visibleRole = selection.view.role;
   const visibleTarget = useMemo<SessionNavigationTarget | null>(() => {
     if (!activeWorkspaceId || !visibleTaskId) return null;
-    return visibleIdentity
+    return visibleIdentity && visibleRole
       ? {
           kind: "task_session",
           workspaceId: activeWorkspaceId,

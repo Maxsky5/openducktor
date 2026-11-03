@@ -1,5 +1,7 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskStreamFrame } from "../connection/host-connection";
 import { type RepoTaskData, taskQueryKeys } from "../queries/tasks";
@@ -7,7 +9,7 @@ import {
   createTestClientConnection,
   createTestHostConnection,
 } from "../test-support/test-client-connection";
-import { createTaskCardFixture } from "../test-support/shared-test-fixtures";
+import { createTaskCardFixture, toWireTaskCard } from "../test-support/shared-test-fixtures";
 import { createHostTaskStreamController } from "./host-task-stream-controller";
 
 const flush = async (): Promise<void> => {
@@ -23,7 +25,7 @@ describe("createHostTaskStreamController", () => {
       throw new Error("The task stream is not open.");
     };
     const host = createTestHostConnection({
-      client: { tasksList: async () => [saved] },
+      client: { tasksList: async () => [toWireTaskCard(saved)] },
       subscribeTaskStream: async (_input, onFrame) => {
         emit = onFrame;
         return { subscriptionId: "stream-1", acknowledge: async () => {}, unsubscribe: () => {} };
@@ -54,13 +56,20 @@ describe("createHostTaskStreamController", () => {
       event: {
         kind: "tasks_updated",
         workspaceId: "workspace-1",
-        boardChanges: { artifactChanges: [], cards: [edited], doneVisibleDays: 1 },
+        boardChanges: { artifactChanges: [], cards: [toWireTaskCard(edited)], doneVisibleDays: 1 },
         eventId: "event-1",
         repoPath: "/repo",
         taskIds: ["task-1"],
         removedTaskIds: [],
         statusChanges: [],
-        taskSnapshots: [{ id: "task-1", title: saved.title, status: saved.status }],
+        taskSnapshots: [
+          {
+            workflow: builtinTaskWorkflow.reference,
+            id: "task-1",
+            title: saved.title,
+            status: saved.status,
+          },
+        ],
         emittedAt: "2026-10-21T10:00:00.000Z",
       },
     });

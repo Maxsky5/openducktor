@@ -1,3 +1,5 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { ComposerState } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -29,6 +31,22 @@ const emptyDocument = {
 const controllerMock: ReturnType<
   typeof taskCreateModalControllerModule.useTaskCreateModalController
 > = {
+  taskWorkflow: builtinTaskWorkflow,
+  issueTypeChoices: builtinTaskWorkflow.definition.issueTypes.map(
+    ({ id, label, description, icon }) => ({
+      value: id,
+      label,
+      description: description ?? "",
+      guidance: description ?? "",
+      icon,
+    }),
+  ),
+  workflowRead: {
+    taskWorkflow: builtinTaskWorkflow,
+    pending: false,
+    error: null,
+    retry: async () => {},
+  },
   mode: "edit",
   workspaceId: "workspace-1",
   workspaceRepoPath: "/workspace/repo",
@@ -39,10 +57,12 @@ const controllerMock: ReturnType<
   isSaveOrRecoveryLocked: false,
   step: "details",
   setStep: (_step: "type" | "details") => {},
-  editSection: "spec",
+  editSection: { artifactCode: "spec" },
   isTaskDraftDirty: false,
   dirtyDocuments: { spec: false, plan: false },
-  requestSectionChange: (_section: "details" | "spec" | "plan") => {},
+  requestSectionChange: (
+    _section: import("@openducktor/frontend-core/tasks/create/task-composer-types").EditTaskSection,
+  ) => {},
   isTypeStepVisible: false,
   selectedCreateIssueType: "task",
   selectCreateIssueType: (_issueType: string) => {},
@@ -52,7 +72,7 @@ const controllerMock: ReturnType<
     spec: "split",
     plan: "split",
   },
-  setDocumentView: (_section: "spec" | "plan", _view: "write" | "split" | "preview") => {},
+  setDocumentView: (_section: string, _view: "write" | "split" | "preview") => {},
   activeDocument: { ...emptyDocument },
   documents: {
     spec: { ...emptyDocument },
@@ -60,8 +80,8 @@ const controllerMock: ReturnType<
   },
   isSavingDocument: noDocumentSaveInProgress(),
   isActiveDocumentDirty: false,
-  updateDocumentDraft: (_section: "spec" | "plan", _value: string) => {},
-  loadDocumentSection: async (_section: "spec" | "plan", _force?: boolean) => {},
+  updateDocumentDraft: (_section: string, _value: string) => {},
+  loadDocumentSection: async (_section: string, _force?: boolean) => {},
   state: {
     issueType: "task",
     removeWorktreeOnClose: null,
@@ -252,7 +272,7 @@ describe("TaskCreateModal", () => {
       }
     } finally {
       controllerMock.isEditingDocument = true;
-      controllerMock.editSection = "spec";
+      controllerMock.editSection = { artifactCode: "spec" };
       controllerMock.activeDocumentSection = "spec";
     }
   });
@@ -293,7 +313,7 @@ describe("TaskCreateModal", () => {
     } finally {
       controllerMock.isFormDisabled = false;
       controllerMock.isEditingDocument = true;
-      controllerMock.editSection = "spec";
+      controllerMock.editSection = { artifactCode: "spec" };
       controllerMock.activeDocumentSection = "spec";
       controllerMock.descriptionAssetUploads = [];
     }
@@ -340,7 +360,7 @@ describe("TaskCreateModal", () => {
       controllerMock.isSaveOrRecoveryLocked = false;
       controllerMock.isFormDisabled = false;
       controllerMock.isEditingDocument = true;
-      controllerMock.editSection = "spec";
+      controllerMock.editSection = { artifactCode: "spec" };
       controllerMock.activeDocumentSection = "spec";
       controllerMock.footerError = null;
     }

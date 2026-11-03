@@ -1,4 +1,5 @@
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { compareBoardTasks } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 export type TaskQueryChange = {
   cards: TaskCard[];
@@ -34,7 +35,7 @@ export const createBoardChanges = (): TaskQueryChanges<TaskCard[]> => {
         cards.set(card.id, card);
       }
       for (const [id, card] of cards) {
-        if (card.status === "closed" && Date.parse(card.updatedAt) < change.cutoff) {
+        if (card.sharedState.terminal && Date.parse(card.updatedAt) < change.cutoff) {
           cards.delete(id);
           removed.add(id);
         }
@@ -44,7 +45,7 @@ export const createBoardChanges = (): TaskQueryChanges<TaskCard[]> => {
     apply(baseline) {
       const expired = new Set<string>();
       for (const card of baseline) {
-        if (card.status !== "closed") continue;
+        if (!card.sharedState.terminal) continue;
         if (Date.parse(card.updatedAt) < (baselineCutoffs.get(card.id) ?? cutoff)) {
           expired.add(card.id);
         }
@@ -79,13 +80,7 @@ export const createIdChanges = (): TaskQueryChanges<string[]> => {
 };
 
 const compareCards = (left: TaskCard, right: TaskCard): number => {
-  const leftOpen = left.status === "open";
-  const rightOpen = right.status === "open";
-  if (leftOpen !== rightOpen) return leftOpen ? -1 : 1;
-  const order = leftOpen
-    ? left.priority - right.priority || Date.parse(right.createdAt) - Date.parse(left.createdAt)
-    : Date.parse(left.updatedAt) - Date.parse(right.updatedAt);
-  if (order) return order;
-  if (left.id < right.id) return -1;
-  return left.id > right.id ? 1 : 0;
+  if (left.sharedState.taskOrder !== right.sharedState.taskOrder)
+    return left.sharedState.taskOrder === "priority_then_created" ? -1 : 1;
+  return compareBoardTasks(left, right, left.sharedState.taskOrder);
 };

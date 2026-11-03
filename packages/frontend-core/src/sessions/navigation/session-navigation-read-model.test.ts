@@ -15,7 +15,7 @@ import {
   type SessionNavigationWorkspace,
   type SessionNavigationWorkspaceSources,
 } from "./session-navigation-read-model";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const workspace = (workspaceId = "alpha"): SessionNavigationWorkspace => ({
   workspaceId,
@@ -516,7 +516,7 @@ describe("buildSessionNavigationModel", () => {
     expect(before.groups.map((group) => group.entries.length)).toEqual([1, 1, 2]);
 
     const closed = buildSessionNavigationModel(
-      [{ ...input, tasks: ready([{ ...task, status: "closed" }]) }],
+      [{ ...input, tasks: ready([createTaskCardFixture({ ...task, status: "closed" })]) }],
       "none",
     );
     expect(groupsOf(closed)).toEqual({

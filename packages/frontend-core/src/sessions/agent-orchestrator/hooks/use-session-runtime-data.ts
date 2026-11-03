@@ -16,6 +16,7 @@ import {
 } from "../../../queries/agent-session-todos";
 import { useRuntimeModelCatalogQuery } from "../../../queries/use-runtime-model-catalogs";
 import { settingsSnapshotQueryOptions } from "../../../queries/workspace";
+import { taskWorkflowContextQueryOptions } from "../../../queries/task-workflow-context";
 import {
   EMPTY_SELECTED_SESSION_RUNTIME_DATA,
   type SelectedSessionRuntimeData,
@@ -75,43 +76,14 @@ export const useSessionRuntimeData = ({
       sessionScope: stableSelectedScope,
     };
   }, [stableSelectedScope, stableSelectedSession]);
-  const settingsSnapshotQuery = useQuery({
-    ...settingsSnapshotQueryOptions(),
-    enabled: runtimePolicyTarget?.runtimeKind === "codex",
-  });
-  const runtimePolicyResult = useMemo(() => {
-    if (!runtimePolicyTarget) {
-      return { runtimePolicy: null, error: null };
-    }
-    const settingsIndependentPolicy = resolveSettingsIndependentAgentSessionRuntimePolicy(
-      runtimePolicyTarget.runtimeKind,
-    );
-    if (settingsIndependentPolicy) {
-      return { runtimePolicy: settingsIndependentPolicy, error: null };
-    }
-    const settingsSnapshot = settingsSnapshotQuery.data;
-    if (!settingsSnapshot) {
-      return { runtimePolicy: null, error: null };
-    }
-    try {
-      return {
-        runtimePolicy: resolveAgentSessionRuntimePolicyFromSnapshot({
-          ...runtimePolicyTarget,
-          snapshot: settingsSnapshot,
-        }),
-        error: null,
-      };
-    } catch (error) {
-      return {
-        runtimePolicy: null,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-  }, [runtimePolicyTarget, settingsSnapshotQuery.data]);
-  const runtimePolicyError =
-    runtimePolicyResult.error ??
-    (settingsSnapshotQuery.error instanceof Error ? settingsSnapshotQuery.error.message : null);
-  const runtimePolicy = runtimePolicyResult.runtimePolicy;
+  const workflowScope = stableSelectedScope?.kind === "workflow" ? stableSelectedScope : null;
+  const { runtimePolicy, runtimePolicyError } = useWorkflowSessionRuntimePolicy(
+    stableSelectedScope?.workspaceId ?? null,
+    repoPath,
+    workflowScope?.taskId ?? null,
+    workflowScope?.role ?? null,
+    runtimePolicyTarget,
+  );
   const runtimeDataRefs = useMemo(() => {
     return resolveSessionRuntimeDataRefs({
       repoPath,
@@ -168,3 +140,69 @@ export const useSessionRuntimeData = ({
     todosQuery.error,
   ]);
 };
+
+function useWorkflowSessionRuntimePolicy(
+  selectedWorkspaceId: string | null,
+  repoPath: string | null,
+  selectedTaskId: string | null,
+  selectedRole: string | null,
+  runtimePolicyTarget: {
+    runtimeKind: SessionRuntimeDataTarget["identity"]["runtimeKind"];
+    sessionScope: ReturnType<typeof resolveSessionRuntimeScope>;
+  } | null,
+) {
+  const settingsSnapshotQuery = useQuery({
+    ...settingsSnapshotQueryOptions(),
+    enabled: runtimePolicyTarget?.runtimeKind === "codex",
+  });
+  const taskQuery = useQuery({
+    ...taskWorkflowContextQueryOptions(
+      selectedWorkspaceId && repoPath ? { workspaceId: selectedWorkspaceId, repoPath } : null,
+      selectedTaskId ?? "",
+    ),
+    enabled: runtimePolicyTarget?.runtimeKind === "codex" && !!repoPath && !!selectedTaskId,
+  });
+  const runtimePolicyResult = useMemo(() => {
+    if (!runtimePolicyTarget) {
+      return { runtimePolicy: null, error: null };
+    }
+    const settingsIndependentPolicy = resolveSettingsIndependentAgentSessionRuntimePolicy(
+      runtimePolicyTarget.runtimeKind,
+    );
+    if (settingsIndependentPolicy) {
+      return { runtimePolicy: settingsIndependentPolicy, error: null };
+    }
+    const settingsSnapshot = settingsSnapshotQuery.data;
+    if (!settingsSnapshot) {
+      return { runtimePolicy: null, error: null };
+    }
+    if (runtimePolicyTarget.sessionScope?.kind === "workflow" && !taskQuery.data)
+      return { runtimePolicy: null, error: null };
+    try {
+      const workflowRole = taskQuery.data?.taskWorkflow.definition.roles.find(
+        ({ id }) => id === selectedRole,
+      );
+      const policyInput: Parameters<typeof resolveAgentSessionRuntimePolicyFromSnapshot>[0] = {
+        ...runtimePolicyTarget,
+        snapshot: settingsSnapshot,
+      };
+      if (workflowRole) policyInput.workflowRole = workflowRole;
+      return {
+        runtimePolicy: resolveAgentSessionRuntimePolicyFromSnapshot(policyInput),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        runtimePolicy: null,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }, [runtimePolicyTarget, settingsSnapshotQuery.data, taskQuery.data, selectedRole]);
+  const runtimePolicyError =
+    runtimePolicyResult.error ??
+    taskQuery.error?.message ??
+    settingsSnapshotQuery.error?.message ??
+    null;
+  const runtimePolicy = runtimePolicyResult.runtimePolicy;
+  return { runtimePolicy, runtimePolicyError };
+}

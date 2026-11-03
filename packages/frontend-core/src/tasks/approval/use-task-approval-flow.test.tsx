@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
@@ -27,6 +27,7 @@ import {
   createGitProviderContextFixture,
   createSettingsSnapshotFixture,
   createTaskCardFixture as createSharedTaskCardFixture,
+  toWireTaskCard,
 } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import type {
@@ -57,10 +58,10 @@ const defaultTaskApprovalContextGet = async (
 type TaskDirectMerge = HostClient["taskDirectMerge"];
 const defaultTaskDirectMerge: TaskDirectMerge = async () => ({
   outcome: "completed" as const,
-  task: createTaskCardFixture({ id: "TASK-1", status: "closed" }),
+  task: toWireTaskCard(createTaskCardFixture({ id: "TASK-1", status: "closed" })),
 });
 const defaultTaskDirectMergeComplete = async () =>
-  createTaskCardFixture({ id: "TASK-1", status: "closed" });
+  toWireTaskCard(createTaskCardFixture({ id: "TASK-1", status: "closed" }));
 const defaultTaskPullRequestUpsert = async () => ({
   providerId: "github" as const,
   number: 17,
@@ -1122,6 +1123,8 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("opens with Close Task selected for a merged task branch and closes with the cleanup choice", async () => {
+    const continuation = createDeferred<void>();
+    const onCommitted = mock(() => continuation.promise);
     taskApprovalContextGetMock.mockResolvedValueOnce(createReadyTaskApprovalContextResult());
     hostClientFakes.taskMergeStatusGet = async (scope) => ({
       ...scope,
@@ -1156,7 +1159,7 @@ describe("useTaskApprovalFlow", () => {
     const harness = await mountApprovalHarness(Harness);
 
     await act(async () => {
-      latestHarnessValue?.openTaskApproval("TASK-1");
+      latestHarnessValue?.openTaskApproval("TASK-1", { onCommitted });
       await Promise.resolve();
     });
     await waitForTaskApprovalModalLoaded();
@@ -1172,6 +1175,9 @@ describe("useTaskApprovalFlow", () => {
 
     expect(closeTaskMock).toHaveBeenCalledWith("TASK-1", { removeWorktree: false });
     expect(taskDirectMergeMock).not.toHaveBeenCalled();
+    expect(onCommitted).toHaveBeenCalledTimes(1);
+    expect(expectApprovalModal().isSubmitting).toBe(true);
+    await act(async () => continuation.resolve());
     await waitForTaskApprovalModalClosed();
 
     await act(async () => {
@@ -1515,7 +1521,7 @@ describe("useTaskApprovalFlow", () => {
   test("publishes and completes a pending direct merge", async () => {
     taskDirectMergeMock.mockResolvedValueOnce({
       outcome: "completed" as const,
-      task: createTaskCardFixture({ id: "TASK-1", status: "human_review" }),
+      task: toWireTaskCard(createTaskCardFixture({ id: "TASK-1", status: "human_review" })),
     });
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({

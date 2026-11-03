@@ -176,6 +176,7 @@ describe("required session default selection", () => {
 
     await expect(
       resolveRequiredDefaultSessionSelection({
+        roleLabel: "Builder",
         role: "build",
         repoSettings: settings,
         repoPath: "/repo",
@@ -202,6 +203,7 @@ describe("required session default selection", () => {
 
     await expect(
       resolveRequiredDefaultSessionSelection({
+        roleLabel: "Builder",
         role: "build",
         repoSettings: createRepoSettings(),
         repoPath: "/repo",
@@ -229,6 +231,7 @@ describe("required session default selection", () => {
 
     await expect(
       resolveRequiredDefaultSessionSelection({
+        roleLabel: "Builder",
         role: "build",
         repoSettings: settings,
         repoPath: "/repo",
@@ -255,6 +258,7 @@ describe("required session default selection", () => {
 
     await expect(
       resolveRequiredDefaultSessionSelection({
+        roleLabel: "Builder",
         role: "build",
         repoSettings: settings,
         repoPath: "/repo",
@@ -281,6 +285,7 @@ describe("required session default selection", () => {
 
     await expect(
       resolveRequiredDefaultSessionSelection({
+        roleLabel: "Builder",
         role: "build",
         repoSettings: settings,
         repoPath: "/repo",
@@ -311,6 +316,7 @@ describe("required session default selection", () => {
 
     await expect(
       resolveRequiredDefaultSessionSelection({
+        roleLabel: "Builder",
         role: "build",
         repoSettings: settings,
         repoPath: "/repo",
@@ -337,6 +343,7 @@ describe("required session default selection", () => {
 
     await expect(
       resolveRequiredDefaultSessionSelection({
+        roleLabel: "Builder",
         role: "build",
         repoSettings: settings,
         repoPath: "/repo",
@@ -366,6 +373,7 @@ describe("required session default selection", () => {
 
     await expect(
       resolveRequiredDefaultSessionSelection({
+        roleLabel: "Builder",
         role: "build",
         repoSettings: settings,
         repoPath: "/repo",
@@ -395,6 +403,7 @@ describe("required session default selection", () => {
 
     await expect(
       resolveRequiredDefaultSessionSelection({
+        roleLabel: "Builder",
         role: "build",
         repoSettings: settings,
         repoPath: "/repo",

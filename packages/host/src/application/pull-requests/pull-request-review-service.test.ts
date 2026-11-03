@@ -42,6 +42,8 @@ const makeTask = (pullRequest: PullRequest | undefined): TaskCard => {
     priority: 2,
     issueType: "task",
     removeWorktreeOnClose: null,
+    workflow: { id: "openducktor", revision: 2 },
+    workflowSteps: [],
     availableActions: [],
     labels: [],
     artifactSummary: {

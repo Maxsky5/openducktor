@@ -1,4 +1,6 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord, WorkspaceRecord, WorkspaceSession } from "@openducktor/contracts";
 import {
@@ -217,7 +219,7 @@ describe("task feedback target", () => {
       session("elsewhere", { lastActivityAt: 50, workingDirectory: "/repos/repo" }),
       session("planner", { lastActivityAt: 90, role: "planner" }),
     ];
-    expect(pickFeedbackBuilder(sessions, `${worktree}/`)?.externalSessionId).toBe("new");
+    expect(pickFeedbackBuilder(sessions, `${worktree}/`, "build")?.externalSessionId).toBe("new");
   });
 
   test("uses the latest Builder when no Builder runs in the worktree", () => {
@@ -225,13 +227,21 @@ describe("task feedback target", () => {
       session("first", { startedAt: "2026-10-01T10:00:00.000Z", workingDirectory: "/a" }),
       session("second", { startedAt: "2026-10-02T10:00:00.000Z", workingDirectory: "/b" }),
     ];
-    expect(pickFeedbackBuilder(sessions, worktree)?.externalSessionId).toBe("second");
-    expect(pickFeedbackBuilder(sessions, null)?.externalSessionId).toBe("second");
+    expect(pickFeedbackBuilder(sessions, worktree, "build")?.externalSessionId).toBe("second");
+    expect(pickFeedbackBuilder(sessions, null, "build")?.externalSessionId).toBe("second");
   });
 
   test("opens the Builder session or tells why it cannot", () => {
     const retry = () => {};
-    expect(taskFeedbackTarget("ws-1", ready([session("b1")]), worktree, retry)).toEqual({
+    expect(
+      taskFeedbackTarget(
+        "ws-1",
+        ready([session("b1")]),
+        worktree,
+        retry,
+        builtinTaskWorkflow.definition.roles.find(({ id }) => id === "build")!,
+      ),
+    ).toEqual({
       session: {
         workspaceId: "ws-1",
         externalSessionId: "b1",
@@ -241,12 +251,28 @@ describe("task feedback target", () => {
       blockedReason: null,
       retry: null,
     });
-    expect(taskFeedbackTarget("ws-1", ready([]), worktree, retry)).toEqual({
+    expect(
+      taskFeedbackTarget(
+        "ws-1",
+        ready([]),
+        worktree,
+        retry,
+        builtinTaskWorkflow.definition.roles.find(({ id }) => id === "build")!,
+      ),
+    ).toEqual({
       session: null,
       blockedReason: "Start the Builder for this task, then send the feedback.",
       retry: null,
     });
-    expect(taskFeedbackTarget("ws-1", loading(), worktree, retry)).toEqual({
+    expect(
+      taskFeedbackTarget(
+        "ws-1",
+        loading(),
+        worktree,
+        retry,
+        builtinTaskWorkflow.definition.roles.find(({ id }) => id === "build")!,
+      ),
+    ).toEqual({
       session: null,
       blockedReason: "Loading the task sessions.",
       retry: null,
@@ -255,7 +281,15 @@ describe("task feedback target", () => {
 
   test("offers a retry after the session list read fails", () => {
     const retry = () => {};
-    expect(taskFeedbackTarget("ws-1", failed("Read failed."), worktree, retry)).toEqual({
+    expect(
+      taskFeedbackTarget(
+        "ws-1",
+        failed("Read failed."),
+        worktree,
+        retry,
+        builtinTaskWorkflow.definition.roles.find(({ id }) => id === "build")!,
+      ),
+    ).toEqual({
       session: null,
       blockedReason: "Could not load the task sessions: Read failed.",
       retry,

@@ -1,3 +1,4 @@
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { describe, expect, mock, test } from "bun:test";
 import { act } from "react";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
@@ -19,6 +20,7 @@ const specSessionSelectorValue = agentSessionIdentityKey({
 
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   selectedTask: {
+    ...createTaskCardFixture(),
     id: "task-1",
     title: "Task 1",
     description: "",

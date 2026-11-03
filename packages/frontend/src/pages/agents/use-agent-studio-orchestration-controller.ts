@@ -20,7 +20,7 @@ import type { RunSessionStartWorkflow } from "@openducktor/frontend-core/session
 import { useWorkspaceStateContext } from "@/state/app-state-contexts";
 import { useAgentModelFavorites } from "@openducktor/frontend-core/sessions/model-selection/use-agent-model-favorites";
 import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
-import { ROLE_OPTIONS } from "./agents-page-constants";
+import { roleOptionsForTask } from "@/lib/agent-role-presentation";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-chat-composer";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-studio-navigation";
@@ -336,7 +336,10 @@ export function useAgentStudioOrchestrationController({
     selectAgentStudioSelection,
   });
 
-  const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);
+  const roleLabelByRole = useMemo(
+    () => buildRoleLabelByRole(roleOptionsForTask(view.selectedTask)),
+    [view.selectedTask],
+  );
   const mergedTarget = useMergedTaskTarget(
     activeWorkspaceId && workspaceRepoPath
       ? { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath }

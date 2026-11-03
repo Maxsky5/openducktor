@@ -1,16 +1,14 @@
 import type { RepoPromptOverrides, WorkspaceSession } from "@openducktor/contracts";
 import {
   buildGitConflictAssistancePrompt,
-  type BuiltinTaskCard as TaskCard,
+  gitConflictPromptContext,
+  taskGitConflictLaunch,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import { matchesAgentSessionIdentity } from "../../lib/agent-session-identity";
 import { normalizeWorkingDirectory } from "../../lib/working-directory";
 import type { AgentMessageSendReceipt, AgentSessionIdentity } from "../../types/agent-orchestrator";
 import type { GitConflict } from "../contracts";
-
-/** The launch action of a Builder session that resolves a rebase conflict. */
-export const BUILD_REBASE_CONFLICT_RESOLUTION_LAUNCH_ACTION =
-  "build_rebase_conflict_resolution" as const;
 
 export class GitConflictRequestCancelled extends Error {
   constructor() {
@@ -116,23 +114,26 @@ export const buildTaskConflictPrompt = ({
   task: TaskCard | null;
   overrides: RepoPromptOverrides;
 }): string => {
-  const taskPrompt: NonNullable<Parameters<typeof buildGitConflictAssistancePrompt>[0]["task"]> = {
-    overrides,
-    context: { taskId },
-  };
-  if (task) {
-    taskPrompt.context = {
+  if (!task)
+    throw new Error(
+      "Task workflow is unavailable. Reload the task before asking for conflict assistance.",
+    );
+  const launch = taskGitConflictLaunch(task);
+  if (!launch) throw new Error(`Task "${taskId}" declares no Git conflict launch.`);
+  const git = conflictRequestContext(conflict);
+  const instructions = task.taskWorkflow.prompts.messagePrompt({
+    launchActionId: launch.id,
+    task: {
       taskId,
       title: task.title,
       issueType: task.issueType,
       status: task.status,
       description: task.description,
-    };
-  }
-  return buildGitConflictAssistancePrompt({
-    git: conflictRequestContext(conflict),
-    task: taskPrompt,
-  });
+    },
+    overrides,
+    git: gitConflictPromptContext(git),
+  }).prompt;
+  return buildGitConflictAssistancePrompt({ git, instructions });
 };
 
 /** What the user learns after a conflict request reached the agent. */

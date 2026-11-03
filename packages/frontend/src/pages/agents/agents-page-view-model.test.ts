@@ -4,12 +4,14 @@ import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent
 import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
+  createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { buildAgentStudioHeaderModel, buildRoleLabelByRole } from "./agents-page-view-model";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const createTaskCard = (id: string): TaskCard => ({
+  ...createTaskCardFixture(),
   id,
   title: `Task ${id}`,
   description: "",
@@ -59,7 +61,7 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
 };
 
 describe("agents-page-view-model", () => {
-  test("buildRoleLabelByRole preserves defaults and applies provided labels", () => {
+  test("buildRoleLabelByRole uses only the declared labels", () => {
     const labels = buildRoleLabelByRole([
       { role: "spec", label: "Specification", icon: Sparkles },
       { role: "build", label: "Builder", icon: Sparkles },
@@ -67,8 +69,8 @@ describe("agents-page-view-model", () => {
 
     expect(labels.spec).toBe("Specification");
     expect(labels.build).toBe("Builder");
-    expect(labels.planner).toBe("Planner");
-    expect(labels.qa).toBe("QA");
+    expect(labels.planner).toBeUndefined();
+    expect(labels.qa).toBeUndefined();
   });
 
   test("buildAgentStudioHeaderModel keeps selector and workflow contracts", () => {

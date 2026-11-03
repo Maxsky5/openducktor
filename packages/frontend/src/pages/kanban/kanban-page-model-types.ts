@@ -1,3 +1,4 @@
+import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import type {
   AgentSessionRecord,
   KanbanEmptyColumnDisplay,
@@ -5,7 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import type {
   KanbanColumn as KanbanColumnData,
-  BuiltinRoleId as AgentRole,
+  WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 import type { ComponentProps } from "react";
 import type { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
@@ -33,6 +34,7 @@ export type KanbanPageHeaderModel = {
 };
 
 export type KanbanPageContentModel = {
+  loadError?: string | null;
   isLoadingTasks: boolean;
   isSwitchingWorkspace: boolean;
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
@@ -52,14 +54,14 @@ export type KanbanPageContentModel = {
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
-  onDelegate: (taskId: string) => void;
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
-  onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
-  onQaStart: (taskId: string) => void;
-  onHumanApprove: (taskId: string) => void;
-  onHumanRequestChanges: (taskId: string) => void;
+  onHumanApprove: TaskWorkflowActions["onHumanApprove"];
+  onHumanRequestChanges: TaskWorkflowActions["onHumanRequestChanges"];
   onResetImplementation: (taskId: string) => void;
-  onCloseTask: (taskId: string) => void;
+  onCloseTask: (
+    taskId: string,
+    continuation?: import("@openducktor/frontend-core/tasks/workflow/task-workflow-continuation").TaskWorkflowContinuation,
+  ) => void;
 };
 
 export type KanbanPageModels = {

@@ -1,4 +1,5 @@
-import { type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowIcon } from "@openducktor/contracts";
+import { workflowRoleIcon } from "@openducktor/workflows";
 import { useMinuteClockLabel } from "@openducktor/frontend-core/lib/relative-time";
 import { useSessionUnread } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
 import {
@@ -18,7 +19,7 @@ import {
 import Animated, { type CSSStyle, cubicBezier } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import type { CommandFailure } from "@/host-session/command-outcome";
-import { taskStatusLabel, taskStatusTone } from "@/features/tasks/presentation/task-status-paint";
+import { taskStatusTone } from "@/features/tasks/presentation/task-status-paint";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { withAlpha } from "@/theme/color-alpha";
 import { themeStyleCache } from "@/theme/theme-style-cache";
@@ -172,14 +173,14 @@ function StartingSpinner(): ReactElement {
 
 /** The role icon of a task session. A theme change renders only this icon again. */
 function EntryRoleIcon({
-  role,
+  hint,
   color,
 }: {
-  role: AgentRole;
+  hint?: WorkflowIcon | undefined;
   color: DesktopColorName;
 }): ReactElement {
   const theme = useAppTheme();
-  return <RoleIcon role={role} size={17} color={theme.desktop[color]} />;
+  return <RoleIcon hint={hint} size={17} color={theme.desktop[color]} />;
 }
 
 /** The role icon of a task session, a chat icon, or a task icon for a blocked task. */
@@ -187,7 +188,16 @@ function EntryIcon({ entry }: { entry: SessionNavigationEntry }): ReactElement {
   const theme = useAppTheme();
   const color = sessionEntryIconColor(entry);
   if (entry.target.kind === "task_session") {
-    return <EntryRoleIcon role={entry.target.role} color={color} />;
+    return (
+      <EntryRoleIcon
+        hint={
+          entry.context.kind === "task"
+            ? workflowRoleIcon(entry.context.task.taskWorkflow, entry.target.role)
+            : undefined
+        }
+        color={color}
+      />
+    );
   }
   return (
     <Icon
@@ -287,10 +297,10 @@ export const SessionRow = memo(function SessionRow({
                 {entry.workspace.workspaceName}
               </Text>
               {task ? (
-                // The desktop row names a blocked task "Blocked"; its attention says the rest.
+                // The desktop row uses the short state label; its attention says the rest.
                 <Badge
-                  label={task.status === "blocked" ? "Blocked" : taskStatusLabel(task.status)}
-                  tone={taskStatusTone(task.status)}
+                  label={task.sharedState.shortLabel}
+                  tone={taskStatusTone(task.sharedState)}
                 />
               ) : null}
               <RowMetadata entry={entry} starting={starting} />

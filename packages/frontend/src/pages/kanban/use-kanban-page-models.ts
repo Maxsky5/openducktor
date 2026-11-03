@@ -1,3 +1,4 @@
+import type { TaskWorkflowContinuation } from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
 import { DEFAULT_KANBAN_SETTINGS } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -45,12 +46,12 @@ export function useKanbanPageModels({
   const horizontalScrollbarVisibility =
     settingsSnapshotQuery.data?.appearance.horizontalScrollbarVisibility;
   useEffect(() => {
-    if (!settingsSnapshotQuery.isError) {
+    if (!settingsSnapshotQuery.isError && !board.workflowError) {
       reportedSettingsErrorRef.current = null;
       return;
     }
 
-    const description = errorMessage(settingsSnapshotQuery.error);
+    const description = errorMessage(board.workflowError ?? settingsSnapshotQuery.error);
     if (reportedSettingsErrorRef.current === description) {
       return;
     }
@@ -59,7 +60,7 @@ export function useKanbanPageModels({
     toast.error("Failed to load Kanban settings", {
       description,
     });
-  }, [settingsSnapshotQuery.error, settingsSnapshotQuery.isError]);
+  }, [board.workflowError, settingsSnapshotQuery.error, settingsSnapshotQuery.isError]);
   const showHorizontalScrollbars =
     workspaceRepoPath !== null && !settingsSnapshotQuery.isPending && !settingsSnapshotQuery.isError
       ? showsHorizontalScrollbars(horizontalScrollbarVisibility)
@@ -93,11 +94,14 @@ export function useKanbanPageModels({
   const autoCloseFailureByTaskId = useAutoCloseFailures(activeWorkspace, board.kanbanTasks);
   const { onConfirmTaskAction } = actions;
   const onCloseTask = useCallback(
-    (taskId: string): void => onConfirmTaskAction(taskId, "close"),
+    (taskId: string, continuation?: TaskWorkflowContinuation): void =>
+      onConfirmTaskAction(taskId, "close", continuation),
     [onConfirmTaskAction],
   );
 
   const content = useKanbanBoardModel({
+    boardDefinition: board.boardDefinition,
+    loadError: board.workflowError ? errorMessage(board.workflowError) : null,
     isLoadingTasks: isLoadingKanbanTasks,
     isSwitchingWorkspace,
     emptyColumnDisplay: board.emptyColumnDisplay,
@@ -113,10 +117,7 @@ export function useKanbanPageModels({
     taskSessionsByTaskId: actions.taskSessionsByTaskId,
     activeTaskSessionContextByTaskId: actions.activeTaskSessionContextByTaskId,
     onOpenDetails,
-    onDelegate: actions.onDelegate,
     onOpenSession: actions.onOpenSession,
-    onPlan: actions.onPlan,
-    onQaStart: actions.onQaStart,
     onHumanApprove: actions.onHumanApprove,
     onHumanRequestChanges: actions.onHumanRequestChanges,
     onResetImplementation: actions.onResetImplementation,

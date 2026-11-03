@@ -156,3 +156,28 @@ export const runTaskMutationWithChatDraftCleanup = <TResult>(
     connectionOf(cleanupInput.queryClient).feedback,
   ).runMutation(cleanupInput);
 };
+
+/** Capture drafts before a terminal transition can change session ownership. */
+export const runTaskStateMutation = <TResult>({
+  canFinish,
+  cleanup,
+  invalidateStopImpact,
+  mutation,
+  ...input
+}: RunTaskMutationWithChatDraftCleanupInput<TResult> & {
+  canFinish: boolean;
+  cleanup: Pick<TaskChatDraftCleanup, "runMutation">;
+  invalidateStopImpact: () => Promise<void>;
+}): Promise<TResult> => {
+  if (!canFinish) return mutation();
+  return cleanup.runMutation({
+    ...input,
+    mutation: async () => {
+      try {
+        return await mutation();
+      } finally {
+        await invalidateStopImpact();
+      }
+    },
+  });
+};

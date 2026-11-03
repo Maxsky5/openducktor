@@ -1,3 +1,5 @@
+import { runTaskWorkflowAction } from "@openducktor/frontend-core/tasks/workflow/run-task-workflow-action";
+import type { ResolvedTaskCard } from "@openducktor/workflows";
 import { useCallback, useMemo } from "react";
 import type { AgentStudioTaskQuickAction } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
@@ -9,7 +11,7 @@ import {
 import type { CloseTaskOptions } from "@openducktor/frontend-core/types/task-close";
 
 type UseAgentStudioShellTaskActionsArgs = {
-  selectedTaskId: string | null;
+  selectedTask: ResolvedTaskCard | null;
   linkingMergedPullRequestTaskId: ReturnType<
     typeof useTasksState
   >["linkingMergedPullRequestTaskId"];
@@ -29,7 +31,7 @@ export type AgentStudioShellTaskActionsModel = {
 };
 
 export function useAgentStudioShellTaskActions({
-  selectedTaskId,
+  selectedTask,
   linkingMergedPullRequestTaskId,
   pendingMergedPullRequest,
   syncPullRequests,
@@ -52,18 +54,28 @@ export function useAgentStudioShellTaskActions({
     cancelLinkMergedPullRequest();
   }, [cancelLinkMergedPullRequest]);
 
-  const { onOpenTaskDetails, onHumanApprove, onConfirmTaskAction } =
-    useRequiredTaskWorkflowActions();
+  const workflowActions = useRequiredTaskWorkflowActions();
+  const { onOpenTaskDetails, onConfirmTaskAction } = workflowActions;
+  const selectedTaskId = selectedTask?.id ?? null;
   const openTaskDetails = useCallback((): void => {
     if (selectedTaskId) onOpenTaskDetails(selectedTaskId);
   }, [onOpenTaskDetails, selectedTaskId]);
   const runTaskQuickAction = useCallback(
     (action: AgentStudioTaskQuickAction): void => {
-      if (!selectedTaskId) return;
-      if (action === "human_approve") onHumanApprove(selectedTaskId);
-      else onConfirmTaskAction(selectedTaskId, "close");
+      if (!selectedTask) return;
+      runTaskWorkflowAction(
+        action,
+        selectedTask.id,
+        {
+          ...workflowActions,
+          onCloseTask: (id, continuation) => onConfirmTaskAction(id, "close", continuation),
+          onResetTask: (id, continuation) => onConfirmTaskAction(id, "reset_task", continuation),
+          onRemoveTaskWorktree: (id) => onOpenTaskDetails(id),
+        },
+        { task: selectedTask },
+      );
     },
-    [onConfirmTaskAction, onHumanApprove, selectedTaskId],
+    [onOpenTaskDetails, onConfirmTaskAction, workflowActions, selectedTask],
   );
 
   const mergedPullRequestModal = useAgentStudioPullRequestModalModel({

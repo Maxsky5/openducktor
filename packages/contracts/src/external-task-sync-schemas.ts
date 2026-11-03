@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { workflowReferenceSchema } from "./workflow-reference-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
 import { taskCardSchema, taskStatusSchema } from "./task-schemas";
 
@@ -46,6 +47,7 @@ export const taskEventTaskSnapshotSchema = z
     id: strictTaskEventValueSchema,
     title: z.string(),
     status: taskStatusSchema,
+    workflow: workflowReferenceSchema,
   })
   .strict();
 export type TaskEventTaskSnapshot = z.infer<typeof taskEventTaskSnapshotSchema>;
@@ -121,7 +123,12 @@ export const externalTaskCreatedEventSchema = z
     (event) => {
       if (!event.boardChanges) return true;
       const card = event.boardChanges.cards.find((card) => card.id === event.taskId);
-      return card?.title === event.taskSnapshot.title && card.status === event.taskSnapshot.status;
+      return (
+        card?.title === event.taskSnapshot.title &&
+        card.status === event.taskSnapshot.status &&
+        card.workflow.id === event.taskSnapshot.workflow.id &&
+        card.workflow.revision === event.taskSnapshot.workflow.revision
+      );
     },
     {
       message: "The created board card must match the task snapshot.",
@@ -155,7 +162,13 @@ export const tasksUpdatedEventSchema = taskChangeSetSchema
         const cardsById = new Map(boardChanges.cards.map((card) => [card.id, card]));
         for (const task of taskSnapshots) {
           const card = cardsById.get(task.id);
-          if (!card || card.title !== task.title || card.status !== task.status) {
+          if (
+            !card ||
+            card.title !== task.title ||
+            card.status !== task.status ||
+            card.workflow.id !== task.workflow.id ||
+            card.workflow.revision !== task.workflow.revision
+          ) {
             context.addIssue({
               code: "custom",
               message: "Board cards must match the changed task snapshots.",

@@ -1,3 +1,5 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
 import { describe, expect, test } from "bun:test";
 import { orderStartModesForDisplay } from "./session-start-display";
 import {
@@ -16,23 +18,34 @@ describe("use-session-start-modal-coordinator", () => {
   });
 
   test("builds role-specific session start titles", () => {
-    expect(buildSessionStartModalTitle("spec")).toBe("Start Spec session");
-    expect(buildSessionStartModalTitle("planner")).toBe("Start Planner session");
-    expect(buildSessionStartModalTitle("build")).toBe("Start Builder session");
-    expect(buildSessionStartModalTitle("qa")).toBe("Start QA session");
+    expect(buildSessionStartModalTitle("spec", builtinTaskWorkflow)).toBe("Start Spec session");
+    expect(buildSessionStartModalTitle("planner", builtinTaskWorkflow)).toBe(
+      "Start Planner session",
+    );
+    expect(buildSessionStartModalTitle("build", builtinTaskWorkflow)).toBe("Start Builder session");
+    expect(buildSessionStartModalTitle("qa", builtinTaskWorkflow)).toBe("Start QA session");
   });
 
   test("builds launch-action and start-mode specific descriptions", () => {
-    expect(buildSessionStartModalDescription({ launchActionId: "spec_initial" })).toBe(
-      "Start a new session.",
-    );
+    expect(
+      buildSessionStartModalDescription({
+        taskWorkflow: builtinTaskWorkflow,
+        launchActionId: "spec_initial",
+      }),
+    ).toBe("Start a new session.");
 
     expect(
-      buildSessionStartModalDescription({ launchActionId: "build_after_human_request_changes" }),
+      buildSessionStartModalDescription({
+        taskWorkflow: builtinTaskWorkflow,
+        launchActionId: "build_after_human_request_changes",
+      }),
     ).toBe("Choose how to start this session.");
 
     expect(
-      buildSessionStartModalDescription({ launchActionId: "build_pull_request_generation" }),
+      buildSessionStartModalDescription({
+        taskWorkflow: builtinTaskWorkflow,
+        launchActionId: "build_pull_request_generation",
+      }),
     ).toBe("Choose how to start this session.");
   });
 });

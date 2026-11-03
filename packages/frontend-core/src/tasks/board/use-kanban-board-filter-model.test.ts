@@ -1,3 +1,5 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
 import "../../test-support/dom-environment";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { act, renderHook } from "@testing-library/react";
@@ -7,7 +9,7 @@ import {
   useKanbanBoardFilterModel,
   useKanbanBoardFilterStore,
 } from "./use-kanban-board-filter-model";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 let filtersBefore: Record<string, KanbanBoardFilter>;
 
@@ -22,7 +24,17 @@ afterEach(() => {
 const NO_TASKS: TaskCard[] = [];
 
 const renderFilterModel = (workspaceId: string | null, tasks: TaskCard[] = NO_TASKS) =>
-  renderHook(() => useKanbanBoardFilterModel(workspaceId, tasks));
+  renderHook(() =>
+    useKanbanBoardFilterModel(
+      workspaceId,
+      tasks,
+      builtinTaskWorkflow.definition.issueTypes.map(({ id, label, icon }) => ({
+        value: id,
+        label,
+        icon,
+      })),
+    ),
+  );
 
 describe("useKanbanBoardFilterModel", () => {
   test("passes the loaded tasks unchanged while the filter is inactive", () => {

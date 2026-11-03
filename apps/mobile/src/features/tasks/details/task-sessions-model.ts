@@ -1,3 +1,4 @@
+import type { WorkflowIcon } from "@openducktor/contracts";
 import { type AgentSessionRecord, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
@@ -8,9 +9,9 @@ import {
 } from "@openducktor/frontend-core/lib/agent-session-options";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
-  BUILTIN_ROLE_LABELS,
-  builtinRoleId,
-  type BuiltinRoleId as AgentRole,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard,
+  workflowRoleIcon,
 } from "@openducktor/workflows";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
@@ -32,9 +33,12 @@ export type TaskSessionRow = {
   activityState: AgentSessionActivityState | null;
 };
 
-export type TaskSessionGroup = { role: AgentRole; roleLabel: string; rows: TaskSessionRow[] };
-
-const ROLE_ORDER: readonly AgentRole[] = ["spec", "planner", "build", "qa"];
+export type TaskSessionGroup = {
+  role: AgentRole;
+  iconHint?: WorkflowIcon | undefined;
+  roleLabel: string;
+  rows: TaskSessionRow[];
+};
 
 const STATUS_PRESENTATION = {
   waiting_input: { label: "Waiting input", tone: "warning" },
@@ -60,7 +64,7 @@ const toEntry = (
   externalSessionId: session.externalSessionId,
   runtimeKind: session.runtimeKind,
   workingDirectory: session.workingDirectory,
-  role: builtinRoleId(session.role),
+  role: session.role,
   startedAt: session.startedAt,
   activityState,
 });
@@ -72,15 +76,14 @@ const toEntry = (
  * numbers follow the desktop session selector.
  */
 export const groupTaskSessions = (
-  scope: { workspaceId: string; taskId: string },
+  task: ResolvedTaskCard,
   records: readonly AgentSessionRecord[],
   live: readonly AgentSessionSummary[],
+  workspaceId: string,
 ): TaskSessionGroup[] => {
   const liveByKey = new Map(
     live
-      .filter(
-        (summary) => summary.workspaceId === scope.workspaceId && summary.taskId === scope.taskId,
-      )
+      .filter((summary) => summary.workspaceId === workspaceId && summary.taskId === task.id)
       .map((summary) => [agentSessionIdentityKey(summary), summary] as const),
   );
   const entries = new Map<string, SessionEntry>();
@@ -91,7 +94,13 @@ export const groupTaskSessions = (
   for (const [key, summary] of liveByKey) {
     if (!entries.has(key)) entries.set(key, toEntry(summary, summary.activityState));
   }
-  return ROLE_ORDER.flatMap((role) => {
+  for (const entry of entries.values()) {
+    if (!task.taskWorkflow.definition.roles.some(({ id }) => id === entry.role))
+      throw new Error(
+        `Task "${task.id}" has a session for unavailable workflow role "${entry.role}". Reload the task workflow.`,
+      );
+  }
+  return task.taskWorkflow.definition.roles.flatMap(({ id: role, label }) => {
     const roleEntries = [...entries.values()].filter((entry) => entry.role === role);
     const sessionNumbers = buildRoleSessionSequenceByIdentity(roleEntries);
     const rows = roleEntries.toSorted(compareAgentSessionRecency).map((entry, index) => {
@@ -107,7 +116,7 @@ export const groupTaskSessions = (
         label: formatAgentSessionOptionLabel({
           session: entry,
           sessionNumber: sessionNumbers.get(key) ?? index + 1,
-          roleLabelByRole: BUILTIN_ROLE_LABELS,
+          roleLabelByRole: { [role]: label },
         }),
         runtimeLabel: RUNTIME_DESCRIPTORS_BY_KIND[entry.runtimeKind].label,
         startedAt: entry.startedAt,
@@ -117,6 +126,8 @@ export const groupTaskSessions = (
         activityState: entry.activityState,
       };
     });
-    return rows.length > 0 ? [{ role, roleLabel: BUILTIN_ROLE_LABELS[role], rows }] : [];
+    return rows.length > 0
+      ? [{ role, roleLabel: label, iconHint: workflowRoleIcon(task.taskWorkflow, role), rows }]
+      : [];
   });
 };

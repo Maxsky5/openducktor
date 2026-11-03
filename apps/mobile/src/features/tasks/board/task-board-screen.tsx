@@ -2,8 +2,8 @@ import type { WorkspaceRecord } from "@openducktor/contracts";
 import type { KanbanColumnId } from "@openducktor/workflows";
 import {
   type TaskWorkflowAction,
-  type BuiltinTaskCard as TaskCardData,
-  type BuiltinRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCardData,
+  type WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 import { type NativeStackNavigationOptions, Stack, useRouter } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
@@ -205,7 +205,7 @@ function TaskBoardContent({
     [board.sessions, onAction, onNewTask, onOpenDetails, onPull, openSession, pulling, shownTaskId],
   );
 
-  const ready = board.state.status === "ready" && board.allTasks.length > 0;
+  const ready = board.state.status === "ready";
   const onSearchText = useHeaderSearchText(search, filter);
   const headerRight = useCallback(
     () => <BoardHeaderActions workspace={workspace} onRefresh={onPull} />,
@@ -256,6 +256,16 @@ function TaskBoardContent({
             summary={filterSummary(board.matchingTasks.length, board.allTasks.length)}
             onClear={filter.onClear}
           />
+        ) : null}
+        {view.kind === "board" && board.allTasks.length === 0 ? (
+          <Text
+            variant="footnote"
+            tone="secondary"
+            accessibilityLiveRegion="polite"
+            style={styles.notice}
+          >
+            No tasks yet. Create a task or import issues from your Git provider.
+          </Text>
         ) : null}
         <View style={styles.content}>
           {view.kind === "board" ? (

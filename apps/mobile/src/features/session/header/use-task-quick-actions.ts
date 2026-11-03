@@ -1,4 +1,5 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { taskSurfaceLaunches } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
 import { gitProviderReadError } from "@openducktor/frontend-core/review/git-provider-health";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
@@ -30,7 +31,9 @@ export function useTaskQuickActions({
 }) {
   const provider = useQuery({
     ...repositoryGitProviderContextQueryOptions({ workspaceId, repoPath }),
-    enabled: task?.status === "human_review",
+    enabled:
+      !!task &&
+      taskSurfaceLaunches(task, "studio").some(({ context }) => context === "pull_request"),
   });
   const providerError = gitProviderReadError(provider.error);
   const providerContext = provider.data;

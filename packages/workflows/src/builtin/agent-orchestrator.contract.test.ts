@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "@openducktor/contracts";
-import { AGENT_ROLE_TOOL_POLICY, builtinWorkflow } from "../index";
+import { builtinWorkflow } from "./definition";
+import { AGENT_ROLE_TOOL_POLICY } from "./role-policy";
 import { loadWorkflowContractFixture } from "../../test-support/workflow-contract-fixture";
 
 describe("agent orchestrator role policy contract", () => {

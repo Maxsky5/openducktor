@@ -1399,6 +1399,7 @@ describe("AgentStudioGitPanel", () => {
     const abortPendingModel = baseModel({
       askBuilderToResolveGitConflict: async () => {},
       isHandlingGitConflict: true,
+      conflictRecipientLabel: "Builder",
       gitConflictAction: "abort",
       gitConflictAutoOpenNonce: 1,
       gitConflict: {
@@ -1451,6 +1452,7 @@ describe("AgentStudioGitPanel", () => {
     const askBuilderPendingModel = baseModel({
       askBuilderToResolveGitConflict: async () => {},
       isHandlingGitConflict: true,
+      conflictRecipientLabel: "Builder",
       gitConflictAction: "ask_builder",
       gitConflictAutoOpenNonce: 1,
       gitConflict: {
@@ -1500,6 +1502,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const conflictModel = baseModel({
+      conflictRecipientLabel: "Builder",
       askBuilderToResolveGitConflict: askBuilder,
       gitConflictAutoOpenNonce: 1,
       gitConflict: {

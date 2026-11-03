@@ -32,9 +32,15 @@ export type SqliteTaskRepositoryContext = {
   workspaceId: string;
   taskWorkflows: TaskWorkflowResolver;
 };
+
+/**
+ * A read of many tasks hides a task in a state that ends a task in a host workflow. The resolver
+ * checked that a shared state has one terminal meaning in every workflow.
+ */
 export const hostTerminalStates = (taskWorkflows: TaskWorkflowResolver): string[] => [
   ...new Set(taskWorkflows.workflows.flatMap(({ terminalStates }) => terminalStates)),
 ];
+
 export type SqliteTaskRepositoryContextProvider = <A>(
   scope: WorkspaceDatabaseScope,
   operation: string,

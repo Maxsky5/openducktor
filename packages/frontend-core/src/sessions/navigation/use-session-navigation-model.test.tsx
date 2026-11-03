@@ -16,7 +16,7 @@ import { workspaceSessionQueryKeys } from "../../queries/workspace-sessions";
 import type { SessionNavigationWorkspace } from "./session-navigation-read-model";
 import { WorkspaceActivityContext } from "../../workspace-activity/workspace-activity-context";
 import {
-  createTaskCardFixture,
+  createWireTaskCardFixture,
   createWorkspaceActivityObserverStub,
 } from "../../test-support/shared-test-fixtures";
 import { useSessionNavigationModel } from "./use-session-navigation-model";
@@ -77,12 +77,15 @@ const facts = (overrides: Partial<WorkspaceSessionLiveFacts>): WorkspaceSessionL
 
 test("joins session sources across workspaces and changes grouping without more reads", async () => {
   const tasksByRepo = new Map([
-    ["/alpha", [createTaskCardFixture({ id: "blocked", title: "Resolve CI", status: "blocked" })]],
+    [
+      "/alpha",
+      [createWireTaskCardFixture({ id: "blocked", title: "Resolve CI", status: "blocked" })],
+    ],
     [
       "/beta",
       [
-        createTaskCardFixture({ id: "build", title: "Keep background", status: "in_progress" }),
-        createTaskCardFixture({ id: "closed", title: "Removed worktree", status: "closed" }),
+        createWireTaskCardFixture({ id: "build", title: "Keep background", status: "in_progress" }),
+        createWireTaskCardFixture({ id: "closed", title: "Removed worktree", status: "closed" }),
       ],
     ],
   ]);
@@ -194,7 +197,7 @@ test("reports a failed batch session read and reads it again on retry", async ()
   let batchReads = 0;
   const connection = createTestClientConnection({
     client: {
-      tasksList: async () => [createTaskCardFixture({ id: "task-1", title: "Retry me" })],
+      tasksList: async () => [createWireTaskCardFixture({ id: "task-1", title: "Retry me" })],
       agentSessionsListForTasks: async (_repoPath, taskIds) => {
         batchReads += 1;
         if (batchReads === 1) throw new Error("Session records are locked.");
@@ -239,7 +242,7 @@ test("reads the tasks, chats, and task sessions of the refreshed workspaces agai
       tasksList: async (repoPath) => {
         reads.push(`tasks ${repoPath.repoPath}`);
         return [
-          createTaskCardFixture({
+          createWireTaskCardFixture({
             id: `task${repoPath.repoPath.replace("/", "-")}`,
             title: "Task",
           }),
@@ -295,8 +298,8 @@ test("keeps cached task sessions listed while the batch read of a new task fails
   const connection = createTestClientConnection({
     client: {
       tasksList: async () => [
-        createTaskCardFixture({ id: "cached", title: "Cached task" }),
-        createTaskCardFixture({ id: "new", title: "New task" }),
+        createWireTaskCardFixture({ id: "cached", title: "Cached task" }),
+        createWireTaskCardFixture({ id: "new", title: "New task" }),
       ],
       agentSessionsListForTasks: async () => {
         throw new Error("Session records are locked.");
@@ -339,7 +342,7 @@ test("keeps every unchanged entry and the model of an equal rebuild", async () =
   ];
   const connection = createTestClientConnection({
     client: {
-      tasksList: async () => [createTaskCardFixture({ id: "build", title: "Build it" })],
+      tasksList: async () => [createWireTaskCardFixture({ id: "build", title: "Build it" })],
       agentSessionsListForTasks: async (
         _repoPath: import("@openducktor/contracts").WorkspaceRef,
         taskIds: string[],

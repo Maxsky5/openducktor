@@ -56,15 +56,22 @@ export const createTaskCrudUseCases = ({
       if (descriptionAssets) {
         createInput.descriptionAssets = descriptionAssets;
       }
-      const created = yield* taskStore
-        .createTask(createInput)
-        .pipe(
-          Effect.mapError((error) =>
-            error instanceof TaskCreatedAssetError
-              ? new TaskCreationProgressFailure(error.createdTask, error)
-              : error,
-          ),
-        );
+      const created = yield* taskStore.createTask(createInput).pipe(
+        Effect.mapError((error) =>
+          error instanceof TaskCreatedAssetError
+            ? new TaskCreationProgressFailure(
+                {
+                  ...error.createdTask,
+                  workflow: {
+                    id: workflow.definition.id,
+                    revision: workflow.definition.revision,
+                  },
+                },
+                error,
+              )
+            : error,
+        ),
+      );
 
       return enrichTask(workflow, created);
     });
@@ -133,7 +140,8 @@ export const createTaskCrudUseCases = ({
               }),
             );
           }
-          if (event.effect !== undefined) {
+          // A status.set event has no host effect beyond its transition.
+          if (event.effect !== undefined && event.effect !== "status.set") {
             return Result.fail(
               new HostValidationError({
                 field: "eventId",

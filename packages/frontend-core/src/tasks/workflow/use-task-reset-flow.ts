@@ -1,8 +1,4 @@
-import {
-  decideTaskEvent,
-  taskStatusTitle,
-  type BuiltinTaskCard as TaskCard,
-} from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { useCallback, useMemo, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
 import { isOutcomeUnknown } from "../../lib/command-outcome";
@@ -43,6 +39,7 @@ export type TaskResetImplementationModalModel = {
 type ResetImplementationModalModel = TaskResetImplementationModalModel;
 type ResetImplementationOptions = {
   closeDetailsAfterReset?: boolean;
+  onCommitted?: (() => Promise<void>) | undefined;
 };
 
 type ResetFlowWorkspaceIdentity = {
@@ -53,6 +50,7 @@ type ResetFlowWorkspaceIdentity = {
 type ResetFlowRequest = ResetFlowWorkspaceIdentity & {
   taskId: string;
   closeDetailsAfterReset: boolean;
+  onCommitted?: (() => Promise<void>) | undefined;
 };
 
 type UseTaskResetFlowArgs = {
@@ -64,8 +62,12 @@ type UseTaskResetFlowArgs = {
 
 /** A task that does not offer the reset keeps its status, and the host rejects the request. */
 const deriveRollbackLabel = (task: TaskCard): string => {
-  const decision = decideTaskEvent("reset-implementation", task);
-  return taskStatusTitle(decision.kind === "transition" ? decision.to : task.status);
+  const workflow = task.taskWorkflow;
+  const event = workflow.effectEvent("implementation.reset");
+  const decision = event ? workflow.decide(event, task) : null;
+  const status = decision?.kind === "transition" ? decision.to : task.status;
+  const state = workflow.state(status);
+  return state.title ?? state.label;
 };
 
 export function useTaskResetFlow({
@@ -140,12 +142,14 @@ export function useTaskResetFlow({
       }
 
       setModalError(null);
-      setRequest({
+      const nextRequest: ResetFlowRequest = {
         taskId: nextTaskId,
         workspaceId: workspaceIdentity.workspaceId,
         repoPath: workspaceIdentity.repoPath,
         closeDetailsAfterReset: options?.closeDetailsAfterReset ?? false,
-      });
+      };
+      if (options?.onCommitted) nextRequest.onCommitted = options.onCommitted;
+      setRequest(nextRequest);
       return true;
     },
     [feedback, tasks, workspaceIdentity],
@@ -161,6 +165,7 @@ export function useTaskResetFlow({
       setModalError(null);
       try {
         await resetTaskImplementation(task.id);
+        await request.onCommitted?.();
         setRequest(null);
         if (request.closeDetailsAfterReset) {
           closeTaskDetails(task.id);

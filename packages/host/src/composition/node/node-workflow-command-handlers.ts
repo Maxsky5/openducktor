@@ -1,3 +1,4 @@
+import { createWorkflowReadCommandHandlers } from "../../interface/commands/workflow-read-command-handlers";
 import {
   createAgentSessionLiveCommandHandlers,
   createWorkflowLaunchCommandHandlers,
@@ -43,6 +44,7 @@ export const createNodeWorkflowCommandHandlers = ({
   taskAssetStagingService: Parameters<typeof createTaskAssetCommandHandlers>[0];
   taskWorktreeService: Parameters<typeof createTaskWorktreeCommandHandlers>[0];
 }) => ({
+  ...createWorkflowReadCommandHandlers(taskSessions.workflowReads),
   ...createAgentSessionLiveCommandHandlers(launchControls.commands, messageDelivery),
   ...createWorkflowLaunchCommandHandlers(taskSessions.workflowLaunchService),
   ...createAgentRuntimeQueryCommandHandlers(

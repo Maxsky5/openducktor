@@ -18,6 +18,7 @@ const failed = ({
     workflowId: "openducktor",
     eventId: "taskRejectedByQa",
     actionId: "startReviewQaFeedbacks",
+    actionLabel: "Start Builder QA feedback",
     occurredAt: "2026-10-10T00:00:00.000Z",
     message: "The first message did not reach the session.",
   };

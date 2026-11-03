@@ -37,7 +37,7 @@ import {
 } from "./task-approval-transition-resolver";
 import { useTaskApprovalGitConflictFlow } from "./use-task-approval-git-conflict-flow";
 import { useClientConnection, useHostClient } from "../../connection/client-connection-react";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
 
 type UseTaskApprovalFlowArgs = {
@@ -112,13 +112,22 @@ export function useTaskApprovalFlow({
   const closeChoice = useTaskCloseChoice(openTask?.removeWorktreeOnClose ?? null);
   const { resetChoice: resetCloseChoice } = closeChoice;
   const removeWorktree = isTaskApprovalOpen(state) ? closeChoice.removeWorktree : null;
+  const continuationRef = useRef<(() => Promise<void>) | undefined>(undefined);
   const approvalRequestVersionRef = useRef(0);
   const workspaceIdentityRef = useRef<TaskApprovalWorkspaceIdentity | null>(workspaceIdentity);
 
   const reset = useCallback(() => {
     approvalRequestVersionRef.current += 1;
+    continuationRef.current = undefined;
     dispatch({ type: "close" });
   }, []);
+
+  const completeApproval = useCallback(async () => {
+    const continuation = continuationRef.current;
+    // Keep the sheet mounted while the committed task loads and its next form opens.
+    await continuation?.();
+    reset();
+  }, [reset]);
 
   useLayoutEffect(() => {
     if (hasSameWorkspaceIdentity(workspaceIdentityRef.current, workspaceIdentity)) {
@@ -160,6 +169,7 @@ export function useTaskApprovalFlow({
             })
           : "direct_merge");
 
+      continuationRef.current = options?.onCommitted;
       resetCloseChoice();
       dispatch({
         type: "open_loading",
@@ -329,7 +339,7 @@ export function useTaskApprovalFlow({
           if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
             return;
           }
-          reset();
+          await completeApproval();
         } catch (error) {
           if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
             return;
@@ -364,13 +374,14 @@ export function useTaskApprovalFlow({
             return;
           }
           if (directMergeResult.outcome === "conflicts") {
+            const continuation = continuationRef.current;
             reset();
-            openGitConflictDialog(approvalState.taskId, directMergeResult.conflict);
+            openGitConflictDialog(approvalState.taskId, directMergeResult.conflict, continuation);
             return;
           }
 
           if (directMergeResult.outcome === "task_closed") {
-            reset();
+            await completeApproval();
             feedback.show("success", "Task approved", {
               description: directMergeResult.successDescription,
             });
@@ -405,7 +416,7 @@ export function useTaskApprovalFlow({
         }
 
         showPullRequestCreated(pullRequestResult.pullRequest);
-        reset();
+        await completeApproval();
       } catch (error) {
         if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
           return;
@@ -437,6 +448,7 @@ export function useTaskApprovalFlow({
     showPullRequestCreated,
     state,
     submitFlight,
+    completeApproval,
   ]);
 
   const resetMissingBuilderWorktree = useCallback((): void => {
@@ -480,7 +492,7 @@ export function useTaskApprovalFlow({
         if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
           return;
         }
-        reset();
+        await completeApproval();
         feedback.show("success", "Task moved to Done", {
           description: result.successDescription,
         });
@@ -505,9 +517,9 @@ export function useTaskApprovalFlow({
     queryClient,
     refreshTasks,
     removeWorktree,
-    reset,
     state,
     submitFlight,
+    completeApproval,
   ]);
 
   if (!isTaskApprovalOpen(state)) {

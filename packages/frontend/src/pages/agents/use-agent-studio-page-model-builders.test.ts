@@ -1,4 +1,4 @@
-import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
+import { BUILTIN_ROLE_LABEL_BY_ROLE } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { describe, expect, test } from "bun:test";
 import {
   agentSessionIdentityKey,
@@ -17,7 +17,7 @@ const createSession = (
     ...overrides,
   });
 
-const roleLabelByRole = { ...BUILTIN_ROLE_LABELS } as const;
+const roleLabelByRole = { ...BUILTIN_ROLE_LABEL_BY_ROLE } as const;
 
 const selectedIdentityFromSession = (session: AgentSessionSummary | null = null) =>
   session ? toAgentSessionIdentity(session) : null;

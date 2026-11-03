@@ -12,7 +12,11 @@ const workspace = createWorkspaceRecordFixture({ workspaceId: "w-1" });
 const task: PaletteTask = {
   key: "task:w-1:odt-1",
   workspace,
-  task: createTaskCardFixture({ id: "odt-1" }),
+  task: createTaskCardFixture({
+    id: "odt-1",
+    status: "ready_for_dev",
+    availableActions: ["build_start", "reset_task", "close_task"],
+  }),
 };
 const builderIdentity = {
   externalSessionId: "build-1",
@@ -31,7 +35,7 @@ const taskView: PaletteTaskView = {
 const runCommand = (command: Exclude<PaletteTaskCommand, { kind: "copy_id" }>) => {
   const navigate = mock((_href: string) => {});
   const onEdit = mock((_taskId: string) => {});
-  const onDelegate = mock((_taskId: string) => {});
+  const onLaunch = mock((_taskId: string, _launchActionId: string) => {});
   const onOpenSession = mock(() => {});
   const onResetTask = mock(async () => {});
   const onCloseTask = mock(async () => {});
@@ -41,7 +45,7 @@ const runCommand = (command: Exclude<PaletteTaskCommand, { kind: "copy_id" }>) =
   intent.run({
     workflow: createTaskWorkflowActionsFixture({
       onEdit,
-      onDelegate,
+      onLaunch,
       onOpenSession,
       onResetTask,
       onCloseTask,
@@ -55,7 +59,7 @@ const runCommand = (command: Exclude<PaletteTaskCommand, { kind: "copy_id" }>) =
     intent,
     navigate,
     onEdit,
-    onDelegate,
+    onLaunch,
     onOpenSession,
     onResetTask,
     onCloseTask,
@@ -97,8 +101,9 @@ describe("taskCommandIntent", () => {
 
   test("runs edit and workflow steps through the workflow handlers", () => {
     expect(runCommand({ kind: "edit" }).onEdit).toHaveBeenCalledWith("odt-1");
-    expect(runCommand({ kind: "workflow", action: "build_start" }).onDelegate).toHaveBeenCalledWith(
+    expect(runCommand({ kind: "workflow", action: "build_start" }).onLaunch).toHaveBeenCalledWith(
       "odt-1",
+      "build_implementation_start",
     );
     expect(
       runCommand({ kind: "workflow", action: "open_builder" }).onOpenSession,

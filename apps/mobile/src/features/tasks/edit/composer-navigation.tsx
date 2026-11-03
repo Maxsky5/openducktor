@@ -1,3 +1,4 @@
+import type { TaskWorkflow } from "@openducktor/workflows";
 import type {
   ComposerStep,
   EditTaskSection,
@@ -116,12 +117,6 @@ export function ComposerStepper({
   );
 }
 
-const SECTION_ITEMS = [
-  { id: "details", label: "Details", icon: "clipboard-list" },
-  { id: "spec", label: "Spec", icon: "file-code" },
-  { id: "plan", label: "Plan", icon: "scroll-text" },
-] as const satisfies readonly { id: EditTaskSection; label: string; icon: IconName }[];
-
 const thumbPosition = (width: number, index: number): CSSStyle<ViewStyle> => ({
   width,
   transform: [{ translateX: index * width }],
@@ -136,25 +131,47 @@ const thumbPosition = (width: number, index: number): CSSStyle<ViewStyle> => ({
  */
 export function EditSectionSwitcher({
   section,
-  unsavedSpec,
-  unsavedPlan,
+  taskWorkflow,
+  dirtyDocuments,
   disabled,
   onChange,
 }: {
   section: EditTaskSection;
-  unsavedSpec: boolean;
-  unsavedPlan: boolean;
+  taskWorkflow: TaskWorkflow;
+  dirtyDocuments: Record<string, boolean>;
   disabled: boolean;
   onChange: (section: EditTaskSection) => void;
 }): ReactElement {
   const theme = useAppTheme();
+  const items: {
+    id: string;
+    section: EditTaskSection;
+    label: string;
+    icon: IconName;
+    dirty: boolean;
+  }[] = [
+    { id: "details", section: "details", label: "Details", icon: "clipboard-list", dirty: false },
+    ...taskWorkflow.definition.artifacts.flatMap((artifact) =>
+      artifact.kind === "document"
+        ? [
+            {
+              id: `artifact:${artifact.id}`,
+              section: { artifactCode: artifact.id },
+              label: artifact.shortLabel ?? artifact.label,
+              icon: "file-text" as const,
+              dirty: dirtyDocuments[artifact.id] === true,
+            },
+          ]
+        : [],
+    ),
+  ];
+  const selectedId = section === "details" ? "details" : `artifact:${section.artifactCode}`;
   const [width, setWidth] = useState(0);
   const index = Math.max(
     0,
-    SECTION_ITEMS.findIndex((item) => item.id === section),
+    items.findIndex((item) => item.id === selectedId),
   );
-  const segmentWidth = (width - 6) / SECTION_ITEMS.length;
-  const unsaved = { details: false, spec: unsavedSpec, plan: unsavedPlan };
+  const segmentWidth = (width - 6) / items.length;
   return (
     <View
       collapsable={false}
@@ -166,8 +183,8 @@ export function EditSectionSwitcher({
       {width > 0 ? (
         <Animated.View style={[styles.thumb, thumbPosition(segmentWidth, index)]} />
       ) : null}
-      {SECTION_ITEMS.map((item) => {
-        const selected = item.id === section;
+      {items.map((item) => {
+        const selected = item.id === selectedId;
         // The white thumb of the segmented controls of the app.
         const color = selected ? theme.desktop.foreground : theme.desktop.mutedForeground;
         return (
@@ -177,12 +194,12 @@ export function EditSectionSwitcher({
             onPress={() => {
               if (selected) return;
               haptics.selection();
-              onChange(item.id);
+              onChange(item.section);
             }}
             disabled={disabled}
             dimWhenDisabled={false}
             accessibilityRole="radio"
-            accessibilityLabel={unsaved[item.id] ? `${item.label}, unsaved` : item.label}
+            accessibilityLabel={item.dirty ? `${item.label}, unsaved` : item.label}
             accessibilityState={{ checked: selected }}
             containerStyle={styles.segmentSlot}
             style={styles.segment}
@@ -196,7 +213,7 @@ export function EditSectionSwitcher({
             >
               {item.label}
             </Text>
-            {unsaved[item.id] ? (
+            {item.dirty ? (
               <View style={styles.unsaved}>
                 <Text variant="caption2" overline style={styles.unsavedText}>
                   Unsaved

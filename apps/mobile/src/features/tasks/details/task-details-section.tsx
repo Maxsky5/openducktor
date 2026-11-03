@@ -1,10 +1,10 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { PropsWithChildren, ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { StatusLabel } from "@/ui/badge";
 import { Text } from "@/ui/text";
-import { qaVerdictPresentation } from "../presentation/task-document-paint";
+import { taskReviewVerdicts } from "../presentation/task-document-paint";
 import { DetailsCard } from "./details-card";
 import { taskTargetBranchPresentation } from "./task-details-model";
 
@@ -47,7 +47,7 @@ function TargetBranchFact({ label, error }: { label: string; error: string | nul
 type CardCollapse = { collapsed: boolean; onToggle: () => void };
 
 /**
- * The facts of a task, as the desktop Metadata card: the target branch and the QA verdict. The
+ * The facts of a task: the target branch and declared review verdicts. The
  * pull request shows as a badge in the header.
  */
 export function TaskMetadataSection({
@@ -55,17 +55,23 @@ export function TaskMetadataSection({
   collapsed,
   onToggle,
 }: CardCollapse & { task: TaskCard }): ReactElement {
-  const verdict = qaVerdictPresentation(task.artifactSummary.qaReport?.verdict);
+  const verdicts = taskReviewVerdicts(task);
   const branch = taskTargetBranchPresentation(task);
   return (
     <DetailsCard title="Metadata" icon="layers" collapsed={collapsed} onToggle={onToggle}>
       <View style={styles.facts}>
         {branch ? <TargetBranchFact label={branch.label} error={branch.error} /> : null}
-        <View accessible accessibilityLabel={`QA verdict: ${verdict.label}`}>
-          <Fact label="QA verdict">
-            <StatusLabel label={verdict.label} tone={verdict.tone} />
-          </Fact>
-        </View>
+        {verdicts.map((verdict) => (
+          <View
+            key={verdict.id}
+            accessible
+            accessibilityLabel={`${verdict.title}: ${verdict.label}`}
+          >
+            <Fact label={verdict.title}>
+              <StatusLabel label={verdict.label} tone={verdict.tone} />
+            </Fact>
+          </View>
+        ))}
       </View>
     </DetailsCard>
   );

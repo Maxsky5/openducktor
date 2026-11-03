@@ -1,5 +1,4 @@
 import type { AutopilotOutcome, AutopilotState } from "@openducktor/contracts";
-import { getAutopilotAction } from "@openducktor/workflows";
 import {
   type AutopilotFailedOutcome,
   type AutopilotRecovery,
@@ -14,10 +13,7 @@ export type AutopilotHeldOutcome = AutopilotFailedOutcome | AutopilotSkippedOutc
 export const AUTOPILOT_RETRY_MESSAGE_LABEL = "Retry message";
 export const AUTOPILOT_FAILURE_TITLE = "Autopilot cannot evaluate task changes.";
 
-const actionLabel = (outcome: AutopilotOutcome): string =>
-  outcome.workflowId === "openducktor"
-    ? getAutopilotAction(outcome.actionId).label
-    : outcome.actionId;
+const actionLabel = (outcome: AutopilotOutcome): string => outcome.actionLabel;
 
 export const autopilotSkippedTitle = (outcome: AutopilotSkippedOutcome): string =>
   `Autopilot skipped ${actionLabel(outcome)} for ${outcome.task.id}.`;

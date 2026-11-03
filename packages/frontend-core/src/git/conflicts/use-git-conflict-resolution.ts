@@ -1,5 +1,5 @@
 import type { RepoPromptOverrides } from "@openducktor/contracts";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { taskGitConflictLaunch, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { useCallback } from "react";
 import type { GitConflict } from "../contracts";
 import { SessionStartWorkflowError } from "../../sessions/start/session-start-orchestration";
@@ -12,7 +12,6 @@ import type { AgentSessionSummary } from "../../sessions/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "../../queries/prompt-overrides";
 import type { AgentMessageSendOptions, AgentSessionIdentity } from "../../types/agent-orchestrator";
 import {
-  BUILD_REBASE_CONFLICT_RESOLUTION_LAUNCH_ACTION,
   buildTaskConflictPrompt,
   conflictBuilderSessions,
   conflictRequestContext,
@@ -23,8 +22,8 @@ import { useQueryClient } from "@tanstack/react-query";
 
 export type StartGitConflictResolutionSessionInput = {
   taskId: string;
-  role: "build";
-  launchActionId: "build_rebase_conflict_resolution";
+  role: string;
+  launchActionId: string;
   message: string;
   existingSessionOptions: ReturnType<typeof buildReusableSessionOptions>;
   initialStartMode: "fresh" | "reuse";
@@ -36,8 +35,8 @@ export type StartGitConflictResolutionSessionInput = {
 
 /** The session start request of a conflict request: start or reuse a Builder, then send it. */
 export type ConflictResolutionStartRequest = SessionStartFlowRequest & {
-  role: "build";
-  launchActionId: "build_rebase_conflict_resolution";
+  role: string;
+  launchActionId: string;
   postStartAction: "send_message";
   message: string;
   targetWorkingDirectory: string;
@@ -98,10 +97,10 @@ export function useGitConflictResolution({
 }: UseGitConflictResolutionArgs): UseGitConflictResolutionResult {
   const queryClient = useQueryClient();
   const loadPromptOverrides = useCallback(
-    (id: string) =>
+    (id: string, task: TaskCard) =>
       suppliedLoadPromptOverrides
         ? suppliedLoadPromptOverrides(id)
-        : loadEffectivePromptOverrides(id, queryClient),
+        : loadEffectivePromptOverrides(id, queryClient, task.taskWorkflow),
     [queryClient, suppliedLoadPromptOverrides],
   );
   const handleResolveGitConflict = useCallback(
@@ -116,6 +115,11 @@ export function useGitConflictResolution({
       }
 
       const workingDirectory = normalizeWorkingDirectory(conflict.workingDir);
+      const task = taskContext.task;
+      if (!task) throw new Error("Load the task workflow before asking for conflict assistance.");
+      const launch = taskGitConflictLaunch(task);
+      if (!launch) throw new Error(`Task "${task.id}" has no available Git conflict launch.`);
+      const roleLabel = task.taskWorkflow.role(launch.role).label;
       if (!workingDirectory) {
         throw new Error(
           `Cannot resolve a git conflict for task "${taskContext.taskId}" because the conflicted working directory is missing.`,
@@ -124,11 +128,11 @@ export function useGitConflictResolution({
 
       const { matching: matchingBuilders, defaultBuilder } = conflictBuilderSessions(
         conflict,
-        taskContext.builderSessions,
+        taskContext.builderSessions.filter(({ role }) => role === launch.role),
         taskContext.currentViewSession,
       );
 
-      const promptOverrides = await loadPromptOverrides(workspaceId);
+      const promptOverrides = await loadPromptOverrides(workspaceId, task);
       assertCurrent?.();
       const git = conflictRequestContext(conflict);
       const message = buildTaskConflictPrompt({
@@ -140,12 +144,13 @@ export function useGitConflictResolution({
 
       const session = await startConflictResolutionSession({
         taskId: taskContext.taskId,
-        role: "build",
-        launchActionId: BUILD_REBASE_CONFLICT_RESOLUTION_LAUNCH_ACTION,
+        role: launch.role,
+        launchActionId: launch.id,
         message,
         existingSessionOptions: buildReusableSessionOptions({
           sessions: matchingBuilders,
-          role: "build",
+          role: launch.role,
+          roleLabel,
         }),
         initialStartMode: defaultBuilder ? "reuse" : "fresh",
         initialSourceSession: defaultBuilder ? toAgentSessionIdentity(defaultBuilder) : null,

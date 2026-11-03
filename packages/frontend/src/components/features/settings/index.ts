@@ -5,7 +5,6 @@ export {
   ensureDraftAgentDefault,
   findCatalogModel,
   getNeededCatalogRuntimeKinds,
-  ROLE_DEFAULTS,
   resolvePromptOverrideFallbackTemplate,
   resolveRepoAgentDefaultRuntimeKind,
   selectedModelKey,

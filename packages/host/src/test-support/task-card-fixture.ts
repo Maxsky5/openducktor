@@ -1,8 +1,8 @@
-import { taskCardSchema, type TaskCard } from "@openducktor/contracts";
+import { taskRecordDataSchema, type TaskCard } from "@openducktor/contracts";
 import { builtinTaskWorkflow, type TaskWorkflow } from "@openducktor/workflows";
 import type { z } from "zod";
 
-const taskRecordSchema = taskCardSchema.omit({ availableActions: true, agentWorkflows: true });
+const taskRecordSchema = taskRecordDataSchema;
 
 /** A task card with the workflow projection of its stored fields. */
 export const taskCardFixture = (

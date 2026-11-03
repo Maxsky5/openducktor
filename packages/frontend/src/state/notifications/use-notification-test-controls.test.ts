@@ -10,7 +10,7 @@ import {
   describeNotificationOsCapability,
   useNotificationTestControls,
 } from "./use-notification-test-controls";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
 
 const capability = (
   overrides: Partial<NotificationOsCapability> = {},

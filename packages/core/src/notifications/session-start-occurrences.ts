@@ -53,6 +53,7 @@ export const buildSessionStartedOccurrence = (
   occurrenceId: `agent.session_started:${workspace.repoPath}:${sessionKey(input.session)}:${input.launchAttemptId}`,
   kind: "agent.session_started",
   ...(workspace.workspaceId !== undefined && { workspaceId: workspace.workspaceId }),
+  copy: { title: input.roleLabel, body: "Session started." },
   repoPath: workspace.repoPath,
   repositoryLabel: workspace.repositoryLabel,
   task: task(input),
@@ -105,6 +106,7 @@ export const buildSessionStartErrorOccurrence = (
         .slice(0, 240) || "The session failed. Open it for details.",
     navigationTarget: errorNavigationTarget(workspace, input),
   };
+  occurrence.copy = { title: input.roleLabel, body: occurrence.status };
   if (input.session) occurrence.sessionLabel = `${input.roleLabel} Agent Session`;
   return occurrence;
 };

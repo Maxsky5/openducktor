@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import { toAgentSessionIdentity } from "../../lib/agent-session-identity";
 import { createSessionMessagesState } from "../agent-orchestrator/support/messages";

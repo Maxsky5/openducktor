@@ -6,8 +6,8 @@ import type {
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import type { AgentMessageSendOptions, AgentSessionIdentity } from "../../types/agent-orchestrator";
 import type {
-  BuiltinLaunchActionId as SessionLaunchActionId,
-  BuiltinRoleId as AgentRole,
+  WorkflowLaunchActionId as SessionLaunchActionId,
+  WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 
 export type SessionStartExistingSessionOption = {
@@ -74,6 +74,9 @@ export type SessionStartBeforeAction = {
 export type SessionStartFlowRequest = Omit<NewSessionStartRequest, "selectedModel"> & {
   initialStartMode?: AgentSessionStartMode;
   postStartAction: SessionStartPostAction;
+  /** Collected context for the declared prompt, not a complete instruction. */
+  humanFeedback?: string;
+  /** A complete message instruction, such as Git conflict assistance. */
   message?: string;
   parts?: AgentSessionUserMessagePart[];
   assertBeforeLaunch?: () => void;

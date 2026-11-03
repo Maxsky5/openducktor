@@ -44,7 +44,7 @@ export function WorkflowRail({
               <WorkflowStepButton
                 step={step}
                 isSelected={selectedStepId === step.id}
-                disabled={disabled}
+                disabled={disabled || step.human === true}
                 onSelect={onStepSelect}
               />
               {nextStep ? (
@@ -121,7 +121,7 @@ function WorkflowStepButton({
         workflowSelectionClassName(isSelected, step.state),
         isSelected && compact && "ring-offset-1 ring-offset-popover",
       )}
-      disabled={disabled}
+      disabled={disabled || step.human}
       aria-pressed={isSelected}
       aria-current={isSelected && compact ? "step" : undefined}
       title={step.hint}

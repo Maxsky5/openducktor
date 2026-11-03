@@ -29,7 +29,6 @@ import {
 } from "./task-operations-model";
 import { useClientConnection } from "../../connection/client-connection-react";
 import type { HostClient } from "@openducktor/host-client";
-import type { BuiltinStateId as TaskStatus } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
 
 type UseTaskMutationCommandsArgs = {
@@ -51,7 +50,6 @@ export type TaskMutationCommands = {
   closeTask: (taskId: string, options: CloseTaskOptions) => Promise<void>;
   /** Removes the worktree and local branches of a closed task. */
   removeTaskWorktree: (taskId: string) => Promise<void>;
-  transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };
 
@@ -62,7 +60,6 @@ export type TaskMutationCommandHostPort = Pick<
   | "taskDelete"
   | "taskClose"
   | "taskWorktreeRemove"
-  | "taskTransition"
   | "humanRequestChanges"
 >;
 
@@ -202,36 +199,6 @@ export const createTaskMutationCommands = ({
     });
   };
 
-  const transitionTask = async (
-    taskId: string,
-    status: TaskStatus,
-    reason?: string,
-  ): Promise<void> => {
-    await runTaskMutation({
-      run: async (repoPath) => {
-        if (status !== "closed") {
-          await hostPort.taskTransition(scopeFor(repoPath), taskId, status, reason);
-          return;
-        }
-        await taskChatDraftCleanup.runMutation({
-          queryClient,
-          repoPath,
-          workspaceId: activeWorkspaceId,
-          taskIds: [taskId],
-          mutation: async () => {
-            try {
-              await hostPort.taskTransition(scopeFor(repoPath), taskId, status, reason);
-            } finally {
-              await invalidateTaskStopImpact(queryClient, scopeFor(repoPath));
-            }
-          },
-        });
-      },
-      successDescription: taskId,
-      failureTitle: "Failed to transition task",
-    });
-  };
-
   const humanRequestChangesTask = async (taskId: string, note?: string): Promise<void> => {
     await runTaskMutation({
       run: async (repoPath) => {
@@ -250,7 +217,6 @@ export const createTaskMutationCommands = ({
     deleteTask,
     closeTask,
     removeTaskWorktree,
-    transitionTask,
     humanRequestChangesTask,
   };
 };

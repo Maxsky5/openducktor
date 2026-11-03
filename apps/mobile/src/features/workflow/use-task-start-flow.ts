@@ -1,3 +1,4 @@
+import { useTaskActionTasks } from "@openducktor/frontend-core/queries/use-task-action-tasks";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import {
   TasksStateContext,
@@ -26,7 +27,8 @@ import { useRepairedStartupHandoff } from "@/features/session-startup/use-repair
 export function useTaskStartFlow(workspace: WorkspaceRecord) {
   const connection = useClientConnection();
   const [backgroundAttemptId, setBackgroundAttemptId] = useState<string | null>(null);
-  const { tasks } = useRequiredContext(TasksStateContext, "useTaskStartFlow");
+  const { tasks: boardTasks } = useRequiredContext(TasksStateContext, "useTaskStartFlow");
+  const tasks = useTaskActionTasks(workspace, boardTasks);
   const sessions = useAgentSessionSummaries();
   const {
     repoSettings,
@@ -69,10 +71,11 @@ export function useTaskStartFlow(workspace: WorkspaceRecord) {
         });
       }
       // The flow opens the task when the role has no session to continue.
-      if (target.role) showNoSession(connection.feedback, target.taskId, target.role);
+      const task = tasks.find(({ id }) => id === target.taskId);
+      if (target.role && task) showNoSession(connection.feedback, task, target.role);
       navigation.openTask(target.taskId);
     },
-    [connection, navigation, routeNavigation, visibleHandoff],
+    [connection, navigation, routeNavigation, visibleHandoff, tasks],
   );
   const flow = useTaskSessionStartFlow({
     activeWorkspaceId: workspaceId,

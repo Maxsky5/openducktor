@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import {
   TasksStateContext,

@@ -4,10 +4,7 @@ import type {
   TaskCreateInput,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
-import type {
-  BuiltinStateId as TaskStatus,
-  BuiltinTaskCard as TaskCard,
-} from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "./task-close";
 import type { TaskPullRequestOperations } from "./task-pull-request";
 
@@ -31,7 +28,6 @@ export type TasksStateContextValue = TaskPullRequestOperations & {
   removeTaskWorktree: (taskId: string) => Promise<void>;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   resetTask: (taskId: string) => Promise<void>;
-  transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };
 

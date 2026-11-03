@@ -1,3 +1,5 @@
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+
 import { afterEach, describe, expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { type ReactElement, useState } from "react";
@@ -45,6 +47,9 @@ const renderBar = ({
       <KanbanBoardFilterBar
         filter={{
           value,
+          issueTypeOptions: builtinTaskWorkflow.definition.issueTypes.map(
+            ({ id, label, icon }) => ({ value: id, label, icon }),
+          ),
           labelOptions,
           isActive: isKanbanBoardFilterActive(value),
           isDisabled,
@@ -131,9 +136,9 @@ describe("KanbanBoardFilterBar menus", () => {
     await openMenu("Type");
     expect(screen.getByRole("listbox", { name: "Type" })).toBeTruthy();
     expect(screen.getAllByRole("option").map((entry) => entry.textContent)).toEqual([
-      "Task",
       "Feature",
       "Bug",
+      "Task",
     ]);
 
     await act(async () => {

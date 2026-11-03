@@ -1,5 +1,5 @@
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 export type TaskDetailsSheetProps = {
   activeWorkspace?: ActiveWorkspace | null;

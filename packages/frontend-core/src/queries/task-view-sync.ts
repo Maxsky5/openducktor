@@ -35,7 +35,8 @@ import {
   type TaskQueryChange,
   type TaskQueryChanges,
 } from "./task-query-changes";
-import { builtinTaskCardSchema, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+import { resolveTaskCards, refreshWorkflowMetadata, workflowQueryKeys } from "./workflows";
 
 const queryKeyStringSchema = z.string();
 
@@ -499,7 +500,11 @@ export const createTaskViewSync = ({
       const scope = workspaceScopeValue(event);
       await runForRepo(scope, async () => {
         const { doneVisibleDays } = event.boardChanges!;
-        const cards = event.boardChanges!.cards.map((card) => builtinTaskCardSchema.parse(card));
+        const cards = await resolveTaskCards(
+          queryClient,
+          { workspaceId: event.workspaceId, repoPath: event.repoPath },
+          event.boardChanges!.cards,
+        );
         const previousCards =
           queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(scope))?.tasks ?? [];
         const { taskIds, removedTaskIds } = toEventChanges(event);
@@ -563,6 +568,7 @@ export const createTaskViewSync = ({
           ...cachedRepoPaths(artifactQueries),
         ].filter((repoPath) => !openRepoPathSet.has(workspaceScopeKey(repoPath))),
       );
+      await refreshWorkflowMetadata(queryClient);
       const [results] = await Promise.all([
         Promise.allSettled(
           openRepos.map(({ request, observedDocuments }) => reloadRepo(request, observedDocuments)),
@@ -591,10 +597,12 @@ export const createTaskViewSync = ({
       const cancelled = Promise.all([
         cancelRepoTaskQueries(repoPath),
         cancelDocuments(repoPath),
+        queryClient.cancelQueries({ queryKey: workflowQueryKeys.workspace(repoPath), exact: true }),
         removeArtifactQueries(queryClient, repoPath),
       ]);
       queryClient.removeQueries({ queryKey: taskQueryKeys.repoDataPrefix(repoPath) });
       removeDocuments(repoPath);
+      queryClient.removeQueries({ queryKey: workflowQueryKeys.workspace(repoPath), exact: true });
       await cancelled;
     },
   };
@@ -611,7 +619,7 @@ export const getProductionTaskViewSync = (queryClient: QueryClient): TaskViewSyn
   const taskViewSync = createTaskViewSync({
     queryClient,
     ports: {
-      listTasks: (repoPath) => host.tasksList(repoPath),
+      listTasks: (scope) => resolveTaskCards(queryClient, scope, host.tasksList(scope)),
       loadFreshDocument: (repoPath, taskId, code) =>
         host.workflowArtifactGet(repoPath, taskId, code),
     },

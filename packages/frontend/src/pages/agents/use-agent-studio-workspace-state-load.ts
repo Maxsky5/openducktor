@@ -4,7 +4,7 @@ import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/ag
 import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type { AgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import { buildAgentStudioStateLoad } from "./agent-studio-workspace-state-load-model";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const INACTIVE_AGENT_STUDIO_WORKSPACE_ID = "__inactive_agent_studio_workspace__";
 

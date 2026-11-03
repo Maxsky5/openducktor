@@ -1,4 +1,4 @@
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { useMemo } from "react";
 import { useTaskStopImpact } from "../../queries/use-task-stop-impact";
 import { useTaskWorktreeOwners } from "../../queries/use-task-worktree-owners";
@@ -18,13 +18,14 @@ type UseTaskConfirmDialogOptions = {
   /** The action. Without it, Confirm does nothing. */
   run: ((taskId: string) => Promise<void>) | undefined;
   onSucceeded: () => void;
+  onCommitted?: (() => Promise<void>) | undefined;
   taskCleanupImpactHook?: typeof useTaskCleanupImpact;
   taskStopImpactHook?: typeof useTaskStopImpact;
   taskWorktreeOwnersHook?: typeof useTaskWorktreeOwners;
 };
 
 export type TaskConfirmDialog = {
-  openDialog: () => void;
+  openDialog: (onCommitted?: () => Promise<void>) => void;
   dialog: TaskConfirmDialogState;
 };
 
@@ -36,6 +37,7 @@ export function useTaskConfirmDialog({
   initiallyOpen = false,
   run,
   onSucceeded,
+  onCommitted,
   taskCleanupImpactHook = useTaskCleanupImpact,
   taskStopImpactHook = useTaskStopImpact,
   taskWorktreeOwnersHook = useTaskWorktreeOwners,
@@ -48,6 +50,7 @@ export function useTaskConfirmDialog({
     scopeKey: taskId,
     run: taskId && run ? () => run(taskId) : undefined,
     onSucceeded,
+    onCommitted,
   });
   const loadImpact = dialog.open && run !== undefined;
   const cleanup = taskCleanupImpactHook(impactTaskIds, loadImpact);

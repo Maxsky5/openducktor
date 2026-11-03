@@ -1,7 +1,7 @@
 import {
   buildRoleWorkflowMapForTask,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { ComboboxGroup } from "@/components/ui/combobox";
@@ -35,7 +35,7 @@ type BuildWorkflowModelContextArgs = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   selectedSessionIdentity: AgentSessionIdentity | null;
-  role: AgentRole;
+  role: AgentRole | null;
   isSessionWorking: boolean;
   roleLabelByRole: Record<AgentRole, string>;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
@@ -80,10 +80,12 @@ export const buildWorkflowModelContext = ({
     roleWorkflowsByTask,
     liveSessionByRole,
   });
-  const selectedRoleAvailable = roleWorkflowsByTask[role].available;
+  const selectedRoleAvailable = role !== null && roleWorkflowsByTask[role]?.available === true;
   const selectedRoleReadOnlyReason = selectedRoleAvailable
     ? null
-    : `${roleLabelByRole[role]} is unavailable for this task right now.`;
+    : role
+      ? `${roleLabelByRole[role]} is unavailable for this task right now.`
+      : "This workflow step does not start an agent session.";
   const sessionSelectorGroups = buildSessionSelectorGroups({
     sessionsForTask,
     roleLabelByRole,
@@ -91,7 +93,8 @@ export const buildWorkflowModelContext = ({
   const sessionSelectorAutofocusByValue = Object.fromEntries(
     sessionsForTask.map((session) => [
       agentSessionIdentityKey(session),
-      roleWorkflowsByTask[session.role].available && session.activityState !== "waiting_input",
+      roleWorkflowsByTask[session.role]?.available === true &&
+        session.activityState !== "waiting_input",
     ]),
   );
   const sessionSelectorValue = selectedSessionIdentity

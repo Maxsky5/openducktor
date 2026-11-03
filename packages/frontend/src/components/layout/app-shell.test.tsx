@@ -110,7 +110,7 @@ import type {
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { AppShell } from "./app-shell";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
 const SESSION_SCOPE_STORAGE_KEY = "openducktor:sidebar:session-scope";
@@ -340,7 +340,6 @@ const createTasksState = (tasks: TaskCard[] = []): TasksStateContextValue => ({
   removeTaskWorktree: async () => undefined,
   resetTaskImplementation: async () => undefined,
   resetTask: async () => undefined,
-  transitionTask: async () => undefined,
   humanRequestChangesTask: async () => undefined,
 });
 

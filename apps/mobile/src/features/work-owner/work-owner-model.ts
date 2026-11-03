@@ -1,4 +1,5 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { TaskWorkflowRole } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { AgentSessionRecord, WorkspaceRecord, WorkspaceSession } from "@openducktor/contracts";
 import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
 import {
@@ -182,8 +183,9 @@ const activityTime = (record: AgentSessionRecord): number =>
 export const pickFeedbackBuilder = (
   records: readonly AgentSessionRecord[],
   worktreePath: string | null,
+  roleId: string,
 ): AgentSessionRecord | null => {
-  const builders = records.filter((record) => record.role === "build");
+  const builders = records.filter((record) => record.role === roleId);
   const worktree = worktreePath === null ? "" : normalizeWorkingDirectory(worktreePath);
   const inWorktree =
     worktree.length === 0
@@ -204,6 +206,7 @@ export const taskFeedbackTarget = (
   sessions: OwnerRead<readonly AgentSessionRecord[]>,
   worktreePath: string | null,
   retrySessions: () => void,
+  role: TaskWorkflowRole | null,
 ): WorkOwnerFeedbackTarget => {
   if (sessions.data === undefined) {
     if (sessions.error) {
@@ -215,11 +218,17 @@ export const taskFeedbackTarget = (
     }
     return { session: null, blockedReason: "Loading the task sessions.", retry: null };
   }
-  const builder = pickFeedbackBuilder(sessions.data, worktreePath);
+  if (!role)
+    return {
+      session: null,
+      blockedReason: "This workflow does not declare a feedback launch. Open its task actions.",
+      retry: null,
+    };
+  const builder = pickFeedbackBuilder(sessions.data, worktreePath, role.id);
   if (!builder) {
     return {
       session: null,
-      blockedReason: "Start the Builder for this task, then send the feedback.",
+      blockedReason: `Start the ${role.label} for this task, then send the feedback.`,
       retry: null,
     };
   }

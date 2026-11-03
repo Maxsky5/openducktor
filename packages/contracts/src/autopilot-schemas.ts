@@ -11,6 +11,8 @@ const autopilotOutcomeFieldsSchema = z.strictObject({
   workflowId: z.string().min(1),
   eventId: autopilotEventIdSchema,
   actionId: autopilotActionIdSchema,
+  /** The label of the automation in the workflow of the task. */
+  actionLabel: z.string().min(1),
   occurredAt: z.string().min(1),
 });
 

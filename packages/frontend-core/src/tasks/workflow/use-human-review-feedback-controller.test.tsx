@@ -7,6 +7,13 @@ import { useHumanReviewFeedbackController } from "./use-human-review-feedback-co
 const createState = (
   overrides: Partial<HumanReviewFeedbackState> = {},
 ): HumanReviewFeedbackState => ({
+  launch: {
+    role: "build",
+    roleLabel: "Builder",
+    launchActionId: "build_after_human_request_changes",
+    postStartAction: "kickoff",
+  },
+  confirmLabel: "Request Changes",
   taskId: "TASK-1",
   message: "Apply the requested changes.",
   ...overrides,

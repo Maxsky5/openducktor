@@ -4,7 +4,7 @@ import type {
   CodexAppServerThreadStatus,
 } from "@openducktor/contracts";
 import { type AgentEvent } from "@openducktor/core";
-import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/workflows";
+import { builtinTaskWorkflow } from "@openducktor/workflows";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
@@ -823,7 +823,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       method: "thread/resume",
       params: expect.objectContaining({
         threadId: "parent-thread",
-        config: expectedThreadConfig("/repo", AGENT_ROLE_TOOL_POLICY.build),
+        config: expectedThreadConfig("/repo", builtinTaskWorkflow.role("build").tools),
       }),
     });
   });

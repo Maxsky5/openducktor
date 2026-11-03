@@ -32,7 +32,6 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalController } from "./use-settings-modal-controller";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
-import type { BuiltinAutomationId as AutopilotActionId } from "@openducktor/workflows";
 
 enableReactActEnvironment();
 
@@ -279,7 +278,7 @@ describe("useSettingsModalController", () => {
   test("an open modal applies cached Autopilot settings and keeps unsaved rule edits", async () => {
     saveSettingsSnapshot = mock(async () => savedSettingsResult());
     const harness = createHookHarness(true);
-    const rules = (actionIds: AutopilotActionId[], alwaysStartQaReviewsFresh = false) => ({
+    const rules = (actionIds: string[], alwaysStartQaReviewsFresh = false) => ({
       alwaysStartQaReviewsFresh,
       rules: [
         { workflowId: "openducktor", eventId: "taskProgressedToAiReview" as const, actionIds },
@@ -764,7 +763,7 @@ describe("useSettingsModalController", () => {
       expect(didSave).toBe(true);
       expect(harness.getLatest().selectedRepoModelWarnings).toEqual([
         'Default Model runtime "Codex" is disabled.',
-        'Builder agent runtime "Codex" is disabled.',
+        'build agent runtime "Codex" is disabled.',
       ]);
       expect(harness.getLatest().hasRuntimeAvailabilityErrors).toBe(false);
       expect(harness.getLatest().settingsSectionErrorCountById.repositories).toBe(0);
@@ -1572,7 +1571,7 @@ describe("useSettingsModalController", () => {
 
       expect(didSave).toBe(false);
       expect(harness.getLatest().saveError).toBe(
-        "Specification agent default runtime kind is required when provider and model are configured.",
+        "spec agent default runtime kind is required when provider and model are configured.",
       );
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
     } finally {

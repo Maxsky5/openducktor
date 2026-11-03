@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { emptyArtifactSummary } from "@openducktor/workflows";
+import { emptyArtifactSummary } from "@openducktor/workflows/test-support";
 import {
   type CreateHostCommandRouterInput,
   createEffectHostCommandRouter,

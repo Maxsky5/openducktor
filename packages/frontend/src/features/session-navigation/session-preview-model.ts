@@ -1,9 +1,9 @@
 import type { AgentSessionLiveRef, AgentSessionScope } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import {
-  BUILTIN_STEPS,
   roleWorkflowForTask,
-  type BuiltinRoleId as AgentRole,
+  type WorkflowRoleId as AgentRole,
+  workflowRoleIcon,
 } from "@openducktor/workflows";
 import type { AgentWorkflowStep } from "@/components/features/agents/agent-studio-header.types";
 import type { WorkspaceActivityProjection } from "@openducktor/frontend-core/workspace-activity/workspace-activity-projection";
@@ -11,7 +11,8 @@ import {
   foldWorkspaceSessionLiveFacts,
   resolveWorkspaceSessionOwnerKey,
 } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
-import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
+import { CircleUserRound } from "lucide-react";
+import { roleIconForHint } from "@/lib/agent-role-presentation";
 import {
   agentSessionIdentityKey,
   toAgentSessionIdentity,
@@ -19,6 +20,7 @@ import {
 import { compareAgentSessionRecency } from "@openducktor/frontend-core/lib/agent-session-options";
 import {
   buildRoleWorkflowState,
+  buildHumanWorkflowState,
   workflowStepRailState,
 } from "@openducktor/frontend-core/lib/agent-workflow-state";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
@@ -130,7 +132,21 @@ const previewWorkflow = (
   const facts = projection
     ? foldWorkspaceSessionLiveFacts(projection.sessions, projection.faults)
     : null;
-  const steps: AgentWorkflowStep[] = BUILTIN_STEPS.map((step) => {
+  const steps: AgentWorkflowStep[] = context.task.taskWorkflow.definition.steps.map((step) => {
+    if (step.kind === "human")
+      return {
+        id: step.id,
+        role: null,
+        human: true,
+        label: step.label,
+        icon: CircleUserRound,
+        state: buildHumanWorkflowState(
+          context.task.workflowSteps.find(({ id }) => id === step.id)!,
+        ),
+        sessionValue: null,
+        hint: step.label,
+        attentionVariant: "none",
+      };
     const latest = context.sessions
       .filter((session) => session.role === step.roleId)
       .toSorted(compareAgentSessionRecency)[0];
@@ -156,7 +172,7 @@ const previewWorkflow = (
       id: step.id,
       role: step.roleId,
       label: step.label,
-      icon: AGENT_ROLE_ICONS[step.roleId],
+      icon: roleIconForHint(workflowRoleIcon(context.task.taskWorkflow, step.roleId)),
       state: buildRoleWorkflowState({
         task: context.task,
         role: step.roleId,

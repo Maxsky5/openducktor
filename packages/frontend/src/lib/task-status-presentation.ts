@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard, type KanbanColumnId } from "@openducktor/workflows";
+import type { SharedBoardState, WorkflowTone } from "@openducktor/contracts";
 import {
   statusTone,
   type TaskStatusTone,
@@ -13,11 +13,8 @@ type KanbanLaneTheme = {
   emptyStateClass: string;
 };
 
-type TaskStatusLaneTheme = {
-  laneTheme?: KanbanLaneTheme;
-};
-
-const DEFAULT_LANE_THEME: KanbanLaneTheme = {
+/** The lanes of the board loading shell, before any board state is known. */
+export const LOADING_LANE_THEME: KanbanLaneTheme = {
   boardSurfaceClass: "border-border/90 bg-muted/55",
   headerSurfaceClass: "bg-muted/70",
   headerAccentClass: "bg-muted/0",
@@ -26,7 +23,7 @@ const DEFAULT_LANE_THEME: KanbanLaneTheme = {
 };
 
 const TASK_STATUS_PRESENTATION = {
-  open: {
+  neutral: {
     laneTheme: {
       boardSurfaceClass: "border-border/90 bg-muted/60",
       headerSurfaceClass: "bg-muted/80",
@@ -36,7 +33,7 @@ const TASK_STATUS_PRESENTATION = {
       emptyStateClass: "border-input bg-card/80 text-muted-foreground",
     },
   },
-  spec_ready: {
+  pending: {
     laneTheme: {
       boardSurfaceClass:
         "border-violet-200/90 dark:border-violet-800/60 bg-violet-50/55 dark:bg-violet-950/30",
@@ -48,7 +45,7 @@ const TASK_STATUS_PRESENTATION = {
         "border-violet-300 dark:border-violet-800 bg-card/80 text-violet-700 dark:text-violet-300",
     },
   },
-  ready_for_dev: {
+  info: {
     laneTheme: {
       boardSurfaceClass: "border-sky-200/90 dark:border-sky-800/60 bg-sky-50/55 dark:bg-sky-950/30",
       headerSurfaceClass: "bg-sky-50/75 dark:bg-sky-950/40",
@@ -58,7 +55,7 @@ const TASK_STATUS_PRESENTATION = {
         "border-sky-300 dark:border-sky-800 bg-card/80 text-sky-700 dark:text-sky-300",
     },
   },
-  in_progress: {
+  warning: {
     laneTheme: {
       boardSurfaceClass:
         "border-amber-200/90 dark:border-amber-800/60 bg-amber-50/55 dark:bg-amber-950/30",
@@ -70,7 +67,7 @@ const TASK_STATUS_PRESENTATION = {
         "border-amber-300 dark:border-amber-800 bg-card/80 text-amber-700 dark:text-amber-300",
     },
   },
-  blocked: {
+  destructive: {
     laneTheme: {
       boardSurfaceClass:
         "border-rose-200/90 dark:border-rose-800/60 bg-rose-50/55 dark:bg-rose-950/30",
@@ -82,7 +79,7 @@ const TASK_STATUS_PRESENTATION = {
         "border-rose-300 dark:border-rose-800 bg-card/80 text-rose-700 dark:text-rose-300",
     },
   },
-  ai_review: {
+  review: {
     laneTheme: {
       boardSurfaceClass:
         "border-indigo-200/90 dark:border-indigo-800/60 bg-indigo-50/55 dark:bg-indigo-950/30",
@@ -94,7 +91,7 @@ const TASK_STATUS_PRESENTATION = {
         "border-indigo-300 dark:border-indigo-800 bg-card/80 text-indigo-700 dark:text-indigo-300",
     },
   },
-  human_review: {
+  approval: {
     laneTheme: {
       boardSurfaceClass:
         "border-cyan-200/90 dark:border-cyan-800/60 bg-cyan-50/55 dark:bg-cyan-950/30",
@@ -106,7 +103,7 @@ const TASK_STATUS_PRESENTATION = {
         "border-cyan-300 dark:border-cyan-800 bg-card/80 text-cyan-700 dark:text-cyan-300",
     },
   },
-  closed: {
+  success: {
     laneTheme: {
       boardSurfaceClass:
         "border-emerald-200/90 dark:border-emerald-800/60 bg-emerald-50/55 dark:bg-emerald-950/30",
@@ -118,7 +115,7 @@ const TASK_STATUS_PRESENTATION = {
         "border-emerald-300 dark:border-emerald-800 bg-card/80 text-emerald-700 dark:text-emerald-300",
     },
   },
-} satisfies Record<TaskCard["status"], TaskStatusLaneTheme>;
+} satisfies Record<WorkflowTone, { laneTheme: KanbanLaneTheme }>;
 
 /** Badge classes of each status tone. Light and dark themes use the same semantic tokens. */
 const STATUS_TONE_BADGE_CLASS_NAMES = {
@@ -134,8 +131,8 @@ const STATUS_TONE_BADGE_CLASS_NAMES = {
   success: "border-success-border bg-success-surface text-success-muted",
 } satisfies Record<TaskStatusTone, string>;
 
-export const statusBadgeClassName = (status: TaskCard["status"]): string =>
+export const statusBadgeClassName = (status: SharedBoardState): string =>
   STATUS_TONE_BADGE_CLASS_NAMES[statusTone(status)];
 
-export const laneTheme = (columnId: KanbanColumnId): KanbanLaneTheme =>
-  TASK_STATUS_PRESENTATION[columnId].laneTheme ?? DEFAULT_LANE_THEME;
+export const laneTheme = (tone: WorkflowTone): KanbanLaneTheme =>
+  TASK_STATUS_PRESENTATION[tone].laneTheme;

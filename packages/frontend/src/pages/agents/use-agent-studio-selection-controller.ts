@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
+import { taskWorkflowContextQueryOptions } from "@openducktor/frontend-core/queries/task-workflow-context";
 import { useMemo } from "react";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
@@ -12,8 +14,8 @@ import {
 } from "./selected-session/use-agent-studio-selected-session-view";
 import type { AgentStudioSelectionState } from "./shell/agent-studio-selection-state";
 import type {
-  BuiltinRoleId as AgentRole,
-  BuiltinTaskCard as TaskCard,
+  WorkflowRoleId as AgentRole,
+  ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 
 type UseAgentStudioSelectionControllerArgs = {
@@ -26,7 +28,7 @@ type UseAgentStudioSelectionControllerArgs = {
   taskIdParam: string;
   sessionExternalIdParam: string | null;
   hasExplicitRoleParam: boolean;
-  roleFromQuery: AgentRole;
+  roleFromQuery: AgentRole | null;
   selectionState: AgentStudioSelectionState;
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
@@ -66,6 +68,21 @@ export function useAgentStudioSelectionController({
   isLoadingRepoSettings,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
+  const selectedTaskIsListed = tasks.some(({ id }) => id === selectionState.taskId);
+  const retainedTask = useQuery({
+    ...taskWorkflowContextQueryOptions(
+      activeWorkspaceId && workspaceRepoPath
+        ? { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath }
+        : null,
+      selectionState.taskId,
+    ),
+    enabled:
+      !!workspaceRepoPath && !!selectionState.taskId && !isLoadingTasks && !selectedTaskIsListed,
+  });
+  const navigationTasks = useMemo(
+    () => (selectedTaskIsListed || !retainedTask.data ? tasks : [...tasks, retainedTask.data]),
+    [selectedTaskIsListed, retainedTask.data, tasks],
+  );
 
   const navigationState = useMemo(
     () =>
@@ -73,7 +90,7 @@ export function useAgentStudioSelectionController({
         isWorkspaceRestorePending,
         isLoadingTasks,
         sessionReadModelLoadState,
-        tasks,
+        tasks: navigationTasks,
         sessions,
         taskIdParam,
         sessionExternalIdParam,
@@ -91,7 +108,7 @@ export function useAgentStudioSelectionController({
       sessionReadModelLoadState,
       sessions,
       taskIdParam,
-      tasks,
+      navigationTasks,
     ],
   );
 
@@ -119,7 +136,9 @@ export function useAgentStudioSelectionController({
     runtimeReadinessState: selectedSessionView.selectedSession.runtimeReadiness.state,
   });
   const selectedSessionViewWithContextError = useMemo<AgentStudioSelectedSessionView>(() => {
-    if (contextLoadError === null) {
+    const metadataError = !selectedTaskIsListed ? (retainedTask.error?.message ?? null) : null;
+    const error = metadataError ?? contextLoadError;
+    if (error === null) {
       return selectedSessionView;
     }
     return {
@@ -128,12 +147,12 @@ export function useAgentStudioSelectionController({
         ...selectedSessionView.selectedSession,
         runtimeData: {
           ...selectedSessionView.selectedSession.runtimeData,
-          contextError: contextLoadError,
+          contextError: error,
         },
       },
     };
-  }, [contextLoadError, selectedSessionView]);
-  const isActiveTaskReady = Boolean(activeWorkspaceId && navigationState.view.taskId);
+  }, [contextLoadError, selectedSessionView, selectedTaskIsListed, retainedTask.error]);
+  const isActiveTaskReady = Boolean(activeWorkspaceId && navigationState.view.selectedTask);
 
   return useMemo<AgentStudioSelectionControllerResult>(
     () => ({

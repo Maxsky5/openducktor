@@ -125,7 +125,9 @@ test("shows a closeable skeleton while context tasks load, then shows the task",
     expect(within(dialog).getByRole("status").getAttribute("aria-busy")).toBe("true");
     expect(dialog.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(5);
     expect(h.container.textContent).not.toContain("Loading task details");
-    expect(h.queryClient.isFetching({ queryKey: taskQueryKeys.all })).toBe(0);
+    expect(
+      h.queryClient.isFetching({ queryKey: taskQueryKeys.repoDataPrefix(activeWorkspace) }),
+    ).toBe(0);
     fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
     expect(h.closed).toEqual([false]);
     snapshot.tasks = [createTaskCardFixture({ id: "task-1", title: "Loaded task" })];
@@ -150,7 +152,9 @@ test("uses a task already in context without a task-list request", () => {
   try {
     expect(h.getByRole("dialog", { name: "Cached task" })).toBeTruthy();
     expect(h.queryByRole("status", { name: "Loading task details" })).toBeNull();
-    expect(h.queryClient.isFetching({ queryKey: taskQueryKeys.all })).toBe(0);
+    expect(
+      h.queryClient.isFetching({ queryKey: taskQueryKeys.repoDataPrefix(activeWorkspace) }),
+    ).toBe(0);
   } finally {
     h.dispose();
   }

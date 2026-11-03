@@ -36,6 +36,7 @@ const failed = (launchResult?: WorkflowLaunchResult): AutopilotFailedOutcome => 
     workflowId: "openducktor",
     eventId: "taskRejectedByQa",
     actionId: "startReviewQaFeedbacks",
+    actionLabel: "Start Review QA Feedbacks",
     occurredAt: "2026-10-10T00:00:00.000Z",
     outcomeId: "failed-1",
     kind: "failed",

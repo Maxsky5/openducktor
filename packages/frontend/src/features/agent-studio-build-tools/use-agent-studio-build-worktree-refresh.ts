@@ -55,10 +55,10 @@ export function useAgentStudioBuildWorktreeRefresh({
 
   useEffect(() => {
     if (
-      role !== "build" ||
+      role === null ||
       !loadedSession ||
       !isWorkflowAgentSession(loadedSession) ||
-      loadedSession.sessionAssociation.role !== "build"
+      loadedSession.sessionAssociation.role !== role
     ) {
       return;
     }

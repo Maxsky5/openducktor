@@ -124,9 +124,7 @@ describe("TaskCloseConfirmDialog", () => {
       screen.getByText("1 active agent session will be stopped before closing."),
     ).toBeDefined();
     expect(screen.getByText("Closing does not merge code or change a pull request.")).toBeDefined();
-    expect(
-      screen.getByText(/Keep artifacts, session history and the pull request link/),
-    ).toBeDefined();
+    expect(screen.getByText(/moves to its workflow's terminal state/)).toBeDefined();
 
     unmount();
   });

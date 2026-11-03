@@ -1,10 +1,11 @@
+import { renderWithWorkflow as render } from "@/test-utils/workflow-provider";
 import { afterEach, expect, test } from "bun:test";
 import {
   claudeRuntimeConfigSchema,
   type ClaudeRuntimeConfig,
   type ClaudeToolCatalog,
 } from "@openducktor/contracts";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { useState } from "react";
 import { ClaudeToolAvailabilityEditor } from "./settings-claude-tool-availability";
 

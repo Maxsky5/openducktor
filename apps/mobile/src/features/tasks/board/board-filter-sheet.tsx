@@ -1,4 +1,4 @@
-import { type BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
+import type { WorkflowIcon } from "@openducktor/contracts";
 import type { KanbanBoardFilterModel } from "@openducktor/frontend-core/tasks/board/use-kanban-board-filter-model";
 import { type ReactElement, type ReactNode, useState } from "react";
 import { View } from "react-native";
@@ -15,11 +15,7 @@ import { Touchable } from "@/ui/touchable";
 import { issueTypePaint } from "../presentation/task-badge-paint";
 import { IssueTypeMark } from "../presentation/task-chip";
 import { chipColors, priorityChipPaint } from "../presentation/task-chip-paint";
-import {
-  ISSUE_TYPE_FILTER_OPTIONS,
-  PRIORITY_FILTER_OPTIONS,
-  toggleFilterValue,
-} from "./board-filter-controls";
+import { PRIORITY_FILTER_OPTIONS, toggleFilterValue } from "./board-filter-controls";
 
 /** The Labels list shows a search field from this many labels, as the desktop Labels menu. */
 const LABEL_SEARCH_THRESHOLD = 7;
@@ -123,6 +119,7 @@ export function BoardFilterSheet({
     ? labelOptions.filter((label) => label.toLowerCase().includes(term))
     : labelOptions;
   const selectedLabels = new Set(value.labels);
+  const selectedTypes = new Set(value.issueTypes);
   return (
     <InPlaceSheet
       visible={visible}
@@ -177,13 +174,13 @@ export function BoardFilterSheet({
         ))}
       </FilterGroup>
       <FilterGroup title="Type" icon="blocks" count={value.issueTypes.length}>
-        {ISSUE_TYPE_FILTER_OPTIONS.map((option) => (
+        {filter.issueTypeOptions.map((option) => (
           <FilterOption
             key={option.value}
             label={option.label}
             accessibilityLabel={option.label}
-            leading={<TypeIcon issueType={option.value} />}
-            checked={value.issueTypes.includes(option.value)}
+            leading={<TypeIcon hint={option.icon} />}
+            checked={selectedTypes.has(option.value)}
             onToggle={() =>
               onChange({ issueTypes: toggleFilterValue(value.issueTypes, option.value) })
             }
@@ -216,8 +213,14 @@ export function BoardFilterSheet({
   );
 }
 
-function TypeIcon({ issueType }: { issueType: IssueType }): ReactElement {
-  return <IssueTypeMark issueType={issueType} icon={issueTypePaint(issueType).icon} size={15} />;
+function TypeIcon({ hint }: { hint?: WorkflowIcon | undefined }): ReactElement {
+  return (
+    <IssueTypeMark
+      hint={hint}
+      icon={issueTypePaint({ id: "", label: "", icon: hint }).icon}
+      size={15}
+    />
+  );
 }
 
 const styles = StyleSheet.create((theme) => ({

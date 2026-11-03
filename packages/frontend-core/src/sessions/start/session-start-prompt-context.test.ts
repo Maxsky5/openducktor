@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentKickoffTemplateId } from "@openducktor/workflows";
 import {
   FEEDBACK_MESSAGE_REQUIRED_ERROR,
   resolveSessionStartKickoffPromptContext,
 } from "./session-start-prompt-context";
 
-const CONTEXT_FREE_TEMPLATES: AgentKickoffTemplateId[] = [
+const CONTEXT_FREE_TEMPLATES = [
   "kickoff.spec_initial",
   "kickoff.planner_initial",
   "kickoff.build_implementation_start",
@@ -18,6 +17,7 @@ describe("resolveSessionStartKickoffPromptContext", () => {
     expect(
       resolveSessionStartKickoffPromptContext({
         templateId,
+        context: "none",
         repoDefaultTargetBranch: { remote: "origin", branch: "main" },
       }),
     ).toEqual({});
@@ -27,6 +27,7 @@ describe("resolveSessionStartKickoffPromptContext", () => {
     expect(
       resolveSessionStartKickoffPromptContext({
         templateId: "kickoff.build_after_human_request_changes",
+        context: "human_feedback",
         message: "  Address every review comment.  ",
         repoDefaultTargetBranch: null,
       }),
@@ -41,6 +42,7 @@ describe("resolveSessionStartKickoffPromptContext", () => {
     expect(() =>
       resolveSessionStartKickoffPromptContext({
         templateId: "kickoff.build_after_human_request_changes",
+        context: "human_feedback",
         message: "   ",
         repoDefaultTargetBranch: null,
       }),
@@ -51,6 +53,7 @@ describe("resolveSessionStartKickoffPromptContext", () => {
     expect(
       resolveSessionStartKickoffPromptContext({
         templateId: "kickoff.build_pull_request_generation",
+        context: "pull_request",
         taskTargetBranch: {
           remote: "upstream",
           branch: "release/2026.04",
@@ -71,6 +74,7 @@ describe("resolveSessionStartKickoffPromptContext", () => {
     expect(
       resolveSessionStartKickoffPromptContext({
         templateId: "kickoff.build_pull_request_generation",
+        context: "pull_request",
         repoDefaultTargetBranch: { remote: "upstream", branch: "develop" },
       }),
     ).toEqual({

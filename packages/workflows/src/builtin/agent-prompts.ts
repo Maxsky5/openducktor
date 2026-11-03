@@ -102,34 +102,33 @@ const launchActionOf = (templateId: string): string => {
   return launchActionId;
 };
 
-/** Required facts stay outside custom task text so overrides cannot drop the target. */
-export const buildGitConflictAssistancePrompt = (input: {
-  git: GitConflictRequestContext;
-  task?: { context: BuildAgentMessagePromptInput["task"]; overrides: RepoPromptOverrides };
-}): string => {
-  const { git, task } = input;
+const unavailable = (value: string | null) => value?.trim() || "Unavailable";
+
+/** The labelled conflict facts that a Git conflict message template renders. */
+export const gitConflictPromptContext = (git: GitConflictRequestContext): AgentPromptGitContext => {
   if (!git.operation || !git.workingDirectory.trim()) {
     throw new Error(
       "Restore the Git conflict operation and working directory before asking for assistance.",
     );
   }
-  const operationLabel = GIT_CONFLICT_OPERATION_LABELS[git.operation];
-  const available = (value: string | null) => value?.trim() || "Unavailable";
-  const instructions = task
-    ? buildAgentMessagePrompt({
-        role: "build",
-        templateId: "message.build_rebase_conflict_resolution",
-        task: task.context,
-        overrides: task.overrides,
-        git: {
-          operationLabel,
-          currentBranch: available(git.currentBranch),
-          targetBranch: available(git.targetBranch),
-          conflictedFiles: [...git.conflictedFiles],
-          conflictOutput: available(git.conflictOutput),
-        },
-      })
-    : GIT_CONFLICT_INSTRUCTIONS;
+  return {
+    operationLabel: GIT_CONFLICT_OPERATION_LABELS[git.operation],
+    currentBranch: unavailable(git.currentBranch),
+    targetBranch: unavailable(git.targetBranch),
+    conflictedFiles: [...git.conflictedFiles],
+    conflictOutput: unavailable(git.conflictOutput),
+  };
+};
+
+/** Required facts stay outside custom task text so overrides cannot drop the target. */
+export const buildGitConflictAssistancePrompt = (input: {
+  git: GitConflictRequestContext;
+  instructions?: string;
+}): string => {
+  const { git } = input;
+  const { operationLabel } = gitConflictPromptContext(git);
+  const available = unavailable;
+  const instructions = input.instructions ?? GIT_CONFLICT_INSTRUCTIONS;
   return [
     instructions,
     [

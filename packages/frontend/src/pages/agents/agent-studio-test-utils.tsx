@@ -1,3 +1,5 @@
+import { workflowQueryKeys } from "@openducktor/frontend-core/queries/workflows";
+import { builtinCompiledCatalogFixture } from "@openducktor/frontend-core/test-support/workflow-fixtures";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   type ComponentProps,
@@ -35,7 +37,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 type RuntimeDefinitionsContextValue = NonNullable<
   ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"]
@@ -56,6 +58,7 @@ type HookHarnessOptions = {
   hostRuntimeStatusContext?: HostRuntimeStatusContextValue;
   hostRuntimeStatusContextRef?: { current: HostRuntimeStatusContextValue };
   seedSettingsSnapshot?: boolean;
+  seedWorkflowCatalog?: boolean;
   wrapper?: (props: PropsWithChildren) => ReactElement;
 };
 
@@ -148,6 +151,8 @@ export const createHookHarness = <Props, State>(
         : { feedback: sonnerFeedback },
     );
   const queryClient = connection.queryClient;
+  if (options?.seedWorkflowCatalog !== false)
+    queryClient.setQueryData(workflowQueryKeys.catalog, builtinCompiledCatalogFixture);
   if (options?.seedSettingsSnapshot !== false) {
     queryClient.setQueryData(
       settingsSnapshotQueryOptions().queryKey,

@@ -128,7 +128,7 @@ test("sends the review feedback and the pre-start action with the kickoff", asyn
     request: {
       ...baseRequest,
       launchActionId: "build_after_human_request_changes",
-      message: "Review feedback",
+      humanFeedback: "Review feedback",
       beforeStartAction,
     },
   });
@@ -161,26 +161,35 @@ test("sends no instruction when the start has no post-start action", async () =>
   expect(sentRequest(launch).instruction).toEqual({ kind: "none" });
 });
 
-test("a git conflict reuse start sends no target working directory", async () => {
-  const launch = createLaunch({ startMode: "reuse" });
-  await start(launch, {
-    request: {
+test.each(["message", "parts"] as const)(
+  "a git conflict reuse start preserves explicit %s and sends no target working directory",
+  async (instruction) => {
+    const launch = createLaunch({ startMode: "reuse" });
+    const request: SessionStartFlowRequest = {
       ...baseRequest,
       launchActionId: "build_rebase_conflict_resolution",
       postStartAction: "send_message",
-      message: "Resolve the conflict",
       targetWorkingDirectory: "/repo/conflict",
-    },
-    decision: { startMode: "reuse", sourceSession },
-  });
-  const request = sentRequest(launch);
-  expect(request.policy).toEqual({
-    kind: "manual",
-    actionId: "build_rebase_conflict_resolution",
-    decision: { startMode: "reuse", sourceSession },
-  });
-  expect(() => workflowLaunchRequestSchema.parse(request)).not.toThrow();
-});
+    };
+    if (instruction === "message") request.message = "  Resolve this exact conflict  ";
+    else request.parts = [{ kind: "text", text: "  Resolve this exact conflict  " }];
+    await start(launch, {
+      request,
+      decision: { startMode: "reuse", sourceSession },
+    });
+    const sent = sentRequest(launch);
+    expect(sent.instruction).toEqual({
+      kind: "message",
+      parts: [{ kind: "text", text: "  Resolve this exact conflict  " }],
+    });
+    expect(sent.policy).toEqual({
+      kind: "manual",
+      actionId: "build_rebase_conflict_resolution",
+      decision: { startMode: "reuse", sourceSession },
+    });
+    expect(() => workflowLaunchRequestSchema.parse(sent)).not.toThrow();
+  },
+);
 
 test.each(["fast", null] as const)("a reuse start sends the selected speed %p", async (speed) => {
   const launch = createLaunch({ startMode: "reuse" });
