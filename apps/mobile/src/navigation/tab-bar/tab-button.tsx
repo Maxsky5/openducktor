@@ -1,6 +1,6 @@
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { memo, type ReactElement } from "react";
-import { Platform, View } from "react-native";
+import { View } from "react-native";
 import Animated, {
   Extrapolation,
   interpolate,
@@ -40,23 +40,9 @@ const TAB_ICON_SIZE = 25;
  * inside the fixed row of the bar at the largest text sizes.
  */
 const MAX_FONT_SCALE = 1.3;
-/** VoiceOver reads the position of a tab, such as "1 of 4", only inside a tab bar. */
-export const TAB_ROW_ROLE = Platform.OS === "ios" ? "tabbar" : "tablist";
 
 /** The bottom bar of portrait, or the rail on the left edge of a low window. */
 export type TabPlacement = "bottom" | "rail";
-
-type TabNavigation = Pick<BottomTabBarProps, "state" | "emitter" | "navigateToTab">;
-
-/** Presses the tab of `routeKey`, as the default tab bar does. */
-export const pressTabRoute = (
-  routeKey: string,
-  { state, emitter, navigateToTab }: TabNavigation,
-): void => {
-  const focused = state.routes[state.index]?.key === routeKey;
-  const event = emitter.emit({ type: "tabPress", target: routeKey, canPreventDefault: true });
-  if (!focused && !event.defaultPrevented) navigateToTab(routeKey);
-};
 
 /** The create button goes after this many tabs. */
 const CREATE_SLOT = 2;

@@ -16,7 +16,8 @@ import {
   tabBarEdgePath,
   tabBarPath,
 } from "./tab-bar-geometry";
-import { pressTabRoute, TAB_ROW_ROLE, TabButtons } from "./tab-button";
+import { TabButtons } from "./tab-button";
+import { pressTabRoute, TAB_ROW_ROLE } from "./tab-route";
 import { useCreateFan } from "./use-create-fan";
 
 /** The room beside the right edge of the rail for its hairline. */
