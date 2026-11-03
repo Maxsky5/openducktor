@@ -254,7 +254,7 @@ describe("SessionStartModal", () => {
       const close = within(footer).getByRole("button", { name: "Close" });
       expect(close.className).toContain("self-start");
       expect(close.className).toContain("sm:self-auto");
-      expect(footer.lastElementChild).toBe(close);
+      expect(view.queryByRole("button", { name: "Edit choices" })).toBeNull();
       await act(async () => {
         await connection.startupAttempts.operation(startupAttemptId, async (context) => ({
           startupProgress: {
@@ -280,7 +280,7 @@ describe("SessionStartModal", () => {
     }
   });
 
-  test("shows startup actions only for unsaved choices", async () => {
+  test("right-aligns startup actions when the attempt has unsaved choices", async () => {
     const connection = createTestClientConnection();
     const startupAttemptId = connection.startupAttempts.begin({
       origin: {

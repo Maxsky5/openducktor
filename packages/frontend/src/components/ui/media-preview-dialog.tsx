@@ -128,6 +128,7 @@ export function MediaPreviewDialog({
         </DialogBody>
         {actions ? (
           <DialogFooter className="mt-0">
+            {/* The footer stacks below sm, so fill the row to keep the actions right. */}
             <div className="flex w-full justify-end">{actions}</div>
           </DialogFooter>
         ) : null}

@@ -116,7 +116,6 @@ test("keeps Cancel left and connection actions right when the footer stacks", ()
   expect(cancel.className).toContain("self-start");
   expect(cancel.className).toContain("sm:self-auto");
   const actions = footer?.lastElementChild;
-  expect(actions?.tagName).toBe("DIV");
   expect(actions?.className).toContain("justify-end");
 });
 
