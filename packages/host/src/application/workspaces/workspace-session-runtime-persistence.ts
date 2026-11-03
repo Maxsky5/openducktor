@@ -102,7 +102,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       }
       yield* publishUpdated(known.ref.workspaceId, saved);
     });
-  const { find, findAll } = createWorkspaceSessionRuntimeOwners({ store, settings });
+  const { find } = createWorkspaceSessionRuntimeOwners({ store, settings });
   const requireActive = (session: WorkspaceSession) =>
     session.archivedAt === null
       ? Effect.void
@@ -261,16 +261,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
     message: AcceptedAgentUserMessage,
   ) =>
     Effect.gen(function* () {
-      const associations = yield* findAll(runtimeRef);
-      if (associations.length > 1) {
-        for (const known of associations) {
-          const plan = yield* planAcceptedMessage(known, runtimeRef, message);
-          const saved = yield* storeEffect(store.recordAcceptedMessage(plan.input));
-          yield* publishUpdated(known.ref.workspaceId, saved);
-        }
-        return;
-      }
-      const known = associations[0];
+      const known = yield* find(runtimeRef);
       if (!known) return;
       const plan = yield* planAcceptedMessage(known, runtimeRef, message);
       if (titleSyncNeedsTurn(runtimeRef.runtimeKind))
@@ -294,19 +285,18 @@ export const createWorkspaceSessionRuntimePersistence = ({
     });
   const recordActivity = (runtimeRef: AgentSessionLiveRef, occurredAt: number) =>
     Effect.gen(function* () {
-      const associations = yield* findAll(runtimeRef);
-      for (const known of associations) {
-        if (occurredAt > (known.session.lastActivityAt ?? known.session.createdAt)) {
-          const saved = yield* storeEffect(
-            store.recordActivity({
-              ...known.ref,
-              activity: { type: "session_activity", occurredAt },
-            }),
-          );
-          yield* publishUpdated(known.ref.workspaceId, saved);
-        }
+      const known = yield* find(runtimeRef);
+      if (!known) return false;
+      if (occurredAt > (known.session.lastActivityAt ?? known.session.createdAt)) {
+        const saved = yield* storeEffect(
+          store.recordActivity({
+            ...known.ref,
+            activity: { type: "session_activity", occurredAt },
+          }),
+        );
+        yield* publishUpdated(known.ref.workspaceId, saved);
       }
-      return associations.length > 0;
+      return true;
     });
   const validateRef = (runtimeRef: ScopedAgentSessionRef) =>
     Effect.gen(function* () {

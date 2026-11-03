@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { RuntimeReadinessState } from "../../../lib/runtime-readiness";
 import { useStableAgentSessionIdentity } from "../../../lib/use-stable-agent-session-identity";
+import { useStableAgentSessionScope } from "../../../lib/use-stable-agent-session-scope";
 import {
   sessionTodosQueryOptions,
   skippedSessionTodosQueryOptions,
@@ -28,6 +29,8 @@ import {
   resolveSettingsIndependentAgentSessionRuntimePolicy,
 } from "../support/session-runtime-policy";
 import { resolveSessionRuntimeScope } from "../support/session-runtime-scope";
+
+const UNBOUND_ASSOCIATION: AgentSessionAssociation = { kind: "unbound" };
 
 type UseSessionRuntimeDataArgs = {
   repoPath: string | null;
@@ -49,57 +52,21 @@ export const useSessionRuntimeData = ({
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
   const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSession?.identity);
-  const selectedAssociationKind = selectedSession?.sessionAssociation.kind ?? null;
-  const selectedTaskId =
-    selectedSession?.sessionAssociation.kind === "workflow"
-      ? selectedSession.sessionAssociation.taskId
-      : null;
-  const selectedWorkspaceId =
-    selectedSession?.sessionAssociation.kind === "workflow" ||
-    selectedSession?.sessionAssociation.kind === "repository"
-      ? selectedSession.sessionAssociation.workspaceId
-      : null;
-  const selectedRole =
-    selectedSession?.sessionAssociation.kind === "workflow"
-      ? selectedSession.sessionAssociation.role
-      : null;
+  const selectedAssociation = selectedSession?.sessionAssociation ?? null;
+  const stableSelectedScope = useStableAgentSessionScope(
+    selectedAssociation?.kind === "unbound" ? null : selectedAssociation,
+  );
   const selectedModel = selectedSession?.selectedModel ?? null;
   const stableSelectedSession = useMemo<SessionRuntimeDataTarget | null>(() => {
-    if (!stableSelectedSessionIdentity || !selectedAssociationKind) {
+    if (!stableSelectedSessionIdentity) {
       return null;
-    }
-    let sessionAssociation: AgentSessionAssociation;
-    if (selectedAssociationKind === "workflow") {
-      if (!selectedTaskId || !selectedRole || !selectedWorkspaceId) {
-        throw new Error("Workflow session runtime data requires a task id and role.");
-      }
-      sessionAssociation = {
-        kind: "workflow",
-        workspaceId: selectedWorkspaceId,
-        taskId: selectedTaskId,
-        role: selectedRole,
-      };
-    } else if (selectedAssociationKind === "repository") {
-      if (!selectedWorkspaceId) {
-        throw new Error("Workspace session runtime data requires a workspace id.");
-      }
-      sessionAssociation = { kind: "repository", workspaceId: selectedWorkspaceId };
-    } else {
-      sessionAssociation = { kind: "unbound" };
     }
     return {
       identity: stableSelectedSessionIdentity,
-      sessionAssociation,
+      sessionAssociation: stableSelectedScope ?? UNBOUND_ASSOCIATION,
       selectedModel,
     };
-  }, [
-    selectedAssociationKind,
-    stableSelectedSessionIdentity,
-    selectedModel,
-    selectedRole,
-    selectedWorkspaceId,
-    selectedTaskId,
-  ]);
+  }, [stableSelectedScope, stableSelectedSessionIdentity, selectedModel]);
   const runtimePolicyTarget = useMemo(() => {
     if (stableSelectedSession === null) {
       return null;

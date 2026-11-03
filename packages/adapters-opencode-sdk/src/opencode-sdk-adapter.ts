@@ -105,10 +105,6 @@ const nativeModelSelection = (model: AgentModelSelection): ModelRef => {
 const newSessionIdSchema = z.object({ id: z.string().startsWith("ses") });
 
 /** One controller for an owned authenticated V2 runtime. */
-const sameRuntimeScope = (left: AgentSessionScope, right: AgentSessionScope): boolean =>
-  (left.kind === "repository" && right.kind === "repository") ||
-  agentSessionScopesEqual(left, right);
-
 export class OpencodeSdkAdapter {
   readonly client: OpenCodeClient;
   private readonly generations = new Map<string, number>();
@@ -210,7 +206,7 @@ export class OpencodeSdkAdapter {
       previous &&
       (previous.ref.repoPath !== ref.repoPath ||
         previous.ref.workingDirectory !== ref.workingDirectory ||
-        !sameRuntimeScope(previous.scope, scope))
+        !agentSessionScopesEqual(previous.scope, scope))
     )
       throw operationError(
         ref,
@@ -234,7 +230,7 @@ export class OpencodeSdkAdapter {
       previous &&
       (previous.ref.repoPath !== input.repoPath ||
         previous.ref.workingDirectory !== input.workingDirectory ||
-        !sameRuntimeScope(previous.scope, input.sessionScope))
+        !agentSessionScopesEqual(previous.scope, input.sessionScope))
     )
       throw operationError(
         input,
@@ -487,7 +483,7 @@ export class OpencodeSdkAdapter {
       );
     if (
       !agentSessionRefsEqual(binding.ref, input) ||
-      !sameRuntimeScope(binding.scope, input.sessionScope)
+      !agentSessionScopesEqual(binding.scope, input.sessionScope)
     )
       throw operationError(
         input,
