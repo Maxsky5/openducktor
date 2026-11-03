@@ -123,7 +123,7 @@ function Footer({
       >
         Close
       </Button>
-      <div className="flex flex-col items-start gap-2 self-end sm:flex-row sm:items-center sm:self-auto">
+      <div className="flex flex-col items-end gap-2 self-end sm:flex-row sm:items-center sm:self-auto">
         {onEditChoices && attempt?.ownership.state === "not_saved" ? (
           <Button type="button" size="sm" variant="secondary" onClick={onEditChoices}>
             <Pencil data-icon="inline-start" />

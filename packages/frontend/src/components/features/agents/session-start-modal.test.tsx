@@ -257,6 +257,7 @@ describe("SessionStartModal", () => {
       const footer = close.closest('[data-slot="dialog-footer"]');
       const actionGroup = footer?.lastElementChild;
       expect(actionGroup?.tagName).toBe("DIV");
+      expect(actionGroup?.className).toContain("items-end");
       expect(actionGroup?.className).toContain("self-end");
       expect(actionGroup?.className).toContain("sm:self-auto");
       await act(async () => {
