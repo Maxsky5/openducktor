@@ -7,11 +7,12 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { z } from "zod";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import { errorMessage, HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import {
   RuntimeExecutableIncompatibleError,
   type RuntimeExecutableProbePort,
 } from "../../ports/runtime-executable-probe-port";
+import { runtimeExecutableStartFailureMessage } from "../runtimes/runtime-executable-guidance";
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
 import { getClaudeCodeCompatibilityError } from "./claude-code-compatibility";
 
@@ -108,7 +109,16 @@ export const createClaudeExecutableProbe = ({
         Effect.tryPromise({
           try: () => sdkQuery.initializationResult(),
           catch: (cause) =>
-            toHostOperationError(cause, "claudeExecutableProbe.initialize", { executablePath }),
+            new HostOperationError({
+              operation: "claudeExecutableProbe.initialize",
+              message: runtimeExecutableStartFailureMessage(
+                "claude",
+                executablePath,
+                errorMessage(cause),
+              ),
+              cause,
+              details: { executablePath },
+            }),
         }).pipe(
           Effect.filterOrFail(
             isClaudeInitializationResponse,
@@ -130,7 +140,11 @@ export const createClaudeExecutableProbe = ({
               Effect.fail(
                 new HostOperationError({
                   operation: "claudeExecutableProbe.initialize",
-                  message: `Timed out initializing Claude Agent SDK with ${executablePath}.`,
+                  message: runtimeExecutableStartFailureMessage(
+                    "claude",
+                    executablePath,
+                    `it did not respond within ${initializationTimeoutMs / 1000} seconds`,
+                  ),
                   details: { executablePath, initializationTimeoutMs },
                 }),
               ),

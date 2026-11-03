@@ -30,7 +30,9 @@ describe("verifyCodexAppServerProtocol", () => {
       rejectPendingRequestsForShutdown: () => Effect.void,
     };
 
-    await Effect.runPromise(verifyCodexAppServerProtocol(transport, "1.2.3"));
+    await Effect.runPromise(
+      verifyCodexAppServerProtocol(transport, "1.2.3", "/usr/local/bin/codex"),
+    );
 
     expect(calls).toEqual([
       {
@@ -70,14 +72,39 @@ describe("verifyCodexAppServerProtocol", () => {
     };
 
     const failure = await Effect.runPromise(
-      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3")),
+      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3", "/usr/local/bin/codex")),
     );
 
     expect(failure._tag).toBe("RuntimeExecutableIncompatibleError");
     expect(notified).toBe(false);
   });
 
-  test("preserves operational initialization failures", async () => {
+  test("reports the stderr of a Codex process that stops before initialization", async () => {
+    const transport: CodexProbeTransport = {
+      request: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "codexAppServerTransport.childProcess",
+            message:
+              "Codex app-server closed: process exited with code 1 for runtime executable-probe-1: Error loading configuration",
+            details: { runtimeId: "executable-probe-1", stderr: "Error loading configuration" },
+          }),
+        ),
+      notify: () => Effect.void,
+      close: () => Effect.void,
+      rejectPendingRequestsForShutdown: () => Effect.void,
+    };
+
+    const failure = await Effect.runPromise(
+      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3", "/usr/local/bin/codex")),
+    );
+
+    expect(failure.message).toBe(
+      "Codex at '/usr/local/bin/codex' did not start: Error loading configuration. OpenDucktor needs a Codex version with the `codex app-server` command. Fix the reported problem, or update Codex to the latest version, for example with `npm install -g @openai/codex@latest`. Then try again.",
+    );
+  });
+
+  test("keeps operational initialization failures apart from incompatible executables", async () => {
     const operationFailure = new HostOperationError({
       operation: "codexAppServerTransport.request.initialize",
       message: "initialize request timed out",
@@ -90,10 +117,15 @@ describe("verifyCodexAppServerProtocol", () => {
     };
 
     const failure = await Effect.runPromise(
-      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3")),
+      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3", "/usr/local/bin/codex")),
     );
 
-    expect(failure).toBe(operationFailure);
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "codexExecutableProbe.initialize",
+      cause: operationFailure,
+    });
+    expect(failure.message).toContain("did not start: initialize request timed out.");
   });
 });
 

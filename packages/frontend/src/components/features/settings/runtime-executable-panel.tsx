@@ -80,12 +80,20 @@ function RuntimeStatusMessage({
   }
   if (showInvalidState && result?.ok === false) {
     return (
-      <span className="inline-flex items-center gap-1.5">
+      <span className="inline-flex items-start gap-1.5">
         <CircleAlert
-          className={cn("size-3.5", enabled ? "text-destructive" : "text-muted-foreground")}
+          className={cn(
+            "mt-0.5 size-3.5 shrink-0",
+            enabled ? "text-destructive" : "text-muted-foreground",
+          )}
           aria-hidden="true"
         />
-        {result.error}
+        <span className="flex flex-col gap-0.5">
+          <span>{result.error}</span>
+          {result.version ? (
+            <span className="text-muted-foreground">Found version: {result.version}</span>
+          ) : null}
+        </span>
       </span>
     );
   }

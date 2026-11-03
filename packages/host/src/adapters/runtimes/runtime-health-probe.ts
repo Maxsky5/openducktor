@@ -8,6 +8,7 @@ import {
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SystemCommandPort, SystemCommandRunOptions } from "../../ports/system-command-port";
 import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-discovery-port";
+import { incompatibleRuntimeExecutableMessage } from "./runtime-executable-guidance";
 
 const VERSION_TIMEOUT_MS = 2_000;
 const OPENCODE_VERSION_OPTIONS: SystemCommandRunOptions = {
@@ -18,22 +19,17 @@ const VERSION_OPTIONS_BY_KIND = {
   codex: { timeoutMs: VERSION_TIMEOUT_MS },
   opencode: OPENCODE_VERSION_OPTIONS,
 } satisfies Record<RuntimeKind, SystemCommandRunOptions>;
-const RUNTIME_LABELS = {
-  claude: "Claude",
-  codex: "Codex",
-  opencode: "OpenCode",
-} satisfies Record<RuntimeKind, string>;
-
 const runtimeHealthFailure = (
   kind: RuntimeKind,
   executablePath: string,
+  version: string | null,
   detail: string,
 ): RuntimeHealth => ({
   kind,
   enabled: true,
   ok: false,
   executablePath,
-  version: null,
+  version,
   error: detail,
 });
 
@@ -56,7 +52,12 @@ export const createRuntimeHealthProbe = (
           validateExactToolPath(toolDiscovery, kind, executablePath),
         );
         if (validatedPath._tag === "Failure") {
-          return runtimeHealthFailure(kind, executablePath, errorMessage(validatedPath.failure));
+          return runtimeHealthFailure(
+            kind,
+            executablePath,
+            null,
+            errorMessage(validatedPath.failure),
+          );
         }
         const binary = validatedPath.success.path;
         const [probeResult, version] = yield* Effect.all(
@@ -71,7 +72,8 @@ export const createRuntimeHealthProbe = (
             return runtimeHealthFailure(
               kind,
               binary,
-              `The executable at ${binary} is not a compatible ${RUNTIME_LABELS[kind]} runtime.`,
+              version,
+              incompatibleRuntimeExecutableMessage(kind, binary),
             );
           }
           return yield* Effect.fail(probeResult.failure);

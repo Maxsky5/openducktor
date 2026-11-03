@@ -647,6 +647,41 @@ describe("useOnboardingRuntimeSetup", () => {
     expect(within(opencodeSection()).getByText("1.0.0")).toBeTruthy();
   });
 
+  test("shows the update steps and found version of an incompatible runtime", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: {
+        defaults: { rules: [] },
+        roleOverrides: {},
+        enabled: true,
+        executablePath: "/tools/opencode",
+      },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
+    };
+    const error =
+      "OpenCode at '/tools/opencode' is not compatible with OpenDucktor. OpenDucktor needs OpenCode 2 or later. Run `opencode upgrade`, or select another OpenCode executable. Then try again.";
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => {
+      const check = createCheck(runtimes);
+      return {
+        runtimes: check.runtimes.map((row) =>
+          row.kind === "opencode" ? { ...row, version: "1.0.0", error } : row,
+        ),
+      };
+    });
+
+    renderOnboarding({ client, runtimes });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
+      );
+    });
+
+    await within(opencodeSection()).findByText("Needs attention");
+    expect(within(opencodeSection()).getByText(error)).toBeTruthy();
+    expect(within(opencodeSection()).getByText("Found version: 1.0.0")).toBeTruthy();
+  });
+
   test("blocks Continue while a changed path is being checked and rejects the new invalid path", async () => {
     const initialRuntimes: AgentRuntimes = {
       opencode: {

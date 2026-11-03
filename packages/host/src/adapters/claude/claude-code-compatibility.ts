@@ -1,6 +1,8 @@
 import type { SDKControlInitializeResponse } from "@anthropic-ai/claude-agent-sdk";
 import { RuntimeExecutableIncompatibleError } from "../../ports/runtime-executable-probe-port";
 
+export const CLAUDE_CODE_MINIMUM_VERSION = "2.1.306";
+
 export const getClaudeCodeCompatibilityError = (
   initialization: Pick<SDKControlInitializeResponse, "claude_code_version">,
   executablePath: string,
@@ -23,6 +25,6 @@ export const getClaudeCodeCompatibilityError = (
       ? "did not report its version"
       : `reported unsupported version '${version}'`;
   return new RuntimeExecutableIncompatibleError({
-    message: `Claude Code at '${executablePath}' ${reportedVersion}. OpenDucktor needs Claude Code 2.1.306 or later to track background work. Update Claude Code or select a compatible executable, then retry.`,
+    message: `Claude Code at '${executablePath}' ${reportedVersion}. OpenDucktor needs Claude Code ${CLAUDE_CODE_MINIMUM_VERSION} or later to track background work. Run \`claude update\`, or select a compatible executable. Then try again.`,
   });
 };

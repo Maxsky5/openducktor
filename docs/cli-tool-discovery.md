@@ -21,6 +21,8 @@ Startup, version checks, and diagnostics use the saved path. If that path is inv
 
 Onboarding and Settings call `runtime_executables_check`. The Check again action runs discovery and can replace saved paths. Normal startup does not repeat discovery.
 
+The check returns one row for each runtime. A failed check of one runtime does not stop the checks of the other runtimes. The row error names the executable, the problem, the required version, and the next action, such as `claude update` or `opencode upgrade`. The row also keeps the version that `--version` reports, so the user can see the installed version. `packages/host/src/adapters/runtimes/runtime-executable-guidance.ts` owns these messages.
+
 ## Ownership
 
 | Concern | Owner |

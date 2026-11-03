@@ -603,7 +603,9 @@ describe("createOpenCodeRuntimeStarter", () => {
       );
       expect(result._tag).toBe("Failure");
       if (result._tag === "Failure")
-        expect(result.failure.message).toContain("authenticated V2 readiness URL within 40ms");
+        expect(result.failure.message).toContain(
+          "did not start: it was not ready within 0.04 seconds.",
+        );
     } finally {
       try {
         if (ownedCleanups.length > 0) await Effect.runPromise(runOwnedCleanup(ownedCleanups));
@@ -995,7 +997,7 @@ describe("createOpenCodeRuntimeStarter", () => {
             const result = yield* Fiber.join(startup);
             expect(result._tag).toBe("Failure");
             if (result._tag === "Failure") {
-              expect(result.failure.message).toContain("authenticated V2 readiness URL");
+              expect(result.failure.message).toContain("did not start: it was not ready within");
             }
           }).pipe(Effect.ensuring(Fiber.interrupt(startup)));
         }).pipe(Effect.provide(TestClock.layer())),
@@ -1134,7 +1136,7 @@ describe("createOpenCodeRuntimeStarter", () => {
           starter.startRuntime(startInput(opencodeBinary, undefined, undefined, ownedCleanups)),
         ),
       );
-      expect(failure.message).toContain("authenticated V2 readiness URL");
+      expect(failure.message).toContain("did not start: it was not ready within");
       await expect(Effect.runPromise(runOwnedCleanup(ownedCleanups))).rejects.toThrow(
         "process tree cleanup failed",
       );

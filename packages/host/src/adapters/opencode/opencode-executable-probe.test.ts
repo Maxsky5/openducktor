@@ -37,6 +37,13 @@ describe("OpenCode V2 executable probe", () => {
       await fixture.cleanup();
     }
   });
+  const failureDetails = {
+    v1: "did not start: The selected executable did not provide an authenticated OpenCode V2 server. OpenDucktor needs OpenCode 2 or later.",
+    malformed:
+      'did not start: it printed "OpenCode server listening" instead of the OpenCode 2 readiness line.',
+    silent: "did not start: it was not ready within 0.08 seconds.",
+    exit: "did not start: it stopped before it was ready: native startup failed.",
+  } as const;
   for (const mode of ["v1", "malformed", "silent", "exit"] as const) {
     test(`fails with an actionable error and cleans up a ${mode} executable`, async () => {
       const fixture = await createFakeOpenCodeV2(mode);
@@ -50,9 +57,11 @@ describe("OpenCode V2 executable probe", () => {
             return started;
           },
         });
-        await expect(
-          Effect.runPromise(probe.probeExecutable(fixture.executablePath)),
-        ).rejects.toThrow(/OpenCode.*V2|OpenCode.*readiness/);
+        const failure = await Effect.runPromise(
+          Effect.flip(probe.probeExecutable(fixture.executablePath)),
+        );
+        expect(failure.message).toContain(failureDetails[mode]);
+        expect(failure.message).toContain("or run `opencode upgrade`. Then try again.");
         expect(child?.stdin?.writableEnded).toBe(true);
       } finally {
         child?.kill();

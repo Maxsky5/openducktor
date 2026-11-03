@@ -107,7 +107,7 @@ describe("createRuntimeHealthProbe", () => {
     expect(calls).toEqual([["claude", executablePaths.claude]]);
   });
 
-  test("does not treat a successful version command as runtime identity", async () => {
+  test("reports the found version and update steps for an incompatible executable", async () => {
     const systemCommands = createSystemCommands({ version: "edgee 0.1.7" });
     const probe = createProbe(
       systemCommands,
@@ -127,9 +127,9 @@ describe("createRuntimeHealthProbe", () => {
     );
 
     expect(health.ok).toBe(false);
-    expect(health.version).toBeNull();
+    expect(health.version).toBe("edgee 0.1.7");
     expect(health.error).toBe(
-      `The executable at ${executablePaths.opencode} is not a compatible OpenCode runtime.`,
+      `OpenCode at '${executablePaths.opencode}' is not compatible with OpenDucktor. OpenDucktor needs OpenCode 2 or later. Run \`opencode upgrade\`, or select another OpenCode executable. Then try again.`,
     );
   });
 
@@ -152,7 +152,7 @@ describe("createRuntimeHealthProbe", () => {
     );
 
     expect(health.error).toBe(
-      `The executable at ${executablePaths.claude} is not a compatible Claude runtime.`,
+      `Claude Code at '${executablePaths.claude}' is not compatible with OpenDucktor. OpenDucktor needs Claude Code 2.1.306 or later. Run \`claude update\`, or select another Claude Code executable. Then try again.`,
     );
     expect(health.error).not.toContain("\u001b");
     expect(health.error).not.toContain("unexpected argument");

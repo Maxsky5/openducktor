@@ -8,16 +8,19 @@ import { randomBytes } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
 import {
   assertOpenCodeV2Connection,
+  OpenCodeOperationError,
   type OpenCodeRuntimeConnection,
 } from "@openducktor/adapters-opencode-sdk";
 import { Effect } from "effect";
 import { z } from "zod";
 import {
+  errorMessage,
   HostOperationError,
   type HostOperationErrorAggregate,
   toHostOperationError,
 } from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
+import { runtimeExecutableStartFailureMessage } from "../runtimes/runtime-executable-guidance";
 import {
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
@@ -25,6 +28,24 @@ import {
   type ProcessTreePlatform,
   type ProcessTreeTerminator,
 } from "../../infrastructure/process/process-tree";
+
+const readinessLineSchema = z.object({ url: z.string() });
+
+/** Returns the readiness URL, or null when the line is not the OpenCode 2 readiness JSON. */
+const readReadinessUrl = (line: string): string | null => {
+  try {
+    const parsed = readinessLineSchema.safeParse(JSON.parse(line));
+    return parsed.success ? parsed.data.url : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Keeps only the reason of a failed V2 check, because the start failure message adds the next action. */
+const readinessFailureDetail = (cause: unknown): string =>
+  cause instanceof OpenCodeOperationError
+    ? (cause.failure.runtimeOperationFailure.nativeReason ?? cause.message)
+    : errorMessage(cause);
 
 type StandaloneChild = ChildProcessByStdio<Writable, Readable, Readable>;
 export type OpenCodeStandaloneOptions = {
@@ -111,9 +132,15 @@ export const acquireOpenCodeStandalone = (
         const end = firstLine.indexOf("\n");
         if (end < 0) return;
         parsed = true;
+        const line = firstLine.slice(0, end).trim();
         try {
-          const value = z.object({ url: z.string() }).parse(JSON.parse(firstLine.slice(0, end)));
-          const url = new URL(value.url);
+          const readinessUrl = readReadinessUrl(line);
+          if (readinessUrl === null) {
+            throw new Error(
+              `it printed "${redact(line).slice(0, 200)}" instead of the OpenCode 2 readiness line`,
+            );
+          }
+          const url = new URL(readinessUrl);
           if (
             url.protocol !== "http:" ||
             url.hostname !== "127.0.0.1" ||
@@ -137,7 +164,7 @@ export const acquireOpenCodeStandalone = (
         description = signal
           ? `process exited from signal ${signal}`
           : `process exited with code ${code}`;
-        rejectReady(new Error(`OpenCode exited before V2 readiness: ${stderr || description}`));
+        rejectReady(new Error(`it stopped before it was ready: ${stderr || description}`));
         for (const listener of listeners) listener();
       });
       if (!child.pid || child.pid <= 0) {
@@ -160,7 +187,7 @@ export const acquireOpenCodeStandalone = (
           try: async (signal) => {
             const endpoint = await readiness;
             if (closed)
-              throw new Error(`OpenCode exited before authentication: ${stderr || description}`);
+              throw new Error(`it stopped before authentication: ${stderr || description}`);
             const connection: OpenCodeRuntimeConnection = {
               runtimeId: input.runtimeId,
               endpoint,
@@ -172,7 +199,11 @@ export const acquireOpenCodeStandalone = (
           catch: (cause) =>
             new HostOperationError({
               operation: "opencodeStandalone.start",
-              message: `Cannot start OpenCode V2 with '${input.executablePath}': ${redact(cause instanceof Error ? cause.message : String(cause))}. Install or select OpenCode V2, then retry.`,
+              message: runtimeExecutableStartFailureMessage(
+                "opencode",
+                input.executablePath,
+                redact(readinessFailureDetail(cause)),
+              ),
               details: { executablePath: input.executablePath },
             }),
         }).pipe(
@@ -182,7 +213,11 @@ export const acquireOpenCodeStandalone = (
               Effect.fail(
                 new HostOperationError({
                   operation: "opencodeStandalone.start",
-                  message: `OpenCode did not return an authenticated V2 readiness URL within ${input.startupTimeoutMs ?? 30_000}ms. Check the selected executable and retry.`,
+                  message: runtimeExecutableStartFailureMessage(
+                    "opencode",
+                    input.executablePath,
+                    `it was not ready within ${(input.startupTimeoutMs ?? 30_000) / 1000} seconds`,
+                  ),
                 }),
               ),
           }),

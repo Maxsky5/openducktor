@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Cause, Effect, Exit } from "effect";
+import { z } from "zod";
 import {
   HostOperationError,
   type HostOperationErrorAggregate,
@@ -20,9 +21,13 @@ import {
   type RuntimeExecutableProbeError,
   type RuntimeExecutableProbePort,
 } from "../../ports/runtime-executable-probe-port";
+import { runtimeExecutableStartFailureMessage } from "../runtimes/runtime-executable-guidance";
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
-import type { CodexAppServerChildTransport } from "./codex-app-server-transport-types";
+import type {
+  CodexAppServerChildTransport,
+  CodexTransportBaseError,
+} from "./codex-app-server-transport-types";
 import type { CodexChildProcess } from "./codex-runtime-cleanup";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
@@ -33,9 +38,18 @@ type CodexProbeTransport = Pick<
   "close" | "notify" | "rejectPendingRequestsForShutdown" | "request"
 >;
 
+const capturedStderrSchema = z.object({ stderr: z.string().min(1) });
+
+/** Prefers the stderr of a Codex process that closed, because it names the startup problem. */
+const codexFailureDetail = (cause: CodexTransportBaseError): string => {
+  const details = capturedStderrSchema.safeParse(cause.details);
+  return details.success ? details.data.stderr : cause.message;
+};
+
 export const verifyCodexAppServerProtocol = (
   transport: CodexProbeTransport,
   clientVersion: string,
+  executablePath: string,
 ): Effect.Effect<void, RuntimeExecutableProbeError> =>
   Effect.gen(function* () {
     yield* transport.request({
@@ -62,7 +76,16 @@ export const verifyCodexAppServerProtocol = (
               "The executable did not complete the Codex app-server initialization protocol.",
             cause,
           })
-        : toHostOperationError(cause, "codexExecutableProbe.initialize"),
+        : new HostOperationError({
+            operation: "codexExecutableProbe.initialize",
+            message: runtimeExecutableStartFailureMessage(
+              "codex",
+              executablePath,
+              codexFailureDetail(cause),
+            ),
+            cause,
+            details: { executablePath },
+          }),
     ),
   );
 
@@ -171,7 +194,8 @@ export const createCodexExecutableProbe = ({
         child.off("error", handleEarlySpawnError);
         return { child, closed: () => closed, pid, transport };
       }),
-      probe: ({ transport }) => verifyCodexAppServerProtocol(transport, clientVersion),
+      probe: ({ transport }) =>
+        verifyCodexAppServerProtocol(transport, clientVersion, executablePath),
       release: ({ child, closed, pid, transport }) =>
         cleanupCodexProbe({
           child,
