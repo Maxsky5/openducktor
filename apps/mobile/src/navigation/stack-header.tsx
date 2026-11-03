@@ -83,7 +83,10 @@ const useHeaderSearch = (
     toggleCancelButton: () => undefined,
     cancelSearch: close,
   };
-  useEffect(() => (searchRef ? attachSearchCommands(searchRef, commands) : undefined));
+  useEffect(() => {
+    if (!searchRef) return;
+    return attachSearchCommands(searchRef, commands);
+  });
   // A sheet or a screen above this one gets the Back press.
   const onBack = useEffectEvent(() => {
     if (!navigation.isFocused()) return false;

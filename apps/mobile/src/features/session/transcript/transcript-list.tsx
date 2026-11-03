@@ -170,9 +170,8 @@ export function TranscriptList({
     store: viewportStore,
     frameRef,
     onFrameLayout,
-    onScroll: onViewportScroll,
+    onScroll: checkViewport,
   } = useListViewport();
-  const checkViewport = onViewportScroll;
   // Each image and isolated page near the screen measures its position on a viewport check. They
   // load one screen ahead, so a check after each quarter screen of scroll, and at rest, is enough.
   const checkedAt = useRef<number | null>(null);

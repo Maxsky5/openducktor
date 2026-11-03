@@ -13,5 +13,5 @@ export const isRouteInView = (
 ): boolean => {
   const index = routes.findIndex((route) => route.key === routeKey);
   if (index === -1) return true;
-  return routes.slice(index + 1).every((route) => !isPushedScreen(route.name));
+  return !routes.some((route, position) => position > index && isPushedScreen(route.name));
 };

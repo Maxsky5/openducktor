@@ -102,7 +102,7 @@ Follow these rules, or sheets and screens open and close late. React Native show
 - Keep `experiments.reactCompiler` on in `app.config.ts`. Expo Router renders every mounted route and navigator again on each navigation. The React Compiler memoizes the elements of each component, so that render stops at the first unchanged element.
 - Keep hot components in a form that the React Compiler can compile. The compiler skips a component that reads `ref.current` during render, reads a hook result that holds a ref, writes to a prop, or has a `try` with a `finally` clause. Destructure a hook result that holds a ref, as `ActionMenu` does with `useAnchoredPopover`.
 - Close a screen or a sheet with `closeScreen(navigation)` from `src/navigation/close-screen.ts`. `goBack` and `router.back` go through the routing queue of Expo Router, which adds a render and a scan of the whole tree. The `expo-router/no-queued-back` lint rule finds them.
-- Give each endless CSS animation its style from `useEndlessAnimation`. Start and stop a shared-value animation in `useFocusEffect`.
+- Give each endless CSS animation its style from `useEndlessAnimation`.
 - Do not read a shared value with `get()` on the JavaScript thread on a tap path.
 - Measure a speed change on a release build with `atrace`, from the finger release to the first frame that shows the result.
 

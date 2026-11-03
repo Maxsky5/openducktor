@@ -22,9 +22,6 @@ import {
 import { pressTabRoute, TAB_ROW_ROLE, TabButtons } from "./tab-button";
 import { useCreateFan } from "./use-create-fan";
 
-/** The create button goes after this many tabs. */
-const CREATE_SLOT = 2;
-
 /** The room above the top edge of the bar for its hairline. */
 const EDGE_ROOM = 1;
 /**
@@ -96,17 +93,7 @@ function BottomTabBar({ state, descriptors, emitter, navigateToTab }: BottomTabB
             progress={progress}
             placement="bottom"
             onPressTab={pressTab}
-            from={0}
-            to={CREATE_SLOT}
-          />
-          <View style={styles.createSlot} />
-          <TabButtons
-            state={state}
-            descriptors={descriptors}
-            progress={progress}
-            placement="bottom"
-            onPressTab={pressTab}
-            from={CREATE_SLOT}
+            createSlot={<View style={styles.createSlot} />}
           />
         </View>
         <View pointerEvents="box-none" style={styles.createAnchor}>

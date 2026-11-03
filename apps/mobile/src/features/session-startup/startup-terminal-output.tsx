@@ -20,7 +20,7 @@ import { createTerminalOutputSession } from "../terminals/terminal-output-sessio
 import { TERMINAL_PAGE } from "../terminals/terminal-page";
 import { useTerminalBridge } from "../terminals/use-terminal-bridge";
 import { useStartupPresentation } from "./startup-presentation-context";
-import { createStartupOutputReader, keepTextOffset } from "./startup-output-reading";
+import { createStartupOutputReader } from "./startup-output-reading";
 
 export function StartupTerminalOutput({
   attemptId,
@@ -124,7 +124,7 @@ export function StartupTerminalOutput({
           overScrollMode="never"
           contentOffset={initialTextOffset}
           onScroll={(event) => {
-            keepTextOffset(reading, event.nativeEvent.contentOffset.y);
+            reader.scrollText(event.nativeEvent.contentOffset.y);
           }}
           scrollEventThrottle={100}
         >

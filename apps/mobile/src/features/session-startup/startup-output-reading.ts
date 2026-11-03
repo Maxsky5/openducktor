@@ -9,11 +9,6 @@ export type StartupOutputReading = {
   textOffset: number;
 };
 
-/** Keeps the scroll position of the text output, so the output opens there again. */
-export const keepTextOffset = (reading: StartupOutputReading, offset: number): void => {
-  reading.textOffset = offset;
-};
-
 /** Ignore replay scroll events until the page restores the saved position. */
 export const createStartupOutputReader = ({
   reading,
@@ -28,6 +23,10 @@ export const createStartupOutputReader = ({
   return {
     reset(): void {
       viewportReady = false;
+    },
+    /** Keeps the scroll position of the text output, so the output opens there again. */
+    scrollText(offset: number): void {
+      reading.textOffset = offset;
     },
     receive(message: TerminalPageOutbound): boolean {
       if (message.type === "terminal_hydrated") {

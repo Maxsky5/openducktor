@@ -1,6 +1,13 @@
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
-import { type ReactElement, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type ReactElement,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Platform, ScrollView, useWindowDimensions, View } from "react-native";
 import Animated, {
   FadeIn,
@@ -61,8 +68,10 @@ export function StartupProgressHost(): ReactElement | null {
 }
 
 function StartupStack(): ReactElement | null {
-  // Keep the viewport open while the last native card finishes its exit.
-  const [lastSize, setLastSize] = useState({ viewport: 0, content: 0 });
+  // Keep the viewport open while the last native card finishes its exit. The layout callbacks keep
+  // the sizes with no render, and the stack holds them only when it empties.
+  const measured = useRef({ viewport: 0, content: 0 });
+  const [heldSize, setHeldSize] = useState<{ viewport: number; content: number } | null>(null);
   const attempts = useStartupAttempts();
   const { startupAttempts } = useClientConnection();
   const hidden = useSyncExternalStore(
@@ -81,6 +90,9 @@ function StartupStack(): ReactElement | null {
   }, [hidden, startupAttempts]);
   const visible = attempts.filter((attempt) => attempt.presentation === "notification");
   const empty = visible.length === 0;
+  useLayoutEffect(() => {
+    setHeldSize(empty ? { ...measured.current } : null);
+  }, [empty]);
   if (hidden || covered) return null;
   const top = insets.top + 70 + toastStackHeight + (toastStackHeight > 0 ? theme.space.sm : 0);
   const bottom = insets.bottom + 80;
@@ -99,16 +111,13 @@ function StartupStack(): ReactElement | null {
         ]}
       >
         <ScrollView
-          style={[styles.stack, empty && { height: lastSize.viewport }]}
-          contentContainerStyle={[styles.content, empty && { minHeight: lastSize.content }]}
+          style={[styles.stack, empty && { height: heldSize?.viewport ?? 0 }]}
+          contentContainerStyle={[styles.content, empty && { minHeight: heldSize?.content ?? 0 }]}
           onLayout={(event) => {
-            const viewport = event.nativeEvent.layout.height;
-            if (!empty)
-              setLastSize((size) => (size.viewport === viewport ? size : { ...size, viewport }));
+            if (!empty) measured.current.viewport = event.nativeEvent.layout.height;
           }}
-          onContentSizeChange={(_width, content) => {
-            if (!empty)
-              setLastSize((size) => (size.content === content ? size : { ...size, content }));
+          onContentSizeChange={(_width, contentHeight) => {
+            if (!empty) measured.current.content = contentHeight;
           }}
           nestedScrollEnabled
           bounces={false}
@@ -148,7 +157,7 @@ function StartupCard({
   // above it follow each frame and the card bottom stays in place.
   const height = useSharedValue<number | null>(null);
   // The first layout sets the height at once. The JavaScript thread does not read the shared value.
-  const measured = useRef(false);
+  const hasHeight = useRef(false);
   const resizeStyle = useAnimatedStyle(() => {
     const value = height.get();
     return value === null ? {} : { height: value };
@@ -164,8 +173,8 @@ function StartupCard({
         <View
           onLayout={(event) => {
             const next = event.nativeEvent.layout.height;
-            height.set(measured.current ? withTiming(next, CARD_RESIZE) : next);
-            measured.current = true;
+            height.set(hasHeight.current ? withTiming(next, CARD_RESIZE) : next);
+            hasHeight.current = true;
           }}
         >
           <StartupTrace

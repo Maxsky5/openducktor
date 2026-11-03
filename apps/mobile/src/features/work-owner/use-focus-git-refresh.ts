@@ -22,7 +22,7 @@ export function useFocusGitRefresh({
   const latest = useRef({ loaded, refresh });
   useLayoutEffect(() => {
     latest.current = { loaded, refresh };
-  });
+  }, [loaded, refresh]);
   return useCallback(() => {
     const current = latest.current;
     if (!enabled || !current.loaded) return;

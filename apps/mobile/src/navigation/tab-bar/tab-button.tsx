@@ -58,24 +58,22 @@ export const pressTabRoute = (
   if (!focused && !event.defaultPrevented) navigateToTab(routeKey);
 };
 
-/**
- * The tab buttons of the navigator from tab `from` up to tab `to`, in route order. The bar puts the
- * create button between two ranges.
- */
+/** The create button goes after this many tabs. */
+const CREATE_SLOT = 2;
+
+/** The tab buttons of the navigator in route order, with the slot of the create button among them. */
 export function TabButtons({
   state,
   descriptors,
   progress,
   placement,
   onPressTab,
-  from,
-  to,
+  createSlot,
 }: Pick<BottomTabBarProps, "state" | "descriptors"> & {
   progress: SharedValue<number>;
   placement: TabPlacement;
   onPressTab: (routeKey: string) => void;
-  from: number;
-  to?: number | undefined;
+  createSlot: ReactElement;
 }): ReactElement {
   const buttons = state.routes.flatMap((route, index) => {
     const meta = tabMeta(route.name);
@@ -95,7 +93,13 @@ export function TabButtons({
       <TabButton key={route.key} {...tab} />
     );
   });
-  return <>{buttons.slice(from, to)}</>;
+  return (
+    <>
+      {buttons.slice(0, CREATE_SLOT)}
+      {createSlot}
+      {buttons.slice(CREATE_SLOT)}
+    </>
+  );
 }
 
 type TabButtonProps = {
