@@ -3,3 +3,19 @@
   Strict-Transport-Security: max-age=31536000
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
+
+/artifact-preview-bootstrap
+  ! cache-control
+  cache-control: no-store
+  ! connection-allowlist
+  connection-allowlist: ()
+  ! content-security-policy
+  content-security-policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri about:; form-action 'none'; sandbox allow-scripts
+  ! content-type
+  content-type: text/html; charset=utf-8
+  ! permissions-policy
+  permissions-policy: accelerometer=(), ambient-light-sensor=(), autoplay=(), bluetooth=(), camera=(), clipboard-read=(), clipboard-write=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), payment=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), web-share=(), xr-spatial-tracking=()
+  ! referrer-policy
+  referrer-policy: no-referrer
+  ! x-content-type-options
+  x-content-type-options: nosniff

@@ -864,6 +864,9 @@ test.each(["new", "existing", "moved"] as const)(
     expect(result).toBeInstanceOf(Error);
     expect(storedHosts(f.appStore).activeHostId).toBe("saved-1");
     expect(f.owner.getState().status).not.toBe("active");
+    // A canceled move keeps the saved access of the old address, so the saved host still connects.
+    const saved = await f.dependencies.openAuthorizationStore("saved-1").read("");
+    expect(saved?.endpoint).toBe("http://100.64.0.7:14328");
   },
 );
 

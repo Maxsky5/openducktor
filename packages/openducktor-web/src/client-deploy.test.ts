@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import {
+  ARTIFACT_PREVIEW_BOOTSTRAP_PATH,
+  artifactPreviewBootstrapResponse,
+} from "@openducktor/remote-host/artifact-preview-bootstrap";
 
 const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
@@ -19,7 +23,8 @@ test("wrangler.json deploys only the static files of dist/client to the existing
 });
 
 describe("client/_headers", () => {
-  const lines = read("client/_headers").split("\n");
+  const blocks = read("client/_headers").trimEnd().split("\n\n");
+  const lines = (blocks[0] ?? "").split("\n");
   const headers = new Map(
     lines
       .filter((line) => line.startsWith("  "))
@@ -61,6 +66,15 @@ describe("client/_headers", () => {
     expect(policy.get("script-src-attr")).toEqual(["'unsafe-hashes'", ...handlers]);
     // `script-src 'self'` blocks inline script elements.
     expect(html).not.toMatch(/<script(?![^>]*\ssrc=)[^>]*>/);
+  });
+
+  // The bootstrap replaces the site headers with the policy of its isolated preview document.
+  test("gives the artifact preview bootstrap only its own response headers", () => {
+    const dedicated = [...artifactPreviewBootstrapResponse().headers].flatMap(([name, value]) => [
+      `  ! ${name}`,
+      `  ${name}: ${value}`,
+    ]);
+    expect(blocks.slice(1)).toEqual([[ARTIFACT_PREVIEW_BOOTSTRAP_PATH, ...dedicated].join("\n")]);
   });
 
   test("sends HSTS for a year, no MIME sniffing, and no referrer", () => {

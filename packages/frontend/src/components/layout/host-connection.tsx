@@ -13,10 +13,8 @@ import {
   isRemotePairingFailure,
   type RemoteConnectionState,
 } from "@openducktor/host-client/remote";
-import {
-  ConnectionPairingForm,
-  PAIR_WITH_HOST,
-} from "@/components/features/remote-control/pairing-form";
+import { ConnectionPairingForm } from "@/components/features/remote-control/pairing-form";
+import { PAIR_WITH_HOST } from "@/components/features/remote-control/connection-flow";
 import { connectedDevicesLabel } from "@/components/features/remote-control/remote-control-status";
 import { type RemoteAccessState, remoteFailureText } from "@openducktor/contracts";
 import { Button } from "@/components/ui/button";

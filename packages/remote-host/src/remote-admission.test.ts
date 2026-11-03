@@ -93,15 +93,16 @@ describe("remote admission", () => {
     );
   });
 
-  test("a renewal without an expired window starts a new count", async () => {
+  test("a late renewal after Stop pairing opens no window", async () => {
     await withAdmission((admission) =>
       Effect.gen(function* () {
         yield* admission.start();
-        yield* guessWrong(admission, 4);
         admission.stop("stopped");
         yield* admission.renew();
-        yield* guessWrong(admission, 4);
-        expect(admission.view(true, new Set()).pairing).not.toBeNull();
+        expect(admission.view(true, new Set())).toMatchObject({
+          pairing: null,
+          pairingEnd: "stopped",
+        });
       }),
     );
   });

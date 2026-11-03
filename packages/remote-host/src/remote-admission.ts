@@ -197,13 +197,10 @@ export const createRemoteAdmission = (options: {
       }),
     /**
      * Gives a new code when the open window or the last window expired. The count of wrong codes
-     * stays, so renewals never give fresh guesses. In other states it starts a new window.
+     * stays, so renewals never give fresh guesses. A window that closed for another reason stays
+     * closed, so a late renewal cannot undo Stop pairing.
      */
-    renew: (): Effect.Effect<void> =>
-      Effect.suspend(() => {
-        if (!pairing && pairingEnd !== "expired") failedGuesses = 0;
-        return open();
-      }),
+    renew: (): Effect.Effect<void> => (pairing || pairingEnd === "expired" ? open() : Effect.void),
     /** Closes the pairing window. `null` means that remote control stopped. */
     stop: close,
     revoke: (clientId: string): Effect.Effect<void, RemoteAccessError> =>

@@ -12,13 +12,8 @@ import {
 import { useSingleFlight } from "@openducktor/frontend-core/lib/use-single-flight";
 import { Button } from "@/components/ui/button";
 import type { ShellBridge } from "@/lib/shell-bridge";
-import {
-  ConnectedView,
-  ConnectionFailureAlert,
-  PairingCodeField,
-  incompleteCodeFailure,
-  waitForConnectedView,
-} from "./connection-feedback";
+import { ConnectedView, ConnectionFailureAlert, PairingCodeField } from "./connection-feedback";
+import { incompleteCodeFailure, waitForConnectedView } from "./connection-flow";
 import { RemoteNetworkNotice } from "./remote-network-notice";
 
 type PairingFormProps = {
@@ -140,12 +135,6 @@ export function PairingForm({
     </form>
   );
 }
-
-/** The title and text above the re-pair form. */
-export const PAIR_WITH_HOST = {
-  title: "Pair with host",
-  description: "Enter the code from the computer you want to use.",
-} as const;
 
 type ConnectionPairingFormProps = Pick<PairingFormProps, "endpoint" | "failure" | "pair"> & {
   connection: NonNullable<ShellBridge["remoteConnection"]>;

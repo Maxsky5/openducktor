@@ -9,10 +9,8 @@ import {
   isRemotePairingFailure,
   type RemoteConnectionState,
 } from "@openducktor/host-client/remote";
-import {
-  ConnectionPairingForm,
-  PAIR_WITH_HOST,
-} from "@/components/features/remote-control/pairing-form";
+import { ConnectionPairingForm } from "@/components/features/remote-control/pairing-form";
+import { PAIR_WITH_HOST } from "@/components/features/remote-control/connection-flow";
 import type { ShellBridge } from "@/lib/shell-bridge";
 import { LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";

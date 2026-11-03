@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   completesPairingCode,
   isPairingCode,
@@ -13,9 +13,11 @@ import { Label } from "@/components/ui/label";
 import {
   ConnectionFailureAlert,
   PairingCodeField,
+} from "@/components/features/remote-control/connection-feedback";
+import {
   incompleteCodeFailure,
   waitForConnectedView,
-} from "@/components/features/remote-control/connection-feedback";
+} from "@/components/features/remote-control/connection-flow";
 import type { HostSelection } from "@/lib/host-location";
 
 export type HostAction = "connect" | "local" | "disconnect";
@@ -52,6 +54,14 @@ export function useHostConnectForm(selection: HostSelection, initialError: strin
   );
   const [pending, setPending] = useState<HostAction | null>(null);
   const [connected, setConnected] = useState<string | null>(null);
+  // Cancel closes the form while a check can still run. A closed form must not switch hosts.
+  const closed = useRef(false);
+  useEffect(() => {
+    closed.current = false;
+    return () => {
+      closed.current = true;
+    };
+  }, []);
   // The sixth digit and Enter can both submit before React renders the pending state.
   const flight = useSingleFlight();
   const run = (action: HostAction, work: () => Promise<void>): Promise<void> =>
@@ -76,10 +86,12 @@ export function useHostConnectForm(selection: HostSelection, initialError: strin
       return;
     }
     const address = await selection.confirm(endpoint, pairingCode || undefined);
-    setFailure(null);
-    setConnected(address);
-    await waitForConnectedView();
-    await selection.select(address);
+    if (!closed.current) {
+      setFailure(null);
+      setConnected(address);
+      await waitForConnectedView();
+      if (!closed.current) await selection.select(address);
+    }
   };
   return {
     endpoint,

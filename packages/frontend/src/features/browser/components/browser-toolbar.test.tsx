@@ -109,7 +109,8 @@ describe("BrowserToolbar", () => {
     const address = getAddress();
 
     fireEvent.pointerDown(address);
-    address.focus();
+    // The focus shows the full address. The render must finish before the click reads the caret.
+    act(() => address.focus());
     address.setSelectionRange(5, 5);
     fireEvent.click(address);
     expect([address.selectionStart, address.selectionEnd]).toEqual([0, address.value.length]);

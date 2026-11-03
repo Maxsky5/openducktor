@@ -18,7 +18,7 @@ import type {
   RemoteAuthorizationStore,
   RemoteConnectInput,
 } from "@openducktor/host-client/remote";
-import { waitWithAbort } from "@openducktor/host-client/remote";
+import { RemoteConnectionError, waitWithAbort } from "@openducktor/host-client/remote";
 import {
   type DamagedSavedHost,
   type InvalidDeviceRecord,
@@ -353,9 +353,20 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
           "Saved access is missing on this device. Enter a fresh host code.",
           null,
         );
+      // The old access stays until the new address connects, so a failed move keeps the host usable.
+      const knownAccess = deps.openAuthorizationStore(known.id);
+      const previous = await knownAccess.read(known.endpoint).catch((cause: unknown) => {
+        // Damaged saved access cannot connect, so the move has nothing to keep.
+        if (
+          cause instanceof RemoteConnectionError &&
+          cause.failure.code === "authorization_rejected"
+        )
+          return null;
+        throw cause;
+      });
       await closeSession(options);
       options.signal?.throwIfAborted();
-      await deps.openAuthorizationStore(known.id).save(grant);
+      await knownAccess.save(grant);
       const moved: SavedHost = { ...known, ...reached, hostId: grant.authorization.hostId };
       const opened = openSession(
         moved,
@@ -375,6 +386,7 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
         activate(opened);
       } catch (cause) {
         await release(opened.connection);
+        if (previous) await knownAccess.save(previous);
         throw cause;
       }
       deps.feedback.show("success", `${known.label} is at a new address`, {

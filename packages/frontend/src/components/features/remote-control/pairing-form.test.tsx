@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { act } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
-import * as feedback from "./connection-feedback";
+import * as feedback from "./connection-flow";
 import { PairingForm } from "./pairing-form";
 
 let connectedView: ReturnType<typeof spyOn>;

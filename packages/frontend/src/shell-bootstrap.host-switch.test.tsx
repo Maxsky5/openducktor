@@ -9,7 +9,7 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import * as appModule from "./App";
 import { HostSwitcher } from "./components/layout/host-connection";
-import * as feedback from "./components/features/remote-control/connection-feedback";
+import * as feedback from "./components/features/remote-control/connection-flow";
 import { readHostTarget } from "./lib/host-location";
 import { bootstrapOpenDucktorShell } from "./shell-bootstrap";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";

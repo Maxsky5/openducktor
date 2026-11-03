@@ -1,9 +1,10 @@
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
-import { expect, jest, mock, test } from "bun:test";
+import { expect, jest, mock, spyOn, test } from "bun:test";
 import { act } from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { HostPicker } from "./host-picker";
-import { CONNECTED_VIEW_MS } from "@/components/features/remote-control/connection-feedback";
+import * as feedback from "@/components/features/remote-control/connection-flow";
+import { CONNECTED_VIEW_MS } from "@/components/features/remote-control/connection-flow";
 
 test("does not offer the local host when it is already selected", () => {
   const view = render(
@@ -222,4 +223,32 @@ test("pairs with the address and code in one step and keeps a refused code with 
   } finally {
     jest.useRealTimers();
   }
+});
+
+test("a closed picker does not switch hosts when a pending check succeeds", async () => {
+  // The Connected view waits one second. This test checks the order, not the time.
+  const connectedView = spyOn(feedback, "waitForConnectedView").mockResolvedValue();
+  const check = Promise.withResolvers<string>();
+  const select = mock(async (_endpoint: string | null) => {});
+  const view = render(
+    <HostPicker
+      selection={{
+        target: { kind: "picker" },
+        localHost: null,
+        confirm: () => check.promise,
+        select,
+        disconnect: async () => {},
+      }}
+      onCancel={() => {}}
+    />,
+  );
+  fireEvent.change(view.getByLabelText("Host address"), {
+    target: { value: "http://192.168.1.9:14328" },
+  });
+  fireEvent.change(view.getByLabelText("Pairing code"), { target: { value: "123456" } });
+  // Cancel closes the dialog, which unmounts the picker while the check runs.
+  view.unmount();
+  await act(async () => check.resolve("http://192.168.1.9:14328"));
+  expect(select).not.toHaveBeenCalled();
+  connectedView.mockRestore();
 });

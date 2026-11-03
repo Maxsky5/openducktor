@@ -66,14 +66,10 @@ const clientHeaders = (): Plugin => ({
   name: "openducktor-client-headers",
   apply: "build",
   generateBundle() {
-    const bootstrap = artifactPreviewBootstrapResponse();
-    const dedicated = [...bootstrap.headers]
-      .flatMap(([name, value]) => [`  ! ${name}`, `  ${name}: ${value}`])
-      .join("\n");
     this.emitFile({
       type: "asset",
       fileName: "_headers",
-      source: `${readFileSync(path.join(__dirname, "client/_headers"), "utf8")}\n${ARTIFACT_PREVIEW_BOOTSTRAP_PATH}\n${dedicated}\n`,
+      source: readFileSync(path.join(__dirname, "client/_headers"), "utf8"),
     });
   },
 });
