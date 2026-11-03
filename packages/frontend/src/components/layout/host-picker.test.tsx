@@ -96,7 +96,7 @@ test("disconnect locks the form and reports its own failure", async () => {
   expect(onCancel).toHaveBeenCalledTimes(1);
 });
 
-test("keeps Cancel left and connection actions right in narrow windows", () => {
+test("keeps Cancel left and connection actions right when the footer stacks", () => {
   const view = render(
     <HostPicker
       selection={{
@@ -109,9 +109,16 @@ test("keeps Cancel left and connection actions right in narrow windows", () => {
     />,
   );
   const cancel = view.getByRole("button", { name: "Cancel" });
-  expect(cancel.closest('[data-slot="dialog-footer"]')).not.toBeNull();
-  expect(cancel.className).toContain("self-start");
+  const footer = cancel.closest('[data-slot="dialog-footer"]');
+  expect(footer).not.toBeNull();
+  // flex-wrap-reverse flips the cross axis, so self-end is the left edge.
+  expect(cancel.className).toContain("self-end");
   expect(cancel.className).toContain("sm:self-auto");
+  const actions = footer?.lastElementChild;
+  expect(actions?.tagName).toBe("DIV");
+  expect(actions?.className).toContain("self-start");
+  expect(actions?.className).toContain("justify-end");
+  expect(actions?.className).toContain("sm:self-auto");
 });
 
 test("the picker connects the entered host, reports failure, and permits a local connection", async () => {
