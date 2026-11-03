@@ -342,7 +342,7 @@ function WorkspaceSessionCreateForm({
             </p>
           )}
         </DialogBody>
-        <DialogFooter className="mt-0 justify-between border-t border-border px-6 py-4 sm:justify-between">
+        <DialogFooter className="mt-0 justify-between border-t border-border px-6 py-4">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>

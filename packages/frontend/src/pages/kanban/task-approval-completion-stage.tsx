@@ -48,7 +48,7 @@ export function TaskApprovalCompletionStage({
         />
       </DialogBody>
 
-      <DialogFooter className="mt-0 flex-col gap-3 border-t border-border/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <DialogFooter className="mt-0 flex-col gap-3 border-t border-border/80 px-6 py-4 sm:flex-row sm:items-center sm:px-8">
         <p className="text-sm text-muted-foreground">
           {directMergeCompletionStageDescription(model)}
         </p>
