@@ -1,5 +1,9 @@
 import { getScopedRepoConfig } from "../support/scoped-repo-config";
-import type { TaskMergeStatusSnapshot, WorkspaceRef } from "@openducktor/contracts";
+import type {
+  TaskAutoCloseFailure,
+  TaskMergeStatusSnapshot,
+  WorkspaceRef,
+} from "@openducktor/contracts";
 import { Clock, Effect, Exit, Scope, Semaphore } from "effect";
 import { canonicalTargetBranch, targetBranchRef } from "../../../domain/task";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
@@ -56,6 +60,15 @@ export type TaskMergeDetectionService = {
    * call during a pass of the same workspace waits for that pass and gets its snapshot.
    */
   runPass(workspace: WorkspaceRef): Effect.Effect<TaskMergeStatusSnapshot, TaskMergeDetectionError>;
+  /**
+   * Keeps the merged tasks that one pull request sync could not close, in memory only. A task that
+   * this sync did not fail to close loses its failure. It returns the failures of tasks that had
+   * none before, so each blocked close notifies once.
+   */
+  recordAutoCloseFailures(
+    workspace: WorkspaceRef,
+    failures: ReadonlyArray<{ taskId: string; message: string }>,
+  ): Effect.Effect<TaskAutoCloseFailure[]>;
   shutdown(): Effect.Effect<void>;
 };
 
@@ -80,6 +93,7 @@ export const createTaskMergeDetectionService = ({
   logger,
 }: CreateTaskMergeDetectionServiceInput): TaskMergeDetectionService => {
   const entries = new Map<string, Map<string, Entry>>();
+  const autoCloseFailures = new Map<string, Map<string, TaskAutoCloseFailure>>();
   // The service scope owns each pass, so a caller that stops waiting does not stop it.
   const scope = Scope.makeUnsafe();
   const passes = createKeyedSharedFlight<string, TaskMergeStatusSnapshot, TaskMergeDetectionError>({
@@ -93,6 +107,7 @@ export const createTaskMergeDetectionService = ({
   const snapshotOf = (workspace: WorkspaceRef): TaskMergeStatusSnapshot => ({
     ...workspace,
     tasks: [...(entries.get(workspaceKey(workspace))?.values() ?? [])].map((entry) => entry.status),
+    autoCloseFailures: [...(autoCloseFailures.get(workspaceKey(workspace))?.values() ?? [])],
   });
 
   /** Why a workspace runs no pass, or null when it is open and its removal is complete. */
@@ -309,6 +324,28 @@ export const createTaskMergeDetectionService = ({
         return yield* startPass(workspace, true);
       }),
     runPass: (workspace) => startPass(workspace, false),
+    recordAutoCloseFailures: (workspace, failures) =>
+      Effect.gen(function* () {
+        const key = workspaceKey(workspace);
+        const last = autoCloseFailures.get(key) ?? new Map<string, TaskAutoCloseFailure>();
+        const now = new Date(yield* Clock.currentTimeMillis).toISOString();
+        // `failedAt` stays the time of the first failure, so a later sync changes only the message.
+        const next = new Map(
+          failures.map(({ taskId, message }) => [
+            taskId,
+            { taskId, message, failedAt: last.get(taskId)?.failedAt ?? now },
+          ]),
+        );
+        if (next.size === 0) autoCloseFailures.delete(key);
+        else autoCloseFailures.set(key, next);
+        const changed =
+          next.size !== last.size ||
+          [...next.values()].some(
+            (failure) => last.get(failure.taskId)?.message !== failure.message,
+          );
+        if (changed) publish(snapshotOf(workspace));
+        return [...next.values()].filter((failure) => !last.has(failure.taskId));
+      }),
     shutdown: () => Scope.close(scope, Exit.void),
   };
 };

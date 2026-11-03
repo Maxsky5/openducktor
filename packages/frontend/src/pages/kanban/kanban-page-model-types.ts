@@ -47,6 +47,8 @@ export type KanbanPageContentModel = {
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   /** The target of each task whose branch is merged. Its card proposes Close Task. */
   mergedTargetByTaskId: ReadonlyMap<string, string>;
+  /** Why the pull request sync could not close each task. */
+  autoCloseFailureByTaskId: ReadonlyMap<string, string>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;

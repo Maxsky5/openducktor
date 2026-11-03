@@ -1,3 +1,4 @@
+import { worktreeOwnersRead } from "../../test-support/worktree-owners-read";
 import { describe, expect, test } from "bun:test";
 import {
   buildTaskDeleteConfirmCopy,
@@ -16,6 +17,7 @@ const impact = (overrides: Partial<TaskConfirmImpact> = {}): TaskConfirmImpact =
   terminalCount: 0,
   activeSessionCount: 0,
   activeSessionCountError: null,
+  worktreeOwners: worktreeOwnersRead(),
   error: null,
   ...overrides,
 });
@@ -73,6 +75,7 @@ const implementation = (
   legacyWorktreeCount: 0,
   terminalCount: 0,
   impactError: null,
+  worktreeOwners: worktreeOwnersRead(),
   ...overrides,
 });
 
@@ -105,13 +108,23 @@ describe("taskResetImplementationConfirmState", () => {
   test("waits for the impact reads and the reset", () => {
     expect(
       taskResetImplementationConfirmState(
-        { isSubmitting: false, isLoadingImpact: true, activeSessionCountError: null },
+        {
+          isSubmitting: false,
+          isLoadingImpact: true,
+          activeSessionCountError: null,
+          worktreeOwners: worktreeOwnersRead(),
+        },
         copy,
       ),
     ).toEqual({ isBusy: true, disabled: true, label: "Checking impact…" });
     expect(
       taskResetImplementationConfirmState(
-        { isSubmitting: true, isLoadingImpact: false, activeSessionCountError: null },
+        {
+          isSubmitting: true,
+          isLoadingImpact: false,
+          activeSessionCountError: null,
+          worktreeOwners: worktreeOwnersRead(),
+        },
         copy,
       ),
     ).toEqual({ isBusy: true, disabled: true, label: "Resetting..." });
@@ -120,7 +133,12 @@ describe("taskResetImplementationConfirmState", () => {
   test("blocks the reset when the active session check failed", () => {
     expect(
       taskResetImplementationConfirmState(
-        { isSubmitting: false, isLoadingImpact: false, activeSessionCountError: "Host error." },
+        {
+          isSubmitting: false,
+          isLoadingImpact: false,
+          activeSessionCountError: "Host error.",
+          worktreeOwners: worktreeOwnersRead(),
+        },
         copy,
       ),
     ).toEqual({ isBusy: false, disabled: true, label: "Reset" });

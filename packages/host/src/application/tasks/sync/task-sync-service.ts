@@ -1,5 +1,6 @@
 import {
   type ExternalTaskSyncEvent,
+  type TaskAutoCloseFailure,
   type WorkspaceRef,
   type TaskArtifactChange,
   type TaskEventCursor,
@@ -27,6 +28,8 @@ import type {
 } from "../task-mutation-operation";
 import type { RepoPullRequestSyncResult, TaskService, TaskServiceError } from "../task-service";
 import { workspaceSyncSkip } from "./pull-request-sync-target";
+import type { TaskMergeDetectionService } from "../merge-detection/task-merge-detection-service";
+import { syncedMergedTaskFailure } from "../support/close-synced-merged-task";
 import {
   type CreateTaskSyncLoopInput,
   createTaskSyncLoop,
@@ -84,10 +87,15 @@ export type TaskEventPublicationReporter = {
 };
 export type CreateTaskSyncServiceInput = Omit<
   CreateTaskSyncLoopInput,
-  "syncRepoPullRequests" | "workspaceSettingsService"
+  "syncRepoPullRequests" | "workspaceSettingsService" | "mergeDetection"
 > & {
   eventIdFactory?: () => string;
   acceptNotificationInput?: ((event: ExternalTaskSyncEvent) => void) | undefined;
+  /** Notifies the first failure of a merged task that the pull request sync could not close. */
+  notifyAutoCloseBlocked?:
+    | ((workspace: WorkspaceRef, failure: TaskAutoCloseFailure) => void)
+    | undefined;
+  mergeDetection: Pick<TaskMergeDetectionService, "runPass" | "recordAutoCloseFailures">;
   observeStatusChanges?: CommittedTaskStatusChangeObserver | undefined;
   publicationReporter: TaskEventPublicationReporter;
   taskEventStream: TaskEventStreamPort;
@@ -101,6 +109,7 @@ export type CreateTaskSyncServiceInput = Omit<
 export const createTaskSyncService = ({
   eventIdFactory = () => crypto.randomUUID(),
   acceptNotificationInput,
+  notifyAutoCloseBlocked,
   observeStatusChanges,
   intervalMs,
   logger,
@@ -312,6 +321,19 @@ export const createTaskSyncService = ({
                 statusChanges,
               );
             }
+            if (!syncResult.success.ran) return syncResult.success;
+            const { autoCloseFailures } = syncResult.success;
+            const workspace = { workspaceId: expectedWorkspaceId, repoPath };
+            const blocked = yield* mergeDetection.recordAutoCloseFailures(
+              workspace,
+              autoCloseFailures.map(({ taskId, failure }) => ({
+                taskId,
+                message: failure.message,
+              })),
+            );
+            for (const failure of blocked) notifyAutoCloseBlocked?.(workspace, failure);
+            const failure = syncedMergedTaskFailure(autoCloseFailures);
+            if (failure) return yield* Effect.fail(failure);
             return syncResult.success;
           }
           if (syncResult.failure instanceof TaskMutationProgressFailure) {

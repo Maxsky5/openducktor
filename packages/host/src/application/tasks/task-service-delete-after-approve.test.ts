@@ -1,13 +1,23 @@
+import {
+  createSettingsConfigTestDouble,
+  createClaudeSessionMetadataTestDouble,
+  createWorktreeFilePortTestDouble,
+  noWorktreeOwners,
+} from "../../test-support/service-test-doubles";
+import { createTaskWorktreeOwnerReader } from "../workspaces/task-worktree-owner-reader";
 import type {
   AgentSessionLiveSnapshot,
   DirectMergeRecord,
   TaskCard,
   TaskMetadataPayload,
 } from "@openducktor/contracts";
+import { createDefaultGlobalConfig } from "../../config/global-config";
+import type { WorktreeOwnershipChat } from "../../ports/workspace-session-store-port";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Effect } from "effect";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import { createRuntimeTaskActivityGuard } from "./runtime-task-activity-guard";
+import type { TaskWorktreeOwnerReader } from "../../ports/task-worktree-owner-port";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
@@ -99,7 +109,7 @@ const createLiveSessions = (existingPaths: ReadonlySet<string>) => {
   };
 };
 
-const createHarness = () => {
+const createHarness = (worktreeOwners: TaskWorktreeOwnerReader = noWorktreeOwners) => {
   const calls: unknown[] = [];
   const existingPaths = new Set([repoPath, worktreePath]);
   const settingsConfig = createBuildSettingsConfig(existingPaths);
@@ -155,6 +165,7 @@ const createHarness = () => {
         ),
     }),
     settingsConfig,
+    worktreeOwners,
     worktreeFiles: createBuildStartWorktreeFiles(calls),
     taskWorktreeService: {
       getTaskWorktree: () =>
@@ -216,6 +227,44 @@ describe("task deletion after Approve", () => {
     expect(preview).toEqual({ stoppableSessionCount: 0, removedWorktreeCount: 0 });
     await Effect.runPromise(harness.service.deleteTask(deleteInput));
     expect(harness.isDeleted()).toBe(true);
+  });
+
+  test("blocks the delete of a task while an imported chat works in its worktree through an alias", async () => {
+    // An imported OpenCode chat keeps the symlink path that the user gave.
+    const aliasPath = "/alias/task-1";
+    const chat: WorktreeOwnershipChat = {
+      workspaceId: "repo",
+      id: "chat-1",
+      runtimeKind: "opencode",
+      externalSessionId: "ses_chat",
+      workingDirectory: aliasPath,
+      generatedTitle: "Hi",
+      manualTitle: null,
+      archivedAt: null,
+    };
+    const harness = createHarness(
+      createTaskWorktreeOwnerReader({
+        settingsConfig: createSettingsConfigTestDouble({
+          readConfig: () => Effect.succeed(createDefaultGlobalConfig()),
+          pathExists: () => Effect.succeed(true),
+        }),
+        worktreeFiles: createWorktreeFilePortTestDouble({
+          resolveWorktreeRemovalPath: (path) =>
+            Effect.succeed(path === aliasPath ? worktreePath : path),
+        }),
+        store: { listForWorktreeOwnership: () => Effect.succeed([chat]) },
+        taskOwnership: { listOpenTasksForWorktreeOwnership: () => Effect.succeed([]) },
+        claudeSessionMetadata: createClaudeSessionMetadataTestDouble(() => Effect.succeed(null)),
+      }),
+    );
+
+    const deletion = await Effect.runPromise(Effect.flip(harness.service.deleteTask(deleteInput)));
+    expect(deletion.message).toBe(
+      "Cannot delete task task-1 because others still need its worktree. Saved chats work in a removed worktree: “Hi”. Archive these chats first.",
+    );
+    expect(harness.isDeleted()).toBe(false);
+    expect(harness.existingPaths.has(worktreePath)).toBe(true);
+    expect(harness.calls).not.toContainEqual(expect.objectContaining({ type: "removeWorktree" }));
   });
 
   test("blocks the delete of a task whose worktree went missing outside the workflow", async () => {

@@ -1,4 +1,6 @@
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
+import { taskWorktreeOwnersQueryOptions } from "@openducktor/frontend-core/queries/task-worktree-owners";
+import { noTaskWorktreeOwners } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { TaskMergeStatus } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -50,10 +52,11 @@ const createLoadedConnection = () => {
   const connection = createTestClientConnection({
     client: {
       workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+      taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
       taskWorktreeCleanupImpactGet: async () => LOADED_IMPACT,
       terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
     },
   });
   const { queryClient } = connection;
@@ -62,6 +65,15 @@ const createLoadedConnection = () => {
   queryClient.setQueryData(
     terminalListByFilterQueryOptions({ filter: { kind: "task", ...target } }).queryKey,
     { hostInstanceId: "host", revision: 1, terminals: [] },
+  );
+  queryClient.setQueryData(
+    taskWorktreeOwnersQueryOptions({
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      taskIds: ["TASK-1"],
+      operation: "close",
+    }).queryKey,
+    noTaskWorktreeOwners,
   );
   queryClient.setQueryData(
     taskStopImpactQueryOptions({
@@ -75,6 +87,7 @@ const createLoadedConnection = () => {
   queryClient.setQueryData(taskMergeStatusQueryOptions(workspaceRefFixture("/repo")).queryKey, {
     workspaceId: "workspace-1",
     repoPath: "/repo",
+    autoCloseFailures: [],
     tasks: [],
   });
   queryClient.setQueryData(
@@ -305,10 +318,11 @@ describe("TaskApprovalModal", () => {
     const connection = createTestClientConnection({
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: readImpact,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
       },
     });
     return render(
@@ -398,10 +412,11 @@ describe("TaskApprovalModal", () => {
     const connection = createTestClientConnection({
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: impactGet,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: stopImpactGet,
-        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
       },
     });
     const panel = (mode: TaskApprovalApprovalModalModel["mode"]) =>
@@ -452,14 +467,19 @@ describe("TaskApprovalModal", () => {
     const connection = createTestClientConnection({
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: async () => readKeptWorktree(),
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [notMerged] }),
+        taskMergeStatusGet: async (scope) => ({
+          ...scope,
+          tasks: [notMerged],
+          autoCloseFailures: [],
+        }),
         // The check finds the same result, so the card must not change at all.
         taskMergeStatusCheck: (scope) =>
           new Promise((resolve) => {
-            finishCheck = () => resolve({ ...scope, tasks: [notMerged] });
+            finishCheck = () => resolve({ ...scope, tasks: [notMerged], autoCloseFailures: [] });
           }),
       },
     });
@@ -510,6 +530,7 @@ describe("TaskApprovalModal", () => {
     const connection = createTestClientConnection({
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: async () => ({
           worktreePaths: ["/worktrees/TASK-1"],
           branchNames: ["odt/TASK-1"],
@@ -519,7 +540,7 @@ describe("TaskApprovalModal", () => {
         }),
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
-        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+        taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
         taskMergeStatusCheck: async () => {
           throw new Error("git fetch origin failed.");
         },
@@ -573,17 +594,20 @@ describe("TaskApprovalModal", () => {
     const connection = createTestClientConnection({
       client: {
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
         taskWorktreeCleanupImpactGet: impactGet,
         terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
         taskStopImpactGet: async () => ({ stoppableSessionCount: 0 }),
         taskMergeStatusGet: async (scope) => ({
           ...scope,
+          autoCloseFailures: [],
           tasks: [
             status({ kind: "not_merged", checkedAt, branchOid: "old-tip", unmergedCommitCount: 1 }),
           ],
         }),
         taskMergeStatusCheck: async (scope) => ({
           ...scope,
+          autoCloseFailures: [],
           tasks: [status({ kind: "merged", checkedAt, branchOid: "new-tip" })],
         }),
       },

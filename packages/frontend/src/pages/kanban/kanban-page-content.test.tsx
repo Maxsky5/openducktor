@@ -33,6 +33,7 @@ const model: KanbanPageContentModel = {
   taskSessionsByTaskId: new Map(),
   historicalSessionsByTaskId: new Map(),
   mergedTargetByTaskId: new Map(),
+  autoCloseFailureByTaskId: new Map(),
   activeTaskSessionContextByTaskId: new Map(),
   taskActivityStateByTaskId: new Map(),
   onOpenDetails: () => {},

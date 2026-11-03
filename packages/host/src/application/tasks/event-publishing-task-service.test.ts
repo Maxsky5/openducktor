@@ -66,7 +66,8 @@ const sync = (
       events.push({ changes });
       return { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 };
     }),
-  syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+  syncRepoPullRequests: () =>
+    Effect.succeed({ ran: true, changedTaskIds: [], autoCloseFailures: [] }),
 });
 
 describe("createEventPublishingTaskService", () => {
@@ -373,7 +374,8 @@ describe("createEventPublishingTaskService", () => {
           reports.push("acceptance failure reported");
           return { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 };
         }),
-      syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      syncRepoPullRequests: () =>
+        Effect.succeed({ ran: true, changedTaskIds: [], autoCloseFailures: [] }),
     };
     const service = createEventPublishingTaskService({
       taskWorkflows: builtinTaskWorkflows,
@@ -425,7 +427,8 @@ describe("createEventPublishingTaskService", () => {
             publishedTaskIds.push(taskSnapshot.id);
           }),
         publishTasksUpdated: () => Effect.die(new Error("unexpected task update publication")),
-        syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+        syncRepoPullRequests: () =>
+          Effect.succeed({ ran: true, changedTaskIds: [], autoCloseFailures: [] }),
       },
     });
 

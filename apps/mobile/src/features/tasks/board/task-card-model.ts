@@ -92,6 +92,8 @@ export type TaskCardInputs = {
   taskActivityState: KanbanTaskActivityState;
   /** The target that the task branch is merged into. Close Task then leads. */
   mergedTarget?: string | undefined;
+  /** Why the pull request sync could not close the task. Close Task then leads. */
+  autoCloseFailure?: string | undefined;
 };
 
 const PRIMARY_APPEARANCES = {
@@ -116,6 +118,7 @@ export const buildTaskCardModel = ({
   activeSessionRole,
   taskActivityState,
   mergedTarget,
+  autoCloseFailure,
 }: TaskCardInputs): TaskCardModel => {
   // The active session context of the board names the role of the primary active session.
   const hasActiveSession = activeSessionRole !== undefined;
@@ -127,6 +130,7 @@ export const buildTaskCardModel = ({
     activeSessionRole,
     taskActivityState,
     mergedTarget,
+    autoCloseFailure,
   });
   const disabled = new Set(footer.disabledActions);
   const closed = task.status === "closed";
@@ -192,6 +196,7 @@ export const buildTaskCardModel = ({
     `Priority ${priority.label}, ${priority.hint}`,
     qaRejected ? "QA rejected" : null,
     mergedTarget === undefined ? null : `Branch merged into ${mergedTarget}`,
+    autoCloseFailure ?? null,
     labels.length > 0 ? `Labels ${labels.join(", ")}` : null,
     liveSession?.label ?? null,
   ].filter((part): part is string => part !== null);

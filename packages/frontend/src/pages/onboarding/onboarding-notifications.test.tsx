@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
   AGENT_NOTIFICATION_KIND_VALUES,
+  TASK_NOTIFICATION_KIND_VALUES,
   type SettingsSnapshotSaveInput,
 } from "@openducktor/contracts";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
@@ -46,7 +47,9 @@ describe("onboarding notifications", () => {
 
     expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
     expect(screen.getAllByRole("switch", { name: /^Enable / })).toHaveLength(
-      AGENT_NOTIFICATION_KIND_VALUES.length + BUILTIN_NOTIFICATION_KINDS.length,
+      AGENT_NOTIFICATION_KIND_VALUES.length +
+        TASK_NOTIFICATION_KIND_VALUES.length +
+        BUILTIN_NOTIFICATION_KINDS.length,
     );
     expect(screen.getByRole("slider", { name: "Volume" })).toBeTruthy();
     expect(

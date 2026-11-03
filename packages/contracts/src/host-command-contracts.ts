@@ -138,6 +138,7 @@ export const HOST_COMMAND_NAMES = [
   "task_update",
   "task_worktree_cleanup_impact_get",
   "task_worktree_get",
+  "task_worktree_owners_get",
   "task_worktree_remove",
   "tasks_list",
   "tasks_list_all",

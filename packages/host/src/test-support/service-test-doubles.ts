@@ -2,11 +2,18 @@ import { withSettingsConfigMutationTestMethods } from "./settings-config-mutatio
 import { unexpectedSessionImport } from "./session-import-test-doubles";
 import { unexpectedRuntimeQueries } from "./runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../ports/agent-session-live-adapter-port";
+import { emptyWorktreeOwners } from "@openducktor/core";
 import { Effect } from "effect";
 import type { WorkspaceSettingsService } from "../application/workspaces/workspace-settings-service";
 import type { GitPort } from "../ports/git-port";
 import type { SettingsConfigPort } from "../ports/settings-config-port";
 import type { WorktreeFilePort } from "../ports/worktree-file-port";
+import type {
+  ClaudeSessionMetadataPort,
+  ClaudeWorkingDirectoryRead,
+} from "../ports/claude-session-metadata-port";
+import type { HostOperationError } from "../effect/host-errors";
+import type { TaskWorktreeOwnerReader } from "../ports/task-worktree-owner-port";
 import type {
   AgentSessionLiveAdapterBinding,
   AgentSessionRuntimeAdapterPort,
@@ -239,4 +246,30 @@ export const createWorktreeFilePortTestDouble = <Overrides extends Partial<Workt
   resolvePathWithinRoot: unexpectedEffectCall("worktree file port", "resolvePathWithinRoot"),
   resolveWorktreePath: () => unexpectedSyncCall("worktree file port", "resolveWorktreePath"),
   ...overrides,
+});
+
+/** No other owner needs a task worktree, so task cleanup can remove every task worktree. */
+export const noWorktreeOwners: TaskWorktreeOwnerReader = {
+  readOwners: () => Effect.succeed({ owners: emptyWorktreeOwners(), historyReadErrors: [] }),
+};
+
+/**
+ * A Claude metadata port. `read` answers the history directory of each session. Without it, a
+ * read fails the test.
+ */
+export const createClaudeSessionMetadataTestDouble = (
+  read?: (externalSessionId: string) => Effect.Effect<string | null, HostOperationError>,
+): ClaudeSessionMetadataPort => ({
+  readWorkingDirectories: read
+    ? (externalSessionIds) =>
+        Effect.forEach(externalSessionIds, (id) =>
+          read(id).pipe(
+            Effect.map((directory): ClaudeWorkingDirectoryRead => ({ kind: "read", directory })),
+            Effect.catch((error) =>
+              Effect.succeed<ClaudeWorkingDirectoryRead>({ kind: "failed", error }),
+            ),
+            Effect.map((entry) => [id, entry] as const),
+          ),
+        ).pipe(Effect.map((entries) => new Map(entries)))
+    : unexpectedEffectCall("Claude session metadata", "readWorkingDirectories"),
 });

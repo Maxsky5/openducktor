@@ -231,6 +231,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     taskDelete: taskClient.taskDelete.bind(taskClient),
     taskClose: taskClient.taskClose.bind(taskClient),
     taskWorktreeCleanupImpactGet: taskClient.taskWorktreeCleanupImpactGet.bind(taskClient),
+    taskWorktreeOwnersGet: taskClient.taskWorktreeOwnersGet.bind(taskClient),
     taskWorktreeRemove: taskClient.taskWorktreeRemove.bind(taskClient),
     taskMergeStatusGet: taskClient.taskMergeStatusGet.bind(taskClient),
     taskMergeStatusCheck: taskClient.taskMergeStatusCheck.bind(taskClient),

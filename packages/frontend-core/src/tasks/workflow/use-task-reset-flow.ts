@@ -9,6 +9,10 @@ import { isOutcomeUnknown } from "../../lib/command-outcome";
 import { errorMessage } from "../../lib/errors";
 import { useSingleFlight } from "../../lib/use-single-flight";
 import { useTaskStopImpact } from "../../queries/use-task-stop-impact";
+import {
+  type TaskWorktreeOwnersRead,
+  useTaskWorktreeOwners,
+} from "../../queries/use-task-worktree-owners";
 import { useTaskCleanupImpact } from "../details/use-task-cleanup-impact";
 
 export type TaskResetImplementationModalModel = {
@@ -25,6 +29,8 @@ export type TaskResetImplementationModalModel = {
   managedWorktreeCount: number;
   legacyWorktreeCount: number;
   terminalCount: number;
+  /** The others that need a removed worktree. */
+  worktreeOwners: TaskWorktreeOwnersRead;
   impactError: string | null;
   errorMessage: string | null;
   /** True when the connection lost the result of the reset. The host may have run it. */
@@ -96,6 +102,11 @@ export function useTaskResetFlow({
     isLoading: isLoadingStopImpact,
     error: stopImpactError,
   } = useTaskStopImpact({
+    taskIds: openTaskId ? [openTaskId] : [],
+    operation: "reset_implementation",
+    enabled: open,
+  });
+  const worktreeOwners = useTaskWorktreeOwners({
     taskIds: openTaskId ? [openTaskId] : [],
     operation: "reset_implementation",
     enabled: open,
@@ -181,12 +192,13 @@ export function useTaskResetFlow({
       isSubmitting,
       activeSessionCount,
       activeSessionCountError: stopImpactError,
-      isLoadingImpact: isLoadingImpact || isLoadingStopImpact,
+      isLoadingImpact: isLoadingImpact || isLoadingStopImpact || worktreeOwners.isLoading,
       hasCanonicalWorktree,
       hasManagedSessionCleanup,
       managedWorktreeCount,
       legacyWorktreeCount,
       terminalCount,
+      worktreeOwners,
       impactError,
       errorMessage: modalError?.message ?? null,
       errorOutcomeUnknown: modalError?.outcomeUnknown ?? false,

@@ -1,4 +1,5 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
+import { noWorktreeOwners } from "../../test-support/service-test-doubles";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError, TaskCreatedAssetError } from "../../effect/task-asset-error";
@@ -702,6 +703,7 @@ describe("createTaskService task mutations and reset", () => {
             closeOwnerTabs: (owner) =>
               Effect.sync(() => void calls.push({ type: "closeTabs", owner })),
           },
+          worktreeOwners: noWorktreeOwners,
           worktreeFiles: createCleanupWorktreeFiles(calls),
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
@@ -855,6 +857,7 @@ describe("createTaskService task mutations and reset", () => {
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskActivityGuard,
           taskStore,
+          worktreeOwners: noWorktreeOwners,
           worktreeFiles: createCleanupWorktreeFiles(calls),
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
@@ -941,6 +944,7 @@ describe("createTaskService task mutations and reset", () => {
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskActivityGuard,
           taskStore,
+          worktreeOwners: noWorktreeOwners,
           worktreeFiles: createCleanupWorktreeFiles(calls),
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
@@ -1313,6 +1317,7 @@ describe("createTaskService task mutations and reset", () => {
           ),
           taskActivityGuard,
           taskStore,
+          worktreeOwners: noWorktreeOwners,
           worktreeFiles: createCleanupWorktreeFiles(calls),
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
@@ -1552,6 +1557,7 @@ describe("createTaskService task mutations and reset", () => {
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
           taskActivityGuard,
           taskStore,
+          worktreeOwners: noWorktreeOwners,
           worktreeFiles: createCleanupWorktreeFiles(calls),
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
@@ -1799,6 +1805,7 @@ describe("createTaskService task mutations and reset", () => {
         }),
         settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
         taskStore,
+        worktreeOwners: noWorktreeOwners,
         worktreeFiles: createCleanupWorktreeFiles(calls),
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",

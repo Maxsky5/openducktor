@@ -7,11 +7,13 @@ import {
   requireMergedTaskCleanupDependencies,
   requirePullRequestSyncDependencies,
 } from "../support/required-task-dependencies";
-import { completeTaskClosure } from "../support/task-closure";
-import { requireEffect } from "../support/task-workflow-events";
-import { cleanupMergedTaskState } from "../support/task-worktree-cleanup";
+import {
+  closeSyncedMergedTask,
+  syncedMergedTaskFailure,
+} from "../support/close-synced-merged-task";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type {
+  AutoCloseFailure,
   RepoPullRequestSyncResult,
   TaskService,
   TaskServiceError,
@@ -30,6 +32,7 @@ export const createTaskPullRequestSyncUseCases = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
+  worktreeOwners,
 }: TaskServiceUseCaseInput): Pick<
   TaskService,
   "repoPullRequestSync" | "repoPullRequestSyncDetailed"
@@ -71,6 +74,7 @@ export const createTaskPullRequestSyncUseCases = ({
           workspaceId: input.workspaceId,
           repoPath: effectiveRepoPath,
         });
+        const closureFailures: AutoCloseFailure[] = [];
         for (const task of tasks) {
           const pullRequest = task.pullRequest;
           if (!pullRequest) {
@@ -112,42 +116,28 @@ export const createTaskPullRequestSyncUseCases = ({
               pullRequest: updated.record,
             });
             changedTaskIds.add(task.id);
-            const current = yield* taskStore.getTask({
-              workspaceId: input.workspaceId,
-              repoPath: effectiveRepoPath,
-              taskId: task.id,
-            });
-            const workflow = taskWorkflows.forTask(current);
-            const decision = yield* requireEffect(workflow, "pull_request.merged", current);
-            if (decision.kind === "unchanged") {
-              continue;
-            }
-            yield* completeTaskClosure({
-              workspaceId: input.workspaceId,
-              cleanup: cleanupMergedTaskState(
+            // A task that cannot close does not stop the sync of the other tasks.
+            const closure = yield* Effect.result(
+              closeSyncedMergedTask(
                 {
                   ...cleanupDependencies,
+                  taskStore,
+                  taskWorkflows,
                   taskActivityGuard,
                   taskSessionLifecycleCoordinator,
-                  workflow,
+                  worktreeOwners,
                 },
-                taskStore,
-                effectiveRepoPath,
-                task.id,
-                updated.sourceBranch,
-                updated.targetBranch,
-                current.removeWorktreeOnClose,
-                input.workspaceId,
+                {
+                  workspaceId: input.workspaceId,
+                  repoPath: effectiveRepoPath,
+                  taskId: task.id,
+                  sourceBranch: updated.sourceBranch,
+                  targetBranch: updated.targetBranch,
+                },
               ),
-              gitPort: cleanupDependencies.gitPort,
-              operation: "sync merged pull request",
-              repoPath: effectiveRepoPath,
-              taskWorkflows,
-              effect: "pull_request.merged",
-              taskId: task.id,
-              taskSessionLifecycleCoordinator,
-              taskStore,
-            });
+            );
+            if (closure._tag === "Failure")
+              closureFailures.push({ taskId: task.id, failure: closure.failure });
           } else if (!pullRequestRecordsMatch(updated.record, pullRequest)) {
             yield* taskStore.setPullRequest({
               workspaceId: input.workspaceId,
@@ -159,7 +149,11 @@ export const createTaskPullRequestSyncUseCases = ({
           }
         }
 
-        return { ran: true, changedTaskIds: [...changedTaskIds] };
+        return {
+          ran: true,
+          changedTaskIds: [...changedTaskIds],
+          autoCloseFailures: closureFailures,
+        };
       },
     );
     return Effect.gen(function* () {
@@ -189,9 +183,10 @@ export const createTaskPullRequestSyncUseCases = ({
             Effect.fail(partialFailure.failure),
           ),
         );
-        return result.ran
-          ? { ok: true }
-          : { ok: false, reason: result.reason, message: result.message };
+        if (!result.ran) return { ok: false, reason: result.reason, message: result.message };
+        const failure = syncedMergedTaskFailure(result.autoCloseFailures);
+        if (failure) return yield* Effect.fail(failure);
+        return { ok: true };
       });
     },
     repoPullRequestSyncDetailed,

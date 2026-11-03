@@ -1,7 +1,7 @@
 import type {
   AgentSessionRecord,
   RepoConfig,
-  TaskStopImpactOperation,
+  TaskWorktreeOwnersOperation,
 } from "@openducktor/contracts";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
@@ -19,7 +19,7 @@ import {
   workflowRoleIds,
 } from "./task-cleanup-support";
 
-export type RemovedWorktreeOperation = Exclude<TaskStopImpactOperation, "reset_implementation">;
+export type RemovedWorktreeOperation = Exclude<TaskWorktreeOwnersOperation, "reset_implementation">;
 
 export type RemovedWorktreeTarget = {
   task: TaskRecord;
@@ -35,8 +35,8 @@ type RemovedWorktreeDependencies = {
   workspaceSettingsService: WorkspaceSettingsService;
 };
 
-// Keep these path lists in step with Close, Delete, and Reset Task.
-const collectRemovedWorktreePaths = (
+// Keep these path lists in step with Close, Delete, Reset Task, and Remove worktree.
+export const collectRemovedWorktreePaths = (
   { taskWorktreeService, ...dependencies }: RemovedWorktreeDependencies,
   operation: RemovedWorktreeOperation,
   repoConfig: RepoConfig,
@@ -73,9 +73,12 @@ const collectRemovedWorktreePaths = (
     const closeDependencies = taskWorktreeService
       ? { ...dependencies, taskWorktreeService }
       : dependencies;
-    // Close returns early for a terminal task, so it removes nothing there.
+    // Close returns early for a terminal task, so it removes nothing there. Remove worktree runs
+    // only for a closed task, and removes the same worktrees as a close.
     const paths = yield* Effect.forEach(
-      targets.filter(({ task, workflow }) => !workflow.isTerminalState(task.status)),
+      operation === "remove_worktree"
+        ? targets
+        : targets.filter(({ task, workflow }) => !workflow.isTerminalState(task.status)),
       ({ task, sessions, workflow }) =>
         collectCloseWorktreePaths(
           closeDependencies,
@@ -90,27 +93,17 @@ const collectRemovedWorktreePaths = (
   });
 
 /**
- * Counts the existing task worktrees that Close, Delete, or Reset Task removes. A worktree that
- * the workflow or the user already removed does not count.
+ * Counts the existing task worktrees of a cleanup. A worktree that the workflow or the user
+ * already removed does not count.
  */
-export const countRemovedWorktrees = (
-  dependencies: RemovedWorktreeDependencies,
-  operation: RemovedWorktreeOperation,
-  repoConfig: RepoConfig,
-  repoPath: string,
-  targets: RemovedWorktreeTarget[],
+export const countExistingWorktrees = (
+  settingsConfig: Pick<SettingsConfigPort, "pathExists">,
+  paths: readonly string[],
 ) =>
   Effect.gen(function* () {
-    const paths = yield* collectRemovedWorktreePaths(
-      dependencies,
-      operation,
-      repoConfig,
-      repoPath,
-      targets,
-    );
     const existing = new Set<string>();
     for (const path of paths) {
-      if (yield* dependencies.settingsConfig.pathExists(path)) {
+      if (yield* settingsConfig.pathExists(path)) {
         existing.add(normalizePathForComparison(path));
       }
     }

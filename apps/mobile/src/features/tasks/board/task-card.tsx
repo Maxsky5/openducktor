@@ -60,6 +60,8 @@ export type TaskCardProps = TaskCardHandlers & {
   taskActivityState: KanbanTaskActivityState;
   /** The target that the task branch is merged into. The card then proposes Close Task. */
   mergedTarget: string | undefined;
+  /** Why the pull request sync could not close the task. The card shows it and proposes Close Task. */
+  autoCloseFailure: string | undefined;
   /** True when the card shows in the detail area next to the board. */
   selected: boolean;
 };
@@ -116,6 +118,7 @@ export const TaskCard = memo(function TaskCard({
   activeSessionRole,
   taskActivityState,
   mergedTarget,
+  autoCloseFailure,
   selected,
   onOpenDetails,
   onAction,
@@ -130,8 +133,17 @@ export const TaskCard = memo(function TaskCard({
         activeSessionRole,
         taskActivityState,
         mergedTarget,
+        autoCloseFailure,
       }),
-    [activeSessionRole, historicalSessions, mergedTarget, task, taskActivityState, taskSessions],
+    [
+      activeSessionRole,
+      autoCloseFailure,
+      historicalSessions,
+      mergedTarget,
+      task,
+      taskActivityState,
+      taskSessions,
+    ],
   );
   const items = useMemo(() => menuItems(model), [model]);
   const menuRef = useRef<ActionMenuHandle>(null);
@@ -211,6 +223,17 @@ export const TaskCard = memo(function TaskCard({
           </View>
         ) : null}
         {liveSession && !primaryShowsSession ? <LiveSessionChip session={liveSession} /> : null}
+        {autoCloseFailure ? (
+          <View
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            <Text variant="footnote" style={styles.autoCloseFailure}>
+              {autoCloseFailure}
+            </Text>
+          </View>
+        ) : null}
         <View pointerEvents="box-none" style={styles.footer}>
           <View
             pointerEvents="none"
@@ -333,6 +356,7 @@ const styles = StyleSheet.create((theme) => ({
     boxShadow: theme.shadows.card,
   },
   idleFrame: { borderColor: theme.desktop.border },
+  autoCloseFailure: { color: theme.desktop.warningMuted },
   // `.kanban-active-session-card`: a sky border and glow under the running ray.
   runningFrame: {
     borderColor: withAlpha(theme.palette.sky500, 0.58),

@@ -1,3 +1,4 @@
+import { worktreeOwnersRead } from "../../test-support/worktree-owners-read";
 import { describe, expect, test } from "bun:test";
 import type { TaskStopImpactState } from "../../queries/use-task-stop-impact";
 import { buildTaskConfirmImpact } from "./task-cleanup-impact-model";
@@ -28,7 +29,7 @@ const subject = { id: "task-1", title: "Approved task" };
 
 describe("buildTaskConfirmImpact", () => {
   test("counts the worktrees that the host still finds", () => {
-    const impact = buildTaskConfirmImpact(sessionCleanup(), stopImpact());
+    const impact = buildTaskConfirmImpact(sessionCleanup(), stopImpact(), worktreeOwnersRead());
 
     expect(impact).toMatchObject({ hasManagedSessionCleanup: false, managedWorktreeCount: 0 });
     const lines = buildTaskDeleteConfirmCopy(subject, impact).changes;
@@ -39,6 +40,7 @@ describe("buildTaskConfirmImpact", () => {
     const impact = buildTaskConfirmImpact(
       sessionCleanup(),
       stopImpact({ removedWorktreeCount: 2 }),
+      worktreeOwnersRead(),
     );
 
     expect(impact).toMatchObject({ hasManagedSessionCleanup: true, managedWorktreeCount: 2 });
@@ -48,6 +50,7 @@ describe("buildTaskConfirmImpact", () => {
     const impact = buildTaskConfirmImpact(
       sessionCleanup(),
       stopImpact({ removedWorktreeCount: null }),
+      worktreeOwnersRead(),
     );
 
     expect(impact).toMatchObject({ hasManagedSessionCleanup: true, managedWorktreeCount: 1 });
@@ -57,6 +60,7 @@ describe("buildTaskConfirmImpact", () => {
     const impact = buildTaskConfirmImpact(
       sessionCleanup(),
       stopImpact({ stoppableSessionCount: null, removedWorktreeCount: null, isLoading: true }),
+      worktreeOwnersRead(),
     );
 
     expect(impact).toMatchObject({ isLoading: true, isLoadingStopImpact: true });

@@ -14,6 +14,11 @@ import {
   type TaskWorktreeImpact,
   useRemoveWorktreeSettingsRead,
 } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
+import {
+  worktreeOwnerLines,
+  worktreeOwnerLineTone,
+  worktreeOwnerReadErrorMessage,
+} from "@openducktor/frontend-core/tasks/details/task-worktree-owner-copy";
 import type { TaskMergeStatusView } from "@openducktor/frontend-core/tasks/presentation/task-merge-status";
 import { type ReactElement, useState } from "react";
 import { View } from "react-native";
@@ -137,9 +142,12 @@ export function TaskCleanupTargets({
   if (impact.error) return null;
   if (worktreePaths.length === 0 && branchNames.length === 0) {
     return (
-      <Text variant="footnote" style={styles.muted}>
-        {COPY.noCleanupTargets}
-      </Text>
+      <>
+        <Text variant="footnote" style={styles.muted}>
+          {COPY.noCleanupTargets}
+        </Text>
+        <TaskCleanupOwners owners={impact.worktreeOwners} removes={removes} />
+      </>
     );
   }
   return (
@@ -158,6 +166,7 @@ export function TaskCleanupTargets({
             (removes ? " will be lost." : " will be kept.")
           : "No uncommitted changes."}
       </Text>
+      <TaskCleanupOwners owners={impact.worktreeOwners} removes={removes} />
       <Button
         label={expanded ? "Hide worktree details" : "Worktree details"}
         variant="plain"
@@ -184,6 +193,45 @@ export function TaskCleanupTargets({
     </>
   );
 }
+
+/**
+ * The others that need the worktree. Their color follows the choice, as the uncommitted files do.
+ * A failed owner read shows with its retry, but only a removal needs the owners.
+ */
+function TaskCleanupOwners({
+  owners,
+  removes,
+}: {
+  owners: TaskWorktreeImpact["worktreeOwners"];
+  removes: boolean;
+}): ReactElement {
+  const theme = useAppTheme();
+  const readError = worktreeOwnerReadErrorMessage(owners);
+  return (
+    <>
+      {worktreeOwnerLines(owners).map((line) => (
+        <Text
+          key={line.text}
+          variant="footnote"
+          style={{ color: ownerLineColors(theme)[worktreeOwnerLineTone(line, removes)] }}
+        >
+          {line.text}
+        </Text>
+      ))}
+      {removes && readError ? (
+        <TaskReadError
+          read={{ isLoading: owners.isLoading, error: readError, retry: owners.retry }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+const ownerLineColors = (theme: ReturnType<typeof useAppTheme>) => ({
+  muted: theme.desktop.mutedForeground,
+  destructive: theme.desktop.destructiveMuted,
+  warning: theme.desktop.warningMuted,
+});
 
 function CleanupTarget({ label, values }: { label: string; values: string[] }): ReactElement {
   return (

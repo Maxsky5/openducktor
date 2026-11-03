@@ -20,6 +20,7 @@ import {
   workflowRoleIds,
 } from "../support/task-cleanup-support";
 import { collectTaskCleanupTargets } from "../support/task-close-cleanup";
+import { noRemovedWorktrees } from "../support/task-worktree-owner-guard";
 import { completeTaskClosure } from "../support/task-closure";
 import { requireEffect } from "../support/task-workflow-events";
 import { enrichTask } from "../support/task-workflow-helpers";
@@ -35,6 +36,7 @@ export const createTaskCloseUseCase = ({
   taskWorktreeService,
   worktreeFiles,
   workspaceSettingsService,
+  worktreeOwners,
   taskSessionLifecycleCoordinator,
 }: TaskServiceUseCaseInput): Pick<TaskService, "closeTask"> => ({
   closeTask(input) {
@@ -95,6 +97,7 @@ export const createTaskCloseUseCase = ({
               ? { ...dependencies, taskWorktreeService: taskWorktreeDependency }
               : dependencies,
             lifecycle: taskSessionLifecycleCoordinator,
+            worktreeOwners,
             repoPath: effectiveRepoPath,
             branchPrefix,
             workflow,
@@ -106,7 +109,7 @@ export const createTaskCloseUseCase = ({
         // A kept worktree keeps its branch, because the worktree has that branch checked out.
         const { worktreePaths, branchNames } = removeWorktree
           ? yield* collectCleanupTargets
-          : { worktreePaths: [], branchNames: [] };
+          : { worktreePaths: noRemovedWorktrees, branchNames: [] };
         if (hasWorkflowSessions && taskActivityGuard) {
           const { stoppedSessionCount } = yield* taskActivityGuard.cleanupTaskSessions({
             repoPath: effectiveRepoPath,

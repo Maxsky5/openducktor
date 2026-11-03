@@ -3,7 +3,10 @@ import { HostOperationError } from "../../effect/host-errors";
 import { WorktreeActionExitError } from "../actions/worktree-action-runner";
 import { createWorkspaceSessionImportService } from "./workspace-session-import-service";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
-import { createAgentSessionRuntimeAdapterTestDouble } from "../../test-support/service-test-doubles";
+import {
+  createAgentSessionRuntimeAdapterTestDouble,
+  createClaudeSessionMetadataTestDouble,
+} from "../../test-support/service-test-doubles";
 import { removeWorkspaceSessionWorktree } from "./workspace-session-worktree-lifecycle";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
@@ -171,9 +174,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     const store = createSqliteWorkspaceSessionStore(database);
     const dependencies: WorkspaceSessionServiceDependencies = {
       taskOwnership: database.taskOwnership,
-      claudeSessionMetadata: {
-        readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
-      },
+      claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },
       runForkSourceOperation: (_target, work) => work,
       browserTabs: { closeOwnerTabs: () => Effect.void },
@@ -524,7 +525,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         removeWorktree: true,
         worktreeConfirmation: { workingDirectory: external, branchName: "external" },
       }),
-    ).rejects.toThrow("saved chats need it for files or history");
+    ).rejects.toThrow("Saved chats work in a removed worktree");
     const archived = await h.router.invoke("workspace_session_archive", ref);
 
     expect(archived.archivedAt).not.toBeNull();

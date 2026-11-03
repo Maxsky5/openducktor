@@ -62,6 +62,20 @@ describe("buildTaskCardModel", () => {
     expect(model.menu).toEqual([]);
   });
 
+  test("proposes Close Task and reads the reason when the pull request sync could not close it", () => {
+    const reason = "Pull request merged, but the task did not close. Archive the chat first.";
+    const model = buildTaskCardModel({
+      task: task({ status: "human_review", availableActions: ["human_approve", "close_task"] }),
+      taskSessions: [],
+      historicalSessions: [],
+      activeSessionRole: undefined,
+      taskActivityState: "idle",
+      autoCloseFailure: reason,
+    });
+    expect(model.primary?.action).toBe("close_task");
+    expect(model.accessibilityLabel).toContain(reason);
+  });
+
   test("names the running session on the primary control", () => {
     const model = buildTaskCardModel({
       task: task({ status: "in_progress", availableActions: ["build_start", "open_builder"] }),

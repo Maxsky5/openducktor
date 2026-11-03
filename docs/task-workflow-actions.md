@@ -127,6 +127,27 @@ A confirmed close removes the task worktree, the session worktrees, and the rela
 
 `task_worktree_remove` stops task terminals, removes the managed worktrees, and force-deletes the related local branches. Commits that exist only on these branches are lost. It changes no other task data.
 
+## Other owners of a task worktree
+
+The host checks the others that need a task worktree before Close, Delete, Reset Task, Reset Implementation, Remove worktree, and merged task cleanup remove it. It uses the owner rules of chat archive with worktree removal. It checks every configured workspace, also closed workspaces. It compares paths after alias resolution, so a symlink path and its real path are the same worktree.
+
+| Owner | Effect |
+|---|---|
+| Another workspace that uses the worktree as its repository checkout | Blocks. Remove that workspace. |
+| An open task, other than the task itself, whose worktree or session uses the directory | Blocks. Close that task. |
+| A saved chat that works in the worktree and is not archived | Blocks. Archive that chat. |
+| A saved Claude chat whose native history uses the worktree, also when archived | Warns. The chat cannot resume after the removal. |
+
+Each confirmation reads these owners with `task_worktree_owners_get` when it opens, and shows its content when this read also has its first result. A close, approval, or merged pull request confirmation uses the owners only while its choice removes the worktree, so a change of that choice only changes their color. A blocking owner disables Confirm, and the host also refuses the cleanup before it stops task sessions or removes a worktree. A confirmed cleanup removes a worktree that only Claude history needs, because its confirmation showed the warning.
+
+A saved Claude chat whose native history the host cannot read only warns in a confirmation, and the warning names the chat and its workspace. A failed owner read blocks only the removal, and its error row has a retry.
+
+Pull request sync closes a merged task without a confirmation. It also blocks on a Claude history owner, so the user must close that task. A task that cannot close does not stop the sync of the other tasks. The sync then fails with the reason for each task.
+
+The host keeps each task that the last pull request sync could not close in memory, and does not save it. The merge status snapshot lists these tasks in `autoCloseFailures`. The task card shows the reason and proposes Close Task. The first failure of a task since the host started sends one `task.auto_close_blocked` notification, which opens the task on the board. A later sync that fails again sends no notification. A sync that closes the task, or no longer fails, removes the failure.
+
+A worktree that no longer exists has nothing to remove, so its owners do not count.
+
 ## Merge detection
 
 The host checks whether task branches are merged into their targets. It never closes a task. It only proposes Close Task.

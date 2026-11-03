@@ -1,3 +1,4 @@
+import { noWorktreeOwners } from "../../test-support/service-test-doubles";
 import type {
   DirectMergeRecord,
   TaskCompletionObservation,
@@ -115,6 +116,7 @@ const createHarness = (
     ),
     settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
     taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+    worktreeOwners: noWorktreeOwners,
     worktreeFiles: createBuildStartWorktreeFiles(calls),
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",

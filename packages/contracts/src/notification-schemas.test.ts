@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   AGENT_NOTIFICATION_KIND_VALUES,
   NOTIFICATION_CUE_VALUES,
+  TASK_NOTIFICATION_KIND_VALUES,
   createDefaultNotificationSettings,
   notificationOccurrenceSchema,
   notificationNavigationTargetSchema,
@@ -28,7 +29,7 @@ describe("notification contracts", () => {
     },
   );
 
-  test("ships the agent catalogue and defaults", () => {
+  test("ships the agent and task catalogues and defaults", () => {
     const settings = createDefaultNotificationSettings();
 
     expect(AGENT_NOTIFICATION_KIND_VALUES).toEqual([
@@ -38,7 +39,11 @@ describe("notification contracts", () => {
       "agent.session_started",
       "agent.session_idle",
     ]);
-    expect(Object.keys(settings.kinds)).toEqual([...AGENT_NOTIFICATION_KIND_VALUES]);
+    expect(TASK_NOTIFICATION_KIND_VALUES).toEqual(["task.auto_close_blocked"]);
+    expect(Object.keys(settings.kinds)).toEqual([
+      ...AGENT_NOTIFICATION_KIND_VALUES,
+      ...TASK_NOTIFICATION_KIND_VALUES,
+    ]);
     expect(settings).toMatchObject({
       globalCue: "chime",
       volumePercent: 30,
@@ -51,7 +56,15 @@ describe("notification contracts", () => {
       "agent.session_error": { enabled: true, target: "both", sound: "inherit" },
       "agent.session_started": { enabled: true, target: "in_app", sound: "inherit" },
       "agent.session_idle": { enabled: false, target: "both", sound: "inherit" },
+      "task.auto_close_blocked": { enabled: true, target: "both", sound: "inherit" },
     });
+  });
+
+  test("accepts a saved config without a task kind, so the host can add its default", () => {
+    const settings = createDefaultNotificationSettings();
+    const { "task.auto_close_blocked": _removed, ...kinds } = settings.kinds;
+
+    expect(notificationSettingsSchema.parse({ ...settings, kinds }).kinds).toEqual(kinds);
   });
 
   test("adds the workflow kinds that the caller supplies", () => {

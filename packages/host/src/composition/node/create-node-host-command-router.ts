@@ -69,6 +69,7 @@ import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createNodeWorkspaceSessionPersistence } from "./node-workspace-session-persistence";
 import { createNodeWorkspaceSessionServices } from "./node-workspace-session-services";
+import { createClaudeSessionMetadataAdapter } from "../../adapters/claude/claude-session-metadata-adapter";
 import { createNodeSessionStartupTracker } from "./node-session-startup-progress";
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 export const assembleNodeEffectHostCommandRouter = (
@@ -118,6 +119,7 @@ export const assembleNodeEffectHostCommandRouter = (
     taskWorkflows,
   );
   const { workspaceSettingsService, workspaceProviderSetup, workspaceAdmissionService } = setup;
+  const claudeSessionMetadata = createClaudeSessionMetadataAdapter(readEnv);
   const assets = createNodeTaskAssetServices({
     configDir,
     contextManager: defaultPorts.taskDatabase,
@@ -272,6 +274,7 @@ export const assembleNodeEffectHostCommandRouter = (
     },
     eventServiceInput: {
       acceptNotificationInput: notificationComposition.acceptTask,
+      notifyAutoCloseBlocked: notificationComposition.acceptAutoCloseBlocked,
       observeStatusChanges: (change) => autopilot?.observe(change),
       lifecycleLogger,
       onBackgroundFailure,
@@ -286,6 +289,8 @@ export const assembleNodeEffectHostCommandRouter = (
     repositoryPolicy: workspaceSessions.persistence,
     pauseForStop: messageDelivery.pauseForStop,
     readSessionRootRefs: workspaceSessions.readSessionRootRefs,
+    savedSessions: assets,
+    claudeSessionMetadata,
     workflowLaunch: {
       messageDelivery,
       resolveParts: (parts) => resolveSessionMessageParts(parts, localAttachmentService),
@@ -358,7 +363,7 @@ export const assembleNodeEffectHostCommandRouter = (
     worktreeActions,
     registry: liveSessionAdapterRegistry,
     eventBus,
-    readEnv,
+    claudeSessionMetadata,
   });
   const workspaceFiles = workspaceChats.scopeFiles(createWorkspaceFilesService(filesystem, git));
   const launchControls = createNodeSessionLaunchControls(agentSessionCommandService, [

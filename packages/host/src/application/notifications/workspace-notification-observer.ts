@@ -7,6 +7,7 @@ import type {
   WorkspaceSession,
   ExternalTaskSyncEvent,
   AgentSessionLiveEnvelope,
+  TaskAutoCloseFailure,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { createSessionOccurrenceProjector } from "./session-occurrence-projector";
@@ -20,7 +21,12 @@ import { runtimeTitle } from "../../domain/workspace-sessions/workspace-session-
 export type WorkspaceNotificationInput =
   | { type: "task"; event: ExternalTaskSyncEvent }
   | { type: "live"; envelope: AgentSessionLiveEnvelope; provenance: "baseline" | "live" }
-  | { type: "association"; session: WorkspaceSession };
+  | { type: "association"; session: WorkspaceSession }
+  | { type: "auto_close_blocked"; failure: TaskAutoCloseFailure };
+
+/** The health source that a failed input reports. */
+export const notificationInputSource = (input: WorkspaceNotificationInput): "task" | "session" =>
+  input.type === "task" || input.type === "auto_close_blocked" ? "task" : "session";
 type WorkspaceState = {
   record: WorkspaceRecord;
   active: boolean;
@@ -194,19 +200,39 @@ export const createWorkspaceNotificationObserver = ({
           if (!retained.has(key)) state.projector.invalidateOwnership(key);
         yield* refreshOwners();
       });
+    const autoCloseBlockedOccurrence = ({
+      taskId,
+      failedAt,
+    }: TaskAutoCloseFailure): NotificationOccurrence => {
+      const { workspaceId, repoPath, workspaceName } = state.record;
+      const title = state.tasks.get(taskId)?.title;
+      return {
+        occurrenceId: `task.auto_close_blocked:${repoPath}:${taskId}:${failedAt}`,
+        kind: "task.auto_close_blocked",
+        workspaceId,
+        repoPath,
+        repositoryLabel: workspaceName,
+        task: title ? { id: taskId, title } : { id: taskId },
+        // The task shows the full reason, which can be longer than a notification.
+        status: "Its pull request merged, but the task could not close. Open the task to see why.",
+        navigationTarget: { type: "kanban_task", workspaceId, repoPath, taskId },
+      };
+    };
     const process = (input: WorkspaceNotificationInput) =>
       Effect.gen(function* () {
         if (!state.active) return;
+        if (input.type === "auto_close_blocked") {
+          yield* publish([autoCloseBlockedOccurrence(input.failure)]);
+          return;
+        }
         if (input.type === "association") {
           setWorkspaceSession(input.session);
           yield* refreshOwners();
           return;
         }
         if (input.type === "live") {
-          if (input.envelope.type === "fault") {
-            failure(state.record.repoPath, "session", new Error(input.envelope.message));
-            return;
-          }
+          // A fault reports a session or runtime read, and the session views show it.
+          // The projector only marks the session status as unavailable.
           yield* publish(state.projector.accept(input.envelope, input.provenance));
           return;
         }
@@ -241,9 +267,7 @@ export const createWorkspaceNotificationObserver = ({
     const consume = (input: WorkspaceNotificationInput) =>
       process(input).pipe(
         Effect.catch((cause) =>
-          Effect.sync(() =>
-            failure(state.record.repoPath, input.type === "task" ? "task" : "session", cause),
-          ),
+          Effect.sync(() => failure(state.record.repoPath, notificationInputSource(input), cause)),
         ),
       );
     const initialize = () =>
@@ -285,7 +309,7 @@ export const createWorkspaceNotificationObserver = ({
         state.active = false;
         failure(
           state.record.repoPath,
-          input.type === "task" ? "task" : "session",
+          notificationInputSource(input),
           new Error("Notification observation queue is full."),
         );
       }

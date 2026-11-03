@@ -28,6 +28,8 @@ import {
   type TaskStopImpact,
   type TaskStopImpactRequest,
   type TaskWorktreeCleanupImpact,
+  type TaskWorktreeOwners,
+  type TaskWorktreeOwnersRequest,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task/task-policy-error";
@@ -45,34 +47,22 @@ import {
   GitProviderRepositoryError,
   GitProviderResolutionError,
 } from "../../ports/git-provider-errors";
-import type { GitPort, GitPortError } from "../../ports/git-port";
-import type { RuntimeRegistryError, RuntimeRegistryPort } from "../../ports/runtime-registry-port";
-import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
-import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
-import type {
-  TaskReference,
-  TaskStoreError,
-  TaskStorePort,
-} from "../../ports/task-repository-ports";
-import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
-import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
-import type { WorktreeActionRunner } from "../actions/worktree-action-runner";
-import type { GitProviderResolver } from "../git/git-provider-resolver";
-import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
-import type { TerminalService, TerminalServiceError } from "../terminals/terminal-service";
-import type { BrowserOwnerCleanupPort } from "../browser/browser-owner-cleanup";
-import type {
-  WorkspaceSettingsError,
-  WorkspaceSettingsService,
-} from "../workspaces/workspace-settings-service";
+import type { GitPortError } from "../../ports/git-port";
+import type { RuntimeRegistryError } from "../../ports/runtime-registry-port";
+import type { SettingsConfigError } from "../../ports/settings-config-port";
+import type { TaskReference, TaskStoreError } from "../../ports/task-repository-ports";
+import type { ToolDiscoveryError } from "../../ports/tool-discovery-port";
+import type { WorktreeFileError } from "../../ports/worktree-file-port";
+import type { TerminalServiceError } from "../terminals/terminal-service";
+import type { WorkspaceSettingsError } from "../workspaces/workspace-settings-service";
 import {
   mapTaskServiceErrors,
   mapTaskCreationProgressErrors,
   mapTaskMutationProgressErrors,
 } from "./task-error-mapping";
 import { createTaskStopImpactUseCase } from "./use-cases/get-task-stop-impact";
+import { createTaskWorktreeOwnersUseCase } from "./use-cases/get-task-worktree-owners";
+import type { CreateTaskServiceInput, TaskServiceUseCaseInput } from "./task-dependencies";
 import { createTaskWorktreeUseCases } from "./use-cases/manage-task-worktree";
 import type {
   AgentSessionDeleteInput,
@@ -125,11 +115,7 @@ import { createTaskFullResetUseCase } from "./use-cases/reset-task";
 import { createTaskReviewUseCases } from "./use-cases/review-task";
 import { createTaskPullRequestSyncUseCases } from "./use-cases/sync-pull-requests";
 import { createTaskBuildStateUseCases } from "./use-cases/update-build-state";
-import {
-  createTaskSessionLifecycleCoordinator,
-  type TaskSessionLifecycleCoordinator,
-} from "./worktrees/task-session-lifecycle-coordinator";
-import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
+import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
 
 export type TaskServiceError =
   | GitProviderRepositoryError
@@ -180,6 +166,10 @@ export type TaskService = {
   getTaskWorktreeCleanupImpact(
     input: TaskIdInput,
   ): Effect.Effect<TaskWorktreeCleanupImpact, TaskServiceError>;
+  /** The others that need a worktree that a task action removes, for its confirmation. */
+  getTaskWorktreeOwners(
+    input: TaskWorktreeOwnersRequest,
+  ): Effect.Effect<TaskWorktreeOwners, TaskServiceError>;
   /** Removes the worktree and local branches of a closed task. */
   removeTaskWorktree(input: TaskIdInput): Effect.Effect<void, TaskServiceError>;
   getTaskMetadata(input: TaskIdInput): Effect.Effect<TaskMetadataPayload, TaskServiceError>;
@@ -288,42 +278,17 @@ export type TaskServiceWithMutationProgress = Omit<
     input: UpdateTaskInput,
   ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
 };
+/** A merged task that the pull request sync could not close. */
+export type AutoCloseFailure = { taskId: string; failure: TaskServiceError };
 export type RepoPullRequestSyncResult =
-  | { ran: true; changedTaskIds: string[] }
+  | { ran: true; changedTaskIds: string[]; autoCloseFailures: AutoCloseFailure[] }
   | { ran: false; changedTaskIds: []; reason: RepoPullRequestSyncSkipReason; message: string };
 export type RepoPullRequestSyncDetailedError = TaskServiceError | TaskMutationProgressFailure;
-export type TaskTerminalCleanupPort = Pick<TerminalService, "acquireTaskCleanup">;
-export type CreateTaskServiceInput = {
-  publishCompletion?:
-    | ((
-        observation: import("@openducktor/contracts").TaskCompletionObservation,
-      ) => Effect.Effect<void, import("../../effect/host-errors").HostError>)
-    | undefined;
-  terminalService?: TaskTerminalCleanupPort;
-  browserTabs?: BrowserOwnerCleanupPort;
-  worktreeActions?: WorktreeActionRunner;
-  gitPort?: GitPort;
-  gitProviderResolver?: GitProviderResolver;
-  taskStore: TaskStorePort;
-  taskWorkflows: TaskWorkflowResolver;
-  taskActivityGuard?: TaskActivityGuardPort;
-  settingsConfig?: SettingsConfigPort;
-  systemCommands?: SystemCommandPort;
-  toolDiscovery?: ToolDiscoveryPort;
-  taskWorktreeService?: TaskWorktreeService;
-  workspaceSettingsService?: WorkspaceSettingsService;
-  runtimeDefinitionsService?: RuntimeDefinitionsService;
-  runtimeRegistry?: RuntimeRegistryPort;
-  worktreeFiles?: WorktreeFilePort;
-  taskSessionLifecycleCoordinator?: TaskSessionLifecycleCoordinator;
-};
-export type TaskServiceUseCaseInput = Omit<
+export type {
   CreateTaskServiceInput,
-  "taskSessionLifecycleCoordinator"
-> & {
-  taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
-  completionState: ReturnType<typeof createTaskCompletionState>;
-};
+  TaskServiceUseCaseInput,
+  TaskTerminalCleanupPort,
+} from "./task-dependencies";
 export const createTaskServiceWithMutationProgress = (
   input: CreateTaskServiceInput,
 ): TaskServiceWithMutationProgress => createTaskServiceImplementation(input);
@@ -345,6 +310,7 @@ const createTaskServiceImplementation = (
     ...createArtifactUseCases(useCaseInput),
     ...createTaskQueryUseCases(useCaseInput),
     ...createTaskStopImpactUseCase(useCaseInput),
+    ...createTaskWorktreeOwnersUseCase(useCaseInput),
     ...createTaskWorktreeUseCases(useCaseInput),
     ...createTaskApprovalContextUseCase(useCaseInput),
     ...createTaskPullRequestDetectionUseCase(useCaseInput),
@@ -403,6 +369,7 @@ const createTaskServiceImplementation = (
     getTaskStopImpact: (input) => mapTaskServiceErrors(service.getTaskStopImpact(input)),
     getTaskWorktreeCleanupImpact: (input) =>
       mapTaskServiceErrors(service.getTaskWorktreeCleanupImpact(input)),
+    getTaskWorktreeOwners: (input) => mapTaskServiceErrors(service.getTaskWorktreeOwners(input)),
     removeTaskWorktree: (input) => mapTaskServiceErrors(service.removeTaskWorktree(input)),
     repoPullRequestSync: (input) => mapTaskServiceErrors(service.repoPullRequestSync(input)),
     repoPullRequestSyncDetailed: (input) =>

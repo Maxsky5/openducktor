@@ -5,6 +5,8 @@ import { waitFor } from "@testing-library/react";
 import type { PropsWithChildren, ReactElement } from "react";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";
 import * as stopImpactModule from "../../queries/use-task-stop-impact";
+import * as worktreeOwnersModule from "../../queries/use-task-worktree-owners";
+import { worktreeOwnersRead } from "../../test-support/worktree-owners-read";
 import { createFeedbackFake } from "../../test-support/feedback-fake";
 import { enableReactActEnvironment } from "../../test-support/react-act-environment";
 import { createHookHarness as createSharedHookHarness } from "../../test-support/react-hook-harness";
@@ -62,6 +64,9 @@ describe("useTaskResetFlow", () => {
         error: null,
         retry: () => {},
       })),
+      spyOn(worktreeOwnersModule, "useTaskWorktreeOwners").mockImplementation(() =>
+        worktreeOwnersRead(),
+      ),
     );
   });
 

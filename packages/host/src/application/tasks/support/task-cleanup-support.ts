@@ -16,6 +16,7 @@ import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import { classifyWorkspaceCheckout } from "../../git/workspace-checkout";
 import type { TaskTerminalCleanupPort } from "../task-service";
 import { type TaskCleanupOperation, type TaskCleanupProgressState } from "./task-cleanup-progress";
+import type { OwnerCheckedWorktreePaths } from "./task-worktree-owner-guard";
 /** The roles of the task workflow. Cleanup stops and removes only their sessions. */
 export const workflowRoleIds = (workflow: TaskWorkflow): Set<string> =>
   new Set(workflow.definition.roles.map(({ id }) => id));
@@ -366,7 +367,8 @@ export const runTaskLocalCleanup = ({
   terminalService: TaskTerminalCleanupPort | undefined;
   worktreeCleanupOperation: TaskWorktreeCleanupOperation;
   worktreeFiles: WorktreeFilePort | undefined;
-  worktreePaths: string[];
+  /** The worktrees to remove, after `acquireRemovableWorktrees` checked them. */
+  worktreePaths: OwnerCheckedWorktreePaths;
   /** False makes a worktree with uncommitted changes fail the cleanup. */
   forceWorktreeRemoval?: boolean;
   /** Gets each branch and its tip just before Git deletes it, so a caller can restore it. */

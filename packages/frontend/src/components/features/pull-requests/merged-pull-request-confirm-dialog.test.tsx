@@ -39,7 +39,7 @@ const createConnection = (readImpact: typeof keptWorktree = keptWorktree) =>
       taskWorktreeCleanupImpactGet: readImpact,
       terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
       taskStopImpactGet: async () => ({ stoppableSessionCount: 1 }),
-      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [] }),
+      taskMergeStatusGet: async (scope) => ({ ...scope, tasks: [], autoCloseFailures: [] }),
     },
   });
 

@@ -39,6 +39,7 @@ type KanbanColumnProps = {
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   historicalSessionsByTaskId: Map<string, HistoricalSessions>;
   mergedTargetByTaskId: ReadonlyMap<string, string>;
+  autoCloseFailureByTaskId: ReadonlyMap<string, string>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
@@ -59,6 +60,7 @@ export function KanbanColumn({
   taskSessionsByTaskId,
   historicalSessionsByTaskId,
   mergedTargetByTaskId,
+  autoCloseFailureByTaskId,
   activeTaskSessionContextByTaskId,
   taskActivityStateByTaskId,
   onOpenDetails,
@@ -87,6 +89,7 @@ export function KanbanColumn({
             taskActivityState: getRequiredTaskActivityState(taskActivityStateByTaskId, task.id),
             pendingState,
             mergedTarget: mergedTargetByTaskId.get(task.id),
+            autoCloseFailure: autoCloseFailureByTaskId.get(task.id),
           };
           return [task.id, getCardLayout(inputs)];
         }),
@@ -97,6 +100,7 @@ export function KanbanColumn({
       taskSessionsByTaskId,
       historicalSessionsByTaskId,
       mergedTargetByTaskId,
+      autoCloseFailureByTaskId,
       taskActivityStateByTaskId,
       pendingState,
     ],
@@ -130,6 +134,8 @@ export function KanbanColumn({
     if (context?.role) cardProps.activeSessionRole = context.role;
     const mergedTarget = mergedTargetByTaskId.get(task.id);
     if (mergedTarget !== undefined) cardProps.mergedTarget = mergedTarget;
+    const autoCloseFailure = autoCloseFailureByTaskId.get(task.id);
+    if (autoCloseFailure !== undefined) cardProps.autoCloseFailure = autoCloseFailure;
     if (onCloseTask) cardProps.onCloseTask = onCloseTask;
     if (onQaStart) cardProps.onQaStart = onQaStart;
     if (onHumanApprove) cardProps.onHumanApprove = onHumanApprove;

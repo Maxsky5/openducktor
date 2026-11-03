@@ -1,3 +1,5 @@
+import type { TaskWorktreeOwnersRead } from "../../queries/use-task-worktree-owners";
+
 /** What a task confirmation shows about the cleanup that its action runs. */
 export type TaskConfirmImpact = {
   isLoading: boolean;
@@ -7,6 +9,8 @@ export type TaskConfirmImpact = {
   terminalCount: number;
   activeSessionCount: number | null;
   activeSessionCountError: string | null;
+  /** The others that need a removed worktree. */
+  worktreeOwners: TaskWorktreeOwnersRead;
   error: string | null;
 };
 

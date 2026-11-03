@@ -38,6 +38,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
+  worktreeOwners,
 }: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "linkMergedPullRequest"> => ({
   linkMergedPullRequest(input) {
     return Effect.gen(function* () {
@@ -158,7 +159,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           const cleanupEffect = hasTaskBranch
             ? cleanupConfirmedMergeClose({
                 workspaceId: input.workspaceId,
-                dependencies: { ...dependencies, taskActivityGuard },
+                dependencies: { ...dependencies, taskActivityGuard, worktreeOwners },
                 taskStore,
                 lifecycle: taskSessionLifecycleCoordinator,
                 repoPath,

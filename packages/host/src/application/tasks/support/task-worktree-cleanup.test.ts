@@ -21,7 +21,10 @@ import {
 } from "../test-support/task-workflow-harness";
 import { createTaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
 import { createTaskWorktreeService } from "../worktrees/task-worktree-service";
-import { createGitPortTestDouble } from "../../../test-support/service-test-doubles";
+import {
+  createGitPortTestDouble,
+  noWorktreeOwners,
+} from "../../../test-support/service-test-doubles";
 import {
   cleanupMergedTaskState,
   findLatestCleanupTarget,
@@ -396,6 +399,7 @@ describe("task worktree cleanup", () => {
             taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
             taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
             terminalService: createTerminalCleanupService(calls),
+            worktreeOwners: noWorktreeOwners,
             worktreeFiles: createBuildStartWorktreeFiles(calls),
           },
           taskStoreWithTasks([task()]),
@@ -410,8 +414,9 @@ describe("task worktree cleanup", () => {
     );
 
     expect(calls).toEqual([
-      { type: "acquireTerminalCleanup", repoPath: "/repo", taskIds: ["task-1"] },
+      // The owner check runs before the close stops anything.
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "acquireTerminalCleanup", repoPath: "/repo", taskIds: ["task-1"] },
       {
         type: "removeWorktree",
         repoPath: "/repo",
@@ -424,6 +429,76 @@ describe("task worktree cleanup", () => {
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
       { type: "releaseTerminalCleanup" },
     ]);
+  });
+
+  test("keeps the worktree of a merged task when a Claude chat keeps its native history there", async () => {
+    const calls: unknown[] = [];
+    const reads: unknown[] = [];
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        Effect.scoped(
+          cleanupMergedTaskState(
+            {
+              workflow: builtinTaskWorkflow,
+              gitPort: createDirectMergeGitPort({
+                calls,
+                currentBranches: {
+                  "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+                },
+                branches: {
+                  "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+                },
+              }),
+              settingsConfig: createBuildSettingsConfig(
+                new Set(["/repo", "/worktrees/repo/task-1"]),
+              ),
+              taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+              taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
+              terminalService: createTerminalCleanupService(calls),
+              worktreeOwners: {
+                readOwners: (input) =>
+                  Effect.sync(() => {
+                    reads.push(input);
+                    return {
+                      owners: {
+                        checkoutWorkspaces: [],
+                        tasks: [],
+                        chats: [],
+                        historyChats: [{ workspaceId: "repo", sessionId: "fork-1", title: "Fork" }],
+                      },
+                      historyReadErrors: [],
+                    };
+                  }),
+              },
+              worktreeFiles: createBuildStartWorktreeFiles(calls),
+            },
+            taskStoreWithTasks([task()]),
+            "/repo",
+            "task-1",
+            "odt/task-1",
+            "main",
+            true,
+            "repo",
+          ),
+        ),
+      ),
+    );
+
+    // No user confirms a pull request sync close, so it cannot warn about native history.
+    expect(failure.message).toBe(
+      "Cannot close task task-1 because others still need its worktree. Saved Claude chats keep their native history in a removed worktree: “Fork”. These chats cannot resume after this. Close the task yourself to confirm the removal.",
+    );
+    expect(reads).toEqual([
+      {
+        workspaceId: "repo",
+        repoPath: "/repo",
+        taskIds: ["task-1"],
+        worktreePaths: ["/worktrees/repo/task-1"],
+        history: "required",
+      },
+    ]);
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "removeWorktree" }));
   });
 
   test("releases the task sessions under the worktree lock before it removes the worktree", async () => {
@@ -472,6 +547,7 @@ describe("task worktree cleanup", () => {
             taskWorktreeService: createDirectMergeTaskWorktreeService(worktreePath),
             taskSessionLifecycleCoordinator: coordinator,
             terminalService: createTerminalCleanupService(calls),
+            worktreeOwners: noWorktreeOwners,
             worktreeFiles: createBuildStartWorktreeFiles(calls),
           },
           taskStoreWithTasks([task()], {
@@ -500,8 +576,8 @@ describe("task worktree cleanup", () => {
     await Effect.runPromise(Effect.forEach(reads, Fiber.join));
 
     expect(calls.slice(0, 8)).toEqual([
-      { type: "acquireTerminalCleanup", repoPath: "/repo", taskIds: ["task-1"] },
       { type: "currentBranch", workingDir: worktreePath },
+      { type: "acquireTerminalCleanup", repoPath: "/repo", taskIds: ["task-1"] },
       { type: "cleanupTaskSessions", repoPath: "/repo", sessionIds: ["build-1", "planner-1"] },
       { type: "removeWorktree", repoPath: "/repo", worktreePath, force: false },
       { type: "removePathIfPresent", path: worktreePath },
@@ -534,6 +610,7 @@ describe("task worktree cleanup", () => {
               taskWorktreeService: createDirectMergeTaskWorktreeService(worktreePath),
               taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
               terminalService: createTerminalCleanupService(calls),
+              worktreeOwners: noWorktreeOwners,
               worktreeFiles: createBuildStartWorktreeFiles(calls),
             },
             taskStoreWithTasks([task()], {
@@ -577,6 +654,7 @@ describe("task worktree cleanup", () => {
             taskWorktreeService: createDirectMergeTaskWorktreeService("/repo/./task/.."),
             taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
             terminalService: createTerminalCleanupService(calls),
+            worktreeOwners: noWorktreeOwners,
             worktreeFiles: createBuildStartWorktreeFiles(calls),
           },
           taskStoreWithTasks([task()]),
@@ -638,6 +716,7 @@ describe("task worktree cleanup", () => {
               taskWorktreeService,
               taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
               terminalService: createTerminalCleanupService(calls),
+              worktreeOwners: noWorktreeOwners,
               worktreeFiles: {
                 ...createBuildStartWorktreeFiles(calls),
                 resolvePathWithinRoot: (_root, candidate) =>
@@ -706,6 +785,7 @@ describe("task worktree cleanup", () => {
               taskWorktreeService: createDirectMergeTaskWorktreeService(worktreePath),
               taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
               terminalService: createTerminalCleanupService(calls),
+              worktreeOwners: noWorktreeOwners,
               worktreeFiles: createBuildStartWorktreeFiles(calls),
             },
             taskStoreWithTasks([task()]),
@@ -755,6 +835,7 @@ describe("task worktree cleanup", () => {
               taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
               taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
               terminalService: createTerminalCleanupService(calls),
+              worktreeOwners: noWorktreeOwners,
               worktreeFiles: createBuildStartWorktreeFiles(calls),
             },
             taskStoreWithTasks([task()]),

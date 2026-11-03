@@ -1,7 +1,9 @@
 import type { TerminalListResponse } from "@openducktor/contracts";
 import type { TaskStopImpactState } from "../../queries/use-task-stop-impact";
+import type { TaskWorktreeOwnersRead } from "../../queries/use-task-worktree-owners";
 import type { TaskConfirmDialogState, TaskConfirmImpact } from "./task-confirm-dialog-types";
 import type { TaskCleanupImpact } from "./use-task-cleanup-impact";
+import { isConfirmBlockedByImpact } from "./task-worktree-owner-copy";
 
 /** The task terminals that a cleanup stops. */
 export const runningTerminalCount = (response: TerminalListResponse | undefined): number =>
@@ -74,11 +76,12 @@ export const formatCleanupImpactMessage = (
 export const buildTaskConfirmImpact = (
   cleanup: TaskCleanupImpact,
   stop: TaskStopImpactState,
+  owners: TaskWorktreeOwnersRead,
 ): TaskConfirmImpact => {
   const removedWorktreeCount = stop.removedWorktreeCount;
   return {
     // The worktree count comes with the stop impact, so the cleanup line waits for it too.
-    isLoading: cleanup.isLoadingImpact || stop.isLoading,
+    isLoading: cleanup.isLoadingImpact || stop.isLoading || owners.isLoading,
     isLoadingStopImpact: stop.isLoading,
     hasManagedSessionCleanup:
       removedWorktreeCount === null ? cleanup.hasManagedSessionCleanup : removedWorktreeCount > 0,
@@ -86,6 +89,7 @@ export const buildTaskConfirmImpact = (
     terminalCount: cleanup.terminalCount,
     activeSessionCount: stop.stoppableSessionCount,
     activeSessionCountError: stop.error,
+    worktreeOwners: owners,
     error: cleanup.impactError,
   };
 };
@@ -102,5 +106,5 @@ export const confirmButtonState = (
   let label = labels.idle;
   if (operation.isPending) label = labels.pending;
   else if (isBusy) label = labels.checking;
-  return { isBusy, disabled: isBusy || impact.activeSessionCountError !== null, label };
+  return { isBusy, disabled: isBusy || isConfirmBlockedByImpact(impact), label };
 };

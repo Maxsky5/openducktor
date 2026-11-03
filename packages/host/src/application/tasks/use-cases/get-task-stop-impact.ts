@@ -15,9 +15,15 @@ import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-p
 import type { TaskRecord } from "../../../ports/task-repository-ports";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import { collectImplementationResetSessionState } from "../support/implementation-reset-targets";
-import { requireDependencies } from "../support/required-task-dependencies";
+import {
+  requireDependencies,
+  requireTaskStopImpactDependencies,
+} from "../support/required-task-dependencies";
 import { selectWorkflowCleanupSessionRecords } from "../support/task-cleanup-support";
-import { countRemovedWorktrees } from "../support/task-removed-worktrees";
+import {
+  collectRemovedWorktreePaths,
+  countExistingWorktrees,
+} from "../support/task-removed-worktrees";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 type TaskStopImpactDependencies = {
@@ -31,35 +37,6 @@ type StopImpactTarget = {
   taskId: string;
   sessions: AgentSessionRecord[];
   workflow: TaskWorkflow;
-};
-
-const requireTaskStopImpactDependencies = (
-  gitPort: GitPort | undefined,
-  settingsConfig: SettingsConfigPort | undefined,
-  workspaceSettingsService: WorkspaceSettingsService | undefined,
-): TaskStopImpactDependencies => {
-  if (!gitPort) {
-    throw new HostDependencyError({
-      dependency: "gitPort",
-      operation: "task_stop_impact_get",
-      message: "Git port is required for task stop impact previews.",
-    });
-  }
-  if (!settingsConfig) {
-    throw new HostDependencyError({
-      dependency: "settingsConfig",
-      operation: "task_stop_impact_get",
-      message: "Settings config port is required for task stop impact previews.",
-    });
-  }
-  if (!workspaceSettingsService) {
-    throw new HostDependencyError({
-      dependency: "workspaceSettingsService",
-      operation: "task_stop_impact_get",
-      message: "Workspace settings service is required for task stop impact previews.",
-    });
-  }
-  return { gitPort, settingsConfig, workspaceSettingsService };
 };
 
 // Keep this filter in step with each stop path.
@@ -166,12 +143,15 @@ export const createTaskStopImpactUseCase = ({
       if (input.operation === "reset_implementation") {
         return { stoppableSessionCount } satisfies TaskStopImpact;
       }
-      const removedWorktreeCount = yield* countRemovedWorktrees(
-        { ...dependencies, taskWorktreeService },
-        input.operation,
-        repoConfig,
-        effectiveRepoPath,
-        targets,
+      const removedWorktreeCount = yield* countExistingWorktrees(
+        dependencies.settingsConfig,
+        yield* collectRemovedWorktreePaths(
+          { ...dependencies, taskWorktreeService },
+          input.operation,
+          repoConfig,
+          effectiveRepoPath,
+          targets,
+        ),
       );
       return { stoppableSessionCount, removedWorktreeCount } satisfies TaskStopImpact;
     });

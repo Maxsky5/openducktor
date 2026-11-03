@@ -8,6 +8,7 @@ import {
 } from "../../../effect/host-errors";
 import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
 import type { TaskRecord } from "../../../ports/task-repository-ports";
+import type { TaskWorktreeOwnerReader } from "../../../ports/task-worktree-owner-port";
 import type { TaskServiceUseCaseInput } from "../task-service";
 import type { TaskCompletionState } from "../task-completion-state";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
@@ -23,7 +24,11 @@ export const closeMergedTask = (
     Pick<
       TaskServiceUseCaseInput,
       "taskStore" | "completionState" | "taskSessionLifecycleCoordinator" | "taskWorkflows"
-    > & { taskActivityGuard: TaskActivityGuardPort | undefined; workflow: TaskWorkflow },
+    > & {
+      taskActivityGuard: TaskActivityGuardPort | undefined;
+      worktreeOwners: TaskWorktreeOwnerReader | undefined;
+      workflow: TaskWorkflow;
+    },
   input: TaskDirectMergeCompleteIntent,
   merge: DirectMergeRecord,
   current: TaskRecord,

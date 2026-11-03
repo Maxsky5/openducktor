@@ -7,7 +7,9 @@ import {
   type NotificationOccurrence,
   type NotificationSettings,
   type SelectedNotification,
+  type TaskAutoCloseFailure,
   type WorkspaceRecord,
+  type WorkspaceRef,
   type WorkspaceSession,
 } from "@openducktor/contracts";
 import { prepareNotificationOccurrence } from "@openducktor/core";
@@ -24,6 +26,7 @@ import {
   createWorkspaceNotificationObserver,
   type WorkspaceNotificationObserver,
   type WorkspaceNotificationInput,
+  notificationInputSource,
 } from "./workspace-notification-observer";
 
 export const createNotificationService = ({
@@ -74,7 +77,7 @@ export const createNotificationService = ({
     if (startupInputs.length >= 1024) {
       failure(
         repoPath,
-        input.type === "task" ? "task" : "session",
+        notificationInputSource(input),
         new Error("Notification startup queue is full."),
       );
       return;
@@ -221,6 +224,13 @@ export const createNotificationService = ({
       const state = workspaces.get(event.workspaceId);
       if (state?.record.repoPath === event.repoPath) state.observer.accept({ type: "task", event });
       else if (startup !== "ready") captureStartup(event.repoPath, { type: "task", event });
+    },
+    acceptAutoCloseBlocked(workspace: WorkspaceRef, failure: TaskAutoCloseFailure) {
+      if (stopped) return;
+      const state = workspaces.get(workspace.workspaceId);
+      const input: WorkspaceNotificationInput = { type: "auto_close_blocked", failure };
+      if (state?.record.repoPath === workspace.repoPath) state.observer.accept(input);
+      else if (startup !== "ready") captureStartup(workspace.repoPath, input);
     },
     acceptLive(envelope: AgentSessionLiveEnvelope, provenance: "baseline" | "live") {
       if (stopped) return;

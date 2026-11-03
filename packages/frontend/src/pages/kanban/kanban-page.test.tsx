@@ -496,6 +496,7 @@ const publishKanbanPageModels = (
         taskSessionsByTaskId: models.content.taskSessionsByTaskId,
         historicalSessionsByTaskId: models.content.historicalSessionsByTaskId,
         mergedTargetByTaskId: models.content.mergedTargetByTaskId,
+        autoCloseFailureByTaskId: models.content.autoCloseFailureByTaskId,
         activeTaskSessionContextByTaskId: models.content.activeTaskSessionContextByTaskId,
         taskActivityStateByTaskId: models.content.taskActivityStateByTaskId,
         onOpenDetails: models.content.onOpenDetails,

@@ -34,6 +34,7 @@ export const createTaskWorktreeUseCases = ({
   taskWorktreeService,
   worktreeFiles,
   workspaceSettingsService,
+  worktreeOwners,
   taskSessionLifecycleCoordinator,
 }: TaskServiceUseCaseInput): Pick<
   TaskService,
@@ -144,6 +145,7 @@ export const createTaskWorktreeUseCases = ({
         workspaceId: input.workspaceId,
         dependencies,
         lifecycle: taskSessionLifecycleCoordinator,
+        worktreeOwners,
         repoPath: effectiveRepoPath,
         branchPrefix: repoConfig.branchPrefix,
         workflow,

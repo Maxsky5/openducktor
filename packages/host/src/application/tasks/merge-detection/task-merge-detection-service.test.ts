@@ -184,7 +184,12 @@ describe("task merge detection service", () => {
       tasks: [],
     });
 
-    expect(await runPass(harness)).toEqual({ workspaceId: "repo", repoPath: "/repo", tasks: [] });
+    expect(await runPass(harness)).toEqual({
+      workspaceId: "repo",
+      repoPath: "/repo",
+      tasks: [],
+      autoCloseFailures: [],
+    });
     expect(harness.gitCalls).toEqual([]);
     expect(harness.snapshots).toEqual([]);
   });
@@ -683,5 +688,41 @@ describe("task merge detection service", () => {
     expect(open.gitCalls.filter((call) => call.startsWith("fetch:"))).toEqual([
       "fetch:origin:true",
     ]);
+  });
+
+  test("keeps the close failures of the last pull request sync, and returns only new ones", async () => {
+    const harness = createHarness();
+    const workspace = { workspaceId: "repo", repoPath: "/repo" };
+    const record = (failures: { taskId: string; message: string }[]) =>
+      Effect.runPromise(harness.service.recordAutoCloseFailures(workspace, failures));
+
+    const first = await record([{ taskId: "task-1", message: "A chat needs the worktree." }]);
+    expect(first).toEqual([
+      { taskId: "task-1", message: "A chat needs the worktree.", failedAt: expect.any(String) },
+    ]);
+    expect(harness.snapshots.at(-1)?.autoCloseFailures).toEqual(first);
+
+    // The same failure again notifies nothing and publishes nothing.
+    expect(await record([{ taskId: "task-1", message: "A chat needs the worktree." }])).toEqual([]);
+    expect(harness.snapshots).toHaveLength(1);
+
+    // A new message keeps the time of the first failure.
+    expect(
+      await record([
+        { taskId: "task-1", message: "A task needs the worktree." },
+        { taskId: "task-2", message: "The worktree has changes." },
+      ]),
+    ).toEqual([
+      { taskId: "task-2", message: "The worktree has changes.", failedAt: expect.any(String) },
+    ]);
+    const snapshot = await Effect.runPromise(harness.service.getSnapshot(workspace));
+    expect(snapshot.autoCloseFailures).toEqual([
+      { taskId: "task-1", message: "A task needs the worktree.", failedAt: first[0]?.failedAt },
+      { taskId: "task-2", message: "The worktree has changes.", failedAt: expect.any(String) },
+    ]);
+
+    // A sync without failures clears them.
+    expect(await record([])).toEqual([]);
+    expect(harness.snapshots.at(-1)?.autoCloseFailures).toEqual([]);
   });
 });

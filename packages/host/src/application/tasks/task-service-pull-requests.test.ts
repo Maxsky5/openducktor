@@ -1,4 +1,5 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
+import { noWorktreeOwners } from "../../test-support/service-test-doubles";
 import { Effect } from "effect";
 import { z } from "zod";
 import { GithubProviderAdapter } from "../../adapters/git-providers/github/provider-adapter";
@@ -1851,6 +1852,7 @@ describe("createTaskService pull requests", () => {
             taskActivityGuard: createReleasingActivityGuard(calls),
             taskStore,
             taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+            worktreeOwners: noWorktreeOwners,
             worktreeFiles: createBuildStartWorktreeFiles(calls),
             workspaceSettingsService: createBuildWorkspaceSettingsService({
               workspaceId: "repo",
@@ -1916,6 +1918,100 @@ describe("createTaskService pull requests", () => {
       }
     });
   }
+  test("closes the other merged tasks when one merged task cannot close", async () => {
+    const calls: unknown[] = [];
+    const linkedPullRequest = {
+      providerId: "github" as const,
+      number: 42,
+      url: "https://github.com/openai/openducktor/pull/42",
+      state: "open" as const,
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    };
+    const taskIds = ["task-1", "task-2"];
+    // Only task-1 has a session worktree, and a saved chat works there.
+    const buildSession = createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" });
+    const taskStore: TaskStorePort = {
+      listPullRequestSyncCandidates: () =>
+        Effect.succeed(
+          taskIds.map((id) => ({ id, status: "human_review", pullRequest: linkedPullRequest })),
+        ),
+      listTasks: () =>
+        Effect.succeed(
+          taskIds.map((id) => task({ id, status: "human_review", pullRequest: linkedPullRequest })),
+        ),
+      getTaskMetadata: (input) =>
+        Effect.succeed({
+          artifacts: {},
+          agentSessions: input.taskId === "task-1" ? [buildSession] : [],
+        }),
+      setPullRequest: () => Effect.succeed(true),
+      transitionTask: (input) =>
+        Effect.sync(() => {
+          calls.push({ type: "transition", taskId: input.taskId });
+          return task({ id: input.taskId, status: input.status });
+        }),
+    };
+    const service = createGithubTaskService({
+      gitPort: createDirectMergeGitPort({
+        calls,
+        currentBranches: { "/worktrees/repo/task-1": { name: "odt/task-1", detached: false } },
+        branches: { "/repo": [{ name: "main", isCurrent: true, isRemote: false }] },
+      }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+      systemCommands: createPullRequestSyncSystemCommands({
+        calls,
+        payload: githubPullResponsePayload({
+          number: 42,
+          state: "closed",
+          mergedAt: "2026-05-10T11:00:00.000Z",
+          updatedAt: "2026-05-10T11:00:00.000Z",
+        }),
+      }),
+      taskActivityGuard: createReleasingActivityGuard(calls),
+      taskStore,
+      taskWorktreeService: {
+        getTaskWorktree: ({ taskId }) =>
+          Effect.succeed(
+            taskId === "task-1" ? { workingDirectory: "/worktrees/repo/task-1" } : null,
+          ),
+      },
+      worktreeOwners: {
+        readOwners: () =>
+          Effect.succeed({
+            owners: {
+              checkoutWorkspaces: [],
+              tasks: [],
+              chats: [{ workspaceId: "repo", sessionId: "chat-1", title: "Hi" }],
+              historyChats: [],
+            },
+            historyReadErrors: [],
+          }),
+      },
+      worktreeFiles: createBuildStartWorktreeFiles(calls),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { postComplete: [] },
+        git: {
+          provider: {
+            id: "github",
+            enabled: true,
+            repository: { host: "github.com", owner: "openai", name: "openducktor" },
+            autoDetected: false,
+          },
+        },
+      }),
+    });
+
+    const failure = await Effect.runPromise(
+      Effect.flip(service.repoPullRequestSync({ workspaceId: "repo", repoPath: "/repo" })),
+    );
+    expect(failure.message).toContain("Cannot close task task-1 because others still need");
+    expect(calls).toContainEqual({ type: "transition", taskId: "task-2" });
+    expect(calls).not.toContainEqual({ type: "transition", taskId: "task-1" });
+  });
+
   test("syncs linked pull request metadata without a matching local remote", async () => {
     const calls: unknown[] = [];
     const linkedPullRequest = {
@@ -2126,7 +2222,7 @@ describe("createTaskService pull requests", () => {
       Effect.runPromise(
         service.repoPullRequestSyncDetailed({ workspaceId: "repo", repoPath: "/repo" }),
       ),
-    ).resolves.toEqual({ ran: true, changedTaskIds: [] });
+    ).resolves.toEqual({ ran: true, changedTaskIds: [], autoCloseFailures: [] });
     expect(setPullRequestCalls).toEqual([]);
   });
   test("reports deduplicated changed task ids when a later pull request write fails", async () => {
@@ -2306,17 +2402,19 @@ describe("createTaskService pull requests", () => {
         ),
       );
       if (closure === "fails validation") {
+        // The sync keeps the merged pull request and reports the close failure of the task.
         expect(result).toMatchObject({
-          _tag: "Failure",
-          failure: {
-            changes: { taskIds: ["task-1"], removedTaskIds: [] },
-            failure: mutationFailure,
+          _tag: "Success",
+          success: {
+            ran: true,
+            changedTaskIds: ["task-1"],
+            autoCloseFailures: [{ taskId: "task-1", failure: mutationFailure }],
           },
         });
       } else {
         expect(result).toMatchObject({
           _tag: "Success",
-          success: { ran: true, changedTaskIds: ["task-1"] },
+          success: { ran: true, changedTaskIds: ["task-1"], autoCloseFailures: [] },
         });
       }
     },
@@ -2910,6 +3008,7 @@ describe("createTaskService pull requests", () => {
       taskActivityGuard: createReleasingActivityGuard(calls),
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createBuildStartWorktreeFiles(calls),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
@@ -3003,6 +3102,7 @@ describe("createTaskService pull requests", () => {
       settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+      worktreeOwners: noWorktreeOwners,
       worktreeFiles: createBuildStartWorktreeFiles([]),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",

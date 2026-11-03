@@ -1,4 +1,5 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
+import { noWorktreeOwners } from "../../test-support/service-test-doubles";
 import { Deferred, Effect, Fiber } from "effect";
 import type { GitPort } from "../../ports/git-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
@@ -77,6 +78,7 @@ const createHarness = (
       },
     ),
     settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+    worktreeOwners: noWorktreeOwners,
     worktreeFiles: createBuildStartWorktreeFiles(calls),
     taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
     workspaceSettingsService: createBuildWorkspaceSettingsService({

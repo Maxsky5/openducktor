@@ -13,6 +13,9 @@ export const AGENT_NOTIFICATION_KIND_VALUES = [
   "agent.session_idle",
 ] as const;
 
+/** Notifications of host task actions that no user started, such as a pull request sync. */
+export const TASK_NOTIFICATION_KIND_VALUES = ["task.auto_close_blocked"] as const;
+
 export const NOTIFICATION_CUE_VALUES = [
   "chime",
   "sparkle",
@@ -38,10 +41,12 @@ export const NOTIFICATION_OS_FOCUS_VALUES = ["suppress_if_focused", "always_send
 export const NOTIFICATION_SOUND_FOCUS_VALUES = ["mute_while_focused", "always_play"] as const;
 
 export const agentNotificationKindSchema = z.enum(AGENT_NOTIFICATION_KIND_VALUES);
+export const taskNotificationKindSchema = z.enum(TASK_NOTIFICATION_KIND_VALUES);
 /** The notification of a workflow state. The workflow of the task names it. */
 export const workflowNotificationKindSchema = z.templateLiteral(["workflow.", z.string().min(1)]);
 export const notificationKindSchema = z.union([
   agentNotificationKindSchema,
+  taskNotificationKindSchema,
   workflowNotificationKindSchema,
 ]);
 export const notificationCueSchema = z.enum(NOTIFICATION_CUE_VALUES);
@@ -55,6 +60,7 @@ export const notificationOsFocusSchema = z.enum(NOTIFICATION_OS_FOCUS_VALUES);
 export const notificationSoundFocusSchema = z.enum(NOTIFICATION_SOUND_FOCUS_VALUES);
 
 export type AgentNotificationKind = z.infer<typeof agentNotificationKindSchema>;
+export type TaskNotificationKind = z.infer<typeof taskNotificationKindSchema>;
 export type WorkflowNotificationKind = z.infer<typeof workflowNotificationKindSchema>;
 export type NotificationKind = z.infer<typeof notificationKindSchema>;
 export type NotificationCue = z.infer<typeof notificationCueSchema>;
@@ -77,6 +83,14 @@ const DEFAULT_AGENT_NOTIFICATION_KIND_SETTINGS = {
   "agent.session_started": { enabled: true, target: "in_app", sound: "inherit" },
   "agent.session_idle": { enabled: false, target: "both", sound: "inherit" },
 } satisfies Record<AgentNotificationKind, NotificationKindSetting>;
+
+/**
+ * Configs from before a task kind have no setting for it, so the host adds these defaults when it
+ * reads the settings.
+ */
+export const DEFAULT_TASK_NOTIFICATION_KIND_SETTINGS = {
+  "task.auto_close_blocked": { enabled: true, target: "both", sound: "inherit" },
+} satisfies Record<TaskNotificationKind, NotificationKindSetting>;
 
 /** The host adds the workflow kinds of the workflow and rejects other workflow kinds. */
 const notificationKindSettingsSchema = z
@@ -110,6 +124,7 @@ export function createDefaultNotificationSettings(
     soundFocus: "mute_while_focused",
     kinds: notificationKindSettingsSchema.parse({
       ...DEFAULT_AGENT_NOTIFICATION_KIND_SETTINGS,
+      ...DEFAULT_TASK_NOTIFICATION_KIND_SETTINGS,
       ...workflowKinds,
     }),
   };

@@ -18,6 +18,9 @@ import type { CreateTaskServiceInput } from "../../application/tasks/task-servic
 import { createTaskServiceWithMutationProgress } from "../../application/tasks/task-service";
 import { createTaskSessionStartPreparationService } from "../../application/tasks/worktrees/task-session-start-preparation-service";
 import { createNodeTaskEventServices } from "./node-task-event-services";
+import { createTaskWorktreeOwnerReader } from "../../application/workspaces/task-worktree-owner-reader";
+import type { ClaudeSessionMetadataPort } from "../../ports/claude-session-metadata-port";
+import type { NodeTaskAssetServices } from "./node-task-asset-services";
 import {
   createTaskMergeDetectionService,
   type CreateTaskMergeDetectionServiceInput,
@@ -57,6 +60,8 @@ export const createNodeTaskSessionServices = ({
   workflowLaunch,
   pauseForStop,
   readSessionRootRefs: readSavedRoots,
+  savedSessions,
+  claudeSessionMetadata,
 }: {
   taskServiceInput: TaskServiceInput;
   eventServiceInput: Omit<
@@ -79,7 +84,11 @@ export const createNodeTaskSessionServices = ({
   readSessionRootRefs: Parameters<
     typeof createAgentSessionCommandService
   >[0]["readSessionRootRefs"];
+  /** The saved chats and tasks that own sessions and worktrees. */
+  savedSessions: Pick<NodeTaskAssetServices, "workspaceSessionStore" | "taskOwnership">;
+  claudeSessionMetadata: ClaudeSessionMetadataPort;
 }) => {
+  const { workspaceSessionStore: store, taskOwnership } = savedSessions;
   const readSessionRootRefs: typeof readSavedRoots = (repoPath) =>
     readSavedRoots(repoPath).pipe(
       Effect.map((saved) => {
@@ -94,6 +103,13 @@ export const createNodeTaskSessionServices = ({
     );
   const baseTaskService = createTaskServiceWithMutationProgress({
     ...taskServiceInput,
+    worktreeOwners: createTaskWorktreeOwnerReader({
+      store,
+      taskOwnership,
+      settingsConfig: taskServiceInput.settingsConfig,
+      worktreeFiles: taskServiceInput.worktreeFiles,
+      claudeSessionMetadata,
+    }),
     publishCompletion: (observation) =>
       agentSessionLiveStateService.publishOperation({
         type: "task_completion_updated",

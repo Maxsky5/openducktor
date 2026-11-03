@@ -1,5 +1,11 @@
 import { plural } from "../../lib/plural";
+import type { TaskWorktreeOwnersRead } from "../../queries/use-task-worktree-owners";
 import type { TaskConfirmImpact } from "./task-confirm-dialog-types";
+import {
+  isConfirmBlockedByImpact,
+  worktreeOwnerLines,
+  worktreeOwnerReadErrorMessage,
+} from "./task-worktree-owner-copy";
 
 /** The task that a confirmation names. A missing title leaves its ID visible. */
 export type TaskConfirmSubject = { id: string; title: string | null };
@@ -25,6 +31,8 @@ export type TaskResetImplementationCopyInput = {
   hasCanonicalWorktree: boolean;
   legacyWorktreeCount: number;
   terminalCount: number;
+  /** The others that need a worktree that the reset removes. */
+  worktreeOwners: TaskWorktreeOwnersRead;
   impactError: string | null;
 };
 
@@ -46,11 +54,16 @@ export function buildTaskResetConfirmCopy(
       ...stoppedWork(impact),
     ],
     kept: ["Task title, description and labels"],
-    warning:
+    warning: withOwnerWarnings(
       impact.hasManagedSessionCleanup || impact.error
         ? "Artifacts and session history cannot be recovered. Uncommitted work in deleted worktrees will be lost."
         : "Artifacts and session history cannot be recovered.",
-    errors: readErrors(impact.activeSessionCountError, impact.error),
+      impact.worktreeOwners,
+    ),
+    errors: [
+      ...readErrors(impact.activeSessionCountError, impact.error),
+      ...ownerErrors(impact.worktreeOwners),
+    ],
     confirmLabel: { idle: "Reset task", pending: "Resetting…", checking: "Checking…" },
   };
 }
@@ -71,11 +84,16 @@ export function buildTaskDeleteConfirmCopy(
       ...stoppedWork(impact),
     ],
     kept: [],
-    warning:
+    warning: withOwnerWarnings(
       impact.hasManagedSessionCleanup || impact.error
         ? "This cannot be undone. Uncommitted work in deleted worktrees will be lost."
         : "This cannot be undone.",
-    errors: readErrors(impact.activeSessionCountError, impact.error),
+      impact.worktreeOwners,
+    ),
+    errors: [
+      ...readErrors(impact.activeSessionCountError, impact.error),
+      ...ownerErrors(impact.worktreeOwners),
+    ],
     confirmLabel: { idle: "Delete task", pending: "Deleting…", checking: "Checking…" },
   };
 }
@@ -112,11 +130,16 @@ export function buildTaskResetImplementationConfirmCopy(
       "Spec, plan and artifacts you added",
       ...(input.hasCanonicalWorktree ? ["Current worktree, its branch and ignored files"] : []),
     ],
-    warning:
+    warning: withOwnerWarnings(
       input.hasCanonicalWorktree || input.legacyWorktreeCount > 0
         ? "Uncommitted and untracked work will be lost. Builder and QA history cannot be recovered."
         : "Builder and QA history cannot be recovered.",
-    errors: readErrors(input.activeSessionCountError, input.impactError),
+      input.worktreeOwners,
+    ),
+    errors: [
+      ...readErrors(input.activeSessionCountError, input.impactError),
+      ...ownerErrors(input.worktreeOwners),
+    ],
     confirmLabel: {
       idle: "Reset implementation",
       pending: "Resetting…",
@@ -135,6 +158,7 @@ export function taskResetImplementationConfirmState(
     isSubmitting: boolean;
     isLoadingImpact: boolean;
     activeSessionCountError: string | null;
+    worktreeOwners: TaskWorktreeOwnersRead;
   },
   copy: Pick<TaskConfirmCopy, "confirmLabel">,
 ): TaskConfirmControlState {
@@ -142,7 +166,7 @@ export function taskResetImplementationConfirmState(
   let label = copy.confirmLabel.idle;
   if (state.isSubmitting) label = copy.confirmLabel.pending;
   else if (state.isLoadingImpact) label = copy.confirmLabel.checking;
-  return { isBusy, disabled: isBusy || state.activeSessionCountError !== null, label };
+  return { isBusy, disabled: isBusy || isConfirmBlockedByImpact(state), label };
 }
 
 function stoppedWork(impact: {
@@ -174,4 +198,25 @@ function readErrors(stopError: string | null, cleanupError: string | null): stri
     ...(stopError ? [stopImpactReadErrorMessage(stopError)] : []),
     ...(cleanupError ? [cleanupError] : []),
   ];
+}
+
+/** The others that need a removed worktree and stop the action. */
+function ownerErrors(owners: TaskWorktreeOwnersRead): string[] {
+  const readError = worktreeOwnerReadErrorMessage(owners);
+  return [
+    ...(readError ? [readError] : []),
+    ...worktreeOwnerLines(owners)
+      .filter((line) => line.blocking)
+      .map((line) => line.text),
+  ];
+}
+
+/** The warning of a confirmation, with the owners that the action can break but not stop. */
+function withOwnerWarnings(warning: string, owners: TaskWorktreeOwnersRead): string {
+  return [
+    warning,
+    ...worktreeOwnerLines(owners)
+      .filter((line) => !line.blocking)
+      .map((line) => line.text),
+  ].join(" ");
 }

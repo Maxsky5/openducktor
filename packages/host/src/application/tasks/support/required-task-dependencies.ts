@@ -374,3 +374,32 @@ export const requirePullRequestSyncDependencies = ({
   }
   return { gitProviderResolver, workspaceSettingsService };
 };
+
+export const requireTaskStopImpactDependencies = (
+  gitPort: GitPort | undefined,
+  settingsConfig: SettingsConfigPort | undefined,
+  workspaceSettingsService: WorkspaceSettingsService | undefined,
+) => {
+  if (!gitPort) {
+    throw new HostDependencyError({
+      dependency: "gitPort",
+      operation: "task_stop_impact_get",
+      message: "Git port is required for task stop impact previews.",
+    });
+  }
+  if (!settingsConfig) {
+    throw new HostDependencyError({
+      dependency: "settingsConfig",
+      operation: "task_stop_impact_get",
+      message: "Settings config port is required for task stop impact previews.",
+    });
+  }
+  if (!workspaceSettingsService) {
+    throw new HostDependencyError({
+      dependency: "workspaceSettingsService",
+      operation: "task_stop_impact_get",
+      message: "Workspace settings service is required for task stop impact previews.",
+    });
+  }
+  return { gitPort, settingsConfig, workspaceSettingsService };
+};

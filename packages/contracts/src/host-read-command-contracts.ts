@@ -59,6 +59,7 @@ export const HOST_READ_COMMAND_NAMES = [
   "task_metadata_get",
   "task_stop_impact_get",
   "task_worktree_get",
+  "task_worktree_owners_get",
   "tasks_list",
   "terminal_list",
   "workflow_artifact_get",

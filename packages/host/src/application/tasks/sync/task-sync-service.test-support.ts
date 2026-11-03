@@ -42,7 +42,9 @@ type TaskSyncServiceTestInput = Omit<
 
 /** A merge detection pass that finds no candidates. */
 export const noMergeDetection = {
-  runPass: (workspace: WorkspaceRef) => Effect.succeed({ ...workspace, tasks: [] }),
+  runPass: (workspace: WorkspaceRef) =>
+    Effect.succeed({ ...workspace, tasks: [], autoCloseFailures: [] }),
+  recordAutoCloseFailures: () => Effect.succeed([]),
 };
 
 export const syncWorkspace = (repoPath = "/repo", workspaceId = "repo"): WorkspaceRecord => ({

@@ -1,5 +1,7 @@
 import {
   AGENT_NOTIFICATION_KIND_VALUES,
+  DEFAULT_TASK_NOTIFICATION_KIND_SETTINGS,
+  TASK_NOTIFICATION_KIND_VALUES,
   autopilotRuleKey,
   type AutopilotRule,
   type GlobalConfig,
@@ -87,6 +89,7 @@ export const applyGlobalTaskWorkflowSettings = (
 
   const notificationKinds = new Set<string>([
     ...AGENT_NOTIFICATION_KIND_VALUES,
+    ...TASK_NOTIFICATION_KIND_VALUES,
     ...Object.keys(host.notificationDefaults),
   ]);
   requireKnownKeys(
@@ -128,7 +131,11 @@ export const applyGlobalTaskWorkflowSettings = (
     ...config,
     notifications: {
       ...config.notifications,
-      kinds: { ...host.notificationDefaults, ...config.notifications.kinds },
+      kinds: {
+        ...DEFAULT_TASK_NOTIFICATION_KIND_SETTINGS,
+        ...host.notificationDefaults,
+        ...config.notifications.kinds,
+      },
     },
     autopilot: {
       ...config.autopilot,

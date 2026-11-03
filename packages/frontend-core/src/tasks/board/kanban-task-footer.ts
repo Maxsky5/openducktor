@@ -40,6 +40,7 @@ export const getTaskFooter = ({
   taskActivityState,
   pendingState,
   mergedTarget,
+  autoCloseFailure,
 }: FooterInputs): Footer => {
   const workflowOptions: Parameters<typeof resolveTaskCardActions>[1] = {
     include: TASK_CARD_WORKFLOW_ACTIONS,
@@ -48,7 +49,8 @@ export const getTaskFooter = ({
   };
   if (activeSessionRole) workflowOptions.activeSessionRole = activeSessionRole;
   // A merged task proposes Close Task.
-  if (mergedTarget !== undefined) workflowOptions.leadingAction = "close_task";
+  if (mergedTarget !== undefined || autoCloseFailure !== undefined)
+    workflowOptions.leadingAction = "close_task";
   // Session shortcuts must not change which action the workflow picks first.
   const workflowActions = resolveTaskCardActions(task, workflowOptions);
   const sessions = SESSION_ACTIONS.map((descriptor) => ({
@@ -126,6 +128,7 @@ export const getCardLayout = (inputs: FooterInputs): CardLayout => {
     inputs.activeSessionRole,
     inputs.taskActivityState,
     inputs.mergedTarget,
+    inputs.autoCloseFailure,
     inputs.taskSessions.map((session) => [
       agentSessionIdentityKey(session),
       session.role,
@@ -192,4 +195,6 @@ type FooterInputs = {
   pendingState?: WorkflowPendingState | undefined;
   /** The target that the task branch is merged into. */
   mergedTarget?: string | undefined;
+  /** Why the pull request sync could not close the task. Close Task then leads. */
+  autoCloseFailure?: string | undefined;
 };

@@ -252,6 +252,42 @@ test("routes committed task changes by workspace when repository paths and task 
   }
 });
 
+test("a merged task that the pull request sync cannot close notifies and opens the task", async () => {
+  const h = harness();
+  try {
+    await Effect.runPromise(h.service.initialize());
+    await flush();
+    h.service.acceptAutoCloseBlocked(
+      { workspaceId: "alpha", repoPath: "/alpha" },
+      {
+        taskId: "task",
+        message: "Saved chats work in a removed worktree.",
+        failedAt: "2026-11-03T10:00:00.000Z",
+      },
+    );
+    await flush();
+
+    expect(occurrences(h.frames).map((frame) => frame.selected.occurrence)).toMatchObject([
+      {
+        kind: "task.auto_close_blocked",
+        workspaceId: "alpha",
+        repositoryLabel: "Alpha",
+        task: { id: "task" },
+        status: "Its pull request merged, but the task could not close. Open the task to see why.",
+        navigationTarget: {
+          type: "kanban_task",
+          workspaceId: "alpha",
+          repoPath: "/alpha",
+          taskId: "task",
+        },
+      },
+    ]);
+    expect(h.failures).toEqual([]);
+  } finally {
+    await Effect.runPromise(h.service.dispose());
+  }
+});
+
 test.each(["close", "shutdown"])(
   "%s stops a workspace opened through a config write",
   async (stop) => {
@@ -486,6 +522,35 @@ test("delivers the state notifications of a custom workflow with its default set
       "workflow.published": { enabled: true, target: "in_app", sound: "none" },
     });
     expect(Object.keys(reviewing?.settings.kinds ?? {})).not.toContain("workflow.human_review");
+  } finally {
+    await Effect.runPromise(h.service.dispose());
+  }
+});
+test("a session read fault is not a notification observation failure", async () => {
+  const h = harness({ baseline: [snapshot()] });
+  try {
+    await Effect.runPromise(h.service.initialize());
+    await flush();
+    h.service.acceptLive(
+      {
+        type: "fault",
+        repoPath: "/alpha",
+        ref: ref(),
+        operation: "opencode-live-session.refresh-session",
+        message: "The linked working directory is unavailable.",
+        statusUnavailable: true,
+      },
+      "live",
+    );
+    h.service.acceptLive(
+      { type: "session_upsert", session: snapshot({ pendingQuestions: [question("after")] }) },
+      "live",
+    );
+    await flush();
+    expect(h.frames.filter((frame) => frame.type === "health" && frame.health.message)).toEqual([]);
+    expect(occurrences(h.frames).map((frame) => frame.selected.occurrence.kind)).toEqual([
+      "agent.question_asked",
+    ]);
   } finally {
     await Effect.runPromise(h.service.dispose());
   }

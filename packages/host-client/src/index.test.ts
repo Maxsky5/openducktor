@@ -1331,13 +1331,24 @@ describe("HostClient", () => {
       mergeCandidate: true,
       branchOid: "tip",
     };
+    const owners = {
+      owners: { checkoutWorkspaces: [], tasks: [], chats: [], historyChats: [] },
+      historyReadErrors: [],
+    };
     const { client, calls } = createClient((command) => {
       if (command === "task_worktree_cleanup_impact_get") return impact;
+      if (command === "task_worktree_owners_get") return owners;
       if (command === "task_worktree_remove") return null;
       throw new Error(`Unexpected command: ${command}`);
     });
+    const ownersInput = {
+      ...workspace,
+      taskIds: ["task-1"],
+      operation: "delete" as const,
+    };
 
     expect(await client.taskWorktreeCleanupImpactGet(workspace, "task-1")).toEqual(impact);
+    expect(await client.taskWorktreeOwnersGet(ownersInput)).toEqual(owners);
     await client.taskWorktreeRemove(workspace, "task-1");
 
     expect(calls).toEqual([
@@ -1345,6 +1356,7 @@ describe("HostClient", () => {
         command: "task_worktree_cleanup_impact_get",
         args: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" },
       },
+      { command: "task_worktree_owners_get", args: ownersInput },
       {
         command: "task_worktree_remove",
         args: { workspaceId: "workspace-1", repoPath: "/repo", taskId: "task-1" },
@@ -1372,8 +1384,10 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    expect(await client.taskMergeStatusGet(workspace)).toEqual(snapshot);
-    expect(await client.taskMergeStatusCheck(workspace)).toEqual(snapshot);
+    // A host older than the close failures omits them, so the client reads an empty list.
+    const parsed = { ...snapshot, autoCloseFailures: [] };
+    expect(await client.taskMergeStatusGet(workspace)).toEqual(parsed);
+    expect(await client.taskMergeStatusCheck(workspace)).toEqual(parsed);
     expect(calls.map((call) => call.command)).toEqual([
       "task_merge_status_get",
       "task_merge_status_check",

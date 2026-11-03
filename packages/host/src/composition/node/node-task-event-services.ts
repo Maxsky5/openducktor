@@ -27,6 +27,7 @@ export const createNodeTaskEventServices = ({
   baseTaskService,
   taskWorkflows,
   acceptNotificationInput,
+  notifyAutoCloseBlocked,
   observeStatusChanges,
   lifecycleLogger,
   mergeDetection,
@@ -40,6 +41,7 @@ export const createNodeTaskEventServices = ({
   acceptNotificationInput?:
     | ((event: import("@openducktor/contracts").ExternalTaskSyncEvent) => void)
     | undefined;
+  notifyAutoCloseBlocked?: CreateTaskSyncServiceInput["notifyAutoCloseBlocked"];
   observeStatusChanges: CommittedTaskStatusChangeObserver;
   lifecycleLogger: HostLifecycleLogger;
   mergeDetection: CreateTaskSyncServiceInput["mergeDetection"];
@@ -65,6 +67,7 @@ export const createNodeTaskEventServices = ({
   });
   const taskSyncService = createTaskSyncService({
     acceptNotificationInput,
+    notifyAutoCloseBlocked,
     observeStatusChanges,
     logger: lifecycleLogger,
     mergeDetection,

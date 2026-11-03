@@ -1,3 +1,4 @@
+import { worktreeOwnersRead } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import type { TaskResetImplementationModalModel } from "@openducktor/frontend-core/tasks/workflow/use-task-reset-flow";
@@ -11,6 +12,7 @@ const makeModel = (legacyWorktreeCount: number): TaskResetImplementationModalMod
   isSubmitting: false,
   activeSessionCount: 0,
   activeSessionCountError: null,
+  worktreeOwners: worktreeOwnersRead(),
   isLoadingImpact: false,
   hasCanonicalWorktree: true,
   hasManagedSessionCleanup: true,

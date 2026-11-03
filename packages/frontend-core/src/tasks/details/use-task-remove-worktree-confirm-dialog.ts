@@ -3,7 +3,7 @@ import { useMinimumLoader } from "../../lib/use-minimum-loader";
 import type { TaskConfirmDialogState } from "./task-confirm-dialog-types";
 import { useTaskAsyncConfirmDialog } from "./use-task-async-confirm-dialog";
 import {
-  isReadBlocked,
+  isWorktreeRemovalBlocked,
   type TaskReadState,
   type TaskWorktreeImpact,
   useTaskWorktreeImpact,
@@ -50,8 +50,16 @@ export function useTaskRemoveWorktreeConfirmDialog({
   // The sheet reads the worktree to show the action. Each confirmation reads it again, because
   // the worktree can change while the sheet stays open, and the removal deletes its files. A new
   // read observer reports its fetch from its first render, so Confirm never sees old data.
-  const sheetImpact = useTaskWorktreeImpact({ taskId: task.id, enabled: canRemove });
-  const impact = useTaskWorktreeImpact({ taskId: task.id, enabled: canRemove && dialog.open });
+  const sheetImpact = useTaskWorktreeImpact({
+    taskId: task.id,
+    enabled: canRemove,
+    readsOwners: false,
+  });
+  const impact = useTaskWorktreeImpact({
+    taskId: task.id,
+    enabled: canRemove && dialog.open,
+    readsOwners: true,
+  });
   const isPreparing = useMinimumLoader(!impact.isReady);
   // The action stays while the confirmation reads again. Only a successful read that finds no
   // worktree and no branch hides it. A failed read keeps it and shows the error in the sheet.
@@ -67,7 +75,8 @@ export function useTaskRemoveWorktreeConfirmDialog({
       impact,
       isPreparing,
       // Confirm waits for the loader, so the user sees what the removal deletes first.
-      confirmDisabled: isPreparing || dialog.operation.isPending || isReadBlocked(impact),
+      confirmDisabled:
+        isPreparing || dialog.operation.isPending || isWorktreeRemovalBlocked(impact),
     },
   };
 }

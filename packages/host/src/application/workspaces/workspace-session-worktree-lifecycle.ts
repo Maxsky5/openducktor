@@ -16,7 +16,6 @@ import {
   validateWorkspaceSessionTarget,
   type WorkspaceSessionTargetDependencies,
 } from "./workspace-session-target";
-import type { WorktreeOwners } from "./workspace-session-worktree-owners";
 import {
   runWorkspaceSessionWorktreeActions,
   stopWorktreeActionTerminals,
@@ -25,7 +24,7 @@ import {
 type WorktreeTarget = Extract<WorkspaceSessionExecutionTarget, { kind: "local_worktree" }>;
 
 /** The archive preview of the worktree itself. The caller adds the owners. */
-type WorktreeArchivePreview = Omit<WorkspaceSessionArchivePreview, keyof WorktreeOwners>;
+type WorktreeArchivePreview = Omit<WorkspaceSessionArchivePreview, "sharedWith" | "taskOwners">;
 
 const validateRemovableBranch = (
   { git }: WorkspaceSessionTargetDependencies,

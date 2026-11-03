@@ -30,6 +30,8 @@ type UseKanbanBoardModelArgs = {
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   /** The target of each task whose branch is merged. */
   mergedTargetByTaskId: ReadonlyMap<string, string>;
+  /** Why the pull request sync could not close each task. */
+  autoCloseFailureByTaskId: ReadonlyMap<string, string>;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   activeTaskSessionContextByTaskId: Map<string, ActiveTaskSessionContext>;
   onOpenDetails: (taskId: string) => void;
@@ -55,6 +57,7 @@ export function useKanbanBoardModel({
   filter,
   historicalSessionsByTaskId,
   mergedTargetByTaskId,
+  autoCloseFailureByTaskId,
   taskSessionsByTaskId,
   activeTaskSessionContextByTaskId,
   onOpenDetails,
@@ -82,6 +85,7 @@ export function useKanbanBoardModel({
     taskSessionsByTaskId,
     historicalSessionsByTaskId,
     mergedTargetByTaskId,
+    autoCloseFailureByTaskId,
     activeTaskSessionContextByTaskId,
     taskActivityStateByTaskId,
     onOpenDetails,
