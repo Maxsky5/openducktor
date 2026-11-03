@@ -2,8 +2,8 @@ import type { AgentRuntimes, RuntimeDescriptor, RuntimeKind } from "@openducktor
 import { CircleAlert, CircleCheck, FolderOpen, LoaderCircle, RefreshCw } from "lucide-react";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
-import { RuntimeMessageText } from "@/components/features/settings/runtime-message-text";
 import { FolderPickerDialog } from "@/components/features/repository/folder-picker-dialog";
+import { RuntimeMessageText } from "@/components/features/settings/runtime-message-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

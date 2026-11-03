@@ -32,9 +32,13 @@ const invalidRow = (
   error: errorMessage(cause),
 });
 
-const checkHealth = (runtimeHealth: RuntimeHealthPort, kind: RuntimeKind, executablePath: string) =>
+const checkHealth = (
+  runtimeHealth: RuntimeHealthPort,
+  kind: RuntimeKind,
+  executablePath: string,
+): Effect.Effect<RuntimeExecutableCheckResult> =>
   runtimeHealth.getRuntimeHealth(kind, executablePath).pipe(
-    Effect.map((health): RuntimeExecutableCheckResult => ({
+    Effect.map((health) => ({
       kind,
       path: health.executablePath ?? executablePath,
       ok: health.ok,

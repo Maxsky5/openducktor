@@ -8,7 +8,6 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
-import { CodexAppServerClosedError } from "../../ports/codex-app-server-port";
 import {
   type ProcessTreePlatform,
   type ProcessTreeTerminator,
@@ -16,6 +15,7 @@ import {
   terminateProcessTree,
   waitForChildProcessClose,
 } from "../../infrastructure/process/process-tree";
+import { CodexAppServerClosedError } from "../../ports/codex-app-server-port";
 import {
   RuntimeExecutableIncompatibleError,
   type RuntimeExecutableProbeError,
