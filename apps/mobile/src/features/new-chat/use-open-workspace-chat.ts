@@ -84,10 +84,9 @@ export function useOpenWorkspaceChat(): OpenWorkspaceChat {
       } catch (cause) {
         const next = toCommandFailure(cause, "Could not start the chat");
         if (mounted.current) setFailure({ recordId: record.id, failure: next });
-      } finally {
-        starting.current = false;
-        if (mounted.current) setPendingRecordId(null);
       }
+      starting.current = false;
+      if (mounted.current) setPendingRecordId(null);
     },
     [gate.open, host, mounted, navigation, queryClient, router, store],
   );

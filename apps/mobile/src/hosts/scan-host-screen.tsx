@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/ui/states";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { scannedAddress } from "./scanned-address";
+import { closeScreen } from "@/navigation/close-screen";
 
 const CORNERS = ["topLeft", "topRight", "bottomLeft", "bottomRight"] as const;
 
@@ -72,14 +73,14 @@ export function ScanHostScreen(): ReactElement {
   );
   const [cameraError, setCameraError] = useState<string | null>(null);
   const scanned = useRef(false);
-  const close = () => navigation.goBack();
+  const close = () => closeScreen(navigation);
 
   const onScanned = (result: BarcodeScanningResult) => {
     if (scanned.current) return;
     scanned.current = true;
     haptics.success();
     scannedAddress.setState({ value: result.data.trim() });
-    navigation.goBack();
+    closeScreen(navigation);
   };
 
   const live = permission?.granted === true && cameraError === null;

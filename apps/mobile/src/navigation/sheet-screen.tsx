@@ -23,6 +23,7 @@ import { Touchable } from "@/ui/touchable";
 import { ModalLoadingContent } from "@/ui/modal-loading-content";
 import { SheetCloseContext } from "./sheet-close";
 import { useBlockBack } from "./use-block-back";
+import { closeScreen } from "./close-screen";
 
 export type SheetScreenProps = PropsWithChildren<{
   title: string;
@@ -110,7 +111,7 @@ export function SheetScreen({
   const close = useCallback(() => {
     const handler = closeHandler.current;
     if (handler) handler();
-    else navigation.goBack();
+    else closeScreen(navigation);
   }, [navigation]);
   const [footers, setFooters] = useState(0);
   const claimFooter = useCallback(() => {

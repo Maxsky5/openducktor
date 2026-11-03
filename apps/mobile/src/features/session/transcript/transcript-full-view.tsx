@@ -1,4 +1,5 @@
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import type { ReactElement } from "react";
 import { ScrollView } from "react-native";
 import { StyleSheet } from "react-native-unistyles";

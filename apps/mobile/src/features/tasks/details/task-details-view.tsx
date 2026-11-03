@@ -10,7 +10,8 @@ import { loadAgentSessionListFromQuery } from "@openducktor/frontend-core/querie
 import { gitProviderReadError } from "@openducktor/frontend-core/review/git-provider-health";
 import { canDetectTaskPullRequest } from "@openducktor/frontend-core/tasks/presentation/task-display";
 import { resolveTaskPullRequestActions } from "@openducktor/frontend-core/tasks/pull-requests/pull-request-presentation";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type NativeStackNavigationOptions, Stack, useRouter } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
@@ -299,11 +300,16 @@ function TaskDetailsContent({
   );
 
   // Document images and isolated pages load near this viewport.
-  const viewport = useListViewport();
+  const {
+    store: viewportStore,
+    frameRef,
+    onFrameLayout,
+    onScroll: onViewportScroll,
+  } = useListViewport();
 
   return (
-    <ViewportProvider value={viewport.store}>
-      <View ref={viewport.frameRef} style={styles.root} onLayout={viewport.onFrameLayout}>
+    <ViewportProvider value={viewportStore}>
+      <View ref={frameRef} style={styles.root} onLayout={onFrameLayout}>
         {embedded ? null : <Stack.Screen options={screenOptions} />}
         <View style={styles.split}>
           {split ? (
@@ -325,7 +331,7 @@ function TaskDetailsContent({
               renderItem={renderItem}
               keyExtractor={detailsRowKey}
               getItemType={detailsRowType}
-              onScroll={viewport.onScroll}
+              onScroll={onViewportScroll}
               scrollEventThrottle={32}
               contentInsetAdjustmentBehavior="automatic"
               // The safe area sets this end padding. It changes only on rotation and moves no row.

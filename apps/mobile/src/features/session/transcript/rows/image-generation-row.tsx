@@ -25,7 +25,7 @@ import { useAgentOperationsContext } from "@openducktor/frontend-core/sessions/s
 import { useQuery } from "@tanstack/react-query";
 import { memo, type ReactElement, useMemo } from "react";
 import { View } from "react-native";
-import Animated, { useReducedMotion } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { type Base64Resource, base64ResourceFileQueryOptions } from "@/platform/resource-files";
 import { useResourceFiles } from "@/platform/resource-files-context";
@@ -38,6 +38,7 @@ import { monoWeight, SKELETON_PULSE, sansWeight } from "@/theme/tokens";
 import { Icon, type IconName } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
+import { useEndlessAnimation } from "@/ui/use-endless-animation";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { useRowVisible } from "../transcript-visibility";
 import { type Disclosure, useDisclosure } from "./disclosure";
@@ -60,14 +61,11 @@ export const ImageGenerationRow = memo(function ImageGenerationRow({
   part: AgentImageGenerationPart;
   rowKey: string;
 }): ReactElement {
-  const reducedMotion = useReducedMotion();
   return (
     <View style={styles.card}>
       {/* Every state keeps its header, also while a completed image loads or fails. */}
       <ImageHeader label={imageGenerationStatusLabel(part)} running={part.status === "running"} />
-      {part.status === "running" ? (
-        <Animated.View style={[styles.generating, reducedMotion ? null : SKELETON_PULSE]} />
-      ) : null}
+      {part.status === "running" ? <GeneratingPulse /> : null}
       {part.status === "completed" ? <CompletedImage part={part} rowKey={rowKey} /> : null}
       {part.status === "failed" ? <ImageFailure failure={part.failure} /> : null}
       {part.status === "interrupted" ? (
@@ -80,6 +78,12 @@ export const ImageGenerationRow = memo(function ImageGenerationRow({
     </View>
   );
 });
+
+/** The desktop progress placeholder: a box that pulses while the image generates. */
+function GeneratingPulse(): ReactElement {
+  const pulse = useEndlessAnimation(SKELETON_PULSE);
+  return <Animated.View style={[styles.generating, pulse]} />;
+}
 
 /** The desktop `ImageGenerationHeader`: a spinner or an image icon and the status label. */
 function ImageHeader({

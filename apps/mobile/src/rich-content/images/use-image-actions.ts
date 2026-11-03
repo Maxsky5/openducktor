@@ -39,9 +39,8 @@ export const useImageActions = () => {
         }
       } catch (cause) {
         feedback.show("error", "The image was not shared.", { description: errorMessage(cause) });
-      } finally {
-        setAction(null);
       }
+      setAction(null);
     },
     [feedback],
   );

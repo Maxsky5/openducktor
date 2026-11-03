@@ -1,6 +1,7 @@
 import type { GitFileDiff } from "@openducktor/contracts";
 import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { type ReactElement, useCallback, useMemo } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";

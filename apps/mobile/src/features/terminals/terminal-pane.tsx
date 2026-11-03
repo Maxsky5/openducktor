@@ -3,8 +3,8 @@ import {
   type TerminalTab,
 } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
-import { type ReactElement, useLayoutEffect } from "react";
-import { useIsFocused } from "expo-router";
+import { type ReactElement, useCallback } from "react";
+import { useFocusEffect } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useCommandGate } from "@/host-session/active-session-context";
@@ -32,10 +32,11 @@ export function TerminalPane({
 }: TerminalPaneProps): ReactElement | null {
   const gate = useCommandGate();
   const status = terminalScreenStatus(model, tabId);
-  const focused = useIsFocused();
-  useLayoutEffect(() => {
-    if (focused && status.kind === "missing") onBack?.();
-  }, [focused, onBack, status.kind]);
+  useFocusEffect(
+    useCallback(() => {
+      if (status.kind === "missing") onBack?.();
+    }, [onBack, status.kind]),
+  );
   const back = onBack ? (
     <Button label="Back to Terminals" variant="outline" onPress={onBack} />
   ) : null;

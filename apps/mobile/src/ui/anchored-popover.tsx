@@ -5,6 +5,7 @@ import {
   type RefObject,
   useCallback,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -42,12 +43,10 @@ export type PopoverCardSize = (
   insets: EdgeInsets,
 ) => { width: number; height: number };
 
-export type AnchoredPopoverState = {
-  /** The view that the card anchors to. */
-  trigger: RefObject<ComponentRef<typeof View> | null>;
+/** The card of an anchored popover, as `AnchoredPopover` draws it. It holds no ref, so a render can read it. */
+export type PopoverView = {
   placement: OpenPlacement | null;
   progress: SharedValue<number>;
-  show: () => void;
   /**
    * Closes the card. `after` runs at once on Android, where each modal has its own dialog window,
    * so a chosen action opens its screen while the card fades. On iOS it runs when the card has
@@ -57,6 +56,13 @@ export type AnchoredPopoverState = {
   close: (after?: () => void) => void;
   /** The `onDismiss` of the iOS modal: it runs the pending `after`. */
   dismissed: () => void;
+};
+
+export type AnchoredPopoverState = {
+  /** The view that the card anchors to. */
+  trigger: RefObject<ComponentRef<typeof View> | null>;
+  show: () => void;
+  view: PopoverView;
 };
 
 /**
@@ -111,7 +117,11 @@ export const useAnchoredPopover = (cardSize: PopoverCardSize): AnchoredPopoverSt
     },
     [hide, progress],
   );
-  return { trigger, placement, progress, show, close, dismissed };
+  const view = useMemo(
+    () => ({ placement, progress, close, dismissed }),
+    [close, dismissed, placement, progress],
+  );
+  return { trigger, show, view };
 };
 
 type CardProps = PropsWithChildren<{
@@ -127,7 +137,7 @@ export function AnchoredPopover({
   popover,
   children,
   ...card
-}: CardProps & { popover: AnchoredPopoverState }): ReactElement {
+}: CardProps & { popover: PopoverView }): ReactElement {
   const { placement, close } = popover;
   return (
     <Modal
@@ -155,7 +165,7 @@ function PopoverCard({
   accessibilityRole,
   accessibilityLabel,
   children,
-}: CardProps & { popover: AnchoredPopoverState; placement: OpenPlacement }): ReactElement {
+}: CardProps & { popover: PopoverView; placement: OpenPlacement }): ReactElement {
   useMenuCoversToasts(true);
   const { progress, close } = popover;
   const reducedMotion = useReducedMotion();

@@ -414,6 +414,7 @@ export function SavedHostsList({
   const select = async (host: SavedHost, discardUnsavedDrafts = false) => {
     setBusy({ hostId: host.id, action: "connect" });
     setError(null);
+    // oxlint-disable-next-line react-compiler/todo -- the catch returns early and selects again, so the cleanup must stay in finally
     try {
       await owner.selectHost(host.id, { discardUnsavedDrafts });
     } catch (cause) {
@@ -452,9 +453,8 @@ export function SavedHostsList({
         action: "remove",
         message: errorMessage(cause),
       });
-    } finally {
-      setBusy(null);
     }
+    setBusy(null);
   };
 
   const renderHost = (host: SavedHost): ReactElement =>

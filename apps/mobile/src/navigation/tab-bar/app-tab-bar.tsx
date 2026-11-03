@@ -19,11 +19,9 @@ import {
   tabBarEdgePath,
   tabBarPath,
 } from "./tab-bar-geometry";
-import { pressTabRoute, TAB_ROW_ROLE, tabButtons } from "./tab-button";
+import { TabButtons } from "./tab-button";
+import { pressTabRoute, TAB_ROW_ROLE } from "./tab-route";
 import { useCreateFan } from "./use-create-fan";
-
-/** The create button goes after this many tabs. */
-const CREATE_SLOT = 2;
 
 /** The room above the top edge of the bar for its hairline. */
 const EDGE_ROOM = 1;
@@ -61,13 +59,6 @@ function BottomTabBar({ state, descriptors, emitter, navigateToTab }: BottomTabB
     if (open) close();
     pressTabRoute(routeKey, latest.current);
   }, []);
-  const tabs = tabButtons({
-    state,
-    descriptors,
-    progress,
-    placement: "bottom",
-    onPressTab: pressTab,
-  });
 
   return (
     <>
@@ -97,9 +88,14 @@ function BottomTabBar({ state, descriptors, emitter, navigateToTab }: BottomTabB
           />
         </Svg>
         <View accessibilityRole={TAB_ROW_ROLE} style={styles.row}>
-          {tabs.slice(0, CREATE_SLOT)}
-          <View style={styles.createSlot} />
-          {tabs.slice(CREATE_SLOT)}
+          <TabButtons
+            state={state}
+            descriptors={descriptors}
+            progress={progress}
+            placement="bottom"
+            onPressTab={pressTab}
+            createSlot={<View style={styles.createSlot} />}
+          />
         </View>
         <View pointerEvents="box-none" style={styles.createAnchor}>
           <CreateButton

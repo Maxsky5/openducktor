@@ -33,7 +33,8 @@ import {
   useIssueImportSubmission,
   useIssueSelectionState,
 } from "@openducktor/frontend-core/tasks/issue-import/issue-import-state";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import {
@@ -73,6 +74,7 @@ import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { IssueReviewCard } from "./issue-review-card";
 import { IssueRow, IssueRowPlaceholder } from "./issue-row";
 import { type IssueImportReads, useIssueImportReads } from "./use-issue-import-reads";
+import { closeScreen } from "@/navigation/close-screen";
 
 /** Mobile has no repository settings, so the texts tell where they are. */
 const SETTINGS_ELSEWHERE = "The repository settings are in the desktop or web app.";
@@ -164,7 +166,7 @@ function IssueImportFlow({
     providerScope: provider.config,
     onComplete: (createdCount) => {
       feedback.show("success", issueImportCreatedMessage(createdCount));
-      navigation.goBack();
+      closeScreen(navigation);
     },
     onRefreshed: selection.replaceItem,
   });

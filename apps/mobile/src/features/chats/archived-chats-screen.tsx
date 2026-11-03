@@ -9,7 +9,7 @@ import {
   filterWorkspaceSessions,
   useRestoreWorkspaceSession,
 } from "@openducktor/frontend-core/workspace-sessions/archived-workspace-sessions";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { type NativeStackNavigationOptions, Stack } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";

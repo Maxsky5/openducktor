@@ -56,6 +56,7 @@ import { IssueTypeGrid, IssueTypeSummary } from "./issue-type-grid";
 import { LabelsField } from "./labels-field";
 import { MarkdownEditorField } from "./markdown-editor-field";
 import { taskEditorSaveDisabled } from "./task-editor-model";
+import { closeScreen } from "@/navigation/close-screen";
 
 const PRIORITY_CHOICES = PRIORITY_OPTIONS.map((option) => ({
   value: String(option.value),
@@ -160,12 +161,12 @@ const useDescriptionImages = (controller: EditorController) => {
 
 /**
  * Close, Back, and the iOS swipe ask before they drop edits. A running save blocks them, and a
- * save or a confirmed discard calls `allowRemoval` so the sheet can close.
+ * save or a confirmed discard calls `allowRemovalRef` so the sheet can close.
  */
 const useEditorClose = (
   controller: EditorController,
   confirmDiscard: ConfirmDiscard,
-  allowRemoval: RefObject<() => void>,
+  allowRemovalRef: RefObject<() => void>,
 ) => {
   const { close, isBusy, isActiveDocumentDirty } = controller;
   const dirty =
@@ -187,8 +188,8 @@ const useEditorClose = (
     if (!isBusy) requestClose();
   });
   useEffect(() => {
-    allowRemoval.current = disablePrevention;
-  }, [allowRemoval, disablePrevention]);
+    allowRemovalRef.current = disablePrevention;
+  }, [allowRemovalRef, disablePrevention]);
   return requestClose;
 };
 
@@ -228,12 +229,12 @@ export function TaskEditorSheet({
     [task, workspace.workspaceId, workspace.workspaceName],
   );
   // The back guard of `useEditorClose` must let a save or a confirmed discard close the sheet.
-  const allowRemoval = useRef<() => void>(() => {});
+  const allowRemovalRef = useRef<() => void>(() => {});
   const onOpenChange = useCallback(
     (open: boolean) => {
       if (open) return;
-      allowRemoval.current();
-      navigation.goBack();
+      allowRemovalRef.current();
+      closeScreen(navigation);
     },
     [navigation],
   );
@@ -251,7 +252,7 @@ export function TaskEditorSheet({
   const { mode, editSection, isFormDisabled, isBusy } = controller;
   useDiscardConfirmation(controller, confirmDiscard);
   const images = useDescriptionImages(controller);
-  const requestClose = useEditorClose(controller, confirmDiscard, allowRemoval);
+  const requestClose = useEditorClose(controller, confirmDiscard, allowRemovalRef);
   const imageContext = useMemo(() => taskImageContext(workspace, task), [task, workspace]);
   const primaryLabel = primaryActionLabel(controller);
   const titleMissing = editSection === "details" && controller.state.title.trim().length === 0;

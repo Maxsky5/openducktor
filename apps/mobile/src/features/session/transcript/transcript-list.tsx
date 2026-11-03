@@ -166,8 +166,12 @@ export function TranscriptList({
   const [fullView, setFullView] = useState<TranscriptFullView | null>(null);
   const closeFullView = useCallback(() => setFullView(null), []);
   // Images and isolated pages in visible rows check their own position against this viewport.
-  const viewport = useListViewport();
-  const checkViewport = viewport.onScroll;
+  const {
+    store: viewportStore,
+    frameRef,
+    onFrameLayout,
+    onScroll: checkViewport,
+  } = useListViewport();
   // Each image and isolated page near the screen measures its position on a viewport check. They
   // load one screen ahead, so a check after each quarter screen of scroll, and at rest, is enough.
   const checkedAt = useRef<number | null>(null);
@@ -281,8 +285,8 @@ export function TranscriptList({
   const jumps = useTranscriptListJumps({ shown, topRow, dispatch, latestSignal });
 
   return (
-    <ViewportProvider value={viewport.store}>
-      <View ref={viewport.frameRef} style={styles.fill} onLayout={viewport.onFrameLayout}>
+    <ViewportProvider value={viewportStore}>
+      <View ref={frameRef} style={styles.fill} onLayout={onFrameLayout}>
         <TranscriptNoticeContext value={notice}>
           {TRANSCRIPT_LIST_SLOTS.map((slot) =>
             ready.has(slot) ? (

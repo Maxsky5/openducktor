@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { IconButton } from "@/ui/icon-button";
+import { closeScreen } from "./close-screen";
 
 type SearchTextEvent = Parameters<NonNullable<SearchBarProps["onChangeText"]>>[0];
 
@@ -30,6 +31,15 @@ const searchEvent = (text: string): SearchTextEvent =>
   ({ nativeEvent: { text } }) as SearchTextEvent;
 
 type HeaderSearchOptions = NonNullable<NativeStackNavigationOptions["headerSearchBarOptions"]>;
+type SearchRef = NonNullable<HeaderSearchOptions["ref"]>;
+
+/** Gives the commands to the `headerSearchBarOptions.ref` of the screen, and takes them back. */
+const attachSearchCommands = (ref: SearchRef, commands: SearchBarCommands): (() => void) => {
+  ref.current = commands;
+  return () => {
+    if (ref.current === commands) ref.current = null;
+  };
+};
 
 /**
  * The search of the bar: its open state, its text, and the commands of
@@ -75,10 +85,7 @@ const useHeaderSearch = (
   };
   useEffect(() => {
     if (!searchRef) return;
-    searchRef.current = commands;
-    return () => {
-      if (searchRef.current === commands) searchRef.current = null;
-    };
+    return attachSearchCommands(searchRef, commands);
   });
   // A sheet or a screen above this one gets the Back press.
   const onBack = useEffectEvent(() => {
@@ -119,7 +126,7 @@ function StackHeader({ back, options, route, navigation }: NativeStackHeaderProp
           canGoBack={back !== undefined}
           options={options}
           routeName={route.name}
-          onBack={() => navigation.goBack()}
+          onBack={() => closeScreen(navigation)}
           onSearch={search ? headerSearch.start : null}
         />
       )}

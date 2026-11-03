@@ -92,6 +92,21 @@ flowchart TD
 - Every control that sends a host command reads one command gate. The gate is open only while the connection state is `connected`. Draft editing stays available.
 - The app never resends a mutation, reply, message, or terminal input after an unknown outcome. It reads the current host state after the reconnect.
 
+### Fast navigation
+
+Follow these rules, or sheets and screens open and close late. React Native shows a navigation only after its JavaScript work ends, so each render that a navigation causes adds delay.
+
+- Read `useIsFocused` only in a leaf component, as `PublishVisibleSession` does. Use `useFocusEffect` when the focus only starts or stops work, as `BorderRay` does. A sheet takes the focus, so a screen that reads it renders again when a sheet opens or closes.
+- Gate the reads of a screen with `useScreenInView`, as the work views do. It changes only when a pushed screen covers or uncovers the screen, not when a sheet opens.
+- Make a session store selector return only the values that its views show.
+- Keep `experiments.reactCompiler` on in `app.config.ts`. Expo Router renders every mounted route and navigator again on each navigation. The React Compiler memoizes the elements of each component, so that render stops at the first unchanged element.
+- Keep each component in a form that the React Compiler can compile. The `react-compiler/*` lint rules report each component that it skips. Fix the cause, or add a disable comment that gives the reason. Destructure a hook result that holds a ref, as `ActionMenu` does with `useAnchoredPopover`. Name a ref that a hook takes with a `Ref` suffix. Put cleanup after `try` and `catch`, or use `.finally()` on one promise, because the compiler does not compile `finally`.
+- Close a screen or a sheet with `closeScreen(navigation)` from `src/navigation/close-screen.ts`. `goBack`, `router.back`, the `pop` helpers, and a `dispatch` of a back action go through the routing queue of Expo Router, which adds a render and a scan of the whole tree. The `expo-router/no-queued-back` lint rule finds them.
+- Give each endless CSS animation its style from `useEndlessAnimation`.
+- Render a list with the `FlashList` of `src/ui/flash-list.tsx`. It renders the first screen of rows in one or two passes. The `no-restricted-imports` lint rule blocks the `FlashList` of `@shopify/flash-list`.
+- Do not read a shared value with `get()` on the JavaScript thread on a tap path.
+- Measure a speed change on a release build with `atrace`, from the finger release to the first frame that shows the result.
+
 ### Transcript list
 
 - The `latest` transcript list is an inverted FlashList. Rows that mount while the reader scrolls toward earlier messages go to the far end of the list, so they move no row in view.

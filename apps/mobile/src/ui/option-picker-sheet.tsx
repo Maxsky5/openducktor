@@ -1,5 +1,5 @@
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import {
   type ComponentRef,
   type ReactElement,

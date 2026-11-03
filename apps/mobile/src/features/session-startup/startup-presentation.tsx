@@ -5,7 +5,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { StartupPresentationContext } from "./startup-presentation-context";
@@ -14,25 +13,30 @@ import type { StartupOutputReading } from "./startup-output-reading";
 /** Details and reading positions stay with the attempt when its progress changes windows. */
 export function StartupPresentationProvider({ children }: PropsWithChildren): ReactElement {
   const [expanded, setExpanded] = useState<Record<string, ReadonlySet<string>>>({});
-  const scroll = useRef(new Map<string, number>());
-  const notificationPresented = useRef(new Set<string>());
-  const readings = useRef(new Map<string, Map<string, StartupOutputReading>>());
-  const sheetClosers = useRef(new Map<string, () => void>());
+  // Each attempt keeps its positions here until it ends. The containers keep their identity.
+  const [stores] = useState(() => ({
+    scroll: new Map<string, number>(),
+    notificationPresented: new Set<string>(),
+    readings: new Map<string, Map<string, StartupOutputReading>>(),
+    sheetClosers: new Map<string, () => void>(),
+  }));
   const attempts = useStartupAttempts();
   useEffect(() => {
     const retained = new Set(attempts.map((attempt) => attempt.id));
-    for (const id of scroll.current.keys()) if (!retained.has(id)) scroll.current.delete(id);
-    for (const id of notificationPresented.current)
-      if (!retained.has(id)) notificationPresented.current.delete(id);
-    for (const id of readings.current.keys()) if (!retained.has(id)) readings.current.delete(id);
-    for (const id of sheetClosers.current.keys())
-      if (!retained.has(id)) sheetClosers.current.delete(id);
+    for (const store of [
+      stores.scroll,
+      stores.notificationPresented,
+      stores.readings,
+      stores.sheetClosers,
+    ]) {
+      for (const id of store.keys()) if (!retained.has(id)) store.delete(id);
+    }
     setExpanded((current) =>
       Object.keys(current).every((id) => retained.has(id))
         ? current
         : Object.fromEntries(Object.entries(current).filter(([id]) => retained.has(id))),
     );
-  }, [attempts]);
+  }, [attempts, stores]);
   const toggle = useCallback((attemptId: string, stepId: string) => {
     setExpanded((current) => {
       const next = new Set(current[attemptId]);
@@ -42,10 +46,10 @@ export function StartupPresentationProvider({ children }: PropsWithChildren): Re
   }, []);
   const outputReading = useCallback(
     (attemptId: string, terminalId: string): StartupOutputReading => {
-      let terminals = readings.current.get(attemptId);
+      let terminals = stores.readings.get(attemptId);
       if (!terminals) {
         terminals = new Map();
-        readings.current.set(attemptId, terminals);
+        stores.readings.set(attemptId, terminals);
       }
       let reading = terminals.get(terminalId);
       if (!reading) {
@@ -54,18 +58,18 @@ export function StartupPresentationProvider({ children }: PropsWithChildren): Re
       }
       return reading;
     },
-    [],
+    [stores],
   );
   const value = useMemo(
     () => ({
       expanded,
-      scroll: scroll.current,
-      notificationPresented: notificationPresented.current,
+      scroll: stores.scroll,
+      notificationPresented: stores.notificationPresented,
       toggle,
       outputReading,
-      sheetClosers: sheetClosers.current,
+      sheetClosers: stores.sheetClosers,
     }),
-    [expanded, toggle, outputReading],
+    [expanded, outputReading, stores, toggle],
   );
   return <StartupPresentationContext value={value}>{children}</StartupPresentationContext>;
 }

@@ -1,7 +1,8 @@
 import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import type { DiffScope } from "@openducktor/frontend-core/git/contracts";
 import { gitPanelTabCounts } from "@openducktor/frontend-core/git/model/git-panel-header";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useReducer, useState } from "react";
 import { View } from "react-native";

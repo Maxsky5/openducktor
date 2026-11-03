@@ -16,11 +16,10 @@ import {
   tabBarEdgePath,
   tabBarPath,
 } from "./tab-bar-geometry";
-import { pressTabRoute, TAB_ROW_ROLE, tabButtons } from "./tab-button";
+import { TabButtons } from "./tab-button";
+import { pressTabRoute, TAB_ROW_ROLE } from "./tab-route";
 import { useCreateFan } from "./use-create-fan";
 
-/** The create button goes after this many tabs. */
-const CREATE_SLOT = 2;
 /** The room beside the right edge of the rail for its hairline. */
 const EDGE_ROOM = 1;
 
@@ -53,13 +52,6 @@ export function NavigationRail({
     if (open) close();
     pressTabRoute(routeKey, latest.current);
   }, []);
-  const tabs = tabButtons({
-    state,
-    descriptors,
-    progress,
-    placement: "rail",
-    onPressTab: pressTab,
-  });
   const measure = useCallback((event: LayoutChangeEvent) => {
     setHeight(event.nativeEvent.layout.height);
   }, []);
@@ -99,9 +91,14 @@ export function NavigationRail({
           </Svg>
         ) : null}
         <View accessibilityRole={TAB_ROW_ROLE} style={styles.tabs}>
-          {tabs.slice(0, CREATE_SLOT)}
-          <View style={styles.createSlot} />
-          {tabs.slice(CREATE_SLOT)}
+          <TabButtons
+            state={state}
+            descriptors={descriptors}
+            progress={progress}
+            placement="rail"
+            onPressTab={pressTab}
+            createSlot={<View style={styles.createSlot} />}
+          />
         </View>
       </View>
       {/* The anchor reaches the left edge of the rail, so the touch slop of the button stays inside

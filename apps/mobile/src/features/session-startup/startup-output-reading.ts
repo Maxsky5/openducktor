@@ -24,6 +24,10 @@ export const createStartupOutputReader = ({
     reset(): void {
       viewportReady = false;
     },
+    /** Keeps the scroll position of the text output, so the output opens there again. */
+    scrollText(offset: number): void {
+      reading.textOffset = offset;
+    },
     receive(message: TerminalPageOutbound): boolean {
       if (message.type === "terminal_hydrated") {
         if (reading.viewport) post({ type: "terminal_set_viewport", ...reading.viewport });

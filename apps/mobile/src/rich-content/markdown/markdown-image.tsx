@@ -19,10 +19,10 @@ const BROWSER_HINT = "Opens the image in the browser.";
  * browser.
  */
 export function MarkdownImage({ url, alt }: { url: string; alt: string }): ReactElement {
-  const viewport = useInViewport(useMarkdownVisible());
+  const { ref: viewportRef, onLayout, inView } = useInViewport(useMarkdownVisible());
   return (
-    <View ref={viewport.ref} onLayout={viewport.onLayout}>
-      <MarkdownImageContent url={url} alt={alt} inView={viewport.inView} />
+    <View ref={viewportRef} onLayout={onLayout}>
+      <MarkdownImageContent url={url} alt={alt} inView={inView} />
     </View>
   );
 }

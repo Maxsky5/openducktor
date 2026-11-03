@@ -45,7 +45,7 @@ function TerminalContent({ owner, tabId }: { owner: WorkOwner; tabId: string }):
   const theme = useAppTheme();
   const model = useOwnerTerminals(owner);
   const goBack = useCallback(() => {
-    navigation.dispatch(StackActions.popTo("work/terminals", toWorkOwnerParams(owner.ref)));
+    navigation.dispatchSync(StackActions.popTo("work/terminals", toWorkOwnerParams(owner.ref)));
   }, [navigation, owner.ref]);
   const { close, closeUnknown } = useTerminalClose(model, { onClosing: goBack });
   const tab = findTerminalTab(model.tabs, tabId);

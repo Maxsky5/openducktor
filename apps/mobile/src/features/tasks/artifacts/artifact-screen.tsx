@@ -240,9 +240,8 @@ const useShareArtifact = (artifact: FreeTaskArtifact) => {
         feedback.show("error", "The artifact was not shared.", {
           description: errorMessage(cause),
         });
-      } finally {
-        setSharing(false);
       }
+      setSharing(false);
     },
     [artifact.mediaType, artifact.name, feedback],
   );

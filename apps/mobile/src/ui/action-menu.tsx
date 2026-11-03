@@ -82,10 +82,10 @@ export function ActionMenu({
 }>): ReactElement {
   const gate = useOptionalCommandGate();
   const commandsBlocked = gate !== null && !gate.open;
-  const popover = useAnchoredPopover(
+  const { trigger, show, view } = useAnchoredPopover(
     (screen, insets) => menuLayout(items, title, screen, insets).size,
   );
-  const { show, close } = popover;
+  const { close } = view;
   useImperativeHandle(menuRef, () => ({ show }), [show]);
 
   // On iOS the choice runs after the menu has closed, so it can open a dialog or a native picker.
@@ -96,10 +96,10 @@ export function ActionMenu({
   );
 
   return (
-    <View ref={popover.trigger} collapsable={false} style={fill ? styles.fill : null}>
+    <View ref={trigger} collapsable={false} style={fill ? styles.fill : null}>
       <MenuTriggerContext value={triggerValue}>{children}</MenuTriggerContext>
       <AnchoredPopover
-        popover={popover}
+        popover={view}
         accessibilityRole="menu"
         accessibilityLabel={title ?? accessibilityLabel}
       >

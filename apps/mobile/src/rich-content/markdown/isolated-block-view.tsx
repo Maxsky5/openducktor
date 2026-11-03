@@ -71,7 +71,11 @@ export const IsolatedBlockView = memo(function IsolatedBlockView({
   const [pageGeneration, setPageGeneration] = useState(0);
   // A long message can hold many blocks. Each page mounts only while its row is in view and the
   // block is near the viewport.
-  const viewport = useInViewport(useMarkdownVisible());
+  const {
+    ref: viewportRef,
+    onLayout: onViewportLayout,
+    inView,
+  } = useInViewport(useMarkdownVisible());
   const page = route === "diagram" ? RICH_DIAGRAM_PAGE : RICH_BLOCK_PAGE;
   const markdown = useMemo(
     () => blockPageMarkdown(source, node, definitions),
@@ -120,7 +124,6 @@ export const IsolatedBlockView = memo(function IsolatedBlockView({
     [fontScale, italic, markdown, muted, theme, variant],
   );
 
-  const { onLayout: onViewportLayout } = viewport;
   const onLayout = useCallback(
     (event: LayoutChangeEvent) => {
       const next = event.nativeEvent.layout.width;
@@ -184,8 +187,8 @@ export const IsolatedBlockView = memo(function IsolatedBlockView({
     );
   }
   return (
-    <View ref={viewport.ref} style={styles.frame(height)} onLayout={onLayout}>
-      {viewport.inView ? (
+    <View ref={viewportRef} style={styles.frame(height)} onLayout={onLayout}>
+      {inView ? (
         // A new page or a restart mounts a new view, with its own load and ready state.
         <BlockPage
           key={`${page.name}:${pageGeneration}`}

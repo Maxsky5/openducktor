@@ -4,7 +4,7 @@ import type {
   ModelPickerRuntime,
   ModelPickerValue,
 } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { type ReactElement, useCallback, useMemo } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";

@@ -33,9 +33,8 @@ export function useAttachmentPickers({
         }
       } catch (cause) {
         feedback.show("error", "The picker could not open", { description: errorMessage(cause) });
-      } finally {
-        setPicking(false);
       }
+      setPicking(false);
     },
     [enabled, feedback, isPicking, onAdd],
   );

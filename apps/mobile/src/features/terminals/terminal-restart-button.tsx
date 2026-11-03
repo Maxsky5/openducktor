@@ -51,9 +51,8 @@ export function TerminalRestartButton({
         feedback.show(failure.kind === "unknown" ? "warning" : "error", failure.title, {
           description: failure.message,
         });
-      } finally {
-        setPending(false);
       }
+      setPending(false);
     });
   };
 

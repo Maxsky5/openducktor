@@ -37,6 +37,7 @@ import { NewChatWorkspaceField } from "./new-chat-workspace-field";
 import { WorktreeFields } from "./new-chat-worktree-fields";
 import { TargetBranchField } from "./target-branch-field";
 import { useNewChatModel } from "./use-new-chat-model";
+import { closeScreen } from "@/navigation/close-screen";
 
 export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
   const router = useRouter();
@@ -246,6 +247,7 @@ const useClose = (edited: boolean, running: boolean) => {
   const [closing, setClosing] = useState(false);
   const closed = useRef(false);
   const allowRemoval = usePreventRemove(!closing && (edited || running), () => {
+    // oxlint-disable-next-line react-compiler/immutability -- usePreventRemove calls back into the close that needs its result; the hook memoizes by hand
     if (!running) requestClose();
   });
   const close = useCallback(() => {
@@ -253,8 +255,9 @@ const useClose = (edited: boolean, running: boolean) => {
     closed.current = true;
     setClosing(true);
     allowRemoval();
-    navigation.goBack();
+    closeScreen(navigation);
   }, [allowRemoval, navigation]);
+  // oxlint-disable-next-line react-compiler/preserve-manual-memoization -- usePreventRemove calls back into the close that needs its result; the hook memoizes by hand
   const requestClose = useCallback(() => {
     if (running) return;
     if (!edited) {

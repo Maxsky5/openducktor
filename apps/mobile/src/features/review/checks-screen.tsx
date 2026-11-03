@@ -8,9 +8,10 @@ import {
   useHideResolvedComments,
 } from "@openducktor/frontend-core/review/pull-request-comment-filters";
 import { TASK_EXECUTION_CI_PANEL_COPY } from "@openducktor/frontend-core/review/task-execution-ci-panel-copy";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { useQuery } from "@tanstack/react-query";
-import { Stack, useIsFocused } from "expo-router";
+import { Stack } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -43,6 +44,7 @@ import {
 } from "./checks-model";
 import { ChecksPanelState, PullRequestChip } from "./checks-parts";
 import { CheckRow, ChecksHeaderRow, ChecksListNote, CommentsHeaderRow } from "./checks-rows";
+import { useScreenInView } from "@/navigation/use-screen-in-view";
 
 const STATE_ACTION_LABELS = {
   retry: { label: "Retry", pendingLabel: "Retrying" },
@@ -104,7 +106,7 @@ function ChecksContent({
   task: TaskCard;
 }): ReactElement {
   const { repoPath } = workspace;
-  const focused = useIsFocused();
+  const inView = useScreenInView();
   const gate = useCommandGate();
   const provider = useQuery(repositoryGitProviderContextQueryOptionsOrSkip(workspace));
   const providerRead = {
@@ -126,7 +128,7 @@ function ChecksContent({
       taskId: task.id,
       ...(task.pullRequest && { pullRequest: task.pullRequest }),
     }),
-    enabled: focused && queryInput !== null,
+    enabled: inView && queryInput !== null,
   });
   const state = ciChecksViewState({
     provider: providerRead,

@@ -8,7 +8,7 @@ import {
 } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { workspaceCatalogQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { useTerminalTransport } from "@openducktor/frontend-core/terminals/use-terminal-transport";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { type NativeStackNavigationOptions, Stack, useRouter } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";

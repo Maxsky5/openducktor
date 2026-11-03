@@ -51,6 +51,7 @@ export const useMarkdownBlocks = (
 ): MarkdownDocument => {
   const previous = useRef<MarkdownDocument | null>(null);
   const document = useMemo(
+    // oxlint-disable-next-line react-compiler/refs -- streaming text parses only its end from the previous document; the hook memoizes by hand
     () => readMarkdownDocument(markdown, revision, previous.current),
     [markdown, revision],
   );

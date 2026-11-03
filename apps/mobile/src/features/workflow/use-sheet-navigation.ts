@@ -1,8 +1,8 @@
 import { useNavigation, useRouter } from "expo-router";
-import { StackActions } from "expo-router/react-navigation";
 import { useCallback, useMemo, useRef } from "react";
 import { routes, sessionParams } from "@/navigation/routes";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { closeScreen } from "@/navigation/close-screen";
 
 /** Leaves a workflow sheet, and opens a session or a task in the tab below it. */
 export function useSheetNavigation(workspaceId: string) {
@@ -14,7 +14,7 @@ export function useSheetNavigation(workspaceId: string) {
     if (left.current) return;
     left.current = true;
     // Dismiss the sheet instead of following the focused tab's back history.
-    navigation.dispatch(StackActions.pop(1));
+    closeScreen(navigation);
   }, [navigation]);
   const openSession = useCallback(
     (identity: AgentSessionIdentity) => {

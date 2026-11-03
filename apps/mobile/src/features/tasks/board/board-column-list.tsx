@@ -1,5 +1,6 @@
 import { type BuiltinTaskCard as TaskCardData } from "@openducktor/workflows";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { Fragment, memo, type ReactElement, useCallback } from "react";
 import { type DimensionValue, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";

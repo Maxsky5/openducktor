@@ -309,14 +309,19 @@ function DocumentPage({
   const theme = useAppTheme();
   const endSpace = useScreenEndSpace(theme.space.huge);
   // Document images and isolated pages load near this viewport.
-  const viewport = useListViewport();
+  const {
+    store: viewportStore,
+    frameRef,
+    onFrameLayout,
+    onScroll: onViewportScroll,
+  } = useListViewport();
   const shown = useProgressiveCount(rows.length);
   return (
-    <ViewportProvider value={viewport.store}>
-      <View ref={viewport.frameRef} style={styles.fill} onLayout={viewport.onFrameLayout}>
+    <ViewportProvider value={viewportStore}>
+      <View ref={frameRef} style={styles.fill} onLayout={onFrameLayout}>
         <ScrollView
           removeClippedSubviews={selectable}
-          onScroll={viewport.onScroll}
+          onScroll={onViewportScroll}
           scrollEventThrottle={32}
           contentInsetAdjustmentBehavior="automatic"
           contentContainerStyle={[styles.content, { paddingBottom: endSpace }]}

@@ -1,6 +1,6 @@
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { memo, type ReactElement } from "react";
-import { Platform, View } from "react-native";
+import { View } from "react-native";
 import Animated, {
   Extrapolation,
   interpolate,
@@ -40,37 +40,28 @@ const TAB_ICON_SIZE = 25;
  * inside the fixed row of the bar at the largest text sizes.
  */
 const MAX_FONT_SCALE = 1.3;
-/** VoiceOver reads the position of a tab, such as "1 of 4", only inside a tab bar. */
-export const TAB_ROW_ROLE = Platform.OS === "ios" ? "tabbar" : "tablist";
 
 /** The bottom bar of portrait, or the rail on the left edge of a low window. */
 export type TabPlacement = "bottom" | "rail";
 
-type TabNavigation = Pick<BottomTabBarProps, "state" | "emitter" | "navigateToTab">;
+/** The create button goes after this many tabs. */
+const CREATE_SLOT = 2;
 
-/** Presses the tab of `routeKey`, as the default tab bar does. */
-export const pressTabRoute = (
-  routeKey: string,
-  { state, emitter, navigateToTab }: TabNavigation,
-): void => {
-  const focused = state.routes[state.index]?.key === routeKey;
-  const event = emitter.emit({ type: "tabPress", target: routeKey, canPreventDefault: true });
-  if (!focused && !event.defaultPrevented) navigateToTab(routeKey);
-};
-
-/** The tab buttons of the navigator, in route order. */
-export const tabButtons = ({
+/** The tab buttons of the navigator in route order, with the slot of the create button among them. */
+export function TabButtons({
   state,
   descriptors,
   progress,
   placement,
   onPressTab,
+  createSlot,
 }: Pick<BottomTabBarProps, "state" | "descriptors"> & {
   progress: SharedValue<number>;
   placement: TabPlacement;
   onPressTab: (routeKey: string) => void;
-}): ReactElement[] =>
-  state.routes.flatMap((route, index) => {
+  createSlot: ReactElement;
+}): ReactElement {
+  const buttons = state.routes.flatMap((route, index) => {
     const meta = tabMeta(route.name);
     if (!meta) return [];
     const tab: TabButtonProps = {
@@ -88,6 +79,14 @@ export const tabButtons = ({
       <TabButton key={route.key} {...tab} />
     );
   });
+  return (
+    <>
+      {buttons.slice(0, CREATE_SLOT)}
+      {createSlot}
+      {buttons.slice(CREATE_SLOT)}
+    </>
+  );
+}
 
 type TabButtonProps = {
   label: string;

@@ -1,11 +1,7 @@
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
-import {
-  FlashList,
-  type FlashListRef,
-  type ListRenderItemInfo,
-  type ViewToken,
-} from "@shopify/flash-list";
+import { type FlashListRef, type ListRenderItemInfo, type ViewToken } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import {
   memo,
   type ReactElement,

@@ -34,9 +34,8 @@ export function useSessionStop(): SessionStop {
         await stopAgentSession(identity);
       } catch (cause) {
         setFailure(toCommandFailure(cause, "Session not stopped"));
-      } finally {
-        setStopping(false);
       }
+      setStopping(false);
     });
   }, [identity, stopAgentSession, stopFlight]);
   return { available, isStopping, failure, stop };

@@ -28,6 +28,7 @@ import { type SheetFieldFocus, useSheetFieldFocus } from "@/ui/use-sheet-field-f
 import type { ChatSheetParams } from "./chat-sheet-params";
 import { ChatSheetStateScreen } from "./chat-sheet-states";
 import { useChatRecord } from "./use-chat-record";
+import { closeScreen } from "@/navigation/close-screen";
 
 const TITLE = "Rename chat";
 
@@ -50,7 +51,7 @@ function RenameChatForm({
     sessionId: record.id,
     onRenamed: () => {
       feedback.show("success", "Chat renamed.");
-      if (mounted.current) navigation.goBack();
+      if (mounted.current) closeScreen(navigation);
     },
   });
   const canSave = canSaveWorkspaceSessionRename({
@@ -98,7 +99,7 @@ function RenameChatForm({
             fill
             style={styles.action}
             disabled={rename.isPending}
-            onPress={() => navigation.goBack()}
+            onPress={() => closeScreen(navigation)}
           />
           <Button
             label={RENAME_CHAT_TEXT.save}

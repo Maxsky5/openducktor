@@ -8,14 +8,14 @@ import type { SearchBarCommands } from "react-native-screens";
  */
 export type HeaderSearch = {
   /** The `ref` of `headerSearchBarOptions`. */
-  bar: RefObject<SearchBarCommands | null>;
-  text: RefObject<string>;
+  barRef: RefObject<SearchBarCommands | null>;
+  textRef: RefObject<string>;
 };
 
 export function useHeaderSearch(): HeaderSearch {
-  const bar = useRef<SearchBarCommands>(null);
-  const text = useRef("");
-  return useMemo(() => ({ bar, text }), []);
+  const barRef = useRef<SearchBarCommands>(null);
+  const textRef = useRef("");
+  return useMemo(() => ({ barRef, textRef }), []);
 }
 
 /**
@@ -27,19 +27,20 @@ export function useHeaderSearchText(
   search: HeaderSearch,
   filter: Pick<KanbanBoardFilterModel, "value" | "onChange">,
 ): (text: string) => void {
+  const { barRef, textRef } = search;
   const { searchText } = filter.value;
   const { onChange } = filter;
   useEffect(() => {
-    const bar = search.bar.current;
-    if (!bar || search.text.current === searchText) return;
+    const bar = barRef.current;
+    if (!bar || textRef.current === searchText) return;
     bar.setText(searchText);
-    search.text.current = searchText;
-  }, [search, searchText]);
+    textRef.current = searchText;
+  }, [barRef, searchText, textRef]);
   return useCallback(
     (text: string) => {
-      search.text.current = text;
+      textRef.current = text;
       onChange({ searchText: text });
     },
-    [onChange, search],
+    [onChange, textRef],
   );
 }

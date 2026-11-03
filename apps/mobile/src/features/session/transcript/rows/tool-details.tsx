@@ -363,9 +363,8 @@ function DownloadAttachment({
       feedback.show("error", "The attachment was not saved.", {
         description: errorMessage(cause),
       });
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
   return (
     <Touchable

@@ -2,10 +2,10 @@ import type { ChatFileScope } from "@openducktor/contracts";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { isMarkdownFile } from "@openducktor/frontend-core/lib/markdown-file";
 import { workspaceFilePreviewQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { type ListRenderItem } from "@shopify/flash-list";
+import { FlashList } from "@/ui/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { useIsFocused } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -34,6 +34,7 @@ import {
   lineNumberColumnChars,
   textLineCount,
 } from "./file-content-model";
+import { useScreenInView } from "@/navigation/use-screen-in-view";
 
 /**
  * A read-only view of one file, as the desktop file preview: the code view with line numbers and
@@ -55,11 +56,11 @@ export function FileViewer({
   /** Closes the preview, such as in the detail pane of a wide screen. */
   onClose?: (() => void) | undefined;
 }): ReactElement {
-  const focused = useIsFocused();
+  const inView = useScreenInView();
   const gate = useCommandGate();
   const query = useQuery({
     ...workspaceFilePreviewQueryOptions(rootPath, relativePath, scope),
-    enabled: focused,
+    enabled: inView,
   });
   const content = useMemo(() => (query.data ? fileContentView(query.data) : null), [query.data]);
   const { refetch } = query;
@@ -217,7 +218,12 @@ function MarkdownPreview({ path, contents }: { path: string; contents: string })
       })),
     [document.blocks],
   );
-  const viewport = useListViewport();
+  const {
+    store: viewportStore,
+    frameRef,
+    onFrameLayout,
+    onScroll: onViewportScroll,
+  } = useListViewport();
   const renderItem = useCallback<ListRenderItem<MarkdownRow>>(
     ({ item }) => (
       <View style={styles.markdownBlock(item.gap)}>
@@ -227,15 +233,15 @@ function MarkdownPreview({ path, contents }: { path: string; contents: string })
     [document.definitions],
   );
   return (
-    <ViewportProvider value={viewport.store}>
-      <View ref={viewport.frameRef} style={styles.fill} onLayout={viewport.onFrameLayout}>
+    <ViewportProvider value={viewportStore}>
+      <View ref={frameRef} style={styles.fill} onLayout={onFrameLayout}>
         <FlashList
           data={rows}
           renderItem={renderItem}
           keyExtractor={markdownRowKey}
           getItemType={markdownRowType}
           extraData={renderItem}
-          onScroll={viewport.onScroll}
+          onScroll={onViewportScroll}
           scrollEventThrottle={32}
           contentInsetAdjustmentBehavior="automatic"
           contentContainerStyle={[styles.document, { paddingBottom: endSpace }]}

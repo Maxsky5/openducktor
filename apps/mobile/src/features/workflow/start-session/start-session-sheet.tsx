@@ -170,6 +170,7 @@ const useStartChoicesClose = (modal: SessionStartModalModel | null) => {
   const markEdited = useCallback(() => setEdited(true), []);
   const asksBeforeClose =
     modal?.phase.kind !== "progress" && edited && modal?.open === true && !modal.isStarting;
+  // oxlint-disable-next-line react-compiler/immutability -- usePreventRemove calls back into the close that needs its result; the hook memoizes by hand
   const allowRemoval = usePreventRemove(asksBeforeClose, () => close());
   const close = () => {
     if (!asksBeforeClose) {

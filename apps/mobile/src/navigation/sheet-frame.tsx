@@ -8,6 +8,7 @@ import { IconButton } from "@/ui/icon-button";
 import { Text } from "@/ui/text";
 import { ModalLoadingContent } from "@/ui/modal-loading-content";
 import { useBlockBack } from "./use-block-back";
+import { closeScreen } from "./close-screen";
 
 /**
  * The frame of a compact route sheet that fits its content: a drag handle, the title with one
@@ -57,7 +58,7 @@ export function SheetFrame({
           variant="filled"
           accessibilityLabel="Close"
           disabled={!closable}
-          onPress={() => navigation.goBack()}
+          onPress={() => closeScreen(navigation)}
         />
       </View>
       <ModalLoadingContent loading={isLoading} style={styles.content}>

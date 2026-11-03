@@ -125,7 +125,7 @@ export function DetailsItem({
   onPress,
   accessibilityLabel,
   accessibilityHint,
-  chevron = onPress !== undefined,
+  chevron,
 }: PropsWithChildren<{
   leading?: ReactNode;
   trailing?: ReactNode;
@@ -140,7 +140,7 @@ export function DetailsItem({
       {leading}
       <View style={styles.itemBody}>{children}</View>
       {trailing}
-      {chevron ? (
+      {(chevron ?? onPress !== undefined) ? (
         <Icon name="chevron-right" size={15} colorValue={theme.desktop.mutedForeground} />
       ) : null}
     </>

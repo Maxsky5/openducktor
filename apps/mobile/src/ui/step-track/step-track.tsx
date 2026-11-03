@@ -1,4 +1,4 @@
-import { type ReactElement, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { type AccessibilityActionEvent, type LayoutChangeEvent, View } from "react-native";
 import {
   GestureDetector,
@@ -69,6 +69,8 @@ const LOOK = {
     thumbShadow: "0 1px 1px rgba(0, 0, 0, 0.18)",
   },
 } as const;
+/** The label width before its first layout. */
+const INITIAL_LABEL_WIDTH = 64;
 const TICK_ON_THUMB = "rgba(0, 0, 0, 0.45)";
 
 const EASE_OUT = Easing.out(Easing.cubic);
@@ -138,8 +140,11 @@ export function StepTrack({
   const display = useSharedValue(rest);
   const open = useSharedValue(0);
   const reveal = useSharedValue(0);
-  const plateau = useSharedValue(plateauFor(64));
-  const textWidth = useSharedValue(64);
+  const plateau = useSharedValue(plateauFor(INITIAL_LABEL_WIDTH));
+  const textWidth = useSharedValue(INITIAL_LABEL_WIDTH);
+  // The last label width, kept on the JavaScript thread: a read of `textWidth` here would wait for
+  // the UI thread after each layout.
+  const labelWidth = useRef(INITIAL_LABEL_WIDTH);
   const dragging = useSharedValue(false);
   const liveIndex = useSharedValue(rest);
   const burst = useSharedValue(0);
@@ -257,7 +262,8 @@ export function StepTrack({
   const onLayout = (event: LayoutChangeEvent) => setTrack(event.nativeEvent.layout.width);
   const onLabelLayout = (event: LayoutChangeEvent) => {
     const width = event.nativeEvent.layout.width;
-    if (Math.abs(width - textWidth.get()) < 0.4) return;
+    if (Math.abs(width - labelWidth.current) < 0.4) return;
+    labelWidth.current = width;
     textWidth.set(width);
     plateau.set(withTiming(plateauFor(width), reducedMotion ? NO_MOTION : PLATEAU));
   };
