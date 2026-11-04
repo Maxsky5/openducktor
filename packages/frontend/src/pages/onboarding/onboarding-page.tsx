@@ -39,9 +39,13 @@ export function OnboardingPage({ onComplete, headerActions }: OnboardingPageProp
     const transition = document.startViewTransition(() => {
       flushSync(() => setStage(nextStage));
     });
-    void transition.finished.finally(() => {
+    // Skipping the animation rejects ready but still runs the stage update.
+    void transition.ready.catch(() => {});
+    const clearTransitionClass = (): void => {
       root.classList.remove("onboarding-stage-transition");
-    });
+    };
+    // updateCallbackDone still reports stage-update failures.
+    void transition.finished.then(clearTransitionClass, clearTransitionClass);
   }, []);
   const openWorkspaceStage = useCallback((): void => changeStage("workspace"), [changeStage]);
   const openNotificationsStage = useCallback(
