@@ -182,20 +182,20 @@ export const createGitlabConnectionAdapter = ({
     Effect.gen(function* () {
       const existing = yield* accounts.findByUser(fields.instanceUrl, fields.userId);
       const accountId = existing?.accountId ?? randomUUID();
-      const previousSecret = existing ? yield* secrets.read(accountId) : null;
+      // The raw text, so a credential that no longer decodes can still be replaced.
+      const previous = existing ? yield* secrets.snapshot(accountId) : null;
       return yield* secrets.save(accountId, secret).pipe(
         Effect.andThen(accounts.upsert(fields, accountId)),
         Effect.tapError(() =>
-          (previousSecret
-            ? secrets.save(accountId, previousSecret)
-            : secrets.delete(accountId)
-          ).pipe(
-            Effect.catch((error) =>
-              Effect.logWarning(
-                `Failed to restore the GitLab credential of account ${accountId}: ${error.message}`,
+          secrets
+            .restore(accountId, previous)
+            .pipe(
+              Effect.catch((error) =>
+                Effect.logWarning(
+                  `Failed to restore the GitLab credential of account ${accountId}: ${error.message}`,
+                ),
               ),
             ),
-          ),
         ),
       );
     });

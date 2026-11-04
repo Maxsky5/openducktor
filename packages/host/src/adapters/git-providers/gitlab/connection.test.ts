@@ -8,7 +8,7 @@ import type {
 } from "../../sqlite/sqlite-gitlab-account-store";
 import { createGitlabConnectionAdapter } from "./connection";
 import { createGitlabHttp } from "./http";
-import type { GitlabSecret, GitlabSecretStore } from "./secret-store";
+import { decodeGitlabSecret, type GitlabSecret, type GitlabSecretStore } from "./secret-store";
 
 type Route = (request: Request) => Response | undefined;
 
@@ -66,12 +66,31 @@ const createHarness = (
     listKnownInstances: () =>
       Effect.succeed([...new Set([...rows.values()].map((row) => row.instanceUrl))]),
   };
-  const secretValues = new Map<string, GitlabSecret>();
+  // Like the OS store, the fake keeps text, so a test can save a credential that does not decode.
+  const storedSecrets = new Map<string, string>();
+  const secretValues = {
+    get: (accountId: string): GitlabSecret | undefined => {
+      const payload = storedSecrets.get(accountId);
+      return payload === undefined ? undefined : Effect.runSync(decodeGitlabSecret(payload));
+    },
+    set: (accountId: string, secret: GitlabSecret) =>
+      void storedSecrets.set(accountId, JSON.stringify(secret)),
+    setPayload: (accountId: string, payload: string) => void storedSecrets.set(accountId, payload),
+    get size() {
+      return storedSecrets.size;
+    },
+  };
+  const snapshot = (accountId: string) => Effect.succeed(storedSecrets.get(accountId) ?? null);
   const secrets: GitlabSecretStore = {
-    read: (accountId) => Effect.succeed(secretValues.get(accountId) ?? null),
+    read: (accountId) =>
+      snapshot(accountId).pipe(
+        Effect.flatMap((payload) =>
+          payload === null ? Effect.succeed(null) : decodeGitlabSecret(payload),
+        ),
+      ),
     // Like the OS store, a failing write can change the secret before its marker file fails.
     save: (accountId, secret) =>
-      Effect.sync(() => void secretValues.set(accountId, secret)).pipe(
+      Effect.sync(() => secretValues.set(accountId, secret)).pipe(
         Effect.andThen(
           failures.secretSave
             ? Effect.fail(
@@ -83,7 +102,14 @@ const createHarness = (
             : Effect.void,
         ),
       ),
-    delete: (accountId) => Effect.sync(() => void secretValues.delete(accountId)),
+    delete: (accountId) => Effect.sync(() => void storedSecrets.delete(accountId)),
+    snapshot,
+    restore: (accountId, payload) =>
+      Effect.sync(() =>
+        payload === null
+          ? void storedSecrets.delete(accountId)
+          : void storedSecrets.set(accountId, payload),
+      ),
   };
   const connection = createGitlabConnectionAdapter({
     http: createGitlabHttp(fetchImplementation),
@@ -226,6 +252,28 @@ describe("GitLab connection adapter", () => {
     expect((await replace())._tag).toBe("Failure");
     expect(harness.rows.get(prior.accountId)).toEqual(prior);
     expect(harness.secretValues.get(prior.accountId)).toEqual(priorSecret);
+  });
+
+  test("replaces a saved credential that no longer decodes", async () => {
+    const harness = createHarness(selfManagedToken());
+    const prior: GitlabAccount = {
+      accountId: "4b0b1d5a-1c49-4f43-9f7b-5f1d2d4f0c11",
+      instanceUrl: "https://code.corp",
+      userId: 7,
+      username: "alice",
+      displayName: "Alice",
+      authKind: "token",
+      tokenExpiresAt: null,
+    };
+    harness.rows.set(prior.accountId, prior);
+    harness.secretValues.setPayload(prior.accountId, "not a credential");
+
+    const account = await Effect.runPromise(
+      harness.connection.addToken({ instanceUrl: "https://code.corp", token: "secret" }),
+    );
+
+    expect(account.accountId).toBe(prior.accountId);
+    expect(harness.secretValues.get(prior.accountId)).toEqual({ kind: "token", token: "secret" });
   });
 
   test("reports a GitLab server error as a GitLab error to retry", async () => {
