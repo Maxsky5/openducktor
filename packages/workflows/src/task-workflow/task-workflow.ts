@@ -122,6 +122,15 @@ export type TaskWorkflow = {
   /** The status.set event that moves a task to the status. */
   statusEvent(status: string): string | undefined;
   decide(eventId: string, task: TaskFacts): TaskEventDecision;
+  /**
+   * The launch that follows an event, selected in the state that the event gives. A client starts
+   * that launch before the host commits the event, so a canceled start leaves the task unchanged.
+   */
+  launchAfterEvent(
+    eventId: string,
+    task: TaskFacts,
+    launchActionIds: readonly string[],
+  ): string | null;
   isEventAvailable(eventId: string, task: TaskFacts): boolean;
   eventSourceStates(eventId: string): readonly string[];
   /** Tasks with equal inputs share one frozen projection. */
@@ -365,6 +374,15 @@ export const createTaskWorkflow = (
     emptyArtifactSummary: inputs.emptyArtifactSummary,
     effectEvent: (effect) => effectEvents.get(effect),
     statusEvent: (status) => statusEvents.get(status),
+    launchAfterEvent: (eventId, task, launchActionIds) => {
+      const decision = evaluator.decide(inputs.input(task), eventId);
+      if (decision.kind === "denied")
+        throw new Error(
+          `Event "${eventId}" is unavailable in state "${task.status}". Reload the task.`,
+        );
+      const status = decision.kind === "transition" ? decision.to : task.status;
+      return evaluator.selectLaunchAction(inputs.input({ ...task, status }), launchActionIds);
+    },
     decide: (eventId, task) => {
       const decision = evaluator.decide(inputs.input(task), eventId);
       if (decision.kind === "unchanged") return { kind: "unchanged", status: task.status };

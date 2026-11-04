@@ -1695,7 +1695,7 @@ describe("KanbanPage session start modal flow", () => {
   );
 
   kanbanTest(
-    "keeps feedback edits out of task action updates and closes the form after commit",
+    "keeps feedback edits out of task action updates and keeps the draft when the start is canceled",
     async () => {
       currentTaskFixture = createTaskCardFixture({
         id: "TASK-123",
@@ -1737,7 +1737,7 @@ describe("KanbanPage session start modal flow", () => {
 
         await waitForSessionStartModalReady(renderer);
         expect(renderer.getActionRenderCount()).toBeGreaterThan(rendersBeforeEdit);
-        expect(renderer.getHumanReviewFeedbackModalModel()).toBeNull();
+        expect(renderer.getHumanReviewFeedbackModalModel()?.isSubmitting).toBe(true);
 
         const sessionStartModal = renderer.getSessionStartModalModel();
         if (!sessionStartModal) {
@@ -1749,9 +1749,13 @@ describe("KanbanPage session start modal flow", () => {
           sessionStartModal.onOpenChange(false);
         });
 
+        // The host commits Request Changes only with the launch, so the draft stays for a retry.
         await waitFor(() => {
           expect(renderer.getSessionStartModalModel()).toBeNull();
-          expect(renderer.getHumanReviewFeedbackModalModel()).toBeNull();
+          expect(renderer.getHumanReviewFeedbackModalModel()?.message).toBe(
+            "Keep this request-changes draft.",
+          );
+          expect(renderer.getHumanReviewFeedbackModalModel()?.isSubmitting).toBe(false);
           expect(renderer.getKanbanColumnProps().pendingState?.requestingChangesTaskId).toBeNull();
         });
       } finally {

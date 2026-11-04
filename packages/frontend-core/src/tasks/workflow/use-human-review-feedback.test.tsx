@@ -1,25 +1,40 @@
 import "../../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
-import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
+import { createFeedbackFake } from "../../test-support/feedback-fake";
+import { IsolatedQueryWrapper } from "../../test-support/isolated-query-wrapper";
 import { createHookHarness } from "../../test-support/react-hook-harness";
-import { useHumanReviewFeedbackState } from "./use-human-review-feedback";
+import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
+import { useHumanReviewFeedback } from "./use-human-review-feedback";
 
-describe("useHumanReviewFeedbackState", () => {
+const renderFeedback = (tasks: Parameters<typeof useHumanReviewFeedback>[0]["tasks"]) =>
+  createHookHarness(
+    useHumanReviewFeedback,
+    {
+      tasks,
+      scope: { workspaceId: "workspace-1", repoPath: "/repo" },
+      feedback: createFeedbackFake(),
+      sessions: [],
+      startSession: async () => undefined,
+    },
+    { wrapper: IsolatedQueryWrapper },
+  );
+
+describe("useHumanReviewFeedback", () => {
   test("opens Request Changes, edits its message, and closes", async () => {
     const task = createTaskCardFixture({
       id: "TASK-1",
       status: "human_review",
       availableActions: ["human_request_changes"],
     });
-    const harness = createHookHarness(useHumanReviewFeedbackState, [task]);
+    const harness = renderFeedback([task]);
     await harness.mount();
     try {
       await harness.run((form) => form.open("TASK-1", undefined, true));
-      expect(harness.getLatest().state).toMatchObject({ taskId: "TASK-1", launch: null });
-      await harness.run((form) => form.setMessage("Rework the API."));
-      expect(harness.getLatest().state?.message).toBe("Rework the API.");
-      await harness.run((form) => form.close());
-      expect(harness.getLatest().state).toBeNull();
+      expect(harness.getLatest().modal).toMatchObject({ taskId: "TASK-1", roleLabel: null });
+      await harness.run((form) => form.modal?.onMessageChange("Rework the API."));
+      expect(harness.getLatest().modal?.message).toBe("Rework the API.");
+      await harness.run((form) => form.modal?.onOpenChange(false));
+      expect(harness.getLatest().modal).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -27,14 +42,11 @@ describe("useHumanReviewFeedbackState", () => {
 
   test("opens the feedback launch of a task outside the task list", async () => {
     const task = createTaskCardFixture({ id: "TASK-2", status: "human_review" });
-    const harness = createHookHarness(useHumanReviewFeedbackState, []);
+    const harness = renderFeedback([]);
     await harness.mount();
     try {
       await harness.run((form) => form.openForTask(task, "build_after_human_request_changes"));
-      expect(harness.getLatest().state?.launch).toMatchObject({
-        role: "build",
-        launchActionId: "build_after_human_request_changes",
-      });
+      expect(harness.getLatest().modal?.roleLabel).toBe("Builder");
     } finally {
       await harness.unmount();
     }

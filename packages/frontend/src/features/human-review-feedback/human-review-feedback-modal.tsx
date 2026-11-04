@@ -42,7 +42,7 @@ export function HumanReviewFeedbackModal({
         <DialogHeader className="px-6 py-5 pr-14">
           <DialogTitle>{HUMAN_REVIEW_FEEDBACK_COPY.title}</DialogTitle>
           <DialogDescription>
-            {HUMAN_REVIEW_FEEDBACK_COPY.description(model.roleLabel, model.hasContinuation)}
+            {HUMAN_REVIEW_FEEDBACK_COPY.description(model.roleLabel)}
           </DialogDescription>
         </DialogHeader>
 

@@ -48,6 +48,7 @@ const createState = (
     launchActionId: "build_after_human_request_changes",
     postStartAction: "kickoff",
   },
+  requestChanges: false,
   confirmLabel: "Request Changes",
   taskId: "TASK-1",
   message: "Apply the requested changes.",

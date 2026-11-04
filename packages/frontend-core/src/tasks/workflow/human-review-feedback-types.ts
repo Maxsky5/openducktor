@@ -1,6 +1,4 @@
-import type { TaskWorkflowContinuation } from "./task-workflow-continuation";
 export type HumanReviewFeedbackModalModel = {
-  hasContinuation?: boolean;
   roleLabel: string | null;
   confirmLabel: string;
   open: boolean;
@@ -20,9 +18,11 @@ export type HumanReviewFeedbackLaunch = {
 };
 
 export type HumanReviewFeedbackState = {
+  /** The session that receives the feedback. Request Changes without a following launch has none. */
   launch: HumanReviewFeedbackLaunch | null;
+  /** The host commits Request Changes, before the launch starts when there is one. */
+  requestChanges: boolean;
   confirmLabel: string;
   taskId: string;
   message: string;
-  continuation?: TaskWorkflowContinuation;
 };

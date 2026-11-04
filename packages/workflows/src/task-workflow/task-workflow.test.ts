@@ -82,6 +82,22 @@ describe("createTaskWorkflow", () => {
     });
   });
 
+  test("selects the launch after an event in the state that the event gives", () => {
+    const definition = reviewTaskDefinition();
+    const write = definition.steps.find((step) => step.id === "write")!;
+    if (write.kind !== "agent") throw new Error("Expected the write step.");
+    write.launchActions[0]!.selectWhen = { stateIn: ["writing"] };
+    const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
+    const candidates = ["write_revise", "write_start"];
+
+    expect(
+      workflow.launchAfterEvent("request-rewrite", reviewTask({ status: "approval" }), candidates),
+    ).toBe("write_start");
+    expect(() =>
+      workflow.launchAfterEvent("request-rewrite", reviewTask({ status: "writing" }), candidates),
+    ).toThrow("unavailable");
+  });
+
   test("projects role states and actions from the definition", () => {
     const projection = review.project(reviewTask({ status: "reviewing" }));
 

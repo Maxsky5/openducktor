@@ -1086,7 +1086,7 @@ describe("useKanbanSessionStartFlow", () => {
     }
   });
 
-  test("selects the second Request Changes launch from the committed task and does not repeat the effect after cancel", async () => {
+  test("selects the Request Changes launch of the committed state and commits nothing when its start is canceled", async () => {
     const workflow = editTaskWorkflow(createBaseArgs().tasks[0]!.taskWorkflow, (definition) => {
       const action = definition.actions.find(({ id }) => id === "human_request_changes")!;
       if (action.kind !== "event") throw new Error("Expected event");
@@ -1145,11 +1145,12 @@ describe("useKanbanSessionStartFlow", () => {
       });
       await harness.waitFor((flow) => flow.sessionStartModal !== null);
       expect(harness.getLatest().sessionStartModal?.title).toBe("Start Builder session");
-      expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();
       await harness.run((flow) => flow.sessionStartModal?.onOpenChange(false));
-      expect(requestChanges).toHaveBeenCalledTimes(1);
+      await harness.waitFor((flow) => flow.humanReviewFeedbackModal?.isSubmitting === false);
+      // The host commits Request Changes with the launch, so a canceled start changes nothing.
+      expect(requestChanges).not.toHaveBeenCalled();
       expect(start).not.toHaveBeenCalled();
-      expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();
+      expect(harness.getLatest().humanReviewFeedbackModal?.message).toBe("Revise the draft");
     } finally {
       await harness.unmount();
     }
@@ -1289,7 +1290,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("canceling the following start modal does not reopen the committed Request Changes form", async () => {
+  test("canceling the following start modal keeps the Request Changes form and its draft", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
     });
@@ -1318,7 +1319,9 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     await harness.waitFor(
-      (state) => state.sessionStartModal === null && state.humanReviewFeedbackModal === null,
+      (state) =>
+        state.sessionStartModal === null &&
+        state.humanReviewFeedbackModal?.message === "Keep this request-changes draft.",
     );
 
     await harness.unmount();

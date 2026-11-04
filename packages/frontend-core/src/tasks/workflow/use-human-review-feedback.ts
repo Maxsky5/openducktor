@@ -20,12 +20,23 @@ import type {
   HumanReviewFeedbackModalModel,
   HumanReviewFeedbackState,
 } from "./human-review-feedback-types";
-import type { ContinueTaskWorkflow, TaskWorkflowContinuation } from "./task-workflow-continuation";
+import type { TaskWorkflowContinuation } from "./task-workflow-continuation";
 
-/** The open feedback form of a client. */
-export type HumanReviewFeedbackStateApi = {
-  state: HumanReviewFeedbackState | null;
-  /** Opens the form of a feedback launch, or of Request Changes with its continuation. */
+type UseHumanReviewFeedbackArgs = {
+  /** The tasks that the form can open for. */
+  tasks: readonly TaskCard[];
+  scope: WorkspaceRef | null;
+  feedback: ClientFeedback;
+  /** The sessions whose role session a feedback launch can reuse. */
+  sessions: readonly AgentSessionSummary[];
+  startSession: (
+    request: HumanReviewFeedbackStartRequest,
+  ) => Promise<AgentSessionIdentity | undefined>;
+};
+
+export type HumanReviewFeedback = {
+  modal: HumanReviewFeedbackModalModel | null;
+  /** Opens the form of a feedback launch, or of Request Changes with its following launches. */
   open: (
     taskId: string,
     launchActionId?: string,
@@ -34,23 +45,29 @@ export type HumanReviewFeedbackStateApi = {
   ) => void;
   /** Opens the form of a feedback launch of a task that the task list does not hold yet. */
   openForTask: (task: TaskCard, launchActionId: string) => void;
-  setMessage: (message: string) => void;
-  close: () => void;
 };
 
 /**
- * The state of the one human feedback form. A launch can open it before its submission exists,
- * because Request Changes continues into launches that can open the form again.
+ * The one human feedback form of every client. Request Changes with a following launch starts that
+ * launch, and the host commits the change only after the launch passes its checks. A canceled
+ * start keeps the form, its message, and the task state.
  */
-export function useHumanReviewFeedbackState(
-  tasks: readonly TaskCard[],
-): HumanReviewFeedbackStateApi {
+export function useHumanReviewFeedback({
+  tasks,
+  scope,
+  feedback,
+  sessions,
+  startSession,
+}: UseHumanReviewFeedbackArgs): HumanReviewFeedback {
+  const queryClient = useQueryClient();
   const tasksRef = useRef(tasks);
   useLayoutEffect(() => {
     tasksRef.current = tasks;
   }, [tasks]);
   const [state, setState] = useState<HumanReviewFeedbackState | null>(null);
-  const open = useCallback<HumanReviewFeedbackStateApi["open"]>(
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const open = useCallback<HumanReviewFeedback["open"]>(
     (taskId, launchActionId, requestChanges, continuation) =>
       setState(
         createHumanReviewFeedbackState(
@@ -63,45 +80,11 @@ export function useHumanReviewFeedbackState(
       ),
     [],
   );
-  const openForTask = useCallback<HumanReviewFeedbackStateApi["openForTask"]>(
+  const openForTask = useCallback<HumanReviewFeedback["openForTask"]>(
     (task, launchActionId) =>
       setState(createHumanReviewFeedbackState([task], task.id, launchActionId)),
     [],
   );
-  const setMessage = useCallback(
-    (message: string) => setState((current) => (current ? { ...current, message } : current)),
-    [],
-  );
-  const close = useCallback(() => setState(null), []);
-  return useMemo(
-    () => ({ state, open, openForTask, setMessage, close }),
-    [state, open, openForTask, setMessage, close],
-  );
-}
-
-type UseHumanReviewFeedbackFormArgs = {
-  scope: WorkspaceRef | null;
-  feedback: ClientFeedback;
-  /** The sessions whose role session a feedback launch can reuse. */
-  sessions: readonly AgentSessionSummary[];
-  /** Without it, Request Changes cannot start a declared following launch. */
-  continueTaskWorkflow?: ContinueTaskWorkflow | undefined;
-  startSession: (
-    request: HumanReviewFeedbackStartRequest,
-  ) => Promise<AgentSessionIdentity | undefined>;
-};
-
-/**
- * The submission and modal model of the one human feedback form. Request Changes runs its host
- * command, and a feedback launch starts its role session.
- */
-export function useHumanReviewFeedbackForm(
-  form: HumanReviewFeedbackStateApi,
-  { scope, feedback, sessions, continueTaskWorkflow, startSession }: UseHumanReviewFeedbackFormArgs,
-): HumanReviewFeedbackModalModel | null {
-  const queryClient = useQueryClient();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { state, close, setMessage } = form;
 
   const confirm = useCallback(async (): Promise<void> => {
     if (!state) return;
@@ -111,7 +94,6 @@ export function useHumanReviewFeedbackForm(
       const result = await submitHumanReviewFeedback({
         feedback,
         state,
-        continueTaskWorkflow,
         requestChangesTask: (taskId, note) =>
           requestHumanReviewChanges(queryClient, scope, taskId, note),
         builderSessions: launch
@@ -121,27 +103,30 @@ export function useHumanReviewFeedbackForm(
           : [],
         startRequestChangesSession: startSession,
       });
-      if (result.outcome !== "cancelled") close();
+      if (result.outcome !== "cancelled") setState(null);
     } catch (cause) {
       feedback.show("error", "Failed to submit feedback.", { description: errorMessage(cause) });
     } finally {
       setIsSubmitting(false);
     }
-  }, [state, feedback, continueTaskWorkflow, queryClient, scope, sessions, startSession, close]);
+  }, [state, feedback, queryClient, scope, sessions, startSession]);
 
-  return useMemo(
+  const modal = useMemo(
     () =>
       state
         ? buildHumanReviewFeedbackModalModel({
             state,
             isSubmitting,
             onDismiss: () => {
-              if (!isSubmitting) close();
+              if (!isSubmitting) setState(null);
             },
-            onMessageChange: setMessage,
+            onMessageChange: (message) =>
+              setState((current) => (current ? { ...current, message } : current)),
             onConfirm: confirm,
           })
         : null,
-    [state, isSubmitting, confirm, close, setMessage],
+    [state, isSubmitting, confirm],
   );
+
+  return { modal, open, openForTask };
 }

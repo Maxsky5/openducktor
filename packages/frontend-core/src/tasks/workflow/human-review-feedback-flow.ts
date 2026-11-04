@@ -1,10 +1,12 @@
 import type { TaskCard, WorkspaceRef } from "@openducktor/contracts";
-import type { ContinueTaskWorkflow } from "./task-workflow-continuation";
 import type { QueryClient } from "@tanstack/react-query";
 import { connectionHost } from "../../connection/client-connection";
 import type { ClientFeedback } from "../../platform/client-feedback";
 import type { WorkflowLaunchActionId as SessionLaunchActionId } from "@openducktor/workflows";
-import type { SessionStartExistingSessionOption } from "../../sessions/start/session-start-types";
+import type {
+  SessionStartBeforeAction,
+  SessionStartExistingSessionOption,
+} from "../../sessions/start/session-start-types";
 import { buildReusableSessionOptions } from "../../sessions/start/session-start-reuse-options";
 import type { AgentSessionSummary } from "../../sessions/agent-sessions-store";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
@@ -24,6 +26,8 @@ export type HumanReviewFeedbackStartRequest = {
   initialSourceSession?: AgentSessionIdentity;
   postStartAction: "kickoff" | "send_message";
   humanFeedback: string;
+  /** The host commits Request Changes after it checks the launch, and before the session starts. */
+  beforeStartAction?: SessionStartBeforeAction;
 };
 
 export type SubmitHumanReviewFeedbackResult =
@@ -33,7 +37,6 @@ export type SubmitHumanReviewFeedbackResult =
 type SubmitHumanReviewFeedbackInput = {
   feedback: ClientFeedback;
   state: HumanReviewFeedbackState;
-  continueTaskWorkflow?: ContinueTaskWorkflow | undefined;
   requestChangesTask: (taskId: string, note: string) => Promise<TaskCard>;
   builderSessions: AgentSessionSummary[];
   startRequestChangesSession: (
@@ -62,6 +65,9 @@ const buildRequestChangesSessionRequest = (
     postStartAction: launch.postStartAction,
     humanFeedback: feedback,
   };
+  if (state.requestChanges) {
+    request.beforeStartAction = { action: "human_request_changes", note: feedback };
+  }
   if (existingSessionOptions.length === 0) {
     request.initialStartMode = "fresh";
   }
@@ -75,7 +81,6 @@ export const submitHumanReviewFeedback = async ({
   feedback,
   state,
   requestChangesTask,
-  continueTaskWorkflow,
   builderSessions,
   startRequestChangesSession,
 }: SubmitHumanReviewFeedbackInput): Promise<SubmitHumanReviewFeedbackResult> => {
@@ -86,10 +91,7 @@ export const submitHumanReviewFeedback = async ({
   }
 
   if (!state.launch) {
-    if (state.continuation && !continueTaskWorkflow)
-      throw new Error("This client cannot continue Request Changes. Update the client.");
-    const committed = await requestChangesTask(state.taskId, trimmedMessage);
-    await continueTaskWorkflow?.(committed, state.continuation, { humanFeedback: trimmedMessage });
+    await requestChangesTask(state.taskId, trimmedMessage);
     return { outcome: "updated" };
   }
   const startResult = await startRequestChangesSession(

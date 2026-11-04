@@ -20,10 +20,7 @@ import { isKanbanActiveTaskSession, toKanbanTaskSession } from "../board/kanban-
 import type { SessionTargetOptions } from "../board/session-target-resolution";
 import { resolvePreferredActiveSession } from "../board/session-target-resolution";
 import type { HumanReviewFeedbackModalModel } from "./human-review-feedback-types";
-import {
-  useHumanReviewFeedbackForm,
-  useHumanReviewFeedbackState,
-} from "./use-human-review-feedback";
+import { useHumanReviewFeedback } from "./use-human-review-feedback";
 import { buildReusableSessionOptions } from "../../sessions/start/session-start-reuse-options";
 import {
   buildSessionStartModalRequest,
@@ -168,10 +165,6 @@ export function useTaskSessionStartFlow({
       onBackgroundTransfer,
     });
 
-  const feedbackForm = useHumanReviewFeedbackState(tasks);
-  const { open: openHumanReviewFeedback, openForTask: openHumanReviewFeedbackForTask } =
-    feedbackForm;
-
   const openAgents = useCallback(
     (taskId: string, role: AgentRole): void => {
       if (!activeWorkspaceId) {
@@ -256,6 +249,18 @@ export function useTaskSessionStartFlow({
       startupAttempts,
     ],
   );
+
+  const {
+    modal: humanReviewFeedbackModal,
+    open: openHumanReviewFeedback,
+    openForTask: openHumanReviewFeedbackForTask,
+  } = useHumanReviewFeedback({
+    tasks,
+    scope: workflowScope,
+    feedback,
+    sessions,
+    startSession: startSessionIntent,
+  });
 
   const onLaunch = useCallback(
     (
@@ -391,14 +396,6 @@ export function useTaskSessionStartFlow({
     },
     [openHumanReviewFeedback],
   );
-
-  const humanReviewFeedbackModal = useHumanReviewFeedbackForm(feedbackForm, {
-    scope: workflowScope,
-    feedback,
-    sessions,
-    continueTaskWorkflow,
-    startSession: startSessionIntent,
-  });
 
   return {
     continueTaskWorkflow,

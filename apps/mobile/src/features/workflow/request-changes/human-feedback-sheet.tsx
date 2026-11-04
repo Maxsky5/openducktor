@@ -70,7 +70,7 @@ export function HumanFeedbackSheet({
       >
         <FormBody>
           <View style={styles.lead}>
-            <FormLead text={COPY.description(feedback.roleLabel, feedback.hasContinuation)} />
+            <FormLead text={COPY.description(feedback.roleLabel)} />
             <Text variant="footnote" tone="secondary" numberOfLines={2}>
               <Text variant="monoSmall" tone="secondary">
                 {task.id}
