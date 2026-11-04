@@ -2,6 +2,8 @@ import { describe, expect, mock, test } from "bun:test";
 import { renderHook, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { configureShellBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { gitlabDraftFromConfig } from "./gitlab-provider-model";
 import { useGitlabAccountController } from "./use-gitlab-account-controller";
@@ -17,10 +19,23 @@ const account = {
 };
 const unlinkedProject = { ...gitlabDraftFromConfig(undefined), projectPath: "group/app" };
 
+const deviceCode = {
+  attemptId: "attempt-1",
+  verificationUri: "https://gitlab.com/oauth/device",
+  verificationUriComplete: "https://gitlab.com/oauth/device?user_code=FDG0A2Q2",
+  userCode: "FDG0A2Q2",
+  expiresAt: "2099-01-01T00:00:00.000Z",
+  // A real code polls a few seconds later. The test ends before this poll time.
+  nextPollAt: new Date(Date.now() + 60_000).toISOString(),
+};
+
 const renderController = (fromSavedSettings: boolean) => {
   const onLink = mock((_accountId: string | null, _instanceUrl: string) => undefined);
   const connection = createTestClientConnection({
-    client: { gitlabAccountsList: async () => [account] },
+    client: {
+      gitlabAccountsList: async () => [account],
+      gitlabSignInStart: async () => deviceCode,
+    },
   });
   const wrapper = ({ children }: PropsWithChildren) =>
     createElement(QueryProvider, { connection }, children);
@@ -51,5 +66,20 @@ describe("GitLab account auto-link", () => {
     result.current.afterDraftChange(unlinkedProject);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(onLink).not.toHaveBeenCalled();
+  });
+});
+
+describe("GitLab browser sign-in", () => {
+  test("opens the sign-in page with the one-time code when sign-in starts", async () => {
+    const openExternalUrl = mock(async (_url: string) => {});
+    configureShellBridge(createShellBridgeFixture({ bridge: { openExternalUrl } }));
+    const { result } = renderController(false);
+
+    result.current.startSignIn();
+
+    await waitFor(() =>
+      expect(openExternalUrl).toHaveBeenCalledWith(deviceCode.verificationUriComplete),
+    );
+    expect(result.current.deviceCode).toEqual(deviceCode);
   });
 });

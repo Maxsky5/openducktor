@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { openExternalUrl } from "@/lib/open-external-url";
 import {
   gitlabAccountsQueryOptionsOrSkip,
   gitlabConnectionStatusQueryOptionsOrSkip,
@@ -191,6 +192,12 @@ export function useGitlabAccountController({
         attemptRef.current = code.attemptId;
         setDeviceCode(code);
         setConnectMode("sign_in");
+        // The page URL carries the one-time code, so the user only approves the sign-in there.
+        void openExternalUrl(code.verificationUriComplete).catch((cause: unknown) =>
+          setActionError(
+            `GitLab sign-in did not open: ${errorMessage(cause)}. Use Open GitLab sign-in.`,
+          ),
+        );
         void pollSignIn(code).catch((cause: unknown) => {
           if (attemptRef.current !== code.attemptId) return;
           attemptRef.current = null;
