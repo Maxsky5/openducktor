@@ -69,24 +69,21 @@ const BUILTIN_AUTOMATION_IDS = [
 ] as const;
 export type BuiltinAutomationId = (typeof BUILTIN_AUTOMATION_IDS)[number];
 
-export const BUILTIN_PROMPT_TEMPLATE_IDS = [
-  "system.shared.workflow_guards",
-  "system.shared.tool_protocol",
-  "system.shared.task_context",
-  "system.role.spec.base",
-  "system.role.planner.base",
-  "system.role.build.base",
-  "system.role.qa.base",
-  "kickoff.spec_initial",
-  "kickoff.planner_initial",
-  "kickoff.build_implementation_start",
-  "kickoff.build_after_qa_rejected",
-  "kickoff.build_after_human_request_changes",
-  "kickoff.build_pull_request_generation",
-  "kickoff.qa_review",
-  "message.build_rebase_conflict_resolution",
-  "permission.read_only.reject",
+/** The prompt IDs of the built-in workflow. Each ID is unique within the workflow. */
+const BUILTIN_WORKFLOW_PROMPT_IDS = [
+  "workflow.rules",
+  "workflow.tool_rules",
+  "workflow.task_context",
+  "messages.spec_start",
+  "messages.plan_start",
+  "messages.build_start",
+  "messages.build_after_qa_rejection",
+  "messages.build_requested_changes",
+  "messages.build_pull_request",
+  "messages.qa_review",
+  "messages.build_git_conflict",
+  "workflow.read_only_rejection",
 ] as const;
-export type BuiltinPromptTemplateId = (typeof BUILTIN_PROMPT_TEMPLATE_IDS)[number];
+export type BuiltinWorkflowPromptId = (typeof BUILTIN_WORKFLOW_PROMPT_IDS)[number];
 
 export type BuiltinNotificationKind = `workflow.${Exclude<BuiltinStateId, "open">}`;

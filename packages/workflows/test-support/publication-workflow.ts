@@ -76,14 +76,14 @@ export const publicationDefinition = (): WorkflowDefinition => ({
           label: "Write draft",
           startModes: ["fresh"],
           defaultStartMode: "fresh",
-          template: { kind: "kickoff", id: "kickoff.write" },
+          template: { kind: "kickoff", id: "messages.write" },
         },
         {
           id: "revise-draft",
           label: "Revise draft",
           startModes: ["fresh", "reuse", "fork"],
           defaultStartMode: "reuse",
-          template: { kind: "kickoff", id: "kickoff.revise" },
+          template: { kind: "kickoff", id: "messages.revise" },
           selectWhen: { artifact: "first-review", verdict: "changes" },
           context: "human_feedback",
           requiresWorktree: true,
@@ -106,7 +106,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
           label: "First review",
           startModes: ["fresh"],
           defaultStartMode: "fresh",
-          template: { kind: "kickoff", id: "kickoff.review" },
+          template: { kind: "kickoff", id: "messages.review" },
         },
       ],
     },
@@ -131,7 +131,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
           label: "Second review",
           startModes: ["fresh", "fork"],
           defaultStartMode: "fork",
-          template: { kind: "message", id: "message.review" },
+          template: { kind: "message", id: "messages.review_message" },
         },
       ],
     },
@@ -268,7 +268,6 @@ export const publicationDefinition = (): WorkflowDefinition => ({
     { when: true, actions: ["publish", "submit", "finish-first", "view-copy"] },
   ],
   actionPriority: [{ when: { stateIn: ["draft"] }, actions: ["start-writing", "submit"] }],
-  prompts: { system: [], readOnlyRejection: "publication.permission.read_only" },
 });
 
 export type Artifacts = WorkflowInput["artifacts"];

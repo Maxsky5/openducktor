@@ -324,7 +324,7 @@ const observeSettlement = async (promise: Promise<unknown>): Promise<string> =>
 const occurrence: NotificationOccurrence = {
   occurrenceId: "workflow.closed:/repo:task-1:event-1",
   kind: "workflow.closed",
-  workflow: { id: "openducktor", revision: 2 },
+  workflow: { id: "openducktor-research-plan-implement", revision: 2 },
   copy: { title: "Task closed", body: "Task moved to Closed." },
   repoPath: "/repo",
   repositoryLabel: "Repo",

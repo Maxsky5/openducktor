@@ -78,11 +78,11 @@ describe("host workflow reads in the connection task cache", () => {
       expect(tasks[1]!.availableActions).not.toContain("beta_hold");
       expect(Object.keys(tasks[0]!.agentWorkflows)).toEqual(["alpha_writer", "alpha_editor"]);
       expect(Object.keys(tasks[1]!.artifactSummary)).toEqual(["beta_draft", "beta_review"]);
-      expect(
-        tasks[0]!.taskWorkflow.prompts.templates.find(
-          ({ id }) => id === "alpha.kickoff.edit_review",
-        )!.template,
-      ).toContain("alpha:");
+      const editReviewPrompt = (task: (typeof tasks)[number]) =>
+        task.taskWorkflow.prompts.templates.find(({ id }) => id === "messages.edit_review")!
+          .template;
+      expect(editReviewPrompt(tasks[0]!)).toContain("alpha:");
+      expect(editReviewPrompt(tasks[1]!)).toContain("beta:");
       expect(tasks[1]!.workflowSteps.find(({ id }) => id === "beta_signoff")!.kind).toBe("human");
       const alphaEdit = h.alpha.launchAction("alpha_edit_review");
       const betaEdit = h.beta.launchAction("beta_edit_review");

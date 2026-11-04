@@ -94,7 +94,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
           label: "Start writing",
           startModes: ["fresh"],
           defaultStartMode: "fresh",
-          template: { kind: "kickoff", id: "kickoff.write_start" },
+          template: { kind: "kickoff", id: "messages.write_start" },
           targetBranch: true,
         },
         {
@@ -102,7 +102,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
           label: "Revise draft",
           startModes: ["fresh", "reuse", "fork"],
           defaultStartMode: "reuse",
-          template: { kind: "kickoff", id: "kickoff.write_revise" },
+          template: { kind: "kickoff", id: "messages.write_revise" },
           selectWhen: revised,
           requiresWorktree: true,
         },
@@ -124,7 +124,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
           label: "Review draft",
           startModes: ["fresh", "reuse"],
           defaultStartMode: "fresh",
-          template: { kind: "kickoff", id: "kickoff.edit_review" },
+          template: { kind: "kickoff", id: "messages.edit_review" },
         },
       ],
     },
@@ -350,10 +350,6 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
   ],
   actionPriority: [],
   launchOrder: [],
-  prompts: {
-    system: ["review.system.guards", "review.system.tools", "review.system.task"],
-    readOnlyRejection: "review.permission.read_only",
-  },
 });
 
 const template = (
@@ -362,11 +358,10 @@ const template = (
   text: string,
 ): PromptTemplate => ({ id, purpose, builtinVersion: 1, template: text });
 
-const systemPrompt = (id: string, text: string) => ({
-  id,
+const systemPrompt = (label: string, text: string) => ({
   builtinVersion: 1,
   template: text,
-  label: id,
+  label,
   description: "",
 });
 
@@ -386,10 +381,7 @@ export const reviewTaskRoles: readonly AgentRoleDefinition[] = [
     workspaceAccess: "write",
     location: "task_worktree",
     runtimeScopes: ["build"],
-    systemPrompt: systemPrompt(
-      "system.role.writer.base",
-      "You are the {{role}} of task {{task.id}}.",
-    ),
+    systemPrompt: systemPrompt("Writer system prompt", "You are the {{role}} of task {{task.id}}."),
   },
   {
     id: "editor",
@@ -398,25 +390,22 @@ export const reviewTaskRoles: readonly AgentRoleDefinition[] = [
     workspaceAccess: "read",
     location: "repository",
     runtimeScopes: ["workspace"],
-    systemPrompt: systemPrompt(
-      "system.role.editor.base",
-      "You review task {{task.id}} as {{role}}.",
-    ),
+    systemPrompt: systemPrompt("Editor system prompt", "You review task {{task.id}} as {{role}}."),
   },
 ];
 
 export const reviewTaskPromptTemplates: readonly PromptTemplate[] = [
-  template("review.system.guards", "system", "Follow the review workflow."),
-  template("review.system.tools", "system", "Tools:\n{{role.allowedTools}}"),
+  template("workflow.rules", "system", "Follow the review workflow."),
+  template("workflow.tool_rules", "system", "Tools:\n{{role.allowedTools}}"),
   template(
-    "review.system.task",
+    "workflow.task_context",
     "system",
     "Task {{task.id}}: {{task.title}} ({{task.issueType}}, {{task.status}})",
   ),
-  template("review.permission.read_only", "permission", "The {{role}} cannot change files."),
-  template("kickoff.write_start", "kickoff", "Write the draft for {{task.id}}."),
-  template("kickoff.write_revise", "kickoff", "Revise the draft for {{task.id}}."),
-  template("kickoff.edit_review", "kickoff", "Review the draft of {{task.id}}."),
+  template("workflow.read_only_rejection", "permission", "The {{role}} cannot change files."),
+  template("messages.write_start", "kickoff", "Write the draft for {{task.id}}."),
+  template("messages.write_revise", "kickoff", "Revise the draft for {{task.id}}."),
+  template("messages.edit_review", "kickoff", "Review the draft of {{task.id}}."),
 ];
 
 export const createReviewTaskWorkflow = (): TaskWorkflow =>

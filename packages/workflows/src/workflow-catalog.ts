@@ -101,8 +101,7 @@ const sharedStates = (workflows: readonly TaskWorkflow[]) => {
 /**
  * Checks a workflow inventory once: unique references, one catalog role for each role ID, equal
  * shared state metadata for each state ID, and equal notification defaults for each notification
- * kind. The latest revisions of the workflows give one prompt for each template ID, because one
- * override applies to it. Older revisions can keep their own templates.
+ * kind. Prompt IDs are local to the workflow that owns them, so workflows cannot conflict there.
  */
 export const validateWorkflowInventory = (workflows: readonly TaskWorkflow[]): void => {
   const references = new Set<string>();
@@ -121,10 +120,6 @@ export const validateWorkflowInventory = (workflows: readonly TaskWorkflow[]): v
     (kind, prior, current) =>
       `Notification "${kind}" has conflicting defaults in "${prior.reference}" state "${prior.state}" and "${current.reference}" state "${current.state}". Use distinct kinds for distinct policies.`,
   );
-  const checkTemplate = sameValueCheck<readonly unknown[], string>(
-    (id, prior, current) =>
-      `Prompt template "${id}" differs between workflows "${prior}" and "${current}". Give each workflow template its own ID.`,
-  );
   for (const workflow of workflows) {
     const reference = workflowReferenceKey(workflow.reference);
     if (references.has(reference))
@@ -140,19 +135,6 @@ export const validateWorkflowInventory = (workflows: readonly TaskWorkflow[]): v
         });
     }
   }
-  for (const workflow of latestWorkflowRevisions(workflows))
-    for (const {
-      id,
-      purpose,
-      builtinVersion,
-      template,
-      requiredPlaceholders,
-    } of workflow.workflowTemplates)
-      checkTemplate(
-        id,
-        [purpose, builtinVersion, template, requiredPlaceholders],
-        workflowReferenceKey(workflow.reference),
-      );
 };
 
 /**

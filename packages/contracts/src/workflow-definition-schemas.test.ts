@@ -24,7 +24,6 @@ const createDefinition = (): WorkflowDefinition => ({
   ],
   issueTypes: [],
   roles: [{ id: "reviewer", writes: ["release-review"] }],
-  prompts: { system: ["release.system.task"], readOnlyRejection: "release.permission.read_only" },
   artifacts: [
     { id: "release-notes", label: "Release notes", shortLabel: "Notes", kind: "document" },
     {
@@ -73,7 +72,7 @@ const createDefinition = (): WorkflowDefinition => ({
           label: "Review release",
           startModes: ["fresh", "reuse"],
           defaultStartMode: "reuse",
-          template: { kind: "kickoff", id: "kickoff.review" },
+          template: { kind: "kickoff", id: "messages.review" },
           selectWhen: { artifact: "release-notes", present: true },
           context: "pull_request",
           targetBranch: true,
@@ -167,6 +166,34 @@ describe("workflow definition schemas", () => {
     }
   });
 
+  test("requires launch action prompt IDs in the messages namespace", () => {
+    const definition = createDefinition();
+    const agentStep = definition.steps[0]!;
+    if (agentStep.kind !== "agent") throw new Error("Expected the agent step fixture");
+    const withTemplateId = (id: string) => ({
+      ...definition,
+      steps: [
+        {
+          ...agentStep,
+          launchActions: agentStep.launchActions.map((launch) => ({
+            ...launch,
+            template: { ...launch.template, id },
+          })),
+        },
+        ...definition.steps.slice(1),
+      ],
+    });
+
+    expect(workflowDefinitionSchema.safeParse(withTemplateId("messages.review")).success).toBe(
+      true,
+    );
+    const rejected = workflowDefinitionSchema.safeParse(withTemplateId("kickoff.review"));
+    expect(rejected.success).toBe(false);
+    expect(rejected.error?.issues.map(({ message }) => message)).toContain(
+      'A launch action prompt ID starts with "messages.".',
+    );
+  });
+
   test("keeps role capabilities in the role catalog", () => {
     const role = {
       id: "reviewer",
@@ -176,7 +203,6 @@ describe("workflow definition schemas", () => {
       location: "repository",
       runtimeScopes: ["workspace"],
       systemPrompt: {
-        id: "system.role.reviewer",
         builtinVersion: 1,
         template: "Review {{task.id}}.",
         label: "Reviewer system prompt",

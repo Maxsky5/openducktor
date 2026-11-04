@@ -1,7 +1,7 @@
 import type { PromptTemplate as TaskPromptTemplate } from "../task-workflow/task-prompts";
-import type { BuiltinPromptTemplateId } from "./ids";
+import type { BuiltinRoleId, BuiltinWorkflowPromptId } from "./ids";
 
-export type PromptTemplate = TaskPromptTemplate & { id: BuiltinPromptTemplateId };
+export type PromptTemplate = TaskPromptTemplate & { id: BuiltinWorkflowPromptId };
 
 export const GIT_CONFLICT_INSTRUCTIONS = [
   "Resolve the conflicts below and finish the interrupted git operation.",
@@ -10,9 +10,10 @@ export const GIT_CONFLICT_INSTRUCTIONS = [
   "When finished, summarize what you resolved and which checks passed.",
 ].join("\n\n");
 
+/** The prompts of the built-in workflow, by their workflow prompt ID. */
 export const PROMPT_TEMPLATES = {
-  "system.shared.workflow_guards": {
-    id: "system.shared.workflow_guards",
+  "workflow.rules": {
+    id: "workflow.rules",
     purpose: "system",
     builtinVersion: 10,
     template: joinBlocks(
@@ -52,8 +53,8 @@ export const PROMPT_TEMPLATES = {
       ]),
     ),
   },
-  "system.shared.tool_protocol": {
-    id: "system.shared.tool_protocol",
+  "workflow.tool_rules": {
+    id: "workflow.tool_rules",
     purpose: "system",
     builtinVersion: 12,
     template: joinBlocks(
@@ -85,8 +86,8 @@ export const PROMPT_TEMPLATES = {
       ]),
     ),
   },
-  "system.shared.task_context": {
-    id: "system.shared.task_context",
+  "workflow.task_context": {
+    id: "workflow.task_context",
     purpose: "system",
     builtinVersion: 6,
     template: joinBlocks(
@@ -111,9 +112,110 @@ export const PROMPT_TEMPLATES = {
       ]),
     ),
   },
-  "system.role.spec.base": {
-    id: "system.role.spec.base",
-    purpose: "system",
+  "messages.spec_start": {
+    id: "messages.spec_start",
+    purpose: "kickoff",
+    builtinVersion: 6,
+    template:
+      "Write the specification for this task and save it with odt_set_task_artifact and code spec. Use taskId {{task.id}} for every task-bound odt_* tool call.",
+  },
+  "messages.plan_start": {
+    id: "messages.plan_start",
+    purpose: "kickoff",
+    builtinVersion: 6,
+    template:
+      "Write the implementation plan for this task and save it with odt_set_task_artifact and code plan. Use taskId {{task.id}} for every task-bound odt_* tool call.",
+  },
+  "messages.build_start": {
+    id: "messages.build_start",
+    purpose: "kickoff",
+    builtinVersion: 5,
+    template:
+      "Implement this task and submit the completed change with odt_build_completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
+  },
+  "messages.build_after_qa_rejection": {
+    id: "messages.build_after_qa_rejection",
+    purpose: "kickoff",
+    builtinVersion: 5,
+    template:
+      "Address the latest QA rejection for this task. Check each finding against the current code. Fix valid in-scope issues and explain why you decline any other finding. Submit the completed change with odt_build_completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
+  },
+  "messages.build_requested_changes": {
+    id: "messages.build_requested_changes",
+    purpose: "kickoff",
+    builtinVersion: 6,
+    requiredPlaceholders: ["humanFeedback"],
+    template:
+      "Address the requested changes for this task.\n\nRequested changes from human review:\n{{humanFeedback}}\n\nSubmit the completed change with odt_build_completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
+  },
+  "messages.build_pull_request": {
+    id: "messages.build_pull_request",
+    purpose: "kickoff",
+    builtinVersion: 9,
+    requiredPlaceholders: ["git.targetBranch"],
+    template: joinBlocks(
+      "Publish a review-ready pull request for the current task.",
+      lineSection("Pull request base", ["{{git.targetBranch}}"]),
+      bulletSection("Prepare", [
+        "Use the base branch for Git diffs, rebases, and pull request provider tools.",
+        "Treat the current task artifacts and live repository state as the source of truth.",
+        "Read the repository's contribution guidance and pull request template when present.",
+        "Inspect the source branch, any existing pull request, and the diff against the base branch.",
+        "If the source branch is behind the base branch, rebase it and resolve conflicts.",
+        "Complete repo-required local checks and choose any additional verification based on the diff and risk. Fix failures at the source and rerun affected checks; repeat passing checks only when changes or unresolved risks justify it.",
+        "Preparation is complete when the diff matches the current task and every required local check passes.",
+      ]),
+      bulletSection("Publish", [
+        "Use a concise Conventional Commit-style pull request title that explains why the change matters.",
+        "Start the body with the problem and goal. Add reviewer context and decisions or tradeoffs that affect review.",
+        "For a new pull request, use the repository's template and fill each relevant section. Keep the body focused on the current task.",
+        "For an existing pull request, read its title and body. Preserve useful context, links, media, and edits from other authors. Update only what the current task makes inaccurate or what the user requests, and add missing task-specific context or UI evidence when relevant.",
+        "Push the source branch, create or update the pull request against the base branch, and confirm the published title and body follow repository conventions.",
+      ]),
+      bulletSection("Complete", [
+        "After the pull request exists, call odt_set_pull_request with taskId {{task.id}} and the pull request number.",
+        "Wait for required pull request checks to finish. If any fail, diagnose and fix the root cause, rerun the affected local checks, commit and push the fix, then check again until all required checks pass.",
+        "Completion criterion: the task references the pull request and every required pull request check passes.",
+        "Report the pull request URL and the passed local and pull request checks.",
+      ]),
+      "Use taskId {{task.id}} for every task-bound odt_* tool call.",
+    ),
+  },
+  "messages.qa_review": {
+    id: "messages.qa_review",
+    purpose: "kickoff",
+    builtinVersion: 5,
+    template:
+      "Review this task's implementation and submit one QA report with exactly one odt_set_task_artifact call using code qaReport and verdict approved or rejected. Use taskId {{task.id}} for every task-bound odt_* tool call.",
+  },
+  "messages.build_git_conflict": {
+    id: "messages.build_git_conflict",
+    purpose: "message",
+    builtinVersion: 5,
+    template: joinBlocks(
+      GIT_CONFLICT_INSTRUCTIONS,
+      lineSection("Git context", [
+        "- Operation: {{git.operationLabel}}",
+        "- Current branch: {{git.currentBranch}}",
+        "- Target branch: {{git.targetBranch}}",
+        "- Conflicted files:",
+        "{{git.conflictedFiles}}",
+      ]),
+      "Use taskId {{task.id}} for any task-bound odt_* tool calls.",
+    ),
+  },
+  "workflow.read_only_rejection": {
+    id: "workflow.read_only_rejection",
+    purpose: "permission",
+    builtinVersion: 2,
+    template:
+      "Rejected by OpenDucktor {{role}} read-only policy: this role cannot use mutating tools in this session.",
+  },
+} satisfies Record<BuiltinWorkflowPromptId, PromptTemplate>;
+
+/** The system prompts of the built-in roles. Each role owns its prompt in every workflow. */
+export const ROLE_SYSTEM_PROMPTS = {
+  spec: {
     builtinVersion: 8,
     template: joinBlocks(
       "You are the Spec Agent for OpenDucktor. Define the user problem and required product behavior so Planner can choose the technical design. Own the work from discovery through saving the canonical spec with odt_set_task_artifact and code spec.",
@@ -149,9 +251,7 @@ export const PROMPT_TEMPLATES = {
       ]),
     ),
   },
-  "system.role.planner.base": {
-    id: "system.role.planner.base",
-    purpose: "system",
+  planner: {
     builtinVersion: 9,
     template: joinBlocks(
       "You are the Planner Agent for OpenDucktor. Work as a software architect: decide the architecture, boundaries, and contracts Builder needs, and leave the implementation to Builder. Own the design through saving the canonical plan with odt_set_task_artifact and code plan.",
@@ -181,9 +281,7 @@ export const PROMPT_TEMPLATES = {
       ]),
     ),
   },
-  "system.role.build.base": {
-    id: "system.role.build.base",
-    purpose: "system",
+  build: {
     builtinVersion: 7,
     template: joinBlocks(
       "You are the Build Agent for OpenDucktor. Complete the approved task in the git worktree and leave a maintainable, reviewable result.",
@@ -213,9 +311,7 @@ export const PROMPT_TEMPLATES = {
       ]),
     ),
   },
-  "system.role.qa.base": {
-    id: "system.role.qa.base",
-    purpose: "system",
+  qa: {
     builtinVersion: 7,
     template: joinBlocks(
       "You are the QA Agent for OpenDucktor. Decide whether the implementation meets the task requirements and is ready for human review.",
@@ -242,106 +338,7 @@ export const PROMPT_TEMPLATES = {
       ]),
     ),
   },
-  "kickoff.spec_initial": {
-    id: "kickoff.spec_initial",
-    purpose: "kickoff",
-    builtinVersion: 6,
-    template:
-      "Write the specification for this task and save it with odt_set_task_artifact and code spec. Use taskId {{task.id}} for every task-bound odt_* tool call.",
-  },
-  "kickoff.planner_initial": {
-    id: "kickoff.planner_initial",
-    purpose: "kickoff",
-    builtinVersion: 6,
-    template:
-      "Write the implementation plan for this task and save it with odt_set_task_artifact and code plan. Use taskId {{task.id}} for every task-bound odt_* tool call.",
-  },
-  "kickoff.build_implementation_start": {
-    id: "kickoff.build_implementation_start",
-    purpose: "kickoff",
-    builtinVersion: 5,
-    template:
-      "Implement this task and submit the completed change with odt_build_completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
-  },
-  "kickoff.build_after_qa_rejected": {
-    id: "kickoff.build_after_qa_rejected",
-    purpose: "kickoff",
-    builtinVersion: 5,
-    template:
-      "Address the latest QA rejection for this task. Check each finding against the current code. Fix valid in-scope issues and explain why you decline any other finding. Submit the completed change with odt_build_completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
-  },
-  "kickoff.build_after_human_request_changes": {
-    id: "kickoff.build_after_human_request_changes",
-    purpose: "kickoff",
-    builtinVersion: 6,
-    requiredPlaceholders: ["humanFeedback"],
-    template:
-      "Address the requested changes for this task.\n\nRequested changes from human review:\n{{humanFeedback}}\n\nSubmit the completed change with odt_build_completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
-  },
-  "kickoff.build_pull_request_generation": {
-    id: "kickoff.build_pull_request_generation",
-    purpose: "kickoff",
-    builtinVersion: 9,
-    requiredPlaceholders: ["git.targetBranch"],
-    template: joinBlocks(
-      "Publish a review-ready pull request for the current task.",
-      lineSection("Pull request base", ["{{git.targetBranch}}"]),
-      bulletSection("Prepare", [
-        "Use the base branch for Git diffs, rebases, and pull request provider tools.",
-        "Treat the current task artifacts and live repository state as the source of truth.",
-        "Read the repository's contribution guidance and pull request template when present.",
-        "Inspect the source branch, any existing pull request, and the diff against the base branch.",
-        "If the source branch is behind the base branch, rebase it and resolve conflicts.",
-        "Complete repo-required local checks and choose any additional verification based on the diff and risk. Fix failures at the source and rerun affected checks; repeat passing checks only when changes or unresolved risks justify it.",
-        "Preparation is complete when the diff matches the current task and every required local check passes.",
-      ]),
-      bulletSection("Publish", [
-        "Use a concise Conventional Commit-style pull request title that explains why the change matters.",
-        "Start the body with the problem and goal. Add reviewer context and decisions or tradeoffs that affect review.",
-        "For a new pull request, use the repository's template and fill each relevant section. Keep the body focused on the current task.",
-        "For an existing pull request, read its title and body. Preserve useful context, links, media, and edits from other authors. Update only what the current task makes inaccurate or what the user requests, and add missing task-specific context or UI evidence when relevant.",
-        "Push the source branch, create or update the pull request against the base branch, and confirm the published title and body follow repository conventions.",
-      ]),
-      bulletSection("Complete", [
-        "After the pull request exists, call odt_set_pull_request with taskId {{task.id}} and the pull request number.",
-        "Wait for required pull request checks to finish. If any fail, diagnose and fix the root cause, rerun the affected local checks, commit and push the fix, then check again until all required checks pass.",
-        "Completion criterion: the task references the pull request and every required pull request check passes.",
-        "Report the pull request URL and the passed local and pull request checks.",
-      ]),
-      "Use taskId {{task.id}} for every task-bound odt_* tool call.",
-    ),
-  },
-  "kickoff.qa_review": {
-    id: "kickoff.qa_review",
-    purpose: "kickoff",
-    builtinVersion: 5,
-    template:
-      "Review this task's implementation and submit one QA report with exactly one odt_set_task_artifact call using code qaReport and verdict approved or rejected. Use taskId {{task.id}} for every task-bound odt_* tool call.",
-  },
-  "message.build_rebase_conflict_resolution": {
-    id: "message.build_rebase_conflict_resolution",
-    purpose: "message",
-    builtinVersion: 5,
-    template: joinBlocks(
-      GIT_CONFLICT_INSTRUCTIONS,
-      lineSection("Git context", [
-        "- Operation: {{git.operationLabel}}",
-        "- Current branch: {{git.currentBranch}}",
-        "- Target branch: {{git.targetBranch}}",
-        "- Conflicted files:",
-        "{{git.conflictedFiles}}",
-      ]),
-      "Use taskId {{task.id}} for any task-bound odt_* tool calls.",
-    ),
-  },
-  "permission.read_only.reject": {
-    id: "permission.read_only.reject",
-    purpose: "permission",
-    builtinVersion: 2,
-    template:
-      "Rejected by OpenDucktor {{role}} read-only policy: this role cannot use mutating tools in this session.",
-  },
-} satisfies Record<BuiltinPromptTemplateId, PromptTemplate>;
+} satisfies Record<BuiltinRoleId, Pick<TaskPromptTemplate, "builtinVersion" | "template">>;
 
 function joinBlocks(...blocks: string[]): string {
   return blocks

@@ -17,7 +17,7 @@ import type {
   ModelDefaultDraft,
 } from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
-import type { WorkflowPromptTemplate } from "@openducktor/contracts";
+import type { SettingsPromptTemplate } from "@openducktor/frontend-core/queries/workflow-settings";
 type AgentPromptTemplateId = string;
 
 export {
@@ -184,12 +184,12 @@ const formatPlaceholders = (placeholders: string[]): string => {
 
 export const buildPromptOverrideValidationErrors = (
   overrides: RepoPromptOverrides,
-  templates: readonly WorkflowPromptTemplate[],
+  templates: readonly SettingsPromptTemplate[],
 ) => {
   const errors: PromptOverrideValidationErrors = {};
 
   for (const template of templates) {
-    const templateId = template.id;
+    const templateId = template.key;
     const override = overrides[templateId];
     if (!override || override.enabled === false) {
       continue;

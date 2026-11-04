@@ -1,4 +1,6 @@
 import { createDefaultNotificationSettings } from "@openducktor/contracts";
+import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { builtinWorkflowPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import type { JSONType } from "zod";
 import {
@@ -9,6 +11,8 @@ import {
   upgradePersistedGlobalConfigV2,
   upgradePersistedGlobalConfigV3,
 } from "./global-config";
+
+const BUILTIN_WORKFLOW_ID = builtinTaskWorkflow.definition.id;
 
 const rejectionMessage = (run: () => void): string => {
   try {
@@ -138,6 +142,53 @@ describe("global config", () => {
     expect(config.chat).not.toHaveProperty("customPrompts");
   });
 
+  test("moves legacy prompt overrides to their owners and Autopilot rules to the built-in workflow", () => {
+    const override = (template: string) => ({ template, baseVersion: 1 });
+    const config = parsePersistedGlobalConfig({
+      version: 4,
+      globalPromptOverrides: {
+        "system.role.build.base": override("build"),
+        "system.shared.workflow_guards": override("guards"),
+        "kickoff.qa_review": override("kickoff"),
+        [rolePromptKey("qa")]: override("current"),
+      },
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          promptOverrides: {
+            "system.role.planner.base": override("planner"),
+            "message.build_rebase_conflict_resolution": override("message"),
+          },
+        },
+      },
+      autopilot: {
+        rules: [
+          { eventId: "taskProgressedToSpecReady", actionIds: [] },
+          { workflowId: "openducktor", eventId: "taskProgressedToReadyForDev", actionIds: [] },
+          { workflowId: "custom", eventId: "taskProgressedToAiReview", actionIds: [] },
+        ],
+      },
+    });
+
+    expect(config.globalPromptOverrides).toEqual({
+      [rolePromptKey("build")]: override("build"),
+      [builtinWorkflowPromptKey("workflow.rules")]: override("guards"),
+      [builtinWorkflowPromptKey("messages.qa_review")]: override("kickoff"),
+      [rolePromptKey("qa")]: override("current"),
+    });
+    expect(config.workspaces.repo?.promptOverrides).toEqual({
+      [rolePromptKey("planner")]: override("planner"),
+      [builtinWorkflowPromptKey("messages.build_git_conflict")]: override("message"),
+    });
+    expect(config.autopilot.rules.map(({ workflowId, eventId }) => [workflowId, eventId])).toEqual([
+      [BUILTIN_WORKFLOW_ID, "taskProgressedToSpecReady"],
+      [BUILTIN_WORKFLOW_ID, "taskProgressedToReadyForDev"],
+      ["custom", "taskProgressedToAiReview"],
+    ]);
+  });
+
   test("keeps supported legacy fields out of strict persisted validation", () => {
     const config = parsePersistedGlobalConfig({
       version: 4,
@@ -192,10 +243,10 @@ describe("global config", () => {
     [
       {
         globalPromptOverrides: {
-          "system.shared.workflow_guards": { template: "text", baseVersion: 1, extra: true },
+          [rolePromptKey("build")]: { template: "text", baseVersion: 1, extra: true },
         },
       },
-      "globalPromptOverrides.system.shared.workflow_guards.extra",
+      `globalPromptOverrides.${rolePromptKey("build")}.extra`,
     ],
     [
       {

@@ -8,14 +8,11 @@ import {
   type AgentPromptGitContext,
   type BuiltAgentPrompt,
   type MergePromptOverridesInput,
+  type OwnedPromptTemplate,
 } from "../task-workflow/task-prompts";
-import {
-  GIT_CONFLICT_INSTRUCTIONS,
-  PROMPT_TEMPLATES,
-  type PromptTemplate,
-} from "./prompt-templates";
+import { GIT_CONFLICT_INSTRUCTIONS } from "./prompt-templates";
 import { builtinTaskWorkflow } from "./task-workflow";
-import type { BuiltinIssueTypeId, BuiltinPromptTemplateId, BuiltinRoleId } from "./ids";
+import type { BuiltinIssueTypeId, BuiltinWorkflowPromptId, BuiltinRoleId } from "./ids";
 
 export type {
   AgentPromptGitContext,
@@ -39,7 +36,13 @@ export type BuildAgentPromptInput = {
   overrides?: RepoPromptOverrides;
 };
 
-export type AgentKickoffTemplateId = Extract<BuiltinPromptTemplateId, `kickoff.${string}`>;
+/** The prompt of the built-in workflow that a launch sends into a running session. */
+export type AgentMessageTemplateId = "messages.build_git_conflict";
+/** The prompts of the built-in workflow that start a session. */
+export type AgentKickoffTemplateId = Exclude<
+  Extract<BuiltinWorkflowPromptId, `messages.${string}`>,
+  AgentMessageTemplateId
+>;
 
 export type BuildAgentKickoffPromptInput = {
   role: BuiltinRoleId;
@@ -68,8 +71,6 @@ export type GitConflictRequestContext = {
   conflictedFiles: readonly string[];
   conflictOutput: string | null;
 };
-
-export type AgentMessageTemplateId = Extract<BuiltinPromptTemplateId, `message.${string}`>;
 
 export type BuildAgentMessagePromptInput = {
   role: BuiltinRoleId;
@@ -148,10 +149,11 @@ export const buildGitConflictAssistancePrompt = (input: {
 };
 
 export const resolvePullRequestTarget = (targetBranch: GitTargetBranch | undefined): string =>
-  requirePullRequestTarget("kickoff.build_pull_request_generation", targetBranch);
+  requirePullRequestTarget("messages.build_pull_request", targetBranch);
 
-export const listBuiltinAgentPromptTemplates = (): PromptTemplate[] =>
-  Object.values<PromptTemplate>(PROMPT_TEMPLATES).map((definition) => ({ ...definition }));
+/** The prompts of the built-in workflow and of the roles that it binds. */
+export const listBuiltinAgentPromptTemplates = (): OwnedPromptTemplate[] =>
+  prompts.templates.map((definition) => ({ ...definition }));
 
 export const buildAgentSystemPromptBundle = (input: BuildAgentPromptInput): BuiltAgentPrompt =>
   prompts.systemPrompt(input);

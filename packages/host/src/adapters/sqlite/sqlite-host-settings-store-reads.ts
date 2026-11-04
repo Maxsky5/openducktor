@@ -83,7 +83,8 @@ export const readHostGlobalConfig = (session: HostDatabaseSession) =>
         )) from (select role_id, name, system_prompt from custom_agent_roles order by position))`.mapWith(
               JSON.parse,
             ),
-            prompts: sql<string>`(select json_group_object(template_id, json_patch(
+            prompts:
+              sql<string>`(select json_group_object(json_array(owner_kind, owner_id, prompt_id), json_patch(
           json_object('template', template, 'baseVersion', base_version),
           json_object('enabled', json(case enabled when 1 then 'true' when 0 then 'false' else 'null' end))
         )) from global_prompt_overrides)`.mapWith(JSON.parse),
@@ -217,12 +218,13 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
       paths: sql<string>`(select json_group_array(path) from (
     select path from workspace_copy_paths where workspace_id = ${schema.workspaces.workspaceId} order by position
   ))`.mapWith(JSON.parse),
-      prompts: sql<string>`(select json_group_object(template_id, json_patch(
+      prompts:
+        sql<string>`(select json_group_object(json_array(owner_kind, owner_id, prompt_id), json_patch(
     json_object('template', template, 'baseVersion', base_version),
     json_object('enabled', json(case enabled when 1 then 'true' when 0 then 'false' else 'null' end))
   )) from workspace_prompt_overrides where workspace_id = ${schema.workspaces.workspaceId})`.mapWith(
-        JSON.parse,
-      ),
+          JSON.parse,
+        ),
     })
     .from(schema.workspaces)
     .leftJoin(

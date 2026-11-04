@@ -52,7 +52,9 @@ const configFor = (
 ): GlobalConfig =>
   globalConfigSchema.parse({
     version: 4,
-    autopilot: { rules: rules.map((rule) => ({ workflowId: "openducktor", ...rule })) },
+    autopilot: {
+      rules: rules.map((rule) => ({ workflowId: "openducktor-research-plan-implement", ...rule })),
+    },
     workspaces: Object.fromEntries(
       ["alpha", "beta"].map((id) => {
         const repo = repoConfigFixture({
@@ -143,7 +145,8 @@ const createAutopilotHarness = async ({
       store(input.repoPath)
         .transitionTask({
           ...input,
-          decide: () => Result.succeed({ status, workflowId: "openducktor" }),
+          decide: () =>
+            Result.succeed({ status, workflowId: "openducktor-research-plan-implement" }),
         })
         .pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task)));
   const decided =
@@ -156,7 +159,7 @@ const createAutopilotHarness = async ({
             const decision = builtinTaskWorkflow.decide(eventId, prepare(current));
             return Result.succeed({
               status: decision.kind === "transition" ? decision.to : current.status,
-              workflowId: "openducktor",
+              workflowId: "openducktor-research-plan-implement",
               ...(decision.kind === "transition" && { cause: decision.cause }),
             });
           },
@@ -356,7 +359,8 @@ const createAutopilotHarness = async ({
           workspaceId: repoPath.split("/").at(-1)!,
           repoPath,
           taskId: task.id,
-          decide: () => Result.succeed({ status, workflowId: "openducktor" }),
+          decide: () =>
+            Result.succeed({ status, workflowId: "openducktor-research-plan-implement" }),
         }),
       );
     return task.id;

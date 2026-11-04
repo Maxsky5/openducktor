@@ -2,15 +2,25 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { repoConfigSchema, type GlobalConfig } from "@openducktor/contracts";
-import { BUILTIN_PROMPT_TEMPLATE_IDS, BUILTIN_ROLE_IDS } from "@openducktor/workflows/test-support";
+import { promptOverrideKey, repoConfigSchema, type GlobalConfig } from "@openducktor/contracts";
+import {
+  BUILTIN_PROMPT_OVERRIDE_KEYS,
+  BUILTIN_ROLE_IDS,
+  builtinWorkflowPromptKey,
+  rolePromptKey,
+} from "@openducktor/workflows/test-support";
 import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { applyTaskWorkflowSettings } from "../../config/workflow-settings";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { openHostDatabaseConnection } from "./sqlite-host-database-connection";
-import { agentRuntimeSettings, workspaceAzureConfig } from "./sqlite-host-settings-schema";
+import {
+  agentRuntimeSettings,
+  globalPromptOverrides,
+  workspaceAzureConfig,
+  workspacePromptOverrides,
+} from "./sqlite-host-settings-schema";
 import { createSqliteGitlabAccountStore } from "./sqlite-gitlab-account-store";
 import { createSqliteSharedSettingsDatabase } from "./sqlite-shared-settings-database";
 import { hostMetadata, type HostDatabaseSession } from "./sqlite-host-database-schema";
@@ -81,12 +91,20 @@ const measureSettingsEdits = async (
   return { requests, rows: result.rows };
 };
 
+/** The key of a prompt of a workflow that no catalog checks. */
+const customPromptKey = (index: number) =>
+  promptOverrideKey({
+    ownerKind: "workflow",
+    ownerId: "custom",
+    promptId: index === 349 ? "constructor" : `template-${index}`,
+  });
+
 describe("shared host settings", () => {
   test("writes only changed prompt and role keys and preserves other workspaces", async () => {
     await withDatabase(async ({ session }) => {
       const config = createDefaultGlobalConfig();
       const prompts = Object.fromEntries(
-        BUILTIN_PROMPT_TEMPLATE_IDS.map((id) => [
+        BUILTIN_PROMPT_OVERRIDE_KEYS.map((id) => [
           id,
           { template: `Prompt ${id}`, baseVersion: 1, enabled: false },
         ]),
@@ -126,7 +144,7 @@ describe("shared host settings", () => {
           applyTaskWorkflowSettings(current, builtinTaskWorkflows);
           return current;
         });
-      const promptId = "system.role.build.base";
+      const promptId = rolePromptKey("build");
       const costs = [
         await edit((next) => {
           next.globalPromptOverrides[promptId]!.template = "Global edit";
@@ -170,13 +188,65 @@ describe("shared host settings", () => {
     });
   });
 
+  test("stores role and workflow prompt overrides by owner and reads back their keys", async () => {
+    await withDatabase(async ({ session }) => {
+      const config = createDefaultGlobalConfig();
+      const overrides = {
+        [rolePromptKey("build")]: { template: "Build", baseVersion: 2, enabled: true },
+        [builtinWorkflowPromptKey("messages.qa_review")]: { template: "QA", baseVersion: 3 },
+      };
+      config.globalPromptOverrides = overrides;
+      config.workspaces.one = repoConfigFixture({
+        workspaceId: "one",
+        workspaceName: "One",
+        repoPath: "/one",
+        promptOverrides: overrides,
+      });
+      await Effect.runPromise(
+        session.transaction("test.import", (transaction) =>
+          importHostSharedConfig(
+            transaction,
+            applyTaskWorkflowSettings(config, builtinTaskWorkflows),
+          ),
+        ),
+      );
+
+      const owners = (rows: readonly { ownerKind: string; ownerId: string; promptId: string }[]) =>
+        rows.map(({ ownerKind, ownerId, promptId }) => [ownerKind, ownerId, promptId]).sort();
+      const expectedOwners = [
+        ["role", "build", "instructions"],
+        ["workflow", "openducktor-research-plan-implement", "messages.qa_review"],
+      ];
+      expect(
+        owners(
+          await Effect.runPromise(
+            session.execute((db) => db.select().from(globalPromptOverrides), "test.globalRows"),
+          ),
+        ),
+      ).toEqual(expectedOwners);
+      expect(
+        owners(
+          await Effect.runPromise(
+            session.execute(
+              (db) => db.select().from(workspacePromptOverrides),
+              "test.workspaceRows",
+            ),
+          ),
+        ),
+      ).toEqual(expectedOwners);
+      const stored = await Effect.runPromise(readHostSharedConfig(session));
+      expect(stored.globalPromptOverrides).toEqual(overrides);
+      expect(stored.workspaces.one?.promptOverrides).toEqual(overrides);
+    });
+  });
+
   test("batches large keyed maps during import, mixed edits, and removal", async () => {
     await withDatabase(async ({ session }) => {
       const config = createDefaultGlobalConfig();
       config.hostId = "f24f4d32-64f7-4d8a-ae78-cbcd22003c0a";
       config.globalPromptOverrides = Object.fromEntries(
         Array.from({ length: 350 }, (_, index) => [
-          index === 349 ? "constructor" : `template-${index}`,
+          customPromptKey(index),
           { template: `Prompt ${index}`, baseVersion: 1, enabled: false },
         ]),
       );
@@ -206,15 +276,16 @@ describe("shared host settings", () => {
         const next = current;
         const workspace = next.workspaces.one!;
         for (let index = 0; index < 350; index++) {
-          const templateId = index === 349 ? "constructor" : `template-${index}`;
-          delete next.globalPromptOverrides[templateId];
-          next.globalPromptOverrides[`template-${index + 350}`] = {
+          const removedKey = customPromptKey(index);
+          const addedKey = customPromptKey(index + 350);
+          delete next.globalPromptOverrides[removedKey];
+          next.globalPromptOverrides[addedKey] = {
             template: `Replacement ${index}`,
             baseVersion: 2,
           };
-          if (index % 2) next.globalPromptOverrides[`template-${index + 350}`]!.enabled = true;
-          delete workspace.promptOverrides[templateId];
-          workspace.promptOverrides[`template-${index + 350}`] = {
+          if (index % 2) next.globalPromptOverrides[addedKey]!.enabled = true;
+          delete workspace.promptOverrides[removedKey];
+          workspace.promptOverrides[addedKey] = {
             template: `Replacement ${index}`,
             baseVersion: 2,
             enabled: true,
@@ -251,7 +322,9 @@ describe("shared host settings", () => {
           workspaceId: id,
           workspaceName: id,
           repoPath: `/${id}`,
-          promptOverrides: { build: { template: `${id} prompt`, baseVersion: 1 } },
+          promptOverrides: {
+            [rolePromptKey("build")]: { template: `${id} prompt`, baseVersion: 1 },
+          },
         });
       await Effect.runPromise(
         session.transaction("test.import", (tx) => importHostSharedConfig(tx, config)),
@@ -334,7 +407,9 @@ describe("shared host settings", () => {
         agentDefaults: {
           build: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5", variant: "fast" },
         },
-        promptOverrides: { build: { template: "", baseVersion: 1, enabled: false } },
+        promptOverrides: {
+          [rolePromptKey("build")]: { template: "", baseVersion: 1, enabled: false },
+        },
         git: {
           provider: {
             id: "github",
@@ -363,7 +438,9 @@ describe("shared host settings", () => {
         repoPath: "/same/repo",
         closed: false,
       });
-      config.globalPromptOverrides = { build: { template: "", baseVersion: 1, enabled: false } };
+      config.globalPromptOverrides = {
+        [rolePromptKey("build")]: { template: "", baseVersion: 1, enabled: false },
+      };
       config.remoteAccess = {
         enabled: false,
         configuration: { listenHost: "192.168.1.9", listenPort: 9000, webOrigins: [] },
@@ -409,7 +486,11 @@ describe("shared host settings", () => {
       ];
       config.agentRuntimes.custom = { enabled: true, executablePath: "/opt/custom" };
       config.autopilot.rules = [
-        { workflowId: "openducktor", eventId: "build.completed", actionIds: ["qa"] },
+        {
+          workflowId: "openducktor-research-plan-implement",
+          eventId: "build.completed",
+          actionIds: ["qa"],
+        },
         { workflowId: "custom", eventId: "build.completed", actionIds: ["qa"] },
       ];
       await Effect.runPromise(

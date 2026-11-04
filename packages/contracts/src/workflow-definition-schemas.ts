@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { runtimeSupportedScopeSchema } from "./agent-runtime-schemas";
 import { agentSessionStartModeSchema, agentToolNameSchema } from "./agent-workflow-schemas";
-import { agentPromptPlaceholderSchema } from "./prompt-schemas";
+import { agentPromptPlaceholderSchema, WORKFLOW_MESSAGE_PROMPT_PREFIX } from "./prompt-schemas";
 import {
   notificationKindSettingSchema,
   workflowNotificationKindSchema,
@@ -21,9 +21,11 @@ import {
   workflowIdSchema,
 } from "./workflow-condition-schemas";
 
-/** The system prompt template of an agent role. Overrides keep its required placeholders. */
+/**
+ * The system prompt of an agent role. The role owns it, so its prompt ID is always "system".
+ * Overrides keep its required placeholders.
+ */
 export const agentRoleSystemPromptSchema = z.strictObject({
-  id: workflowIdSchema,
   builtinVersion: z.number().int().positive(),
   template: z.string(),
   requiredPlaceholders: z.array(agentPromptPlaceholderSchema).optional(),
@@ -135,7 +137,10 @@ export type WorkflowStateDefinition = z.infer<typeof workflowStateDefinitionSche
 
 export const workflowPromptTemplateRefSchema = z.strictObject({
   kind: z.enum(["kickoff", "message"]),
-  id: workflowIdSchema,
+  id: workflowIdSchema.refine(
+    (id) => id.startsWith(WORKFLOW_MESSAGE_PROMPT_PREFIX),
+    `A launch action prompt ID starts with "${WORKFLOW_MESSAGE_PROMPT_PREFIX}".`,
+  ),
 });
 
 /** One way to start or continue an agent session for a step. */
@@ -362,14 +367,6 @@ export type WorkflowActionRule = z.infer<typeof workflowActionRuleSchema>;
  * schemaVersion identifies the format. The ID and revision identify the definition. actionOrder
  * gives the base order of actions. actionPriority puts its actions ahead of that order.
  */
-/** The prompt templates that the workflow adds to every role. */
-export const workflowPromptsDefinitionSchema = z.strictObject({
-  /** System templates after the role system prompt, in prompt order. */
-  system: z.array(workflowIdSchema),
-  /** The permission template that rejects a mutating tool of a read-only role. */
-  readOnlyRejection: workflowIdSchema,
-});
-
 export const workflowDefinitionSchema = z.strictObject({
   schemaVersion: z.literal(1),
   id: workflowIdSchema,
@@ -392,7 +389,6 @@ export const workflowDefinitionSchema = z.strictObject({
   actionOrder: z.array(workflowActionRuleSchema),
   actionPriority: z.array(workflowActionRuleSchema),
   launchOrder: z.array(workflowLaunchOrderRuleSchema).default([]),
-  prompts: workflowPromptsDefinitionSchema,
 });
 export type WorkflowDefinition = z.infer<typeof workflowDefinitionSchema>;
 

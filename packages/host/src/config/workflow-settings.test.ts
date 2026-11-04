@@ -6,7 +6,10 @@ import {
   workflowDefinitionSchema,
   repoConfigSchema,
 } from "@openducktor/contracts";
-import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
+import {
+  builtinWorkflowPromptKey,
+  createReviewTaskWorkflow,
+} from "@openducktor/workflows/test-support";
 import { createTaskWorkflow, workflowRoleCatalog } from "@openducktor/workflows";
 import type { z } from "zod";
 import { createTaskWorkflowResolver } from "../application/tasks/task-workflows";
@@ -135,11 +138,13 @@ describe("applyTaskWorkflowSettings", () => {
     expect(() =>
       applyTaskWorkflowSettings(
         config({
-          globalPromptOverrides: { "kickoff.qa_review": { template: "x", baseVersion: 1 } },
+          globalPromptOverrides: {
+            [builtinWorkflowPromptKey("messages.qa_review")]: { template: "x", baseVersion: 1 },
+          },
         }),
         reviewWorkflows,
       ),
-    ).toThrow('Unknown prompt template "kickoff.qa_review"');
+    ).toThrow(`Unknown prompt "${builtinWorkflowPromptKey("messages.qa_review")}"`);
     expect(() =>
       applyTaskWorkflowSettings(
         config({

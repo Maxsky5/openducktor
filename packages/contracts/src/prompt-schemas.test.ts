@@ -2,6 +2,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   extractPromptTemplatePlaceholders,
+  parsePromptOverrideKey,
+  promptOverrideKey,
+  repoPromptOverridesSchema,
   validatePromptTemplatePlaceholders,
 } from "./prompt-schemas";
 
@@ -44,5 +47,34 @@ describe("prompt placeholder validation", () => {
 
     expect(result.unsupportedPlaceholders).toEqual([]);
     expect(result.missingRequiredPlaceholders).toEqual(["humanFeedback"]);
+  });
+});
+
+describe("prompt override keys", () => {
+  test("round-trips the owner and prompt ID of a key", () => {
+    const role = { ownerKind: "role", ownerId: "build", promptId: "system" } as const;
+    const workflow = {
+      ownerKind: "workflow",
+      ownerId: "rpi",
+      promptId: "messages.qa_review",
+    } as const;
+
+    expect(parsePromptOverrideKey(promptOverrideKey(role))).toEqual(role);
+    expect(parsePromptOverrideKey(promptOverrideKey(workflow))).toEqual(workflow);
+  });
+
+  test("rejects legacy template IDs and keys of another form", () => {
+    for (const key of [
+      "system.role.build.base",
+      "messages.qa_review",
+      '["task","rpi","messages.qa_review"]',
+      '["role","build"]',
+      '[ "role", "build", "system" ]',
+    ]) {
+      expect(parsePromptOverrideKey(key)).toBeNull();
+      expect(
+        repoPromptOverridesSchema.safeParse({ [key]: { template: "x", baseVersion: 1 } }).success,
+      ).toBe(false);
+    }
   });
 });

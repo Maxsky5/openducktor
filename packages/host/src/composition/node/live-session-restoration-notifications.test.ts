@@ -68,7 +68,7 @@ test.each([
       db.store.transitionTask({
         ...db.scope,
         taskId: task.id,
-        decide: () => Result.succeed({ status, workflowId: "openducktor" }),
+        decide: () => Result.succeed({ status, workflowId: "openducktor-research-plan-implement" }),
       }),
     );
     const chat: WorkspaceSession = {

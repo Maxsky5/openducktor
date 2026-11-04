@@ -399,7 +399,7 @@ test.each([
           decide: (current: { status: string }) =>
             Result.succeed({
               status: code === "qaReport" ? "in_progress" : current.status,
-              workflowId: "openducktor",
+              workflowId: "openducktor-research-plan-implement",
             }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",

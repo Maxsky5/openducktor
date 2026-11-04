@@ -32,6 +32,7 @@ import {
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
   OPENCODE_ODT_TOOL_ID_PREFIXES,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  promptOverrideKey,
   type RuntimeDescriptor,
   repoConfigSchema,
   runtimeDescriptorSchema,
@@ -45,6 +46,17 @@ import {
   toOpencodeExposedOdtToolIds,
   toOpencodeOdtToolAliases,
 } from "./index";
+
+const KICKOFF_KEY = promptOverrideKey({
+  ownerKind: "workflow",
+  ownerId: "rpi",
+  promptId: "messages.spec_start",
+});
+const GUARDS_KEY = promptOverrideKey({
+  ownerKind: "workflow",
+  ownerId: "rpi",
+  promptId: "workflow.rules",
+});
 
 const baseRepoConfigInput = {
   workspaceId: "repo",
@@ -246,7 +258,7 @@ describe("runtime schemas", () => {
 
   const stepState = { required: false, canSkip: true, available: false, completed: false };
   const projection = {
-    workflow: { id: "openducktor", revision: 2 },
+    workflow: { id: "openducktor-research-plan-implement", revision: 2 },
     workflowSteps: [],
     availableActions: [],
     agentWorkflows: { spec: stepState, planner: stepState, build: stepState, qa: stepState },
@@ -453,7 +465,7 @@ describe("runtime schemas", () => {
       branchPrefix: "obp",
       hooks: { postComplete: [] },
       promptOverrides: {
-        "kickoff.spec_initial": {
+        [KICKOFF_KEY]: {
           template: "Custom kickoff for {{task.id}}",
           baseVersion: 1,
           enabled: false,
@@ -461,11 +473,9 @@ describe("runtime schemas", () => {
       },
     });
 
-    expect(parsed.promptOverrides["kickoff.spec_initial"]?.template).toBe(
-      "Custom kickoff for {{task.id}}",
-    );
-    expect(parsed.promptOverrides["kickoff.spec_initial"]?.baseVersion).toBe(1);
-    expect(parsed.promptOverrides["kickoff.spec_initial"]?.enabled).toBe(false);
+    expect(parsed.promptOverrides[KICKOFF_KEY]?.template).toBe("Custom kickoff for {{task.id}}");
+    expect(parsed.promptOverrides[KICKOFF_KEY]?.baseVersion).toBe(1);
+    expect(parsed.promptOverrides[KICKOFF_KEY]?.enabled).toBe(false);
   });
 
   test("repo config allows empty prompt override templates", () => {
@@ -475,7 +485,7 @@ describe("runtime schemas", () => {
       branchPrefix: "obp",
       hooks: { postComplete: [] },
       promptOverrides: {
-        "system.shared.workflow_guards": {
+        [GUARDS_KEY]: {
           template: "",
           baseVersion: 1,
           enabled: true,
@@ -483,8 +493,8 @@ describe("runtime schemas", () => {
       },
     });
 
-    expect(parsed.promptOverrides["system.shared.workflow_guards"]?.template).toBe("");
-    expect(parsed.promptOverrides["system.shared.workflow_guards"]?.enabled).toBe(true);
+    expect(parsed.promptOverrides[GUARDS_KEY]?.template).toBe("");
+    expect(parsed.promptOverrides[GUARDS_KEY]?.enabled).toBe(true);
   });
 
   test("repo config normalizes null agent default fields and entries", () => {

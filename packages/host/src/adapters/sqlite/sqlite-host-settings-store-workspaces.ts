@@ -6,6 +6,7 @@ import { HostValidationError } from "../../effect/host-errors";
 import type { HostDatabaseSession } from "./sqlite-host-database-schema";
 import * as schema from "./sqlite-host-settings-schema";
 import { settingsKeyChanges, settingsRowBatches } from "./sqlite-host-settings-store-validation";
+import { promptOverrideColumns, promptOverrideKeysMatch } from "./sqlite-prompt-override-keys";
 
 const operation = "hostSettings.workspace";
 export const saveWorkspace = (
@@ -164,15 +165,15 @@ export const saveWorkspace = (
             .where(
               and(
                 eq(schema.workspacePromptOverrides.workspaceId, workspaceId),
-                inArray(schema.workspacePromptOverrides.templateId, keys),
+                promptOverrideKeysMatch(schema.workspacePromptOverrides, keys),
               ),
             ),
         operation,
       );
     for (const rows of settingsRowBatches(
-      prompts.changed.map(([templateId, prompt]) => ({
+      prompts.changed.map(([key, prompt]) => ({
         workspaceId,
-        templateId,
+        ...promptOverrideColumns(key),
         ...prompt,
         enabled: prompt.enabled ?? null,
       })),
@@ -185,7 +186,9 @@ export const saveWorkspace = (
             .onConflictDoUpdate({
               target: [
                 schema.workspacePromptOverrides.workspaceId,
-                schema.workspacePromptOverrides.templateId,
+                schema.workspacePromptOverrides.ownerKind,
+                schema.workspacePromptOverrides.ownerId,
+                schema.workspacePromptOverrides.promptId,
               ],
               set: {
                 template: sql`excluded.template`,

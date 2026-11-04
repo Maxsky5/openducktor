@@ -259,11 +259,31 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   autopilot: {
     alwaysStartQaReviewsFresh: false,
     rules: [
-      { workflowId: "openducktor", eventId: "taskProgressedToSpecReady", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskProgressedToReadyForDev", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskProgressedToAiReview", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskRejectedByQa", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskProgressedToHumanReview", actionIds: [] },
+      {
+        workflowId: "openducktor-research-plan-implement",
+        eventId: "taskProgressedToSpecReady",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-research-plan-implement",
+        eventId: "taskProgressedToReadyForDev",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-research-plan-implement",
+        eventId: "taskProgressedToAiReview",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-research-plan-implement",
+        eventId: "taskRejectedByQa",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-research-plan-implement",
+        eventId: "taskProgressedToHumanReview",
+        actionIds: [],
+      },
     ],
   },
   agentRuntimes: agentRuntimes({ opencode: true }),

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { workflowDefinitionSchema, type WorkflowDefinition } from "@openducktor/contracts";
+import {
+  promptOverrideKey,
+  workflowDefinitionSchema,
+  type WorkflowDefinition,
+} from "@openducktor/contracts";
 import { builtinTaskWorkflow } from "./builtin/task-workflow";
 import { BUILTIN_BOARD_LAYOUT } from "./builtin/board";
 import {
@@ -109,7 +113,7 @@ describe("workflow catalog and shared board", () => {
     );
   });
 
-  test("rejects a role or template that differs between workflows", () => {
+  test("rejects a role that differs between workflows", () => {
     const relabelled = createTaskWorkflow(
       { ...workflowDefinitionSchema.parse(structuredClone(review.definition)), id: "second" },
       reviewTaskPromptTemplates,
@@ -118,35 +122,32 @@ describe("workflow catalog and shared board", () => {
     expect(() => validateWorkflowInventory([review, relabelled])).toThrow(
       'Role "editor" differs between workflows',
     );
+  });
+
+  test("lets two workflows use the same prompt ID with different text", () => {
     const rewritten = createTaskWorkflow(
       { ...workflowDefinitionSchema.parse(structuredClone(review.definition)), id: "third" },
       reviewTaskPromptTemplates.map((template) =>
-        template.id === "kickoff.edit_review" ? { ...template, template: "Other" } : template,
+        template.id === "messages.edit_review" ? { ...template, template: "Other" } : template,
       ),
       reviewTaskRoles,
     );
-    expect(() => validateWorkflowInventory([review, rewritten])).toThrow(
-      'Prompt template "kickoff.edit_review" differs between workflows',
+    expect(() => validateWorkflowInventory([review, rewritten])).not.toThrow();
+    const kickoffKeys = [review, rewritten].map(
+      ({ prompts }) => prompts.templates.find(({ id }) => id === "messages.edit_review")?.key,
     );
-  });
-
-  test("compares templates across the latest revision of each workflow, in any catalog order", () => {
-    const revise = (id: string, revision: number, text: string) =>
-      createTaskWorkflow(
-        { ...workflowDefinitionSchema.parse(structuredClone(review.definition)), id, revision },
-        reviewTaskPromptTemplates.map((template) =>
-          template.id === "kickoff.edit_review" ? { ...template, template: text } : template,
-        ),
-        reviewTaskRoles,
-      );
-    // The old revision keeps its own template; the latest revisions agree.
-    expect(() =>
-      validateWorkflowInventory([revise("a", 1, "v1"), revise("a", 2, "v2"), revise("b", 1, "v2")]),
-    ).not.toThrow();
-    // The latest revision of "a" disagrees with "b", even after "b" matched the old revision.
-    expect(() =>
-      validateWorkflowInventory([revise("a", 1, "v1"), revise("b", 1, "v1"), revise("a", 2, "v2")]),
-    ).toThrow('Prompt template "kickoff.edit_review" differs');
+    expect(kickoffKeys).toEqual([
+      promptOverrideKey({
+        ownerKind: "workflow",
+        ownerId: "review",
+        promptId: "messages.edit_review",
+      }),
+      promptOverrideKey({
+        ownerKind: "workflow",
+        ownerId: "third",
+        promptId: "messages.edit_review",
+      }),
+    ]);
   });
 
   test("rejects invalid display references in the definition", () => {

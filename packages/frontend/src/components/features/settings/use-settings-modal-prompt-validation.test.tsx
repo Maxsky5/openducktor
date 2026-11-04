@@ -1,3 +1,4 @@
+import { builtinWorkflowPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
@@ -17,7 +18,7 @@ const createHookHarness = (initialProps: HookArgs) =>
 const createSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({
     globalPromptOverrides: {
-      "system.role.spec.base": {
+      [rolePromptKey("spec")]: {
         template: "invalid {{task.bad}}",
         baseVersion: 1,
         enabled: true,
@@ -36,7 +37,7 @@ const createSnapshot = (): SettingsSnapshot =>
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {
-          "kickoff.build_implementation_start": {
+          [builtinWorkflowPromptKey("messages.build_start")]: {
             template: "invalid {{unknown.value}}",
             baseVersion: 1,
             enabled: true,
@@ -122,9 +123,9 @@ describe("useSettingsModalPromptValidation", () => {
       kanban: 0,
       autopilot: 0,
     });
-    expect(latest.selectedRepoPromptValidationErrors["kickoff.build_implementation_start"]).toBe(
-      "Unsupported placeholder: {{unknown.value}}.",
-    );
+    expect(
+      latest.selectedRepoPromptValidationErrors[builtinWorkflowPromptKey("messages.build_start")],
+    ).toBe("Unsupported placeholder: {{unknown.value}}.");
 
     await harness.unmount();
   });
@@ -132,7 +133,7 @@ describe("useSettingsModalPromptValidation", () => {
   test("includes required-placeholder validation errors in the aggregated counts", async () => {
     const snapshot = createSnapshot();
     snapshot.globalPromptOverrides = {
-      "kickoff.build_after_human_request_changes": {
+      [builtinWorkflowPromptKey("messages.build_requested_changes")]: {
         template: "Review {{task.id}} before editing.",
         baseVersion: 3,
         enabled: true,
@@ -149,7 +150,9 @@ describe("useSettingsModalPromptValidation", () => {
 
     expect(latest.hasPromptValidationErrors).toBe(true);
     expect(
-      latest.promptValidationState.globalErrors["kickoff.build_after_human_request_changes"],
+      latest.promptValidationState.globalErrors[
+        builtinWorkflowPromptKey("messages.build_requested_changes")
+      ],
     ).toBe("Missing required placeholder: {{humanFeedback}}.");
     expect(latest.promptValidationState.globalErrorCount).toBe(1);
 

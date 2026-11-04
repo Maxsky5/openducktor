@@ -60,7 +60,7 @@ export function PromptOverridesSection({
         <p role="alert">Choose a workflow role to view its prompts.</p>
       </div>
     );
-  const visibleErrorCount = selectedTab.templates.filter(({ id }) => validationErrors[id]).length;
+  const visibleErrorCount = selectedTab.templates.filter(({ key }) => validationErrors[key]).length;
 
   return (
     <div className="grid gap-4 p-4">
@@ -85,7 +85,7 @@ export function PromptOverridesSection({
 
       <div className="grid gap-3">
         {selectedTab.templates.map((builtin) => {
-          const templateId = builtin.id;
+          const templateId = builtin.key;
           const override = overrides[templateId];
           const inheritedPreview = resolveInheritedPreview(templateId, builtin.template, override);
           const canClearOverride = canClearPromptOverride(override);
@@ -96,7 +96,7 @@ export function PromptOverridesSection({
 
           return (
             <PromptOverrideCard
-              key={builtin.id}
+              key={builtin.key}
               label={builtin.label}
               description={builtin.description}
               override={override}

@@ -1,4 +1,8 @@
-import type { WorkflowDescriptor } from "@openducktor/contracts";
+import {
+  promptOverrideKey,
+  ROLE_INSTRUCTIONS_PROMPT_ID,
+  type WorkflowDescriptor,
+} from "@openducktor/contracts";
 import {
   latestWorkflowRevisions,
   workflowPromptTemplates,
@@ -7,10 +11,12 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { workflowCatalogQueryOptions } from "./workflows";
 
+/** A prompt in Settings, with the override key of its owner. */
+export type SettingsPromptTemplate = WorkflowDescriptor["templates"][number] & { key: string };
+
 /**
- * Settings list each catalog role once, with its system prompt, and each workflow prompt template
- * once. The host rejects latest workflow revisions that give one template ID different content, so
- * the latest revision gives each settings entry.
+ * Settings list each catalog role once, with its system prompt, and the prompts of the latest
+ * revision of each workflow. An override applies to its owner role or workflow in every revision.
  */
 export const workflowSettingsData = (catalog: CompiledWorkflowCatalog) => {
   const workflows = [...catalog.workflows.values()];
@@ -19,16 +25,28 @@ export const workflowSettingsData = (catalog: CompiledWorkflowCatalog) => {
     label: definition.label,
     definition,
   }));
-  const byId = new Map<string, WorkflowDescriptor["templates"][number]>();
-  const roleTemplates = catalog.roles.map(({ id, systemPrompt }) => ({
+  const roleTemplates = catalog.roles.map(({ id, systemPrompt }): SettingsPromptTemplate => ({
     ...systemPrompt,
-    purpose: "system" as const,
+    id: ROLE_INSTRUCTIONS_PROMPT_ID,
+    key: promptOverrideKey({
+      ownerKind: "role",
+      ownerId: id,
+      promptId: ROLE_INSTRUCTIONS_PROMPT_ID,
+    }),
+    purpose: "system",
     roleIds: [id],
   }));
-  const latest = latestWorkflowRevisions(workflows).flatMap(workflowPromptTemplates);
-  for (const template of [...roleTemplates, ...latest])
-    if (!byId.has(template.id)) byId.set(template.id, template);
-  const templates = [...byId.values()];
+  const workflowTemplates = latestWorkflowRevisions(workflows).flatMap((workflow) =>
+    workflowPromptTemplates(workflow).map((template): SettingsPromptTemplate => ({
+      ...template,
+      key: promptOverrideKey({
+        ownerKind: "workflow",
+        ownerId: workflow.reference.id,
+        promptId: template.id,
+      }),
+    })),
+  );
+  const templates = [...roleTemplates, ...workflowTemplates];
   const promptTabs = [
     {
       id: "shared",

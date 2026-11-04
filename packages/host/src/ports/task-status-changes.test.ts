@@ -8,8 +8,8 @@ const record = (id: string, status: string, previousStatus: string) =>
   recordCommittedTaskStatusChange({
     task: { id, title: id, status } as TaskCard,
     previousStatus,
-    workflowId: "openducktor",
-    workflow: { id: "openducktor", revision: 1 },
+    workflowId: "openducktor-research-plan-implement",
+    workflow: { id: "openducktor-research-plan-implement", revision: 1 },
     autopilotSettings: { alwaysStartQaReviewsFresh: false, rules: [] },
     workspace: { repoPath: "/repo", workspaceName: "Repo" },
   });

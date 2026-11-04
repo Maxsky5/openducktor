@@ -11,9 +11,11 @@ export {
 } from "./shared-board-workflows";
 
 export {
-  BUILTIN_PROMPT_TEMPLATE_IDS,
+  BUILTIN_PROMPT_OVERRIDE_KEYS,
   BUILTIN_ROLE_IDS,
+  builtinWorkflowPromptKey,
   createBuiltinNotificationSettings,
   emptyArtifactSummary,
+  rolePromptKey,
 } from "./builtin";
 export { createTaskCardFixture } from "./task-card-fixture";

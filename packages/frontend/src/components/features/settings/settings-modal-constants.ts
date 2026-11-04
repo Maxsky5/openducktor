@@ -62,8 +62,8 @@ export const REPOSITORY_SECTIONS: ReadonlyArray<{
 
 export const countPromptErrorsByRoleTab = (
   errors: Partial<Record<string, string>>,
-  tabs: readonly { id: string; templates: readonly { id: string }[] }[],
+  tabs: readonly { id: string; templates: readonly { key: string }[] }[],
 ): Record<string, number> =>
   Object.fromEntries(
-    tabs.map((tab) => [tab.id, tab.templates.filter(({ id }) => errors[id]).length]),
+    tabs.map((tab) => [tab.id, tab.templates.filter(({ key }) => errors[key]).length]),
   );

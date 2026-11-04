@@ -281,7 +281,11 @@ describe("useSettingsModalController", () => {
     const rules = (actionIds: string[], alwaysStartQaReviewsFresh = false) => ({
       alwaysStartQaReviewsFresh,
       rules: [
-        { workflowId: "openducktor", eventId: "taskProgressedToAiReview" as const, actionIds },
+        {
+          workflowId: "openducktor-research-plan-implement",
+          eventId: "taskProgressedToAiReview" as const,
+          actionIds,
+        },
       ],
     });
     const updateSavedAutopilot = (autopilot: SettingsSnapshot["autopilot"]) =>
@@ -320,7 +324,7 @@ describe("useSettingsModalController", () => {
       alwaysStartQaReviewsFresh: true,
       rules: [
         {
-          workflowId: "openducktor",
+          workflowId: "openducktor-research-plan-implement",
           eventId: "taskProgressedToAiReview" as const,
           actionIds: ["startQa" as const],
         },

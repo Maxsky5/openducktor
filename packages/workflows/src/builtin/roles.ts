@@ -6,11 +6,8 @@ import {
 import { deepFreeze } from "../deep-freeze";
 import { recordBy } from "../record-by";
 import { BUILTIN_ROLE_IDS, type BuiltinRoleId } from "./ids";
-import {
-  BUILTIN_PROMPT_TEMPLATE_DESCRIPTIONS,
-  BUILTIN_PROMPT_TEMPLATE_LABELS,
-} from "./prompt-metadata";
-import { PROMPT_TEMPLATES } from "./prompt-templates";
+import { ROLE_SYSTEM_PROMPT_METADATA } from "./prompt-metadata";
+import { ROLE_SYSTEM_PROMPTS } from "./prompt-templates";
 
 const taskTools = [
   "odt_read_task",
@@ -23,14 +20,10 @@ const taskTools = [
   "odt_update_task",
 ] as const satisfies readonly AgentToolName[];
 
-const systemPrompt = (id: `system.role.${BuiltinRoleId}.base`) => {
-  const { purpose: _purpose, ...template } = PROMPT_TEMPLATES[id];
-  return {
-    ...template,
-    label: BUILTIN_PROMPT_TEMPLATE_LABELS[id],
-    description: BUILTIN_PROMPT_TEMPLATE_DESCRIPTIONS[id],
-  };
-};
+const systemPrompt = (role: BuiltinRoleId) => ({
+  ...ROLE_SYSTEM_PROMPTS[role],
+  ...ROLE_SYSTEM_PROMPT_METADATA[role],
+});
 
 export type BuiltinAgentRole = AgentRoleDefinition & { id: BuiltinRoleId; tools: AgentToolName[] };
 
@@ -43,7 +36,7 @@ export const BUILTIN_ROLES: readonly BuiltinAgentRole[] = deepFreeze([
     workspaceAccess: "read",
     location: "repository",
     runtimeScopes: ["workspace"],
-    systemPrompt: systemPrompt("system.role.spec.base"),
+    systemPrompt: systemPrompt("spec"),
     icon: "specification",
   },
   {
@@ -53,7 +46,7 @@ export const BUILTIN_ROLES: readonly BuiltinAgentRole[] = deepFreeze([
     workspaceAccess: "read",
     location: "repository",
     runtimeScopes: ["workspace"],
-    systemPrompt: systemPrompt("system.role.planner.base"),
+    systemPrompt: systemPrompt("planner"),
     icon: "planning",
   },
   {
@@ -70,7 +63,7 @@ export const BUILTIN_ROLES: readonly BuiltinAgentRole[] = deepFreeze([
     workspaceAccess: "write",
     location: "task_worktree",
     runtimeScopes: ["build", "workspace"],
-    systemPrompt: systemPrompt("system.role.build.base"),
+    systemPrompt: systemPrompt("build"),
     icon: "building",
     defaultPanel: "diffs",
   },
@@ -81,7 +74,7 @@ export const BUILTIN_ROLES: readonly BuiltinAgentRole[] = deepFreeze([
     workspaceAccess: "read",
     location: "task_worktree",
     runtimeScopes: ["task"],
-    systemPrompt: systemPrompt("system.role.qa.base"),
+    systemPrompt: systemPrompt("qa"),
     icon: "quality",
   },
 ] satisfies BuiltinAgentRole[]);

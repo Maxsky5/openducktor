@@ -75,7 +75,7 @@ const held: AutopilotState = {
   outcomes: [
     {
       outcomeId: "recovered",
-      workflowId: "openducktor",
+      workflowId: "openducktor-research-plan-implement",
       workspaceId: "alpha",
       repoPath: "/repo",
       task: { id: "task", title: "Task" },

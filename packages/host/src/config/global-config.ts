@@ -1,6 +1,9 @@
 import {
   type GlobalConfig,
   globalConfigSchema,
+  parsePromptOverrideKey,
+  promptOverrideKey,
+  ROLE_INSTRUCTIONS_PROMPT_ID,
   HOST_PREFERENCE_FIELDS,
   type PersistedGlobalConfigV2,
   persistedGlobalConfigV2Schema,
@@ -19,6 +22,53 @@ type PersistedConfigObject = Record<string, JSONType>;
 const persistedConfigObjectSchema = z.record(z.string(), z.json());
 const isPersistedConfigObject = (value: JSONType | undefined): value is PersistedConfigObject =>
   persistedConfigObjectSchema.safeParse(value).success;
+
+/** The built-in workflow of legacy settings. Its prompt overrides and Autopilot rules move to it. */
+const LEGACY_BUILTIN_WORKFLOW_ID = "openducktor-research-plan-implement";
+const LEGACY_ROLE_PROMPT_ID = /^system\.role\.(.+)\.base$/;
+
+/** The workflow prompt IDs of the legacy global prompt IDs. */
+const LEGACY_WORKFLOW_PROMPT_IDS = new Map([
+  ["system.shared.workflow_guards", "workflow.rules"],
+  ["system.shared.tool_protocol", "workflow.tool_rules"],
+  ["system.shared.task_context", "workflow.task_context"],
+  ["permission.read_only.reject", "workflow.read_only_rejection"],
+  ["kickoff.spec_initial", "messages.spec_start"],
+  ["kickoff.planner_initial", "messages.plan_start"],
+  ["kickoff.build_implementation_start", "messages.build_start"],
+  ["kickoff.build_after_qa_rejected", "messages.build_after_qa_rejection"],
+  ["kickoff.build_after_human_request_changes", "messages.build_requested_changes"],
+  ["kickoff.build_pull_request_generation", "messages.build_pull_request"],
+  ["message.build_rebase_conflict_resolution", "messages.build_git_conflict"],
+  ["kickoff.qa_review", "messages.qa_review"],
+]);
+
+/** The owner key of an override that legacy settings keyed by a global prompt ID. */
+const migratePromptOverrideKey = (key: string): string => {
+  if (parsePromptOverrideKey(key) !== null) return key;
+  const role = LEGACY_ROLE_PROMPT_ID.exec(key)?.[1];
+  if (role !== undefined)
+    return promptOverrideKey({
+      ownerKind: "role",
+      ownerId: role,
+      promptId: ROLE_INSTRUCTIONS_PROMPT_ID,
+    });
+  return promptOverrideKey({
+    ownerKind: "workflow",
+    ownerId: LEGACY_BUILTIN_WORKFLOW_ID,
+    promptId: LEGACY_WORKFLOW_PROMPT_IDS.get(key) ?? key,
+  });
+};
+
+const migratePromptOverrides = (overrides: JSONType): JSONType =>
+  isPersistedConfigObject(overrides)
+    ? Object.fromEntries(
+        Object.entries(overrides).map(([key, override]) => [
+          migratePromptOverrideKey(key),
+          override,
+        ]),
+      )
+    : overrides;
 
 export type LoadedGlobalConfig = GlobalConfig;
 
@@ -190,6 +240,8 @@ const migratePersistedConfig = (payload: PersistedConfigObject) => {
   const migrated = { ...payload };
   delete migrated.trustedHooks;
   delete migrated.trustedHooksFingerprint;
+  if (migrated.globalPromptOverrides !== undefined)
+    migrated.globalPromptOverrides = migratePromptOverrides(migrated.globalPromptOverrides);
   if (isPersistedConfigObject(migrated.workspaces)) {
     migrated.workspaces = Object.fromEntries(
       Object.entries(migrated.workspaces).map(([id, workspace]) => {
@@ -197,6 +249,10 @@ const migratePersistedConfig = (payload: PersistedConfigObject) => {
           return [id, workspace];
         }
         const currentWorkspace = { ...workspace };
+        if (currentWorkspace.promptOverrides !== undefined)
+          currentWorkspace.promptOverrides = migratePromptOverrides(
+            currentWorkspace.promptOverrides,
+          );
         delete currentWorkspace.defaultRuntimeKind;
         delete currentWorkspace.trustedHooks;
         delete currentWorkspace.trustedHooksFingerprint;
@@ -208,8 +264,9 @@ const migratePersistedConfig = (payload: PersistedConfigObject) => {
     migrated.autopilot = {
       ...migrated.autopilot,
       rules: migrated.autopilot.rules.map((rule) =>
-        isPersistedConfigObject(rule) && rule.workflowId === undefined
-          ? { ...rule, workflowId: "openducktor" }
+        isPersistedConfigObject(rule) &&
+        (rule.workflowId === undefined || rule.workflowId === "openducktor")
+          ? { ...rule, workflowId: LEGACY_BUILTIN_WORKFLOW_ID }
           : rule,
       ),
     };

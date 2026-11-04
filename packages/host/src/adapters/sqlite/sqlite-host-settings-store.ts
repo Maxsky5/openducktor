@@ -4,11 +4,12 @@ import {
   globalConfigSchema,
   jsonValuesEqual,
 } from "@openducktor/contracts";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import type { HostDatabaseSession } from "./sqlite-host-database-schema";
 import * as schema from "./sqlite-host-settings-schema";
 import { writeAutopilotRules } from "./sqlite-host-settings-store-autopilot";
+import { promptOverrideColumns, promptOverrideKeysMatch } from "./sqlite-prompt-override-keys";
 import { replaceRuntimeSettings } from "./sqlite-host-settings-store-policies";
 import { writeRemoteAccessListener } from "./sqlite-host-settings-store-remote-access";
 import {
@@ -100,12 +101,12 @@ const writeGlobalPrompts: HostSettingsWriter = (session, current, next) =>
         (db) =>
           db
             .delete(schema.globalPromptOverrides)
-            .where(inArray(schema.globalPromptOverrides.templateId, keys)),
+            .where(promptOverrideKeysMatch(schema.globalPromptOverrides, keys)),
         operation,
       );
     for (const rows of settingsRowBatches(
-      prompts.changed.map(([templateId, prompt]) => ({
-        templateId,
+      prompts.changed.map(([key, prompt]) => ({
+        ...promptOverrideColumns(key),
         ...prompt,
         enabled: prompt.enabled ?? null,
       })),
@@ -116,7 +117,11 @@ const writeGlobalPrompts: HostSettingsWriter = (session, current, next) =>
             .insert(schema.globalPromptOverrides)
             .values(rows)
             .onConflictDoUpdate({
-              target: schema.globalPromptOverrides.templateId,
+              target: [
+                schema.globalPromptOverrides.ownerKind,
+                schema.globalPromptOverrides.ownerId,
+                schema.globalPromptOverrides.promptId,
+              ],
               set: {
                 template: sql`excluded.template`,
                 baseVersion: sql`excluded.base_version`,

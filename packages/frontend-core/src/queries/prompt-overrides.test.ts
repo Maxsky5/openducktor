@@ -1,4 +1,5 @@
 import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { builtinWorkflowPromptKey } from "@openducktor/workflows/test-support";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import type { ClientConnection } from "../connection/client-connection";
@@ -19,7 +20,7 @@ const createRepoConfig = (): RepoConfig => ({
   hooks: { postComplete: [] },
   actions: { items: [], defaultActionId: null },
   promptOverrides: {
-    "kickoff.planner_initial": {
+    [builtinWorkflowPromptKey("messages.plan_start")]: {
       template: "repo planner {{task.id}}",
       baseVersion: 1,
       enabled: true,
@@ -33,7 +34,7 @@ const createRepoConfig = (): RepoConfig => ({
 const createSettingsSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({
     globalPromptOverrides: {
-      "kickoff.spec_initial": {
+      [builtinWorkflowPromptKey("messages.spec_start")]: {
         template: "global kickoff {{task.id}}",
         baseVersion: 1,
         enabled: true,
@@ -111,8 +112,12 @@ describe("loadEffectivePromptOverrides", () => {
     expect(workspaceListMock).not.toHaveBeenCalled();
     expect(workspaceGetSettingsSnapshotMock).toHaveBeenCalledTimes(1);
     expect(firstResult).toEqual(secondResult);
-    expect(firstResult["kickoff.spec_initial"]?.template).toBe("global kickoff {{task.id}}");
-    expect(firstResult["kickoff.planner_initial"]?.template).toBe("repo planner {{task.id}}");
+    expect(firstResult[builtinWorkflowPromptKey("messages.spec_start")]?.template).toBe(
+      "global kickoff {{task.id}}",
+    );
+    expect(firstResult[builtinWorkflowPromptKey("messages.plan_start")]?.template).toBe(
+      "repo planner {{task.id}}",
+    );
   });
 
   test("normalizes workspace ids before deduplicating concurrent loads", async () => {

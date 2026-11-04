@@ -1,17 +1,18 @@
+import { builtinWorkflowPromptKey } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import { buildInheritedPromptPreview } from "./settings-prompt-inheritance";
 
 describe("settings prompt inheritance", () => {
   test("builds inherited preview from global override and builtin", () => {
     const fromGlobal = buildInheritedPromptPreview(
-      "kickoff.spec_initial",
+      builtinWorkflowPromptKey("messages.spec_start"),
       {
         template: "repo override",
         baseVersion: 2,
         enabled: false,
       },
       {
-        "kickoff.spec_initial": {
+        [builtinWorkflowPromptKey("messages.spec_start")]: {
           template: "global override",
           baseVersion: 1,
           enabled: true,
@@ -25,7 +26,7 @@ describe("settings prompt inheritance", () => {
     });
 
     const fromBuiltin = buildInheritedPromptPreview(
-      "kickoff.spec_initial",
+      builtinWorkflowPromptKey("messages.spec_start"),
       {
         template: "repo override",
         baseVersion: 2,
@@ -40,7 +41,7 @@ describe("settings prompt inheritance", () => {
     });
 
     const hiddenWhenRepoEnabled = buildInheritedPromptPreview(
-      "kickoff.spec_initial",
+      builtinWorkflowPromptKey("messages.spec_start"),
       {
         template: "repo override",
         baseVersion: 2,

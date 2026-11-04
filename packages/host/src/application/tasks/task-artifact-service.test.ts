@@ -92,7 +92,11 @@ describe("task artifact service", () => {
         await run(
           h.store.transitionTask({
             ...h.scope,
-            decide: () => Result.succeed({ status: "ai_review", workflowId: "openducktor" }),
+            decide: () =>
+              Result.succeed({
+                status: "ai_review",
+                workflowId: "openducktor-research-plan-implement",
+              }),
           }),
         );
         const base = createTaskServiceWithMutationProgress({
@@ -129,7 +133,11 @@ describe("task artifact service", () => {
         await run(Deferred.await(saved));
         const newer = await run(
           h.store.saveWorkflowArtifact({
-            decide: () => Result.succeed({ status: "human_review", workflowId: "openducktor" }),
+            decide: () =>
+              Result.succeed({
+                status: "human_review",
+                workflowId: "openducktor-research-plan-implement",
+              }),
             sourceTool: "workflow_artifact_save",
             updatedBy: "user",
             ...h.scope,
@@ -311,7 +319,10 @@ describe("task artifact service", () => {
       await run(
         h.store.saveWorkflowArtifact({
           decide: (current) =>
-            Result.succeed({ status: current.status, workflowId: "openducktor" }),
+            Result.succeed({
+              status: current.status,
+              workflowId: "openducktor-research-plan-implement",
+            }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...h.scope,

@@ -38,7 +38,7 @@ const skipped = (outcomeId: string, workspace: WorkspaceRecord): AutopilotOutcom
   workspaceId: workspace.workspaceId,
   repoPath: workspace.repoPath,
   task: { id: `${workspace.workspaceId}-task`, title: "Task" },
-  workflowId: "openducktor",
+  workflowId: "openducktor-research-plan-implement",
   eventId: "taskProgressedToAiReview",
   actionId: "startQa",
   actionLabel: "Start QA",
@@ -186,7 +186,9 @@ describe("AutopilotProvider", () => {
         if (failure) expect(cause).toMatchObject({ message: "Autopilot recovery failed." });
         else {
           expect(cause).toBeNull();
-          expect(shownToastIds()).toEqual(['autopilot:["alpha","openducktor","recovered"]']);
+          expect(shownToastIds()).toEqual([
+            'autopilot:["alpha","openducktor-research-plan-implement","recovered"]',
+          ]);
         }
       } finally {
         provider.unmount();
@@ -207,14 +209,16 @@ describe("AutopilotProvider", () => {
     try {
       await waitFor(() =>
         expect(shownToastIds()).toEqual([
-          'autopilot:["alpha","openducktor","alpha-held"]',
-          'autopilot:["beta","openducktor","beta-held"]',
+          'autopilot:["alpha","openducktor-research-plan-implement","alpha-held"]',
+          'autopilot:["beta","openducktor-research-plan-implement","beta-held"]',
         ]),
       );
       // A workspace that opens later is read once.
       await provider.rerender(alpha, [alpha, beta, gamma]);
       await waitFor(() =>
-        expect(shownToastIds()).toContain('autopilot:["gamma","openducktor","gamma-held"]'),
+        expect(shownToastIds()).toContain(
+          'autopilot:["gamma","openducktor-research-plan-implement","gamma-held"]',
+        ),
       );
       // A selection reads its workspace again, and the outcomes do not show again.
       await provider.rerender(beta, [alpha, beta, gamma]);
@@ -230,9 +234,9 @@ describe("AutopilotProvider", () => {
         "read:alpha",
       ]);
       expect(shownToastIds()).toEqual([
-        'autopilot:["alpha","openducktor","alpha-held"]',
-        'autopilot:["beta","openducktor","beta-held"]',
-        'autopilot:["gamma","openducktor","gamma-held"]',
+        'autopilot:["alpha","openducktor-research-plan-implement","alpha-held"]',
+        'autopilot:["beta","openducktor-research-plan-implement","beta-held"]',
+        'autopilot:["gamma","openducktor-research-plan-implement","gamma-held"]',
       ]);
     } finally {
       provider.unmount();
@@ -251,7 +255,9 @@ describe("AutopilotProvider", () => {
       });
 
       await waitFor(() =>
-        expect(shownToastIds()).toEqual(['autopilot:["beta","openducktor","beta-held"]']),
+        expect(shownToastIds()).toEqual([
+          'autopilot:["beta","openducktor-research-plan-implement","beta-held"]',
+        ]),
       );
     } finally {
       provider.unmount();
@@ -287,9 +293,9 @@ describe("AutopilotProvider", () => {
       });
 
       expect(shownToastIds()).toEqual([
-        'autopilot:["beta","openducktor","beta-live"]',
-        'autopilot:["alpha","openducktor","alpha-missed"]',
-        'autopilot:["beta","openducktor","beta-missed"]',
+        'autopilot:["beta","openducktor-research-plan-implement","beta-live"]',
+        'autopilot:["alpha","openducktor-research-plan-implement","alpha-missed"]',
+        'autopilot:["beta","openducktor-research-plan-implement","beta-missed"]',
       ]);
       expect(provider.calls).toEqual([
         "subscribe",
@@ -339,7 +345,7 @@ describe("AutopilotProvider", () => {
           workspaceId: "beta",
           repoPath: "/repos/beta",
           task: { id: "beta-task", title: "Task" },
-          workflowId: "openducktor",
+          workflowId: "openducktor-research-plan-implement",
           eventId: "taskProgressedToAiReview",
           actionId: "startQa",
           actionLabel: "Start QA",
@@ -371,7 +377,7 @@ describe("AutopilotProvider", () => {
       workspaceId: "alpha",
       repoPath: "/repos/alpha",
       task: { id: "alpha-task", title: "Task" },
-      workflowId: "openducktor",
+      workflowId: "openducktor-research-plan-implement",
       eventId: "taskRejectedByQa",
       actionId: "startReviewQaFeedbacks",
       actionLabel: "Start Review QA Feedbacks",
@@ -403,8 +409,8 @@ describe("AutopilotProvider", () => {
       await waitFor(() => expect(error).toHaveBeenCalledTimes(2));
 
       expect(error.mock.calls.map((call) => call[1]?.id)).toEqual([
-        'autopilot:["alpha","openducktor","alpha-recoverable"]',
-        'autopilot:["alpha","openducktor","alpha-recoverable"]',
+        'autopilot:["alpha","openducktor-research-plan-implement","alpha-recoverable"]',
+        'autopilot:["alpha","openducktor-research-plan-implement","alpha-recoverable"]',
       ]);
     } finally {
       provider.unmount();
@@ -458,7 +464,9 @@ describe("AutopilotProvider", () => {
       provider.emit({ type: "autopilot_outcome", outcome: skipped("beta-live", beta) });
       await provider.rerender(alpha, [alpha]);
 
-      expect(dismiss).toHaveBeenCalledWith('autopilot:["beta","openducktor","beta-live"]');
+      expect(dismiss).toHaveBeenCalledWith(
+        'autopilot:["beta","openducktor-research-plan-implement","beta-live"]',
+      );
     } finally {
       provider.unmount();
     }

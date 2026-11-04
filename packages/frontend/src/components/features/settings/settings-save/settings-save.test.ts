@@ -11,7 +11,10 @@ import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
 import { preparePromptOverridesForSave } from "./prompt-overrides";
 import { prepareRepoConfigForSave } from "./repo-config";
 import { prepareSettingsSnapshotForSave } from "./settings-snapshot";
-import { BUILTIN_PROMPT_TEMPLATE_IDS } from "@openducktor/workflows/test-support";
+import {
+  BUILTIN_PROMPT_OVERRIDE_KEYS,
+  builtinWorkflowPromptKey,
+} from "@openducktor/workflows/test-support";
 
 const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): SettingsRepoConfig => ({
   workspaceId: "repo-a",
@@ -46,12 +49,12 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   },
   worktreeCopyPaths: [" .env ", " "],
   promptOverrides: {
-    "kickoff.spec_initial": {
+    [builtinWorkflowPromptKey("messages.spec_start")]: {
       template: " custom kickoff ",
       baseVersion: 0,
       enabled: true,
     },
-    "kickoff.qa_review": {
+    [builtinWorkflowPromptKey("messages.qa_review")]: {
       template: "   ",
       baseVersion: 2,
       enabled: true,
@@ -104,12 +107,12 @@ describe("settings save transforms", () => {
 
   test("prepares prompt overrides for save", () => {
     const saveReady = preparePromptOverridesForSave({
-      "kickoff.spec_initial": {
+      [builtinWorkflowPromptKey("messages.spec_start")]: {
         template: "  spec  ",
         baseVersion: 0,
         enabled: undefined,
       },
-      "kickoff.qa_review": {
+      [builtinWorkflowPromptKey("messages.qa_review")]: {
         template: "    ",
         baseVersion: 2,
         enabled: true,
@@ -117,12 +120,12 @@ describe("settings save transforms", () => {
     });
 
     expect(saveReady).toEqual({
-      "kickoff.spec_initial": {
+      [builtinWorkflowPromptKey("messages.spec_start")]: {
         template: "spec",
         baseVersion: 1,
         enabled: true,
       },
-      "kickoff.qa_review": {
+      [builtinWorkflowPromptKey("messages.qa_review")]: {
         template: "",
         baseVersion: 2,
         enabled: true,
@@ -132,12 +135,12 @@ describe("settings save transforms", () => {
 
   test("preserves shared prompt override entries when preparing save payloads", () => {
     const saveReady = preparePromptOverridesForSave({
-      "system.shared.workflow_guards": {
+      [builtinWorkflowPromptKey("workflow.rules")]: {
         template: "  guards override  ",
         baseVersion: 2,
         enabled: true,
       },
-      "system.shared.tool_protocol": {
+      [builtinWorkflowPromptKey("workflow.tool_rules")]: {
         template: " protocol override ",
         baseVersion: 2,
         enabled: false,
@@ -145,12 +148,12 @@ describe("settings save transforms", () => {
     });
 
     expect(saveReady).toEqual({
-      "system.shared.workflow_guards": {
+      [builtinWorkflowPromptKey("workflow.rules")]: {
         template: "guards override",
         baseVersion: 2,
         enabled: true,
       },
-      "system.shared.tool_protocol": {
+      [builtinWorkflowPromptKey("workflow.tool_rules")]: {
         template: "protocol override",
         baseVersion: 2,
         enabled: false,
@@ -160,7 +163,7 @@ describe("settings save transforms", () => {
 
   test("preserves every known prompt override key when preparing save payloads", () => {
     const source: RepoPromptOverrides = Object.fromEntries(
-      BUILTIN_PROMPT_TEMPLATE_IDS.map((templateId, index) => [
+      BUILTIN_PROMPT_OVERRIDE_KEYS.map((templateId, index) => [
         templateId,
         {
           template: ` ${templateId} template `,
@@ -172,9 +175,9 @@ describe("settings save transforms", () => {
 
     const saveReady = preparePromptOverridesForSave(source);
     const saveReadyKeys = Object.keys(saveReady).sort();
-    expect(saveReadyKeys).toEqual(BUILTIN_PROMPT_TEMPLATE_IDS.toSorted());
+    expect(saveReadyKeys).toEqual(BUILTIN_PROMPT_OVERRIDE_KEYS.toSorted());
 
-    for (const [index, templateId] of BUILTIN_PROMPT_TEMPLATE_IDS.entries()) {
+    for (const [index, templateId] of BUILTIN_PROMPT_OVERRIDE_KEYS.entries()) {
       const entry = saveReady[templateId];
       expect(entry).toEqual({
         template: `${templateId} template`,
@@ -201,12 +204,12 @@ describe("settings save transforms", () => {
     expect(saveReady.actions).toEqual(createRepoConfig().actions);
     expect(saveReady.worktreeCopyPaths).toEqual([".env"]);
     expect(saveReady.promptOverrides).toEqual({
-      "kickoff.spec_initial": {
+      [builtinWorkflowPromptKey("messages.spec_start")]: {
         template: "custom kickoff",
         baseVersion: 1,
         enabled: true,
       },
-      "kickoff.qa_review": {
+      [builtinWorkflowPromptKey("messages.qa_review")]: {
         template: "",
         baseVersion: 2,
         enabled: true,
@@ -376,22 +379,30 @@ describe("settings save transforms", () => {
         actionIds: ["startQa", "startQa"],
       },
       {
-        workflowId: "openducktor",
+        workflowId: "openducktor-research-plan-implement",
         eventId: "taskProgressedToSpecReady",
         actionIds: ["startPlanner", "startPlanner"],
       },
-      { workflowId: "openducktor", eventId: "taskProgressedToHumanReview", actionIds: [] },
+      {
+        workflowId: "openducktor-research-plan-implement",
+        eventId: "taskProgressedToHumanReview",
+        actionIds: [],
+      },
     ];
     expect(prepareAutopilotSettingsForSave({ alwaysStartQaReviewsFresh: true, rules })).toEqual({
       alwaysStartQaReviewsFresh: true,
       rules: [
         { workflowId: "other", eventId: "taskProgressedToSpecReady", actionIds: ["startQa"] },
         {
-          workflowId: "openducktor",
+          workflowId: "openducktor-research-plan-implement",
           eventId: "taskProgressedToSpecReady",
           actionIds: ["startPlanner"],
         },
-        { workflowId: "openducktor", eventId: "taskProgressedToHumanReview", actionIds: [] },
+        {
+          workflowId: "openducktor-research-plan-implement",
+          eventId: "taskProgressedToHumanReview",
+          actionIds: [],
+        },
       ],
     });
   });
@@ -421,7 +432,11 @@ describe("settings save transforms", () => {
       ],
       workspaces: { "repo-a": { ...repo, hooks: { postComplete: [" bun test ", ""] } } },
       globalPromptOverrides: {
-        "kickoff.spec_initial": { template: " global ", baseVersion: 2, enabled: false },
+        [builtinWorkflowPromptKey("messages.spec_start")]: {
+          template: " global ",
+          baseVersion: 2,
+          enabled: false,
+        },
       },
     };
     const input = prepareSettingsSnapshotForSave(draft, baseline);
@@ -434,7 +449,13 @@ describe("settings save transforms", () => {
       { id: "prompt-1", name: "review", description: "Review context", content: "Review this." },
     ]);
     expect(input.global?.globalPromptOverrides).toEqual({
-      create: { "kickoff.spec_initial": { template: "global", baseVersion: 2, enabled: false } },
+      create: {
+        [builtinWorkflowPromptKey("messages.spec_start")]: {
+          template: "global",
+          baseVersion: 2,
+          enabled: false,
+        },
+      },
     });
     expect(input.global?.kanban).toBeUndefined();
     expect(input).not.toHaveProperty("theme");

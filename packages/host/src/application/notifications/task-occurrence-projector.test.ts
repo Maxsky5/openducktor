@@ -7,7 +7,7 @@ const event = (
   eventId: string,
   status: string,
   previousStatus: string = "open",
-  workflow = { id: "openducktor", revision: 2 },
+  workflow = { id: "openducktor-research-plan-implement", revision: 2 },
 ): Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }> => ({
   eventId,
   kind: "tasks_updated",
@@ -125,7 +125,7 @@ test("keeps repeated destinations within one mutation distinct and suppresses re
     {
       previousStatus: "in_progress",
       task: {
-        workflow: { id: "openducktor", revision: 2 },
+        workflow: { id: "openducktor-research-plan-implement", revision: 2 },
         id: "task-1",
         title: "Task",
         status: "blocked",
@@ -134,7 +134,7 @@ test("keeps repeated destinations within one mutation distinct and suppresses re
     {
       previousStatus: "blocked",
       task: {
-        workflow: { id: "openducktor", revision: 2 },
+        workflow: { id: "openducktor-research-plan-implement", revision: 2 },
         id: "task-1",
         title: "Task",
         status: "in_progress",
@@ -143,7 +143,7 @@ test("keeps repeated destinations within one mutation distinct and suppresses re
     {
       previousStatus: "in_progress",
       task: {
-        workflow: { id: "openducktor", revision: 2 },
+        workflow: { id: "openducktor-research-plan-implement", revision: 2 },
         id: "task-1",
         title: "Task",
         status: "blocked",

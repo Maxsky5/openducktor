@@ -70,8 +70,71 @@ export const agentPromptOverrideSchema = z.object({
 });
 export type AgentPromptOverride = z.infer<typeof agentPromptOverrideSchema>;
 
-/** Keyed by prompt template ID. The host checks the IDs against the task workflow. */
+/** A prompt belongs to one role or one workflow. Its ID is unique only within its owner. */
+export type PromptOwnerKind = "role" | "workflow";
+export type PromptOverrideTarget = {
+  ownerKind: PromptOwnerKind;
+  ownerId: string;
+  promptId: string;
+};
+
+/** The prompt ID of the instructions of a role. A role owns this one prompt. */
+export const ROLE_INSTRUCTIONS_PROMPT_ID = "instructions";
+
+/**
+ * The prompts that every workflow provides. The system prompt of a session is the role
+ * instructions, then the rules, the tool rules, and the task context of the workflow.
+ */
+export const WORKFLOW_PROMPT_IDS = {
+  rules: "workflow.rules",
+  toolRules: "workflow.tool_rules",
+  taskContext: "workflow.task_context",
+  readOnlyRejection: "workflow.read_only_rejection",
+} as const;
+
+/** A workflow prompt that a launch action sends as a session message has an ID in this group. */
+export const WORKFLOW_MESSAGE_PROMPT_PREFIX = "messages.";
+
+/** The settings key of a prompt override: its owner and its prompt ID. */
+export const promptOverrideKey = ({ ownerKind, ownerId, promptId }: PromptOverrideTarget): string =>
+  JSON.stringify([ownerKind, ownerId, promptId]);
+
+const promptOverrideKeyTupleSchema = z
+  .string()
+  .transform((key, context) => {
+    try {
+      return JSON.parse(key);
+    } catch {
+      context.addIssue({ code: "custom", message: "A prompt override key is a JSON array." });
+      return z.NEVER;
+    }
+  })
+  .pipe(
+    z.tuple([
+      z.enum(["role", "workflow"]),
+      agentPromptTemplateIdSchema,
+      agentPromptTemplateIdSchema,
+    ]),
+  );
+
+/** The owner and prompt ID of a settings key, or null when the key has another form. */
+export const parsePromptOverrideKey = (key: string): PromptOverrideTarget | null => {
+  const parsed = promptOverrideKeyTupleSchema.safeParse(key);
+  if (!parsed.success) return null;
+  const [ownerKind, ownerId, promptId] = parsed.data;
+  const target = { ownerKind, ownerId, promptId };
+  return promptOverrideKey(target) === key ? target : null;
+};
+
+const promptOverrideKeySchema = z
+  .string()
+  .refine(
+    (key) => parsePromptOverrideKey(key) !== null,
+    'Use a prompt override key of the form ["role" | "workflow", ownerId, promptId].',
+  );
+
+/** Keyed by prompt owner and prompt ID. The host checks the keys against its roles and workflows. */
 export const repoPromptOverridesSchema = z
-  .record(agentPromptTemplateIdSchema, agentPromptOverrideSchema)
+  .record(promptOverrideKeySchema, agentPromptOverrideSchema)
   .default({});
 export type RepoPromptOverrides = z.output<typeof repoPromptOverridesSchema>;

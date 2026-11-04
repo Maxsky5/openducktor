@@ -4,13 +4,14 @@ import {
   taskWorkflowDescriptor,
   workflowRoleCatalog,
 } from "@openducktor/workflows";
-import { repoConfigSchema } from "@openducktor/contracts";
+import { promptOverrideKey } from "@openducktor/contracts";
 import {
   createSettingsSnapshotFixture,
   createTaskCardFixture,
 } from "../../test-support/shared-test-fixtures";
 import "../../test-support/dom-environment";
 import { expect, mock, test } from "bun:test";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
@@ -611,7 +612,7 @@ test.each([
     if (step?.kind !== "agent") throw new Error("Missing Builder fixture step");
     const launch = step.launchActions.find(({ id }) => id === "build_implementation_start");
     if (!launch) throw new Error("Missing Builder fixture launch");
-    launch.template = { kind: "message", id: "message.custom_feedback" };
+    launch.template = { kind: "message", id: "messages.custom_feedback" };
     if (context === "none") delete launch.context;
     else launch.context = context;
     const samples = {
@@ -629,7 +630,7 @@ test.each([
     };
     const { contents, required, expected } = samples[context];
     descriptor.templates.push({
-      id: "message.custom_feedback",
+      id: "messages.custom_feedback",
       purpose: "message",
       builtinVersion: 1,
       template: `Default {{task.id}}: ${contents}`,
@@ -652,14 +653,18 @@ test.each([
       agentSessionWorkflowLaunch: dispatch,
       workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       workspaceGetRepoConfig: async () =>
-        repoConfigSchema.parse({
+        repoConfigFixture({
           workspaceId: workspace.workspaceId,
           workspaceName: "Workspace",
           repoPath: workspace.repoPath,
           branchPrefix: "odt",
           promptOverrides: override
             ? {
-                "message.custom_feedback": {
+                [promptOverrideKey({
+                  ownerKind: "workflow",
+                  ownerId: descriptor.definition.id,
+                  promptId: "messages.custom_feedback",
+                })]: {
                   template: `Override {{task.id}}: ${contents}`,
                   baseVersion: 1,
                   enabled: true,

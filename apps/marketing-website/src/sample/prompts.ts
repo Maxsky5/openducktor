@@ -3,7 +3,7 @@
 // settings-modal-prompt-components.tsx, and settings-modal-constants.ts in
 // packages/frontend/src/components/features/settings.
 
-/** The QA Role Base prompt (system.role.qa.base) up to the new line. */
+/** The QA role system prompt up to the new line. */
 export const QA_BASE_BEFORE =
   "You are the QA Agent for OpenDucktor. Decide whether the implementation meets the task requirements and is ready for human review.\n\nReview:";
 
@@ -46,6 +46,6 @@ export const ADDED_LINE = {
 /** The error of the settings model for an unsupported placeholder. */
 export const unsupported = (key: string): string => `Unsupported placeholder: {{task.${key}}}.`;
 
-/** The QA Kickoff prompt (kickoff.qa_review). */
+/** The QA Kickoff prompt (messages.qa_review). */
 export const QA_KICKOFF =
   "Review this task's implementation and submit one QA report with exactly one odt_set_task_artifact call using code qaReport and verdict approved or rejected. Use taskId {{task.id}} for every task-bound odt_* tool call.";

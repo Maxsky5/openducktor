@@ -109,6 +109,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(readDrizzleMigrationRows(databasePath)).toEqual([
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
     const database = new Database(databasePath);
     try {
@@ -132,7 +133,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     );
 
     expect(results).toEqual(Array.from({ length: 8 }, () => []));
-    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(2);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(3);
   });
 
   test("enforces the approved task asset registry shape and cascades task deletion", async () => {
@@ -383,7 +384,11 @@ describe("createSqliteTaskRepository SQLite integration", () => {
 
     await Effect.runPromise(
       store.saveWorkflowArtifact({
-        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
+        decide: (current) =>
+          Result.succeed({
+            status: current.status,
+            workflowId: "openducktor-research-plan-implement",
+          }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -394,7 +399,11 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     );
     const latestSpec = await Effect.runPromise(
       store.saveWorkflowArtifact({
-        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
+        decide: (current) =>
+          Result.succeed({
+            status: current.status,
+            workflowId: "openducktor-research-plan-implement",
+          }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -511,7 +520,8 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       store.transitionTask({
         ...scope,
         taskId: closedTask.id,
-        decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
+        decide: () =>
+          Result.succeed({ status: "closed", workflowId: "openducktor-research-plan-implement" }),
       }),
     );
     await Effect.runPromise(

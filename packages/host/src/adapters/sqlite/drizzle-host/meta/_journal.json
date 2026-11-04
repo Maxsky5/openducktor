@@ -15,6 +15,13 @@
       "when": 1793746782513,
       "tag": "0001_gitlab_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793833316920,
+      "tag": "0002_prompt_owners_and_rpi_workflow",
+      "breakpoints": true
     }
   ]
 }

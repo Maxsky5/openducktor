@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkflowDefinition } from "@openducktor/contracts";
+import { promptOverrideKey, type WorkflowDefinition } from "@openducktor/contracts";
 import {
   createReviewTaskWorkflow,
   reviewTaskDefinition,
@@ -146,6 +146,9 @@ describe("createTaskWorkflow", () => {
   });
 
   test("builds prompts from the templates and role tools of the workflow", () => {
+    const workflowKey = (promptId: string) =>
+      promptOverrideKey({ ownerKind: "workflow", ownerId: "review", promptId });
+    const kickoffKey = workflowKey("messages.edit_review");
     const system = review.prompts.systemPrompt({
       role: "editor",
       task: { taskId: "task-1", title: "Essay", issueType: "article", status: "reviewing" },
@@ -164,10 +167,12 @@ describe("createTaskWorkflow", () => {
     );
     expect(
       review.prompts.mergeOverrides({
-        globalOverrides: { "kickoff.edit_review": { template: "Global", baseVersion: 1 } },
-        repoOverrides: { "kickoff.unknown": { template: "Ignored", baseVersion: 1 } },
+        globalOverrides: { [kickoffKey]: { template: "Global", baseVersion: 1 } },
+        repoOverrides: {
+          [workflowKey("messages.unknown")]: { template: "Ignored", baseVersion: 1 },
+        },
       }),
-    ).toEqual({ "kickoff.edit_review": { template: "Global", baseVersion: 1 } });
+    ).toEqual({ [kickoffKey]: { template: "Global", baseVersion: 1 } });
   });
 
   test("rejects a definition that a task workflow cannot run", () => {
@@ -202,11 +207,41 @@ describe("createTaskWorkflow", () => {
     expect(() =>
       createTaskWorkflow(
         reviewTaskDefinition(),
-        reviewTaskPromptTemplates.filter(({ id }) => id !== "kickoff.write_revise"),
+        reviewTaskPromptTemplates.filter(({ id }) => id !== "messages.write_revise"),
         reviewTaskRoles,
       ),
     ).toThrow(
-      'Task workflow "review" has no prompt template "kickoff.write_revise" for launch action "write_revise".',
+      'Task workflow "review" has no prompt template "messages.write_revise" for launch action "write_revise".',
+    );
+    expect(() =>
+      createTaskWorkflow(
+        reviewTaskDefinition(),
+        reviewTaskPromptTemplates.filter(({ id }) => id !== "workflow.tool_rules"),
+        reviewTaskRoles,
+      ),
+    ).toThrow(
+      'Task workflow "review" has no prompt template "workflow.tool_rules" for the system prompt.',
+    );
+    expect(() =>
+      createTaskWorkflow(
+        reviewTaskDefinition(),
+        reviewTaskPromptTemplates.filter(({ id }) => id !== "workflow.read_only_rejection"),
+        reviewTaskRoles,
+      ),
+    ).toThrow(
+      'Task workflow "review" has no prompt template "workflow.read_only_rejection" for read-only rejections.',
+    );
+    expect(() =>
+      createTaskWorkflow(
+        reviewTaskDefinition(),
+        [
+          ...reviewTaskPromptTemplates,
+          { id: "kickoff.extra", purpose: "kickoff", builtinVersion: 1, template: "Extra" },
+        ],
+        reviewTaskRoles,
+      ),
+    ).toThrow(
+      'Prompt "kickoff.extra" of task workflow "review" is neither a base workflow prompt nor in the "messages." group. Rename it.',
     );
   });
 });

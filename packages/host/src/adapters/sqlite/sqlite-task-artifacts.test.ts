@@ -385,7 +385,11 @@ describe("task artifact repository", () => {
     const { store, scope, databasePath } = harness;
     await Effect.runPromise(
       store.saveWorkflowArtifact({
-        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
+        decide: (current) =>
+          Result.succeed({
+            status: current.status,
+            workflowId: "openducktor-research-plan-implement",
+          }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -419,7 +423,10 @@ describe("task artifact repository", () => {
           yield* observedStore.getTaskMetadata(scope);
           yield* observedStore.saveWorkflowArtifact({
             decide: (current) =>
-              Result.succeed({ status: current.status, workflowId: "openducktor" }),
+              Result.succeed({
+                status: current.status,
+                workflowId: "openducktor-research-plan-implement",
+              }),
             sourceTool: "workflow_artifact_save",
             updatedBy: "user",
             ...scope,
@@ -473,7 +480,11 @@ describe("task artifact repository", () => {
     const reference = { ...scope, artifactId: workflowArtifactId(task.id, "spec") };
     await Effect.runPromise(
       store.saveWorkflowArtifact({
-        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
+        decide: (current) =>
+          Result.succeed({
+            status: current.status,
+            workflowId: "openducktor-research-plan-implement",
+          }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -489,7 +500,11 @@ describe("task artifact repository", () => {
     await Effect.runPromise(store.clearTaskArtifacts(scope));
     await Effect.runPromise(
       store.saveWorkflowArtifact({
-        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
+        decide: (current) =>
+          Result.succeed({
+            status: current.status,
+            workflowId: "openducktor-research-plan-implement",
+          }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -503,7 +518,11 @@ describe("task artifact repository", () => {
     await Effect.runPromise(store.clearTaskArtifacts(scope));
     await Effect.runPromise(
       store.saveWorkflowArtifact({
-        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
+        decide: (current) =>
+          Result.succeed({
+            status: current.status,
+            workflowId: "openducktor-research-plan-implement",
+          }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -532,7 +551,11 @@ describe("task artifact repository", () => {
     );
     await Effect.runPromise(
       store.saveWorkflowArtifact({
-        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
+        decide: (current) =>
+          Result.succeed({
+            status: current.status,
+            workflowId: "openducktor-research-plan-implement",
+          }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -762,7 +785,11 @@ describe("task artifact repository", () => {
     const free = await Effect.runPromise(store.createArtifact({ ...scope, ...file }));
     await Effect.runPromise(
       store.saveWorkflowArtifact({
-        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
+        decide: (current) =>
+          Result.succeed({
+            status: current.status,
+            workflowId: "openducktor-research-plan-implement",
+          }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -798,7 +825,8 @@ describe("task artifact repository", () => {
     await Effect.runPromise(
       store.transitionTask({
         ...scope,
-        decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
+        decide: () =>
+          Result.succeed({ status: "closed", workflowId: "openducktor-research-plan-implement" }),
       }),
     );
     for (const mutate of [
@@ -817,7 +845,11 @@ describe("task artifact repository", () => {
     ).toEqual(Buffer.from(file.content));
     await Effect.runPromise(
       store.saveWorkflowArtifact({
-        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
+        decide: (current) =>
+          Result.succeed({
+            status: current.status,
+            workflowId: "openducktor-research-plan-implement",
+          }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -832,7 +864,11 @@ describe("task artifact repository", () => {
     const { store, scope, databasePath } = await createTaskHarness();
     await Effect.runPromise(
       store.saveWorkflowArtifact({
-        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
+        decide: (current) =>
+          Result.succeed({
+            status: current.status,
+            workflowId: "openducktor-research-plan-implement",
+          }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -842,7 +878,11 @@ describe("task artifact repository", () => {
     );
     await Effect.runPromise(
       store.saveWorkflowArtifact({
-        decide: (current) => Result.succeed({ status: current.status, workflowId: "openducktor" }),
+        decide: (current) =>
+          Result.succeed({
+            status: current.status,
+            workflowId: "openducktor-research-plan-implement",
+          }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
         ...scope,
@@ -853,7 +893,11 @@ describe("task artifact repository", () => {
     for (const verdict of ["rejected", "approved"] as const)
       await Effect.runPromise(
         store.saveWorkflowArtifact({
-          decide: () => Result.succeed({ status: "human_review", workflowId: "openducktor" }),
+          decide: () =>
+            Result.succeed({
+              status: "human_review",
+              workflowId: "openducktor-research-plan-implement",
+            }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...scope,

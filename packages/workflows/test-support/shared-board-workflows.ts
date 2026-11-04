@@ -97,7 +97,7 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
             label: `${prefix} Write`,
             startModes: ["fresh"],
             defaultStartMode: "fresh",
-            template: { kind: "kickoff", id: `${prefix}.kickoff.write_start` },
+            template: { kind: "kickoff", id: `messages.write_start` },
             targetBranch: true,
           },
           {
@@ -105,7 +105,7 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
             label: `${prefix} Revise`,
             startModes: ["fresh", "reuse", "fork"],
             defaultStartMode: "reuse",
-            template: { kind: "kickoff", id: `${prefix}.kickoff.write_revise` },
+            template: { kind: "kickoff", id: `messages.write_revise` },
             context: "human_feedback",
             selectWhen: { artifact: review, verdict: "revise" },
           },
@@ -127,7 +127,7 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
             label: `${prefix} Review draft`,
             startModes: prefix === "alpha" ? ["fresh", "reuse"] : ["fresh"],
             defaultStartMode: "fresh",
-            template: { kind: "kickoff", id: `${prefix}.kickoff.edit_review` },
+            template: { kind: "kickoff", id: `messages.edit_review` },
           },
         ],
       },
@@ -218,27 +218,34 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
     actionOrder: [],
     actionPriority: [],
     launchOrder: [],
-    prompts: {
-      system: [`${prefix}.system.task`],
-      readOnlyRejection: `${prefix}.permission.read_only`,
-    },
   };
   const templates = [
     {
-      id: `${prefix}.system.task`,
+      id: "workflow.rules",
       purpose: "system" as const,
       builtinVersion: 1,
-      template: `${prefix} task {{task.id}}: {{task.title}}\nTools:\n{{role.allowedTools}}`,
+      template: `${prefix} rules.`,
     },
     {
-      id: `${prefix}.permission.read_only`,
+      id: "workflow.tool_rules",
+      purpose: "system" as const,
+      builtinVersion: 1,
+      template: `Tools:\n{{role.allowedTools}}`,
+    },
+    {
+      id: "workflow.task_context",
+      purpose: "system" as const,
+      builtinVersion: 1,
+      template: `${prefix} task {{task.id}}: {{task.title}}`,
+    },
+    {
+      id: "workflow.read_only_rejection",
       purpose: "permission" as const,
       builtinVersion: 1,
       template: `${prefix}: the {{role}} cannot change files.`,
     },
   ];
   const systemPrompt = (role: string) => ({
-    id: `system.role.${role}.base`,
     builtinVersion: 1,
     template: `${prefix}: work on {{task.id}} as {{role}}.`,
     label: `${role} base`,
@@ -265,7 +272,7 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
     },
   ];
   const kickoffs = ["write_start", "write_revise", "edit_review"].map((action) => ({
-    id: `${prefix}.kickoff.${action}`,
+    id: `messages.${action}`,
     purpose: "kickoff" as const,
     builtinVersion: 1,
     template: `${prefix}: ${action} for {{task.id}}.`,

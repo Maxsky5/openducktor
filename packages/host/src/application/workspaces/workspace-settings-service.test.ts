@@ -82,11 +82,31 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   autopilot: {
     alwaysStartQaReviewsFresh: false,
     rules: [
-      { workflowId: "openducktor", eventId: "taskProgressedToSpecReady", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskProgressedToReadyForDev", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskProgressedToAiReview", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskRejectedByQa", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskProgressedToHumanReview", actionIds: [] },
+      {
+        workflowId: "openducktor-research-plan-implement",
+        eventId: "taskProgressedToSpecReady",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-research-plan-implement",
+        eventId: "taskProgressedToReadyForDev",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-research-plan-implement",
+        eventId: "taskProgressedToAiReview",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-research-plan-implement",
+        eventId: "taskRejectedByQa",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-research-plan-implement",
+        eventId: "taskProgressedToHumanReview",
+        actionIds: [],
+      },
     ],
   },
   notifications: createBuiltinNotificationSettings(),
@@ -327,7 +347,7 @@ describe("createWorkspaceSettingsService", () => {
         alwaysStartQaReviewsFresh: false,
         rules: [
           {
-            workflowId: "openducktor",
+            workflowId: "openducktor-research-plan-implement",
             eventId: "taskProgressedToAiReview",
             actionIds: ["startBuilder"],
           },
@@ -365,7 +385,7 @@ describe("createWorkspaceSettingsService", () => {
           autopilot: {
             rules: [
               {
-                workflowId: "openducktor",
+                workflowId: "openducktor-research-plan-implement",
                 eventId: "taskProgressedToAiReview",
                 actionIds: ["startQa"],
               },
@@ -400,7 +420,11 @@ describe("createWorkspaceSettingsService", () => {
     expect(
       saved.autopilot.rules.filter((rule) => rule.eventId === "taskProgressedToAiReview"),
     ).toEqual([
-      { workflowId: "openducktor", eventId: "taskProgressedToAiReview", actionIds: ["startQa"] },
+      {
+        workflowId: "openducktor-research-plan-implement",
+        eventId: "taskProgressedToAiReview",
+        actionIds: ["startQa"],
+      },
       {
         workflowId: "other",
         eventId: "taskProgressedToAiReview",

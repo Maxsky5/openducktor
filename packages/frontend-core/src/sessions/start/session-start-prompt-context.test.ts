@@ -5,11 +5,11 @@ import {
 } from "./session-start-prompt-context";
 
 const CONTEXT_FREE_TEMPLATES = [
-  "kickoff.spec_initial",
-  "kickoff.planner_initial",
-  "kickoff.build_implementation_start",
-  "kickoff.build_after_qa_rejected",
-  "kickoff.qa_review",
+  "messages.spec_start",
+  "messages.plan_start",
+  "messages.build_start",
+  "messages.build_after_qa_rejection",
+  "messages.qa_review",
 ];
 
 describe("resolveSessionStartKickoffPromptContext", () => {
@@ -26,7 +26,7 @@ describe("resolveSessionStartKickoffPromptContext", () => {
   test("maps human review feedback to its prompt placeholder", () => {
     expect(
       resolveSessionStartKickoffPromptContext({
-        templateId: "kickoff.build_after_human_request_changes",
+        templateId: "messages.build_requested_changes",
         context: "human_feedback",
         message: "  Address every review comment.  ",
         repoDefaultTargetBranch: null,
@@ -41,7 +41,7 @@ describe("resolveSessionStartKickoffPromptContext", () => {
   test("rejects missing human review feedback", () => {
     expect(() =>
       resolveSessionStartKickoffPromptContext({
-        templateId: "kickoff.build_after_human_request_changes",
+        templateId: "messages.build_requested_changes",
         context: "human_feedback",
         message: "   ",
         repoDefaultTargetBranch: null,
@@ -52,7 +52,7 @@ describe("resolveSessionStartKickoffPromptContext", () => {
   test("maps the selected pull request target into nested Git context", () => {
     expect(
       resolveSessionStartKickoffPromptContext({
-        templateId: "kickoff.build_pull_request_generation",
+        templateId: "messages.build_pull_request",
         context: "pull_request",
         taskTargetBranch: {
           remote: "upstream",
@@ -73,7 +73,7 @@ describe("resolveSessionStartKickoffPromptContext", () => {
   test("uses the repository default for pull request context when the task has no target", () => {
     expect(
       resolveSessionStartKickoffPromptContext({
-        templateId: "kickoff.build_pull_request_generation",
+        templateId: "messages.build_pull_request",
         context: "pull_request",
         repoDefaultTargetBranch: { remote: "upstream", branch: "develop" },
       }),

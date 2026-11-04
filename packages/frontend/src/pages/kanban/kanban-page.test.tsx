@@ -1,3 +1,4 @@
+import { builtinWorkflowPromptKey } from "@openducktor/workflows/test-support";
 import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { createAgentStudioStartupTestHost } from "../agents/agent-studio-startup-test-host";
@@ -1436,7 +1437,7 @@ describe("KanbanPage session start modal flow", () => {
 
   kanbanTest("malformed kickoff override blocks the modal before startup", async () => {
     currentRepoConfigFixture = createRepoConfigFixture({
-      "kickoff.build_implementation_start": {
+      [builtinWorkflowPromptKey("messages.build_start")]: {
         template: "Kickoff {{unsupported.token}}",
         baseVersion: 1,
       },
@@ -1456,7 +1457,7 @@ describe("KanbanPage session start modal flow", () => {
 
     await waitFor(() => {
       expect(renderer.getSessionStartModalModel()?.kickoffPromptError).toBe(
-        'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token". Edit or disable this prompt override in Settings.',
+        'The prompt "messages.build_start" uses unsupported placeholder "unsupported.token". Edit or disable this prompt override in Settings.',
       );
     });
     expect(startAgentSessionMock).not.toHaveBeenCalled();

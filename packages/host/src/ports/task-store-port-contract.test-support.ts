@@ -32,6 +32,8 @@ const createTask = (
   input: TaskCreateInput,
 ): Promise<TaskRecord> => run(store.createTask({ ...scope, status: "open", task: input }));
 
+const BUILTIN_WORKFLOW_ID = "openducktor-research-plan-implement";
+
 export const describeTaskStorePortContract = (
   name: string,
   createHarness: CreateTaskStorePortContractHarness,
@@ -122,14 +124,14 @@ export const describeTaskStorePortContract = (
           store.transitionTask({
             ...scope,
             taskId: olderSpecReady.id,
-            decide: () => Result.succeed({ status: "spec_ready", workflowId: "openducktor" }),
+            decide: () => Result.succeed({ status: "spec_ready", workflowId: BUILTIN_WORKFLOW_ID }),
           }),
         );
         await run(
           store.transitionTask({
             ...scope,
             taskId: newerSpecReady.id,
-            decide: () => Result.succeed({ status: "spec_ready", workflowId: "openducktor" }),
+            decide: () => Result.succeed({ status: "spec_ready", workflowId: BUILTIN_WORKFLOW_ID }),
           }),
         );
 
@@ -167,7 +169,7 @@ export const describeTaskStorePortContract = (
       await run(
         store.saveWorkflowArtifact({
           decide: (current) =>
-            Result.succeed({ status: current.status, workflowId: "openducktor" }),
+            Result.succeed({ status: current.status, workflowId: BUILTIN_WORKFLOW_ID }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...scope,
@@ -179,7 +181,7 @@ export const describeTaskStorePortContract = (
       const latestSpec = await run(
         store.saveWorkflowArtifact({
           decide: (current) =>
-            Result.succeed({ status: current.status, workflowId: "openducktor" }),
+            Result.succeed({ status: current.status, workflowId: BUILTIN_WORKFLOW_ID }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...scope,
@@ -191,7 +193,7 @@ export const describeTaskStorePortContract = (
       const plan = await run(
         store.saveWorkflowArtifact({
           decide: (current) =>
-            Result.succeed({ status: current.status, workflowId: "openducktor" }),
+            Result.succeed({ status: current.status, workflowId: BUILTIN_WORKFLOW_ID }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...scope,
@@ -202,7 +204,7 @@ export const describeTaskStorePortContract = (
       );
       const reviewed = await run(
         store.saveWorkflowArtifact({
-          decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
+          decide: () => Result.succeed({ status: "closed", workflowId: BUILTIN_WORKFLOW_ID }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...scope,
@@ -245,7 +247,7 @@ export const describeTaskStorePortContract = (
       await run(
         store.saveWorkflowArtifact({
           decide: (current) =>
-            Result.succeed({ status: current.status, workflowId: "openducktor" }),
+            Result.succeed({ status: current.status, workflowId: BUILTIN_WORKFLOW_ID }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...scope,
@@ -257,7 +259,7 @@ export const describeTaskStorePortContract = (
       await run(
         store.saveWorkflowArtifact({
           decide: (current) =>
-            Result.succeed({ status: current.status, workflowId: "openducktor" }),
+            Result.succeed({ status: current.status, workflowId: BUILTIN_WORKFLOW_ID }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...scope,
@@ -268,7 +270,7 @@ export const describeTaskStorePortContract = (
       );
       await run(
         store.saveWorkflowArtifact({
-          decide: () => Result.succeed({ status: "ai_review", workflowId: "openducktor" }),
+          decide: () => Result.succeed({ status: "ai_review", workflowId: BUILTIN_WORKFLOW_ID }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...scope,
@@ -460,7 +462,7 @@ export const describeTaskStorePortContract = (
         store.transitionTask({
           ...scope,
           taskId: closed.id,
-          decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
+          decide: () => Result.succeed({ status: "closed", workflowId: BUILTIN_WORKFLOW_ID }),
         }),
       );
 

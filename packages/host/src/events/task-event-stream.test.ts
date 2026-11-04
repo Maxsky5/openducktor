@@ -20,7 +20,7 @@ const event = (id: string): Extract<ExternalTaskSyncEvent, { kind: "external_tas
   repoPath: "/repo",
   taskId: `task-${id}`,
   taskSnapshot: {
-    workflow: { id: "openducktor", revision: 2 },
+    workflow: { id: "openducktor-research-plan-implement", revision: 2 },
     id: `task-${id}`,
     title: "Task",
     status: "open",
@@ -212,7 +212,7 @@ describe("createTaskEventStream", () => {
         type: "change",
         event: {
           taskSnapshot: {
-            workflow: { id: "openducktor", revision: 2 },
+            workflow: { id: "openducktor-research-plan-implement", revision: 2 },
             id: "task-1",
             title: "Task",
             status: "open",
@@ -409,7 +409,7 @@ describe("createTaskEventStream", () => {
         {
           previousStatus: "open",
           task: {
-            workflow: { id: "openducktor", revision: 2 },
+            workflow: { id: "openducktor-research-plan-implement", revision: 2 },
             id: "task-1",
             title: "Committed title",
             status: "spec_ready",
@@ -418,7 +418,7 @@ describe("createTaskEventStream", () => {
       ],
       taskSnapshots: [
         {
-          workflow: { id: "openducktor", revision: 2 },
+          workflow: { id: "openducktor-research-plan-implement", revision: 2 },
           id: "task-1",
           title: "Task 1",
           status: "open",
@@ -445,7 +445,7 @@ describe("createTaskEventStream", () => {
     expect(change.event.taskIds).toEqual(["task-1"]);
     expect(change.event.taskSnapshots).toEqual([
       {
-        workflow: { id: "openducktor", revision: 2 },
+        workflow: { id: "openducktor-research-plan-implement", revision: 2 },
         id: "task-1",
         title: "Task 1",
         status: "open",
@@ -461,7 +461,7 @@ describe("createTaskEventStream", () => {
       {
         previousStatus: "open",
         task: {
-          workflow: { id: "openducktor", revision: 2 },
+          workflow: { id: "openducktor-research-plan-implement", revision: 2 },
           id: "task-1",
           title: "Committed title",
           status: "spec_ready",
@@ -505,7 +505,7 @@ describe("createTaskEventStream", () => {
       },
       taskId: "task-1",
       taskSnapshot: {
-        workflow: { id: "openducktor", revision: 2 },
+        workflow: { id: "openducktor-research-plan-implement", revision: 2 },
         id: "task-1",
         title: "Task",
         status: "open",

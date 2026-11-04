@@ -1,3 +1,4 @@
+import { builtinWorkflowPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
 import { workflowSettingsData } from "@openducktor/frontend-core/queries/workflow-settings";
 import { builtinCompiledCatalogFixture } from "@openducktor/frontend-core/test-support/workflow-fixtures";
 import { describe, expect, test } from "bun:test";
@@ -7,9 +8,9 @@ describe("settings-modal-constants", () => {
   test("counts validation errors per prompt role tab", () => {
     const counts = countPromptErrorsByRoleTab(
       {
-        "system.shared.workflow_guards": "bad",
-        "system.role.spec.base": "bad",
-        "kickoff.build_implementation_start": "bad",
+        [builtinWorkflowPromptKey("workflow.rules")]: "bad",
+        [rolePromptKey("spec")]: "bad",
+        [builtinWorkflowPromptKey("messages.build_start")]: "bad",
       },
       workflowSettingsData(builtinCompiledCatalogFixture).promptTabs,
     );

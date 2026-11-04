@@ -1,5 +1,6 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
+import { builtinWorkflowPromptKey } from "@openducktor/workflows/test-support";
 import { type RepoConfig, type SettingsSnapshot } from "@openducktor/contracts";
 import { workspaceQueryKeys } from "../../queries/workspace";
 import { createRuntimeHookHarness } from "../../test-support/runtime-hook-harness";
@@ -20,7 +21,13 @@ const configFor = (workspaceId = "a", template = "Repo {{task.id}}") =>
     workspaceName: workspaceId,
     repoPath: `/${workspaceId}`,
     branchPrefix: "odt",
-    promptOverrides: { "kickoff.spec_initial": { template, baseVersion: 1, enabled: true } },
+    promptOverrides: {
+      [builtinWorkflowPromptKey("messages.spec_start")]: {
+        template,
+        baseVersion: 1,
+        enabled: true,
+      },
+    },
   });
 
 const inputFor = (workspaceId: string | null = "a"): PromptRequest => ({
@@ -51,7 +58,11 @@ const seedSettings = (connection: ReturnType<typeof createTestClientConnection>)
     workspaceQueryKeys.settingsSnapshot(),
     createSettingsSnapshotFixture({
       globalPromptOverrides: {
-        "kickoff.spec_initial": { template: "Global {{task.id}}", baseVersion: 1, enabled: true },
+        [builtinWorkflowPromptKey("messages.spec_start")]: {
+          template: "Global {{task.id}}",
+          baseVersion: 1,
+          enabled: true,
+        },
       },
     }),
   );

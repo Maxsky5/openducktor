@@ -30,7 +30,7 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
     plan: { present: false },
     qaReport: { present: false },
   },
-  workflow: { id: "openducktor", revision: 2 },
+  workflow: { id: "openducktor-research-plan-implement", revision: 2 },
   workflowSteps: [],
   availableActions: [],
   agentWorkflows: {

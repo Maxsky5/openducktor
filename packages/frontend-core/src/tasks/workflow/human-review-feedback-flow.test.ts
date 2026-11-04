@@ -3,8 +3,8 @@ import {
   createWorkflowTaskCardFixture,
 } from "@openducktor/workflows/test-support";
 import {
+  promptOverrideKey,
   workflowDefinitionSchema,
-  repoConfigSchema,
   type WorkflowLaunchRequest,
 } from "@openducktor/contracts";
 import { prepareSessionStartInstruction } from "../../sessions/start/session-start-kickoff";
@@ -14,6 +14,7 @@ import { createSettingsSnapshotFixture } from "../../test-support/shared-test-fi
 import { createTaskWorkflow, workflowRoleCatalog } from "@openducktor/workflows";
 import { createHumanReviewFeedbackState } from "./human-review-feedback-state";
 import { describe, expect, mock, test } from "bun:test";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 import { createFeedbackFake } from "../../test-support/feedback-fake";
 import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
 import { createAgentSessionSummaryFixture } from "../../test-support/shared-test-fixtures";
@@ -84,7 +85,7 @@ describe("human-review-feedback-flow", () => {
       const alpha = createTaskWorkflow(
         definition,
         original.workflowTemplates.map((template) =>
-          template.id === "alpha.kickoff.write_revise"
+          template.id === "messages.write_revise"
             ? {
                 ...template,
                 purpose: kind,
@@ -107,11 +108,15 @@ describe("human-review-feedback-flow", () => {
       });
       expect(state.confirmLabel).toBe("alpha Revise");
       state.message = "Revise this draft.";
-      const templateId = "alpha.kickoff.write_revise";
+      const templateId = promptOverrideKey({
+        ownerKind: "workflow",
+        ownerId: alpha.definition.id,
+        promptId: "messages.write_revise",
+      });
       const connection = createTestClientConnection({
         client: {
           workspaceGetRepoConfig: async () =>
-            repoConfigSchema.parse({
+            repoConfigFixture({
               workspaceId: "workspace",
               workspaceName: "Workspace",
               repoPath: "/repo",
