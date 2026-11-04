@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import {
   ContextMenu,
   ContextMenuCheckboxItem,
@@ -58,6 +59,10 @@ export function HistoryColumnsHeader({
   const trigger = useRef<HTMLDivElement>(null);
   const [dragged, setDragged] = useState<HistoryColumnId | null>(null);
   const [dropPlace, setDropPlace] = useState<DropPlace | null>(null);
+  // The History header stays mounted with the hidden view, so an open menu would show again and
+  // take keyboard focus when the user returns to the session.
+  const [isMenuOpen, setMenuOpen] = useState(false);
+  useOnSessionViewHide(() => setMenuOpen(false));
 
   const moveTo = (id: HistoryColumnId, place: DropPlace): void => {
     if (place.id !== id) move(id, dropIndex(order, id, place));
@@ -94,7 +99,7 @@ export function HistoryColumnsHeader({
   };
 
   return (
-    <ContextMenu>
+    <ContextMenu open={isMenuOpen} onOpenChange={setMenuOpen}>
       <ContextMenuTrigger asChild>
         <div
           ref={trigger}

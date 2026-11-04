@@ -3,6 +3,7 @@ import type { WorkspaceFileTree, WorkspaceFileTreeEntry } from "@openducktor/con
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { SessionViewShownContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { workspaceFileTreeQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
@@ -320,5 +321,41 @@ describe("TaskExecutionFileExplorerPanel", () => {
     await flushTree();
     expect(searchField()).toHaveProperty("value", "");
     expect(treeRowPaths()).toEqual(["src/", "README.md"]);
+  });
+
+  panelTest("closes the working directory copy tooltip when the session view hides", async () => {
+    const connection = createTestClientConnection();
+    connection.queryClient.setQueryData(
+      workspaceFileTreeQueryOptions(ROOT_PATH, null).queryKey,
+      TREE,
+    );
+    const panel = (isShown: boolean) => (
+      <ClientConnectionProvider connection={connection}>
+        <SessionViewShownContext value={isShown}>
+          <TaskExecutionFileExplorerPanel
+            model={{
+              rootPath: ROOT_PATH,
+              targetBranch: null,
+              unavailableReason: null,
+              isActive: false,
+              selectedFile: null,
+              onSelectFile: () => {},
+            }}
+          />
+        </SessionViewShownContext>
+      </ClientConnectionProvider>
+    );
+    const view = render(panel(true));
+    const copy = screen.getByRole("button", { name: "Copy working directory" });
+
+    await act(async () => {
+      fireEvent.focus(copy);
+    });
+    expect(screen.getByRole("tooltip").textContent).toBe("Copy working directory");
+
+    view.rerender(panel(false));
+    view.rerender(panel(true));
+
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 });
