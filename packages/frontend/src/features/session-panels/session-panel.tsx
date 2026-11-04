@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { horizontalTabSortTransition } from "@/components/ui/use-horizontal-sortable-tabs";
 import { TerminalRestartButton, TerminalStatusMessages } from "@/features/terminals";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { terminalTabLifecycle } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { cn } from "@/lib/utils";
 import {
@@ -215,6 +216,9 @@ function SessionPanelTabStrip({ model, toolTabs }: SessionPanelProps): ReactElem
   const dropGaps = useDropGaps(model.panel, model.tabs);
   const panelName = PANEL_NAMES[model.panel];
   const controller = model.terminals.controller;
+  // The strip stays mounted with the hidden view, so the tooltip would show again on return.
+  const [isAddTooltipOpen, setAddTooltipOpen] = useState(false);
+  useOnSessionViewHide(() => setAddTooltipOpen(false));
   return (
     <div
       ref={setNodeRef}
@@ -269,7 +273,7 @@ function SessionPanelTabStrip({ model, toolTabs }: SessionPanelProps): ReactElem
           </TabsList>
         </SortableContext>
       </div>
-      <Tooltip>
+      <Tooltip open={isAddTooltipOpen} onOpenChange={setAddTooltipOpen}>
         <TooltipTrigger asChild>
           <Button
             type="button"
@@ -387,8 +391,12 @@ function SessionPanelTab({
   const otherPanel = OTHER_PANEL[panel];
   const moves = useSessionPanelMoves();
   const canMoveToOtherPanel = moves.canMove(tab.id, otherPanel);
+  // The strip stays mounted with the hidden view, so an open menu would show again and take
+  // keyboard focus when the user returns to the session.
+  const [isMenuOpen, setMenuOpen] = useState(false);
+  useOnSessionViewHide(() => setMenuOpen(false));
   return (
-    <ContextMenu>
+    <ContextMenu open={isMenuOpen} onOpenChange={setMenuOpen}>
       <ContextMenuTrigger asChild>
         <div
           ref={setNodeRef}
@@ -462,6 +470,8 @@ function SessionPanelTabTrigger({
   // The tooltip shows the full label when the tab cuts it off, and it always shows a tooltip text
   // such as a page URL. It stays mounted, so the tab keeps its focus when its label changes.
   const [isTooltipOpen, setTooltipOpen] = useState(false);
+  // The tab stays mounted with the hidden view, so an open tooltip would show again on return.
+  useOnSessionViewHide(() => setTooltipOpen(false));
   const onTooltipOpenChange = (open: boolean): void => {
     const label = labelRef.current;
     const isLabelCut = label !== null && label.scrollWidth > label.clientWidth;
