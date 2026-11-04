@@ -207,7 +207,7 @@ describe("createRuntimeHealthProbe", () => {
     expect(health.error).toBeNull();
   });
 
-  test("runs version display with a short bounded timeout", async () => {
+  test("reads every runtime version without terminal color and with a short timeout", async () => {
     const versionCalls: Array<Parameters<SystemCommandPort["versionCommand"]>> = [];
     const systemCommands: SystemCommandPort = {
       ...createSystemCommands(),
@@ -217,18 +217,25 @@ describe("createRuntimeHealthProbe", () => {
       },
     };
     const probe = createProbe(systemCommands);
+    const kinds = ["claude", "codex", "opencode"] satisfies readonly RuntimeKind[];
 
-    await Effect.runPromise(probe.getRuntimeHealth("opencode", executablePaths.opencode));
+    await Effect.runPromise(
+      Effect.all(kinds.map((kind) => probe.getRuntimeHealth(kind, executablePaths[kind]))),
+    );
 
-    expect(versionCalls).toEqual([
-      [
-        executablePaths.opencode,
+    expect(versionCalls).toEqual(
+      kinds.map((kind) => [
+        executablePaths[kind],
         ["--version"],
         {
+          env: {
+            FORCE_COLOR: "0",
+            NO_COLOR: "1",
+          },
           timeoutMs: 2_000,
         },
-      ],
-    ]);
+      ]),
+    );
   });
 
   test("reads the version of a running runtime without starting a second runtime", async () => {
@@ -249,7 +256,19 @@ describe("createRuntimeHealthProbe", () => {
       Effect.runPromise(probe.readVersion("codex", executablePaths.codex)),
     ).resolves.toBe("codex-cli 0.160.0");
 
-    expect(versionCalls).toEqual([[executablePaths.codex, ["--version"], { timeoutMs: 2_000 }]]);
+    expect(versionCalls).toEqual([
+      [
+        executablePaths.codex,
+        ["--version"],
+        {
+          env: {
+            FORCE_COLOR: "0",
+            NO_COLOR: "1",
+          },
+          timeoutMs: 2_000,
+        },
+      ],
+    ]);
     expect(protocolProbes).toEqual([]);
   });
 

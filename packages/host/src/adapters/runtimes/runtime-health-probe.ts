@@ -7,14 +7,15 @@ import type { SystemCommandPort, SystemCommandRunOptions } from "../../ports/sys
 import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-discovery-port";
 
 const VERSION_TIMEOUT_MS = 2_000;
-const OPENCODE_VERSION_OPTIONS: SystemCommandRunOptions = {
+// The runtime CLIs add terminal color to `--version` output when FORCE_COLOR is set. NO_COLOR wins
+// over FORCE_COLOR, so the version text stays plain for display.
+const VERSION_OPTIONS: SystemCommandRunOptions = {
+  env: {
+    FORCE_COLOR: "0",
+    NO_COLOR: "1",
+  },
   timeoutMs: VERSION_TIMEOUT_MS,
 };
-const VERSION_OPTIONS_BY_KIND = {
-  claude: { timeoutMs: VERSION_TIMEOUT_MS },
-  codex: { timeoutMs: VERSION_TIMEOUT_MS },
-  opencode: OPENCODE_VERSION_OPTIONS,
-} satisfies Record<RuntimeKind, SystemCommandRunOptions>;
 const runtimeHealth = (
   kind: RuntimeKind,
   executablePath: string,
@@ -36,9 +37,9 @@ export const createRuntimeHealthProbe = (
 ): RuntimeHealthPort => {
   // A failed version read only leaves the version unknown. The protocol probe or the runtime
   // start reports whether the executable works.
-  const readVersion = (kind: RuntimeKind, executablePath: string) =>
+  const readVersion = (_kind: RuntimeKind, executablePath: string) =>
     systemCommands
-      .versionCommand(executablePath, ["--version"], VERSION_OPTIONS_BY_KIND[kind])
+      .versionCommand(executablePath, ["--version"], VERSION_OPTIONS)
       .pipe(Effect.orElseSucceed(() => null));
   return {
     readVersion,
