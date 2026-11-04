@@ -49,6 +49,7 @@ import {
   isFailedClaudeResult,
   successfulClaudeResultText,
 } from "./claude-agent-sdk-result-lifecycle";
+import { isClaudeNoResponseAssistantMessage } from "./claude-agent-sdk-local-commands";
 import { readClaudeTaskNotifications } from "./claude-agent-sdk-runtime-messages";
 import { emitClaudeAgentToolResultSubagentPart } from "./claude-agent-sdk-subagents";
 import {
@@ -293,6 +294,11 @@ export const toClaudeHistoryMessages = (
         continue;
       }
       lastError = null;
+      if (isClaudeNoResponseAssistantMessage(entry)) {
+        replyStartedAt = undefined;
+        resetCurrentUserTurnAssistantTracking();
+        continue;
+      }
       const projection = projectClaudeHistoryAssistantMessage({
         entry,
         timestamp,
