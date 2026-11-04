@@ -18,10 +18,10 @@ export function useSessionViewShown(): boolean {
 }
 
 /**
- * Runs `onHide` when the session view leaves the screen. Content stays mounted with its kept
- * view, so a component that keeps a dialog open in its own state closes it here. A hidden
- * `SessionViewShownActivity` stops the effects of its content, so the hide runs as the cleanup
- * of the shown effect.
+ * Runs `onHide` when the session view leaves the screen or the content unmounts. Content stays
+ * mounted with its kept view, so a component that keeps a dialog open in its own state closes it
+ * here. A hidden `SessionViewShownActivity` stops the effects of its content, so the hide runs as
+ * the cleanup of the shown effect.
  */
 export function useOnSessionViewHide(onHide: () => void): void {
   const isShown = useSessionViewShown();

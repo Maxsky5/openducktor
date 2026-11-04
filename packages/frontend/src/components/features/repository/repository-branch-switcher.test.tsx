@@ -8,6 +8,7 @@ import {
 } from "@/components/layout/workspace-preview-transition-guard";
 import { WorkspaceBranchStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceBranchStateContextValue } from "@/types/state-slices";
+import { SessionViewShownContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { RepositoryBranchSwitcher } from "./repository-branch-switcher";
 
 const actualBranchSelectorModule = await import("@/components/features/repository/branch-selector");
@@ -313,6 +314,40 @@ describe("RepositoryBranchSwitcher", () => {
         screen.getByRole("button", { name: "Current branch: main. Switch repository branch." })
           .textContent,
       ).toBe("main");
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("closes the branch picker when the session view hides and keeps it closed on return", async () => {
+    branchSelectorSpy.mockRestore();
+    updateBranchState({
+      branches: [
+        { name: "main", isCurrent: true, isRemote: false },
+        { name: "release", isCurrent: false, isRemote: false },
+      ],
+    });
+    const renderSwitch = (isShown: boolean) => (
+      <BranchStateProvider>
+        <SessionViewShownContext value={isShown}>
+          <RepositoryBranchSwitcher layout="inline" />
+        </SessionViewShownContext>
+      </BranchStateProvider>
+    );
+    const rendered = render(renderSwitch(true));
+    try {
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Current branch: main. Switch repository branch.",
+        }),
+      );
+      expect(screen.getByRole("dialog", { name: "Repository branch" })).toBeTruthy();
+
+      rendered.rerender(renderSwitch(false));
+      expect(screen.queryByRole("dialog", { name: "Repository branch" })).toBeNull();
+
+      rendered.rerender(renderSwitch(true));
+      expect(screen.queryByRole("dialog", { name: "Repository branch" })).toBeNull();
     } finally {
       rendered.unmount();
     }

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { PullRequestReviewActivity } from "@openducktor/contracts";
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
@@ -9,6 +10,7 @@ import {
   type ClientStorage,
   createMemoryClientStorage,
 } from "@openducktor/frontend-core/platform/client-storage";
+import { SessionViewShownContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { TaskExecutionCiCommentsList } from "./task-execution-ci-comments-list";
 
@@ -50,11 +52,14 @@ beforeEach(() => {
 const commentsList = (
   comments: PullRequestReviewActivity[],
   storage: ClientStorage = testStorage,
+  isShown = true,
 ) => (
   <ClientConnectionProvider connection={connectionFor(storage)}>
-    <TooltipProvider>
-      <TaskExecutionCiCommentsList comments={comments} />
-    </TooltipProvider>
+    <SessionViewShownContext value={isShown}>
+      <TooltipProvider>
+        <TaskExecutionCiCommentsList comments={comments} />
+      </TooltipProvider>
+    </SessionViewShownContext>
   </ClientConnectionProvider>
 );
 
@@ -248,6 +253,28 @@ describe("TaskExecutionCiCommentsList", () => {
         true,
       );
       expect(frameDriver.pendingFrameCount()).toBe(0);
+    });
+  });
+
+  test("closes the filter popover when the session view hides and keeps it closed on return", async () => {
+    await withAnimationFrameTestDriver(async (frameDriver) => {
+      const view = render(commentsList([comment("one")]));
+      await frameDriver.flushFrames();
+
+      fireEvent.click(screen.getByRole("button", { name: "Filter comments" }));
+      expect(screen.getByRole("switch", { name: "Hide resolved" })).toBeTruthy();
+
+      await act(async () => {
+        view.rerender(commentsList([comment("one")], testStorage, false));
+        await frameDriver.flushMicrotasks();
+      });
+      expect(screen.queryByRole("switch", { name: "Hide resolved" })).toBeNull();
+
+      await act(async () => {
+        view.rerender(commentsList([comment("one")], testStorage, true));
+        await frameDriver.flushMicrotasks();
+      });
+      expect(screen.queryByRole("switch", { name: "Hide resolved" })).toBeNull();
     });
   });
 

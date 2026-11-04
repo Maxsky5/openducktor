@@ -594,6 +594,42 @@ describe("useAgentChatWindow", () => {
     }
   });
 
+  test("keeps one row-window ResizeObserver across row updates", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 1);
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+    try {
+      // The row-window observer watches the container only. The scroll observer also watches
+      // the content, so the set with one observed element is the row-window observer.
+      const readRowWindowObservers = () =>
+        [...mockResizeObserverControllers].filter(
+          (controller) => controller.observedElements.size === 1,
+        );
+      const [rowWindowObserver] = readRowWindowObservers();
+      if (!rowWindowObserver) {
+        throw new Error("Expected a row-window ResizeObserver");
+      }
+
+      await harness.update({
+        rows: createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 2),
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      });
+
+      const rowWindowObservers = readRowWindowObservers();
+      expect(rowWindowObservers).toHaveLength(1);
+      expect(rowWindowObservers[0]?.observer).toBe(rowWindowObserver.observer);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("underfilled first history range appends rows until the user can keep scrolling", async () => {
     const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 3);
     const harness = await mountHarness(

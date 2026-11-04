@@ -39,3 +39,16 @@ test("runs onHide when the session view hides and keeps the content mounted", ()
   expect(onHide).toHaveBeenCalledTimes(1);
   expect(view.getByText("kept content")).toBe(content);
 });
+
+test("runs onHide when the content unmounts", () => {
+  const onHide = mock(() => {});
+  const view = render(
+    <Shown isShown>
+      <Harness onHide={onHide} />
+    </Shown>,
+  );
+  expect(onHide).toHaveBeenCalledTimes(0);
+
+  view.unmount();
+  expect(onHide).toHaveBeenCalledTimes(1);
+});
