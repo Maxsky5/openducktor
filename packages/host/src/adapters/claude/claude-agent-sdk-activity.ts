@@ -122,10 +122,14 @@ export const updateBackgroundTasks = (
   session.nativeBackgroundTasks = next;
 };
 
-/** Reject stale events so they cannot overwrite a later run or restart ended work. */
+/**
+ * Reject stale events so they cannot overwrite a later run or restart ended work.
+ * An event without a run comes from a task that this process did not start. On resume, Claude
+ * Code reports the tasks of the previous process this way, and the transcript keeps the result.
+ */
 export const applyTaskEvent = (session: ClaudeNativeActivityState, message: TaskEvent): boolean => {
   const run = taskRun(session, message.task_id, message.run_id, message.subtype === "task_started");
-  if (!run) return !message.run_id;
+  if (!run) return false;
   if (
     run.ended &&
     (message.subtype === "task_started" ||

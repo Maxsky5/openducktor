@@ -9,6 +9,7 @@ import {
   type ClaudeEventSession,
   userTurnIndex,
 } from "./claude-agent-sdk-event-session";
+import { isClaudeForegroundTurnActive } from "./claude-agent-sdk-activity";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 import {
   isClaudeResultStoppedBySteer,
@@ -104,9 +105,12 @@ export const handleClaudeResultMessage = ({
     if (resultText.length === 0 && hasCurrentFinalText) {
       emitClaudeDeferredReplyForkPoint({ emit, session, timestamp });
     }
-    // A notification can finish without any assistant output.
+    // A notification can finish without any assistant output. On resume, Claude Code also
+    // sends an empty result for notifications that it only writes to the transcript. That
+    // result ends no turn of this session.
     if (
       resultText.length === 0 &&
+      isClaudeForegroundTurnActive(session) &&
       !hasCurrentFinalText &&
       (!session.sdkInitiatedTurnActive || hasCurrentAssistant)
     ) {
