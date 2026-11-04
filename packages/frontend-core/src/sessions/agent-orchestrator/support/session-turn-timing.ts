@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   type AssistantTurnTimingState,
   readAssistantActivityStartedAtMsFromMessages,
+  resolvePreviousAssistantCompletedAtMs,
   resolveAssistantTurnDurationMs,
 } from "./assistant-turn-duration";
 import { createSessionMessagesState, getSessionMessagesSlice } from "./messages";
@@ -79,11 +80,16 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
     ) => {
       const completedAtMs = toTimestampMs(timestamp) ?? Date.now();
       const currentTiming = timingBySession[sessionKey] ?? {};
-      const previousAssistantCompletedAtMs = currentTiming.previousAssistantCompletedAtMs;
+      const sessionMessages = getSessionMessagesSlice({ externalSessionId, messages }, 0);
+      const previousAssistantCompletedAtMs = resolvePreviousAssistantCompletedAtMs({
+        messages: sessionMessages,
+        previousAssistantCompletedAtMs: currentTiming.previousAssistantCompletedAtMs,
+        completedAtMs,
+      });
       const activityStartedAtMs =
         currentTiming.activityStartedAtMs ??
         readAssistantActivityStartedAtMsFromMessages({
-          messages: getSessionMessagesSlice({ externalSessionId, messages }, 0),
+          messages: sessionMessages,
           previousAssistantCompletedAtMs,
           completedAtMs,
         });

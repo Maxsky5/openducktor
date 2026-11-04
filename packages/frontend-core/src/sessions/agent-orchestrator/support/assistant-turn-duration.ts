@@ -1,6 +1,7 @@
 import type { AgentStreamPart } from "@openducktor/core";
 import type { AgentChatMessage } from "../../../types/agent-orchestrator";
 import { messageTimestampMs } from "./message-timestamp-ordering";
+import { isFinalAssistantChatMessage } from "./messages";
 
 export type AssistantTurnTimingState = {
   activityStartedAtMs?: number;
@@ -185,4 +186,35 @@ export const readAssistantActivityStartedAtMsFromMessages = ({
   }
 
   return activityStartedAtMs;
+};
+
+/**
+ * Returns when the last completed reply before `completedAtMs` ended. Loaded history can hold
+ * completed replies that the live timing state never saw.
+ */
+export const resolvePreviousAssistantCompletedAtMs = ({
+  messages,
+  previousAssistantCompletedAtMs,
+  completedAtMs,
+}: {
+  messages: AgentChatMessage[];
+  previousAssistantCompletedAtMs: number | undefined;
+  completedAtMs: number;
+}): number | undefined => {
+  let latestCompletedAtMs = previousAssistantCompletedAtMs;
+
+  for (const message of messages) {
+    if (!isFinalAssistantChatMessage(message)) {
+      continue;
+    }
+    const timestampMs = readChatMessageTimestampMs(message);
+    if (!isFiniteTimestamp(timestampMs) || timestampMs > completedAtMs) {
+      continue;
+    }
+    latestCompletedAtMs = isFiniteTimestamp(latestCompletedAtMs)
+      ? Math.max(latestCompletedAtMs, timestampMs)
+      : timestampMs;
+  }
+
+  return latestCompletedAtMs;
 };
