@@ -41,12 +41,17 @@ export const fullSheetOptions = (title: string): NativeStackNavigationOptions =>
 /**
  * A compact sheet that fits its content and draws its own header with `SheetFrame`, such as Add
  * Host. A drag down closes it. `background` is the surface color of the sheet.
+ *
+ * On Android, the sheet takes each new content height at once. The native resize animation of
+ * react-native-screens starts a second resize from the partial offset of the first, so two quick
+ * changes, as when the keyboard closes and Add Host shows its pairing step, leave the sheet too low.
  */
 export const compactSheetOptions = (background: string): NativeStackNavigationOptions => ({
   presentation: "formSheet",
   sheetAllowedDetents: "fitToContents",
   sheetGrabberVisible: Platform.OS === "ios",
   sheetCornerRadius: 24,
+  sheetResizeAnimationEnabled: false,
   headerShown: false,
   contentStyle: { backgroundColor: background },
 });
