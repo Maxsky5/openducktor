@@ -3,14 +3,11 @@ import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
 import type { RuntimeExecutableProbesByKind } from "../../ports/runtime-executable-probe-port";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
-import type { SystemCommandPort, SystemCommandRunOptions } from "../../ports/system-command-port";
+import type { SystemCommandPort } from "../../ports/system-command-port";
 import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-discovery-port";
 
 const VERSION_TIMEOUT_MS = 2_000;
-// The shared version command keeps the output plain. This only bounds a slow executable.
-const VERSION_OPTIONS: SystemCommandRunOptions = {
-  timeoutMs: VERSION_TIMEOUT_MS,
-};
+// The shared version command keeps the output plain. This timeout only bounds a slow executable.
 const runtimeHealth = (
   kind: RuntimeKind,
   executablePath: string,
@@ -34,7 +31,7 @@ export const createRuntimeHealthProbe = (
   // start reports whether the executable works.
   const readVersion = (executablePath: string) =>
     systemCommands
-      .versionCommand(executablePath, ["--version"], VERSION_OPTIONS)
+      .versionCommand(executablePath, ["--version"], { timeoutMs: VERSION_TIMEOUT_MS })
       .pipe(Effect.orElseSucceed(() => null));
   return {
     readVersion,

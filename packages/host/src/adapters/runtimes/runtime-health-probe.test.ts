@@ -219,17 +219,20 @@ describe("createRuntimeHealthProbe", () => {
       },
     };
     const probe = createProbe(systemCommands);
-    const kinds = knownRuntimeKindValues;
 
     await Effect.runPromise(
       Effect.all(
-        kinds.map((kind) => probe.getRuntimeHealth(kind, executablePaths[kind])),
+        knownRuntimeKindValues.map((kind) => probe.getRuntimeHealth(kind, executablePaths[kind])),
         { concurrency: 1 },
       ),
     );
 
     expect(versionCalls).toEqual(
-      kinds.map((kind) => [executablePaths[kind], ["--version"], versionCommandOptions]),
+      knownRuntimeKindValues.map((kind) => [
+        executablePaths[kind],
+        ["--version"],
+        versionCommandOptions,
+      ]),
     );
   });
 

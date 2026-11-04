@@ -107,23 +107,22 @@ describe("createSystemCommandRunner", () => {
     });
 
     const version = await Effect.runPromise(
-      port.versionCommand(
-        "bun",
-        [
-          "-e",
-          "console.log([process.env.NO_COLOR, process.env.FORCE_COLOR, process.env.CLICOLOR, process.env.CLICOLOR_FORCE, process.env.OPENDUCKTOR_VERSION_TEST].join('|'))",
-        ],
-        {
-          env: {
-            FORCE_COLOR: "1",
-            NO_COLOR: "0",
-            OPENDUCKTOR_VERSION_TEST: "kept",
-          },
+      port.versionCommand("bun", ["-e", "console.log(JSON.stringify(process.env))"], {
+        env: {
+          FORCE_COLOR: "1",
+          NO_COLOR: "0",
+          OPENDUCKTOR_VERSION_TEST: "kept",
         },
-      ),
+      }),
     );
 
-    expect(version).toBe("1|0|0|0|kept");
+    expect(JSON.parse(version ?? "{}")).toMatchObject({
+      CLICOLOR: "0",
+      CLICOLOR_FORCE: "0",
+      FORCE_COLOR: "0",
+      NO_COLOR: "1",
+      OPENDUCKTOR_VERSION_TEST: "kept",
+    });
   });
 
   test("fails before spawn when command discovery cannot resolve the executable", async () => {
