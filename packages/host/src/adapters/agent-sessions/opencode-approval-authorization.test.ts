@@ -15,7 +15,7 @@ const roles = ["spec", "planner", "build", "qa"] as const;
 const permittedWrite = {
   spec: "odt_set_task_artifact",
   planner: "odt_set_task_artifact",
-  build: "odt_build_completed",
+  build: "odt_apply_workflow_event",
   qa: "odt_set_task_artifact",
 };
 
@@ -55,7 +55,7 @@ describe("OpenCode approval authorization at the host reply boundary", () => {
         },
         { permission: "odt_browser_snapshot", mutation: "unknown" as const, allowed: true },
         {
-          permission: role === "build" ? "odt_get_workspaces" : "odt_build_completed",
+          permission: role === "build" ? "odt_get_workspaces" : "odt_apply_workflow_event",
           mutation: "mutating" as const,
           allowed: false,
         },

@@ -224,6 +224,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
         { when: true, to: "reviewing", signal: "draftSubmitted", sourceRole: "writer" },
       ],
       effect: "build.completed",
+      agent: { roles: ["writer"], note: "optional", description: "Submit the draft for review." },
     },
     {
       id: "pause-writing",
@@ -231,6 +232,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       guards: [],
       outcomes: [{ when: true, to: "paused" }],
       effect: "build.blocked",
+      agent: { roles: ["writer"], note: "required", description: "Pause the writing." },
     },
     {
       id: "resume-writing",
@@ -238,6 +240,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       guards: [],
       outcomes: [{ when: true, to: "writing" }],
       effect: "build.resumed",
+      agent: { roles: ["writer"], note: "optional", description: "Resume the writing." },
     },
     {
       id: "approve-copy",
@@ -374,9 +377,7 @@ export const reviewTaskRoles: readonly AgentRoleDefinition[] = [
       "odt_read_task",
       "odt_read_task_artifacts",
       "odt_set_task_artifact",
-      "odt_build_blocked",
-      "odt_build_resumed",
-      "odt_build_completed",
+      "odt_apply_workflow_event",
     ],
     workspaceAccess: "write",
     location: "task_worktree",

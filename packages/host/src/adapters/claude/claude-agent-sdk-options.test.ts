@@ -991,14 +991,15 @@ describe("buildClaudeAgentSdkOptions", () => {
       expect(
         await preToolUseHook(options, {
           permissionMode: "bypassPermissions",
-          toolName: "mcp__openducktor__odt_build_completed",
+          toolName: "mcp__openducktor__odt_apply_workflow_event",
           toolInput: {},
         }),
       ).toMatchObject({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
-          permissionDecisionReason: "Tool odt_build_completed is not allowed for spec sessions.",
+          permissionDecisionReason:
+            "Tool odt_apply_workflow_event is not allowed for spec sessions.",
         },
       });
       for (const tool of [

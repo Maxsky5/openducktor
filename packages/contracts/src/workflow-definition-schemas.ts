@@ -305,6 +305,26 @@ export const workflowEventEffectValues = [
 export const workflowEventEffectSchema = z.enum(workflowEventEffectValues);
 export type WorkflowEventEffect = z.infer<typeof workflowEventEffectSchema>;
 
+/** The effects of an event that agents may send. An agent event can also have no effect. */
+export const workflowAgentEventEffectValues = [
+  "status.set",
+  "build.blocked",
+  "build.resumed",
+  "build.completed",
+] as const satisfies readonly WorkflowEventEffect[];
+export type WorkflowAgentEventEffect = (typeof workflowAgentEventEffectValues)[number];
+
+/**
+ * An event that agents of the roles may send with `odt_apply_workflow_event`. The role prompt
+ * lists it with its description. A required note tells why the agent sends the event.
+ */
+export const workflowAgentEventSchema = z.strictObject({
+  roles: z.array(workflowIdSchema).min(1),
+  description: z.string().trim().min(1),
+  note: z.enum(["required", "optional"]),
+});
+export type WorkflowAgentEvent = z.infer<typeof workflowAgentEventSchema>;
+
 /** Guards run in order after the source check. The first matching outcome decides the result. */
 export const workflowEventDefinitionSchema = z.strictObject({
   id: workflowIdSchema,
@@ -312,6 +332,7 @@ export const workflowEventDefinitionSchema = z.strictObject({
   guards: z.array(workflowEventGuardSchema),
   outcomes: z.array(workflowEventOutcomeSchema).min(1),
   effect: workflowEventEffectSchema.optional(),
+  agent: workflowAgentEventSchema.optional(),
 });
 export type WorkflowEventDefinition = z.infer<typeof workflowEventDefinitionSchema>;
 

@@ -170,14 +170,16 @@ describe("workflow-tool-permissions", () => {
       action: "allow",
     });
     expect(rules).toContainEqual({
-      permission: "odt_build_completed",
+      permission: "odt_apply_workflow_event",
       pattern: "*",
       action: "deny",
     });
     expect(findFinalExactAction(rules, "functions.openducktor_odt_set_task_artifact")).toBe(
       "allow",
     );
-    expect(findFinalExactAction(rules, "functions.openducktor_odt_build_completed")).toBe("deny");
+    expect(findFinalExactAction(rules, "functions.openducktor_odt_apply_workflow_event")).toBe(
+      "deny",
+    );
     expect(rules).toContainEqual({
       permission: "openducktor_odt_read_task",
       pattern: "*",
@@ -209,17 +211,17 @@ describe("workflow-tool-permissions", () => {
       action: "allow",
     });
     expect(rules).not.toContainEqual({
-      permission: "openducktor_odt_build_completed",
+      permission: "openducktor_odt_apply_workflow_event",
       pattern: "*",
       action: "allow",
     });
     expect(rules).toContainEqual({
-      permission: "openducktor_odt_build_completed",
+      permission: "openducktor_odt_apply_workflow_event",
       pattern: "*",
       action: "deny",
     });
     expect(rules).toContainEqual({
-      permission: "functions.openducktor_odt_build_completed",
+      permission: "functions.openducktor_odt_apply_workflow_event",
       pattern: "*",
       action: "deny",
     });
@@ -235,21 +237,23 @@ describe("workflow-tool-permissions", () => {
     expect(rules).not.toContainEqual({ permission: "write", pattern: "*", action: "deny" });
     expect(rules).not.toContainEqual({ permission: "apply_patch", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({
-      permission: "odt_build_completed",
+      permission: "odt_apply_workflow_event",
       pattern: "*",
       action: "allow",
     });
     expect(rules).toContainEqual({
-      permission: "openducktor_odt_build_completed",
+      permission: "openducktor_odt_apply_workflow_event",
       pattern: "*",
       action: "allow",
     });
     expect(rules).toContainEqual({
-      permission: "functions.openducktor_odt_build_completed",
+      permission: "functions.openducktor_odt_apply_workflow_event",
       pattern: "*",
       action: "allow",
     });
-    expect(findFinalExactAction(rules, "functions.openducktor_odt_build_completed")).toBe("allow");
+    expect(findFinalExactAction(rules, "functions.openducktor_odt_apply_workflow_event")).toBe(
+      "allow",
+    );
     expect(findFinalExactAction(rules, "functions.openducktor_odt_set_task_artifact")).toBe(
       "allow",
     );
@@ -271,7 +275,7 @@ const effectiveAction = (rules: PermissionRule[], permission: string): string =>
 test.each([
   ["spec", "odt_set_task_artifact"],
   ["planner", "odt_set_task_artifact"],
-  ["build", "odt_build_completed"],
+  ["build", "odt_apply_workflow_event"],
   ["qa", "odt_set_task_artifact"],
 ] as const)(
   "%s rules deny unknown tools despite native grants and keep eligible writes allowed",

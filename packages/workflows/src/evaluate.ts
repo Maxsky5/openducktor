@@ -1,4 +1,5 @@
 import {
+  workflowAgentEventEffectValues,
   workflowConditionSchema,
   workflowDefinitionSchema,
   type CompiledWorkflowDefinition,
@@ -615,6 +616,8 @@ const createConditionCheck = (
   return check;
 };
 
+const AGENT_EVENT_EFFECTS: ReadonlySet<string> = new Set(workflowAgentEventEffectValues);
+
 const checkDefinition = (definition: WorkflowDefinition): void => {
   const invalid = (message: string): never => {
     throw new WorkflowEvaluationError(
@@ -787,6 +790,15 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
           `The effect "${event.effect}" is at ${firstPath}.effect and ${path}.effect. Give each effect one event.`,
         );
       effectPaths.set(event.effect, path);
+    }
+    if (event.agent !== undefined) {
+      if (event.effect !== undefined && !AGENT_EVENT_EFFECTS.has(event.effect))
+        invalid(
+          `The event at ${path} has the ${event.effect} effect, so agents cannot send it. Remove ${path}.agent, or use no effect or one of ${[...AGENT_EVENT_EFFECTS].join(", ")}.`,
+        );
+      event.agent.roles.forEach((id, roleIndex) =>
+        checkReference(id, roles, "roles", `${path}.agent.roles[${roleIndex}]`),
+      );
     }
     event.from.forEach((id, fromIndex) =>
       checkReference(id, states, "states", `${path}.from[${fromIndex}]`),

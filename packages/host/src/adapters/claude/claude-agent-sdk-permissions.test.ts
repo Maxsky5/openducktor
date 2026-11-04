@@ -190,7 +190,7 @@ describe("createClaudeCanUseTool", () => {
     });
 
     const result = await canUseTool(
-      "mcp__openducktor__odt_build_completed",
+      "mcp__openducktor__odt_apply_workflow_event",
       { taskId: "task-1" },
       {
         signal: new AbortController().signal,
@@ -202,7 +202,7 @@ describe("createClaudeCanUseTool", () => {
     expect(result).toEqual({
       behavior: "deny",
       decisionClassification: "user_reject",
-      message: "Tool odt_build_completed is not allowed for spec sessions.",
+      message: "Tool odt_apply_workflow_event is not allowed for spec sessions.",
     });
     expect(events).toEqual([]);
     expect(session.pendingApprovals.size).toBe(0);

@@ -5,7 +5,7 @@
   .st-card[data-running] .st-card-head .st-duration {
     display: none;
   }
-  /* Workflow tool card: set_spec, set_plan, build_completed, qa_rejected, qa_approved. */
+  /* Workflow tool card: set_spec, set_plan, apply_workflow_event, qa_rejected, qa_approved. */
   .st-card {
     margin: calc(8 * var(--u)) 0;
     padding: calc(8 * var(--u)) calc(12 * var(--u));

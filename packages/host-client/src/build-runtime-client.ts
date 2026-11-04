@@ -119,44 +119,6 @@ const buildStart = async (
   );
 };
 
-const buildBlocked = async (
-  invokeFn: InvokeFn,
-  scope: WorkspaceRef,
-  taskId: string,
-  reason: string,
-): Promise<TaskCard> => {
-  return invokeFn(
-    "build_blocked",
-    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, reason },
-    taskCardSchema,
-  );
-};
-
-const buildResumed = async (
-  invokeFn: InvokeFn,
-  scope: WorkspaceRef,
-  taskId: string,
-): Promise<TaskCard> => {
-  return invokeFn(
-    "build_resumed",
-    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
-    taskCardSchema,
-  );
-};
-
-const buildCompleted = async (
-  invokeFn: InvokeFn,
-  scope: WorkspaceRef,
-  taskId: string,
-  summary?: string,
-): Promise<TaskCard> => {
-  return invokeFn(
-    "build_completed",
-    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, input: { summary } },
-    taskCardSchema,
-  );
-};
-
 const humanRequestChanges = async (
   invokeFn: InvokeFn,
   scope: WorkspaceRef,
@@ -348,18 +310,6 @@ export class HostAgentClient {
     runtimeKind: RuntimeKind,
   ): Promise<BuildSessionBootstrap> {
     return buildStart(this.invokeFn, scope, taskId, runtimeKind);
-  }
-
-  async buildBlocked(scope: WorkspaceRef, taskId: string, reason: string): Promise<TaskCard> {
-    return buildBlocked(this.invokeFn, scope, taskId, reason);
-  }
-
-  async buildResumed(scope: WorkspaceRef, taskId: string): Promise<TaskCard> {
-    return buildResumed(this.invokeFn, scope, taskId);
-  }
-
-  async buildCompleted(scope: WorkspaceRef, taskId: string, summary?: string): Promise<TaskCard> {
-    return buildCompleted(this.invokeFn, scope, taskId, summary);
   }
 
   async humanRequestChanges(scope: WorkspaceRef, taskId: string, note?: string): Promise<TaskCard> {

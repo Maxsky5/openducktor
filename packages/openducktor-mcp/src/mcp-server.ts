@@ -108,7 +108,11 @@ export const createMcpServer = async (
     forbidWorkspaceIdInput ? {} : { instructions: WORKSPACE_SERVER_INSTRUCTIONS },
   );
 
-  registerTools(server, store, { forbidWorkspaceIdInput, allowedToolNames });
+  registerTools(server, store, {
+    forbidWorkspaceIdInput,
+    allowedToolNames,
+    activeStatuses: resolved.activeStatuses,
+  });
   return server;
 };
 
@@ -240,9 +244,11 @@ type ListedToolDefinition = {
   annotations?: { readOnlyHint: true };
 };
 
+type ListingOptions = { forbidWorkspaceIdInput: boolean; activeStatuses: readonly string[] };
+
 const toListedToolDefinition = (
   tool: ListedOdtTool,
-  options: { forbidWorkspaceIdInput: boolean },
+  options: ListingOptions,
 ): ListedToolDefinition => {
   const definition: ListedToolDefinition = {
     name: tool.name,
@@ -250,6 +256,7 @@ const toListedToolDefinition = (
     description: tool.description,
     inputSchema: getListedToolInputSchema(tool.name, {
       hideWorkspaceId: options.forbidWorkspaceIdInput,
+      activeStatuses: options.activeStatuses,
     }),
   };
   if (tool.outputSchema) {
@@ -264,7 +271,7 @@ const toListedToolDefinition = (
 const installVisibleToolListHandler = (
   server: McpServer,
   tools: readonly ListedOdtTool[],
-  options: { forbidWorkspaceIdInput: boolean },
+  options: ListingOptions,
 ): void => {
   server.server.setRequestHandler(ListToolsRequestSchema, () => ({
     tools: tools.map((tool) => toListedToolDefinition(tool, options)),
@@ -347,18 +354,10 @@ const ODT_TOOL_DEFINITIONS = [
       "Update fields of one task. Omitted fields stay. An empty description or labels clears it. It never changes status or artifacts.",
     execute: (store, input) => store.updateTask(input),
   }),
-  defineOdtTool("odt_build_blocked", ODT_TOOL_SCHEMAS.odt_build_blocked, {
-    description: "Move the task to blocked, with the reason.",
-    execute: (store, input) => store.buildBlocked(input),
-  }),
-  defineOdtTool("odt_build_resumed", ODT_TOOL_SCHEMAS.odt_build_resumed, {
-    description: "Move a blocked task back to in_progress.",
-    execute: (store, input) => store.buildResumed(input),
-  }),
-  defineOdtTool("odt_build_completed", ODT_TOOL_SCHEMAS.odt_build_completed, {
+  defineOdtTool("odt_apply_workflow_event", ODT_TOOL_SCHEMAS.odt_apply_workflow_event, {
     description:
-      "Move an in_progress task to ai_review, or to human_review when the latest QA report is approved.",
-    execute: (store, input) => store.buildCompleted(input),
+      "Send a workflow event of the task. Use only an event that your role instructions list, and add a note when they require one.",
+    execute: (store, input, meta) => store.applyWorkflowEvent(input, meta),
   }),
   defineOdtTool("odt_set_pull_request", ODT_TOOL_SCHEMAS.odt_set_pull_request, {
     description:
@@ -371,7 +370,7 @@ const ODT_TOOL_DEFINITIONS = [
 const registerTools = (
   server: McpServer,
   store: OdtTaskStore,
-  options: { forbidWorkspaceIdInput: boolean; allowedToolNames: readonly RegisteredToolName[] },
+  options: ListingOptions & { allowedToolNames: readonly RegisteredToolName[] },
 ): void => {
   const allowedToolNames = new Set(options.allowedToolNames);
   const registeredTools: ListedOdtTool[] = [];

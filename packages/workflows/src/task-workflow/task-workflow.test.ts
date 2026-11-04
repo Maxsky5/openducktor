@@ -175,6 +175,71 @@ describe("createTaskWorkflow", () => {
     ).toEqual({ [kickoffKey]: { template: "Global", baseVersion: 1 } });
   });
 
+  test("lists the agent events of each role and lists them in the role prompt", () => {
+    expect(review.agentEvents("writer")).toEqual([
+      { id: "finish-writing", description: "Submit the draft for review.", note: "optional" },
+      { id: "pause-writing", description: "Pause the writing.", note: "required" },
+      { id: "resume-writing", description: "Resume the writing.", note: "optional" },
+    ]);
+    expect(review.agentEvents("editor")).toEqual([]);
+    expect(review.agentEvent("pause-writing")).toEqual({
+      id: "pause-writing",
+      description: "Pause the writing.",
+      note: "required",
+      roles: ["writer"],
+      effect: "build.blocked",
+    });
+    expect(review.agentEvent("approve-copy")).toBeUndefined();
+    expect(builtinTaskWorkflow.agentEvents("build").map(({ id }) => id)).toEqual([
+      "build-blocked",
+      "build-resumed",
+      "build-completed",
+    ]);
+    expect(builtinTaskWorkflow.agentEvents("qa")).toEqual([]);
+
+    const writerPrompt = review.prompts.systemPrompt({
+      role: "writer",
+      task: { taskId: "task-1" },
+    }).prompt;
+    expect(writerPrompt).toContain(
+      [
+        "- Workflow events for odt_apply_workflow_event:",
+        "  - finish-writing: Submit the draft for review.",
+        "  - pause-writing (note required): Pause the writing.",
+        "  - resume-writing: Resume the writing.",
+      ].join("\n"),
+    );
+    expect(
+      review.prompts.systemPrompt({ role: "editor", task: { taskId: "task-1" } }).prompt,
+    ).not.toContain("Workflow events for odt_apply_workflow_event");
+  });
+
+  test("rejects an agent event that an agent cannot send", () => {
+    const agent = { roles: ["writer"], note: "optional" as const, description: "Send it." };
+    expect(
+      withChange((definition) => {
+        const event = definition.events.find(({ id }) => id === "approve-copy");
+        if (event) event.agent = agent;
+      }),
+    ).toThrow(
+      "The event at events[10] has the review.approve effect, so agents cannot send it. Remove events[10].agent, or use no effect or one of status.set, build.blocked, build.resumed, build.completed.",
+    );
+    expect(
+      withChange((definition) => {
+        const event = definition.events.find(({ id }) => id === "accept-review");
+        if (event) event.agent = { ...agent, roles: ["author"] };
+      }),
+    ).toThrow('Unknown roles ID "author" at events[');
+    expect(
+      withChange((definition) => {
+        const event = definition.events.find(({ id }) => id === "accept-review");
+        if (event) event.agent = { ...agent, roles: ["editor"] };
+      }),
+    ).toThrow(
+      'Task workflow "review" lets role "editor" send events accept-review, but the role has no odt_apply_workflow_event tool. Add the tool to the role, or remove the role from these events.',
+    );
+  });
+
   test("supports a subset of the fixed issue types", () => {
     const bugOnly = withChange((definition) => {
       definition.issueTypes = [{ id: "bug", label: "Fix" }];

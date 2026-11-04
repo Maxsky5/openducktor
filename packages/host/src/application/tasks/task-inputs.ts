@@ -105,14 +105,6 @@ export type BuildStartInput = TaskIdInput & {
   runtimeKind: string;
 };
 
-export type BuildBlockedInput = TaskIdInput & {
-  reason: string;
-};
-
-export type BuildCompletedInput = TaskIdInput & {
-  summary?: string;
-};
-
 export type OptionalNoteInput = TaskIdInput & {
   note?: string;
 };

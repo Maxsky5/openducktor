@@ -14,14 +14,22 @@ This matrix lists every allowed task transition. The backend validates it. The U
 | `odt_search_tasks` | `priority?`, `issueType?`, `status?`, `title?`, `tags?`, `limit?` |
 | `odt_create_task` | `title`, `issueType`, `priority`, `description?`, `labels?` |
 | `odt_update_task` | `taskId`, `title?`, `description?`, `priority?`, `labels?`, `issueType?` |
-| `odt_build_blocked` | `taskId`, `reason` |
-| `odt_build_resumed` | `taskId` |
-| `odt_build_completed` | `taskId`, `summary?` |
+| `odt_apply_workflow_event` | `taskId`, `eventId`, `note?` |
 | `odt_set_pull_request` | `taskId`, `number` |
 
 The browser tools never change task status or artifacts. They are `odt_browser_list`, `odt_browser_open`, `odt_browser_navigate`, `odt_browser_close`, `odt_browser_snapshot`, `odt_browser_click`, `odt_browser_hover`, `odt_browser_type`, `odt_browser_press`, `odt_browser_select`, `odt_browser_scroll`, `odt_browser_screenshot`, `odt_browser_console`, `odt_browser_wait`, and `odt_browser_dialog`. See [External MCP](external-mcp.md#browser-tools).
 
 The public update tool never changes `status` or artifacts.
+
+`odt_apply_workflow_event` sends an event that the task workflow declares for agents. The prompt of a role lists the events of the role. The built-in workflow lets the Builder role send these events:
+
+| `eventId` | Note | Meaning |
+|---|---|---|
+| `build-blocked` | Required. It gives the reason. | Move the task to `blocked`. |
+| `build-resumed` | Optional. | Move a blocked task back to `in_progress`. |
+| `build-completed` | Optional. It summarizes the result. | Move the task to `ai_review` or `human_review`. |
+
+The host checks the event against the task workflow and the role of the calling session. The host does not store the note. It returns the note in the result.
 
 Call `odt_read_task` first for task fields, `workflowArtifacts`, and an `artifacts` metadata array of all current workflow and free artifacts.
 
@@ -35,23 +43,25 @@ Free-artifact creation, rename, replacement, and deletion require a non-closed t
 
 ## Matrix
 
+A trigger such as `build-completed` is an event that `odt_apply_workflow_event` sends.
+
 | Trigger | From | Guard | To |
 |---|---|---|---|
 | `task_create` | none | Always. | `open` |
 | `odt_set_task_artifact`, code `spec` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `spec_ready` from `open`; otherwise unchanged. |
 | `odt_set_task_artifact`, code `plan` (feature) | `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `ready_for_dev` from `spec_ready`; otherwise unchanged. |
 | `odt_set_task_artifact`, code `plan` (task/bug) | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `ready_for_dev` from `open` or `spec_ready`; otherwise unchanged. |
-| `odt_build_resumed` for `feature` | `ready_for_dev`, `blocked` | Standard flow or blocked resume. | `in_progress` |
-| `odt_build_resumed` for `task` or `bug` | `open`, `spec_ready`, `ready_for_dev`, `blocked` | Optional short flow or blocked resume. | `in_progress` |
-| `odt_build_resumed` | `ai_review`, `human_review` | Rework. | `in_progress` |
-| `odt_build_resumed` | `in_progress` | Idempotent. No write runs. | Unchanged. |
-| `odt_build_blocked` | `in_progress`, `ai_review`, `human_review` | `reason` is not empty. | `blocked` |
-| `odt_build_blocked` | `blocked` | `reason` is not empty. Idempotent. No write runs. | Unchanged. |
+| `build-resumed` for `feature` | `ready_for_dev`, `blocked` | Standard flow or blocked resume. | `in_progress` |
+| `build-resumed` for `task` or `bug` | `open`, `spec_ready`, `ready_for_dev`, `blocked` | Optional short flow or blocked resume. | `in_progress` |
+| `build-resumed` | `ai_review`, `human_review` | Rework. | `in_progress` |
+| `build-resumed` | `in_progress` | Idempotent. No write runs. | Unchanged. |
+| `build-blocked` | `in_progress`, `ai_review`, `human_review` | `note` is not empty. | `blocked` |
+| `build-blocked` | `blocked` | `note` is not empty. Idempotent. No write runs. | Unchanged. |
 | `reset_implementation` | `in_progress`, `blocked`, `ai_review`, `human_review` | No live build or QA activity. Branch cleanup is safe. | `ready_for_dev`, `spec_ready`, or `open` from retained artifacts. |
 | `reset_task` | Any non-closed status. | No live role activity. Branch cleanup is safe. | `open` |
-| `odt_build_completed` | `in_progress`, `blocked` | The latest QA result is not `approved`. | `ai_review` |
-| `odt_build_completed` | `in_progress`, `blocked` | The latest QA result is `approved`. | `human_review` |
-| `odt_build_completed` | `ai_review`, `human_review` | Idempotent. No hook or patch runs. | Unchanged. |
+| `build-completed` | `in_progress`, `blocked` | The latest QA result is not `approved`. | `ai_review` |
+| `build-completed` | `in_progress`, `blocked` | The latest QA result is `approved`. | `human_review` |
+| `build-completed` | `ai_review`, `human_review` | Idempotent. No hook or patch runs. | Unchanged. |
 | `odt_set_pull_request` | `in_progress`, `ai_review`, `human_review` | A pull request number is present and the repository has a configured provider. | Unchanged. |
 | `odt_set_task_artifact`, code `qaReport`, verdict `rejected` | `blocked`, `ai_review`, `human_review` | Report Markdown is present. | `in_progress` |
 | `odt_set_task_artifact`, code `qaReport`, verdict `approved` | `blocked`, `ai_review`, `human_review` | Report Markdown is present. | `human_review` |

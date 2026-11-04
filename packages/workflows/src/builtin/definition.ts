@@ -2,6 +2,7 @@ import {
   type WorkflowActionDefinition,
   type WorkflowArtifactDefinition,
   type WorkflowArtifactVerdict,
+  type WorkflowAgentEvent,
   type WorkflowAutomationDefinition,
   type WorkflowCondition,
   type WorkflowDefinition,
@@ -51,6 +52,7 @@ type BuiltinEvent = {
   guards: WorkflowEventGuard[];
   outcomes: BuiltinOutcome[];
   effect?: WorkflowEventEffect;
+  agent?: WorkflowAgentEvent & { roles: BuiltinRoleId[] };
 };
 
 export type BuiltinArtifactId = "spec" | "plan" | "qaReport";
@@ -170,12 +172,22 @@ const builtinEvents = {
     guards: [],
     outcomes: moveTo("blocked"),
     effect: "build.blocked",
+    agent: {
+      roles: ["build"],
+      note: "required",
+      description: "Move the task to blocked. Put the reason in the note.",
+    },
   },
   "build-resumed": {
     from: nonClosedStates,
     guards: [planningComplete],
     outcomes: moveTo("in_progress"),
     effect: "build.resumed",
+    agent: {
+      roles: ["build"],
+      note: "optional",
+      description: "Move a blocked task back to in_progress.",
+    },
   },
   "build-completed": {
     from: activeOrReview.stateIn,
@@ -191,6 +203,12 @@ const builtinEvents = {
       { when: true, to: "ai_review", signal: "taskProgressedToAiReview" },
     ],
     effect: "build.completed",
+    agent: {
+      roles: ["build"],
+      note: "optional",
+      description:
+        "Move an in_progress task to ai_review, or to human_review when the latest QA report is approved.",
+    },
   },
   "qa-approved": {
     from: qaAvailable.stateIn,

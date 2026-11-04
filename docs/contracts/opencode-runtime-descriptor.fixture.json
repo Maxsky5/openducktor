@@ -12,17 +12,9 @@
       "functions.openducktor_odt_read_task_assets"
     ],
     "odt_update_task": ["openducktor_odt_update_task", "functions.openducktor_odt_update_task"],
-    "odt_build_blocked": [
-      "openducktor_odt_build_blocked",
-      "functions.openducktor_odt_build_blocked"
-    ],
-    "odt_build_resumed": [
-      "openducktor_odt_build_resumed",
-      "functions.openducktor_odt_build_resumed"
-    ],
-    "odt_build_completed": [
-      "openducktor_odt_build_completed",
-      "functions.openducktor_odt_build_completed"
+    "odt_apply_workflow_event": [
+      "openducktor_odt_apply_workflow_event",
+      "functions.openducktor_odt_apply_workflow_event"
     ],
     "odt_set_pull_request": [
       "openducktor_odt_set_pull_request",

@@ -527,7 +527,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         messageId: "m1",
         partId: "p-tool",
         callId: "call-1",
-        tool: "odt_build_completed",
+        tool: "odt_apply_workflow_event",
         toolType: "generic" as const,
         status: "completed",
         output: "done",

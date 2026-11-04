@@ -18,8 +18,6 @@ import {
 import { z } from "zod";
 import type {
   AgentSessionDeleteInput,
-  BuildBlockedInput,
-  BuildCompletedInput,
   BuildStartInput,
   CloseTaskInput,
   CreateTaskUseCaseInput,
@@ -338,54 +336,6 @@ export const parseBuildStartInput = (input: HostCommandArgs): BuildStartInput =>
     taskId: readRequiredString(record, "taskId"),
     runtimeKind: readRequiredString(record, "runtimeKind"),
   };
-};
-
-export const parseBuildBlockedInput = (input: HostCommandArgs): BuildBlockedInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "build_blocked input",
-  );
-  const parsedReason = commandInputStringSchema.safeParse(record.reason);
-  const reason = parsedReason.success ? parsedReason.data.trim() : "";
-  if (!reason) {
-    throw new HostValidationError({
-      message: "build_blocked requires a non-empty reason",
-      field: "reason",
-    });
-  }
-  return {
-    workspaceId: readRequiredString(record, "workspaceId"),
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    reason,
-  };
-};
-
-export const parseBuildCompletedInput = (input: HostCommandArgs): BuildCompletedInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "build_completed input",
-  );
-  const inputRecord =
-    record.input === undefined || record.input === null
-      ? undefined
-      : requireParsedRecord(
-          commandInputRecordSchema.safeParse(record.input),
-          "build_completed input.input",
-        );
-  const summary = parseOptionalNote(
-    optionalStringSchema.safeParse(inputRecord?.summary),
-    "build_completed summary",
-  );
-  const result: BuildCompletedInput = {
-    workspaceId: readRequiredString(record, "workspaceId"),
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-  };
-  if (summary !== undefined) {
-    result.summary = summary;
-  }
-  return result;
 };
 
 export const parseOptionalNoteInput = (

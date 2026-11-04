@@ -1,9 +1,6 @@
 import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 
-import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
-import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
-import { createTaskService as createRealTaskService } from "../tasks/task-service";
 import {
   createTaskServiceTestDouble,
   createTaskServiceWithMutationProgressTestDouble,
@@ -157,54 +154,7 @@ const createOdtMcpBridgeServiceForTest = (input: TestOdtMcpBridgeServiceInput) =
     },
   });
 describe("createOdtMcpBridgeService", () => {
-  test.each(["in_progress", "ai_review", "human_review"] as const)(
-    "build_blocked transitions %s through the bridge and trims the reason",
-    async (status) => {
-      let current = taskCard({ status });
-      const transitions: unknown[] = [];
-      const taskService = createRealTaskService({
-        taskWorkflows: builtinTaskWorkflows,
-        gitPort: createGitPortTestDouble({ canonicalizePath: (path) => Effect.succeed(path) }),
-        taskStore: createTaskStoreTestDouble({
-          getTask: () => Effect.succeed(current),
-          findTask: () => Effect.succeed(current),
-          listTasks: () => Effect.succeed([current]),
-          transitionTask: (input) => {
-            transitions.push(input);
-            current = { ...current, status: input.status };
-            return Effect.succeed(current);
-          },
-        }),
-      });
-      const bridge = createOdtMcpBridgeServiceForTest({
-        taskService,
-        workspaceSettingsService: createWorkspaceSettingsService(),
-      });
-      const result = await Effect.runPromise(
-        bridge.invoke("odt_build_blocked", {
-          workspaceId: "repo",
-          taskId: current.id,
-          reason: "  Needs a product decision  ",
-        }),
-      );
-      expect(result).toMatchObject({
-        task: { id: "task-1", status: "blocked" },
-        reason: "Needs a product decision",
-      });
-      expect(transitions).toEqual([
-        {
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          status: "blocked",
-          cause: {},
-        },
-      ]);
-      expect(current.status).toBe("blocked");
-    },
-  );
-
-  test("reports MCP tool coverage and workspaces", async () => {
+  test("reports MCP tool coverage, the active states of the host workflows, and workspaces", async () => {
     const service = createOdtMcpBridgeServiceForTest({
       taskService: createTaskServiceTestDouble({}),
       workspaceSettingsService: createWorkspaceSettingsService(),
@@ -212,6 +162,15 @@ describe("createOdtMcpBridgeService", () => {
     await expect(Effect.runPromise(service.ready())).resolves.toEqual({
       bridgeVersion: ODT_MCP_BRIDGE_VERSION,
       toolNames: [...ODT_MCP_TOOL_NAMES],
+      activeStatuses: [
+        "open",
+        "spec_ready",
+        "ready_for_dev",
+        "in_progress",
+        "blocked",
+        "ai_review",
+        "human_review",
+      ],
     });
     await expect(Effect.runPromise(service.getWorkspaces({}))).resolves.toMatchObject({
       workspaces: [{ workspaceId: "repo", repoPath: "/repo" }],

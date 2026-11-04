@@ -31,15 +31,7 @@ export const createTaskBuildStateUseCases = ({
   buildBlocked(input) {
     return Effect.scoped(
       Effect.gen(function* () {
-        const { repoPath, taskId, reason } = input;
-        if (!reason.trim()) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "reason",
-              message: "build_blocked requires a non-empty reason",
-            }),
-          );
-        }
+        const { repoPath, taskId } = input;
         if (!gitPort || !taskSessionLifecycleCoordinator) {
           return yield* Effect.fail(
             new HostDependencyError({
@@ -75,7 +67,7 @@ export const createTaskBuildStateUseCases = ({
       const workflow = taskWorkflows.forTask(current);
 
       const decision = yield* requireEffectInput(
-        "build_completed is",
+        "build-completed is",
         workflow,
         "build.completed",
         current,

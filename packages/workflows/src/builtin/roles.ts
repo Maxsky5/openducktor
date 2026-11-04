@@ -54,9 +54,7 @@ export const BUILTIN_ROLES: readonly BuiltinAgentRole[] = deepFreeze([
     label: "Builder",
     tools: [
       ...taskTools,
-      "odt_build_blocked",
-      "odt_build_resumed",
-      "odt_build_completed",
+      "odt_apply_workflow_event",
       "odt_set_pull_request",
       ...ODT_BROWSER_TOOL_NAMES,
     ],

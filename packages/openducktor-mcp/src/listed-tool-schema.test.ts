@@ -9,9 +9,15 @@ const propertiesOf = (jsonSchema: ListedToolSchema): NonNullable<ListedToolSchem
 
 const requiredOf = (jsonSchema: ListedToolSchema): string[] => jsonSchema.required ?? [];
 
+const activeStatuses = ["open", "in_progress"];
+const hidden = { hideWorkspaceId: true };
+
 describe("listed MCP tool input schema", () => {
   test("hides workspaceId from listed tools when the MCP server is already workspace-scoped", () => {
-    const schema = getListedToolInputSchema("odt_read_task", { hideWorkspaceId: true });
+    const schema = getListedToolInputSchema("odt_read_task", {
+      hideWorkspaceId: true,
+      activeStatuses,
+    });
     const properties = propertiesOf(schema);
 
     expect(properties).toHaveProperty("taskId");
@@ -19,31 +25,29 @@ describe("listed MCP tool input schema", () => {
     expect(requiredOf(schema)).not.toContain("workspaceId");
   });
 
-  test("lists the issue types and active states of the built-in task workflow as a hint", () => {
+  test("lists the fixed issue types and the active states of the host as a hint", () => {
     const create = propertiesOf(
-      getListedToolInputSchema("odt_create_task", { hideWorkspaceId: true }),
+      getListedToolInputSchema("odt_create_task", { ...hidden, activeStatuses: ["todo"] }),
     );
     const search = propertiesOf(
-      getListedToolInputSchema("odt_search_tasks", { hideWorkspaceId: true }),
+      getListedToolInputSchema("odt_search_tasks", {
+        ...hidden,
+        activeStatuses: ["todo", "doing"],
+      }),
     );
 
-    expect(create.issueType).toMatchObject({ enum: ["feature", "bug", "task"] });
-    expect(search.status).toMatchObject({
-      enum: [
-        "open",
-        "spec_ready",
-        "ready_for_dev",
-        "in_progress",
-        "blocked",
-        "ai_review",
-        "human_review",
-      ],
+    expect(create.issueType).toMatchObject({ enum: ["task", "feature", "bug"] });
+    expect(create).not.toHaveProperty("status");
+    expect(search.status).toEqual({
+      type: "string",
+      enum: ["todo", "doing"],
+      description: "A state that is not terminal.",
     });
   });
 
   test("keeps workspaceId in listed tools for external MCP clients", () => {
     const properties = propertiesOf(
-      getListedToolInputSchema("odt_read_task", { hideWorkspaceId: false }),
+      getListedToolInputSchema("odt_read_task", { hideWorkspaceId: false, activeStatuses }),
     );
 
     expect(properties).toHaveProperty("workspaceId");
@@ -52,6 +56,7 @@ describe("listed MCP tool input schema", () => {
   test("lists the task asset batch fields while hiding the bound workspace", () => {
     const schema = getListedToolInputSchema("odt_read_task_assets", {
       hideWorkspaceId: true,
+      activeStatuses,
     });
     const properties = propertiesOf(schema);
 
@@ -62,9 +67,18 @@ describe("listed MCP tool input schema", () => {
   });
 
   test("drops schema parts that guide no call, and keeps the bounds that do", () => {
-    const type = getListedToolInputSchema("odt_browser_type", { hideWorkspaceId: true });
-    const pullRequest = getListedToolInputSchema("odt_set_pull_request", { hideWorkspaceId: true });
-    const assets = getListedToolInputSchema("odt_read_task_assets", { hideWorkspaceId: true });
+    const type = getListedToolInputSchema("odt_browser_type", {
+      hideWorkspaceId: true,
+      activeStatuses,
+    });
+    const pullRequest = getListedToolInputSchema("odt_set_pull_request", {
+      hideWorkspaceId: true,
+      activeStatuses,
+    });
+    const assets = getListedToolInputSchema("odt_read_task_assets", {
+      hideWorkspaceId: true,
+      activeStatuses,
+    });
 
     expect(type).not.toHaveProperty("$schema");
     expect(propertiesOf(type).text).toEqual({ type: "string" });

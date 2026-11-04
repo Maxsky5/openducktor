@@ -12,6 +12,7 @@ import type {
   WorkflowReference,
   TaskWorkflowStepState,
   WorkflowInput,
+  WorkflowAgentEventEffect,
   WorkflowEventEffect,
   WorkflowNotificationKind,
 } from "@openducktor/contracts";
@@ -24,7 +25,12 @@ import {
 } from "../evaluate";
 import { workflowNotificationDefaults } from "../notification-defaults";
 import { createTaskInputs, taskIssueTypes, type TaskFacts } from "./task-input";
-import { createTaskPrompts, type PromptTemplate, type TaskPrompts } from "./task-prompts";
+import {
+  createTaskPrompts,
+  type PromptTemplate,
+  type TaskPrompts,
+  type TaskWorkflowAgentEvent,
+} from "./task-prompts";
 
 type Definition = CompiledWorkflowDefinition;
 /** A catalog role as a workflow binds it: the role and what it may do in this workflow. */
@@ -47,6 +53,12 @@ export type TaskWorkflowLaunchAction = AgentStep["launchActions"][number] & { ro
 export type TaskWorkflowAutomation = Definition["automations"][number] & {
   role: string;
   startMode: AgentSessionStartMode;
+};
+
+/** An agent event with the roles that may send it and its host effect. */
+export type TaskWorkflowAgentEventDefinition = TaskWorkflowAgentEvent & {
+  readonly roles: readonly string[];
+  readonly effect: WorkflowAgentEventEffect | undefined;
 };
 
 /** The Autopilot signal and the source role that a committed transition reports. */
@@ -122,6 +134,10 @@ export type TaskWorkflow = {
   effectEvent(effect: Exclude<WorkflowEventEffect, "status.set">): string | undefined;
   /** The status.set event that moves a task to the status. */
   statusEvent(status: string): string | undefined;
+  /** The events that agents of the role may send, in declaration order. */
+  agentEvents(roleId: string): readonly TaskWorkflowAgentEvent[];
+  /** The agent declaration of an event, or undefined when agents cannot send it. */
+  agentEvent(eventId: string): TaskWorkflowAgentEventDefinition | undefined;
   decide(eventId: string, task: TaskFacts): TaskEventDecision;
   /**
    * The launch that follows an event, selected in the state that the event gives. A client starts
@@ -194,10 +210,37 @@ export const createTaskWorkflow = (
       return { ...structuredClone(catalogRole), ...binding };
     }),
   );
+  const agentEventsById = new Map(
+    definition.events.flatMap(({ id, agent, effect }) =>
+      // SAFETY: the definition check rejects an agent event with another effect.
+      agent
+        ? [[id, deepFreeze({ id, ...agent, effect: effect as WorkflowAgentEventEffect })] as const]
+        : [],
+    ),
+  );
+  const agentEventsByRole = new Map(
+    roles.map(({ id: roleId, tools }) => {
+      const events = [...agentEventsById.values()].filter(({ roles }) => roles.includes(roleId));
+      if (events.length > 0 && !tools.includes("odt_apply_workflow_event"))
+        throw new WorkflowEvaluationError(
+          "invalid_definition",
+          `Task workflow "${definition.id}" lets role "${roleId}" send events ${events.map(({ id }) => id).join(", ")}, but the role has no odt_apply_workflow_event tool. Add the tool to the role, or remove the role from these events.`,
+        );
+      return [
+        roleId,
+        deepFreeze(events.map(({ id, description, note }) => ({ id, description, note }))),
+      ] as const;
+    }),
+  );
+  const agentEvents = lookup(definition.id, "role", agentEventsByRole);
   const issueTypes = taskIssueTypes(definition);
   const inputs = createTaskInputs(definition);
   const workflowTemplates = deepFreeze(structuredClone([...templates]));
-  const prompts = createTaskPrompts(definition, workflowTemplates, roles);
+  const prompts = createTaskPrompts(
+    definition,
+    workflowTemplates,
+    roles.map((role) => ({ ...role, agentEvents: agentEvents(role.id) })),
+  );
 
   const state = lookup(
     definition.id,
@@ -375,6 +418,8 @@ export const createTaskWorkflow = (
     emptyArtifactSummary: inputs.emptyArtifactSummary,
     effectEvent: (effect) => effectEvents.get(effect),
     statusEvent: (status) => statusEvents.get(status),
+    agentEvents,
+    agentEvent: (eventId) => agentEventsById.get(eventId),
     launchAfterEvent: (eventId, task, launchActionIds) => {
       const decision = evaluator.decide(inputs.input(task), eventId);
       if (decision.kind === "denied")

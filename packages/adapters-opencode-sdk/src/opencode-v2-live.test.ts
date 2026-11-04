@@ -491,14 +491,14 @@ describe("OpenCode V2 live observation", () => {
   });
 
   test.each([
-    { role: "spec", allowed: ["odt_set_task_artifact"], blocked: "odt_build_completed" },
-    { role: "planner", allowed: ["odt_set_task_artifact"], blocked: "odt_build_completed" },
+    { role: "spec", allowed: ["odt_set_task_artifact"], blocked: "odt_apply_workflow_event" },
+    { role: "planner", allowed: ["odt_set_task_artifact"], blocked: "odt_apply_workflow_event" },
     {
       role: "build",
-      allowed: ["odt_build_completed", "odt_set_task_artifact"],
+      allowed: ["odt_apply_workflow_event", "odt_set_task_artifact"],
       blocked: "odt_get_workspaces",
     },
-    { role: "qa", allowed: ["odt_set_task_artifact"], blocked: "odt_build_completed" },
+    { role: "qa", allowed: ["odt_set_task_artifact"], blocked: "odt_apply_workflow_event" },
   ] as const)(
     "admits $role children without copying parent workflow instructions",
     async ({ role, allowed, blocked }) => {

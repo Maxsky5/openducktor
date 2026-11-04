@@ -1,7 +1,5 @@
 export {
-  type BuildBlockedInput,
-  type BuildCompletedInput,
-  type BuildResumedInput,
+  type ApplyWorkflowEventInput,
   type CreateTaskInput,
   type GetWorkspacesInput,
   type GetWorkspacesResult,

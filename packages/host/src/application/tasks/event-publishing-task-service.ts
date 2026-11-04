@@ -353,6 +353,13 @@ export const createEventPublishingTaskService = ({
         changeForTask(input.taskId),
         taskService.applyStartEvent(input),
       ),
+    applyAgentEvent: (input) =>
+      publishAfterMutation(
+        "apply-task-event",
+        input,
+        changeForTask(input.taskId),
+        taskService.applyAgentEvent(input),
+      ),
     buildBlocked: (input) =>
       publishAfterMutation(
         "build-blocked",

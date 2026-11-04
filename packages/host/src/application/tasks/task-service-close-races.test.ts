@@ -82,7 +82,6 @@ describe("blocker and close concurrency", () => {
             const block = service.buildBlocked({
               workspaceId: "workspace-1",
               ...input,
-              reason: "Needs clarification",
             });
             const close = service.closeTask({
               workspaceId: "workspace-1",

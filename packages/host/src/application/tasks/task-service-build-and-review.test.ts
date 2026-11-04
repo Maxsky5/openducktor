@@ -33,7 +33,7 @@ const installAction = {
 
 describe("createTaskService build and review", () => {
   test.each(["in_progress", "ai_review", "human_review", "blocked"] as const)(
-    "build_blocked accepts %s and preserves task documents",
+    "buildBlocked accepts %s and preserves task documents",
     async (status) => {
       const current = task({
         id: "task-1",
@@ -61,7 +61,6 @@ describe("createTaskService build and review", () => {
           workspaceId: "repo",
           repoPath: "/repo",
           taskId: current.id,
-          reason: "Needs clarification",
         }),
       );
       expect(result.status).toBe("blocked");
@@ -75,7 +74,7 @@ describe("createTaskService build and review", () => {
   );
 
   test.each(["open", "spec_ready", "ready_for_dev", "closed"] as const)(
-    "build_blocked rejects %s without writing",
+    "buildBlocked rejects %s without writing",
     async (status) => {
       const transitions: unknown[] = [];
       const taskStore: TaskStorePort = {
@@ -95,7 +94,6 @@ describe("createTaskService build and review", () => {
             workspaceId: "repo",
             repoPath: "/repo",
             taskId: "task-1",
-            reason: "Needs clarification",
           }),
         ),
       ).rejects.toThrow(`build-blocked is not allowed for task task-1 (task) from ${status}`);
@@ -103,7 +101,7 @@ describe("createTaskService build and review", () => {
     },
   );
 
-  test("blocks a build after requiring a non-empty reason", async () => {
+  test("blocks a build through the task store", async () => {
     const calls: unknown[] = [];
     const blockedTask = task({ id: "task-1", status: "blocked" });
     const taskStore: TaskStorePort = {
@@ -184,7 +182,6 @@ describe("createTaskService build and review", () => {
         workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
-        reason: " Waiting on API ",
       }),
     );
     expect(calls).toMatchObject([
@@ -205,84 +202,6 @@ describe("createTaskService build and review", () => {
       status: "blocked",
       availableActions: expect.arrayContaining(["open_builder"]),
     });
-  });
-  test("rejects build_blocked without a reason before calling the store", async () => {
-    const taskStore: TaskStorePort = {
-      listTasks() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not list");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not transition");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    await expect(
-      Effect.runPromise(
-        createTaskService({
-          taskWorkflows: builtinTaskWorkflows,
-          taskStore,
-          gitPort: createBuildStartGitPort({ calls: [] }),
-        }).buildBlocked({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1", reason: " " }),
-      ),
-    ).rejects.toThrow("build_blocked requires a non-empty reason");
   });
   test("resumes a blocked build through a targeted task load", async () => {
     const calls: unknown[] = [];
@@ -909,7 +828,6 @@ describe("createTaskService build and review", () => {
         workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
-        summary: "Done",
       }),
     );
     expect(calls).toMatchObject([

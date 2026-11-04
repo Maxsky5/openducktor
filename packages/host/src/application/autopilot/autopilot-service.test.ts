@@ -784,7 +784,6 @@ describe("host Autopilot", () => {
         workspaceId: repoPath.split("/").at(-1)!,
         repoPath,
         taskId,
-        reason: "Needs input",
       }),
     );
     await step(
@@ -971,7 +970,6 @@ describe("host Autopilot", () => {
         workspaceId: repoPath.split("/").at(-1)!,
         repoPath,
         taskId,
-        reason: "Needs input",
       }),
     );
     await run(

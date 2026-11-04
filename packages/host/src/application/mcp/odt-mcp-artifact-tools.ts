@@ -7,12 +7,10 @@ import {
   freeArtifactCodeSchema,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
-  odtBrowserCallerSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { type JSONType, z } from "zod";
+import type { JSONType } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
-import type { RuntimeSessionOwner } from "../../ports/workspace-session-store-port";
 import { decodeArtifactInput } from "../tasks/support/artifact-content";
 import type { TaskService } from "../tasks/task-service";
 import {
@@ -22,18 +20,20 @@ import {
   parseToolInput,
   toMcpTaskArtifact,
 } from "./odt-mcp-bridge-model";
-import type { OdtMcpBridgeError, OdtMcpToolContext } from "./odt-mcp-bridge-tool-context";
-
-const artifactBridgeBodySchema = z.record(z.string(), z.json());
+import {
+  type OdtMcpBridgeError,
+  type OdtMcpToolContext,
+  resolveTaskCaller,
+  splitBridgeCaller,
+} from "./odt-mcp-bridge-tool-context";
 
 export const executeSetTaskArtifact = (
   context: OdtMcpToolContext,
   body: JSONType,
 ): Effect.Effect<McpArtifactSaveResult, OdtMcpBridgeError> =>
   Effect.gen(function* () {
-    const { caller: rawCaller, ...toolBody } = yield* parseToolInput(
+    const { caller: rawCaller, input: toolBody } = yield* splitBridgeCaller(
       "odt_set_task_artifact",
-      artifactBridgeBodySchema,
       body,
     );
     const input = yield* parseToolInput(
@@ -47,12 +47,13 @@ export const executeSetTaskArtifact = (
       repoPath,
       task,
     } = yield* context.taskScopeForWorkspace(workspaceId, input.taskId);
-    const owner = yield* resolveArtifactWriter(
+    const owner = yield* resolveTaskCaller(
       context,
       "odt_set_task_artifact",
       rawCaller,
       workspaceId,
       task.id,
+      "write artifacts",
     );
     const workflow = context.taskWorkflows.forTask(task);
     const declared = workflow.artifact(input.code);
@@ -201,9 +202,8 @@ export const executeDeleteTaskArtifact = (
   body: JSONType,
 ): Effect.Effect<McpArtifactDeleteResult, OdtMcpBridgeError> =>
   Effect.gen(function* () {
-    const { caller: rawCaller, ...toolBody } = yield* parseToolInput(
+    const { caller: rawCaller, input: toolBody } = yield* splitBridgeCaller(
       "odt_delete_task_artifact",
-      artifactBridgeBodySchema,
       body,
     );
     const parsed = yield* parseToolInput(
@@ -221,12 +221,13 @@ export const executeDeleteTaskArtifact = (
         message: `${parsed.code} is a workflow artifact. Only free artifacts can be deleted.`,
       });
     }
-    yield* resolveArtifactWriter(
+    yield* resolveTaskCaller(
       context,
       "odt_delete_task_artifact",
       rawCaller,
       parsed.workspaceId ?? "",
       task.id,
+      "write artifacts",
     );
     const collection = yield* context.taskService.listTaskArtifacts({
       workspaceId,
@@ -246,26 +247,6 @@ export const executeDeleteTaskArtifact = (
       ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_delete_task_artifact,
       { ...result, code: parsed.code },
     );
-  });
-
-const resolveArtifactWriter = (
-  context: OdtMcpToolContext,
-  toolName: "odt_set_task_artifact" | "odt_delete_task_artifact",
-  rawCaller: JSONType | undefined,
-  workspaceId: string,
-  taskId: string,
-): Effect.Effect<RuntimeSessionOwner | undefined, OdtMcpBridgeError> =>
-  Effect.gen(function* () {
-    if (rawCaller === undefined) return undefined;
-    const caller = yield* parseToolInput(toolName, odtBrowserCallerSchema, rawCaller);
-    const owner = yield* context.managedCallers.resolve({ workspaceId, caller });
-    if (owner.kind === "task" && owner.taskId !== taskId) {
-      return yield* new HostValidationError({
-        field: "taskId",
-        message: "Managed task sessions can write artifacts only for their own task.",
-      });
-    }
-    return owner;
   });
 
 /** Workflow artifacts take their name, file name, and media type from the workflow. */

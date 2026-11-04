@@ -150,7 +150,11 @@ const probePackagedMcpInitialization = async (path: string): Promise<void> => {
     request.resume();
     response.setHeader("Content-Type", "application/json");
     response.end(
-      JSON.stringify({ bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: ODT_MCP_TOOL_NAMES }),
+      JSON.stringify({
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+        toolNames: ODT_MCP_TOOL_NAMES,
+        activeStatuses: ["open"],
+      }),
     );
   });
   await new Promise<void>((resolve, reject) => {

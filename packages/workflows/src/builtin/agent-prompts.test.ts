@@ -117,7 +117,8 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain("priority must be an integer 0..4");
     expect(prompt).not.toContain('"priority"?: 0|1|2|3|4');
     expect(prompt).not.toContain("- odt_set_spec(");
-    expect(prompt).not.toContain("- odt_build_completed(");
+    expect(prompt).not.toContain("- odt_apply_workflow_event(");
+    expect(prompt).not.toContain("Workflow events for odt_apply_workflow_event");
     expect(prompt).not.toContain("- odt_qa_rejected(");
     expect(prompt).toContain("odt_read_task_artifacts");
     expect(prompt).toContain("Feature flow");
@@ -324,9 +325,9 @@ describe("buildAgentSystemPrompt", () => {
       "Review the full diff and affected paths as if the user asked what you would improve or refactor",
       "Fix any material in-scope issue you would then recommend",
       "Repeat or broaden checks only when changes, failures, or unresolved risks justify it",
-      "meaningful Conventional Commit before calling odt_build_completed",
-      "odt_build_blocked with a specific reason",
-      "odt_build_resumed",
+      "meaningful Conventional Commit before you send build-completed",
+      "call odt_apply_workflow_event with eventId build-blocked and a note with a specific reason",
+      "send build-resumed",
       "use odt_set_task_artifact with code spec to revise the spec and code plan to revise the plan",
       "Save each changed artifact as complete Markdown",
       "Get user approval before changing required scope, design contracts, or security posture",
@@ -334,6 +335,20 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain("Execute the plan in dependency order");
     expect(prompt).toContain("- odt_set_task_artifact(");
     expect(prompt).toContain("Allowed workflow codes for odt_set_task_artifact: spec, plan.");
+    expect(prompt).toContain(
+      [
+        '- odt_apply_workflow_event({"taskId": string, "eventId": string, "note"?: string})',
+        "- odt_set_pull_request(",
+      ].join("\n"),
+    );
+    expect(prompt).toContain(
+      [
+        "- Workflow events for odt_apply_workflow_event:",
+        "  - build-blocked (note required): Move the task to blocked. Put the reason in the note.",
+        "  - build-resumed: Move a blocked task back to in_progress.",
+        "  - build-completed: Move an in_progress task to ai_review, or to human_review when the latest QA report is approved.",
+      ].join("\n"),
+    );
   });
 
   test("QA reviews outcomes and contracts without enforcing implementation recipes", () => {
@@ -353,7 +368,7 @@ describe("buildAgentSystemPrompt", () => {
     ]);
     expectHeadingsInOrder(prompt, ["## Verdict", "## Findings", "## Verification"]);
     expect(prompt).not.toContain("Run at least two review lenses");
-    expect(prompt).not.toContain("- odt_build_completed(");
+    expect(prompt).not.toContain("- odt_apply_workflow_event(");
   });
 
   test("override template always wins even with stale baseVersion", () => {
@@ -380,18 +395,18 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test.each([
-    ["workflow.rules", 9, 10, "build"],
+    ["workflow.rules", 10, 11, "build"],
     ["workflow.tool_rules", 11, 12, "build"],
     ["workflow.task_context", 5, 6, "build"],
     ["role spec", 7, 8, "spec"],
     ["role planner", 8, 9, "planner"],
-    ["role build", 6, 7, "build"],
+    ["role build", 7, 8, "build"],
     ["role qa", 6, 7, "qa"],
     ["messages.spec_start", 5, 6, "spec"],
     ["messages.plan_start", 5, 6, "planner"],
-    ["messages.build_start", 4, 5, "build"],
-    ["messages.build_after_qa_rejection", 4, 5, "build"],
-    ["messages.build_requested_changes", 5, 6, "build"],
+    ["messages.build_start", 5, 6, "build"],
+    ["messages.build_after_qa_rejection", 5, 6, "build"],
+    ["messages.build_requested_changes", 6, 7, "build"],
     ["messages.build_pull_request", 8, 9, "build"],
     ["messages.qa_review", 4, 5, "qa"],
   ] as const)(
@@ -480,7 +495,7 @@ describe("kickoff and permission prompts", () => {
 
     expectPromptToContainAll(prompt, [
       "Implement this task",
-      "submit the completed change with odt_build_completed",
+      "submit the completed change with odt_apply_workflow_event with eventId build-completed",
       "taskId task-1",
     ]);
     expect(prompt).not.toContain("worktree");
@@ -498,7 +513,7 @@ describe("kickoff and permission prompts", () => {
       "latest QA rejection",
       "Check each finding against the current code",
       "Fix valid in-scope issues and explain why you decline any other finding",
-      "Submit the completed change with odt_build_completed",
+      "Submit the completed change with odt_apply_workflow_event with eventId build-completed",
       "Use taskId task-1 for every task-bound odt_* tool call",
     ]);
   });
@@ -519,7 +534,7 @@ describe("kickoff and permission prompts", () => {
       "Address the requested changes for this task.",
       "Requested changes from human review:",
       "Update the task summary and rerun the desktop tests.",
-      "Submit the completed change with odt_build_completed.",
+      "Submit the completed change with odt_apply_workflow_event with eventId build-completed.",
       "Use taskId task-1 for every task-bound odt_* tool call.",
     ]);
   });

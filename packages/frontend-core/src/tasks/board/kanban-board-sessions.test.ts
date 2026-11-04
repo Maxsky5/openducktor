@@ -180,7 +180,7 @@ describe("use-kanban-board-model helpers", () => {
             requestType: "permission_grant" as const,
             title: `Approve permission: ${"tool"}`,
             summary: `Approval request for ${"tool"}.`,
-            affectedPaths: ["odt_build_completed"],
+            affectedPaths: ["odt_apply_workflow_event"],
             action: { name: "tool" },
             mutation: "read_only" as const,
             supportedReplyOutcomes: [

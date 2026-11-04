@@ -1817,23 +1817,18 @@ describe("HostClient", () => {
     });
   });
 
-  test("build and human workflow commands use expected IPC routes", async () => {
+  test("human workflow commands use expected IPC routes", async () => {
     const { client, calls } = createClient((command) => {
-      if (command === "build_blocked") {
-        return { ...makeTaskCardPayload(), status: "blocked" };
-      }
       if (command === "human_request_changes") {
         return { ...makeTaskCardPayload(), status: "in_progress" };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await client.buildBlocked(workspace, "task-1", "Needs clarification");
     await client.humanRequestChanges(workspace, "task-1", "Please rework API");
 
-    expect(calls.map((entry) => entry.command)).toEqual(["build_blocked", "human_request_changes"]);
-    expect(calls[0]?.args?.reason).toBe("Needs clarification");
-    expect(calls[1]?.args?.note).toBe("Please rework API");
+    expect(calls.map((entry) => entry.command)).toEqual(["human_request_changes"]);
+    expect(calls[0]?.args?.note).toBe("Please rework API");
   });
 
   test("tasksList rejects malformed host payloads", async () => {

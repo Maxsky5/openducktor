@@ -35,12 +35,20 @@ export type OwnedPromptTemplate = PromptTemplate & {
   readonly ownerKind: "role" | "workflow";
 };
 
+/** An event that agents of a role may send with `odt_apply_workflow_event`. */
+export type TaskWorkflowAgentEvent = {
+  readonly id: string;
+  readonly description: string;
+  readonly note: "required" | "optional";
+};
+
 /** The role facts that prompts read. The system template comes from the role catalog. */
 type PromptRole = {
   readonly id: string;
   readonly tools: readonly AgentToolName[];
   readonly writes: readonly string[];
   readonly systemPrompt: CompiledAgentRoleDefinition["systemPrompt"];
+  readonly agentEvents: readonly TaskWorkflowAgentEvent[];
 };
 
 export type PromptTaskContext = {
@@ -344,6 +352,11 @@ export const createTaskPrompts = (
     lines.push(
       `- Allowed workflow codes for odt_set_task_artifact: ${role.writes.join(", ")}. Free-artifact writes are also allowed.`,
     );
+    if (role.agentEvents.length > 0) {
+      lines.push("- Workflow events for odt_apply_workflow_event:");
+      for (const { id, description, note } of role.agentEvents)
+        lines.push(`  - ${id}${note === "required" ? " (note required)" : ""}: ${description}`);
+    }
     // The MCP definitions of the browser tools describe their input, so the prompt only names them.
     const browserTools = role.tools.filter(isOdtBrowserToolName);
     if (browserTools.length > 0) lines.push(`- Browser tools: ${browserTools.join(", ")}`);

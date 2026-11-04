@@ -52,6 +52,7 @@ const createTaskServiceDefaults = () =>
     transitionTask: unexpectedTaskServiceCall("transitionTask"),
     applyTaskEvent: unexpectedTaskServiceCall("applyTaskEvent"),
     applyStartEvent: unexpectedTaskServiceCall("applyStartEvent"),
+    applyAgentEvent: unexpectedTaskServiceCall("applyAgentEvent"),
     unlinkPullRequest: unexpectedTaskServiceCall("unlinkPullRequest"),
     updateTask: unexpectedTaskServiceCall("updateTask"),
     workflowArtifactGet: unexpectedTaskServiceCall("workflowArtifactGet"),

@@ -1112,8 +1112,8 @@ describe("runtime schemas", () => {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
       workflowToolAliasesByCanonical: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-        odt_build_blocked: [" shared_alias "],
-        odt_build_completed: ["shared_alias"],
+        odt_apply_workflow_event: [" shared_alias "],
+        odt_set_pull_request: ["shared_alias"],
         odt_read_task: [" odt_set_task_artifact "],
         odt_set_task_artifact: [" runtime_artifact ", "runtime_artifact", "   "],
       },
@@ -1128,8 +1128,8 @@ describe("runtime schemas", () => {
       expect.arrayContaining([
         expect.objectContaining({
           message:
-            'Runtime workflow alias "shared_alias" is already assigned to canonical tool "odt_build_blocked".',
-          path: ["workflowToolAliasesByCanonical", "odt_build_completed", 0],
+            'Runtime workflow alias "shared_alias" is already assigned to canonical tool "odt_apply_workflow_event".',
+          path: ["workflowToolAliasesByCanonical", "odt_set_pull_request", 0],
         }),
         expect.objectContaining({
           message: "Runtime workflow aliases must not repeat canonical odt_* tool IDs.",

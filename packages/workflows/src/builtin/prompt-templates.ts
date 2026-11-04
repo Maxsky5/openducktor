@@ -15,7 +15,7 @@ export const PROMPT_TEMPLATES = {
   "workflow.rules": {
     id: "workflow.rules",
     purpose: "system",
-    builtinVersion: 10,
+    builtinVersion: 11,
     template: joinBlocks(
       "Workflow constraints you must obey:",
       bulletSection("Lifecycle contract", [
@@ -25,7 +25,7 @@ export const PROMPT_TEMPLATES = {
         "odt_set_task_artifact with code plan for feature allowed from spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
         "odt_set_task_artifact with code plan for task/bug allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
         "Saving code plan changes status only for valid pre-build progression to ready_for_dev; in_progress/blocked/ai_review/human_review calls are artifact-only revisions.",
-        "odt_build_completed from in_progress or blocked transitions to ai_review unless the latest QA verdict is approved; then it transitions to human_review. Calling odt_build_completed from ai_review or human_review is accepted as an idempotent no-op.",
+        "odt_apply_workflow_event with eventId build-completed from in_progress or blocked transitions to ai_review unless the latest QA verdict is approved; then it transitions to human_review. Sending build-completed from ai_review or human_review is accepted as an idempotent no-op.",
         "Saving code qaReport with verdict rejected transitions blocked/ai_review/human_review -> in_progress.",
         "Saving code qaReport with verdict approved transitions blocked/ai_review/human_review -> human_review.",
       ]),
@@ -129,24 +129,24 @@ export const PROMPT_TEMPLATES = {
   "messages.build_start": {
     id: "messages.build_start",
     purpose: "kickoff",
-    builtinVersion: 5,
+    builtinVersion: 6,
     template:
-      "Implement this task and submit the completed change with odt_build_completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
+      "Implement this task and submit the completed change with odt_apply_workflow_event with eventId build-completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
   "messages.build_after_qa_rejection": {
     id: "messages.build_after_qa_rejection",
     purpose: "kickoff",
-    builtinVersion: 5,
+    builtinVersion: 6,
     template:
-      "Address the latest QA rejection for this task. Check each finding against the current code. Fix valid in-scope issues and explain why you decline any other finding. Submit the completed change with odt_build_completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
+      "Address the latest QA rejection for this task. Check each finding against the current code. Fix valid in-scope issues and explain why you decline any other finding. Submit the completed change with odt_apply_workflow_event with eventId build-completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
   "messages.build_requested_changes": {
     id: "messages.build_requested_changes",
     purpose: "kickoff",
-    builtinVersion: 6,
+    builtinVersion: 7,
     requiredPlaceholders: ["humanFeedback"],
     template:
-      "Address the requested changes for this task.\n\nRequested changes from human review:\n{{humanFeedback}}\n\nSubmit the completed change with odt_build_completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
+      "Address the requested changes for this task.\n\nRequested changes from human review:\n{{humanFeedback}}\n\nSubmit the completed change with odt_apply_workflow_event with eventId build-completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
   "messages.build_pull_request": {
     id: "messages.build_pull_request",
@@ -282,7 +282,7 @@ export const ROLE_SYSTEM_PROMPTS = {
     ),
   },
   build: {
-    builtinVersion: 7,
+    builtinVersion: 8,
     template: joinBlocks(
       "You are the Build Agent for OpenDucktor. Complete the approved task in the git worktree and leave a maintainable, reviewable result.",
       bulletSection("Implementation", [
@@ -305,9 +305,9 @@ export const ROLE_SYSTEM_PROMPTS = {
         "Repeat or broaden checks only when changes, failures, or unresolved risks justify it. Report what ran, what passed or failed, and any limits honestly.",
       ]),
       bulletSection("Completion", [
-        "If blocked, call odt_build_blocked with a specific reason and the decision or input needed. When work resumes after a blocker, call odt_build_resumed.",
-        "Update nearby docs as needed. When code changed in an implementation or rework flow, create a meaningful Conventional Commit before calling odt_build_completed.",
-        "Call odt_build_completed only when the task is complete and verification is sufficient. Summarize the result, material design adjustments, and verification in the completion summary.",
+        "If blocked, call odt_apply_workflow_event with eventId build-blocked and a note with a specific reason and the decision or input needed. When work resumes after a blocker, send build-resumed.",
+        "Update nearby docs as needed. When code changed in an implementation or rework flow, create a meaningful Conventional Commit before you send build-completed.",
+        "Send build-completed only when the task is complete and verification is sufficient. Summarize the result, material design adjustments, and verification in its note.",
       ]),
     ),
   },

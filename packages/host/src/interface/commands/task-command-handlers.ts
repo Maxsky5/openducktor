@@ -13,8 +13,6 @@ import type { HostCommandHandlerDefinitions } from "../router/host-command-route
 import type { HostCommandArgs } from "./command-inputs";
 import {
   parseAgentSessionDeleteInput,
-  parseBuildBlockedInput,
-  parseBuildCompletedInput,
   parseBuildStartInput,
   parseCloseTaskInput,
   parseCreateTaskInput,
@@ -56,10 +54,6 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
       taskService.agentSessionsList(parseTaskIdInput(args, "agent_sessions_list input")),
     agent_sessions_list_for_tasks: (args) =>
       taskService.agentSessionsListForTasks(parseListAgentSessionsForTasksInput(args)),
-    build_blocked: (args) => taskService.buildBlocked(parseBuildBlockedInput(args)),
-    build_completed: (args) => taskService.buildCompleted(parseBuildCompletedInput(args)),
-    build_resumed: (args) =>
-      taskService.buildResumed(parseTaskIdInput(args, "build_resumed input")),
     build_start: (args) => taskService.buildStart(parseBuildStartInput(args)),
     human_request_changes: (args) =>
       taskService.humanRequestChanges(

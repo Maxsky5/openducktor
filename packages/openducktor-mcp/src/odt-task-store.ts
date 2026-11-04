@@ -28,7 +28,7 @@ export class OdtTaskStore {
   private readonly callerSource: RuntimeCallerSource | undefined;
   private readonly client: OdtHostBridgeClientPort;
 
-  constructor(options: OdtStoreOptions, deps: OdtTaskStoreDeps = {}) {
+  constructor(options: Omit<OdtStoreOptions, "activeStatuses">, deps: OdtTaskStoreDeps = {}) {
     this.workspaceId = options.workspaceId;
     this.callerSource = options.callerSource;
     this.client =
@@ -116,16 +116,10 @@ export class OdtTaskStore {
     return this.executeWorkspaceScoped("odt_search_tasks", input);
   }
 
-  async buildBlocked(input: ToolInput<"odt_build_blocked">) {
-    return this.executeWorkspaceScoped("odt_build_blocked", input);
-  }
-
-  async buildResumed(input: ToolInput<"odt_build_resumed">) {
-    return this.executeWorkspaceScoped("odt_build_resumed", input);
-  }
-
-  async buildCompleted(input: ToolInput<"odt_build_completed">) {
-    return this.executeWorkspaceScoped("odt_build_completed", input);
+  async applyWorkflowEvent(input: ToolInput<"odt_apply_workflow_event">, meta?: RequestMeta) {
+    const caller = this.callerSource ? resolveNativeCaller(this.callerSource, meta) : undefined;
+    const workspaceId = this.resolveWorkspaceId("odt_apply_workflow_event", input);
+    return this.client.call("odt_apply_workflow_event", workspaceId, input, caller);
   }
 
   async setPullRequest(input: ToolInput<"odt_set_pull_request">) {

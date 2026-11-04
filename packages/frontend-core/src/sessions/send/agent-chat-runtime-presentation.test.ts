@@ -115,9 +115,9 @@ describe("resolveAgentChatRuntimePresentation", () => {
       kind: "regular",
       displayName: "custom_tool",
     });
-    expect(presentation.presentToolCall("odt_build_completed")).toEqual({
+    expect(presentation.presentToolCall("odt_apply_workflow_event")).toEqual({
       kind: "workflow",
-      displayName: "build_completed",
+      displayName: "apply_workflow_event",
     });
   });
 

@@ -145,7 +145,7 @@ export const TURNS = {
     {
       kind: "workflow",
       id: "completed",
-      name: "build_completed",
+      name: "apply_workflow_event",
       duration: "38ms",
       time: "09:49:05 AM",
     },
@@ -199,7 +199,7 @@ export const TURNS = {
     {
       kind: "workflow",
       id: "completed",
-      name: "build_completed",
+      name: "apply_workflow_event",
       duration: "36ms",
       time: "09:55:23 AM",
     },

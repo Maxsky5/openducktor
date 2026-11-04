@@ -279,53 +279,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildBlocked(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "build_blocked", input });
-            return taskFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       buildStart(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_start", input });
             return buildSessionFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      buildCompleted(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "build_completed", input });
-            return taskFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      buildResumed(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "build_resumed", input });
-            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -707,36 +665,11 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.build_blocked?.({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          reason: "Blocked",
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
         handlers.build_start?.({
           workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           runtimeKind: "opencode",
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.build_resumed?.({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.build_completed?.({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          input: { summary: "Done" },
         }),
       ),
     ).resolves.toBeDefined();
@@ -919,10 +852,6 @@ describe("createTaskCommandHandlers", () => {
         input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", eventId: "defer" },
       },
       {
-        command: "build_blocked",
-        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", reason: "Blocked" },
-      },
-      {
         command: "build_start",
         input: {
           workspaceId: "repo",
@@ -930,14 +859,6 @@ describe("createTaskCommandHandlers", () => {
           taskId: "task-1",
           runtimeKind: "opencode",
         },
-      },
-      {
-        command: "build_resumed",
-        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
-      },
-      {
-        command: "build_completed",
-        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", summary: "Done" },
       },
       {
         command: "task_update",

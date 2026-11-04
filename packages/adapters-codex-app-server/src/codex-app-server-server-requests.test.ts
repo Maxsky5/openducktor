@@ -166,7 +166,7 @@ describe("handleCodexServerRequest", () => {
     const request = mcpToolApprovalRequest({
       id: 27,
       serverName: "openducktor",
-      toolName: "odt_build_completed",
+      toolName: "odt_apply_workflow_event",
       threadId: session.threadId,
     });
 
@@ -352,7 +352,11 @@ describe("handleCodexServerRequest", () => {
       handleCodexServerRequest(
         createRequestContext({ events, pendingInput, respondServerRequest }),
         createSession("spec"),
-        mcpToolApprovalRequest({ id: 33, serverName: "external", toolName: "odt_build_completed" }),
+        mcpToolApprovalRequest({
+          id: 33,
+          serverName: "external",
+          toolName: "odt_apply_workflow_event",
+        }),
         new Set(),
       ),
     ).resolves.toBe(true);
@@ -360,7 +364,7 @@ describe("handleCodexServerRequest", () => {
     expect(respondServerRequest).not.toHaveBeenCalled();
     expect(
       pendingInput.nativeRequest("runtime-live", "thread-spec", 33)?.entry.request.tool?.name,
-    ).toBe("odt_build_completed");
+    ).toBe("odt_apply_workflow_event");
   });
 
   test("rejects request owners that are neither the current session nor a known child route", async () => {
@@ -398,7 +402,7 @@ describe("handleCodexServerRequest", () => {
         mcpToolApprovalRequest({
           id: 32,
           serverName: "openducktor",
-          toolName: "odt_build_completed",
+          toolName: "odt_apply_workflow_event",
         }),
         new Set(),
       ),
@@ -414,7 +418,9 @@ describe("handleCodexServerRequest", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "session_error",
-        message: expect.stringContaining("role 'spec' is not allowed to use odt_build_completed"),
+        message: expect.stringContaining(
+          "role 'spec' is not allowed to use odt_apply_workflow_event",
+        ),
       }),
     );
   });

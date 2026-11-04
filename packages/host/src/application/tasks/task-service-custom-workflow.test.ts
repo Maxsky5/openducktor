@@ -314,7 +314,7 @@ describe("task service with a custom task workflow", () => {
     const input = { ...harness.scope, taskId: id };
     await Effect.runPromise(service().transitionTask({ ...input, status: "writing" }));
 
-    await Effect.runPromise(service().buildBlocked({ ...input, reason: "Waiting for data" }));
+    await Effect.runPromise(service().buildBlocked(input));
     expect(await status(id)).toBe("paused");
     await Effect.runPromise(service().buildResumed(input));
     expect(await status(id)).toBe("writing");

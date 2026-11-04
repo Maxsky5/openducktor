@@ -3,6 +3,8 @@ import { ODT_MCP_BRIDGE_VERSION } from "@openducktor/contracts";
 import type { OdtHostBridgeClientPort } from "./host-bridge-client";
 import { OdtTaskStore } from "./odt-task-store";
 
+const TEST_ACTIVE_STATUSES = ["open", "in_progress", "blocked"];
+
 const summaryPayload = {
   task: {
     id: "task-1",
@@ -28,7 +30,11 @@ describe("OdtTaskStore", () => {
   test("delegates workspace-scoped execution using the startup workspace default", async () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [] }),
+      ready: async () => ({
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+        toolNames: [],
+        activeStatuses: TEST_ACTIVE_STATUSES,
+      }),
       getWorkspaces: async () => workspacesPayload,
       call: async (toolName, workspaceId, input) => {
         calls.push({ toolName, workspaceId, input });
@@ -55,7 +61,11 @@ describe("OdtTaskStore", () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const payload = { assets: [] };
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [] }),
+      ready: async () => ({
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+        toolNames: [],
+        activeStatuses: TEST_ACTIVE_STATUSES,
+      }),
       getWorkspaces: async () => workspacesPayload,
       call: async (toolName, workspaceId, input) => {
         calls.push({ toolName, workspaceId, input });
@@ -80,7 +90,11 @@ describe("OdtTaskStore", () => {
   test("tool input workspaceId overrides the startup default", async () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [] }),
+      ready: async () => ({
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+        toolNames: [],
+        activeStatuses: TEST_ACTIVE_STATUSES,
+      }),
       getWorkspaces: async () => workspacesPayload,
       call: async (toolName, workspaceId, input) => {
         calls.push({ toolName, workspaceId, input });
@@ -109,7 +123,11 @@ describe("OdtTaskStore", () => {
   test("workspace-scoped public tools work with only tool-input workspaceId", async () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [] }),
+      ready: async () => ({
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+        toolNames: [],
+        activeStatuses: TEST_ACTIVE_STATUSES,
+      }),
       getWorkspaces: async () => workspacesPayload,
       call: async (toolName, workspaceId, input) => {
         calls.push({ toolName, workspaceId, input });
@@ -144,7 +162,11 @@ describe("OdtTaskStore", () => {
 
   test("fails before delegation when no workspace can be resolved", async () => {
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [] }),
+      ready: async () => ({
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+        toolNames: [],
+        activeStatuses: TEST_ACTIVE_STATUSES,
+      }),
       getWorkspaces: async () => workspacesPayload,
       call: async () => summaryPayload,
     };
@@ -159,7 +181,11 @@ describe("OdtTaskStore", () => {
   test("getWorkspaces bypasses workspace resolution and delegates directly", async () => {
     let calls = 0;
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [] }),
+      ready: async () => ({
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+        toolNames: [],
+        activeStatuses: TEST_ACTIVE_STATUSES,
+      }),
       getWorkspaces: async () => {
         calls += 1;
         return {
@@ -203,10 +229,56 @@ describe("OdtTaskStore", () => {
     expect(calls).toBe(1);
   });
 
+  test("sends a workflow event with the native caller of a managed session", async () => {
+    const calls: unknown[] = [];
+    const client: OdtHostBridgeClientPort = {
+      ready: async () => ({
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+        toolNames: [],
+        activeStatuses: TEST_ACTIVE_STATUSES,
+      }),
+      getWorkspaces: async () => workspacesPayload,
+      call: async (toolName, workspaceId, input, caller) => {
+        calls.push({ toolName, workspaceId, input, caller });
+        return { task: summaryPayload.task, eventId: "build-completed" };
+      },
+    };
+    const managed = new OdtTaskStore(
+      {
+        workspaceId: "repo",
+        hostUrl: "http://127.0.0.1:14327",
+        callerSource: { runtime: "codex" },
+      },
+      { client },
+    );
+    const external = new OdtTaskStore(
+      { workspaceId: "repo", hostUrl: "http://127.0.0.1:14327" },
+      { client },
+    );
+    const input = { taskId: "task-1", eventId: "build-completed" };
+
+    await managed.applyWorkflowEvent(input, { threadId: "thread-1" });
+    await external.applyWorkflowEvent(input);
+
+    expect(calls).toEqual([
+      {
+        toolName: "odt_apply_workflow_event",
+        workspaceId: "repo",
+        input,
+        caller: { runtime: "codex", runtimeSessionId: "thread-1" },
+      },
+      { toolName: "odt_apply_workflow_event", workspaceId: "repo", input, caller: undefined },
+    ]);
+  });
+
   test("encodes UTF-8 artifact writes once before the bridge and rejects lossy input", async () => {
     const calls: unknown[] = [];
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [] }),
+      ready: async () => ({
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+        toolNames: [],
+        activeStatuses: TEST_ACTIVE_STATUSES,
+      }),
       getWorkspaces: async () => workspacesPayload,
       call: async (_toolName, _workspaceId, input) => {
         calls.push(input);

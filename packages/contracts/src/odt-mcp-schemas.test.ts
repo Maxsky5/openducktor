@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  ApplyWorkflowEventInputSchema,
   getWorkspacesResultSchema,
   ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES,
   ODT_TOOL_SCHEMAS,
@@ -76,12 +77,27 @@ describe("odt mcp public task schemas", () => {
     });
   });
 
+  test("workflow event input trims the note and rejects an empty one", () => {
+    expect(
+      ApplyWorkflowEventInputSchema.parse({
+        taskId: "task-1",
+        eventId: "build-blocked",
+        note: "  Waiting on API  ",
+      }),
+    ).toEqual({ taskId: "task-1", eventId: "build-blocked", note: "Waiting on API" });
+    expect(
+      ApplyWorkflowEventInputSchema.safeParse({ taskId: "task-1", eventId: "x", note: " " })
+        .success,
+    ).toBe(false);
+    expect(
+      ApplyWorkflowEventInputSchema.safeParse({ taskId: "task-1", eventId: " " }).success,
+    ).toBe(false);
+  });
+
   test("workspace-scoped tool names stay explicit and exclude odt_get_workspaces", () => {
     expect([...ODT_WORKSPACE_SCOPED_TOOL_NAMES].sort()).toEqual(
       [
-        "odt_build_blocked",
-        "odt_build_completed",
-        "odt_build_resumed",
+        "odt_apply_workflow_event",
         "odt_create_task",
         "odt_read_task",
         "odt_read_task_assets",
@@ -112,13 +128,11 @@ describe("odt mcp public task schemas", () => {
       "odt_set_task_artifact",
       "odt_delete_task_artifact",
       "odt_update_task",
-      "odt_build_blocked",
-      "odt_build_resumed",
-      "odt_build_completed",
+      "odt_apply_workflow_event",
       "odt_set_pull_request",
       ...ODT_BROWSER_TOOL_NAMES,
     ]);
-    expect(ODT_EXTERNAL_MCP_TOOL_NAMES).toEqual(ODT_MCP_TOOL_NAMES.slice(0, 13));
+    expect(ODT_EXTERNAL_MCP_TOOL_NAMES).toEqual(ODT_MCP_TOOL_NAMES.slice(0, 11));
     expect(allTools).toEqual(new Set([...workflowTools, ...blockedTools]));
     expect(allTools).toEqual(new Set(Object.keys(ODT_TOOL_SCHEMAS)));
     expect(Object.keys(ODT_WORKFLOW_TOOL_SCHEMAS)).toEqual([...ODT_WORKFLOW_AGENT_TOOL_NAMES]);

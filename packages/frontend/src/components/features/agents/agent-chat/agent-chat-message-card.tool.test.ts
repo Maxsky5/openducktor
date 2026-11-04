@@ -223,7 +223,7 @@ describe("AgentChatMessageCard tool presentation", () => {
               kind: "tool",
               partId: `${toolType}-${outcome}`,
               callId: `${toolType}-${outcome}`,
-              tool: toolType === "bash" ? "Bash" : "openducktor_odt_build_completed",
+              tool: toolType === "bash" ? "Bash" : "openducktor_odt_apply_workflow_event",
               toolType,
               status: "error",
               error:
@@ -752,13 +752,13 @@ describe("AgentChatMessageCard tool presentation", () => {
         message: {
           id: "tool-4",
           role: "tool",
-          content: "Tool openducktor_odt_build_completed running",
+          content: "Tool openducktor_odt_apply_workflow_event running",
           timestamp: "2026-02-22T10:21:00.000Z",
           meta: {
             kind: "tool",
             partId: "part-4",
             callId: "call-4",
-            tool: "openducktor_odt_build_completed",
+            tool: "openducktor_odt_apply_workflow_event",
             toolType: "workflow",
             status: "pending",
             input: { taskId: "fairnest-98a" },
@@ -772,7 +772,7 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).toContain("border-info-border");
     expect(html).not.toContain("border-pending-border");
     expect(html).toContain("RUNNING");
-    expect(html).toContain("build_completed");
+    expect(html).toContain("apply_workflow_event");
   });
 
   test("shows progress while the model prepares workflow tool arguments", () => {

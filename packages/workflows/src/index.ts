@@ -19,7 +19,6 @@ export {
   type WorkflowPredicate,
 } from "./evaluate";
 export { recordBy } from "./record-by";
-export { workflowToolInputSchema } from "./tool-schemas";
 export {
   createTaskWorkflow,
   type TaskEventDecision,

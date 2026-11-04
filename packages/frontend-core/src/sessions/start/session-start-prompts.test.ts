@@ -8,7 +8,7 @@ describe("kickoffPromptForLaunchAction", () => {
       taskWorkflow: builtinTaskWorkflow,
     });
     expect(prompt).toContain("taskId task-123");
-    expect(prompt).toContain("odt_build_completed");
+    expect(prompt).toContain("odt_apply_workflow_event with eventId build-completed");
     expect(prompt).not.toContain("worktree");
   });
 
