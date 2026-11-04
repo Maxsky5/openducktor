@@ -2282,6 +2282,7 @@ describe("AppShell command palette", () => {
       "Open latest sessionBuilder",
       "Open Builder session",
       "Start Builder",
+      "Close Task",
       "Edit task",
       "Open task details",
       "Copy task ID",

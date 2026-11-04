@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRecord, WorkflowActionSurface } from "@openducktor/contracts";
 import {
   resolveTaskCardActions,
   taskHasSessionPage,
@@ -37,11 +37,12 @@ export const getTaskFooter = ({
   pendingState,
   mergedTarget,
   autoCloseFailure,
+  surface = "kanban",
 }: FooterInputs): Footer => {
   // A merged task proposes Close Task. Session shortcuts must not change which action leads.
   const proposesClose = mergedTarget !== undefined || autoCloseFailure !== undefined;
   const workflowActions = resolveTaskCardActions(task, {
-    surface: "kanban",
+    surface,
     hasActiveSession,
     historicalSessionRoles: resolveHistoricalSessionRoles(historicalSessions),
     activeSessionRole: activeSessionRole || undefined,
@@ -172,4 +173,6 @@ type FooterInputs = {
   mergedTarget?: string | undefined;
   /** Why the pull request sync could not close the task. Close Task then leads. */
   autoCloseFailure?: string | undefined;
+  /** The surface that shows the actions. The default is the Kanban card. */
+  surface?: WorkflowActionSurface | undefined;
 };

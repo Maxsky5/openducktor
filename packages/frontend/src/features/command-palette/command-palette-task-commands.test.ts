@@ -93,13 +93,10 @@ describe("taskCommandIntent", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  test("opens the Reset Task and Delete confirmations on the current page", () => {
-    for (const kind of ["reset_task", "delete"] as const) {
-      const { navigate, onConfirmTaskAction, onResetTask } = runCommand({ kind });
-      expect(onConfirmTaskAction).toHaveBeenCalledWith("odt-1", kind);
-      expect(navigate).not.toHaveBeenCalled();
-      expect(onResetTask).not.toHaveBeenCalled();
-    }
+  test("opens the Delete confirmation on the current page", () => {
+    const { navigate, onConfirmTaskAction } = runCommand({ kind: "delete" });
+    expect(onConfirmTaskAction).toHaveBeenCalledWith("odt-1", "delete");
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   test("runs edit and workflow steps through the workflow handlers", () => {
@@ -113,12 +110,18 @@ describe("taskCommandIntent", () => {
     ).toHaveBeenCalledWith("odt-1", "build", { session: builderIdentity });
   });
 
-  test("never runs the Reset Task or Close Task handlers, which do not ask for confirmation", () => {
-    expect(
-      runCommand({ kind: "workflow", action: "reset_task" }).onResetTask,
-    ).not.toHaveBeenCalled();
-    expect(
-      runCommand({ kind: "workflow", action: "close_task" }).onCloseTask,
-    ).not.toHaveBeenCalled();
+  test("opens the confirmations of Reset Task and Close Task instead of running them", () => {
+    for (const [action, confirmation] of [
+      ["reset_task", "reset_task"],
+      ["close_task", "close"],
+    ] as const) {
+      const { onConfirmTaskAction, onResetTask, onCloseTask } = runCommand({
+        kind: "workflow",
+        action,
+      });
+      expect(onConfirmTaskAction).toHaveBeenCalledWith("odt-1", confirmation);
+      expect(onResetTask).not.toHaveBeenCalled();
+      expect(onCloseTask).not.toHaveBeenCalled();
+    }
   });
 });

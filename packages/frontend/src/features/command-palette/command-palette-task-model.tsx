@@ -6,10 +6,9 @@ import {
   type ResolvedTaskCard as TaskCard,
   workflowRoleIcon,
   actionEmphasis,
-  taskEffectAction,
 } from "@openducktor/workflows";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import { Copy, History, PanelRightOpen, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { Copy, History, PanelRightOpen, Pencil, Trash2 } from "lucide-react";
 import {
   type KanbanTaskSession,
   toKanbanTaskActivityState,
@@ -42,7 +41,6 @@ export type PaletteTaskCommand =
   | { kind: "edit" }
   | { kind: "details" }
   | { kind: "copy_id" }
-  | { kind: "reset_task" }
   | { kind: "delete" };
 
 /** A task action before the palette gives it a handler. */
@@ -97,6 +95,7 @@ export const buildPaletteTaskView = ({
     activeSessionRole: liveSessions[0]?.role,
     taskActivityState: toKanbanTaskActivityState(liveSessions),
     pendingState,
+    surface: "palette",
   });
   const { primaryAction, allActions } = footer.actions;
   const latest = latestTaskSession(liveSessions, records);
@@ -258,19 +257,6 @@ const taskActions = (task: TaskCard): PaletteTaskAction[] => [
     disabled: false,
     command: { kind: "copy_id" },
   },
-  ...(taskResetAction(task)
-    ? [
-        {
-          key: "reset-task",
-          label: taskActionLabel(taskResetAction(task)!, task),
-          keywords: ["reset", "restart", "clear"],
-          icon: <RotateCcw />,
-          destructive: true,
-          disabled: false,
-          command: { kind: "reset_task" },
-        } satisfies PaletteTaskAction,
-      ]
-    : []),
   {
     key: "delete",
     label: "Delete task",
@@ -281,5 +267,3 @@ const taskActions = (task: TaskCard): PaletteTaskAction[] => [
     command: { kind: "delete" },
   },
 ];
-
-const taskResetAction = (task: TaskCard) => taskEffectAction(task, "task.reset");

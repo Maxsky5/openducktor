@@ -125,7 +125,6 @@ describe("command palette task model", () => {
       "edit",
       "details",
       "copy-id",
-      "reset-task",
       "delete",
     ]);
   });
@@ -147,7 +146,7 @@ describe("command palette task model", () => {
     ]);
   });
 
-  test("lists session actions, workflow steps, and task actions, destructive last, without Close Task", () => {
+  test("lists session actions, workflow steps, and task actions of the palette, destructive last", () => {
     const builder = record("build-1", "build", "2026-03-04T00:00:00.000Z");
     const view = buildPaletteTaskView({
       task: inProgressTask({
@@ -169,16 +168,17 @@ describe("command palette task model", () => {
       "session:build",
       "workflow:build_start",
       "workflow:qa_start",
+      "workflow:close_task",
       "edit",
       "details",
       "copy-id",
       "workflow:reset_implementation",
-      "reset-task",
+      "workflow:reset_task",
       "delete",
     ]);
     expect(view.actions.find((action) => action.key === "latest")?.detail).toBe("Builder");
     expect(view.actions.filter((action) => action.destructive).map((action) => action.key)).toEqual(
-      ["workflow:reset_implementation", "reset-task", "delete"],
+      ["workflow:reset_implementation", "workflow:reset_task", "delete"],
     );
   });
 });

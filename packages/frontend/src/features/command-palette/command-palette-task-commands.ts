@@ -42,7 +42,6 @@ export const taskCommandIntent = (
         case "details":
           workflow.onOpenTaskDetails(taskId);
           return;
-        case "reset_task":
         case "delete":
           workflow.onConfirmTaskAction(taskId, command.kind);
           return;
