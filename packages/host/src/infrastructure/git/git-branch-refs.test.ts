@@ -39,7 +39,14 @@ describe("branch refs with real Git", () => {
     git(clone, "checkout", "--quiet", "-b", "feature");
     git(clone, "remote", "add", "fork", upstream);
 
-    expect(await read(clone)).toEqual({
+    // Git prints worktree paths with forward slashes on Windows.
+    const refs = await read(clone);
+    const branches = refs.branches.map((branch) =>
+      branch.worktreePath
+        ? { ...branch, worktreePath: path.normalize(branch.worktreePath) }
+        : branch,
+    );
+    expect({ ...refs, branches }).toEqual({
       remotes: ["fork", "origin"],
       branches: [
         { name: "feature", isCurrent: true, isRemote: false, worktreePath: clone },
