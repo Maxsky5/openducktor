@@ -4,6 +4,7 @@ import {
   type AgentSessionRecord,
   DEFAULT_KANBAN_SETTINGS,
   type WorkflowIcon,
+  type IssueType,
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -46,8 +47,8 @@ export function useKanbanBoardData({
   const taskIds = useMemo(() => kanbanTasks.map((task) => task.id), [kanbanTasks]);
   const issueTypeOptions = useMemo(() => {
     const options = new Map<
-      string,
-      { value: string; label: string; icon?: WorkflowIcon | undefined }
+      IssueType,
+      { value: IssueType; label: string; icon?: WorkflowIcon | undefined }
     >();
     for (const workflow of workspace?.workflows ?? []) {
       for (const type of workflow.definition.issueTypes) {

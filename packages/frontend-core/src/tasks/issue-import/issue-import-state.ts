@@ -4,6 +4,7 @@ import type {
   IssueItemsImportResult,
   RepositoryGitProviderContext,
   SourceIssue,
+  IssueType,
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -16,7 +17,7 @@ import { invalidateRepoIssueItemsQueries } from "../../queries/issue-items";
 
 export type IssueReview = {
   /** Absent until the user picks one: the import uses the default issue type of the workflow. */
-  issueType?: string;
+  issueType?: IssueType;
   priority: number;
   labels: string[];
 };

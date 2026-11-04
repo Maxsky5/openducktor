@@ -27,7 +27,8 @@ import {
   taskAssetIdSchema,
   taskAssetMediaTypeSchema,
 } from "./task-asset-schemas";
-import { issueTypeSchema, taskPrioritySchema, taskStatusSchema } from "./task-schemas";
+import { issueTypeSchema } from "./issue-type-schemas";
+import { taskPrioritySchema, taskStatusSchema } from "./task-schemas";
 import { workflowArtifactIdSchema, workflowIdSchema } from "./workflow-condition-schemas";
 
 const odtToolErrorDetailsSchema = z.record(z.string(), z.json());

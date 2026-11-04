@@ -15,7 +15,7 @@ const review = createReviewTaskWorkflow();
 const reviewTask = (overrides: Partial<TaskFacts> = {}): TaskFacts => ({
   id: "task-1",
   status: "backlog",
-  issueType: "article",
+  issueType: "feature",
   artifactSummary: review.emptyArtifactSummary(),
   ...overrides,
 });
@@ -28,7 +28,7 @@ const withChange = (change: (definition: WorkflowDefinition) => void) => {
 
 describe("createTaskWorkflow", () => {
   test("reads states, roles, artifacts, and issue types from the definition", () => {
-    expect(review.issueTypes).toEqual(["article", "fix"]);
+    expect(review.issueTypes).toEqual(["feature", "bug"]);
     expect(review.initialState).toBe("backlog");
     expect(review.terminalStates).toEqual(["published", "shelved"]);
     expect(review.isTerminalState("shelved")).toBe(true);
@@ -151,13 +151,13 @@ describe("createTaskWorkflow", () => {
     const kickoffKey = workflowKey("messages.edit_review");
     const system = review.prompts.systemPrompt({
       role: "editor",
-      task: { taskId: "task-1", title: "Essay", issueType: "article", status: "reviewing" },
+      task: { taskId: "task-1", title: "Essay", issueType: "feature", status: "reviewing" },
     }).prompt;
 
     expect(system).toContain("You review task task-1 as editor.");
     expect(system).toContain('- odt_read_task({"taskId": string})');
     expect(system).toContain("Allowed workflow codes for odt_set_task_artifact: review.");
-    expect(system).toContain("Task task-1: Essay (article, reviewing)");
+    expect(system).toContain("Task task-1: Essay (feature, reviewing)");
     expect(
       review.prompts.kickoffPrompt({ launchActionId: "edit_review", task: { taskId: "task-1" } })
         .prompt,
@@ -175,17 +175,29 @@ describe("createTaskWorkflow", () => {
     ).toEqual({ [kickoffKey]: { template: "Global", baseVersion: 1 } });
   });
 
+  test("supports a subset of the fixed issue types", () => {
+    const bugOnly = withChange((definition) => {
+      definition.issueTypes = [{ id: "bug", label: "Fix" }];
+    })();
+
+    expect(bugOnly.issueTypes).toEqual(["bug"]);
+  });
+
   test("rejects a definition that a task workflow cannot run", () => {
     expect(
       withChange((definition) => {
         definition.issueTypes = [];
       }),
-    ).toThrow('Task workflow "review" must declare its issueTypes and no facts.');
+    ).toThrow(
+      'Task workflow "review" must support at least one issue type (task, feature, bug) and declare no facts.',
+    );
     expect(
       withChange((definition) => {
         definition.facts.push({ id: "priority", type: "enum", values: ["high", "low"] });
       }),
-    ).toThrow('Task workflow "review" must declare its issueTypes and no facts.');
+    ).toThrow(
+      'Task workflow "review" must support at least one issue type (task, feature, bug) and declare no facts.',
+    );
     expect(
       withChange((definition) => {
         const edit = definition.steps.find(({ id }) => id === "edit");

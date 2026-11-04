@@ -1,4 +1,8 @@
-import type { PullRequest, WorkflowIcon, WorkflowIssueTypeDefinition } from "@openducktor/contracts";
+import type {
+  PullRequest,
+  WorkflowIcon,
+  WorkflowIssueTypeDefinition,
+} from "@openducktor/contracts";
 import {
   PRIORITY_LABELS,
   type PriorityLevel,
@@ -22,7 +26,9 @@ const ISSUE_TYPE_PAINT = new Map<WorkflowIcon, Omit<BadgePaint, "label">>([
 ]);
 const NEUTRAL_ISSUE_TYPE_PAINT: Omit<BadgePaint, "label"> = { tone: "neutral", icon: "file-text" };
 
-export const issueTypePaint = (choice: WorkflowIssueTypeDefinition): BadgePaint => ({
+export const issueTypePaint = (
+  choice: Pick<WorkflowIssueTypeDefinition, "icon" | "label">,
+): BadgePaint => ({
   ...((choice.icon && ISSUE_TYPE_PAINT.get(choice.icon)) || NEUTRAL_ISSUE_TYPE_PAINT),
   label: choice.label,
 });

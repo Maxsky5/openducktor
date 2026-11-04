@@ -52,7 +52,7 @@ test("one workspace keeps mixed-workflow projections and mutations separate in s
         service.createTask({
           workspaceId,
           repoPath,
-          task: { title: workflow.definition.label, issueType: "article", priority: 2 },
+          task: { title: workflow.definition.label, issueType: "feature", priority: 2 },
         }),
       );
     } finally {

@@ -10,12 +10,10 @@ import {
 } from "./git-schemas";
 import { workflowArtifactIdSchema, workflowIdSchema } from "./workflow-condition-schemas";
 import { worktreeOwnersSchema } from "./workspace-session-schemas";
+import { issueTypeSchema } from "./issue-type-schemas";
 
 /** A state of the task workflow. The workflow of the task validates it. */
 export const taskStatusSchema = workflowIdSchema;
-
-/** A value of the `issueType` fact of the task workflow. */
-export const issueTypeSchema = workflowIdSchema;
 
 /** An action of the task workflow. */
 export const taskActionSchema = workflowIdSchema;

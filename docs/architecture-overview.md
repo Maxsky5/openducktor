@@ -192,6 +192,8 @@ The definition also declares the data that host and frontend code read instead o
 
 Roles are separate from workflows. The host role catalog holds the built-in roles (`BUILTIN_ROLES` in `packages/workflows/src/builtin/roles.ts`) and will hold custom roles. A catalog role (`agentRoleDefinitionSchema`) owns its label, `odt_*` tools, workspace access, working location, runtime scopes, icon, default panel, and system prompt. A workflow cannot change these. `createTaskWorkflow` merges each binding with its catalog role, and fails for an unknown role ID. The workflow catalog sends each role once. Model defaults and runtime role overrides stay keyed by role ID. The host rejects two workflows that bind one role ID to different catalog roles.
 
+Issue types are fixed: `ISSUE_TYPE_VALUES` in `packages/contracts/src/issue-type-schemas.ts` lists `task`, `feature`, and `bug`. A workflow cannot add an issue type. It lists the issue types that it supports, with their label, description, form guidance, and icon, and its conditions can depend on the issue type. A workflow can support only some issue types.
+
 Each prompt has one owner: a role or a workflow. A role owns its instructions, with the prompt ID `instructions`, for example `build.instructions`. A workflow owns its base prompts and its `messages.` prompts. A prompt ID is unique only within its owner, so two workflows can use one prompt ID with different text. A prompt override is keyed by `promptOverrideKey({ ownerKind, ownerId, promptId })` from `packages/contracts`. A role prompt override applies to the role in every workflow. A workflow prompt override applies to every revision of that workflow.
 
 An event can name one host effect from `workflowEventEffectValues`, such as `build.start`, `task.close`, or `pull_request.merged`. Each effect has at most one event. The exception is `status.set`, which has at most one event for each target state.
@@ -261,8 +263,8 @@ The page does not parse chat text to create a pull request.
 
 | Concern | Source | Owner |
 |---|---|---|
-| Formats of status, issue type, role, and start mode | `packages/contracts/src/task-schemas.ts`, `packages/contracts/src/agent-workflow-schemas.ts` | Contracts |
-| Built-in states, issue types, roles, and actions | `packages/workflows/src/builtin/ids.ts` | Workflows |
+| Formats of status, role, and start mode, and the fixed issue types | `packages/contracts/src/task-schemas.ts`, `packages/contracts/src/issue-type-schemas.ts`, `packages/contracts/src/agent-workflow-schemas.ts` | Contracts |
+| Built-in states, roles, and actions | `packages/workflows/src/builtin/ids.ts` | Workflows |
 | ODT tool names and schemas | `packages/contracts/src/odt-tool-names.ts`, `packages/contracts/src/odt-mcp-schemas.ts` | Contracts |
 | Role tool list | The host role catalog | Workflows |
 | Generic workflow definitions, display vocabularies, and decisions | `packages/contracts/src/workflow-*-schemas.ts` | Contracts |

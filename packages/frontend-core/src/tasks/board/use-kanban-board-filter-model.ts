@@ -1,3 +1,4 @@
+import type { IssueType, WorkflowIcon } from "@openducktor/contracts";
 import { useMemo } from "react";
 import { create } from "zustand";
 import {
@@ -13,9 +14,9 @@ export type KanbanBoardFilterModel = {
   /** The labels of the loaded tasks and the selected labels, in alphabetical order. */
   labelOptions: readonly string[];
   issueTypeOptions: readonly {
-    value: string;
+    value: IssueType;
     label: string;
-    icon?: import("@openducktor/contracts").WorkflowIcon | undefined;
+    icon?: WorkflowIcon | undefined;
   }[];
   isActive: boolean;
   isDisabled: boolean;

@@ -30,7 +30,6 @@ import {
   specPresent,
 } from "./definition-conditions";
 import {
-  BUILTIN_ISSUE_TYPE_IDS,
   BUILTIN_STATE_IDS,
   type BuiltinActionId,
   type BuiltinAutomationId,
@@ -860,7 +859,7 @@ const builtinIssueTypes = [
     guidance: automationGuidance,
     icon: "task",
   },
-] satisfies (WorkflowIssueTypeDefinition & { id: (typeof BUILTIN_ISSUE_TYPE_IDS)[number] })[];
+] satisfies WorkflowIssueTypeDefinition[];
 
 const secondaryActions: BuiltinActionId[] = [
   "open_spec",

@@ -14,9 +14,6 @@ export const BUILTIN_STATE_IDS = [
 ] as const;
 export type BuiltinStateId = (typeof BUILTIN_STATE_IDS)[number];
 
-export const BUILTIN_ISSUE_TYPE_IDS = ["task", "feature", "bug"] as const;
-export type BuiltinIssueTypeId = (typeof BUILTIN_ISSUE_TYPE_IDS)[number];
-
 export const BUILTIN_ROLE_IDS = ["spec", "planner", "build", "qa"] as const;
 export type BuiltinRoleId = (typeof BUILTIN_ROLE_IDS)[number];
 

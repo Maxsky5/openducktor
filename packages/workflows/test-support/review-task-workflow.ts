@@ -19,8 +19,8 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
   initialState: "backlog",
   facts: [],
   issueTypes: [
-    { id: "article", label: "Article" },
-    { id: "fix", label: "Fix" },
+    { id: "feature", label: "Article" },
+    { id: "bug", label: "Fix" },
   ],
   roles: [
     { id: "writer", writes: ["draft"] },

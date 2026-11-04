@@ -642,6 +642,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "issueImageGetResultSchema",
   "issueItemGetInputSchema",
   "issueTypeSchema",
+  "ISSUE_TYPE_VALUES",
   "isOpencodeExposedOdtToolAlias",
   "isTerminalClientMessage",
   "knownGitProviderIdSchema",

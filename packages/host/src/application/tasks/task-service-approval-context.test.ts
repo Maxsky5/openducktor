@@ -540,7 +540,7 @@ describe("approval preparation", () => {
 
 test.each([
   ["built-in", builtinTaskWorkflows, "human_review", "task"],
-  ["review", reviewTaskWorkflows, "approval", "article"],
+  ["review", reviewTaskWorkflows, "approval", "feature"],
 ] as const)(
   "approval context rereads the target and keeps the publication snapshot (%s)",
   async (_label, taskWorkflows, status, issueType) => {

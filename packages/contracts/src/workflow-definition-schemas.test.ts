@@ -194,6 +194,28 @@ describe("workflow definition schemas", () => {
     );
   });
 
+  test("lets a workflow support a subset of the fixed issue types and no other type", () => {
+    const definition = createDefinition();
+    const withIssueTypes = (ids: readonly string[]) => ({
+      ...definition,
+      facts: [],
+      issueTypes: ids.map((id) => ({ id, label: id })),
+    });
+
+    expect(workflowDefinitionSchema.parse(withIssueTypes(["bug"])).issueTypes).toEqual([
+      { id: "bug", label: "bug" },
+    ]);
+    expect(workflowDefinitionSchema.safeParse(withIssueTypes(["bug", "article"])).success).toBe(
+      false,
+    );
+    expect(
+      workflowDefinitionSchema.safeParse({
+        ...withIssueTypes(["bug"]),
+        defaultIssueType: "article",
+      }).success,
+    ).toBe(false);
+  });
+
   test("keeps role capabilities in the role catalog", () => {
     const role = {
       id: "reviewer",

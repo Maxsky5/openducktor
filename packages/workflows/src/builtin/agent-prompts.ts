@@ -1,4 +1,5 @@
 import type {
+  IssueType,
   GitConflictOperation,
   GitTargetBranch,
   RepoPromptOverrides,
@@ -12,7 +13,7 @@ import {
 } from "../task-workflow/task-prompts";
 import { GIT_CONFLICT_INSTRUCTIONS } from "./prompt-templates";
 import { builtinTaskWorkflow } from "./task-workflow";
-import type { BuiltinIssueTypeId, BuiltinWorkflowPromptId, BuiltinRoleId } from "./ids";
+import type { BuiltinWorkflowPromptId, BuiltinRoleId } from "./ids";
 
 export type {
   AgentPromptGitContext,
@@ -25,7 +26,7 @@ export type {
 export type AgentPromptTaskContext = {
   taskId: string;
   title: string;
-  issueType: BuiltinIssueTypeId;
+  issueType: IssueType;
   status: string;
   description?: string;
 };
@@ -50,7 +51,7 @@ export type BuildAgentKickoffPromptInput = {
   task: {
     taskId: string;
     title?: string;
-    issueType?: BuiltinIssueTypeId;
+    issueType?: IssueType;
     status?: string;
     description?: string;
   };

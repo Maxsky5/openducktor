@@ -35,8 +35,8 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
     initialState: queue,
     facts: [],
     issueTypes: [
-      { id: "article", label: "Article", icon: "feature" },
-      { id: "fix", label: "Fix", icon: "bug" },
+      { id: "feature", label: "Article", icon: "feature" },
+      { id: "bug", label: "Fix", icon: "bug" },
     ],
     roles: [
       { id: writer, writes: [draft] },

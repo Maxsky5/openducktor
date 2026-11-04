@@ -18,7 +18,7 @@ const card = (workflow: TaskWorkflow, id: string, status = "shared_review"): Tas
     title: id,
     description: "",
     priority: 2,
-    issueType: "article",
+    issueType: "feature" as const,
     status,
     labels: [],
     removeWorktreeOnClose: null,

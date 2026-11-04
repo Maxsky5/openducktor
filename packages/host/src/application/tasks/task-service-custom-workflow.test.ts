@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import type { IssueType } from "@openducktor/contracts";
 import { builtinTaskWorkflow, createTaskWorkflow } from "@openducktor/workflows";
 import {
   createReviewTaskWorkflow,
@@ -7,7 +8,7 @@ import {
   reviewTaskPromptTemplates,
   reviewTaskRoles,
 } from "@openducktor/workflows/test-support";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import { z } from "zod";
 import {
   createSqliteTaskStoreHarness,
@@ -52,7 +53,7 @@ const createArticle = () =>
   Effect.runPromise(
     service().createTask({
       ...harness.scope,
-      task: { title: "Launch post", issueType: "article", priority: 2 },
+      task: { title: "Launch post", issueType: "feature", priority: 2 },
     }),
   );
 
@@ -105,21 +106,50 @@ describe("task service with a custom task workflow", () => {
     const card = await createArticle();
 
     expect(card.status).toBe("backlog");
-    expect(card.issueType).toBe("article");
+    expect(card.issueType).toBe("feature");
     expect(Object.keys(card.agentWorkflows)).toEqual(["writer", "editor"]);
     expect(Object.keys(card.artifactSummary)).toEqual(["draft", "review"]);
     expect(card.availableActions).toContain("start_write");
   });
 
-  test("rejects an issue type that the workflow does not declare", async () => {
+  test("rejects an issue type that the workflow does not support", async () => {
     const result = await Effect.runPromiseExit(
       service().createTask({
         ...harness.scope,
-        task: { title: "Bug", issueType: "bug", priority: 2 },
+        task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
 
-    expect(String(result)).toContain("article");
+    expect(String(result)).toContain(
+      'Issue type task is not in task workflow "review". Use feature, bug.',
+    );
+  });
+
+  test("creates tasks only of the one issue type that a workflow supports", async () => {
+    const definition = reviewTaskDefinition();
+    definition.issueTypes = [{ id: "bug", label: "Fix" }];
+    const taskWorkflows = singleTaskWorkflow(
+      createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles),
+    );
+    await harness.cleanup();
+    harness = await createSqliteTaskStoreHarness({ taskWorkflows });
+    const create = (issueType: IssueType) =>
+      Effect.runPromiseExit(
+        service(taskWorkflows).createTask({
+          ...harness.scope,
+          task: { title: issueType, issueType, priority: 2 },
+        }),
+      );
+
+    const bug = await create("bug");
+    expect(Exit.isSuccess(bug) && bug.value.issueType).toBe("bug");
+    for (const issueType of ["feature", "task"] as const) {
+      const rejected = await create(issueType);
+      expect(Exit.isFailure(rejected)).toBe(true);
+      expect(String(rejected)).toContain(
+        `Issue type ${issueType} is not in task workflow "review". Use bug.`,
+      );
+    }
   });
 
   test("moves a task with status events, artifact saves, and review verdicts", async () => {
@@ -249,7 +279,7 @@ describe("task service with a custom task workflow", () => {
     const { id } = await Effect.runPromise(
       tasks.createTask({
         ...harness.scope,
-        task: { title: "Launch post", issueType: "article", priority: 2 },
+        task: { title: "Launch post", issueType: "feature", priority: 2 },
       }),
     );
 
@@ -365,7 +395,7 @@ describe("task service with a workflow for each task", () => {
     // The issue type stands for the stored workflow of a task.
     const taskWorkflows = createTaskWorkflowResolver({
       forTask: (task: { readonly id: string; readonly issueType?: string }) =>
-        task.issueType === "article" ? review : builtinTaskWorkflow,
+        task.issueType === "feature" ? review : builtinTaskWorkflow,
       forNewTask: () => builtinTaskWorkflow,
       workflows: [builtinTaskWorkflow, review],
       forWorkspace: () => ({
@@ -380,7 +410,7 @@ describe("task service with a workflow for each task", () => {
     await harness.cleanup();
     harness = await createSqliteTaskStoreHarness({ taskWorkflows });
     const tasks = service(taskWorkflows);
-    const insert = (issueType: string, status: string) =>
+    const insert = (issueType: IssueType, status: string) =>
       Effect.runPromise(
         harness.store.createTask({
           ...harness.scope,
@@ -388,8 +418,8 @@ describe("task service with a workflow for each task", () => {
           status,
         }),
       );
-    const article = await insert("article", "backlog");
-    const feature = await insert("feature", "open");
+    const article = await insert("feature", "backlog");
+    const builtinTask = await insert("task", "open");
 
     const cards = await Effect.runPromise(
       tasks.listTasks({ workspaceId: harness.workspaceId, repoPath: harness.repoPath }),
@@ -397,7 +427,7 @@ describe("task service with a workflow for each task", () => {
     const card = (id: string) => cards.find((entry) => entry.id === id);
     expect(Object.keys(card(article.id)?.agentWorkflows ?? {})).toEqual(["writer", "editor"]);
     expect(Object.keys(card(article.id)?.artifactSummary ?? {})).toEqual(["draft", "review"]);
-    expect(Object.keys(card(feature.id)?.artifactSummary ?? {})).toEqual([
+    expect(Object.keys(card(builtinTask.id)?.artifactSummary ?? {})).toEqual([
       "spec",
       "plan",
       "qaReport",
@@ -415,14 +445,14 @@ describe("task service with a workflow for each task", () => {
     );
     expect(moved.status).toBe("writing");
     const rejected = await Effect.runPromiseExit(
-      tasks.transitionTask({ ...input(feature.id), status: "writing" }),
+      tasks.transitionTask({ ...input(builtinTask.id), status: "writing" }),
     );
     expect(String(rejected)).toContain("task_transition cannot move tasks to writing");
 
     await Effect.runPromise(tasks.closeTask({ ...input(article.id), removeWorktree: true }));
-    await Effect.runPromise(tasks.closeTask({ ...input(feature.id), removeWorktree: true }));
+    await Effect.runPromise(tasks.closeTask({ ...input(builtinTask.id), removeWorktree: true }));
     expect((await Effect.runPromise(tasks.findTask(input(article.id))))?.status).toBe("shelved");
-    expect((await Effect.runPromise(tasks.findTask(input(feature.id))))?.status).toBe("closed");
+    expect((await Effect.runPromise(tasks.findTask(input(builtinTask.id))))?.status).toBe("closed");
     const visible = await Effect.runPromise(
       harness.store.listTasks({ ...harness.scope, doneVisibleDays: 0 }),
     );

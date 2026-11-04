@@ -1,4 +1,4 @@
-import type { SourceIssue, WorkflowIcon } from "@openducktor/contracts";
+import { issueTypeSchema, type SourceIssue, type WorkflowIcon } from "@openducktor/contracts";
 import type { IssueTypeChoice } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 import { PRIORITY_OPTIONS } from "@openducktor/frontend-core/tasks/create/task-composer-options";
 import {
@@ -179,7 +179,7 @@ export function IssueReviewCard({
             ),
           }))}
           value={issueType ?? ""}
-          onChange={(issueType) => onChange({ issueType })}
+          onChange={(issueType) => onChange({ issueType: issueTypeSchema.parse(issueType) })}
           disabled={fieldsDisabled}
         />
       </FormField>

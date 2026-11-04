@@ -14,6 +14,7 @@ import {
   type AgentSessionModelSelection,
   type AgentSessionRecord,
   type AgentSessionLiveSnapshot,
+  type IssueType,
   type RuntimeKind,
   type WorkflowLaunchRequest,
   RUNTIME_DESCRIPTORS_BY_KIND,
@@ -77,7 +78,7 @@ export const createLaunchHarness = async (
     completion?: Effect.Effect<void, HostOperationError>;
     taskWorkflows?: TaskWorkflowResolver;
     /** The first issue type and status of the task. Defaults suit the built-in workflow. */
-    task?: { issueType: string; status: string };
+    task?: { issueType: IssueType; status: string };
   } = {},
 ) => {
   const taskWorkflows = gates.taskWorkflows ?? builtinTaskWorkflows;

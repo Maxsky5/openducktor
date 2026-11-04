@@ -1,4 +1,4 @@
-import { type AppPlatform, type TaskPriority } from "@openducktor/contracts";
+import { issueTypeSchema, type AppPlatform, type TaskPriority } from "@openducktor/contracts";
 import { Blocks, Flag, Tag, X } from "lucide-react";
 import {
   type ReactElement,
@@ -94,7 +94,9 @@ export function KanbanBoardFilterBar({ filter }: KanbanBoardFilterBarProps): Rea
         options={issueTypeOptions}
         selected={filter.value.issueTypes}
         disabled={filter.isDisabled}
-        onSelectedChange={(issueTypes) => filter.onChange({ issueTypes })}
+        onSelectedChange={(issueTypes) =>
+          filter.onChange({ issueTypes: issueTypes.map((value) => issueTypeSchema.parse(value)) })
+        }
       />
       <KanbanFilterMenu
         name="Priority"

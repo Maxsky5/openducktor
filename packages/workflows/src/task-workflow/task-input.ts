@@ -3,6 +3,8 @@ import {
   type TaskArtifactSummary,
   type TaskCard,
   type WorkflowInput,
+  ISSUE_TYPE_VALUES,
+  type IssueType,
 } from "@openducktor/contracts";
 import { WorkflowEvaluationError } from "../evaluate";
 
@@ -22,12 +24,15 @@ export type TaskInputs = {
   emptyArtifactSummary(): TaskArtifactSummary;
 };
 
-/** The issue types of a task workflow. Tasks supply only the issue type, so it declares no facts. */
-export const taskIssueTypes = (definition: CompiledWorkflowDefinition): readonly string[] => {
+/**
+ * The issue types that a task workflow supports. Issue types are fixed; a workflow supports some
+ * or all of them. Tasks supply only the issue type, so a task workflow declares no facts.
+ */
+export const taskIssueTypes = (definition: CompiledWorkflowDefinition): readonly IssueType[] => {
   if (definition.issueTypes.length === 0 || definition.facts.length > 0) {
     throw new WorkflowEvaluationError(
       "invalid_definition",
-      `Task workflow "${definition.id}" must declare its issueTypes and no facts.`,
+      `Task workflow "${definition.id}" must support at least one issue type (${ISSUE_TYPE_VALUES.join(", ")}) and declare no facts.`,
     );
   }
   return definition.issueTypes.map(({ id }) => id);

@@ -223,7 +223,7 @@ test("commits the signal and source role of the closing event", async () => {
         input.decide({
           ...closedTask(),
           status: "approval",
-          issueType: "article",
+          issueType: "feature",
           artifactSummary: workflow.emptyArtifactSummary(),
         }),
       ).pipe(

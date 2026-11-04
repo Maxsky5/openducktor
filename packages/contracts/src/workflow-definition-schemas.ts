@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { runtimeSupportedScopeSchema } from "./agent-runtime-schemas";
 import { agentSessionStartModeSchema, agentToolNameSchema } from "./agent-workflow-schemas";
+import { issueTypeSchema } from "./issue-type-schemas";
 import { agentPromptPlaceholderSchema, WORKFLOW_MESSAGE_PROMPT_PREFIX } from "./prompt-schemas";
 import {
   notificationKindSettingSchema,
@@ -335,8 +336,9 @@ export const workflowAutomationDefinitionSchema = z.strictObject({
 export type WorkflowAutomationDefinition = z.infer<typeof workflowAutomationDefinitionSchema>;
 
 /** A task issue type and its display. The task workflow derives the `issueType` fact from them. */
+/** An issue type that a task workflow supports, with what the workflow shows for it. */
 export const workflowIssueTypeDefinitionSchema = z.strictObject({
-  id: workflowIdSchema,
+  id: issueTypeSchema,
   label: z.string(),
   description: z.string().optional(),
   /** Writing advice in the task form. */
@@ -376,7 +378,7 @@ export const workflowDefinitionSchema = z.strictObject({
   facts: z.array(workflowFactDefinitionSchema).default([]),
   issueTypes: z.array(workflowIssueTypeDefinitionSchema).default([]),
   /** The issue type that a new task form or an import proposes. The default is the first one. */
-  defaultIssueType: workflowIdSchema.optional(),
+  defaultIssueType: issueTypeSchema.optional(),
   roles: z.array(workflowRoleDefinitionSchema),
   artifacts: z.array(workflowArtifactDefinitionSchema),
   states: z.array(workflowStateDefinitionSchema),

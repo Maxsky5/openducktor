@@ -399,7 +399,7 @@ test.each(["opencode", "codex", "claude"] as const)(
 test("a custom workflow launch starts its step role with the prompts of that workflow", async () => {
   const h = await createLaunchHarness("codex", {
     taskWorkflows: reviewTaskWorkflows,
-    task: { issueType: "article", status: "backlog" },
+    task: { issueType: "feature", status: "backlog" },
   });
   const result = await Effect.runPromise(
     h.service.launch({
@@ -434,7 +434,7 @@ test("automatic launch checks the worktree of an action that needs it without re
   const launch = async (worktreeExists: boolean) => {
     const h = await createLaunchHarness("codex", {
       taskWorkflows: singleTaskWorkflow(workflow),
-      task: { issueType: "article", status: "writing" },
+      task: { issueType: "feature", status: "writing" },
     });
     h.setWorktreeExists(worktreeExists);
     return Effect.runPromise(
@@ -479,7 +479,7 @@ const launchCustomAutomation = async ({
   const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
   const h = await createLaunchHarness("codex", {
     taskWorkflows: singleTaskWorkflow(workflow),
-    task: { issueType: "article", status },
+    task: { issueType: "feature", status },
   });
   h.settings.autopilot.alwaysStartQaReviewsFresh = freshReviews;
   if (roleSession) h.addTaskSession(`${role}-1`, { role });

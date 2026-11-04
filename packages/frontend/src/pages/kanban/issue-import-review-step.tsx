@@ -2,7 +2,7 @@ import {
   defaultIssueType,
   issueTypeChoices,
 } from "@openducktor/frontend-core/tasks/create/task-composer-options";
-import { type SourceIssue } from "@openducktor/contracts";
+import { issueTypeSchema, type IssueType, type SourceIssue } from "@openducktor/contracts";
 import { useTaskFormWorkflow } from "@openducktor/frontend-core/queries/use-task-form-workflow";
 import { ChevronDown, CircleAlert, CircleCheck, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
@@ -91,7 +91,10 @@ export function IssueReviewStep({
   );
 }
 
-const withProposedIssueType = (review: IssueReview, proposed: string | undefined): IssueReview => {
+const withProposedIssueType = (
+  review: IssueReview,
+  proposed: IssueType | undefined,
+): IssueReview => {
   const issueType = review.issueType ?? proposed;
   return issueType ? { ...review, issueType } : review;
 };
@@ -189,7 +192,7 @@ function IssueReviewCard({
             }))}
             searchable={false}
             triggerAriaLabelledBy={`issue-type-label-${item.sourceId}`}
-            onValueChange={(value) => onChange({ issueType: value })}
+            onValueChange={(value) => onChange({ issueType: issueTypeSchema.parse(value) })}
           />
         </div>
         <div className="grid gap-2">

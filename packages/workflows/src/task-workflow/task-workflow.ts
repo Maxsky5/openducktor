@@ -2,6 +2,7 @@ import type {
   AgentRoleDefinition,
   CompiledAgentRoleDefinition,
   AgentSessionStartMode,
+  IssueType,
   AgentWorkflowState,
   AgentWorkflows,
   CompiledWorkflowDefinition,
@@ -97,7 +98,7 @@ export type TaskWorkflow = {
   readonly roles: readonly TaskWorkflowRole[];
   /** The prompt templates of the workflow, without the system prompts of its roles. */
   readonly workflowTemplates: readonly PromptTemplate[];
-  readonly issueTypes: readonly string[];
+  readonly issueTypes: readonly IssueType[];
   readonly initialState: string;
   /** The task states that end the task. */
   readonly terminalStates: readonly string[];

@@ -1,5 +1,6 @@
 import {
   type BoardTaskOrder,
+  type IssueType,
   type SharedBoardState,
   type TaskCard,
   type WorkflowInput,
@@ -23,7 +24,7 @@ export type ResolvedTaskCard = Omit<TaskCard, "workflowSteps"> & {
   sharedState: SharedBoardState;
 };
 export type WorkflowRoleId = string;
-export type WorkflowIssueTypeId = string;
+export type WorkflowIssueTypeId = IssueType;
 export type WorkflowLaunchActionId = string;
 export type WorkflowDocumentCode = string;
 export type WorkflowPromptRoleTabId = string;

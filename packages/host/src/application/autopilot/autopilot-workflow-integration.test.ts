@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   type AutopilotOutcome,
   type ExternalTaskSyncEvent,
+  type IssueType,
   globalConfigSchema,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
@@ -224,7 +225,7 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
         { eventId: "reviewRejected", actionIds: ["startRevision"] },
       ],
     });
-    const input = await workflow.createTask("article");
+    const input = await workflow.createTask("feature");
     const save = (code: string, updatedBy: string, verdict?: string) => {
       const save: WorkflowArtifactSaveInput = {
         ...input,
@@ -588,7 +589,7 @@ const createWorkflowHarness = async ({
     setPublicationGate: (gate: typeof publicationGate) => {
       publicationGate = gate;
     },
-    createTask: async (issueType = "task") => {
+    createTask: async (issueType: IssueType = "task") => {
       const task = await run(
         tasks.createTask({
           workspaceId: "workflow",

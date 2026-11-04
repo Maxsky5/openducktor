@@ -1,4 +1,4 @@
-import type { WorkflowEventEffect } from "@openducktor/contracts";
+import type { IssueType, WorkflowEventEffect } from "@openducktor/contracts";
 import type {
   TaskEventDecision,
   TaskEventDenial,
@@ -171,7 +171,7 @@ export const decideTaskEventInput = <Details extends object>(
 /** An issue type must be one of the task workflow. */
 export const requireWorkflowIssueType = (
   workflow: TaskWorkflow,
-  issueType: string,
+  issueType: IssueType,
 ): Effect.Effect<void, HostValidationError<{ issueType: string }>> =>
   workflow.issueTypes.includes(issueType)
     ? Effect.void

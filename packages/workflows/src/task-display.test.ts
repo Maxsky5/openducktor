@@ -113,9 +113,9 @@ describe("display references", () => {
   test("reject unknown references and a view action with a step and a target", () => {
     expect(
       invalid((definition) => {
-        definition.defaultIssueType = "missing";
+        definition.defaultIssueType = "task";
       }),
-    ).toThrow('Unknown issueTypes ID "missing"');
+    ).toThrow('Unknown issueTypes ID "task"');
     expect(
       invalid((definition) => {
         definition.states[0]!.historyRoles = ["missing"];

@@ -604,7 +604,7 @@ const createTaskStore = (): TaskStorePort =>
             description: "",
             status: "open",
             priority: 2,
-            issueType: "task",
+            issueType: "task" as const,
             removeWorktreeOnClose: null,
             availableActions: [],
             labels: [],

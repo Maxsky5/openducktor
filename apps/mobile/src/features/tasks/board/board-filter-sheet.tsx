@@ -215,11 +215,7 @@ export function BoardFilterSheet({
 
 function TypeIcon({ hint }: { hint?: WorkflowIcon | undefined }): ReactElement {
   return (
-    <IssueTypeMark
-      hint={hint}
-      icon={issueTypePaint({ id: "", label: "", icon: hint }).icon}
-      size={15}
-    />
+    <IssueTypeMark hint={hint} icon={issueTypePaint({ label: "", icon: hint }).icon} size={15} />
   );
 }
 
