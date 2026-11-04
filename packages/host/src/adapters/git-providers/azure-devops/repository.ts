@@ -2,7 +2,6 @@ import {
   AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
   type AzureDevOpsRemoteMapping,
   type AzureDevOpsRepository,
-  type RepoConfig,
 } from "@openducktor/contracts";
 import { azureDevOpsRepositoryKey, isAzureDevOpsRepository } from "@openducktor/core";
 import { Effect } from "effect";
@@ -11,6 +10,7 @@ import type { GitPort, GitRemoteEndpoint } from "../../../ports/git-port";
 import { GitProviderRepositoryError } from "../../../ports/git-provider-errors";
 import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port";
 import { parseAzureDevOpsRepositoryUrl } from "./repository-identity";
+import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
 const PROVIDER_ID = AZURE_DEVOPS_PROVIDER_DESCRIPTOR.id;
 
@@ -19,7 +19,7 @@ export const createAzureDevOpsRepositoryAdapter = ({
 }: {
   gitPort: GitPort;
 }): GitProviderRepositoryPort<AzureDevOpsRepository> => {
-  const getRepository = (repoConfig: RepoConfig) => configuredRepository(repoConfig);
+  const getRepository = (repoConfig: GitProviderWorkspace) => configuredRepository(repoConfig);
 
   return {
     detectRepository(repoPath) {
@@ -71,7 +71,7 @@ export const createAzureDevOpsRepositoryAdapter = ({
   } satisfies GitProviderRepositoryPort<AzureDevOpsRepository>;
 };
 
-function configuredRepository(repoConfig: RepoConfig) {
+function configuredRepository(repoConfig: GitProviderWorkspace) {
   return Effect.gen(function* () {
     const provider = repoConfig.git.provider;
     if (provider?.id !== PROVIDER_ID || !provider.enabled) {
@@ -96,7 +96,7 @@ function configuredRepository(repoConfig: RepoConfig) {
 }
 
 const remoteMatches = (
-  repoConfig: RepoConfig,
+  repoConfig: GitProviderWorkspace,
   repository: AzureDevOpsRepository,
   remote: GitRemoteEndpoint,
 ): boolean => {

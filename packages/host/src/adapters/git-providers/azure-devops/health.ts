@@ -2,7 +2,6 @@ import {
   AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
   type AzureDevOpsRepository,
   type GitProviderHealth,
-  type RepoConfig,
 } from "@openducktor/contracts";
 import { isAzureDevOpsRepository } from "@openducktor/core";
 import { Effect } from "effect";
@@ -14,6 +13,7 @@ import type {
 } from "../../../ports/git-provider-port";
 import { parseAzureRepository } from "./models";
 import type { AzureDevOpsRestClient } from "./rest-client";
+import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
 const PROVIDER_ID = AZURE_DEVOPS_PROVIDER_DESCRIPTOR.id;
 
@@ -26,7 +26,7 @@ export const createAzureDevOpsHealthPort = ({
   connection: AzureDevOpsConnectionPort;
   repositoryPort: GitProviderRepositoryPort<AzureDevOpsRepository>;
 }): GitProviderHealthPort => ({
-  getStatus(repoConfig: RepoConfig) {
+  getStatus(repoConfig: GitProviderWorkspace) {
     return Effect.gen(function* () {
       const provider = repoConfig.git.provider;
       if (provider?.id !== PROVIDER_ID || !provider.enabled) {

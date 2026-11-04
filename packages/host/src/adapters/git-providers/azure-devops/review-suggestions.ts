@@ -1,4 +1,3 @@
-import type { RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostValidationError,
@@ -18,6 +17,7 @@ import {
   type AzureDevOpsJson,
   type AzureDevOpsJsonRecord,
 } from "./json";
+import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
 type SuggestionPosition = {
   line: number;
@@ -131,7 +131,7 @@ export const readAzureSuggestionFiles = ({
   threads,
 }: {
   client: AzureDevOpsRestClient;
-  repoConfig: RepoConfig;
+  repoConfig: GitProviderWorkspace;
   repository: ResolvedAzureDevOpsRepository;
   sourceCommit: string | null;
   iterationId: number | null;

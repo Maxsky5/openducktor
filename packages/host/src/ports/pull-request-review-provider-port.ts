@@ -1,14 +1,10 @@
-import type {
-  GitProviderId,
-  PullRequest,
-  PullRequestReviewContext,
-  RepoConfig,
-} from "@openducktor/contracts";
+import type { GitProviderId, PullRequest, PullRequestReviewContext } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { HostValidationErrorAggregate } from "../effect/host-errors";
+import type { GitProviderWorkspace } from "./git-provider-workspace";
 
 export type PullRequestReviewProviderInput = {
-  repoConfig: RepoConfig;
+  repoConfig: GitProviderWorkspace;
   linkedPullRequest: PullRequest;
 };
 

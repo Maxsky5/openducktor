@@ -6,13 +6,13 @@ import type {
   GitProviderRepository,
   SourceIssue,
   PullRequest,
-  RepoConfig,
   TaskApprovalContext,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { HostError } from "../effect/host-errors";
 import type { GitProviderCapabilityError, GitProviderRepositoryError } from "./git-provider-errors";
 import type { PullRequestReviewProviderPort } from "./pull-request-review-provider-port";
+import type { GitProviderWorkspace } from "./git-provider-workspace";
 
 export type GitProviderRepositoryMapping<
   Repository extends GitProviderRepository = GitProviderRepository,
@@ -28,10 +28,10 @@ export type GitProviderRepositoryPort<
     repoPath: string,
   ): Effect.Effect<Repository, HostError | GitProviderRepositoryError>;
   getRepository(
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
   ): Effect.Effect<Repository, HostError | GitProviderRepositoryError>;
   getMapping(
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
   ): Effect.Effect<
     GitProviderRepositoryMapping<Repository>,
     HostError | GitProviderRepositoryError
@@ -39,11 +39,11 @@ export type GitProviderRepositoryPort<
 };
 
 export type GitProviderHealthPort = {
-  getStatus(repoConfig: RepoConfig): Effect.Effect<GitProviderHealth, HostError>;
+  getStatus(repoConfig: GitProviderWorkspace): Effect.Effect<GitProviderHealth, HostError>;
 };
 
 export type PullRequestProviderInput = {
-  repoConfig: RepoConfig;
+  repoConfig: GitProviderWorkspace;
 };
 
 export type ProviderPullRequest = {
@@ -94,13 +94,15 @@ export type PullRequestProviderPort = {
 
 export type IssueReaderPort = {
   providerId: GitProviderId;
-  scope(repoConfig: RepoConfig): Effect.Effect<string, HostError | GitProviderRepositoryError>;
+  scope(
+    repoConfig: GitProviderWorkspace,
+  ): Effect.Effect<string, HostError | GitProviderRepositoryError>;
   resolveLegacyScope?(
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
     legacyScope: string,
   ): Effect.Effect<string | undefined, HostError | GitProviderRepositoryError>;
   list(input: {
-    repoConfig: RepoConfig;
+    repoConfig: GitProviderWorkspace;
     scope?: string;
     search: string;
     page: number;
@@ -115,19 +117,19 @@ export type IssueReaderPort = {
     HostError | GitProviderRepositoryError
   >;
   get(input: {
-    repoConfig: RepoConfig;
+    repoConfig: GitProviderWorkspace;
     scope?: string;
     sourceId: string;
   }): Effect.Effect<SourceIssue, HostError | GitProviderRepositoryError>;
   prepareGet(
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
     scope?: string,
   ): Effect.Effect<
     (sourceId: string) => Effect.Effect<SourceIssue, HostError | GitProviderRepositoryError>,
     HostError | GitProviderRepositoryError
   >;
   readImage?(input: {
-    repoConfig: RepoConfig;
+    repoConfig: GitProviderWorkspace;
     sourceId: string;
     url: string;
     savedDescription?: string | undefined;

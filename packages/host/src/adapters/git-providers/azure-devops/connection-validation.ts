@@ -1,7 +1,8 @@
-import type { RepoConfig, AzureDevOpsRepository } from "@openducktor/contracts";
+import type { AzureDevOpsRepository } from "@openducktor/contracts";
 import { azureDevOpsCollectionUrl } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
+import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
 export const requireClientId = (clientId: string | undefined) =>
   clientId
@@ -15,7 +16,7 @@ export const requireClientId = (clientId: string | undefined) =>
       );
 
 export const requireConnectionTransport = (
-  repoConfig: RepoConfig,
+  repoConfig: GitProviderWorkspace,
   repository: AzureDevOpsRepository,
 ) =>
   Effect.gen(function* () {

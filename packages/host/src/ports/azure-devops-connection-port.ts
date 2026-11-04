@@ -2,10 +2,10 @@ import type {
   AzureDevOpsConnectionState,
   AzureDevOpsDeviceCode,
   AzureDevOpsRepository,
-  RepoConfig,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { HostError } from "../effect/host-errors";
+import type { GitProviderWorkspace } from "./git-provider-workspace";
 
 export type AzureDevOpsAuthorization = {
   headerValue: string;
@@ -14,27 +14,27 @@ export type AzureDevOpsAuthorization = {
 
 export type AzureDevOpsConnectionPort = {
   getAuthorization(
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
     repository: AzureDevOpsRepository,
   ): Effect.Effect<AzureDevOpsAuthorization, HostError>;
   getState(
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
     repository: AzureDevOpsRepository,
   ): Effect.Effect<AzureDevOpsConnectionState, HostError>;
   replacePat(
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
     repository: AzureDevOpsRepository,
     pat: string,
   ): Effect.Effect<void, HostError>;
   startCloudSignIn(
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
     repository: AzureDevOpsRepository,
   ): Effect.Effect<AzureDevOpsDeviceCode, HostError>;
   cancelCloudSignIn(attemptId: string): Effect.Effect<void, HostError>;
   disconnect(
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
     repository: AzureDevOpsRepository,
   ): Effect.Effect<void, HostError>;
-  removeWorkspaceCredentials(repoConfig: RepoConfig): Effect.Effect<void, HostError>;
+  removeWorkspaceCredentials(repoConfig: GitProviderWorkspace): Effect.Effect<void, HostError>;
   shutdown(): Effect.Effect<void>;
 };

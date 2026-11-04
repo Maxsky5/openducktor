@@ -2,7 +2,6 @@ import {
   GITHUB_PROVIDER_DESCRIPTOR,
   type GitProviderDescriptor,
   type GithubGitProviderRepository,
-  type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { GitPort } from "../../../ports/git-port";
@@ -22,6 +21,7 @@ import { createGithubIssueReader } from "./issues";
 import { createGithubPullRequestProviderPort } from "./pull-requests";
 import { createGithubPullRequestReviewAdapter } from "./review/adapter";
 import { createGithubProviderRepositoryAdapter } from "./repository";
+import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
 export class GithubProviderAdapter implements GitProviderPort {
   private readonly repositoryPort: GitProviderRepositoryPort<GithubGitProviderRepository>;
@@ -43,7 +43,8 @@ export class GithubProviderAdapter implements GitProviderPort {
     const repositoryPort = createGithubProviderRepositoryAdapter({
       gitPort,
     });
-    const getRepository = (repoConfig: RepoConfig) => repositoryPort.getRepository(repoConfig);
+    const getRepository = (repoConfig: GitProviderWorkspace) =>
+      repositoryPort.getRepository(repoConfig);
 
     this.repositoryPort = repositoryPort;
     this.healthPort = createGithubProviderHealthPort({
