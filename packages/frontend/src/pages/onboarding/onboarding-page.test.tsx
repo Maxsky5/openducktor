@@ -104,9 +104,9 @@ describe("OnboardingPage", () => {
     expect(onboardingShell.scrollTop).toBe(0);
   });
 
-  test.each([null, "InvalidStateError", "AbortError"])(
-    "changes stages and clears animation state when ready rejects with %s",
-    async (abortName) => {
+  test.each(["successful", "InvalidStateError", "AbortError"])(
+    "captures stage changes and clears animation state for %s transitions",
+    async (outcome) => {
       const originalDescriptor = Object.getOwnPropertyDescriptor(document, "startViewTransition");
       const capturedHeadings: string[] = [];
       const startViewTransition = mock((update: () => void) => {
@@ -117,9 +117,10 @@ describe("OnboardingPage", () => {
         capturedHeadings.push(heading.textContent ?? "");
         update();
         return {
-          ready: abortName
-            ? Promise.reject(new DOMException("Transition was aborted", abortName))
-            : Promise.resolve(),
+          ready:
+            outcome === "successful"
+              ? Promise.resolve()
+              : Promise.reject(new DOMException("Transition was aborted", outcome)),
           updateCallbackDone: Promise.resolve(),
           finished: Promise.resolve(),
         };
