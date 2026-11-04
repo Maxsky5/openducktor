@@ -14,6 +14,7 @@ import {
 } from "react";
 import { List } from "react-window";
 import { Button } from "@/components/ui/button";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   gitHistoryQueryOptions,
@@ -338,6 +339,8 @@ function HistoryCommitList({
     setSelectedOid((current) => (current === oid ? null : oid));
   }, []);
   const closeDetails = useCallback(() => setSelectedOid(null), []);
+  // The list stays mounted with its kept view, so a switch closes the card and its focus.
+  useOnSessionViewHide(closeDetails);
   const selectedRow = selectedOid
     ? (shown.rows.find((row) => row.commit.oid === selectedOid) ?? null)
     : null;

@@ -9,6 +9,7 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { DismissButton } from "./terminal-notice";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { terminalActivityOwnerKey } from "@openducktor/frontend-core/terminals/terminal-activity-store";
 import {
@@ -34,6 +35,8 @@ export function TerminalRestartButton({
   const activity = findTerminalActivity(state, summary.terminalId);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The notice stays mounted with its kept view, so a switch closes it.
+  useOnSessionViewHide(() => setError(null));
   const [lastCommand, setLastCommand] = useState(activity?.command);
 
   if (activity?.command !== lastCommand) {

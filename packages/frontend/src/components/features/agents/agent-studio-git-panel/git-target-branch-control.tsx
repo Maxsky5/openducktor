@@ -2,6 +2,7 @@ import { ChevronDown, LoaderCircle, Target } from "lucide-react";
 import { type ReactElement, useId, useLayoutEffect, useRef, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { Button } from "@/components/ui/button";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import {
@@ -80,6 +81,10 @@ export function GitTargetBranchSelector({
   }
   // Block a second selection before React renders the saving state.
   const saving = useRef<EditorState | null>(null);
+  // The selector stays mounted with its kept view, so a switch closes its branch list.
+  useOnSessionViewHide(() =>
+    setEditor((current) => ({ context: current.context, mode: "display" })),
+  );
   useLayoutEffect(() => {
     if (saving.current?.context !== context) saving.current = null;
   }, [context]);

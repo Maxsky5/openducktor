@@ -36,6 +36,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import type { DiffScope, GitChangeIntent } from "@openducktor/frontend-core/git/contracts";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { arraysEqual } from "@/lib/arrays-equal";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -362,6 +363,10 @@ function FileDiffEntryHeader({
   const triggerRef = useRef<HTMLDivElement>(null);
   // A menu must not act on content that changed after it opened, so a change closes it.
   const [menu, setMenu] = useState({ open: false, content: diff.diff, generation: 0 });
+  // The menu stays mounted with its kept view, so a switch closes it.
+  useOnSessionViewHide(() =>
+    setMenu((current) => (current.open ? { ...current, open: false } : current)),
+  );
   if (menu.open && menu.content !== diff.diff) {
     setMenu({ open: false, content: diff.diff, generation: menu.generation + 1 });
   }
