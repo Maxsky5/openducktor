@@ -49,7 +49,7 @@ export const isClaudeUserStopMessage = (entry: ClaudeHistoryMessage): boolean =>
   return (
     parsed.success &&
     parsed.data.message.content.every((text) =>
-      CLAUDE_USER_STOP_MARKERS.some((marker) => text.startsWith(marker)),
+      CLAUDE_USER_STOP_MARKERS.some((marker) => text === marker),
     )
   );
 };

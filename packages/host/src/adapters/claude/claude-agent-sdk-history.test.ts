@@ -380,7 +380,10 @@ describe("claude-agent-sdk-history", () => {
           type: "user",
           uuid: "steered-user",
           timestamp: "2026-11-04T15:00:02.000Z",
-          message: { role: "user", content: "[Request interrupted by user] please continue" },
+          message: {
+            role: "user",
+            content: [{ type: "text", text: "[Request interrupted by user] please continue" }],
+          },
         }),
         toSessionMessage({
           type: "assistant",
