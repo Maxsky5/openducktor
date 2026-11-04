@@ -444,7 +444,7 @@ describe("useAgentChatWindow", () => {
   });
 
   test("short transcripts start in the only row window", async () => {
-    const rows = createTurnRows(12);
+    const rows = createTurnRows(10);
     const harness = await mountHarness({
       rows,
       displayedSessionKey: "session-1",
@@ -581,6 +581,7 @@ describe("useAgentChatWindow", () => {
       await act(async () => {
         triggerResizeObservers(container);
       });
+      await animationFrameDriver.flushFrames();
       expect(harness.getLatestResult().visibleRows.length).toBeGreaterThan(
         AGENT_CHAT_ROW_WINDOW_SIZE,
       );
@@ -1701,7 +1702,7 @@ describe("useAgentChatWindow", () => {
     }
 
     expect(harness.getLatestResult().windowStart).toBe(25);
-    container.scrollTop = 1_000;
+    container.scrollTop = getMaxScrollTop(container) - 50;
     await act(async () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
@@ -1874,7 +1875,7 @@ describe("useAgentChatWindow", () => {
   });
 
   test("keeps the latest row window on the first populated render after an empty frame", async () => {
-    const rows = createTurnRows(12);
+    const rows = createTurnRows(10);
     const harness = await mountHarness({
       rows: [],
       displayedSessionKey: "session-1",
@@ -2009,8 +2010,8 @@ describe("useAgentChatWindow", () => {
   });
 
   test("switching sessions after selecting first history resets the next session to its latest row window", async () => {
-    const firstSessionRows = createTurnRows(12, "session-1");
-    const secondSessionRows = createTurnRows(12, "session-2");
+    const firstSessionRows = createTurnRows(10, "session-1");
+    const secondSessionRows = createTurnRows(10, "session-2");
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
@@ -2181,7 +2182,7 @@ describe("useAgentChatWindow", () => {
   });
 
   test("scrollToBottom selects the latest row window and jumps to bottom", async () => {
-    const rows = createTurnRows(12);
+    const rows = createTurnRows(10);
     const harness = await mountHarness(
       {
         rows,
@@ -2311,8 +2312,8 @@ describe("useAgentChatWindow", () => {
   });
 
   test("keeps the current transcript window when a new turn is appended while pinned", async () => {
-    const initialRows = createTurnRows(12);
-    const nextRows = createTurnRows(13);
+    const initialRows = createTurnRows(9);
+    const nextRows = createTurnRows(10);
     const harness = await mountHarness(
       {
         rows: initialRows,
@@ -2765,7 +2766,7 @@ describe("useAgentChatWindow", () => {
   });
 
   test("exports the expected row-window budget", () => {
-    expect(AGENT_CHAT_ROW_WINDOW_SIZE).toBe(40);
+    expect(AGENT_CHAT_ROW_WINDOW_SIZE).toBe(20);
   });
 
   test("navigates 10,000 rows in both directions within the row-window budget", async () => {

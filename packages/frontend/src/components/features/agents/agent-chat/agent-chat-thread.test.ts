@@ -1268,11 +1268,11 @@ describe("AgentChatThread", () => {
     await act(flush);
     await waitFor(() => {
       expect(
-        rendered.container.querySelector(`[data-row-key="${sessionKey}:user-3:0"]`),
+        rendered.container.querySelector(`[data-row-key="${sessionKey}:user-8:0"]`),
       ).not.toBeNull();
     });
 
-    const completedOlderTurnStyle = getTurnStyle(`${sessionKey}:user-3:0`);
+    const completedOlderTurnStyle = getTurnStyle(`${sessionKey}:user-8:0`);
     const completedLatestTurnStyle = getTurnStyle(`${sessionKey}:user-12:0`);
     expect(completedOlderTurnStyle).not.toBeNull();
     expect(completedOlderTurnStyle).not.toContain("content-visibility");

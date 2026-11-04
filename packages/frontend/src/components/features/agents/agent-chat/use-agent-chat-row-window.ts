@@ -378,7 +378,12 @@ export function useAgentChatRowWindow({
 
     expandAfter({ trimTopAfterAppend: false });
   }, [expandAfter, expandBefore, messagesContainerRef]);
-  useLayoutEffect(fillViewport, [fillViewport, range]);
+  // The fill reads layout. Running it after paint keeps a switch from forcing the transcript
+  // layout inside its arrival frame. The row window already fills the pane before the switch.
+  useEffect(() => {
+    const frame = requestAnimationFrame(fillViewport);
+    return () => cancelAnimationFrame(frame);
+  }, [fillViewport, range]);
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
