@@ -46,6 +46,10 @@ const resolvePullRequestPrompt: KickoffPromptContextResolver = ({
   repoDefaultTargetBranch,
 }) => {
   const targetBranch = effectiveTaskTargetBranch(taskTargetBranch, repoDefaultTargetBranch);
+  if (!targetBranch)
+    throw new Error(
+      "The workspace default target branch is not loaded. Open the workspace, then retry.",
+    );
   resolvePullRequestTarget(targetBranch);
   return {
     git: {

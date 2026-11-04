@@ -19,7 +19,10 @@ import {
   filterRuntimeDefinitionsForStartMode,
   resolveRuntimeKindSelection,
 } from "../../lib/agent-runtime";
-import { effectiveTaskTargetBranch, targetBranchSelectionValue } from "../../lib/target-branch";
+import {
+  effectiveTaskTargetBranch,
+  targetBranchSelectionValueOrEmpty,
+} from "../../lib/target-branch";
 import { useRuntimeAvailabilityContext } from "../../app-state/app-state-contexts";
 import type { RepoSettingsInput } from "../../types/session-slices";
 import { orderStartModesForDisplay } from "./session-start-display";
@@ -105,11 +108,12 @@ export function useSessionStartModalState({
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
   const [targetBranch, setSelectedTargetBranch] = useState<string | null>(null);
+  const selectedInitialTargetBranch = useMemo(
+    () => effectiveTaskTargetBranch(intent?.initialTargetBranch, repoSettings?.defaultTargetBranch),
+    [intent?.initialTargetBranch, repoSettings?.defaultTargetBranch],
+  );
   const selectedTargetBranch =
-    targetBranch ??
-    targetBranchSelectionValue(
-      effectiveTaskTargetBranch(intent?.initialTargetBranch, repoSettings?.defaultTargetBranch),
-    );
+    targetBranch ?? targetBranchSelectionValueOrEmpty(selectedInitialTargetBranch);
   const [selectedStartModeForRuntime, setSelectedStartModeForRuntime] =
     useState<AgentSessionStartMode>("fresh");
   const activeRole = intent?.role ?? null;
@@ -204,7 +208,7 @@ export function useSessionStartModalState({
       setIntent(nextIntent);
       setSelectedTargetBranch(
         repoSettings
-          ? targetBranchSelectionValue(
+          ? targetBranchSelectionValueOrEmpty(
               effectiveTaskTargetBranch(
                 nextIntent.initialTargetBranch,
                 repoSettings.defaultTargetBranch,
@@ -334,10 +338,6 @@ export function useSessionStartModalState({
   const showTargetBranchSelector = supportsTaskTargetBranchSelection(
     intent?.role,
     intent?.launchActionId,
-  );
-  const selectedInitialTargetBranch = useMemo(
-    () => effectiveTaskTargetBranch(intent?.initialTargetBranch, repoSettings?.defaultTargetBranch),
-    [intent?.initialTargetBranch, repoSettings?.defaultTargetBranch],
   );
   const targetBranchChoices = useMemo(
     () => resolveSessionStartTargetBranchChoices(branches, selectedInitialTargetBranch),

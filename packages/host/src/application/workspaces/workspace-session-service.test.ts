@@ -20,7 +20,6 @@ import {
   type AgentSessionLiveReadResult,
   type WorkspaceSessionCreateInput,
   type WorkspaceSession,
-  repoConfigSchema,
   globalConfigSchema,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
@@ -69,6 +68,7 @@ import {
   createWorkspaceSessionService,
   type WorkspaceSessionServiceDependencies,
 } from "./workspace-session-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const input = (): Extract<WorkspaceSessionCreateInput, { location: "local_repo_root" }> => ({
   workspaceId: "fairnest",
@@ -163,7 +163,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     const paths = new Set<string>();
     const branches = new Set<string>();
     const registered = new Set<string>();
-    const config = repoConfigSchema.parse({
+    const config = repoConfigFixture({
       workspaceId: "fairnest",
       workspaceName: "Fairnest",
       repoPath: database.repoPath,

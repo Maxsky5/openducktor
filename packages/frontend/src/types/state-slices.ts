@@ -38,14 +38,6 @@ export type {
   RepoSettingsInput,
 } from "@openducktor/frontend-core/types/session-slices";
 
-export type WorkspaceSelectionOperationsInput = {
-  workspaceId: string;
-  workspaceName: string;
-  repoPath: string;
-  abbreviation?: string;
-  tileColor?: string;
-};
-
 export type WorkspaceModelDefaultsDraft = {
   defaultModel?: ModelDefaultDraft | undefined;
   agentDefaults: Partial<Record<RepoAgentDefaultRole, ModelDefaultDraft | undefined>>;
@@ -62,7 +54,6 @@ export type WorkspaceStateContextValue = {
   activeWorkspace: WorkspaceRecord | null;
   branches: GitBranch[];
   activeBranch: GitCurrentBranch | null;
-  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<WorkspaceRecord>;
   commitWorkspaceProviderSetup: (
     input: WorkspaceProviderSetupCommit,
   ) => Promise<WorkspaceProviderSetupProgress>;

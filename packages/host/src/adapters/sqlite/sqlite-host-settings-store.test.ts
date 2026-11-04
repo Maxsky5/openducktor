@@ -19,6 +19,7 @@ import {
   importHostSharedConfig,
   readHostSharedConfig,
 } from "./sqlite-host-settings-store";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const withDatabase = async (
   run: (connection: Effect.Success<ReturnType<typeof openHostDatabaseConnection>>) => Promise<void>,
@@ -93,7 +94,7 @@ describe("shared host settings", () => {
         BUILTIN_ROLE_IDS.map((id) => [
           id,
           {
-            runtimeKind: "codex",
+            runtimeKind: "codex" as const,
             providerId: "openai",
             modelId: `model-${id}`,
             variant: "high",
@@ -103,7 +104,7 @@ describe("shared host settings", () => {
       );
       config.globalPromptOverrides = prompts;
       for (const workspaceId of ["one", "two"])
-        config.workspaces[workspaceId] = repoConfigSchema.parse({
+        config.workspaces[workspaceId] = repoConfigFixture({
           workspaceId,
           workspaceName: workspaceId,
           repoPath: `/${workspaceId}`,
@@ -178,7 +179,7 @@ describe("shared host settings", () => {
           { template: `Prompt ${index}`, baseVersion: 1, enabled: false },
         ]),
       );
-      config.workspaces.one = repoConfigSchema.parse({
+      config.workspaces.one = repoConfigFixture({
         workspaceId: "one",
         workspaceName: "One",
         repoPath: "/one",
@@ -245,7 +246,7 @@ describe("shared host settings", () => {
       const config = createDefaultGlobalConfig();
       config.hostId = "f24f4d32-64f7-4d8a-ae78-cbcd22003c0a";
       for (const id of ["one", "two"])
-        config.workspaces[id] = repoConfigSchema.parse({
+        config.workspaces[id] = repoConfigFixture({
           workspaceId: id,
           workspaceName: id,
           repoPath: `/${id}`,
@@ -355,7 +356,7 @@ describe("shared host settings", () => {
           defaultActionId: "start",
         },
       });
-      config.workspaces.two = repoConfigSchema.parse({
+      config.workspaces.two = repoConfigFixture({
         workspaceId: "two",
         workspaceName: "Two",
         repoPath: "/same/repo",
@@ -724,12 +725,12 @@ describe("shared host settings", () => {
   test("reports malformed Azure mappings with workspace identity", async () => {
     await withDatabase(async ({ session }) => {
       const config = createDefaultGlobalConfig();
-      config.workspaces.other = repoConfigSchema.parse({
+      config.workspaces.other = repoConfigFixture({
         workspaceId: "other",
         workspaceName: "Other",
         repoPath: "/other",
       });
-      config.workspaces.azure = repoConfigSchema.parse({
+      config.workspaces.azure = repoConfigFixture({
         workspaceId: "azure",
         workspaceName: "Azure",
         repoPath: "/azure",

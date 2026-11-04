@@ -1,17 +1,12 @@
 import type { GitBranch, SettingsRepoConfig } from "@openducktor/contracts";
 import { FolderOpen } from "lucide-react";
 import { type ReactElement, useState } from "react";
-import { BranchSelector } from "@/components/features/repository/branch-selector";
-import { toBranchSelectorOptions } from "@openducktor/frontend-core/lib/branch-selector-model";
+import { DefaultTargetBranchField } from "@/components/features/repository/default-target-branch-field";
 import { FolderPickerDialog } from "@/components/features/repository/folder-picker-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { WorkspaceIdentityFields } from "@/components/features/workspace-identity/workspace-identity-fields";
-import {
-  canonicalTargetBranch,
-  targetBranchFromSelection,
-} from "@openducktor/frontend-core/lib/target-branch";
 import { resolveFolderPickerInitialPath } from "./settings-repository-configuration-section-model";
 
 type RepositoryConfigurationSectionProps = {
@@ -53,35 +48,6 @@ export function RepositoryConfigurationSection({
     );
   }
 
-  const defaultTargetBranchValue = canonicalTargetBranch(selectedRepoConfig.defaultTargetBranch);
-  const targetBranchSelectorValue =
-    selectedRepoConfig.defaultTargetBranch.branch === "@{upstream}"
-      ? selectedRepoConfig.defaultTargetBranch.branch
-      : selectedRepoConfig.defaultTargetBranch.remote
-        ? `refs/remotes/${selectedRepoConfig.defaultTargetBranch.remote}/${selectedRepoConfig.defaultTargetBranch.branch}`
-        : `refs/heads/${selectedRepoConfig.defaultTargetBranch.branch}`;
-  const defaultTargetBranchOptions = toBranchSelectorOptions(selectedRepoBranches, {
-    valueFormat: "full_ref",
-    includeOptions: [
-      {
-        value: targetBranchSelectorValue,
-        label: defaultTargetBranchValue,
-        secondaryLabel: "configured",
-        searchKeywords: defaultTargetBranchValue.split("/").filter(Boolean),
-      },
-    ],
-  });
-  const isDefaultTargetBranchPickerDisabled =
-    isLoadingSettings ||
-    isSaving ||
-    isLoadingSelectedRepoBranches ||
-    defaultTargetBranchOptions.length === 0;
-  let defaultTargetBranchPlaceholder = "Select a branch";
-  if (isLoadingSelectedRepoBranches) {
-    defaultTargetBranchPlaceholder = "Loading branches…";
-  } else if (selectedRepoBranchesError) {
-    defaultTargetBranchPlaceholder = "Branches unavailable";
-  }
   const folderPickerInitialPath = resolveFolderPickerInitialPath(
     selectedRepoConfig,
     selectedRepoEffectiveWorktreeBasePath,
@@ -106,18 +72,12 @@ export function RepositoryConfigurationSection({
         />
 
         <RepositoryBranchSettingsSection
-          branchPrefix={selectedRepoConfig.branchPrefix}
-          defaultTargetBranchOptions={defaultTargetBranchOptions}
-          defaultTargetBranchPlaceholder={defaultTargetBranchPlaceholder}
-          controlState={{
-            isBranchPrefixDisabled: isLoadingSettings || isSaving,
-            isDefaultTargetBranchPickerDisabled,
-            isLoadingSelectedRepoBranches,
-            isSaving,
-          }}
-          selectedRepoBranchesError={selectedRepoBranchesError}
-          targetBranchSelectorValue={targetBranchSelectorValue}
-          onRetrySelectedRepoBranchesLoad={onRetrySelectedRepoBranchesLoad}
+          selectedRepoConfig={selectedRepoConfig}
+          branches={selectedRepoBranches}
+          branchesError={selectedRepoBranchesError}
+          isLoadingBranches={isLoadingSelectedRepoBranches}
+          isDisabled={isLoadingSettings || isSaving}
+          onRetryBranchesLoad={onRetrySelectedRepoBranchesLoad}
           onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
         />
       </div>
@@ -309,45 +269,30 @@ function RepositoryWorktreeBasePathSection({
 }
 
 function RepositoryBranchSettingsSection({
-  branchPrefix,
-  defaultTargetBranchOptions,
-  defaultTargetBranchPlaceholder,
-  controlState,
-  selectedRepoBranchesError,
-  targetBranchSelectorValue,
-  onRetrySelectedRepoBranchesLoad,
+  selectedRepoConfig,
+  branches,
+  branchesError,
+  isLoadingBranches,
+  isDisabled,
+  onRetryBranchesLoad,
   onUpdateSelectedRepoConfig,
 }: {
-  branchPrefix: string;
-  defaultTargetBranchOptions: ReturnType<typeof toBranchSelectorOptions>;
-  defaultTargetBranchPlaceholder: string;
-  controlState: {
-    isBranchPrefixDisabled: boolean;
-    isDefaultTargetBranchPickerDisabled: boolean;
-    isLoadingSelectedRepoBranches: boolean;
-    isSaving: boolean;
-  };
-  selectedRepoBranchesError: string | null;
-  targetBranchSelectorValue: string;
-  onRetrySelectedRepoBranchesLoad: () => void;
+  selectedRepoConfig: SettingsRepoConfig;
+  branches: GitBranch[];
+  branchesError: string | null;
+  isLoadingBranches: boolean;
+  isDisabled: boolean;
+  onRetryBranchesLoad: () => void;
   onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
 }): ReactElement {
-  const defaultTargetBranchLabelId = "repo-default-target-branch-label";
-  const {
-    isBranchPrefixDisabled,
-    isDefaultTargetBranchPickerDisabled,
-    isLoadingSelectedRepoBranches,
-    isSaving,
-  } = controlState;
-
   return (
     <div className="grid gap-2 md:grid-cols-2">
       <div className="grid gap-2">
         <Label htmlFor="repo-branch-prefix">Branch prefix</Label>
         <Input
           id="repo-branch-prefix"
-          value={branchPrefix}
-          disabled={isBranchPrefixDisabled}
+          value={selectedRepoConfig.branchPrefix}
+          disabled={isDisabled}
           onChange={(event) => {
             const nextBranchPrefix = event.currentTarget.value;
             onUpdateSelectedRepoConfig((repoConfig) => ({
@@ -358,40 +303,17 @@ function RepositoryBranchSettingsSection({
         />
       </div>
 
-      <div className="grid gap-2">
-        <Label id={defaultTargetBranchLabelId}>Default target branch</Label>
-        <BranchSelector
-          value={targetBranchSelectorValue}
-          options={defaultTargetBranchOptions}
-          disabled={isDefaultTargetBranchPickerDisabled}
-          placeholder={defaultTargetBranchPlaceholder}
-          searchPlaceholder="Search branches…"
-          triggerAriaLabelledBy={defaultTargetBranchLabelId}
-          onValueChange={(nextBranch) =>
-            onUpdateSelectedRepoConfig((repoConfig) => ({
-              ...repoConfig,
-              defaultTargetBranch: targetBranchFromSelection(nextBranch),
-            }))
-          }
-        />
-        {selectedRepoBranchesError ? (
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-warning-muted">
-              Failed to load branches for repository: {selectedRepoBranchesError}
-            </p>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              disabled={isLoadingSelectedRepoBranches || isSaving}
-              onClick={onRetrySelectedRepoBranchesLoad}
-            >
-              Retry
-            </Button>
-          </div>
-        ) : null}
-      </div>
+      <DefaultTargetBranchField
+        value={selectedRepoConfig.defaultTargetBranch}
+        branches={branches}
+        isLoading={isLoadingBranches}
+        error={branchesError}
+        disabled={isDisabled}
+        onRetry={onRetryBranchesLoad}
+        onChange={(defaultTargetBranch) =>
+          onUpdateSelectedRepoConfig((repoConfig) => ({ ...repoConfig, defaultTargetBranch }))
+        }
+      />
     </div>
   );
 }

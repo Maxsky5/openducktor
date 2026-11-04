@@ -2,22 +2,8 @@ import { type GitTargetBranch, UPSTREAM_TARGET_BRANCH } from "@openducktor/contr
 
 export const INVALID_TASK_TARGET_BRANCH_LABEL = "Invalid task target branch";
 
-export const DEFAULT_TARGET_BRANCH: GitTargetBranch = {
-  remote: "origin",
-  branch: "main",
-};
-
-export const normalizeTargetBranch = (
-  value: GitTargetBranch | null | undefined,
-): GitTargetBranch => {
-  if (!value) {
-    return DEFAULT_TARGET_BRANCH;
-  }
-
+export const normalizeTargetBranch = (value: GitTargetBranch): GitTargetBranch => {
   const branch = value.branch.trim();
-  if (!branch) {
-    return DEFAULT_TARGET_BRANCH;
-  }
   const remote = value.remote?.trim();
   if (branch === UPSTREAM_TARGET_BRANCH) {
     return {
@@ -49,15 +35,13 @@ export const normalizeTargetBranch = (
   return targetBranch;
 };
 
+/** The target branch of the task, else the default of the workspace. Null until either loads. */
 export const effectiveTaskTargetBranch = (
   taskTargetBranch: GitTargetBranch | null | undefined,
   defaultTargetBranch: GitTargetBranch | null | undefined,
-): GitTargetBranch => {
-  if (taskTargetBranch) {
-    return normalizeTargetBranch(taskTargetBranch);
-  }
-
-  return normalizeTargetBranch(defaultTargetBranch);
+): GitTargetBranch | null => {
+  const targetBranch = taskTargetBranch ?? defaultTargetBranch;
+  return targetBranch ? normalizeTargetBranch(targetBranch) : null;
 };
 
 export const taskTargetBranchValidationError = (
@@ -65,6 +49,12 @@ export const taskTargetBranchValidationError = (
 ): string | null => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+};
+
+/** The target branch that a task compares with, and why its saved target is invalid. */
+export type TaskTargetBranchState = {
+  effectiveTargetBranch: GitTargetBranch | null;
+  validationError: string | null;
 };
 
 export const resolveTaskTargetBranchState = ({
@@ -75,26 +65,12 @@ export const resolveTaskTargetBranchState = ({
   taskTargetBranch: GitTargetBranch | null | undefined;
   taskTargetBranchError: string | null | undefined;
   defaultTargetBranch: GitTargetBranch | null | undefined;
-}) => {
-  const effectiveTargetBranch = effectiveTaskTargetBranch(taskTargetBranch, defaultTargetBranch);
-  const validationError = taskTargetBranchValidationError(taskTargetBranchError);
+}): TaskTargetBranchState => ({
+  effectiveTargetBranch: effectiveTaskTargetBranch(taskTargetBranch, defaultTargetBranch),
+  validationError: taskTargetBranchValidationError(taskTargetBranchError),
+});
 
-  return {
-    effectiveTargetBranch,
-    validationError,
-    displayTargetBranch: validationError
-      ? INVALID_TASK_TARGET_BRANCH_LABEL
-      : canonicalTargetBranch(effectiveTargetBranch),
-    selectionValue: targetBranchSelectionValue(effectiveTargetBranch),
-  } satisfies {
-    effectiveTargetBranch: GitTargetBranch;
-    validationError: string | null;
-    displayTargetBranch: string;
-    selectionValue: string;
-  };
-};
-
-export const canonicalTargetBranch = (value: GitTargetBranch | null | undefined): string => {
+export const canonicalTargetBranch = (value: GitTargetBranch): string => {
   const normalized = normalizeTargetBranch(value);
   if (normalized.branch === UPSTREAM_TARGET_BRANCH) {
     return normalized.branch;
@@ -102,10 +78,10 @@ export const canonicalTargetBranch = (value: GitTargetBranch | null | undefined)
   return normalized.remote ? `${normalized.remote}/${normalized.branch}` : normalized.branch;
 };
 
-export const checkoutTargetBranch = (value: GitTargetBranch | null | undefined): string =>
+export const checkoutTargetBranch = (value: GitTargetBranch): string =>
   normalizeTargetBranch(value).branch;
 
-export const targetBranchSelectionValue = (value: GitTargetBranch | null | undefined): string => {
+export const targetBranchSelectionValue = (value: GitTargetBranch): string => {
   const normalized = normalizeTargetBranch(value);
   if (normalized.branch === UPSTREAM_TARGET_BRANCH) {
     return normalized.branch;
@@ -116,7 +92,11 @@ export const targetBranchSelectionValue = (value: GitTargetBranch | null | undef
     : `refs/heads/${normalized.branch}`;
 };
 
-export const targetBranchRemote = (value: GitTargetBranch | null | undefined): string | null => {
+/** The choice value of a target branch, or empty while no target is loaded. */
+export const targetBranchSelectionValueOrEmpty = (value: GitTargetBranch | null): string =>
+  value ? targetBranchSelectionValue(value) : "";
+
+export const targetBranchRemote = (value: GitTargetBranch): string | null => {
   const normalized = normalizeTargetBranch(value);
   if (normalized.branch === UPSTREAM_TARGET_BRANCH) {
     return null;
@@ -127,7 +107,7 @@ export const targetBranchRemote = (value: GitTargetBranch | null | undefined): s
 export const targetBranchFromSelection = (value: string): GitTargetBranch => {
   const trimmed = value.trim();
   if (!trimmed) {
-    return DEFAULT_TARGET_BRANCH;
+    throw new Error("Choose a target branch.");
   }
   if (trimmed === UPSTREAM_TARGET_BRANCH) {
     return {

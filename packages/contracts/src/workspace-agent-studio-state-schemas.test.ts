@@ -10,6 +10,7 @@ const baseRepoConfigInput = {
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
 };
 
 describe("workspace Agent Studio state schemas", () => {
@@ -53,6 +54,7 @@ describe("workspace Agent Studio state schemas", () => {
 
   test("stays outside settings snapshots and save inputs", () => {
     const repoConfig = repoConfigSchema.parse({
+      defaultTargetBranch: { remote: "origin", branch: "main" },
       ...baseRepoConfigInput,
       agentStudioState: {
         openTaskIds: ["task-1"],

@@ -36,8 +36,6 @@ export type BranchProbeOutcome =
       error: BranchProbeError;
     };
 
-export const normalizeRepoPath = (repoPath: string): string => repoPath.trim();
-
 export const shouldResetBranchStateForRepoChange = (
   previousActiveRepo: string | null,
   nextActiveRepo: string | null,

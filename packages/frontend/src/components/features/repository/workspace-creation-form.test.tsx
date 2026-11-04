@@ -14,14 +14,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
+  type LocalWorkspaceDetails,
   localOnlyProviderSetupClient,
   localOnlyWorkspaceDetails,
 } from "@/test-utils/workspace-provider-setup-fixture";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
-import type {
-  WorkspaceStateContextValue,
-  WorkspaceSelectionOperationsInput,
-} from "@/types/state-slices";
+import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import {
   WorkspaceCreationBackAction,
   WorkspaceCreationFields,
@@ -37,7 +35,7 @@ afterEach(() => {
   views.clear();
 });
 
-const record = (input: WorkspaceSelectionOperationsInput): WorkspaceRecord => ({
+const record = (input: Omit<LocalWorkspaceDetails, "defaultTargetBranch">): WorkspaceRecord => ({
   workspaceId: input.workspaceId,
   workspaceName: input.workspaceName,
   repoPath: input.repoPath,
@@ -195,6 +193,8 @@ const chooseRepo = async () => {
 const skipProvider = async () => {
   fireEvent.click(screen.getByRole("button", { name: "Skip Git provider setup" }));
   await screen.findByLabelText("Workspace ID");
+  // The repository default branch loads after the details stage opens.
+  await screen.findByText("main");
 };
 const advanceToModels = async () => {
   await chooseRepo();
@@ -286,6 +286,7 @@ describe("workspace creation", () => {
         await harness.run(async (state) => {
           await state.skipProvider();
         });
+        await harness.waitFor((state) => state.defaultTargetBranch !== null);
         await harness.run((state) => {
           state.next();
           if (runtime) {
@@ -334,6 +335,47 @@ describe("workspace creation", () => {
       }
     },
   );
+
+  test("saves the repository default branch as the default target branch", async () => {
+    const commit = mock(async (input) => outcome(input));
+    renderHarness({ commit });
+    await advanceToModels();
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+    await waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+    expect(commit.mock.calls[0]?.[0].defaultTargetBranch).toEqual({ branch: "main" });
+  });
+
+  test("shows why Git cannot tell the default branch and saves the branch that the user chooses", async () => {
+    const commit = mock(async (input) => outcome(input));
+    const reason = "Git does not know the default branch of the remote origin.";
+    renderHarness(
+      { commit },
+      {
+        workspaceProviderSetupTargetBranches: async () => ({
+          repositoryDefault: { kind: "unknown", reason },
+          branches: [
+            { name: "develop", isCurrent: true, isRemote: false },
+            { name: "origin/develop", isCurrent: false, isRemote: true },
+          ],
+        }),
+      },
+    );
+    await chooseRepo();
+    fireEvent.click(screen.getByRole("button", { name: "Skip Git provider setup" }));
+    expect(await screen.findByText(reason)).toBeTruthy();
+    const next = screen.getByRole("button", { name: "Continue to models" });
+    expect(next.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Default target branch" }));
+    fireEvent.click(await screen.findByRole("option", { name: /^origin\/develop/ }));
+    expect(screen.queryByText(reason)).toBeNull();
+    fireEvent.click(next);
+    fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
+    await waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+    expect(commit.mock.calls[0]?.[0].defaultTargetBranch).toEqual({
+      remote: "origin",
+      branch: "develop",
+    });
+  });
 
   test("keeps each submission error readable and allows correction", async () => {
     const failure =
@@ -394,6 +436,7 @@ describe("workspace creation", () => {
         await h.run(async (state) => {
           await state.skipProvider();
         });
+        await h.waitFor((state) => state.defaultTargetBranch !== null);
         await h.run((state) => state.next());
         await h.run((state) => {
           submission = state.submit();
@@ -748,6 +791,7 @@ describe("workspace creation", () => {
         await h.run(async (state) => {
           await state.skipProvider();
         });
+        await h.waitFor((state) => state.defaultTargetBranch !== null);
         await h.run((state) => state.next());
         await h.run(async (state) => {
           await state.submit();

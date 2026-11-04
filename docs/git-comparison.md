@@ -29,6 +29,26 @@ History shows the commits of the current branch and the target that the other br
 
 During a rebase, the current branch upstream is the upstream of the branch that the rebase rewrites. Another detached HEAD has no upstream, so its comparison is unavailable.
 
+## Repository default target branch
+
+Each workspace saves one default target branch. Tasks and chats without their own target use it.
+
+When OpenDucktor creates a workspace, it reads the default branch of the repository from local Git data. It does not contact a remote.
+
+- If the repository has a remote named `origin`, the default is the branch that `refs/remotes/origin/HEAD` names, for example `origin/master`.
+- If the repository has only one remote with another name, that remote is used in the same way.
+- If the repository has no remote, the default is the local branch that `HEAD` names, for example `master`.
+
+The Workspace details step shows the result in the Default target branch field. The user can choose another branch there.
+
+Git cannot always tell the default branch. Examples are a remote without `HEAD`, several remotes and no `origin`, a detached `HEAD`, and a branch without commits. Then the field shows the reason and stays empty. The user must choose a branch before creation continues. OpenDucktor never uses `main` in place of a missing default.
+
+To let Git find the default branch of a remote, run `git remote set-head origin --auto` in the repository.
+
+After creation, change the value in Settings > Repositories > Configuration > Default target branch.
+
+Existing workspaces keep their saved default target branch. A settings file from an earlier version without this value reads it as `origin/main`, as that version did.
+
 ## Workspace chat target
 
 The New chat dialog has a Target branch field for each work location. It preselects the repository default target branch and marks it in the list. Only Current checkout offers Tracked upstream. A change to New worktree or Existing worktree replaces a Tracked upstream choice with the repository default.

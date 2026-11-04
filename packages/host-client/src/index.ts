@@ -130,13 +130,14 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     customAgentRoleUpdate: workspaceClient.customAgentRoleUpdate.bind(workspaceClient),
     customAgentRoleDelete: workspaceClient.customAgentRoleDelete.bind(workspaceClient),
     workspaceList: workspaceClient.workspaceList.bind(workspaceClient),
-    workspaceAdd: workspaceClient.workspaceAdd.bind(workspaceClient),
     workspaceProviderSetupBegin: workspaceClient.workspaceProviderSetupBegin.bind(workspaceClient),
     workspaceProviderSetupSet: workspaceClient.workspaceProviderSetupSet.bind(workspaceClient),
     workspaceProviderSetupDetect:
       workspaceClient.workspaceProviderSetupDetect.bind(workspaceClient),
     workspaceProviderSetupStatus:
       workspaceClient.workspaceProviderSetupStatus.bind(workspaceClient),
+    workspaceProviderSetupTargetBranches:
+      workspaceClient.workspaceProviderSetupTargetBranches.bind(workspaceClient),
     workspaceProviderSetupGithub:
       workspaceClient.workspaceProviderSetupGithub.bind(workspaceClient),
     workspaceProviderSetupAreas: workspaceClient.workspaceProviderSetupAreas.bind(workspaceClient),

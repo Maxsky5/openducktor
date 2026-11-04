@@ -3,7 +3,7 @@ import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-c
 import { AgentChatSendProviders } from "@openducktor/frontend-core/test-support/agent-chat-send-providers";
 import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
 import { describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, repoConfigSchema } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
   type AgentChatComposerDraft,
@@ -44,6 +44,7 @@ import {
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
 import { deriveSelectedSessionViewProjection } from "@openducktor/frontend-core/sessions/session-view/selected-session-view-projection";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
+import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
 
 enableReactActEnvironment();
 
@@ -217,10 +218,7 @@ const createTestRuntimeDefinitionsContextValue = () =>
 
 const createSessionActionsHostClient = (): Partial<HostClient> => ({
   workspaceGetRepoConfig: async () =>
-    repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
+    repoConfigFixture({
       promptOverrides: {},
     }),
   workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),

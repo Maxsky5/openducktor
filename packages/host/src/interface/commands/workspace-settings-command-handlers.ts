@@ -111,7 +111,6 @@ const parseAgentStudioStateInput = (record: CommandInputRecord) => {
 export const createWorkspaceSettingsCommandHandlers = (
   workspaceSettingsService: Pick<
     WorkspaceSettingsService,
-    | "addWorkspace"
     | "getRepoConfig"
     | "getSettingsSnapshot"
     | "listWorkspaces"
@@ -157,33 +156,6 @@ export const createWorkspaceSettingsCommandHandlers = (
     workspace_list: (args) => {
       requireNoArgs("workspace_list", args);
       return workspaceSettingsService.listWorkspaces();
-    },
-    workspace_add: (args) => {
-      const record = requireRecord(commandInputRecordSchema.safeParse(args), "workspace_add input");
-      const input: Parameters<typeof workspaceSettingsService.addWorkspace>[0] = {
-        workspaceId: requireString(
-          commandInputStringSchema.safeParse(record.workspaceId),
-          "workspaceId",
-        ),
-        workspaceName: requireString(
-          commandInputStringSchema.safeParse(record.workspaceName),
-          "workspaceName",
-        ),
-        repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
-      };
-      if (record.abbreviation !== undefined) {
-        input.abbreviation = requireString(
-          commandInputStringSchema.safeParse(record.abbreviation),
-          "abbreviation",
-        );
-      }
-      if (record.tileColor !== undefined) {
-        input.tileColor = requireString(
-          commandInputStringSchema.safeParse(record.tileColor),
-          "tileColor",
-        );
-      }
-      return workspaceSettingsService.addWorkspace(input);
     },
     workspace_select: (args) =>
       workspaceSettingsService.selectWorkspace(

@@ -9,7 +9,7 @@ import {
   type HostEventEnvelope,
   hostRuntimeSnapshotSchema,
   mcpBridgeDiscoveryFileSchema,
-  repoConfigSchema,
+  workspaceProviderSetupSessionSchema,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect } from "effect";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
@@ -33,6 +33,7 @@ import type {
   EffectNodeHostCommandRouter,
 } from "./node-host-command-router-types";
 import { createLiveSessionFaultLogger } from "./node-host-lifecycle-logger";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const createRuntimeDistribution = () =>
   createSourceRuntimeDistribution(path.resolve(import.meta.dir, "../../../../.."));
@@ -315,19 +316,19 @@ describe("createNodeEffectHostCommandRouter", () => {
     );
     const config = createDefaultGlobalConfig();
     config.workspaces = {
-      previous: repoConfigSchema.parse({
+      previous: repoConfigFixture({
         workspaceId: "previous",
         workspaceName: "Previous",
         repoPath: previousRepoPath,
         agentStudioState: { openTaskIds: [] },
       }),
-      selected: repoConfigSchema.parse({
+      selected: repoConfigFixture({
         workspaceId: "selected",
         workspaceName: "Selected",
         repoPath,
         agentStudioState: { openTaskIds: [] },
       }),
-      closed: repoConfigSchema.parse({
+      closed: repoConfigFixture({
         workspaceId: "closed",
         workspaceName: "Closed",
         repoPath: closedRepoPath,
@@ -393,11 +394,19 @@ describe("createNodeEffectHostCommandRouter", () => {
       );
       await new Promise<void>((resolve) => setImmediate(resolve));
       expect(restored).toEqual([]);
+      const setup = workspaceProviderSetupSessionSchema.parse(
+        await Effect.runPromise(
+          router.invoke("workspace_provider_setup_begin", { repoPath: addedRepoPath }),
+        ),
+      );
       await Effect.runPromise(
-        router.invoke("workspace_add", {
+        router.invoke("workspace_provider_setup_commit", {
+          setupId: setup.setupId,
+          revision: setup.revision,
           workspaceId: "added",
           workspaceName: "Added",
-          repoPath: addedRepoPath,
+          defaultTargetBranch: { branch: "main" },
+          agentDefaults: {},
         }),
       );
       await Effect.runPromise(

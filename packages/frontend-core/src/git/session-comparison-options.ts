@@ -5,7 +5,11 @@ import {
 } from "@openducktor/contracts";
 import { toBranchSelectorOptions } from "../lib/branch-selector-model";
 import type { SelectOption } from "../lib/select-option";
-import { canonicalTargetBranch, targetBranchSelectionValue } from "../lib/target-branch";
+import {
+  canonicalTargetBranch,
+  targetBranchSelectionValue,
+  targetBranchSelectionValueOrEmpty,
+} from "../lib/target-branch";
 
 /**
  * The comparison branch choices of a task or a chat: the repository branches, the selected
@@ -27,7 +31,7 @@ export function sessionComparisonOptions(
     checkoutBranch?: string | null;
   } = {},
 ): SelectOption[] {
-  const selection = target ? targetBranchSelectionValue(target) : "";
+  const selection = targetBranchSelectionValueOrEmpty(target);
   const label = target ? canonicalTargetBranch(target) : selection;
   const included = selection
     ? [

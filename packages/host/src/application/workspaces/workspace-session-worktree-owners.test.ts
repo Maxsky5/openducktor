@@ -19,6 +19,7 @@ import {
   readWorktreePathOwners,
   requireNoWorktreeOwners,
 } from "./workspace-session-worktree-owners";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const scope = { workspaceId: "workspace", repoPath: "/repo" };
 
@@ -228,12 +229,12 @@ describe("workspace session worktree owners", () => {
         globalConfigSchema.parse({
           version: 4,
           workspaces: {
-            closed: {
+            closed: repoConfigFixture({
               workspaceId: "closed",
               workspaceName: "Closed workspace",
               repoPath: "/unavailable-repo",
               closed: true,
-            },
+            }),
           },
         }),
       );
@@ -262,11 +263,11 @@ describe("workspace session worktree owners", () => {
         globalConfigSchema.parse({
           version: 4,
           workspaces: {
-            other: {
+            other: repoConfigFixture({
               workspaceId: "other",
               workspaceName: "Other workspace",
               repoPath: "/worktrees/other-repo",
-            },
+            }),
           },
         }),
       );
@@ -320,19 +321,18 @@ describe("workspace session worktree task owners", () => {
   const config = globalConfigSchema.parse({
     version: 4,
     workspaces: {
-      workspace: {
+      workspace: repoConfigFixture({
         workspaceId: "workspace",
         workspaceName: "Workspace",
-        repoPath: "/repo",
         worktreeBasePath: "/worktrees",
-      },
-      other: {
+      }),
+      other: repoConfigFixture({
         workspaceId: "other",
         workspaceName: "Other",
         repoPath: "/other-repo",
         worktreeBasePath: "/other-worktrees",
         closed: true,
-      },
+      }),
     },
   });
   const dependenciesFor = (tasksByWorkspace: Record<string, TaskWorktreeDirectories[]>) => ({
@@ -392,11 +392,11 @@ describe("workspace session worktree task owners", () => {
           ...config,
           workspaces: {
             ...config.workspaces,
-            checkout: {
+            checkout: repoConfigFixture({
               workspaceId: "checkout",
               workspaceName: "Checkout",
               repoPath: "/aliases/shared",
-            },
+            }),
           },
         }),
       );

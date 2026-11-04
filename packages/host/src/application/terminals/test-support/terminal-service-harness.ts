@@ -2,7 +2,7 @@ import { expect } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
-import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
+import { type WorkspaceSession } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostResourceError } from "../../../effect/host-errors";
 import { createTerminalLaunchEnvironment } from "../../../infrastructure/terminals/terminal-launch-environment";
@@ -19,6 +19,7 @@ import type { WithProcessStartAdmission } from "../../workspaces/workspace-admis
 import { TERMINAL_LIMITS } from "../terminal-limits";
 import { createTerminalService } from "../terminal-service";
 import type { TerminalTitleSettlementScheduler } from "../terminal-title-settler";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 export const filesystem: FilesystemPort = {
   homeDirectory: () => "/home/user",
@@ -214,10 +215,9 @@ export const workspaceTerminalDependencies = (records: Map<string, WorkspaceSess
   settings: {
     getRepoConfig: () =>
       Effect.succeed(
-        repoConfigSchema.parse({
+        repoConfigFixture({
           workspaceId: "workspace-1",
           workspaceName: "Workspace",
-          repoPath: "/repo",
         }),
       ),
   },

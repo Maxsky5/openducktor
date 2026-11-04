@@ -12,6 +12,7 @@ import type { z } from "zod";
 import { createTaskWorkflowResolver } from "../composition/node/task-workflow-composition";
 import { singleTaskWorkflow } from "../test-support/task-workflows";
 import { applyTaskWorkflowSettings } from "./workflow-settings";
+import { repoConfigFixture } from "../test-support/repo-config-fixture";
 
 const review = createReviewTaskWorkflow();
 const reviewWorkflows = singleTaskWorkflow(review);
@@ -20,10 +21,7 @@ const config = (input: Partial<z.input<typeof globalConfigSchema>> = {}) =>
   globalConfigSchema.parse({ version: 4, ...input });
 
 const workspace = (input: Partial<z.input<typeof repoConfigSchema>> = {}) =>
-  repoConfigSchema.parse({
-    workspaceId: "repo",
-    workspaceName: "Repo",
-    repoPath: "/repo",
+  repoConfigFixture({
     agentStudioState: { openTaskIds: [] },
     ...input,
   });

@@ -38,9 +38,6 @@ describe("app-state-context-values", () => {
       commitWorkspaceProviderSetup: async () => {
         throw new Error("Not used");
       },
-      addWorkspace: async () => {
-        throw new Error("Not used");
-      },
       selectWorkspace: async () => {},
       reorderWorkspaces: async () => {},
       refreshBranches: async () => {},

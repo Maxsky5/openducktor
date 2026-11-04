@@ -1,5 +1,6 @@
-import type { GitBranch } from "@openducktor/contracts";
+import type { GitBranch, GitTargetBranch } from "@openducktor/contracts";
 import type { SelectOption } from "./select-option";
+import { canonicalTargetBranch, targetBranchSelectionValue } from "./target-branch";
 
 const branchSourceLabel = (branch: GitBranch): string => {
   if (!branch.isRemote) {
@@ -69,4 +70,20 @@ export const toBranchSelectorOptions = (
   }
 
   return options;
+};
+
+/** The branch choices of a target branch field. A saved target stays a choice when the list lacks it. */
+export const targetBranchOptions = (
+  branches: GitBranch[],
+  target: GitTargetBranch | null,
+): SelectOption[] => {
+  if (!target) return toBranchSelectorOptions(branches, { valueFormat: "full_ref" });
+  const label = canonicalTargetBranch(target);
+  const saved: SelectOption = {
+    value: targetBranchSelectionValue(target),
+    label,
+    secondaryLabel: "configured",
+    searchKeywords: label.split("/").filter(Boolean),
+  };
+  return toBranchSelectorOptions(branches, { valueFormat: "full_ref", includeOptions: [saved] });
 };

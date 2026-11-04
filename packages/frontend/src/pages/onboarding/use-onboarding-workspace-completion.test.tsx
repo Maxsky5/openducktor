@@ -24,9 +24,6 @@ describe("useOnboardingWorkspaceCompletion", () => {
         },
       },
     });
-    const addWorkspace = mock(async () => {
-      throw new Error("Not used");
-    });
     const onComplete = mock(() => {});
     const connection = createTestClientConnection();
     const queryClient = connection.queryClient;
@@ -50,7 +47,6 @@ describe("useOnboardingWorkspaceCompletion", () => {
       activeWorkspace: null,
       branches: [],
       activeBranch: null,
-      addWorkspace,
       commitWorkspaceProviderSetup: async () => {
         throw new Error("Not used");
       },
@@ -90,7 +86,6 @@ describe("useOnboardingWorkspaceCompletion", () => {
         completion.completeWorkspace(workspaceRefFixture("/repos/project")),
       );
 
-      expect(addWorkspace).not.toHaveBeenCalled();
       expect(onComplete).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();

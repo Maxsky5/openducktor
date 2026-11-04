@@ -2,6 +2,7 @@ import { queryOptions, type QueryKey } from "@tanstack/react-query";
 import type {
   WorkspaceProviderSetupRef,
   WorkspaceProviderSetupStatus,
+  WorkspaceProviderSetupTargetBranches,
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { skippedQueryOptions } from "./skipped-query";
@@ -26,6 +27,28 @@ const options = <T>(
   });
 export const setupDetectionOptions = (client: HostClient, ref: WorkspaceProviderSetupRef) =>
   options(ref, "detect", () => client.workspaceProviderSetupDetect(ref));
+export const setupTargetBranchesOptions = (
+  client: HostClient,
+  ref: WorkspaceProviderSetupRef | null,
+) =>
+  ref
+    ? queryOptions<
+        WorkspaceProviderSetupTargetBranches,
+        Error,
+        WorkspaceProviderSetupTargetBranches,
+        QueryKey
+      >({
+        // The branches do not depend on the provider choice, so the read lasts for the setup. The
+        // setup removes its queries when it ends.
+        queryKey: [...workspaceProviderSetupKeys.session(ref.setupId), "target-branches"],
+        queryFn: () => client.workspaceProviderSetupTargetBranches(ref),
+        retry: false,
+        staleTime: Number.POSITIVE_INFINITY,
+      })
+    : skippedQueryOptions<WorkspaceProviderSetupTargetBranches>({
+        queryKey: [...workspaceProviderSetupKeys.all, "skipped", "target-branches"],
+        staleTime: 0,
+      });
 export const setupStatusOptions = (client: HostClient, ref: WorkspaceProviderSetupRef) =>
   queryOptions<WorkspaceProviderSetupStatus, Error, WorkspaceProviderSetupStatus, QueryKey>({
     queryKey: workspaceProviderSetupKeys.read(ref, "status"),

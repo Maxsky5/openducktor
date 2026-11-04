@@ -1,10 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
-import { type PullRequestReviewContext, repoConfigSchema } from "@openducktor/contracts";
+import { type PullRequestReviewContext } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../../../effect/host-errors";
 import { createGithubPullRequestReviewAdapter } from "./adapter";
 import type { GithubPullRequestReviewReader } from "./reader";
 import { createGithubReviewTestCli } from "./test-support";
+import { repoConfigFixture } from "../../../../test-support/repo-config-fixture";
 
 const loadedContext: PullRequestReviewContext = {
   status: "loaded",
@@ -24,10 +25,7 @@ const loadedContext: PullRequestReviewContext = {
 };
 
 const createRepoConfig = ({ githubEnabled = true }: { githubEnabled?: boolean } = {}) =>
-  repoConfigSchema.parse({
-    workspaceId: "repo",
-    workspaceName: "Repo",
-    repoPath: "/repo",
+  repoConfigFixture({
     git: {
       provider: {
         id: "github",

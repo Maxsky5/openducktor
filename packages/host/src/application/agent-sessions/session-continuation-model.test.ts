@@ -4,7 +4,6 @@ import { Effect } from "effect";
 import {
   agentModelCatalogSchema,
   agentSessionResumeIntentSchema,
-  repoConfigSchema,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentSessionLiveSnapshot,
   type AgentSessionModelSelection,
@@ -15,6 +14,7 @@ import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-s
 import { createAgentSessionCommandService } from "./agent-session-command-service";
 import { createSessionTurnPreparation } from "./session-turn-preparation";
 import { createDefaultGlobalConfig } from "../../config/global-config";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const root = {
   repoPath: "/repo",
@@ -71,10 +71,8 @@ const setup = (
       settings: {
         getRepoConfig: () =>
           Effect.succeed(
-            repoConfigSchema.parse({
-              workspaceId: "repo",
+            repoConfigFixture({
               workspaceName: "Workspace",
-              repoPath: "/repo",
             }),
           ),
       },

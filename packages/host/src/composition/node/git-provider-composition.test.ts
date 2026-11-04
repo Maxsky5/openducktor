@@ -10,6 +10,7 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createNodeGitProviderComposition } from "./git-provider-composition";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 test("node composition uses the product Azure DevOps Entra client ID by default", () => {
   expect(resolveAzureDevOpsEntraClientId({})).toBe("bac43573-dc2b-4b13-b536-8ea09b9c8816");
@@ -46,10 +47,7 @@ test("node composition leaves Azure storage untouched without an Azure repositor
         toolDiscovery,
       }),
     );
-    const githubConfig = repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
+    const githubConfig = repoConfigFixture({
       git: { provider: { id: "github", enabled: true } },
     });
     const noProviderConfig = repoConfigSchema.parse({

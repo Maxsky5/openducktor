@@ -163,11 +163,17 @@ try {
   writeFileSync(join(repoPath, "README.md"), "# Mobile fixture\n");
   git("add", ".");
   git("commit", "-m", "Initial commit");
-  const workspace = await connection.host.client.workspaceAdd({
+  const setup = await connection.host.client.workspaceProviderSetupBegin({ repoPath });
+  const committed = await connection.host.client.workspaceProviderSetupCommit({
+    ...setup,
     workspaceId: "mobile-fixture",
     workspaceName: "Mobile fixture",
-    repoPath,
+    defaultTargetBranch: { branch: "main" },
+    agentDefaults: {},
   });
+  await connection.host.client.workspaceProviderSetupDiscard({ setupId: setup.setupId });
+  const workspace = committed.workspace;
+  assert.ok(workspace, committed.error ?? "The setup commit created no workspace.");
   const listed = await connection.queryClient.fetchQuery(workspaceListQueryOptions());
   assert.ok(listed.some((record) => record.workspaceId === workspace.workspaceId));
   const created = await connection.host.client.taskCreate(workspace, {

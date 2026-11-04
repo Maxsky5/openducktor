@@ -1,4 +1,4 @@
-import { agentSessionRecordSchema, repoConfigSchema } from "@openducktor/contracts";
+import { agentSessionRecordSchema } from "@openducktor/contracts";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { Database } from "bun:sqlite";
@@ -28,6 +28,7 @@ import { importHostSharedConfig } from "./sqlite-host-settings-store";
 import { hostSettings } from "./sqlite-host-settings-schema";
 import { hostMetadata } from "./sqlite-host-database-schema";
 import { hostDatabaseSchema } from "./sqlite-host-database-schema";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 type BunSqliteStatement = ReturnType<Database["prepare"]>;
 const artifactCountRowSchema = z.object({ count: z.number() });
@@ -136,7 +137,7 @@ export const createSqliteTaskStoreHarness = async ({
             if (!host) {
               const config = createDefaultGlobalConfig();
               config.hostId = "8d2dd770-fb8c-4da7-a4d9-23df3169982f";
-              config.workspaces[workspaceId] = repoConfigSchema.parse({
+              config.workspaces[workspaceId] = repoConfigFixture({
                 workspaceId,
                 repoPath,
                 workspaceName: workspaceId,

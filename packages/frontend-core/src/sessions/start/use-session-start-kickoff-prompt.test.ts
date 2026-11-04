@@ -1,6 +1,6 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
-import { repoConfigSchema, type RepoConfig, type SettingsSnapshot } from "@openducktor/contracts";
+import { type RepoConfig, type SettingsSnapshot } from "@openducktor/contracts";
 import { workspaceQueryKeys } from "../../queries/workspace";
 import { createRuntimeHookHarness } from "../../test-support/runtime-hook-harness";
 import {
@@ -9,16 +9,16 @@ import {
 } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import { useSessionStartKickoffPrompt } from "./use-session-start-kickoff-prompt";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 type PromptRequest = Parameters<typeof useSessionStartKickoffPrompt>[0];
 
 const configFor = (workspaceId = "a", template = "Repo {{task.id}}") =>
-  repoConfigSchema.parse({
+  repoConfigFixture({
     workspaceId,
     workspaceName: workspaceId,
     repoPath: `/${workspaceId}`,
     branchPrefix: "odt",
-    defaultTargetBranch: { remote: "origin", branch: "main" },
     promptOverrides: { "kickoff.spec_initial": { template, baseVersion: 1, enabled: true } },
   });
 

@@ -267,6 +267,7 @@ describe("use-workspace-selection-operations", () => {
             revision: 1,
             workspaceId: record.workspaceId,
             workspaceName: record.workspaceName,
+            defaultTargetBranch: { remote: "origin", branch: "main" },
             agentDefaults: {},
           });
           expect(saved).toEqual(outcome);
@@ -354,56 +355,6 @@ describe("use-workspace-selection-operations", () => {
 
       expect(catalogCalls).toBe(2);
       expect(harness.getLatest().workspaceLoadError).toBeNull();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("adds a workspace from the mutation record without re-reading the list or catalog", async () => {
-    const workspaceAdd = mock(async (): Promise<ReturnType<typeof workspace>> =>
-      workspace("/repo-new", true),
-    );
-    const workspaceList = mock(async () => [workspace("/repo-old", true)]);
-    const workspaceCatalogGet = mock(async () => ({
-      catalogRevision: 0,
-      openWorkspaces: [workspace("/repo-old", true)],
-      closedWorkspaces: [],
-      incompleteRemovals: [],
-    }));
-    const setActiveRepo = mock((_repoPath: string | null) => {});
-    workspaceHost.workspaceAdd = workspaceAdd;
-    workspaceHost.workspaceList = workspaceList;
-    workspaceHost.workspaceCatalogGet = workspaceCatalogGet;
-
-    const harness = createRepoSelectionHarness("/repo-old", setActiveRepo);
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.hasLoadedWorkspaceList);
-      expect(workspaceList).not.toHaveBeenCalled();
-      expect(workspaceCatalogGet).toHaveBeenCalledTimes(1);
-
-      await harness.run(async (value) => {
-        await value.addWorkspace({
-          workspaceId: "repo-new",
-          workspaceName: "Repo New",
-          repoPath: "  /repo-new  ",
-        });
-      });
-
-      expect(workspaceAdd).toHaveBeenCalledWith({
-        workspaceId: "repo-new",
-        workspaceName: "Repo New",
-        repoPath: "/repo-new",
-      });
-      expect(workspaceList).not.toHaveBeenCalled();
-      expect(workspaceCatalogGet).toHaveBeenCalledTimes(1);
-      await harness.waitFor((state) => state.workspaces.length === 2);
-      expect(harness.getLatest().workspaces).toEqual([
-        workspace("/repo-old", false),
-        workspace("/repo-new", true),
-      ]);
-      expect(setActiveRepo).toHaveBeenCalledWith("/repo-new");
     } finally {
       await harness.unmount();
     }

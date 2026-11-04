@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { globalConfigSchema, repoConfigSchema } from "@openducktor/contracts";
+import { globalConfigSchema } from "@openducktor/contracts";
 import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 import { Effect } from "effect";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -9,15 +9,13 @@ import { createSharedSettingsFixture } from "../../test-support/shared-settings-
 import { createSettingsConfigTestDouble } from "../../test-support/service-test-doubles";
 import { singleTaskWorkflow } from "../../test-support/task-workflows";
 import { withTaskWorkflowSettings } from "./task-workflow-settings";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 test("narrow reads keep workflow defaults and validate the selected workspace", async () => {
   const review = createReviewTaskWorkflow();
   const workflows = singleTaskWorkflow(review);
   const config = globalConfigSchema.parse({ version: 4 });
-  const repo = repoConfigSchema.parse({
-    workspaceId: "repo",
-    workspaceName: "Repo",
-    repoPath: "/repo",
+  const repo = repoConfigFixture({
     agentDefaults: {
       build: { runtimeKind: "codex", providerId: "openai", modelId: "model" },
     },
@@ -57,11 +55,7 @@ test("workspace preference writes reject unknown workflow roles before saving", 
   const config = globalConfigSchema.parse({
     version: 4,
     workspaces: {
-      repo: repoConfigSchema.parse({
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        repoPath: "/repo",
-      }),
+      repo: repoConfigFixture(),
     },
   });
   const fixture = await createSharedSettingsFixture({ configPath, config });

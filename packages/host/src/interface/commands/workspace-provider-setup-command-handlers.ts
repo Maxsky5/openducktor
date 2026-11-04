@@ -32,6 +32,10 @@ export const createWorkspaceProviderSetupCommandHandlers = (
       parseConfig(workspaceProviderSetupRefSchema, args).pipe(Effect.flatMap(service.detect)),
     workspace_provider_setup_status: (args) =>
       parseConfig(workspaceProviderSetupRefSchema, args).pipe(Effect.flatMap(service.status)),
+    workspace_provider_setup_target_branches: (args) =>
+      parseConfig(workspaceProviderSetupRefSchema, args).pipe(
+        Effect.flatMap(service.targetBranches),
+      ),
     workspace_provider_setup_github: (args) =>
       parseConfig(
         workspaceProviderSetupRefSchema.extend({

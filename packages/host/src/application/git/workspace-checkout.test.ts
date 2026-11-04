@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, realpath, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
+import { type WorkspaceSession } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import {
@@ -20,6 +20,7 @@ import {
   createWorkspaceSessionFileAccess,
   scopeFilesToChats,
 } from "../workspaces/workspace-session-file-access";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const git = createGitCliAdapter({
   readEnv: () => gitFixtureEnv,
@@ -196,7 +197,11 @@ test("Git requests and chat file reads of one refresh share their Git reads", as
         settings: {
           getRepoConfig: () =>
             Effect.succeed(
-              repoConfigSchema.parse({ workspaceId: "fairnest", workspaceName: "Fair", repoPath }),
+              repoConfigFixture({
+                workspaceId: "fairnest",
+                workspaceName: "Fair",
+                repoPath,
+              }),
             ),
         },
         store: { get: () => Effect.succeed(session) },

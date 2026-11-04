@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  repoConfigSchema,
   type GithubGitProviderRepository,
   type PullRequest,
   type TaskApprovalContext,
@@ -13,6 +12,7 @@ import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 import { createGithubCli } from "./cli";
 import { parseGithubPullListResponse, parseGithubPullResponse } from "./pull-request-model";
 import { createGithubPullRequestProviderPort } from "./pull-requests";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const githubPullResponse = {
   number: 42,
@@ -46,10 +46,7 @@ const githubCliForPayload = (payload: string, calls: string[][] = []) =>
     },
   });
 
-const repoConfig = repoConfigSchema.parse({
-  workspaceId: "repo",
-  workspaceName: "Repo",
-  repoPath: "/repo",
+const repoConfig = repoConfigFixture({
   git: {
     provider: {
       id: "github",

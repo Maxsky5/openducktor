@@ -31,11 +31,9 @@ import type { GitProviderPort, IssueReaderPort } from "../../ports/git-provider-
 import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
 import type { GitProviderResolver } from "./git-provider-resolver";
 import { createIssueImportService } from "./issue-import-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
-const repoConfig = repoConfigSchema.parse({
-  workspaceId: "repo",
-  workspaceName: "Repo",
-  repoPath: "/repo",
+const repoConfig = repoConfigFixture({
   git: {
     provider: {
       id: "github",

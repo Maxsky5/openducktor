@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  type GitBranch,
-  repoConfigSchema,
-  type TaskCard,
-  type TaskMetadataPayload,
-} from "@openducktor/contracts";
+import { type GitBranch, type TaskCard, type TaskMetadataPayload } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { GitRefTip } from "../../ports/git-port";
 import type { TaskWorktreeOwnerReader } from "../../ports/task-worktree-owner-port";
@@ -18,6 +13,7 @@ import {
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createTaskService } from "./task-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const worktreePath = "/worktrees/repo/task-1";
 
@@ -117,10 +113,7 @@ const createService = ({
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
       getRepoConfig: () =>
         Effect.succeed(
-          repoConfigSchema.parse({
-            workspaceId: "repo",
-            workspaceName: "Repo",
-            repoPath: "/repo",
+          repoConfigFixture({
             worktreeBasePath: "/worktrees/repo",
           }),
         ),

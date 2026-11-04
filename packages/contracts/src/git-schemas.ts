@@ -118,9 +118,16 @@ export const gitTargetBranchSchema = z.object({
     (value) => (value === null ? undefined : value),
     z.string().trim().min(1).optional(),
   ),
-  branch: z.string().trim().min(1).default("main"),
+  branch: z.string().trim().min(1),
 });
 export type GitTargetBranch = z.infer<typeof gitTargetBranchSchema>;
+
+/** The default branch of a repository, or the reason that Git cannot tell it. */
+export const gitRepositoryDefaultBranchSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("detected"), targetBranch: gitTargetBranchSchema }),
+  z.strictObject({ kind: z.literal("unknown"), reason: z.string().min(1) }),
+]);
+export type GitRepositoryDefaultBranch = z.infer<typeof gitRepositoryDefaultBranchSchema>;
 
 export const gitComparisonTargetSchema = z.union([
   z.object({ kind: z.literal("available"), reference: z.string().min(1) }),

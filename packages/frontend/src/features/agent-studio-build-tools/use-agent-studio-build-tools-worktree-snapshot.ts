@@ -10,7 +10,7 @@ import type { TaskGitContextMode } from "@openducktor/frontend-core/git/task/tas
 import { useTaskGitPanel } from "@openducktor/frontend-core/git/task/use-task-git-panel";
 import type { TaskWorktreeState } from "@openducktor/frontend-core/git/task/use-task-worktree";
 import type { useSessionComparison } from "@openducktor/frontend-core/git/use-session-comparison";
-import type { resolveTaskTargetBranchState } from "@openducktor/frontend-core/lib/target-branch";
+import type { TaskTargetBranchState } from "@openducktor/frontend-core/lib/target-branch";
 import { windowReturnVisibility } from "@/lib/window-return-visibility";
 import {
   type BuildToolsOpenInTarget,
@@ -52,7 +52,7 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
     hasSelectedTask: boolean;
   };
   gitPanelContextMode: TaskGitContextMode;
-  targetBranchState: ReturnType<typeof resolveTaskTargetBranchState>;
+  targetBranchState: TaskTargetBranchState;
   resolvedGitPanelBranch: string | null;
   repositoryBranchIdentityKey: string | null;
   worktree: TaskWorktreeState;

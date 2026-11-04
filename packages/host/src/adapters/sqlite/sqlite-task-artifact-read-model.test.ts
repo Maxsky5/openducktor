@@ -1,6 +1,6 @@
 import { searchTasksInDatabase } from "./sqlite-task-search";
 import { expect, test } from "bun:test";
-import { repoConfigSchema } from "@openducktor/contracts";
+
 import { Effect, Result } from "effect";
 import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 import { builtinTaskWorkflows, singleTaskWorkflow } from "../../test-support/task-workflows";
@@ -21,6 +21,7 @@ import {
 import { createSqliteTaskStoreHarness } from "./sqlite-task-store-test-support";
 import { taskRowFixture } from "./sqlite-task-row-test-fixtures";
 import { pullRequestRowValues } from "./sqlite-task-delivery-rows";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 test("search keeps Unicode matches, exact counts, limits, and update-time ordering", async () => {
   const harness = await createSqliteTaskStoreHarness();
@@ -110,7 +111,7 @@ for (const input of [
           ...config,
           workspaces: {
             ...config.workspaces,
-            other: repoConfigSchema.parse({
+            other: repoConfigFixture({
               workspaceId: "other",
               workspaceName: "Other",
               repoPath: "/repos/Other",

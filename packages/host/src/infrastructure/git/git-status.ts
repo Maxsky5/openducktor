@@ -17,17 +17,27 @@ import {
 
 const unmergedStatusPairs = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
 
-const parseBranchRows = (output: string): GitBranch[] => {
+/** The branches of a repository, and the branch that each `refs/remotes/<remote>/HEAD` names. */
+export type GitBranchRefRows = { branches: GitBranch[]; remoteHeads: Record<string, string> };
+
+const parseBranchRefRows = (output: string): GitBranchRefRows => {
+  const remoteHeads: Record<string, string> = {};
   const branches = output.split("\0\n").flatMap((line): GitBranch[] => {
     if (!line) {
       return [];
     }
-    const [headMarker, name, fullRef, worktreePath] = line.split("\0");
+    const [headMarker, name, fullRef, worktreePath, symref] = line.split("\0");
     if (!headMarker || !name || !fullRef) {
       return [];
     }
     const isRemote = fullRef.startsWith("refs/remotes/");
     if (isRemote && fullRef.endsWith("/HEAD")) {
+      // `for-each-ref` leaves out a symbolic reference whose target does not exist.
+      const remotePrefix = fullRef.slice(0, -"HEAD".length);
+      if (symref?.startsWith(remotePrefix))
+        remoteHeads[remotePrefix.slice("refs/remotes/".length, -1)] = symref.slice(
+          remotePrefix.length,
+        );
       return [];
     }
     const branch: GitBranch = {
@@ -47,19 +57,22 @@ const parseBranchRows = (output: string): GitBranch[] => {
     }
     return left.name.localeCompare(right.name);
   });
-  return branches;
+  return { branches, remoteHeads };
 };
 
-export const listBranchesUnchecked = (runner: GitCommandRunner, workingDirectory: string) =>
+export const listBranchRefsUnchecked = (runner: GitCommandRunner, workingDirectory: string) =>
   Effect.map(
     runGit(runner, workingDirectory, [
       "for-each-ref",
-      "--format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00",
+      "--format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00%(symref)%00",
       "refs/heads",
       "refs/remotes",
     ]),
-    parseBranchRows,
+    parseBranchRefRows,
   );
+
+export const listBranchesUnchecked = (runner: GitCommandRunner, workingDirectory: string) =>
+  Effect.map(listBranchRefsUnchecked(runner, workingDirectory), ({ branches }) => branches);
 export const parseRemoteNames = (output: string): string[] =>
   output
     .split(/\r?\n/)

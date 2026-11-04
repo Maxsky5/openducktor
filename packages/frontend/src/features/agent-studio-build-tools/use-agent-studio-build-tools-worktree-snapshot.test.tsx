@@ -1,11 +1,7 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import {
-  type GitReadContext,
-  repoConfigSchema,
-  type GitWorktreeStatus,
-} from "@openducktor/contracts";
+import { type GitReadContext, type GitWorktreeStatus } from "@openducktor/contracts";
 import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import { type QueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { toLocalChanges } from "@openducktor/frontend-core/test-support/local-changes-fixture";
@@ -35,6 +31,7 @@ import type {
   AgentSessionState,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "./use-agent-studio-build-tools-worktree-snapshot";
+import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
 
 enableReactActEnvironment();
 if (globalThis.document === undefined) {
@@ -339,10 +336,8 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
   test("shows a failed default-target read and retries settings from Refresh", async () => {
     let fails = true;
-    const config = repoConfigSchema.parse({
+    const config = repoConfigFixture({
       workspaceId: "workspace-repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
     });
     const readConfig = mock(async () => {
       if (fails) throw new Error("Repair config permissions.");

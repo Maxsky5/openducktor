@@ -98,6 +98,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import {
   localOnlyProviderSetupClient,
+  type LocalWorkspaceDetails,
   localOnlyWorkspaceDetails,
 } from "@/test-utils/workspace-provider-setup-fixture";
 import type { TasksStateContextValue } from "@openducktor/frontend-core/types/state-slices";
@@ -254,9 +255,6 @@ const createWorkspaceState = (
   commitWorkspaceProviderSetup: async () => {
     throw new Error("Not used");
   },
-  addWorkspace: async () => {
-    throw new Error("Not used");
-  },
   selectWorkspace: async () => undefined,
   reorderWorkspaces: async () => undefined,
   refreshBranches: async () => undefined,
@@ -295,9 +293,7 @@ type RenderAppShellForTestOptions = {
   initiallyUnselectedWorkspace?: boolean;
   isLoadingRuntimeDefinitions?: boolean;
   runtimeDefinitionsError?: string | null;
-  workspaceAdd?: (
-    input: Parameters<WorkspaceStateContextValue["addWorkspace"]>[0],
-  ) => Promise<WorkspaceRecord>;
+  workspaceAdd?: (input: LocalWorkspaceDetails) => Promise<WorkspaceRecord>;
   workspacePresence?: Partial<WorkspacePresenceContextValue>;
   prepareQueryClient?: (queryClient: QueryClient) => void;
   /** Host storage of the connection, such as a saved Recent list. */
@@ -375,7 +371,7 @@ function AppShellTestEnvironment({
   const hasWorkspaces =
     options.closedOnly ||
     (publishesWorkspaceAfterAdd ? workspaces.length > 0 : startsWithWorkspaces);
-  const addWorkspace: WorkspaceStateContextValue["addWorkspace"] = async (input) => {
+  const createWorkspace = async (input: LocalWorkspaceDetails): Promise<WorkspaceRecord> => {
     if (!options.workspaceAdd) throw new Error("Not used");
     const workspace = await options.workspaceAdd(input);
     setWorkspaces([workspace]);
@@ -414,9 +410,8 @@ function AppShellTestEnvironment({
                     : (options.closedWorkspaces ?? []),
                   incompleteRemovals: options.incompleteRemovals ?? [],
                   activeWorkspace: currentWorkspace,
-                  addWorkspace,
                   commitWorkspaceProviderSetup: async (input) => ({
-                    workspace: await addWorkspace(localOnlyWorkspaceDetails(input)),
+                    workspace: await createWorkspace(localOnlyWorkspaceDetails(input)),
                     registrationSaved: true,
                     settingsSaved: true,
                     credentialsSaved: true,
@@ -845,6 +840,7 @@ describe("AppShell", () => {
     expect(screen.queryByText("Kanban")).toBeNull();
     expect(workspaceAdd).toHaveBeenCalledWith({
       repoPath: "/repo",
+      defaultTargetBranch: { branch: "main" },
       workspaceId: "repo",
       workspaceName: "repo",
     });

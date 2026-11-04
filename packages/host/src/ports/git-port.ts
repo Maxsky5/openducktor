@@ -169,6 +169,14 @@ export type GitReflogEntry = { oid: string; subject: string };
 export type GitBranchUpstreamSetup = {
   createdTrackingRef: string | null;
 };
+/** The branch facts of a repository that tell its default branch. */
+export type GitBranchRefs = {
+  remotes: string[];
+  branches: GitBranch[];
+  /** The branch that each `refs/remotes/<remote>/HEAD` names. A missing target has no entry. */
+  remoteHeads: Record<string, string>;
+  head: { kind: "branch"; name: string } | { kind: "unborn"; name: string } | { kind: "detached" };
+};
 export type GitPort = {
   readPublicationTarget(input: {
     repoPath: string;
@@ -203,6 +211,7 @@ export type GitPort = {
   listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;
   listRemoteEndpoints(workingDir: string): Effect.Effect<GitRemoteEndpoint[], GitPortError>;
   listBranches(workingDir: string): Effect.Effect<GitBranch[], GitPortError>;
+  readBranchRefs(repoPath: string): Effect.Effect<GitBranchRefs, GitPortError>;
   listFiles(
     workingDir: string,
     relativePath?: string,

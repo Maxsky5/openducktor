@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   agentSessionRecordSchema,
-  repoConfigSchema,
   type RepoConfig,
   type TaskCard,
   type TaskAgentSessions,
@@ -42,6 +41,7 @@ import {
   type WorkspaceStoragePort,
 } from "./workspace-lifecycle-service";
 import { taskCardFixture } from "../../test-support/task-card-fixture";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 type TaskStoreDouble = Pick<TaskStorePort, "listTaskIds" | "listAgentSessionsForTasks">;
 
@@ -62,11 +62,10 @@ const filesystemSettings: Pick<SettingsConfigPort, "canonicalizePath" | "pathExi
 };
 
 const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig =>
-  repoConfigSchema.parse({
+  repoConfigFixture({
     workspaceId: "ws",
     workspaceName: "Workspace",
     repoPath: "/repos/ws",
-    defaultRuntimeKind: "opencode",
     agentStudioState: { openTaskIds: [] },
     ...overrides,
   });

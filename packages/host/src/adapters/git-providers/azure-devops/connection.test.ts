@@ -9,6 +9,7 @@ import type { AzureDevOpsProtectedStorage } from "./protected-storage";
 import type { AzureDevOpsCredentialIndex } from "./credential-index";
 import { createAzureDevOpsConnectionAdapter } from "./connection";
 import { azureDevOpsRepositoryKey } from "@openducktor/core";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const repository: AzureDevOpsRepository = {
   providerId: "azure_devops",
@@ -18,10 +19,7 @@ const repository: AzureDevOpsRepository = {
   project: "Desktop",
   name: "app",
 };
-const repoConfig = repoConfigSchema.parse({
-  workspaceId: "repo",
-  workspaceName: "Repo",
-  repoPath: "/repo",
+const repoConfig = repoConfigFixture({
   git: { provider: { id: "azure_devops", enabled: true, repository } },
 });
 const repositoryResponse = (configured: AzureDevOpsRepository = repository) => ({
@@ -264,10 +262,7 @@ describe("Azure DevOps connection", () => {
       project: "Desktop",
       name: "app",
     };
-    const servicesRepoConfig = repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
+    const servicesRepoConfig = repoConfigFixture({
       git: { provider: { id: "azure_devops", enabled: true, repository: servicesRepository } },
     });
     const records = new Map<string, string>();
@@ -365,10 +360,7 @@ describe("Azure DevOps connection", () => {
       project: "Desktop",
       name: "app",
     };
-    const cloudRepoConfig = repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
+    const cloudRepoConfig = repoConfigFixture({
       git: { provider: { id: "azure_devops", enabled: true, repository: cloudRepository } },
     });
     const records = new Map<string, string>();
@@ -601,10 +593,7 @@ describe("Azure DevOps connection", () => {
       project: "Desktop",
       name: "app",
     };
-    const cloudRepoConfig = repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
+    const cloudRepoConfig = repoConfigFixture({
       git: { provider: { id: "azure_devops", enabled: true, repository: cloudRepository } },
     });
     const records = new Map<string, string>();

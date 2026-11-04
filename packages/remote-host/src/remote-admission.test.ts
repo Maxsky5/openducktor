@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   REMOTE_PAIRING_CODE_LIFETIME_MS,
+  REMOTE_PROTOCOL_VERSION,
   type RemoteConnectionRequest,
 } from "@openducktor/contracts";
 import { createSerialLane } from "@openducktor/host";
@@ -11,7 +12,7 @@ import { memoryApprovalStore } from "./remote-approval.test-support";
 
 const request = (pairingCode: string): RemoteConnectionRequest => ({
   appVersion: "client-1",
-  supportedProtocolVersions: [4],
+  supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
   requiredCapabilities: [],
   optionalCapabilities: [],
   clientKind: "browser",

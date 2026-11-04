@@ -9,7 +9,6 @@ import type {
   WorkspaceProviderSetupCommit,
   WorkspaceProviderSetupProgress,
 } from "@openducktor/contracts";
-import type { WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 
 export type UseWorkspaceOperationsResult = {
   workspaces: WorkspaceRecord[];
@@ -27,7 +26,6 @@ export type UseWorkspaceOperationsResult = {
   isSwitchingBranch: boolean;
   branchSyncDegraded: boolean;
   refreshWorkspaces: () => Promise<void>;
-  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<WorkspaceRecord>;
   commitWorkspaceProviderSetup: (
     input: WorkspaceProviderSetupCommit,
   ) => Promise<WorkspaceProviderSetupProgress>;

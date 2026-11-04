@@ -28,6 +28,7 @@ import {
   runGit,
   runGitAllowFailure,
 } from "../../infrastructure/git/git-command-runner";
+import { readBranchRefs } from "../../infrastructure/git/git-branch-refs";
 import { buildFileDiffs, loadDiffPayload } from "../../infrastructure/git/git-diff";
 import { createGitCliLocalChangeMethods } from "./git-cli-local-change-methods";
 import { createGitCliCheckoutMethods } from "./git-cli-checkout-methods";
@@ -271,6 +272,9 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     },
     listBranches(workingDirectory) {
       return listBranchesUnchecked(runner, workingDirectory);
+    },
+    readBranchRefs(repoPath) {
+      return readBranchRefs(runner, repoPath);
     },
     listFiles(workingDirectory, relativePath, options) {
       return Effect.gen(function* () {

@@ -34,6 +34,7 @@ import {
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
+import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
 
 const source: WorkspaceSession = {
   id: "source",
@@ -74,10 +75,9 @@ function mountFork(
     ...overrides,
     client: {
       workspaceGetRepoConfig: async () =>
-        repoConfigSchema.parse({
+        repoConfigFixture({
           workspaceId: "workspace",
           workspaceName: "Workspace",
-          repoPath: "/repo",
           branchPrefix: "odt",
         }),
       workspaceSessionFork: async ({ startup, ...input }) => {
@@ -206,10 +206,9 @@ test("Fork chat opens and keeps worktree edits while repository defaults load", 
     expect(view.getByRole("status").textContent).toBe("Loading branch defaults…");
     await act(async () =>
       config.resolve(
-        repoConfigSchema.parse({
+        repoConfigFixture({
           workspaceId: "workspace",
           workspaceName: "Workspace",
-          repoPath: "/repo",
           branchPrefix: "team",
         }),
       ),
@@ -225,10 +224,9 @@ test("Fork chat opens and keeps worktree edits while repository defaults load", 
     expect(fork).not.toHaveBeenCalled();
   } finally {
     config.resolve(
-      repoConfigSchema.parse({
+      repoConfigFixture({
         workspaceId: "workspace",
         workspaceName: "Workspace",
-        repoPath: "/repo",
       }),
     );
     view.unmount();

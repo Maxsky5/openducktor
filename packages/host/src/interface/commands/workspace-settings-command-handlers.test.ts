@@ -7,7 +7,6 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { HostRuntimeService } from "../../application/runtimes/host-runtime-service";
-import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   type CreateHostCommandRouterInput,
@@ -57,40 +56,12 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
 
   test("routes settings snapshot commands through the workspace settings service", async () => {
     const calls: string[] = [];
-    const addedWorkspaceInputs: Parameters<WorkspaceSettingsService["addWorkspace"]>[0][] = [];
     const service = createWorkspaceSettingsServiceTestDouble({
       listWorkspaces() {
         return Effect.tryPromise({
           try: async () => {
             calls.push("listWorkspaces");
             return [];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      addWorkspace(input: Parameters<WorkspaceSettingsService["addWorkspace"]>[0]) {
-        addedWorkspaceInputs.push(input);
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push("addWorkspace");
-            return {
-              workspaceId: "repo",
-              workspaceName: "repo",
-              abbreviation: null,
-              tileColor: null,
-              repoPath: "/repo",
-              iconDataUrl: null,
-              isActive: true,
-              hasConfig: true,
-              configuredWorktreeBasePath: null,
-              defaultWorktreeBasePath: "/worktrees/repo",
-              effectiveWorktreeBasePath: "/worktrees/repo",
-            };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -286,34 +257,6 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       handlers: createWorkspaceSettingsCommandHandlers(service, hostRuntimeService),
     });
     await expect(router.invoke("workspace_list")).resolves.toEqual([]);
-    await expect(
-      router.invoke("workspace_add", {
-        workspaceId: "repo",
-        workspaceName: "repo",
-        repoPath: "/repo",
-      }),
-    ).resolves.toMatchObject({ workspaceId: "repo" });
-    expect(addedWorkspaceInputs.at(-1)).toEqual({
-      workspaceId: "repo",
-      workspaceName: "repo",
-      repoPath: "/repo",
-    });
-    await expect(
-      router.invoke("workspace_add", {
-        workspaceId: "repo",
-        workspaceName: "repo",
-        repoPath: "/repo",
-        abbreviation: "iOS",
-        tileColor: "#f08c00",
-      }),
-    ).resolves.toMatchObject({ workspaceId: "repo" });
-    expect(addedWorkspaceInputs.at(-1)).toEqual({
-      workspaceId: "repo",
-      workspaceName: "repo",
-      repoPath: "/repo",
-      abbreviation: "iOS",
-      tileColor: "#f08c00",
-    });
     await expect(router.invoke("workspace_select", { workspaceId: "repo" })).resolves.toMatchObject(
       { workspaceId: "repo" },
     );
@@ -384,8 +327,6 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(router.invoke("set_theme", { theme: "dark" })).resolves.toBeUndefined();
     expect(calls).toEqual([
       "listWorkspaces",
-      "addWorkspace",
-      "addWorkspace",
       "selectWorkspace",
       "reorderWorkspaces",
       "replaceAgentStudioState",
@@ -404,19 +345,6 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             return [];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      addWorkspace() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not call addWorkspace");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -526,22 +454,6 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
         state: { openTaskIds: [42] },
       }),
     ).rejects.toThrow("workspace_replace_agent_studio_state state is invalid");
-    await expect(
-      router.invoke("workspace_add", {
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        repoPath: "/repo",
-        abbreviation: 42,
-      }),
-    ).rejects.toThrow("abbreviation");
-    await expect(
-      router.invoke("workspace_add", {
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        repoPath: "/repo",
-        tileColor: false,
-      }),
-    ).rejects.toThrow("tileColor");
   });
 
   test("previews runtime impact and validates the save confirmation", async () => {

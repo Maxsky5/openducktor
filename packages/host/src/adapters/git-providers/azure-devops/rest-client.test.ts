@@ -1,12 +1,13 @@
 /* oxlint-disable anti-slop/no-chained-type-assertions, anti-slop/require-safety-comment-for-type-assertion -- Bun mock functions do not retain the full fetch signature. */
 import { describe, expect, mock, test } from "bun:test";
-import { azureDevOpsRepositorySchema, repoConfigSchema } from "@openducktor/contracts";
+import { azureDevOpsRepositorySchema } from "@openducktor/contracts";
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
 import type { GitPort } from "../../../ports/git-port";
 import { AzureDevOpsProviderAdapter } from "./provider-adapter";
 import { createAzureDevOpsRestClient } from "./rest-client";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const repository = azureDevOpsRepositorySchema.parse({
   providerId: "azure_devops",
@@ -16,10 +17,7 @@ const repository = azureDevOpsRepositorySchema.parse({
   project: "Desktop App",
   name: "app",
 });
-const repoConfig = repoConfigSchema.parse({
-  workspaceId: "repo",
-  workspaceName: "Repo",
-  repoPath: "/repo",
+const repoConfig = repoConfigFixture({
   git: { provider: { id: "azure_devops", enabled: true, repository } },
 });
 const connection: AzureDevOpsConnectionPort = {

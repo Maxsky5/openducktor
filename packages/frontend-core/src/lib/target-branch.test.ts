@@ -2,14 +2,13 @@ import { describe, expect, test } from "bun:test";
 import {
   canonicalTargetBranch,
   checkoutTargetBranch,
-  DEFAULT_TARGET_BRANCH,
   effectiveTaskTargetBranch,
-  INVALID_TASK_TARGET_BRANCH_LABEL,
   normalizeTargetBranch,
   resolveTaskTargetBranchState,
   targetBranchFromSelection,
   targetBranchRemote,
   targetBranchSelectionValue,
+  targetBranchSelectionValueOrEmpty,
   taskTargetBranchValidationError,
 } from "./target-branch";
 import { UPSTREAM_TARGET_BRANCH } from "@openducktor/contracts";
@@ -31,7 +30,6 @@ describe("target-branch helpers", () => {
     expect(normalizeTargetBranch({ branch: "refs/heads/release/2026.03" })).toEqual({
       branch: "release/2026.03",
     });
-    expect(normalizeTargetBranch({ remote: "origin", branch: "" })).toEqual(DEFAULT_TARGET_BRANCH);
   });
 
   test("derives canonical, checkout, and remote values", () => {
@@ -45,6 +43,11 @@ describe("target-branch helpers", () => {
     expect(targetBranchRemote(target)).toBe("upstream");
     expect(canonicalTargetBranch({ branch: UPSTREAM_TARGET_BRANCH })).toBe(UPSTREAM_TARGET_BRANCH);
     expect(targetBranchRemote({ branch: UPSTREAM_TARGET_BRANCH })).toBeNull();
+  });
+
+  test("has an empty selection value without a target", () => {
+    expect(targetBranchSelectionValueOrEmpty(null)).toBe("");
+    expect(targetBranchSelectionValueOrEmpty({ branch: "main" })).toBe("refs/heads/main");
   });
 
   test("formats branch selector values for local and remote branches", () => {
@@ -67,6 +70,7 @@ describe("target-branch helpers", () => {
     expect(targetBranchFromSelection(UPSTREAM_TARGET_BRANCH)).toEqual({
       branch: UPSTREAM_TARGET_BRANCH,
     });
+    expect(() => targetBranchFromSelection(" ")).toThrow("Choose a target branch.");
   });
 
   test("prefers persisted task target branches before repo defaults", () => {
@@ -82,13 +86,27 @@ describe("target-branch helpers", () => {
     });
   });
 
+  test("has no target branch before the task or the workspace default loads", () => {
+    expect(effectiveTaskTargetBranch(undefined, undefined)).toBeNull();
+    expect(
+      resolveTaskTargetBranchState({
+        taskTargetBranch: undefined,
+        taskTargetBranchError: null,
+        defaultTargetBranch: null,
+      }),
+    ).toEqual({
+      effectiveTargetBranch: null,
+      validationError: null,
+    });
+  });
+
   test("normalizes task target branch validation errors", () => {
     expect(taskTargetBranchValidationError(undefined)).toBeNull();
     expect(taskTargetBranchValidationError("   ")).toBeNull();
     expect(taskTargetBranchValidationError(" invalid branch ")).toBe("invalid branch");
   });
 
-  test("resolves task target branch view state from effective branch and validation error", () => {
+  test("resolves the effective task target branch and the validation error", () => {
     expect(
       resolveTaskTargetBranchState({
         taskTargetBranch: { remote: "upstream", branch: "release" },
@@ -98,8 +116,6 @@ describe("target-branch helpers", () => {
     ).toEqual({
       effectiveTargetBranch: { remote: "upstream", branch: "release" },
       validationError: null,
-      displayTargetBranch: "upstream/release",
-      selectionValue: "refs/remotes/upstream/release",
     });
 
     expect(
@@ -111,8 +127,6 @@ describe("target-branch helpers", () => {
     ).toEqual({
       effectiveTargetBranch: { remote: "upstream", branch: "release" },
       validationError: "malformed metadata",
-      displayTargetBranch: INVALID_TASK_TARGET_BRANCH_LABEL,
-      selectionValue: "refs/remotes/upstream/release",
     });
   });
 });

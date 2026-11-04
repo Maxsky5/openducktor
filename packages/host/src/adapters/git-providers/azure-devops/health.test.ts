@@ -1,14 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import {
-  azureDevOpsRepositorySchema,
-  repoConfigSchema,
-  type AzureDevOpsRepository,
-} from "@openducktor/contracts";
+import { azureDevOpsRepositorySchema, type AzureDevOpsRepository } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
 import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port";
 import { createAzureDevOpsHealthPort } from "./health";
 import { createAzureDevOpsRestClient } from "./rest-client";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const repository = azureDevOpsRepositorySchema.parse({
   providerId: "azure_devops",
@@ -18,10 +15,7 @@ const repository = azureDevOpsRepositorySchema.parse({
   project: "app",
   name: "app",
 });
-const repoConfig = repoConfigSchema.parse({
-  workspaceId: "repo",
-  workspaceName: "Repo",
-  repoPath: "/repo",
+const repoConfig = repoConfigFixture({
   git: { provider: { id: "azure_devops", enabled: true, repository } },
 });
 const connection: AzureDevOpsConnectionPort = {

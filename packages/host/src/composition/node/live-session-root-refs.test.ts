@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
+import { type WorkspaceSession } from "@openducktor/contracts";
 import { Effect, Result } from "effect";
 import {
   workspaceSessionCatalog,
@@ -9,13 +9,14 @@ import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
 import { createAgentSessionRecord } from "../../ports/task-store-port-contract.test-support";
 import { createLiveSessionRootRefsReader } from "./live-session-root-refs";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 test("reload roots recover workflow roles and repository scope from persisted owners", async () => {
   const harness = await createSqliteTaskStoreHarness();
   try {
     const { repoPath } = harness;
     const store = createSqliteWorkspaceSessionStore(harness);
-    const config = repoConfigSchema.parse({
+    const config = repoConfigFixture({
       workspaceId: "fairnest",
       workspaceName: "Fairnest",
       repoPath,

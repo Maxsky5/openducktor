@@ -16,8 +16,8 @@ const runGit = (cwd: string, args: string[]): void => {
   execFileSync("git", args, { cwd, env: gitFixtureEnv, stdio: ["ignore", "pipe", "pipe"] });
 };
 
-export const initGitRepository = (path: string): void => {
-  runGit(path, ["init", "-q"]);
+export const initGitRepository = (path: string, initialBranch?: string): void => {
+  runGit(path, ["init", "-q", ...(initialBranch ? ["-b", initialBranch] : [])]);
   runGit(path, [
     "-c",
     "user.name=Fixture",

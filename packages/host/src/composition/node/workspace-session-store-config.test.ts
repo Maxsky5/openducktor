@@ -17,6 +17,7 @@ import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { HostValidationError } from "../../effect/host-errors";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const initializeDatabase = async (
   root: string,
@@ -43,9 +44,7 @@ const initializeDatabase = async (
 test("does not import Issues into SQLite when a custom Task store is active", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "odt-custom-task-store-"));
   const repoPath = path.join(root, "repo");
-  const repoConfig = repoConfigSchema.parse({
-    workspaceId: "repo",
-    workspaceName: "Repo",
+  const repoConfig = repoConfigFixture({
     repoPath,
   });
   const settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "getRepoConfigByRepoPath"> = {
@@ -115,7 +114,9 @@ test("custom config session ownership and import do not read other installations
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, "unreadable unrelated SQLite store");
   }
-  const repoConfig = repoConfigSchema.parse({ ...scope, workspaceName: "Repo" });
+  const repoConfig = repoConfigFixture({
+    ...scope,
+  });
   const settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "getRepoConfigByRepoPath"> = {
     getRepoConfig: () => Effect.succeed(repoConfig),
     getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
@@ -190,7 +191,9 @@ test("ownership reads reject removal and stale configured scopes without recreat
   const root = await mkdtemp(path.join(os.tmpdir(), "odt-ownership-removal-"));
   const scope = { repoPath: path.join(root, "missing-repo"), workspaceId: "repo" };
   let configured = true;
-  const config = repoConfigSchema.parse({ ...scope, workspaceName: "Repo" });
+  const config = repoConfigFixture({
+    ...scope,
+  });
   const settings = createWorkspaceSettingsServiceTestDouble({
     getRepoConfig: () =>
       configured

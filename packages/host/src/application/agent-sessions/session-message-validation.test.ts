@@ -2,7 +2,6 @@ import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Exit } from "effect";
 import {
-  repoConfigSchema,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentRuntimeCatalog,
   type AgentSessionLiveEnvelope,
@@ -23,6 +22,7 @@ import { createAgentMessageDeliveryService } from "./agent-message-delivery-serv
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { taskCardFixture } from "../../test-support/task-card-fixture";
 import { createDefaultGlobalConfig } from "../../config/global-config";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const target = {
   repoPath: "/repo",
@@ -131,10 +131,8 @@ const setup = (
       settings: {
         getRepoConfig: () =>
           Effect.succeed(
-            repoConfigSchema.parse({
-              workspaceId: "repo",
+            repoConfigFixture({
               workspaceName: "Workspace",
-              repoPath: "/repo",
             }),
           ),
       },

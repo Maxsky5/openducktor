@@ -10,7 +10,6 @@ import {
   type WorkspaceSessionStartResult,
   type StartupOperationContext,
   type StartupOperationSnapshot,
-  repoConfigSchema,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { HostInvokeError, type HostClient } from "@openducktor/host-client";
@@ -39,6 +38,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import { AppToaster, StartupNotifications } from "@/features/session-startup/session-startup-stack";
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
+import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
 
 function mountCreation(
   create: (
@@ -86,9 +86,6 @@ function mountCreation(
     branches: [],
     activeBranch: null,
     commitWorkspaceProviderSetup: async () => {
-      throw new Error("Not used");
-    },
-    addWorkspace: async () => {
       throw new Error("Not used");
     },
     selectWorkspace: async () => {},
@@ -143,10 +140,9 @@ function mountCreation(
     client: {
       workspaceGetSettingsSnapshot: async () => snapshot,
       workspaceGetRepoConfig: async () =>
-        repoConfigSchema.parse({
+        repoConfigFixture({
           workspaceId: "a",
           workspaceName: "A",
-          repoPath: "/repo",
           branchPrefix: "odt",
         }),
       gitGetBranches: async () => [
@@ -325,10 +321,9 @@ test.each(["roles", "branches", "defaults", "models"] as const)(
         ...(read === "defaults" && {
           workspaceGetRepoConfig: async () => {
             await pending.promise;
-            return repoConfigSchema.parse({
+            return repoConfigFixture({
               workspaceId: "A",
               workspaceName: "A",
-              repoPath: "/repo",
               branchPrefix: "odt",
             });
           },
@@ -940,10 +935,9 @@ test("shows the repository defaults read failure, keeps a target pick usable and
       workspaceGetRepoConfig: async () => {
         readAttempts += 1;
         if (readAttempts === 1) throw new Error("Settings file is unreadable.");
-        return repoConfigSchema.parse({
+        return repoConfigFixture({
           workspaceId: "a",
           workspaceName: "A",
-          repoPath: "/repo",
           branchPrefix: "odt",
         });
       },

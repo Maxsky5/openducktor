@@ -3,7 +3,7 @@ import { createDefaultGlobalConfig } from "../../config/global-config";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionLiveRef, WorkspaceSession } from "@openducktor/contracts";
-import { repoConfigSchema, workspaceSessionStartResultSchema } from "@openducktor/contracts";
+import { workspaceSessionStartResultSchema } from "@openducktor/contracts";
 import { hostInvokeFailureSchema } from "@openducktor/contracts";
 import { OpenCodeOperationError } from "@openducktor/adapters-opencode-sdk";
 import { Deferred, Effect } from "effect";
@@ -31,6 +31,7 @@ import {
   createEffectHostCommandRouter,
   toPromiseHostCommandRouter,
 } from "../../interface/router/host-command-router";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 describe("Workspace Session persistence through the shared command module", () => {
   let database: SqliteTaskStoreTestHarness;
@@ -48,7 +49,7 @@ describe("Workspace Session persistence through the shared command module", () =
     async (failureStage) => {
       const h = await createPersistenceHarness(database, "opencode", true);
       let fail = true;
-      const config = repoConfigSchema.parse({
+      const config = repoConfigFixture({
         workspaceId: "fairnest",
         workspaceName: "Fairnest",
         repoPath: database.repoPath,
@@ -828,7 +829,7 @@ describe("Workspace Session persistence through the shared command module", () =
           }),
         ),
       );
-    const config = repoConfigSchema.parse({
+    const config = repoConfigFixture({
       workspaceId: "fairnest",
       workspaceName: "Fairnest",
       repoPath: database.repoPath,

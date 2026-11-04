@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { repoConfigSchema, type AgentSessionRecord } from "@openducktor/contracts";
+import { type AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
@@ -20,6 +20,7 @@ import { createSqliteTaskRepository } from "./sqlite-task-repository";
 import { createSqliteHostDatabaseManager } from "./sqlite-task-repository-context";
 import { tasks } from "./sqlite-host-database-schema";
 import { createLegacyTaskStore } from "./sqlite-task-store-test-support";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const run = Effect.runPromise;
 const managers: ReturnType<typeof createSqliteHostDatabaseManager>[] = [];
@@ -53,7 +54,7 @@ const makeRoot = async () => {
   ];
   for (const suffix of ["one", "two"]) {
     const workspaceId = `abcdefghij-${suffix}`;
-    config.workspaces[workspaceId] = repoConfigSchema.parse({
+    config.workspaces[workspaceId] = repoConfigFixture({
       workspaceId,
       workspaceName: suffix,
       repoPath: `/repos/${suffix}`,

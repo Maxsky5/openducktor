@@ -6,7 +6,6 @@ import {
   type AutopilotOutcome,
   type ExternalTaskSyncEvent,
   globalConfigSchema,
-  repoConfigSchema,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
@@ -28,6 +27,7 @@ import type { CommittedTaskStatusChange } from "../tasks/task-mutation-operation
 import { createTaskServiceWithMutationProgress } from "../tasks/task-service";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { createAutopilotService, type AutopilotService } from "./autopilot-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -438,7 +438,7 @@ const createWorkflowHarness = async ({
     workspaceId: "workflow",
   });
   const { repoPath, store } = fixture;
-  const repo = repoConfigSchema.parse({
+  const repo = repoConfigFixture({
     workspaceId: "workflow",
     workspaceName: "Workflow",
     repoPath,
