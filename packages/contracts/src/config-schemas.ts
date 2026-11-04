@@ -8,6 +8,7 @@ import { z } from "zod";
 import { workspaceIdSchema } from "./workspace-id-schemas";
 import { openCodePermissionRulesSchema } from "./opencode-permission-schemas";
 import { azureDevOpsRepositorySchema } from "./azure-devops-schemas";
+import { gitlabRepositorySchema } from "./gitlab-schemas";
 import { systemOpenInToolIdSchema } from "./system-open-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { DEFAULT_REMOTE_ACCESS_SETTINGS, remoteAccessSettingsSchema } from "./remote-host-schemas";
@@ -500,7 +501,13 @@ const persistedPromptOverridesSchema = z
 const persistedGitProviderSchema = gitProviderConfigSchema.safeExtend({
   repository: z.preprocess(
     (value) => (value === null ? undefined : value),
-    z.union([azureDevOpsRepositorySchema, githubGitProviderRepositorySchema.strict()]).optional(),
+    z
+      .union([
+        azureDevOpsRepositorySchema,
+        gitlabRepositorySchema,
+        githubGitProviderRepositorySchema.strict(),
+      ])
+      .optional(),
   ),
 });
 const persistedRepoGitConfigSchema = repoGitConfigSchema.safeExtend({

@@ -1,23 +1,25 @@
 import { z } from "zod";
 import { agentModelDefaultSchema, repoAgentDefaultsSchema } from "./config-schemas";
 import { azureDevOpsConnectionStateSchema } from "./azure-devops-schemas";
+import { gitlabRepositorySchema } from "./gitlab-schemas";
 import {
   gitBranchSchema,
   gitProviderConfigSchema,
   gitProviderHealthSchema,
   gitRepositoryDefaultBranchSchema,
   gitTargetBranchSchema,
+  knownGitProviderIdSchema,
   workspaceRecordSchema,
 } from "./git-schemas";
 
 export const workspaceProviderSetupSelectionSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("none") }),
-  z.strictObject({ kind: z.literal("incomplete"), providerId: z.enum(["github", "azure_devops"]) }),
+  z.strictObject({ kind: z.literal("incomplete"), providerId: knownGitProviderIdSchema }),
   z.strictObject({
     kind: z.literal("configured"),
     config: gitProviderConfigSchema.refine(
-      (config) => config.id === "github" || config.id === "azure_devops",
-      "Choose GitHub or Azure DevOps.",
+      (config) => knownGitProviderIdSchema.safeParse(config.id).success,
+      "Choose GitHub, GitLab, or Azure DevOps.",
     ),
   }),
 ]);
@@ -44,6 +46,8 @@ const candidateSchema = z.strictObject({
 export const workspaceProviderSetupDetectionSchema = z.strictObject({
   outcome: z.enum(["detected", "ambiguous", "none"]),
   candidates: z.array(candidateSchema),
+  /** The GitLab project that the origin remote names, for any host. */
+  gitlabOrigin: gitlabRepositorySchema.nullable(),
 });
 export type WorkspaceProviderSetupDetection = z.infer<typeof workspaceProviderSetupDetectionSchema>;
 export const workspaceProviderSetupStatusSchema = z.strictObject({

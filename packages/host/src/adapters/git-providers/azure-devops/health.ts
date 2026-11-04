@@ -11,6 +11,7 @@ import type {
   GitProviderHealthPort,
   GitProviderRepositoryPort,
 } from "../../../ports/git-provider-port";
+import { unavailableProviderHealth } from "../provider-health";
 import { parseAzureRepository } from "./models";
 import type { AzureDevOpsRestClient } from "./rest-client";
 import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
@@ -104,14 +105,10 @@ const unhealthy = (
   authenticated = false,
   account: string | null = null,
   repositoryMappingValid: boolean | null = null,
-): GitProviderHealth => ({
-  providerId: PROVIDER_ID,
-  enabled,
-  available: false,
-  reason,
-  executablePath: null,
-  version: null,
-  authenticated,
-  account,
-  repositoryMappingValid,
-});
+): GitProviderHealth =>
+  unavailableProviderHealth(PROVIDER_ID, reason, {
+    enabled,
+    authenticated,
+    account,
+    repositoryMappingValid,
+  });

@@ -155,7 +155,8 @@ describe("HostClient", () => {
   test("projects a full setup session to the strict read reference contract", async () => {
     const session = { setupId: crypto.randomUUID(), revision: 2, repoPath: "/new-repo" };
     const { client, calls } = createClient((command) => {
-      if (command === "workspace_provider_setup_detect") return { outcome: "none", candidates: [] };
+      if (command === "workspace_provider_setup_detect")
+        return { outcome: "none", candidates: [], gitlabOrigin: null };
       if (command === "workspace_provider_setup_status") return { health: null, connection: null };
       throw new Error(`Unexpected command ${command}`);
     });

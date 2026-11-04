@@ -17,6 +17,7 @@ import type {
 } from "@/types/state-slices";
 import { checksQueryKeys } from "@openducktor/frontend-core/queries/checks";
 import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
+import { invalidateGitlabQueries } from "@openducktor/frontend-core/queries/gitlab";
 import { runtimeQueryKeys } from "@openducktor/frontend-core/queries/runtime";
 import { getProductionTaskViewSync } from "@openducktor/frontend-core/queries/task-view-sync";
 import { customAgentRolesQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
@@ -104,6 +105,9 @@ export function useRepoSettingsOperations({
           queryKey: repositoryGitProviderContextQueryKeys.repo(scope),
         });
       }
+      // The save deletes a GitLab account that no repository links any more.
+      if (changes.changedGitProviderWorkspaces.length > 0)
+        void invalidateGitlabQueries(queryClient);
     },
     [queryClient, settingsSnapshotQueryKey],
   );

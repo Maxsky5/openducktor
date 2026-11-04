@@ -212,11 +212,25 @@ export const createIssueImportService = ({
               message: "This Task has no source Issue. Refresh the Task and try again.",
             });
           }
-          repoConfig = yield* githubImageRepoConfig(currentConfig, source);
+          // A GitHub source names its repository. A GitLab source must match the current project.
+          repoConfig =
+            source.providerId === "gitlab"
+              ? currentConfig
+              : yield* githubImageRepoConfig(currentConfig, source);
           sourceId = source.sourceId;
           savedDescription = source.description ?? "";
           const provider = yield* resolver.resolve(repoConfig);
           reader = yield* provider.issues();
+          if (
+            source.providerId === "gitlab" &&
+            (reader.providerId !== "gitlab" || (yield* reader.scope(repoConfig)) !== source.scope)
+          ) {
+            return yield* new HostValidationError({
+              field: "taskId",
+              message:
+                "This Task comes from a GitLab project that the repository no longer uses. Restore the GitLab project in the repository Git settings to show its images.",
+            });
+          }
         } else {
           const resolved = yield* resolveReader(input);
           repoConfig = resolved.repoConfig;

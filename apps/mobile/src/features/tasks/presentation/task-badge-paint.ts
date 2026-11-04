@@ -1,5 +1,5 @@
 import { type BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
-import type { PullRequest, SourceIssueReference } from "@openducktor/contracts";
+import type { PullRequest } from "@openducktor/contracts";
 import {
   ISSUE_TYPE_LABELS,
   PRIORITY_LABELS,
@@ -58,9 +58,3 @@ export const pullRequestPaint = (
   stateLabel: PULL_REQUEST_STATE_LABELS[pullRequest.state],
   ...PULL_REQUEST_STATE_PAINT[pullRequest.state],
 });
-
-/** The short name of the provider item that a task came from, such as "GitHub #12". */
-export const sourceIssueLabel = (
-  sourceIssue: Pick<SourceIssueReference, "providerId" | "number">,
-): string =>
-  `${sourceIssue.providerId === "github" ? "GitHub" : "Azure DevOps"} #${sourceIssue.number}`;

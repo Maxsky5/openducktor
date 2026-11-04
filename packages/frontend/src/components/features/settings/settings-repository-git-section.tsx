@@ -1,5 +1,7 @@
 import {
   AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
+  GITLAB_PROVIDER_DESCRIPTOR,
+  knownGitProviderIdSchema,
   type GitProviderRepository,
   type SettingsRepoConfig,
 } from "@openducktor/contracts";
@@ -10,6 +12,7 @@ import {
 } from "./use-repository-git-section-model";
 import { AzureDevOpsGitProviderForm } from "./azure-devops-git-provider-form";
 import { GithubGitProviderForm } from "./github-git-provider-form";
+import { GitlabGitProviderForm } from "./gitlab-git-provider-form";
 import { GitProviderSelector, type GitProviderSelection } from "./git-provider-selector";
 
 type RepositoryGitSectionProps = {
@@ -19,7 +22,7 @@ type RepositoryGitSectionProps = {
   disabled: boolean;
   onDetectGithubRepository: () => Promise<GitProviderRepository | null>;
   onSaveSettings?: () => Promise<boolean>;
-  onAzureDevOpsValidationChange?: (errorCount: number) => void;
+  onGitProviderValidationChange?: (errorCount: number) => void;
   onUpdateSelectedRepoConfig: (
     updater: (current: SettingsRepoConfig) => SettingsRepoConfig,
   ) => void;
@@ -35,7 +38,7 @@ export function RepositoryGitSection({
   disabled,
   onDetectGithubRepository,
   onSaveSettings = ignoreSaveSettings,
-  onAzureDevOpsValidationChange = ignoreValidationChange,
+  onGitProviderValidationChange = ignoreValidationChange,
   onUpdateSelectedRepoConfig,
 }: RepositoryGitSectionProps): ReactElement {
   const model = useRepositoryGitSectionModel({
@@ -57,8 +60,8 @@ export function RepositoryGitSection({
 
   const selectedProviderId = selectedRepoConfig.git.provider?.id;
   const selectProvider = (providerId: Exclude<GitProviderSelection, "unsupported">): void => {
-    if (providerId !== "azure_devops") {
-      onAzureDevOpsValidationChange(0);
+    if (providerId !== "azure_devops" && providerId !== "gitlab") {
+      onGitProviderValidationChange(0);
     }
     onUpdateSelectedRepoConfig((repoConfig) => {
       if (providerId === "none") {
@@ -100,7 +103,24 @@ export function RepositoryGitSection({
           providerState={providerState}
           disabled={disabled}
           onSaveSettings={onSaveSettings}
-          onValidationChange={onAzureDevOpsValidationChange}
+          onValidationChange={onGitProviderValidationChange}
+          onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
+        />
+      </div>
+    );
+  }
+
+  if (selectedProviderId === GITLAB_PROVIDER_DESCRIPTOR.id) {
+    return (
+      <div className="grid gap-4 p-4">
+        {providerSelection}
+        <GitlabGitProviderForm
+          key={selectedRepoConfig.workspaceId}
+          selectedRepoPath={selectedRepoPath ?? ""}
+          selectedRepoConfig={selectedRepoConfig}
+          providerState={providerState}
+          disabled={disabled}
+          onValidationChange={onGitProviderValidationChange}
           onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
         />
       </div>
@@ -120,6 +140,7 @@ export function RepositoryGitSection({
 }
 const selectableProvider = (providerId: string | undefined): GitProviderSelection => {
   if (providerId === undefined) return "none";
-  if (providerId === "github" || providerId === "azure_devops") return providerId;
+  const known = knownGitProviderIdSchema.safeParse(providerId);
+  if (known.success) return known.data;
   return "unsupported";
 };

@@ -396,6 +396,35 @@ describe("Issue import service", () => {
     expect(resolvedConfigs.at(-1)?.git.provider?.id).toBe("github");
   });
 
+  test("loads a saved GitLab Task image only from the same GitLab project", async () => {
+    const { service, store, reader } = fixture();
+    const imageUrl = `https://gitlab.com/group/app/uploads/${"a".repeat(32)}/shot.png`;
+    store.getSourceIssue = () =>
+      Effect.succeed({
+        ...issue("12"),
+        providerId: "gitlab",
+        scope: "gitlab::https://gitlab.com::42",
+        description: `![shot](${imageUrl})`,
+      });
+    reader.providerId = "gitlab";
+    reader.scope = () => Effect.succeed("gitlab::https://gitlab.com::42");
+    reader.readImage = ({ sourceId, url }) => {
+      expect(sourceId).toBe("12");
+      expect(url).toBe(imageUrl);
+      return Effect.succeed({ mediaType: "image/png", bytesBase64: "aGVsbG8=" });
+    };
+    const input = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", url: imageUrl };
+    await expect(Effect.runPromise(service.getImage(input))).resolves.toEqual({
+      mediaType: "image/png",
+      bytesBase64: "aGVsbG8=",
+    });
+
+    reader.scope = () => Effect.succeed("gitlab::https://gitlab.com::7");
+    await expect(Effect.runPromise(service.getImage(input))).rejects.toThrow(
+      "GitLab project that the repository no longer uses",
+    );
+  });
+
   test("rejects a saved Task source whose URL does not match its stored scope", async () => {
     const { service, store, reader } = fixture();
     store.getSourceIssue = () =>

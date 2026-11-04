@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  issueTypePaint,
-  priorityPaint,
-  pullRequestPaint,
-  sourceIssueLabel,
-} from "./task-badge-paint";
+import { issueTypePaint, priorityPaint, pullRequestPaint } from "./task-badge-paint";
 
 describe("task badge paint", () => {
   test("uses the desktop colors and icons for the issue types", () => {
@@ -37,10 +32,5 @@ describe("task badge paint", () => {
       icon: "git-merge",
     });
     expect(pullRequestPaint({ number: 7, state: "closed_unmerged" }).tone).toBe("destructive");
-  });
-
-  test("names the provider of a source issue", () => {
-    expect(sourceIssueLabel({ providerId: "github", number: "12" })).toBe("GitHub #12");
-    expect(sourceIssueLabel({ providerId: "azure-devops", number: "3" })).toBe("Azure DevOps #3");
   });
 });

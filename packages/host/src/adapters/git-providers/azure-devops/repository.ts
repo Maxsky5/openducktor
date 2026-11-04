@@ -9,6 +9,7 @@ import { HostValidationError } from "../../../effect/host-errors";
 import type { GitPort, GitRemoteEndpoint } from "../../../ports/git-port";
 import { GitProviderRepositoryError } from "../../../ports/git-provider-errors";
 import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port";
+import { requireLocalGitRepository } from "../local-repository";
 import { parseAzureDevOpsRepositoryUrl } from "./repository-identity";
 import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
@@ -24,24 +25,7 @@ export const createAzureDevOpsRepositoryAdapter = ({
   return {
     detectRepository(repoPath) {
       return Effect.gen(function* () {
-        const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath).pipe(
-          Effect.mapError(
-            (cause) =>
-              new HostValidationError({
-                field: "repoPath",
-                message: `Repository path is not accessible: ${repoPath}`,
-                cause,
-              }),
-          ),
-        );
-        if (!(yield* gitPort.isGitRepository(canonicalRepoPath))) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "repoPath",
-              message: `Not a git repository: ${canonicalRepoPath}`,
-            }),
-          );
-        }
+        const canonicalRepoPath = yield* requireLocalGitRepository(gitPort, repoPath);
         const endpoints = yield* gitPort.listRemoteEndpoints(canonicalRepoPath);
         const repositories = uniqueRepositories(
           endpoints.flatMap((remote) => [...remote.fetchUrls, ...remote.pushUrls]),

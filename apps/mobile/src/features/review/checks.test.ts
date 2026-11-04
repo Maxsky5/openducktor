@@ -312,7 +312,7 @@ describe("check groups", () => {
     completedAt: null,
   });
 
-  test("lists failed checks first, then running, other, passed, and skipped checks", () => {
+  test("lists failed checks first, then running, other and warning, passed, and skipped checks", () => {
     const items = buildChecksListItems(
       {
         ...loaded,
@@ -322,6 +322,7 @@ describe("check groups", () => {
           check("e2e", "in_progress", null),
           check("lint", "completed", "timed_out"),
           check("label", "completed", "neutral"),
+          check("e2e-optional", "completed", "warning"),
           check("test", "completed", "failure"),
         ],
       },
@@ -335,6 +336,7 @@ describe("check groups", () => {
       "failed test",
       "pending e2e",
       "neutral label",
+      "neutral e2e-optional",
       "passed unit",
       "skipped docs",
     ]);

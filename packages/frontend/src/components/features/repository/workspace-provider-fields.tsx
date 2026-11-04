@@ -5,6 +5,7 @@ import { GitProviderSelector } from "../settings/git-provider-selector";
 import type { WorkspaceProviderSetupController } from "./use-workspace-provider-setup";
 import { AzureSetupFields } from "./workspace-provider-azure-fields";
 import { GithubSetupFields } from "./workspace-provider-github-fields";
+import { GitlabSetupFields } from "./workspace-provider-gitlab-fields";
 
 export type FieldProps = { provider: WorkspaceProviderSetupController; disabled: boolean };
 export function WorkspaceProviderFields({ provider, disabled }: FieldProps): ReactElement {
@@ -29,14 +30,14 @@ export function WorkspaceProviderFields({ provider, disabled }: FieldProps): Rea
         disabled={locked}
         selectedProviderId={provider.draft.providerId ?? "none"}
         onSelect={(providerId) =>
-          provider.update((current) => ({
-            ...current,
-            providerId: providerId === "none" ? null : providerId,
-          }))
+          provider.selectProvider(providerId === "none" ? null : providerId)
         }
       />
       {provider.draft.providerId === "github" ? (
         <GithubSetupFields provider={provider} disabled={locked} />
+      ) : null}
+      {provider.draft.providerId === "gitlab" ? (
+        <GitlabSetupFields provider={provider} disabled={locked} />
       ) : null}
       {provider.draft.providerId === "azure_devops" ? (
         <AzureSetupFields provider={provider} disabled={locked} />
@@ -115,10 +116,10 @@ function detectionMessage(provider: FieldProps["provider"]): string | null {
   const repository = provider.detection?.candidates[0]?.config.repository;
   let identity: string | null = null;
   if (repository) {
-    identity =
-      "deployment" in repository
-        ? `${repository.organization}/${repository.project}/${repository.name}`
-        : `${repository.host}/${repository.owner}/${repository.name}`;
+    if ("deployment" in repository)
+      identity = `${repository.organization}/${repository.project}/${repository.name}`;
+    else if ("instanceUrl" in repository) identity = `GitLab project ${repository.projectPath}`;
+    else identity = `${repository.host}/${repository.owner}/${repository.name}`;
   }
   let message: string | null = null;
   if (provider.detecting) message = "Detecting Git provider…";

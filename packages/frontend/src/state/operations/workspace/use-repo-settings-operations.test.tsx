@@ -29,6 +29,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import { checksQueryKeys } from "@openducktor/frontend-core/queries/checks";
 import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
+import { gitlabQueryKeys } from "@openducktor/frontend-core/queries/gitlab";
 import { runtimeQueryKeys } from "@openducktor/frontend-core/queries/runtime";
 import {
   repoTaskDataQueryOptions,
@@ -1075,6 +1076,7 @@ describe("use-repo-settings-operations", () => {
       expect(run.invalidateQueries).toHaveBeenCalledWith({
         queryKey: [...workspaceQueryKeys.all, "repo-config"],
       });
+      expect(run.invalidateQueries).not.toHaveBeenCalledWith({ queryKey: gitlabQueryKeys.all });
       expect(run.invalidateQueries).not.toHaveBeenCalledWith({ queryKey: checksQueryKeys.all });
       expect(run.resetQueries).not.toHaveBeenCalled();
     } finally {
@@ -1174,6 +1176,8 @@ describe("use-repo-settings-operations", () => {
       expect(run.invalidateQueries).toHaveBeenCalledWith({
         queryKey: [...workspaceQueryKeys.all, "repo-config"],
       });
+      // A provider change can delete a GitLab account, so the account and status reads refresh.
+      expect(run.invalidateQueries).toHaveBeenCalledWith({ queryKey: gitlabQueryKeys.all });
       expect(run.invalidateQueries).not.toHaveBeenCalledWith({ queryKey: checksQueryKeys.all });
       expect(
         run.queryClient.getQueryData(

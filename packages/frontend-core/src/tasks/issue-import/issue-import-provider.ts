@@ -1,4 +1,5 @@
-import type { RepositoryGitProviderContext } from "@openducktor/contracts";
+import type { KnownGitProviderId, RepositoryGitProviderContext } from "@openducktor/contracts";
+import { isKnownGitProviderId } from "../../git/git-provider-label";
 
 export type IssueImportProvider = NonNullable<RepositoryGitProviderContext>;
 
@@ -12,9 +13,35 @@ export const issueImportProvider = (
     ? provider
     : null;
 
+/** The import copy of a Git provider: its items, and its search field when it can search. */
+export type IssueImportProviderCopy = {
+  sourceLabel: string;
+  search: { label: string; placeholder: string };
+};
+
+const ISSUE_SEARCH = {
+  label: "Search issues",
+  placeholder: "Search titles or issue numbers",
+} as const;
+
+const ISSUE_IMPORT_PROVIDER_COPY = {
+  github: { sourceLabel: "GitHub Issues", search: ISSUE_SEARCH },
+  gitlab: { sourceLabel: "GitLab issues", search: ISSUE_SEARCH },
+  azure_devops: {
+    sourceLabel: "Azure DevOps work items",
+    search: { label: "Search work items", placeholder: "Search titles" },
+  },
+} as const satisfies Record<KnownGitProviderId, IssueImportProviderCopy>;
+
+/** The import copy of a provider. An unknown provider shows its ID and issue wording. */
+export const issueImportProviderCopy = (providerId: string): IssueImportProviderCopy =>
+  isKnownGitProviderId(providerId)
+    ? ISSUE_IMPORT_PROVIDER_COPY[providerId]
+    : { sourceLabel: `${providerId} issues`, search: ISSUE_SEARCH };
+
 /** The name of the items that a Git provider imports as tasks. */
 export const issueImportSourceLabel = (providerId: string): string =>
-  providerId === "github" ? "GitHub Issues" : "Azure DevOps work items";
+  issueImportProviderCopy(providerId).sourceLabel;
 
 /**
  * Whether a workspace can import tasks now. A failed provider read is not missing setup: only a

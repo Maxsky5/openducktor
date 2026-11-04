@@ -1,3 +1,4 @@
+import { fileSuggestionPatch } from "../suggestion-patch";
 import { Effect } from "effect";
 import {
   HostValidationError,
@@ -49,34 +50,6 @@ const hasAzureSuggestion = (body: string): boolean => {
   return AZURE_SUGGESTION_BLOCK.test(body);
 };
 
-const replacementLines = (replacement: string): string[] => {
-  const normalized = replacement.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
-  return normalized.length === 0 ? [] : normalized.split("\n");
-};
-
-const buildSuggestionPatch = (
-  fileContent: string,
-  start: SuggestionPosition,
-  end: SuggestionPosition,
-  replacement: string,
-): string | null => {
-  if (end.line < start.line) {
-    return null;
-  }
-  const fileLines = fileContent.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
-  const currentLines = fileLines.slice(start.line - 1, end.line);
-  const expectedLineCount = end.line - start.line + 1;
-  if (currentLines.length !== expectedLineCount) {
-    return null;
-  }
-  const nextLines = replacementLines(replacement);
-  return [
-    `@@ -${start.line},${currentLines.length} +${start.line},${nextLines.length} @@`,
-    ...currentLines.map((line) => `-${line}`),
-    ...nextLines.map((line) => `+${line}`),
-  ].join("\n");
-};
-
 export const parseAzureReviewCommentContent = ({
   body,
   fileContent,
@@ -109,7 +82,7 @@ export const parseAzureReviewCommentContent = ({
   }
 
   const suggestionPatches = replacements.flatMap((replacement) => {
-    const patch = buildSuggestionPatch(fileContent, start, end, replacement);
+    const patch = fileSuggestionPatch(fileContent, start.line, end.line, replacement);
     return patch ? [patch] : [];
   });
   if (suggestionPatches.length !== replacements.length) {

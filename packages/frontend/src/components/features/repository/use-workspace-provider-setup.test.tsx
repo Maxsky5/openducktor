@@ -49,6 +49,7 @@ function fixture(
   detection: Promise<WorkspaceProviderSetupDetection> = Promise.resolve({
     outcome: "none",
     candidates: [],
+    gitlabOrigin: null,
   }),
   options: {
     signInStartup?: Promise<void>;
@@ -60,6 +61,7 @@ function fixture(
     areas?: string[];
     selection?: () => Promise<void>;
     pat?: () => Promise<void>;
+    gitlabAccounts?: unknown[] | Error;
   } = {},
 ) {
   const ref = { setupId: crypto.randomUUID(), revision: 0, repoPath: "/repo" };
@@ -153,6 +155,9 @@ function fixture(
         return schema.parse(undefined);
       case "workspace_provider_setup_pat":
         return schema.parse(await pat());
+      case "gitlab_accounts_list":
+        if (options.gitlabAccounts instanceof Error) throw options.gitlabAccounts;
+        return schema.parse(options.gitlabAccounts ?? []);
       default:
         throw new Error(`Unexpected setup command ${command}`);
     }
@@ -209,6 +214,191 @@ async function chooseAzure(f: ReturnType<typeof fixture>) {
   await f.h.waitFor((state) => state.pending === null);
 }
 describe("workspace provider draft ownership", () => {
+  test("links the sole account of a detected GitLab project without reopening the proposal", async () => {
+    const accountId = "4b0b1d5a-1c49-4f43-9f7b-5f1d2d4f0c11";
+    const gitlabConfig = {
+      id: "gitlab",
+      enabled: true,
+      autoDetected: true,
+      repository: {
+        providerId: "gitlab",
+        instanceUrl: "https://gitlab.com",
+        projectPath: "group/app",
+      },
+    } as const;
+    const f = fixture(
+      Promise.resolve({
+        outcome: "detected",
+        candidates: [{ config: gitlabConfig, remoteNames: ["origin"] }],
+        gitlabOrigin: gitlabConfig.repository,
+      }),
+      {
+        readStatus: async () => ready,
+        gitlabAccounts: [
+          {
+            accountId,
+            instanceUrl: "https://gitlab.com",
+            userId: 1,
+            username: "alice",
+            displayName: "Alice",
+            authKind: "token",
+            tokenExpiresAt: null,
+          },
+        ],
+      },
+    );
+    await f.h.mount();
+    try {
+      await f.h.run(async (state) => {
+        await state.begin("/repo");
+      });
+      await f.h.waitFor((state) => state.draft.gitlab.accountId === accountId);
+      expect(f.h.getLatest().detectionProposal).toBe(false);
+
+      await f.h.run((state) =>
+        state.update((draft) => ({
+          ...draft,
+          gitlab: { ...draft.gitlab, projectPath: "other/app", accountId: null },
+        })),
+      );
+      await f.h.waitFor((state) => state.detectionProposal);
+      await f.h.run(async (state) => {
+        await state.acceptDetection();
+      });
+      await f.h.waitFor((state) => state.pending === null);
+      const latest = f.h.getLatest();
+      expect(latest.draft.gitlab).toMatchObject({ projectPath: "group/app", accountId });
+      expect(latest.detectionProposal).toBe(false);
+    } finally {
+      await f.h.unmount();
+    }
+  });
+
+  test("shows a failed account read after GitLab detection and still checks readiness", async () => {
+    const gitlabConfig = {
+      id: "gitlab",
+      enabled: true,
+      autoDetected: true,
+      repository: {
+        providerId: "gitlab",
+        instanceUrl: "https://gitlab.com",
+        projectPath: "group/app",
+      },
+    } as const;
+    const readStatus = mock(async () => ready);
+    const f = fixture(
+      Promise.resolve({
+        outcome: "detected",
+        candidates: [{ config: gitlabConfig, remoteNames: ["origin"] }],
+        gitlabOrigin: gitlabConfig.repository,
+      }),
+      { readStatus, gitlabAccounts: new Error("Account store locked") },
+    );
+    await f.h.mount();
+    try {
+      await f.h.run(async (state) => {
+        await state.begin("/repo");
+      });
+      await f.h.waitFor((state) => state.error !== null && state.pending === null);
+      expect(f.h.getLatest().error).toContain(
+        "GitLab accounts could not load: Account store locked",
+      );
+      expect(f.h.getLatest().draft.gitlab.accountId).toBeNull();
+      expect(readStatus).toHaveBeenCalled();
+    } finally {
+      await f.h.unmount();
+    }
+  });
+
+  test("keeps a failed remote mapping visible to the Project remote field", async () => {
+    const f = fixture(undefined, {
+      readStatus: async () => ({
+        health: {
+          providerId: "gitlab",
+          enabled: true,
+          available: false,
+          reason: "No local Git remote points to the GitLab project group/app.",
+          executablePath: null,
+          version: null,
+          authenticated: true,
+          account: "@alice",
+          repositoryMappingValid: false,
+        },
+        connection: null,
+      }),
+    });
+    await f.h.mount();
+    try {
+      await f.h.run(async (state) => {
+        await state.begin("/repo");
+      });
+      await f.h.run((state) =>
+        state.update((draft) => ({
+          ...draft,
+          providerId: "gitlab",
+          gitlab: {
+            ...draft.gitlab,
+            projectPath: "group/app",
+            accountId: "4b0b1d5a-1c49-4f43-9f7b-5f1d2d4f0c11",
+          },
+        })),
+      );
+      await f.h.run(async (state) => {
+        await state.check();
+      });
+      await f.h.waitFor((state) => state.pending === null);
+      const latest = f.h.getLatest();
+      expect(latest.error).toContain("No local Git remote");
+      expect(latest.status).toBeNull();
+      expect(latest.remoteMappingFailed).toBe(true);
+    } finally {
+      await f.h.unmount();
+    }
+  });
+
+  test("fills GitLab from the origin remote and links the sole saved account", async () => {
+    const accountId = "4b0b1d5a-1c49-4f43-9f7b-5f1d2d4f0c11";
+    const f = fixture(
+      Promise.resolve({
+        outcome: "none",
+        candidates: [],
+        gitlabOrigin: {
+          providerId: "gitlab",
+          instanceUrl: "https://code.corp",
+          projectPath: "group/app",
+        },
+      }),
+      {
+        gitlabAccounts: [
+          {
+            accountId,
+            instanceUrl: "https://code.corp",
+            userId: 1,
+            username: "alice",
+            displayName: "Alice",
+            authKind: "token",
+            tokenExpiresAt: null,
+          },
+        ],
+      },
+    );
+    await f.h.mount();
+    try {
+      await f.h.run(async (state) => {
+        await state.begin("/repo");
+      });
+      await f.h.waitFor((state) => state.detection !== null);
+      await f.h.run((state) => state.selectProvider("gitlab"));
+      await f.h.waitFor((state) => state.draft.gitlab.accountId === accountId);
+      expect(f.h.getLatest().draft.gitlab).toMatchObject({
+        instanceUrl: "https://code.corp",
+        projectPath: "group/app",
+      });
+    } finally {
+      await f.h.unmount();
+    }
+  });
+
   test.each([
     ["selection", "resolve"],
     ["selection", "reject"],
@@ -659,6 +849,7 @@ describe("workspace provider draft ownership", () => {
       Promise.resolve({
         outcome: "detected",
         candidates: [{ config: github, remoteNames: ["origin"] }],
+        gitlabOrigin: null,
       }),
     );
     await f.h.mount();
@@ -717,6 +908,7 @@ describe("workspace provider draft ownership", () => {
         detection.resolve({
           outcome: "detected",
           candidates: [{ config: github, remoteNames: ["origin"] }],
+          gitlabOrigin: null,
         });
       });
       await f.h.waitFor((state) => !state.detecting);

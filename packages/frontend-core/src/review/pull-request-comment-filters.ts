@@ -4,7 +4,7 @@ import { z } from "zod";
 import { useClientConnection } from "../connection/client-connection-react";
 import { errorMessage } from "../lib/errors";
 import type { ClientStorage } from "../platform/client-storage";
-import { isBotCommentAuthor } from "./task-execution-ci-presentation";
+import { isBotComment } from "./task-execution-ci-presentation";
 
 export type PullRequestCommentAuthorFilter = "all" | "humans" | "bots";
 
@@ -83,7 +83,7 @@ export const filterPullRequestComments = (
   let commentsByAuthor = commentsByResolution;
   if (filter !== "all") {
     commentsByAuthor = commentsByResolution.filter((comment) => {
-      const isBot = isBotCommentAuthor(comment.author);
+      const isBot = isBotComment(comment);
       if (filter === "bots") {
         return isBot;
       }
@@ -103,7 +103,7 @@ export const countPullRequestComments = (
   hideResolved: boolean,
 ): PullRequestCommentCounts => {
   const countable = withoutResolved(comments, hideResolved);
-  const bots = countable.filter((comment) => isBotCommentAuthor(comment.author)).length;
+  const bots = countable.filter(isBotComment).length;
   return { all: countable.length, bots, humans: countable.length - bots };
 };
 

@@ -308,7 +308,7 @@ const onHostDatabaseImport = createDataUpgradeWindowHook({
 
 const createElectronHostCommandRouter = (runtimeDistribution: HostRuntimeDistribution) =>
   createElectronEffectHostCommandRouter({
-    azureDevOpsFetch: (input, init) =>
+    gitProviderFetch: (input, init) =>
       electron.net.fetch(input instanceof URL ? input.href : input, init),
     clientVersion: currentVersion,
     eventBus: hostEventBus,

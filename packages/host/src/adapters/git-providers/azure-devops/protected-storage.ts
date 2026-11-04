@@ -3,6 +3,7 @@ import path from "node:path";
 import type { IPersistence } from "@azure/msal-node-extensions";
 import { Effect } from "effect";
 import { toHostOperationError } from "../../../effect/host-errors";
+import { openOsSecurePersistence } from "../os-secure-store";
 
 const SERVICE_NAME = "OpenDucktor Azure DevOps";
 
@@ -24,27 +25,14 @@ export const createAzureDevOpsProtectedStorage = ({ configDir }: { configDir: st
   };
   const recordPath = (name: string) => path.join(directory, `${name}.cache`);
 
-  const createPersistence = async (scope: string, record: "connection" | "msal") => {
-    const {
-      DataProtectionScope,
-      FilePersistenceWithDataProtection,
-      KeychainPersistence,
-      LibSecretPersistence,
-    } = await import("@azure/msal-node-extensions");
+  const createPersistence = (scope: string, record: "connection" | "msal") => {
     const name = recordName(scope, record);
-    const cachePath = recordPath(name);
-    // PersistenceCreator validates through a shared test.cache file and credential.
-    // Concurrent opens can overwrite or delete that validation data.
-    switch (process.platform) {
-      case "darwin":
-        return KeychainPersistence.create(cachePath, SERVICE_NAME, name);
-      case "win32":
-        return FilePersistenceWithDataProtection.create(cachePath, DataProtectionScope.CurrentUser);
-      case "linux":
-        return LibSecretPersistence.create(cachePath, SERVICE_NAME, name);
-      default:
-        throw new Error(`Azure DevOps credential storage is unavailable on ${process.platform}.`);
-    }
+    return openOsSecurePersistence({
+      cachePath: recordPath(name),
+      serviceName: SERVICE_NAME,
+      accountName: name,
+      providerLabel: "Azure DevOps",
+    });
   };
 
   return {

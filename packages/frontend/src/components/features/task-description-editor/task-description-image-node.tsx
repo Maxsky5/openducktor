@@ -3,7 +3,7 @@ import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 import { useContext, useState } from "react";
 import { z } from "zod";
 import { GithubIssueImage } from "@/components/features/issue-source/github-issue-image";
-import { isGithubIssueAttachmentUrl } from "@openducktor/frontend-core/tasks/issue-import/issue-image-url";
+import { isHostLoadedIssueImageUrl } from "@openducktor/frontend-core/tasks/issue-import/issue-image-url";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { getShellBridge } from "@/lib/shell-bridge";
@@ -32,8 +32,9 @@ export function TaskDescriptionImageNode({
   );
   const { source, alt, title } = imageAttributes(node.attrs);
   const assetId = parseTaskAssetUri(source);
-  const isGithubIssueImage =
-    issueImageContext?.providerId === "github" && isGithubIssueAttachmentUrl(source);
+  const isHostIssueImage =
+    issueImageContext !== undefined &&
+    isHostLoadedIssueImageUrl(issueImageContext.providerId, source);
   const preview = assetId ? previews.get(assetId) : undefined;
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const fileImage = renderImage?.({
@@ -47,14 +48,14 @@ export function TaskDescriptionImageNode({
     source,
     preview,
     renderContext,
-    !isGithubIssueImage && !fileImage,
+    !isHostIssueImage && !fileImage,
     failedSrc,
   );
 
   return (
     <NodeViewWrapper className="my-3" data-drag-handle>
       <figure className="overflow-hidden rounded-md border border-border bg-card p-2">
-        {isGithubIssueImage && issueImageContext ? (
+        {isHostIssueImage && issueImageContext ? (
           <GithubIssueImage
             context={issueImageContext}
             src={source}

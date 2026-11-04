@@ -1,5 +1,5 @@
 import { parseTaskAssetUri, TASK_ASSET_URI_PREFIX } from "@openducktor/contracts";
-import { isGithubIssueAttachmentUrl } from "@openducktor/frontend-core/tasks/issue-import/issue-image-url";
+import { isHostLoadedIssueImageUrl } from "@openducktor/frontend-core/tasks/issue-import/issue-image-url";
 
 /** The source issue of a task, whose attached images load through the host. */
 export type TaskIssueImageContext = { readonly repoPath: string; readonly providerId: string };
@@ -20,15 +20,15 @@ export type MarkdownImageSource =
   | { readonly kind: "unsupported"; readonly reason: string };
 
 /**
- * Classifies a Markdown image. With a task from a GitHub issue, an image that the issue attaches
- * loads through the host, as on desktop, because a private repository needs its credentials.
+ * Classifies a Markdown image. With a task from a GitHub or GitLab issue, an image that the issue
+ * attaches loads through the host, as on desktop, because a private repository needs its credentials.
  */
 export const classifyImageSource = (
   url: string,
   context: TaskImageContext | null = null,
 ): MarkdownImageSource => {
   const source = url.trim();
-  if (context?.issue?.providerId === "github" && isGithubIssueAttachmentUrl(source)) {
+  if (context?.issue && isHostLoadedIssueImageUrl(context.issue.providerId, source)) {
     return { kind: "issue_image", url: source };
   }
   if (source.startsWith(TASK_ASSET_URI_PREFIX)) {

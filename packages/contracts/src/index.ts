@@ -42,6 +42,27 @@ export {
   azureDevOpsConnectionStateSchema,
 } from "./azure-devops-schemas";
 export type * from "./azure-devops-schemas";
+export {
+  GITLAB_COM_INSTANCE_URL,
+  GITLAB_MINIMUM_VERSION,
+  gitlabAccountAddTokenInputSchema,
+  gitlabAccountSchema,
+  gitlabAccountsListInputSchema,
+  gitlabAccountsListResultSchema,
+  gitlabAuthKindSchema,
+  gitlabConnectionStatusInputSchema,
+  gitlabConnectionStatusSchema,
+  gitlabDeviceCodeSchema,
+  gitlabFixActionSchema,
+  gitlabInstanceUrlSchema,
+  gitlabProblemSchema,
+  gitlabProjectPathSchema,
+  gitlabProviderSettingsSchema,
+  gitlabRepositorySchema,
+  gitlabSignInPollInputSchema,
+  gitlabSignInPollResultSchema,
+} from "./gitlab-schemas";
+export type * from "./gitlab-schemas";
 export * from "./agent-runtime-query-command-contracts";
 export * from "./claude-tool-catalog-schemas";
 export * from "./runtime-query-failure-schemas";

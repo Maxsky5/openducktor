@@ -265,6 +265,53 @@ export const workspaceAzureConfig = sqliteTable(
   ],
 );
 
+/** A saved GitLab account. Its secret is in the OS secure store, keyed by the account ID. */
+export const gitlabAccounts = sqliteTable(
+  "gitlab_accounts",
+  {
+    accountId: text("account_id").primaryKey().notNull(),
+    instanceUrl: text("instance_url").notNull(),
+    userId: integer("user_id").notNull(),
+    username: text("username").notNull(),
+    displayName: text("display_name").notNull(),
+    authKind: text("auth_kind", { enum: ["oauth", "token"] }).notNull(),
+    tokenExpiresAt: integer("token_expires_at"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_gitlab_accounts_instance_user").on(table.instanceUrl, table.userId),
+    check("chk_gitlab_accounts_auth_kind", enumCheck(table.authKind, ["oauth", "token"])),
+  ],
+);
+
+export const workspaceGitlabConfig = sqliteTable(
+  "workspace_gitlab_config",
+  {
+    workspaceId: text("workspace_id").primaryKey().notNull(),
+    providerId: text("provider_id", { enum: ["gitlab"] }).notNull(),
+    instanceUrl: text("instance_url"),
+    projectPath: text("project_path"),
+    accountId: text("account_id").references(() => gitlabAccounts.accountId, {
+      onDelete: "restrict",
+    }),
+    remoteName: text("remote_name"),
+    httpConsentInstanceUrl: text("http_consent_instance_url"),
+  },
+  (table) => [
+    check("chk_workspace_gitlab_config_provider", sql`${column(table.providerId)} = 'gitlab'`),
+    check(
+      "chk_workspace_gitlab_config_identity",
+      sql`(${column(table.instanceUrl)} is null) = (${column(table.projectPath)} is null)`,
+    ),
+    index("idx_workspace_gitlab_config_account").on(table.accountId),
+    foreignKey({
+      columns: [table.workspaceId, table.providerId],
+      foreignColumns: [workspaceGitConfig.workspaceId, workspaceGitConfig.providerId],
+    }).onDelete("cascade"),
+  ],
+);
+
 export const hostSettings = sqliteTable(
   "host_settings",
   {
@@ -398,6 +445,8 @@ export const hostSettingsSchema = {
   workspaceGitConfig,
   workspaceRepositoryIdentity,
   workspaceAzureConfig,
+  gitlabAccounts,
+  workspaceGitlabConfig,
   hostSettings,
   customAgentRoles,
   globalPromptOverrides,

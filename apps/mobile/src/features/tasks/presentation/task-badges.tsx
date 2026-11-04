@@ -3,17 +3,13 @@ import {
   type BuiltinTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import type { PullRequest, SourceIssueReference } from "@openducktor/contracts";
+import { sourceIssueLabel } from "@openducktor/frontend-core/git/git-provider-label";
 import { memo, type ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useLinkOpener } from "@/rich-content/links/use-link-opener";
 import { useAppTheme } from "@/theme/app-theme-context";
-import {
-  issueTypePaint,
-  priorityPaint,
-  pullRequestPaint,
-  sourceIssueLabel,
-} from "./task-badge-paint";
+import { issueTypePaint, priorityPaint, pullRequestPaint } from "./task-badge-paint";
 import { TaskChip } from "./task-chip";
 import { issueTypeChipPaint, priorityChipPaint, pullRequestIconColor } from "./task-chip-paint";
 

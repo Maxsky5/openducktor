@@ -188,6 +188,13 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceClient.workspaceReplaceAzureDevOpsPat.bind(workspaceClient),
     workspaceDisconnectAzureDevOps:
       workspaceClient.workspaceDisconnectAzureDevOps.bind(workspaceClient),
+    workspaceDetectGitlabRepository:
+      workspaceClient.workspaceDetectGitlabRepository.bind(workspaceClient),
+    gitlabAccountsList: workspaceClient.gitlabAccountsList.bind(workspaceClient),
+    gitlabConnectionStatus: workspaceClient.gitlabConnectionStatus.bind(workspaceClient),
+    gitlabAccountAddToken: workspaceClient.gitlabAccountAddToken.bind(workspaceClient),
+    gitlabSignInStart: workspaceClient.gitlabSignInStart.bind(workspaceClient),
+    gitlabSignInPoll: workspaceClient.gitlabSignInPoll.bind(workspaceClient),
     workspaceGetGitProviderContext:
       workspaceClient.workspaceGetGitProviderContext.bind(workspaceClient),
     workspacePreviewSettingsSnapshotRuntime:

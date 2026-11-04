@@ -1,3 +1,4 @@
+import { formatSuggestionPatch } from "../../suggestion-patch";
 type GithubReviewCommentContentInput = {
   body: string;
   diffHunk: string | null;
@@ -55,11 +56,6 @@ const selectedRightSideLines = (
   return selectedLines;
 };
 
-const replacementLines = (replacement: string): string[] => {
-  const normalized = replacement.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
-  return normalized.length === 0 ? [] : normalized.split("\n");
-};
-
 const buildSuggestionPatch = (
   diffHunk: string,
   startLine: number,
@@ -70,12 +66,7 @@ const buildSuggestionPatch = (
   if (!currentLines) {
     return null;
   }
-  const nextLines = replacementLines(replacement);
-  return [
-    `@@ -${startLine},${currentLines.length} +${startLine},${nextLines.length} @@`,
-    ...currentLines.map((line) => `-${line}`),
-    ...nextLines.map((line) => `+${line}`),
-  ].join("\n");
+  return formatSuggestionPatch(startLine, currentLines, replacement);
 };
 
 export const parseGithubReviewCommentContent = ({

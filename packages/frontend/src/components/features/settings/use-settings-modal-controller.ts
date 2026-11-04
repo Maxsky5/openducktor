@@ -35,7 +35,7 @@ import {
 } from "@/state/read-models/custom-agent-role-settings";
 import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
-import { validateAzureDevOpsDraft } from "./settings-modal-save-policy";
+import { validateGitProviderDrafts } from "./settings-modal-save-policy";
 import type { SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-selection";
@@ -122,7 +122,7 @@ export type SettingsModalController = {
   retryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
   checkRuntimeExecutablesAgain: () => Promise<void>;
   detectSelectedRepoGithubRepository: () => Promise<GitProviderRepository | null>;
-  setAzureDevOpsValidationErrorCount: (errorCount: number) => void;
+  setGitProviderValidationErrorCount: (errorCount: number) => void;
   updateSelectedRepoConfig: (updater: (current: SettingsRepoConfig) => SettingsRepoConfig) => void;
   updateGlobalGitConfig: (
     updater: (current: SettingsSnapshot["git"]) => SettingsSnapshot["git"],
@@ -232,10 +232,10 @@ export const useSettingsModalController = ({
     workspaceSelectionPolicy: workspacePolicy,
   });
   const {
-    azureDevOpsValidationErrorCount,
-    azureDevOpsInvalidWorkspaceIds,
-    setAzureDevOpsValidationErrorCount,
-  } = useAzureDevOpsValidation({ loadedSnapshot, snapshotDraft, selectedWorkspaceId });
+    gitProviderValidationErrorCount,
+    gitProviderInvalidWorkspaceIds,
+    setGitProviderValidationErrorCount,
+  } = useGitProviderValidation({ loadedSnapshot, snapshotDraft, selectedWorkspaceId });
 
   const selectedWorkspace = useMemo(
     () =>
@@ -372,13 +372,13 @@ export const useSettingsModalController = ({
   const settingsSectionErrorCountByIdWithValidation = useMemo(
     () => ({
       ...settingsSectionErrorCountById,
-      repositories: settingsSectionErrorCountById.repositories + azureDevOpsValidationErrorCount,
+      repositories: settingsSectionErrorCountById.repositories + gitProviderValidationErrorCount,
       runtimes: runtimeAvailabilityValidationState.runtimeExecutableErrors.length,
       "reusable-prompts": reusablePromptValidationState.totalErrorCount,
       "custom-agent-roles": customAgentRoleValidationState.totalErrorCount,
     }),
     [
-      azureDevOpsValidationErrorCount,
+      gitProviderValidationErrorCount,
       reusablePromptValidationState.totalErrorCount,
       customAgentRoleValidationState.totalErrorCount,
       runtimeAvailabilityValidationState.runtimeExecutableErrors.length,
@@ -405,10 +405,10 @@ export const useSettingsModalController = ({
     dirtySections,
     validation: {
       openCodePermissions: openCodePermissionErrors,
-      azureDevOps: {
-        hasErrors: azureDevOpsValidationErrorCount > 0,
-        errorCount: azureDevOpsValidationErrorCount,
-        invalidWorkspaceIds: azureDevOpsInvalidWorkspaceIds,
+      gitProvider: {
+        hasErrors: gitProviderValidationErrorCount > 0,
+        errorCount: gitProviderValidationErrorCount,
+        invalidWorkspaceIds: gitProviderInvalidWorkspaceIds,
         selectedWorkspaceId,
       },
       customAgentRoles: {
@@ -582,7 +582,7 @@ export const useSettingsModalController = ({
     retryRuntimeDefinitions: refreshRuntimeDefinitions,
     checkRuntimeExecutablesAgain,
     detectSelectedRepoGithubRepository,
-    setAzureDevOpsValidationErrorCount,
+    setGitProviderValidationErrorCount,
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
@@ -611,7 +611,7 @@ export const useSettingsModalController = ({
   };
 };
 
-const useAzureDevOpsValidation = ({
+const useGitProviderValidation = ({
   loadedSnapshot,
   snapshotDraft,
   selectedWorkspaceId,
@@ -625,7 +625,7 @@ const useAzureDevOpsValidation = ({
     workspaceId: string | null;
     errorCount: number;
   }>({ snapshot: null, workspaceId: null, errorCount: 0 });
-  const setAzureDevOpsValidationErrorCount = useCallback(
+  const setGitProviderValidationErrorCount = useCallback(
     (errorCount: number): void => {
       setReported({ snapshot: loadedSnapshot, workspaceId: selectedWorkspaceId, errorCount });
     },
@@ -635,15 +635,15 @@ const useAzureDevOpsValidation = ({
     reported.snapshot === loadedSnapshot && reported.workspaceId === selectedWorkspaceId
       ? reported.errorCount
       : 0;
-  const validation = validateAzureDevOpsDraft(
+  const validation = validateGitProviderDrafts(
     snapshotDraft,
     selectedWorkspaceId,
     reportedErrorCount,
   );
   return {
-    azureDevOpsValidationErrorCount: validation.errorCount,
-    azureDevOpsInvalidWorkspaceIds: validation.invalidWorkspaceIds,
-    setAzureDevOpsValidationErrorCount,
+    gitProviderValidationErrorCount: validation.errorCount,
+    gitProviderInvalidWorkspaceIds: validation.invalidWorkspaceIds,
+    setGitProviderValidationErrorCount,
   };
 };
 

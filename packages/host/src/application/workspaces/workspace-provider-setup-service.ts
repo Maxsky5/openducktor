@@ -39,10 +39,11 @@ export const createWorkspaceProviderSetupService = (input: {
   newSetupId: () => string;
   detectRepositories: (
     repoPath: string,
-  ) => Effect.Effect<WorkspaceProviderSetupDetection, GitPortError>;
+  ) => Effect.Effect<WorkspaceProviderSetupDetection, GitPortError | HostError>;
   settings: WorkspaceSettingsService;
   github: Pick<GitProviderPort, "health">;
   azure: Pick<GitProviderPort, "health">;
+  gitlab: Pick<GitProviderPort, "health">;
   areas: AzureAreaPathsPort;
   credentials: WorkspaceProviderSetupCredentialsPort;
   inspectGithub: (
@@ -116,7 +117,12 @@ export const createWorkspaceProviderSetupService = (input: {
       const provider = config.git.provider;
       if (!provider)
         return { health: null, connection: null } satisfies WorkspaceProviderSetupStatus;
-      const adapter = provider.id === "github" ? input.github : input.azure;
+      const adapter = new Map([
+        ["github", input.github],
+        ["azure_devops", input.azure],
+        ["gitlab", input.gitlab],
+      ]).get(provider.id);
+      if (!adapter) return yield* fail(`Git provider ${provider.id} is not supported.`);
       const health = yield* adapter.health().getStatus(config);
       const repository = provider.repository;
       const connection =

@@ -2,7 +2,7 @@ import type { PullRequestReviewActivity } from "@openducktor/contracts";
 import { formatCiRelativeTime } from "@openducktor/frontend-core/review/task-execution-ci-relative-time-format";
 import {
   commentLocationLabel,
-  isBotCommentAuthor,
+  isBotComment,
   REVIEW_OUTCOME_PRESENTATION,
 } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 import { Image } from "expo-image";
@@ -67,9 +67,7 @@ export const CiCommentCard = memo(function CiCommentCard({
               <Text variant="callout" weight="semibold" numberOfLines={1} style={styles.author}>
                 {author}
               </Text>
-              {isBotCommentAuthor(comment.author) ? (
-                <CiBadge label="Bot" variant="secondary" small />
-              ) : null}
+              {isBotComment(comment) ? <CiBadge label="Bot" variant="secondary" small /> : null}
               {outcome ? <CiBadge label={outcome.label} variant={outcome.variant} small /> : null}
               {timestamp ? (
                 <Text variant="caption2" weight="regular" style={styles.muted}>

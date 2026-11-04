@@ -1,3 +1,4 @@
+import { gitlabQueryKeys } from "@openducktor/frontend-core/queries/gitlab";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { WorkspaceCatalog, WorkspaceRecord } from "@openducktor/contracts";
@@ -998,6 +999,8 @@ describe("use-workspace-selection-operations", () => {
       await harness.mount();
       await harness.waitFor((state) => state.hasLoadedWorkspaceList);
       const queryClient = harness.getQueryClient();
+      // Removal can delete a GitLab account that only this workspace linked.
+      queryClient.setQueryData(gitlabQueryKeys.accounts("https://gitlab.com"), []);
 
       await harness.run((value) =>
         value.removeWorkspace({
@@ -1007,6 +1010,9 @@ describe("use-workspace-selection-operations", () => {
         }),
       );
 
+      expect(
+        queryClient.getQueryState(gitlabQueryKeys.accounts("https://gitlab.com"))?.isInvalidated,
+      ).toBe(true);
       expect(queryClient.getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list())).toEqual([]);
       expect(queryClient.getQueryData<WorkspaceCatalog>(workspaceQueryKeys.catalog())).toEqual({
         catalogRevision: 0,

@@ -1,3 +1,4 @@
+import { linkedGitlabAccountId } from "@openducktor/core";
 import { Effect } from "effect";
 import { randomUUID } from "node:crypto";
 import {
@@ -17,21 +18,31 @@ import { resolveAzureDevOpsEntraClientId } from "../../config/azure-devops";
 import { createWorkspaceProviderSetupService } from "../../application/workspaces/workspace-provider-setup-service";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import type { HostEventBusPort } from "../../events/host-event-bus";
-import type { AzureDevOpsFetch } from "../../adapters/git-providers/azure-devops/rest-client";
+import type { GitProviderFetch } from "../../adapters/git-providers/git-provider-fetch";
+import type { GlobalConfig } from "@openducktor/contracts";
+import type { NodeGitlabComposition } from "./git-provider-composition";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 
 export const createNodeWorkspaceProviderSetup = (
   ports: NodeHostDefaultPorts,
   input: {
     eventBus?: HostEventBusPort | undefined;
-    azureDevOpsFetch?: AzureDevOpsFetch | undefined;
+    gitProviderFetch?: GitProviderFetch | undefined;
+    gitlab: NodeGitlabComposition;
   },
   onWorkspaceAdded: (repoPath: string) => void,
   taskWorkflows: TaskWorkflowResolver,
 ) => {
   const savedSettings = createWorkspaceSettingsService(ports.settingsConfig, taskWorkflows);
+  const { gitlab } = input;
   const settings: WorkspaceSettingsService = {
     ...savedSettings,
+    // A save can unlink a GitLab account: Disconnect, a provider change, or an instance change.
+    // The release runs after the commit, so it deletes only accounts that no workspace links now.
+    saveSettingsSnapshotWith: (prepared, commit) =>
+      savedSettings
+        .saveSettingsSnapshotWith(prepared, commit)
+        .pipe(Effect.tap(() => gitlab.connection.release(gitlabAccountIds(prepared.current)))),
     addWorkspace: (input) =>
       savedSettings.addWorkspace({
         ...input,
@@ -42,7 +53,7 @@ export const createNodeWorkspaceProviderSetup = (
       }),
   };
   const { eventBus } = input;
-  const fetchImplementation = input.azureDevOpsFetch ?? fetch;
+  const fetchImplementation = input.gitProviderFetch ?? fetch;
   const { git, configDir, startupEnv, systemCommands, toolDiscovery } = ports;
   const credentials = createWorkspaceProviderSetupCredentials({
     clientId: resolveAzureDevOpsEntraClientId(startupEnv),
@@ -61,12 +72,19 @@ export const createNodeWorkspaceProviderSetup = (
     git,
     newSetupId: randomUUID,
     detectRepositories: (repoPath) =>
-      git.listRemoteEndpoints(repoPath).pipe(Effect.map(detectWorkspaceProviders)),
+      Effect.all([git.listRemoteEndpoints(repoPath), gitlab.connection.knownInstances()], {
+        concurrency: 2,
+      }).pipe(
+        Effect.map(([endpoints, knownInstances]) =>
+          detectWorkspaceProviders(endpoints, knownInstances),
+        ),
+      ),
     settings,
     credentials,
     azure,
     areas: azure.areaPaths(),
     github: new GithubProviderAdapter({ gitPort: git, systemCommands, toolDiscovery }),
+    gitlab: gitlab.adapter,
     publish: (payload) =>
       eventBus?.publish({ channel: "openducktor://workspace-provider-setup-updated", payload }),
     inspectGithub: (repoPath, host) =>
@@ -95,3 +113,9 @@ export const createNodeWorkspaceProviderSetup = (
     handlers: createWorkspaceProviderSetupCommandHandlers(service),
   };
 };
+
+const gitlabAccountIds = (config: GlobalConfig): string[] =>
+  Object.values(config.workspaces).flatMap((workspace) => {
+    const accountId = linkedGitlabAccountId(workspace.git.provider);
+    return accountId ? [accountId] : [];
+  });

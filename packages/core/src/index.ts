@@ -18,6 +18,7 @@ export * from "./services/agent-system-slash-commands";
 export * from "./services/agent-attachment-validation";
 export * from "./services/agent-user-message-parts";
 export * from "./services/azure-devops-repository-identity";
+export * from "./services/gitlab-repository-identity";
 export * from "./services/odt-tools";
 export * from "./services/odt-workflow-tools";
 export * from "./services/odt-tool-history";

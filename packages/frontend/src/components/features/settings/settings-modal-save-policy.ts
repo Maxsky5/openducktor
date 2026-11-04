@@ -58,7 +58,7 @@ export const buildRuntimeAvailabilitySaveError = (totalErrorCount: number): stri
 export const buildCodexDangerousSettingsSaveError = (): string =>
   "Confirm the Codex safety acknowledgement before saving.";
 
-export const validateAzureDevOpsDraft = (
+export const validateGitProviderDrafts = (
   snapshotDraft: SettingsSnapshot | null,
   selectedWorkspaceId: string | null,
   reportedErrorCount: number,
@@ -67,7 +67,7 @@ export const validateAzureDevOpsDraft = (
   const invalidWorkspaceIds: string[] = [];
   for (const [workspaceId, repoConfig] of Object.entries(snapshotDraft?.workspaces ?? {})) {
     const provider = repoConfig.git.provider;
-    if (provider?.id !== "azure_devops") continue;
+    if (provider?.id !== "azure_devops" && provider?.id !== "gitlab") continue;
     const parsed = gitProviderConfigSchema.safeParse(provider);
     const savedErrorCount =
       (parsed.success ? 0 : parsed.error.issues.length) +
@@ -86,7 +86,7 @@ export const validateAzureDevOpsDraft = (
 
 export type SettingsSaveValidation = {
   openCodePermissions: readonly string[];
-  azureDevOps: {
+  gitProvider: {
     hasErrors: boolean;
     errorCount: number;
     invalidWorkspaceIds: string[];
@@ -127,17 +127,17 @@ export const getSettingsSaveBlocker = (
       "opencode",
     );
   }
-  if (validation.azureDevOps.hasErrors) {
-    const count = validation.azureDevOps.errorCount;
-    const workspaceSummary = validation.azureDevOps.invalidWorkspaceIds
+  if (validation.gitProvider.hasErrors) {
+    const count = validation.gitProvider.errorCount;
+    const workspaceSummary = validation.gitProvider.invalidWorkspaceIds
       .map((workspaceId) =>
-        workspaceId === validation.azureDevOps.selectedWorkspaceId
+        workspaceId === validation.gitProvider.selectedWorkspaceId
           ? "the selected repository"
           : `\`${workspaceId}\``,
       )
       .join(", ");
     return saveBlocker(
-      `Fix ${count} Azure DevOps field error${count > 1 ? "s" : ""}${workspaceSummary ? ` in ${workspaceSummary}` : ""} before saving.`,
+      `Fix ${count} Git provider field error${count > 1 ? "s" : ""}${workspaceSummary ? ` in ${workspaceSummary}` : ""} before saving.`,
     );
   }
   if (validation.customAgentRoles.hasErrors) {

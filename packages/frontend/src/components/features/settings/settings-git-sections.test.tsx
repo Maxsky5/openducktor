@@ -1,3 +1,4 @@
+import type { HostClient } from "@openducktor/host-client";
 import {
   AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
   GITHUB_PROVIDER_DESCRIPTOR,
@@ -82,11 +83,11 @@ const baseRepoConfig: SettingsRepoConfig = {
   agentDefaults: {},
 };
 
-const createGitlabProvider = (): GitProviderConfig => ({
-  id: "gitlab",
+const createGiteaProvider = (): GitProviderConfig => ({
+  id: "gitea",
   enabled: true,
   autoDetected: false,
-  repository: { host: "gitlab.com", owner: "acme", name: "widget" },
+  repository: { host: "gitea.com", owner: "acme", name: "widget" },
 });
 
 describe("settings git sections", () => {
@@ -150,29 +151,29 @@ describe("settings git sections", () => {
   });
 
   test("renders the configured provider label and description from its descriptor", () => {
-    const gitlabProvider = createGitlabProvider();
+    const giteaProvider = createGiteaProvider();
     const html = renderToStaticMarkup(
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: {
           ...baseRepoConfig,
-          git: { provider: gitlabProvider },
+          git: { provider: giteaProvider },
         },
         providerState: {
           status: "loaded",
           context: {
             descriptor: {
-              id: "gitlab",
-              label: "GitLab",
-              description: "GitLab repository hosting.",
+              id: "gitea",
+              label: "Gitea",
+              description: "Gitea repository hosting.",
               capabilities: {
                 supportsPullRequests: true,
                 supportsPullRequestReview: false,
               },
             },
-            config: gitlabProvider,
+            config: giteaProvider,
             health: {
-              providerId: "gitlab",
+              providerId: "gitea",
               enabled: true,
               available: true,
               executablePath: "glab",
@@ -189,23 +190,23 @@ describe("settings git sections", () => {
       }),
     );
 
-    expect(html).toContain(">GitLab<");
-    expect(html).not.toContain("GitLab Pull Requests");
-    expect(html).toContain("GitLab repository hosting.");
+    expect(html).toContain(">Gitea<");
+    expect(html).not.toContain("Gitea Pull Requests");
+    expect(html).toContain("Gitea repository hosting.");
   });
 
   test("does not use GitHub copy when a configured provider read fails", () => {
-    const gitlabProvider = createGitlabProvider();
+    const giteaProvider = createGiteaProvider();
     const html = renderToStaticMarkup(
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: {
           ...baseRepoConfig,
-          git: { provider: gitlabProvider },
+          git: { provider: giteaProvider },
         },
         providerState: {
           status: "error",
-          message: "Could not load GitLab health.",
+          message: "Could not load Gitea health.",
         },
         disabled: false,
         onDetectGithubRepository: async () => null,
@@ -213,8 +214,8 @@ describe("settings git sections", () => {
       }),
     );
 
-    expect(html).toContain(">Git provider gitlab<");
-    expect(html).toContain("This repository uses gitlab.");
+    expect(html).toContain(">Git provider gitea<");
+    expect(html).toContain("This repository uses gitea.");
     expect(html).not.toContain("GitHub repository hosting and Pull Request integration.");
   });
 
@@ -439,11 +440,11 @@ describe("settings git sections", () => {
 
   test("allows removing another configured provider before configuring GitHub", async () => {
     const onDetectGithubRepository = mock(async () => null);
-    const gitlabProvider = createGitlabProvider();
+    const giteaProvider = createGiteaProvider();
     const initialRepoConfig: SettingsRepoConfig = {
       ...baseRepoConfig,
       git: {
-        provider: gitlabProvider,
+        provider: giteaProvider,
       },
     };
     const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
@@ -475,7 +476,7 @@ describe("settings git sections", () => {
       });
 
       expect(rendered.container.textContent).toContain(
-        "Git provider gitlab is configured. Remove it before you configure GitHub.",
+        "Git provider gitea is configured. Remove it before you configure GitHub.",
       );
       expect(onDetectGithubRepository).toHaveBeenCalledTimes(0);
       expect(screen.queryByRole("switch")).toBeNull();
@@ -525,11 +526,11 @@ describe("settings git sections", () => {
         await Promise.resolve();
       });
 
-      const gitlabProvider = createGitlabProvider();
+      const giteaProvider = createGiteaProvider();
       repoConfig = {
         ...repoConfig,
         git: {
-          provider: gitlabProvider,
+          provider: giteaProvider,
         },
       };
       rendered.rerender(createElement(RepositoryGitSection, props()));
@@ -544,7 +545,7 @@ describe("settings git sections", () => {
         await Promise.resolve();
       });
 
-      expect(repoConfig.git.provider).toBe(gitlabProvider);
+      expect(repoConfig.git.provider).toBe(giteaProvider);
     } finally {
       rendered.unmount();
     }
@@ -784,6 +785,309 @@ describe("settings git sections", () => {
       expect(rendered.container.textContent).not.toContain("GitHub Pull Requests");
       expect(rendered.container.textContent).not.toContain("Azure DevOps setup");
       expect(onDetectGithubRepository).toHaveBeenCalledTimes(0);
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  const gitlabAccount = {
+    accountId: "4b0b1d5a-1c49-4f43-9f7b-5f1d2d4f0c11",
+    instanceUrl: "https://gitlab.com",
+    userId: 1,
+    username: "alice",
+    displayName: "Alice",
+    authKind: "token" as const,
+    tokenExpiresAt: null,
+  };
+  const newGitlabRepoConfig = (): SettingsRepoConfig => ({
+    ...baseRepoConfig,
+    git: { provider: { id: "gitlab", enabled: true, autoDetected: false } },
+  });
+
+  test("keeps a delayed GitLab account read away from a changed instance", async () => {
+    let repoConfig = newGitlabRepoConfig();
+    let resolveGitlabCom: (accounts: (typeof gitlabAccount)[]) => void = () => undefined;
+    const listAccounts = mock(({ instanceUrl }: { instanceUrl: string }) =>
+      instanceUrl === "https://gitlab.com"
+        ? new Promise<(typeof gitlabAccount)[]>((resolve) => {
+            resolveGitlabCom = resolve;
+          })
+        : Promise.resolve([]),
+    );
+    const connection = createTestClientConnection({ client: { gitlabAccountsList: listAccounts } });
+    const rendered = render(
+      createElement(
+        QueryProvider,
+        { connection },
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          providerState: { status: "draft" },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onUpdateSelectedRepoConfig: (updater) => {
+            repoConfig = updater(repoConfig);
+          },
+        }),
+      ),
+    );
+
+    try {
+      fireEvent.change(screen.getByLabelText("Project path"), { target: { value: "group/app" } });
+      await waitFor(() => expect(listAccounts).toHaveBeenCalled());
+      fireEvent.change(screen.getByLabelText("Instance URL"), {
+        target: { value: "https://code.corp" },
+      });
+      await act(async () => {
+        resolveGitlabCom([gitlabAccount]);
+        await Promise.resolve();
+      });
+      expect(repoConfig.git.provider?.repository).toMatchObject({
+        instanceUrl: "https://code.corp",
+      });
+      expect(repoConfig.git.provider?.settings).toBeUndefined();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  const renderGitlabSection = (client: Partial<HostClient>) => {
+    const state = { repoConfig: newGitlabRepoConfig() };
+    const connection = createTestClientConnection({ client });
+    const renderSection = () =>
+      createElement(
+        QueryProvider,
+        { connection },
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: state.repoConfig,
+          providerState: { status: "draft" },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onUpdateSelectedRepoConfig: (updater) => {
+            state.repoConfig = updater(state.repoConfig);
+            rendered.rerender(renderSection());
+          },
+        }),
+      );
+    const rendered = render(renderSection());
+    return { state, rendered };
+  };
+
+  test("keeps GitLab off when an account read ends after the user turned it off", async () => {
+    let resolveAccounts: (accounts: (typeof gitlabAccount)[]) => void = () => undefined;
+    const { state, rendered } = renderGitlabSection({
+      gitlabAccountsList: mock(
+        () =>
+          new Promise<(typeof gitlabAccount)[]>((resolve) => {
+            resolveAccounts = resolve;
+          }),
+      ),
+    });
+
+    try {
+      fireEvent.change(screen.getByLabelText("Project path"), { target: { value: "group/app" } });
+      fireEvent.click(screen.getByRole("switch", { name: "Enable GitLab provider" }));
+      expect(state.repoConfig.git.provider?.enabled).toBe(false);
+      await act(async () => {
+        resolveAccounts([gitlabAccount]);
+        await Promise.resolve();
+      });
+      expect(state.repoConfig.git.provider?.enabled).toBe(false);
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("keeps a project edit made while Detect from origin runs", async () => {
+    let finishDetect: () => void = () => undefined;
+    const { state, rendered } = renderGitlabSection({
+      gitlabAccountsList: async () => [],
+      workspaceDetectGitlabRepository: () =>
+        new Promise((resolve) => {
+          finishDetect = () =>
+            resolve({
+              providerId: "gitlab",
+              instanceUrl: "https://gitlab.com",
+              projectPath: "group/from-origin",
+            });
+        }),
+    });
+
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Detect from origin" }));
+      fireEvent.change(screen.getByLabelText("Project path"), {
+        target: { value: "group/manual" },
+      });
+      await act(async () => {
+        finishDetect();
+        await Promise.resolve();
+      });
+      expect(state.repoConfig.git.provider?.repository).toMatchObject({
+        projectPath: "group/manual",
+      });
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("keeps No provider when a GitLab account read ends after the user removed GitLab", async () => {
+    let repoConfig = newGitlabRepoConfig();
+    let resolveAccounts: (accounts: (typeof gitlabAccount)[]) => void = () => undefined;
+    const listAccounts = mock(
+      () =>
+        new Promise<(typeof gitlabAccount)[]>((resolve) => {
+          resolveAccounts = resolve;
+        }),
+    );
+    const connection = createTestClientConnection({ client: { gitlabAccountsList: listAccounts } });
+    const renderSection = () =>
+      createElement(
+        QueryProvider,
+        { connection },
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          providerState: { status: "draft" },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onUpdateSelectedRepoConfig: (updater) => {
+            repoConfig = updater(repoConfig);
+            rendered.rerender(renderSection());
+          },
+        }),
+      );
+    const rendered = render(renderSection());
+
+    try {
+      fireEvent.change(screen.getByLabelText("Project path"), { target: { value: "group/app" } });
+      await waitFor(() => expect(listAccounts).toHaveBeenCalled());
+      fireEvent.click(screen.getByRole("radio", { name: "No provider" }));
+      expect(repoConfig.git.provider).toBeUndefined();
+      await act(async () => {
+        resolveAccounts([gitlabAccount]);
+        await Promise.resolve();
+      });
+      expect(repoConfig.git.provider).toBeUndefined();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("drops a GitLab sign-in startup that ends after the instance changed", async () => {
+    let repoConfig = newGitlabRepoConfig();
+    let finishStart: () => void = () => undefined;
+    const startSignIn = mock(
+      () =>
+        new Promise<{
+          attemptId: string;
+          verificationUri: string;
+          verificationUriComplete: string;
+          userCode: string;
+          expiresAt: string;
+          nextPollAt: string;
+        }>((resolve) => {
+          finishStart = () =>
+            resolve({
+              attemptId: "9c7d6a52-55a2-4b8e-8f4a-4c1f0d8b2a10",
+              verificationUri: "https://gitlab.com/oauth/device",
+              verificationUriComplete: "https://gitlab.com/oauth/device?user_code=CODE",
+              userCode: "CODE",
+              expiresAt: "2099-01-01T00:00:00.000Z",
+              nextPollAt: "2026-01-01T00:00:00.000Z",
+            });
+        }),
+    );
+    const pollSignIn = mock(async () => ({
+      status: "pending" as const,
+      nextPollAt: "2099-01-01T00:00:00.000Z",
+    }));
+    const connection = createTestClientConnection({
+      client: {
+        gitlabAccountsList: async () => [],
+        gitlabSignInStart: startSignIn,
+        gitlabSignInPoll: pollSignIn,
+      },
+    });
+    const rendered = render(
+      createElement(
+        QueryProvider,
+        { connection },
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          providerState: { status: "draft" },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onUpdateSelectedRepoConfig: (updater) => {
+            repoConfig = updater(repoConfig);
+          },
+        }),
+      ),
+    );
+
+    try {
+      fireEvent.click(await screen.findByRole("button", { name: "Sign in with GitLab" }));
+      await waitFor(() => expect(startSignIn).toHaveBeenCalledTimes(1));
+      fireEvent.change(screen.getByLabelText("Instance URL"), {
+        target: { value: "https://code.corp" },
+      });
+      await act(async () => {
+        finishStart();
+        await Promise.resolve();
+      });
+      expect(screen.queryByText("Waiting for GitLab sign-in…")).toBeNull();
+      expect(screen.queryByText("CODE")).toBeNull();
+      expect(pollSignIn).not.toHaveBeenCalled();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("links the only saved GitLab account of the instance to a new repository", async () => {
+    let repoConfig = newGitlabRepoConfig();
+    const account = gitlabAccount;
+    const listAccounts = mock(async () => [account]);
+    const status = mock(async () => ({
+      status: "ready" as const,
+      account,
+      projectId: 42,
+      projectWebUrl: "https://gitlab.com/group/app",
+    }));
+    const connection = createTestClientConnection({
+      client: { gitlabAccountsList: listAccounts, gitlabConnectionStatus: status },
+    });
+    const update = mock((updater: (current: SettingsRepoConfig) => SettingsRepoConfig) => {
+      repoConfig = updater(repoConfig);
+    });
+    const rendered = render(
+      createElement(
+        QueryProvider,
+        { connection },
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          providerState: { status: "draft" },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onUpdateSelectedRepoConfig: update,
+        }),
+      ),
+    );
+
+    try {
+      fireEvent.change(screen.getByLabelText("Project path"), {
+        target: { value: "group/sub/app" },
+      });
+      await waitFor(() =>
+        expect(repoConfig.git.provider?.settings).toEqual({ accountId: account.accountId }),
+      );
+      expect(listAccounts).toHaveBeenCalledWith({ instanceUrl: "https://gitlab.com" });
+      await waitFor(() =>
+        expect(screen.getByText("Connected as @alice on gitlab.com")).toBeTruthy(),
+      );
+      expect(screen.getByRole("switch", { name: "Enable GitLab provider" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Use another account" })).toBeTruthy();
     } finally {
       rendered.unmount();
     }
@@ -1085,7 +1389,7 @@ describe("settings git sections", () => {
   });
 
   test("keeps invalid Azure edits and saves an explicit remote mapping draft", async () => {
-    const onAzureDevOpsValidationChange = mock((_errorCount: number) => {});
+    const onGitProviderValidationChange = mock((_errorCount: number) => {});
     const initialRepoConfig: SettingsRepoConfig = {
       ...baseRepoConfig,
       git: {
@@ -1116,7 +1420,7 @@ describe("settings git sections", () => {
           providerState: { status: "draft" },
           disabled: false,
           onDetectGithubRepository: async () => null,
-          onAzureDevOpsValidationChange,
+          onGitProviderValidationChange,
           onUpdateSelectedRepoConfig: setRepoConfig,
         }),
       );
@@ -1144,7 +1448,7 @@ describe("settings git sections", () => {
       fireEvent.change(projectInput, { target: { value: "Desktop" } });
       fireEvent.click(screen.getByRole("button", { name: /Advanced remote mappings/ }));
       fireEvent.click(screen.getByRole("button", { name: "Add mapping" }));
-      expect(onAzureDevOpsValidationChange.mock.lastCall?.[0]).toBeGreaterThan(0);
+      expect(onGitProviderValidationChange.mock.lastCall?.[0]).toBeGreaterThan(0);
       const remoteName = rendered.container.querySelector("#repo-azure-mapping-0-remoteName");
       const fetchUrl = rendered.container.querySelector("#repo-azure-mapping-0-fetchUrl");
       const pushUrls = rendered.container.querySelector("#repo-azure-mapping-0-pushUrls");
@@ -1165,14 +1469,14 @@ describe("settings git sections", () => {
       expect(screen.getByTestId("azure-config").textContent).toContain(
         '"pushUrls":["git@work:team/repo","ssh://work/team/repo"]',
       );
-      expect(onAzureDevOpsValidationChange).toHaveBeenLastCalledWith(0);
+      expect(onGitProviderValidationChange).toHaveBeenLastCalledWith(0);
     } finally {
       rendered.unmount();
     }
   });
 
   test("shows duplicate Azure remote names and reports a save validation error", () => {
-    const onAzureDevOpsValidationChange = mock((_errorCount: number) => {});
+    const onGitProviderValidationChange = mock((_errorCount: number) => {});
     const repository = {
       providerId: "azure_devops" as const,
       deployment: "services" as const,
@@ -1216,7 +1520,7 @@ describe("settings git sections", () => {
         providerState: { status: "draft" },
         disabled: false,
         onDetectGithubRepository: async () => null,
-        onAzureDevOpsValidationChange,
+        onGitProviderValidationChange,
         onUpdateSelectedRepoConfig: setRepoConfig,
       });
     };
@@ -1236,7 +1540,7 @@ describe("settings git sections", () => {
       expect(rendered.container.textContent).toContain(
         "Each remote mapping needs a different name.",
       );
-      expect(onAzureDevOpsValidationChange).toHaveBeenLastCalledWith(1);
+      expect(onGitProviderValidationChange).toHaveBeenLastCalledWith(1);
     } finally {
       rendered.unmount();
     }

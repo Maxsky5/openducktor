@@ -1,6 +1,8 @@
 import { jsonValuesEqual, type RepoConfig } from "@openducktor/contracts";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { canonicalGitlabInstanceUrl } from "@openducktor/core";
 import { Effect } from "effect";
+import { HostValidationError } from "../../effect/host-errors";
 import type { HostDatabaseSession } from "./sqlite-host-database-schema";
 import * as schema from "./sqlite-host-settings-schema";
 import { settingsKeyChanges, settingsRowBatches } from "./sqlite-host-settings-store-validation";
@@ -232,7 +234,10 @@ export const saveWorkspace = (
       );
       const repository = provider.repository;
       if (provider.id === "azure_devops") {
-        const azure = repository && "providerId" in repository ? repository : undefined;
+        const azure =
+          repository && "providerId" in repository && repository.providerId === "azure_devops"
+            ? repository
+            : undefined;
         const settings = provider.settings;
         if (azure || settings?.httpConsentCollectionUrl || settings?.areaPath)
           yield* session.execute(
@@ -257,6 +262,26 @@ export const saveWorkspace = (
               }),
             operation,
           );
+      } else if (provider.id === "gitlab") {
+        const gitlab = repository && "providerId" in repository ? repository : undefined;
+        const settings = provider.settings;
+        if (gitlab?.providerId === "gitlab" && settings?.accountId)
+          yield* requireGitlabAccountLink(session, settings.accountId, gitlab.instanceUrl);
+        const values = {
+          instanceUrl: gitlab?.providerId === "gitlab" ? gitlab.instanceUrl : null,
+          projectPath: gitlab?.providerId === "gitlab" ? gitlab.projectPath : null,
+          accountId: settings?.accountId ?? null,
+          remoteName: settings?.remoteName ?? null,
+          httpConsentInstanceUrl: settings?.httpConsentInstanceUrl ?? null,
+        };
+        if (Object.values(values).some((value) => value !== null))
+          yield* session.execute(
+            (db) =>
+              db
+                .insert(schema.workspaceGitlabConfig)
+                .values({ workspaceId, providerId: "gitlab", ...values }),
+            operation,
+          );
       } else if (repository && !("providerId" in repository)) {
         yield* session.execute(
           (db) =>
@@ -271,6 +296,39 @@ export const saveWorkspace = (
         );
       }
     }
+  });
+
+// A repository can link only a saved account on its own GitLab instance.
+const requireGitlabAccountLink = (
+  session: HostDatabaseSession,
+  accountId: string,
+  instanceUrl: string,
+) =>
+  Effect.gen(function* () {
+    const [account] = yield* session.execute(
+      (db) =>
+        db
+          .select({ instanceUrl: schema.gitlabAccounts.instanceUrl })
+          .from(schema.gitlabAccounts)
+          .where(eq(schema.gitlabAccounts.accountId, accountId)),
+      operation,
+    );
+    if (!account)
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "git.provider.settings.accountId",
+          message:
+            "The linked GitLab account is no longer saved. Connect the GitLab account again, then save.",
+        }),
+      );
+    if (account.instanceUrl !== canonicalGitlabInstanceUrl(instanceUrl))
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "git.provider.settings.accountId",
+          message:
+            "The linked GitLab account belongs to another GitLab instance. Choose an account on this instance, then save.",
+        }),
+      );
   });
 
 const workspaceValues = (config: RepoConfig) => ({

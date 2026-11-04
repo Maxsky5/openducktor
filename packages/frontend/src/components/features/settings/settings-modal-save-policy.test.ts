@@ -13,7 +13,7 @@ import {
   hasAnyDirtySections,
   hasSameSaveReadyGlobalGitConfig,
   isGlobalGitOnlySave,
-  validateAzureDevOpsDraft,
+  validateGitProviderDrafts,
 } from "./settings-modal-save-policy";
 import { EMPTY_DIRTY_SECTIONS } from "./use-settings-modal-dirty-state";
 
@@ -82,7 +82,7 @@ describe("settings-modal-save-policy", () => {
       },
     });
 
-    expect(validateAzureDevOpsDraft(snapshot, "repo", 0)).toEqual({
+    expect(validateGitProviderDrafts(snapshot, "repo", 0)).toEqual({
       errorCount: 0,
       invalidWorkspaceIds: [],
     });
@@ -121,7 +121,7 @@ describe("settings-modal-save-policy", () => {
     ({ openCodePermissions, reason, runtimeKind }) => {
       const blocker = getSettingsSaveBlocker({
         openCodePermissions,
-        azureDevOps: {
+        gitProvider: {
           hasErrors: false,
           errorCount: 0,
           invalidWorkspaceIds: [],
@@ -145,7 +145,7 @@ describe("settings-modal-save-policy", () => {
   test("blocks save when Azure DevOps fields are invalid", () => {
     const blocker = getSettingsSaveBlocker({
       openCodePermissions: [],
-      azureDevOps: {
+      gitProvider: {
         hasErrors: true,
         errorCount: 2,
         invalidWorkspaceIds: [],
@@ -159,13 +159,13 @@ describe("settings-modal-save-policy", () => {
       hasUnacknowledgedCodexDangerousSettings: false,
     });
 
-    expect(blocker?.reason).toBe("Fix 2 Azure DevOps field errors before saving.");
+    expect(blocker?.reason).toBe("Fix 2 Git provider field errors before saving.");
   });
 
   test("returns runtime focus metadata for an executable blocker", () => {
     const blocker = getSettingsSaveBlocker({
       openCodePermissions: [],
-      azureDevOps: {
+      gitProvider: {
         hasErrors: false,
         errorCount: 0,
         invalidWorkspaceIds: [],
@@ -189,7 +189,7 @@ describe("settings-modal-save-policy", () => {
     expect(
       getSettingsSaveBlocker({
         openCodePermissions: [],
-        azureDevOps: {
+        gitProvider: {
           hasErrors: false,
           errorCount: 0,
           invalidWorkspaceIds: [],

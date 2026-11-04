@@ -133,7 +133,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   retryRuntimeDefinitions: async () => [],
   checkRuntimeExecutablesAgain: async () => {},
   detectSelectedRepoGithubRepository: async () => null,
-  setAzureDevOpsValidationErrorCount: () => {},
+  setGitProviderValidationErrorCount: () => {},
   updateSelectedRepoConfig: () => {},
   updateGlobalGitConfig: () => {},
   updateGlobalSystemSettings: () => {},
@@ -333,7 +333,9 @@ describe("settings modal content", () => {
       agentDefaults: {},
     };
     const draftSnapshot = structuredClone(savedSnapshot);
-    draftSnapshot.workspaces.repo!.git.provider!.repository!.name = "draft";
+    const draftRepository = draftSnapshot.workspaces.repo!.git.provider!.repository!;
+    if (!("name" in draftRepository)) throw new Error("Expected a named repository.");
+    draftRepository.name = "draft";
     const workspace = {
       workspaceId: "repo",
       workspaceName: "Repo",

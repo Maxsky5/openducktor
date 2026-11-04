@@ -7,6 +7,7 @@ import {
   issueImportPageSummary,
   issueImportReviewStatus,
   issueImportSearchField,
+  issueImportTitle,
   issueImportUnavailableReason,
   nextIssueImportCursors,
   selectedItemsWithCurrentLinks,
@@ -119,6 +120,23 @@ describe("issue import text", () => {
       capabilities: { ...browseOnly.descriptor.capabilities, issueAccess: "browse" },
     };
     expect(issueImportSearchField(browseOnly)).toBeNull();
+  });
+
+  test("uses issue wording for GitLab and work item wording for Azure DevOps", () => {
+    const gitlab = githubProvider();
+    gitlab.config = { ...gitlab.config, id: "gitlab" };
+    expect(issueImportTitle("gitlab")).toBe("Import from GitLab issues");
+    expect(issueImportSearchField(gitlab)).toEqual({
+      label: "Search issues",
+      placeholder: "Search titles or issue numbers",
+    });
+
+    const azure = githubProvider();
+    azure.config = { ...azure.config, id: "azure_devops" };
+    expect(issueImportSearchField(azure)).toEqual({
+      label: "Search work items",
+      placeholder: "Search titles",
+    });
   });
 
   test("summarizes the page and the item count", () => {

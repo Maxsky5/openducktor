@@ -5,7 +5,12 @@ import {
   type RepositoryGitProviderContext,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
-import { azureDevOpsRepositoryKey, isAzureDevOpsRepository } from "@openducktor/core";
+import {
+  azureDevOpsRepositoryKey,
+  isAzureDevOpsRepository,
+  gitlabRepositoryKey,
+  isGitlabRepository,
+} from "@openducktor/core";
 import { type ReactElement, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
@@ -128,10 +133,11 @@ const shouldLoadProvider = ({
   repoPath: string;
 }): boolean => !providerDirty && repositorySection === "git" && repoPath.length > 0;
 
-const providerRepositoryKey = (repository: GitProviderRepository): string =>
-  isAzureDevOpsRepository(repository)
-    ? azureDevOpsRepositoryKey(repository)
-    : gitRepositoryKey(repository);
+const providerRepositoryKey = (repository: GitProviderRepository): string => {
+  if (isAzureDevOpsRepository(repository)) return azureDevOpsRepositoryKey(repository);
+  if (isGitlabRepository(repository)) return gitlabRepositoryKey(repository);
+  return gitRepositoryKey(repository);
+};
 
 const hasProviderEdits = (
   draft: SettingsSnapshot | null,
@@ -303,7 +309,7 @@ export function SettingsRepositoryContent({
             disabled={isInteractionDisabled}
             onDetectGithubRepository={controller.detectSelectedRepoGithubRepository}
             onSaveSettings={controller.submit}
-            onAzureDevOpsValidationChange={controller.setAzureDevOpsValidationErrorCount}
+            onGitProviderValidationChange={controller.setGitProviderValidationErrorCount}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
           />
         ) : null}

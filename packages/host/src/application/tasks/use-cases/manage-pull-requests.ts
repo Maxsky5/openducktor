@@ -115,7 +115,10 @@ export const createTaskPullRequestManagementUseCases = ({
       });
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
       const pullRequests = yield* provider.pullRequests();
-      const isAzureDevOps = provider.getDescriptor().id === "azure_devops";
+      // A REST provider write can fail after the push, so its errors name the pushed branch.
+      const reportsPublishedBranch = ["azure_devops", "gitlab"].includes(
+        provider.getDescriptor().id,
+      );
       if (approval.pullRequest !== undefined) {
         yield* requirePullRequestProviderMatch({
           configuredProviderId: provider.getDescriptor().id,
@@ -153,12 +156,12 @@ export const createTaskPullRequestManagementUseCases = ({
           title: content.title,
           body: content.body,
         })
-        .pipe(Effect.mapError((cause) => (isAzureDevOps ? writeFailure(cause) : cause)));
+        .pipe(Effect.mapError((cause) => (reportsPublishedBranch ? writeFailure(cause) : cause)));
       const linkFailure = pullRequestLinkFailure(pushDetails, pullRequest);
       yield* requirePullRequestProviderMatch({
         configuredProviderId: provider.getDescriptor().id,
         linkedProviderId: pullRequest.providerId,
-      }).pipe(Effect.mapError((cause) => (isAzureDevOps ? linkFailure(cause) : cause)));
+      }).pipe(Effect.mapError((cause) => (reportsPublishedBranch ? linkFailure(cause) : cause)));
       yield* taskStore
         .setPullRequest({
           workspaceId: input.workspaceId,
@@ -166,7 +169,7 @@ export const createTaskPullRequestManagementUseCases = ({
           taskId,
           pullRequest,
         })
-        .pipe(Effect.mapError((cause) => (isAzureDevOps ? linkFailure(cause) : cause)));
+        .pipe(Effect.mapError((cause) => (reportsPublishedBranch ? linkFailure(cause) : cause)));
       return pullRequest;
     });
   },

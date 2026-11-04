@@ -1,3 +1,4 @@
+import { gitProviderFetch } from "./system-trust-store";
 import { createHostCommandLifetime } from "@openducktor/remote-host/host-command-lifetime";
 import {
   createRemoteAccessController,
@@ -908,6 +909,7 @@ export const startTypescriptHostBackendEffect = ({
     const routerInput: Parameters<typeof createNodeEffectHostCommandRouter>[0] = {
       configDirScope,
       eventBus,
+      gitProviderFetch,
       lifecycleLogger: {
         error: logger.error,
         info: logger.info,

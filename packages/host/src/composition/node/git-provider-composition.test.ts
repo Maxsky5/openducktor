@@ -2,7 +2,11 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "bun:test";
-import { GITHUB_PROVIDER_DESCRIPTOR, repoConfigSchema } from "@openducktor/contracts";
+import {
+  GITHUB_PROVIDER_DESCRIPTOR,
+  GITLAB_PROVIDER_DESCRIPTOR,
+  repoConfigSchema,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createGitProviderService } from "../../application/git/git-provider-service";
 import { resolveAzureDevOpsEntraClientId } from "../../config/azure-devops";
@@ -41,6 +45,7 @@ test("node composition leaves Azure storage untouched without an Azure repositor
     const { resolver } = await Effect.runPromise(
       createNodeGitProviderComposition({
         configDir,
+        hostDatabase: { withHostDatabase: () => Effect.die("Unexpected host database call") },
         gitPort: createGitPortTestDouble({}),
         processEnv: {},
         systemCommands,
@@ -65,6 +70,13 @@ test("node composition leaves Azure storage untouched without an Azure repositor
       GITHUB_PROVIDER_DESCRIPTOR,
     );
     await expect(Effect.runPromise(service.getContext(noProviderConfig))).resolves.toBeNull();
+    const gitlabConfig = repoConfigSchema.parse({
+      ...githubConfig,
+      git: { provider: { id: "gitlab", enabled: true } },
+    });
+    expect((await Effect.runPromise(resolver.resolve(gitlabConfig))).getDescriptor()).toBe(
+      GITLAB_PROVIDER_DESCRIPTOR,
+    );
     await expect(stat(path.join(configDir, "credentials", "azure-devops"))).rejects.toMatchObject({
       code: "ENOENT",
     });
