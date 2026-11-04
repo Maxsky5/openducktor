@@ -38,12 +38,13 @@ export const setupTargetBranchesOptions = (
         WorkspaceProviderSetupTargetBranches,
         QueryKey
       >({
-        // The branches do not depend on the provider choice, so the read lasts for the setup. The
-        // setup removes its queries when it ends.
+        // The branches do not depend on the provider choice, so a return to the step shows the last
+        // read while Git is read again, for example after a first commit. The setup removes its
+        // queries when it ends.
         queryKey: [...workspaceProviderSetupKeys.session(ref.setupId), "target-branches"],
         queryFn: () => client.workspaceProviderSetupTargetBranches(ref),
         retry: false,
-        staleTime: Number.POSITIVE_INFINITY,
+        staleTime: 0,
       })
     : skippedQueryOptions<WorkspaceProviderSetupTargetBranches>({
         queryKey: [...workspaceProviderSetupKeys.all, "skipped", "target-branches"],

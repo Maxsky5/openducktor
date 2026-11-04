@@ -377,6 +377,32 @@ describe("workspace creation", () => {
     });
   });
 
+  test("reads the branches again when the user chooses the same repository again", async () => {
+    const reason = "The repository has no remote and its branch main has no commits.";
+    let commits = 0;
+    renderHarness(
+      { commit: mock(async (input) => outcome(input)) },
+      {
+        workspaceProviderSetupTargetBranches: async () =>
+          commits === 0
+            ? { repositoryDefault: { kind: "unknown", reason }, branches: [] }
+            : {
+                repositoryDefault: { kind: "detected", targetBranch: { branch: "main" } },
+                branches: [{ name: "main", isCurrent: true, isRemote: false }],
+              },
+      },
+    );
+    await chooseRepo();
+    fireEvent.click(screen.getByRole("button", { name: "Skip Git provider setup" }));
+    expect(await screen.findByText(reason)).toBeTruthy();
+    commits = 1;
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await chooseRepo();
+    await skipProvider();
+    expect(screen.queryByText(reason)).toBeNull();
+  });
+
   test("keeps each submission error readable and allows correction", async () => {
     const failure =
       "defaultModel.modelId: Model is unavailable.\nagentDefaults.qa.variant: Choose an effort.";

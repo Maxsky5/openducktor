@@ -11,4 +11,6 @@ test("names only host commands that read, once each", () => {
   expect(isHostReadCommand("task_artifacts_list")).toBe(true);
   expect(isHostReadCommand("task_artifact_read")).toBe(true);
   expect(isHostReadCommand("task_artifact_replace")).toBe(false);
+  expect(isHostReadCommand("workspace_provider_setup_target_branches")).toBe(true);
+  expect(isHostReadCommand("workspace_provider_setup_commit")).toBe(false);
 });
