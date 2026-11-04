@@ -49,7 +49,10 @@ import {
   isFailedClaudeResult,
   successfulClaudeResultText,
 } from "./claude-agent-sdk-result-lifecycle";
-import { isClaudeNoResponseAssistantMessage } from "./claude-agent-sdk-local-commands";
+import {
+  isClaudeNoResponseAssistantMessage,
+  isClaudeUserStopMessage,
+} from "./claude-agent-sdk-local-commands";
 import { readClaudeTaskNotifications } from "./claude-agent-sdk-runtime-messages";
 import { emitClaudeAgentToolResultSubagentPart } from "./claude-agent-sdk-subagents";
 import {
@@ -229,6 +232,11 @@ export const toClaudeHistoryMessages = (
         // Native history can omit a notification's result and assistant output.
         const previous = history.findLast((message) => message.role !== "system");
         history.push(projectedMessage);
+        if (isClaudeUserStopMessage(entry)) {
+          replyStartedAt = undefined;
+          resetCurrentUserTurnAssistantTracking();
+          continue;
+        }
         // Steering keeps the first prompt's start, even before assistant output.
         if (!lastAssistantMessage || hasFinalStopStep(lastAssistantMessage)) {
           if (

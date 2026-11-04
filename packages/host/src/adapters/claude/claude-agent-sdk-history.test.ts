@@ -296,6 +296,61 @@ describe("claude-agent-sdk-history", () => {
     expect(history.at(-1)).toMatchObject({ messageId: "next-response", durationMs: 444_614 });
   });
 
+  test("starts the next human clock after the user stops a turn", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "user",
+          uuid: "stopped-user",
+          timestamp: "2026-11-01T15:24:50.685Z",
+          message: { role: "user", content: "Run sleep 30, then reply DONE." },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "stopped-assistant",
+          timestamp: "2026-11-01T15:24:51.659Z",
+          message: {
+            id: "stopped-response",
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "sleep", name: "Bash", input: { command: "sleep 30" } },
+            ],
+            stop_reason: null,
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "stop-marker",
+          timestamp: "2026-11-01T15:24:51.683Z",
+          message: {
+            role: "user",
+            content: [{ type: "text", text: "[Request interrupted by user]" }],
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "next-user",
+          timestamp: "2026-11-04T15:24:51.692Z",
+          message: { role: "user", content: "Reply with OK only." },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "next-assistant",
+          timestamp: "2026-11-04T15:24:52.364Z",
+          message: {
+            id: "next-response",
+            role: "assistant",
+            content: [{ type: "text", text: "OK" }],
+            stop_reason: "end_turn",
+          },
+        }),
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
+      () => "2026-11-04T16:00:00.000Z",
+    );
+
+    expect(history.at(-1)).toMatchObject({ messageId: "next-response", durationMs: 672 });
+  });
+
   test("does not hydrate current context usage from Claude result totals", () => {
     const history = toClaudeHistoryMessages(
       [

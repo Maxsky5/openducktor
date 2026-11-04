@@ -34,6 +34,36 @@ const claudeNoResponseMessageSchema = z.looseObject({
 export const isClaudeNoResponseAssistantMessage = (entry: ClaudeHistoryMessage): boolean =>
   entry.type === "assistant" && claudeNoResponseMessageSchema.safeParse(entry).success;
 
+/** The CLI writes one of these user entries when the user stops a turn. */
+export const CLAUDE_USER_STOP_MARKERS = [
+  "[Request interrupted by user]",
+  "[Request interrupted by user for tool use]",
+] as const;
+
+const claudeUserStopMessageSchema = z.looseObject({
+  message: z.looseObject({
+    content: z.union([
+      z.string().transform((text) => [text]),
+      z
+        .array(z.looseObject({ type: z.string(), text: z.string().optional() }))
+        .transform((blocks) =>
+          blocks.map((block) => (block.type === "text" ? block.text : undefined)),
+        ),
+    ]),
+  }),
+});
+
+export const isClaudeUserStopMessage = (entry: ClaudeHistoryMessage): boolean => {
+  if (entry.type !== "user") return false;
+  const parsed = claudeUserStopMessageSchema.safeParse(entry);
+  if (!parsed.success) return false;
+  const texts = parsed.data.message.content;
+  return (
+    texts.length > 0 &&
+    texts.every((text) => CLAUDE_USER_STOP_MARKERS.some((marker) => text?.startsWith(marker)))
+  );
+};
+
 export const readClaudeCommandEnvelope = (text: string): string | null => {
   const commandName = COMMAND_NAME_PATTERN.exec(text)?.[1]?.trim();
   if (!commandName) {
