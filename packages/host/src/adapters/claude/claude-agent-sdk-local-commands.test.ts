@@ -145,6 +145,57 @@ describe("Claude local slash commands", () => {
     ]);
   });
 
+  test("does not label a later command with a queued task notification", () => {
+    const notification =
+      "<task-notification>\n<task-id>boqp9rwf8</task-id>\n<status>completed</status>\n</task-notification>";
+    const commandTimestamp = "2026-11-04T13:11:13.919Z";
+    const hydrated = toClaudeHistoryMessages(
+      claudeHistoryMessagesFixture([
+        {
+          type: "queue-operation",
+          operation: "enqueue",
+          timestamp: "2026-11-04T12:16:31.802Z",
+          sessionId: "session-1",
+          content: notification,
+        },
+        {
+          type: "user",
+          uuid: "task-notification",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-11-04T12:16:31.822Z",
+          origin: { kind: "task-notification" },
+          message: { role: "user", content: notification },
+        },
+        {
+          type: "user",
+          uuid: "show-me-command",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: commandTimestamp,
+          message: {
+            role: "user",
+            content:
+              "<command-message>show-me</command-message>\n<command-name>/show-me</command-name>",
+          },
+        },
+      ]),
+      () => commandTimestamp,
+    );
+
+    expect(hydrated.filter((message) => message.role === "user")).toEqual([
+      {
+        messageId: "show-me-command",
+        role: "user",
+        timestamp: commandTimestamp,
+        text: "/show-me",
+        displayParts: [{ kind: "text", text: "/show-me" }],
+        state: "read",
+        parts: [],
+      },
+    ]);
+  });
+
   test("does not render synthetic transport messages or select their model", () => {
     const events: AgentEvent[] = [];
     const session: ClaudeEventSession = createEventTestSession();

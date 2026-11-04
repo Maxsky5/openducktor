@@ -41,6 +41,8 @@ type ClaudeHistoryInputProjection =
       message?: ClaudeVisibleHistoryMessage;
     };
 
+const commandName = (text: string): string | undefined => text.trim().split(/\s/, 1)[0];
+
 const notHandled: ClaudeHistoryInputProjection = { handled: false };
 const handledWithoutMessage: ClaudeHistoryInputProjection = { handled: true };
 
@@ -84,6 +86,13 @@ export const createClaudeHistoryInputProjector = (options: {
     return message;
   };
 
+  // The queue also holds task notifications and peer messages. A queued prompt labels a command
+  // only when it queued that command.
+  const queuedCommand = (command: string): PendingQueuedPrompt | null =>
+    pendingQueuedPrompt && commandName(pendingQueuedPrompt.text) === commandName(command)
+      ? pendingQueuedPrompt
+      : null;
+
   return (entry: ClaudeHistoryMessage, timestamp: string): ClaudeHistoryInputProjection => {
     const entryValue = entry;
     const queuedPrompt = readClaudeQueuedPrompt(entry);
@@ -101,9 +110,10 @@ export const createClaudeHistoryInputProjector = (options: {
       const messageId = entry.uuid ?? `claude-${subtype}:${timestamp}`;
       const command = readClaudeCommandEnvelope(content);
       if (command) {
-        const text = pendingQueuedPrompt?.text ?? command;
+        const queued = queuedCommand(command);
+        const text = queued?.text ?? command;
         if (text.trim().toLowerCase() === "/compact") {
-          const commandTimestamp = pendingQueuedPrompt?.timestamp ?? timestamp;
+          const commandTimestamp = queued?.timestamp ?? timestamp;
           pendingQueuedPrompt = null;
           return {
             handled: true,
@@ -118,7 +128,7 @@ export const createClaudeHistoryInputProjector = (options: {
           fallbackMessageId: messageId,
           message: { content: text },
           text,
-          timestamp: pendingQueuedPrompt?.timestamp ?? timestamp,
+          timestamp: queued?.timestamp ?? timestamp,
         });
         pendingQueuedPrompt = null;
         return message ? { handled: true, message } : handledWithoutMessage;
@@ -178,7 +188,7 @@ export const createClaudeHistoryInputProjector = (options: {
     if (promptId && compactPromptIds.has(promptId) && !command) {
       return handledWithoutMessage;
     }
-    const text = command ? (pendingQueuedPrompt?.text ?? command) : rawText;
+    const text = command ? (queuedCommand(command)?.text ?? command) : rawText;
     const queuedPromptTimestamp =
       pendingQueuedPrompt?.text === text ? pendingQueuedPrompt.timestamp : undefined;
     if (text.trim().toLowerCase() === "/compact") {

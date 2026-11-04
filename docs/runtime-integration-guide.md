@@ -316,8 +316,6 @@ Use native fields to classify tool-result wrappers, synthetic messages, queue op
 
 Use stable native IDs when present. Deduplicate by ID and lifecycle, not message text. Keep tool proposal, queue, execution, progress, and completion separate. Measure duration from native execution start. If history omits that point, omit duration.
 
-When Claude Code resumes a session, it reports the background tasks of the previous process without `run_id`. It also sends an empty `result` for the notifications that it writes only to the transcript. The live stream ignores these task events and shows no turn end or duration for that `result`. History shows the final state of these tasks from the transcript.
-
 Keep the original tool ID and reason for success, failure, and denial. Read applied file edits from structured results or supported hooks. Keep previews from tool input separate from confirmed file changes. Do not reconstruct applied changes from private transcripts.
 
 Keep prompt parts typed until the adapter encodes them. History must rebuild the same command, skill, file, attachment, and subagent parts as the live stream.
