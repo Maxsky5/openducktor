@@ -7,8 +7,8 @@ import type { SystemCommandPort, SystemCommandRunOptions } from "../../ports/sys
 import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-discovery-port";
 
 const VERSION_TIMEOUT_MS = 2_000;
-// The runtime CLIs add terminal color to `--version` output when FORCE_COLOR is set. NO_COLOR wins
-// over FORCE_COLOR, so the version text stays plain for display.
+// OpenCode adds color to `--version` output when FORCE_COLOR is set. Its CLI gives NO_COLOR
+// priority, and FORCE_COLOR=0 covers CLIs that check FORCE_COLOR first. Keep the version plain.
 const VERSION_OPTIONS: SystemCommandRunOptions = {
   env: {
     FORCE_COLOR: "0",
@@ -37,7 +37,7 @@ export const createRuntimeHealthProbe = (
 ): RuntimeHealthPort => {
   // A failed version read only leaves the version unknown. The protocol probe or the runtime
   // start reports whether the executable works.
-  const readVersion = (_kind: RuntimeKind, executablePath: string) =>
+  const readVersion = (executablePath: string) =>
     systemCommands
       .versionCommand(executablePath, ["--version"], VERSION_OPTIONS)
       .pipe(Effect.orElseSucceed(() => null));
@@ -55,7 +55,7 @@ export const createRuntimeHealthProbe = (
         const [probeResult, version] = yield* Effect.all(
           [
             Effect.result(executableProbes[kind].probeExecutable(binary)),
-            readVersion(kind, binary),
+            readVersion(binary),
           ] as const,
           { concurrency: 2 },
         );

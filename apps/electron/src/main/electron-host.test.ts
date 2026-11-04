@@ -430,7 +430,7 @@ const createSystemCommands = (): SystemCommandPort => ({
 });
 
 const createRuntimeHealth = (): RuntimeHealthPort => ({
-  readVersion: (kind) => Effect.succeed(`${kind} 1.0.0`),
+  readVersion: () => Effect.succeed("1.0.0"),
   getRuntimeHealth: (kind) =>
     Effect.succeed({
       kind,

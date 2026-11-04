@@ -252,9 +252,9 @@ describe("createRuntimeHealthProbe", () => {
       createExecutableProbes((kind) => Effect.sync(() => void protocolProbes.push(kind))),
     );
 
-    await expect(
-      Effect.runPromise(probe.readVersion("codex", executablePaths.codex)),
-    ).resolves.toBe("codex-cli 0.160.0");
+    await expect(Effect.runPromise(probe.readVersion(executablePaths.codex))).resolves.toBe(
+      "codex-cli 0.160.0",
+    );
 
     expect(versionCalls).toEqual([
       [
@@ -286,8 +286,6 @@ describe("createRuntimeHealthProbe", () => {
       },
     });
 
-    await expect(
-      Effect.runPromise(probe.readVersion("claude", executablePaths.claude)),
-    ).resolves.toBeNull();
+    await expect(Effect.runPromise(probe.readVersion(executablePaths.claude))).resolves.toBeNull();
   });
 });
