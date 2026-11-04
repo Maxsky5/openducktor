@@ -6,6 +6,7 @@ import {
   CircleX,
   Clock,
   ExternalLink,
+  TriangleAlert,
 } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { toast } from "sonner";
@@ -23,6 +24,7 @@ const CHECK_ICON_BY_VARIANT = {
   info: Clock,
   secondary: CircleDashed,
   success: CircleCheck,
+  warning: TriangleAlert,
 } as const;
 
 const CHECK_TEXT_CLASS_BY_VARIANT = {
@@ -30,6 +32,7 @@ const CHECK_TEXT_CLASS_BY_VARIANT = {
   info: "text-info-muted",
   secondary: "text-muted-foreground",
   success: "text-success-muted",
+  warning: "text-warning-muted",
 } as const;
 
 const openCheckUrl = (url: string): void => {

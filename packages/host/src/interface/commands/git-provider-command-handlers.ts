@@ -1,6 +1,7 @@
 import {
   AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
   GITHUB_PROVIDER_DESCRIPTOR,
+  GITLAB_PROVIDER_DESCRIPTOR,
   type WorkspaceRef,
 } from "@openducktor/contracts";
 import type { GitProviderService } from "../../application/git/git-provider-service";
@@ -35,6 +36,11 @@ export const createGitProviderCommandHandlers = ({ service }: { service: GitProv
       service.detectRepository({
         ...parseWorkspace(args, "workspace_detect_github_repository"),
         providerId: GITHUB_PROVIDER_DESCRIPTOR.id,
+      }),
+    workspace_detect_gitlab_repository: (args) =>
+      service.detectRepository({
+        ...parseWorkspace(args, "workspace_detect_gitlab_repository"),
+        providerId: GITLAB_PROVIDER_DESCRIPTOR.id,
       }),
     workspace_get_git_provider_context: (args) =>
       service.getContext(parseWorkspace(args, "workspace_get_git_provider_context")),

@@ -20,7 +20,7 @@ export const FAQS = [
   {
     question: "Can agents merge code without me?",
     answer:
-      "The workflow cannot. A task goes to Done when you approve a direct merge, or when a pull request that was merged on GitHub or Azure DevOps closes it. Autopilot can start agents and open a pull request. It cannot approve or merge.",
+      "The workflow cannot. A task goes to Done when you approve a direct merge, or when a pull request that was merged on GitHub, GitLab, or Azure DevOps closes it. Autopilot can start agents and open a pull request. It cannot approve or merge.",
   },
   {
     question: "Must every task go through every step?",
@@ -30,7 +30,7 @@ export const FAQS = [
   {
     question: "Which Git hosts work with pull requests?",
     answer:
-      "GitHub, through the GitHub CLI, and Azure DevOps. Direct merges work in any local Git repository. GitLab and Bitbucket are not supported.",
+      "GitHub, through the GitHub CLI, GitLab.com and self-managed GitLab 17.4 or later, and Azure DevOps. Direct merges work in any local Git repository. Bitbucket is not supported.",
   },
   {
     question: "Which operating systems are supported?",

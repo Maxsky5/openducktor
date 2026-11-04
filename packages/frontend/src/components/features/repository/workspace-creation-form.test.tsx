@@ -516,6 +516,7 @@ describe("workspace creation", () => {
                 },
               },
             ],
+            gitlabOrigin: null,
           }
         : detect(ref);
     const h = createHookHarness(

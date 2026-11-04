@@ -35,6 +35,8 @@ export const pullRequestReviewCheckConclusionSchema = z.enum([
   "timed_out",
   "action_required",
   "neutral",
+  /** A failed check that does not block the pull request, such as a GitLab job allowed to fail. */
+  "warning",
   "unknown",
 ]);
 export type PullRequestReviewCheckConclusion = z.infer<
@@ -69,6 +71,11 @@ export type PullRequestReviewCheck = z.infer<typeof pullRequestReviewCheckSchema
 const pullRequestReviewActivityFields = {
   id: z.string().min(1),
   author: z.string().nullable(),
+  /**
+   * Whether the provider marks the author as a bot account. Without it, clients guess from the
+   * author name.
+   */
+  authorIsBot: z.boolean().optional(),
   authorAvatarUrl: nullableUrlSchema,
   body: z.string(),
   patch: z.string().nullable(),

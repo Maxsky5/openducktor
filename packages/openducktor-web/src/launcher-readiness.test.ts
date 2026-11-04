@@ -117,9 +117,12 @@ test.each([
     });
     const url = `http://127.0.0.1:${backend.port}`;
     if (failure === "refused") await backend.stop(true);
+    // Only the timeout case needs a short deadline. A failed request must finish before the
+    // deadline, so a slow CI runner does not turn its error into an abort.
+    const deadlineMs = failure === "timeout" ? 150 : 1_000;
     try {
       await expect(
-        waitForBackend(url, "readiness-test-token", 150, { exited: new Promise(() => {}) }),
+        waitForBackend(url, "readiness-test-token", deadlineMs, { exited: new Promise(() => {}) }),
       ).rejects.toMatchObject({
         _tag: "WebOperationError",
         message: expect.stringContaining(message),

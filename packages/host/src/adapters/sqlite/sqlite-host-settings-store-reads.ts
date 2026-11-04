@@ -8,6 +8,7 @@ import {
   globalConfigSchema,
   repoConfigSchema,
   gitProviderConfigSchema,
+  gitlabRepositorySchema,
 } from "@openducktor/contracts";
 import { eq, inArray, sql, type SQL } from "drizzle-orm";
 import { Effect } from "effect";
@@ -193,6 +194,7 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
       provider: schema.workspaceGitConfig,
       githubConfig: schema.workspaceRepositoryIdentity,
       azureConfig: schema.workspaceAzureConfig,
+      gitlabConfig: schema.workspaceGitlabConfig,
       removal: schema.workspaceRemovals,
       agentDefaults: sql<string>`(select json_group_object(role_id, json_object(
     'runtimeKind', runtime_kind, 'providerId', provider_id, 'modelId', model_id,
@@ -240,6 +242,10 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
       eq(schema.workspaceAzureConfig.workspaceId, schema.workspaces.workspaceId),
     )
     .leftJoin(
+      schema.workspaceGitlabConfig,
+      eq(schema.workspaceGitlabConfig.workspaceId, schema.workspaces.workspaceId),
+    )
+    .leftJoin(
       schema.workspaceRemovals,
       eq(schema.workspaceRemovals.workspaceId, schema.workspaces.workspaceId),
     )
@@ -252,6 +258,7 @@ const mapWorkspace = ({
   provider,
   githubConfig,
   azureConfig,
+  gitlabConfig,
   removal,
   ...collections
 }: WorkspaceRow) =>
@@ -291,6 +298,20 @@ const mapWorkspace = ({
           mappings.length
         )
           settings = values;
+      }
+      if (gitlabConfig) {
+        if (gitlabConfig.instanceUrl !== null && gitlabConfig.projectPath !== null)
+          repository = gitlabRepositorySchema.parse({
+            providerId: "gitlab",
+            instanceUrl: gitlabConfig.instanceUrl,
+            projectPath: gitlabConfig.projectPath,
+          });
+        const values = {
+          accountId: gitlabConfig.accountId ?? undefined,
+          remoteName: gitlabConfig.remoteName ?? undefined,
+          httpConsentInstanceUrl: gitlabConfig.httpConsentInstanceUrl ?? undefined,
+        };
+        if (Object.values(values).some((value) => value !== undefined)) settings = values;
       }
       return {
         provider: gitProviderConfigSchema.parse({

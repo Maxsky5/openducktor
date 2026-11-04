@@ -63,6 +63,8 @@ import { createNodeHostRouterLifecycle } from "./node-host-router-lifecycle";
 import type { NodeHostSharedPorts } from "./node-shared-storage";
 import { createNodeBrowser } from "./node-browser-composition";
 import { createNodeWorkspaceStorageRemoval } from "./node-workspace-storage-removal";
+import type { NodeGitlabComposition } from "./git-provider-composition";
+import { createGitlabConnectionCommandHandlers } from "../../interface/commands/gitlab-connection-command-handlers";
 import { createBrowserCommandHandlers } from "../../interface/commands/browser-command-handlers";
 import { createNodeHostRuntimeComposition } from "./node-host-runtime-composition";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
@@ -78,6 +80,7 @@ export const assembleNodeEffectHostCommandRouter = (
   gitProviderResolver: GitProviderResolver,
   azureDevOpsConnection: AzureDevOpsConnectionPort | undefined,
   azureAreaPaths: AzureAreaPathsPort,
+  gitlab: NodeGitlabComposition,
 ): EffectNodeHostCommandRouter => {
   const {
     clientVersion,
@@ -114,7 +117,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const { settingsConfig } = notificationComposition;
   const setup = createNodeWorkspaceProviderSetup(
     { ...defaultPorts, settingsConfig },
-    input,
+    { ...input, gitlab },
     (repoPath) => observeWorkflowWorkspace(repoPath),
     taskWorkflows,
   );
@@ -244,6 +247,7 @@ export const assembleNodeEffectHostCommandRouter = (
     storage: createNodeWorkspaceStorageRemoval({
       taskAssets: assets,
       azureDevOpsConnection,
+      gitlabConnection: gitlab.connection,
       browserService,
     }),
     taskSessionLifecycleCoordinator,
@@ -395,7 +399,9 @@ export const assembleNodeEffectHostCommandRouter = (
     mcpHostBridge: resolvedMcpHostBridge,
     runtimeRegistry,
     initializeRuntimes: hostRuntimeService.initialize,
-    startupSweep,
+    // Deletes GitLab accounts that no workspace links, such as after a cancelled draft. The sweep
+    // logs its failures, so it cannot stop the startup.
+    startupSweep: () => startupSweep().pipe(Effect.andThen(gitlab.connection.sweep())),
     taskAssetStagingService,
     taskSyncService,
     mergeDetection: taskSessions.mergeDetection,
@@ -434,6 +440,7 @@ export const assembleNodeEffectHostCommandRouter = (
       azureDevOpsConnection,
       azureAreaPaths,
     }),
+    ...createGitlabConnectionCommandHandlers({ connection: gitlab.connection }),
     ...createLocalAttachmentCommandHandlers(localAttachmentService),
     ...createNodeImageCommandHandlers(
       liveSessionAdapterRegistry,

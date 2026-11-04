@@ -51,7 +51,11 @@ export function localOnlyProviderSetupClient(): LocalOnlyProviderSetupClient {
       sessions.set(setupId, next);
       return next;
     },
-    workspaceProviderSetupDetect: async () => ({ outcome: "none", candidates: [] }),
+    workspaceProviderSetupDetect: async () => ({
+      outcome: "none",
+      candidates: [],
+      gitlabOrigin: null,
+    }),
     workspaceProviderSetupStatus: async () => ({ health: null, connection: null }),
     workspaceProviderSetupTargetBranches: async () => ({
       repositoryDefault: { kind: "detected", targetBranch: { branch: "main" } },

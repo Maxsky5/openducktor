@@ -74,6 +74,7 @@ OpenDucktor runs on macOS, Windows, and Linux.
 - `git` 2.41 or later
 - `opencode`, `codex`, or `claude`
 - `gh` plus `gh auth login` if you use GitHub and want OpenDucktor to open pull requests for you
+- No CLI for GitLab: sign in or add an access token in OpenDucktor. Self-managed GitLab needs version 17.4 or later.
 
 OpenDucktor supports local OpenCode, Codex, and Claude Code runtimes. OpenCode remains the default runtime. Runtime discovery checks configured overrides, common local install locations, and `PATH`.
 

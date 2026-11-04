@@ -18,7 +18,10 @@ import {
 const comment = (
   id: string,
   author: string,
-  overrides: Pick<Partial<PullRequestReviewActivity>, "createdAt" | "isResolved"> = {},
+  overrides: Pick<
+    Partial<PullRequestReviewActivity>,
+    "createdAt" | "isResolved" | "authorIsBot"
+  > = {},
 ): PullRequestReviewActivity => ({
   id,
   author,
@@ -150,5 +153,21 @@ describe("useHideResolvedComments", () => {
       },
     ]);
     view.unmount();
+  });
+});
+
+describe("bot comment authors", () => {
+  test("uses the provider bot flag before the author name", () => {
+    const comments = [
+      comment("1", "build-assistant", { authorIsBot: true }),
+      comment("2", "release-bot", { authorIsBot: false }),
+      comment("3", "dependabot[bot]"),
+    ];
+
+    expect(filterPullRequestComments(comments, "bots", false).map((item) => item.id)).toEqual([
+      "1",
+      "3",
+    ]);
+    expect(countPullRequestComments(comments, false)).toEqual({ all: 3, bots: 2, humans: 1 });
   });
 });

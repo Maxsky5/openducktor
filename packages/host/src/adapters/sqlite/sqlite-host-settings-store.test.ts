@@ -11,6 +11,7 @@ import { applyTaskWorkflowSettings } from "../../config/workflow-settings";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { openHostDatabaseConnection } from "./sqlite-host-database-connection";
 import { agentRuntimeSettings, workspaceAzureConfig } from "./sqlite-host-settings-schema";
+import { createSqliteGitlabAccountStore } from "./sqlite-gitlab-account-store";
 import { createSqliteSharedSettingsDatabase } from "./sqlite-shared-settings-database";
 import { hostMetadata, type HostDatabaseSession } from "./sqlite-host-database-schema";
 import { readRuntimePolicies } from "./sqlite-host-settings-store-policies";
@@ -787,6 +788,73 @@ describe("shared host settings", () => {
       const result = await Effect.runPromise(readHostSharedConfig(session).pipe(Effect.result));
       expect(result._tag).toBe("Failure");
       if (result._tag === "Failure") expect(result.failure.message).toContain("workspace azure");
+    });
+  });
+
+  test("saves a GitLab project and account link, and checks the link", async () => {
+    await withDatabase(async ({ session }) => {
+      const accounts = createSqliteGitlabAccountStore({
+        withHostDatabase: (_operation, use) => use(session),
+      });
+      const account = await Effect.runPromise(
+        accounts.upsert(
+          {
+            instanceUrl: "https://code.corp/gitlab",
+            userId: 7,
+            username: "alice",
+            displayName: "Alice",
+            authKind: "token",
+            tokenExpiresAt: null,
+          },
+          "4b0b1d5a-1c49-4f43-9f7b-5f1d2d4f0c11",
+        ),
+      );
+      const gitlabWorkspace = (accountId: string, instanceUrl = "https://code.corp/gitlab") =>
+        repoConfigSchema.parse({
+          workspaceId: "gitlab",
+          workspaceName: "GitLab",
+          repoPath: "/gitlab",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
+          git: {
+            provider: {
+              id: "gitlab",
+              enabled: true,
+              repository: { providerId: "gitlab", instanceUrl, projectPath: "group/sub/app" },
+              settings: { accountId, remoteName: "work" },
+            },
+          },
+        });
+      const config = createDefaultGlobalConfig();
+      config.workspaces.gitlab = gitlabWorkspace(account.accountId);
+      await Effect.runPromise(
+        session.transaction("test.import", (transaction) =>
+          importHostSharedConfig(transaction, config),
+        ),
+      );
+      const stored = await Effect.runPromise(readHostSharedConfig(session));
+      expect(stored.workspaces.gitlab?.git.provider).toEqual(config.workspaces.gitlab.git.provider);
+      expect(await Effect.runPromise(accounts.listUnreferenced())).toEqual([]);
+      expect(await Effect.runPromise(accounts.listKnownInstances())).toEqual([
+        "https://code.corp/gitlab",
+      ]);
+
+      // The link blocks the account delete.
+      const blocked = await Effect.runPromise(Effect.result(accounts.delete(account.accountId)));
+      expect(blocked._tag).toBe("Failure");
+
+      const current = await Effect.runPromise(readHostSharedConfig(session));
+      const next = structuredClone(current);
+      next.workspaces.gitlab = gitlabWorkspace(account.accountId, "https://gitlab.com");
+      const otherInstance = await Effect.runPromise(
+        Effect.result(
+          session.transaction("test.otherInstance", (transaction) =>
+            applyHostSharedConfigEdits(transaction, current, next),
+          ),
+        ),
+      );
+      expect(otherInstance._tag === "Failure" && otherInstance.failure.message).toContain(
+        "another GitLab instance",
+      );
     });
   });
 });

@@ -17,6 +17,7 @@ import type { createGitProviderCommandHandlers } from "../commands/git-provider-
 import type { createIssueImportCommandHandlers } from "../commands/issue-import-command-handlers";
 import type { createAzureDevOpsConnectionCommandHandlers } from "../commands/azure-devops-connection-command-handlers";
 import type { createAzureAreaPathsCommandHandlers } from "../commands/azure-area-paths-command-handlers";
+import type { createGitlabConnectionCommandHandlers } from "../commands/gitlab-connection-command-handlers";
 import type { createLocalAttachmentCommandHandlers } from "../commands/local-attachment-command-handlers";
 import type { createOpenInToolsCommandHandlers } from "../commands/open-in-tools-command-handlers";
 import type { createPullRequestReviewCommandHandlers } from "../commands/pull-request-review-command-handlers";
@@ -54,6 +55,7 @@ type AllHostCommandHandlers = ReturnType<typeof createWorkspaceSessionLaunchComm
   ReturnType<typeof createIssueImportCommandHandlers> &
   ReturnType<typeof createAzureAreaPathsCommandHandlers> &
   ReturnType<typeof createAzureDevOpsConnectionCommandHandlers> &
+  ReturnType<typeof createGitlabConnectionCommandHandlers> &
   ReturnType<typeof createLocalAttachmentCommandHandlers> &
   ReturnType<typeof createOpenInToolsCommandHandlers> &
   ReturnType<typeof createPullRequestReviewCommandHandlers> &

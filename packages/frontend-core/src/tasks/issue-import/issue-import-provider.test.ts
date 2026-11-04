@@ -1,7 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
-import { GITHUB_PROVIDER_DESCRIPTOR } from "@openducktor/contracts";
+import { GITHUB_PROVIDER_DESCRIPTOR, GITLAB_PROVIDER_DESCRIPTOR } from "@openducktor/contracts";
 import { createGitProviderContextFixture } from "../../test-support/shared-test-fixtures";
 import {
+  issueImportActionLabel,
   issueImportBlockedReason,
   runIssueImport,
   toIssueImportState,
@@ -49,5 +50,25 @@ describe("issue import state", () => {
     const ready = toIssueImportState(readyProvider(), null);
     runIssueImport(ready, { openImport, openSettings });
     expect(openImport).toHaveBeenCalledTimes(1);
+  });
+
+  test("names the issues of each provider in the import action", () => {
+    const github = readyProvider();
+    const gitlab = {
+      ...readyProvider(),
+      descriptor: GITLAB_PROVIDER_DESCRIPTOR,
+      config: { ...github.config, id: "gitlab" },
+    };
+    const azure = { ...readyProvider(), config: { ...github.config, id: "azure_devops" } };
+
+    expect(issueImportActionLabel({ kind: "ready", provider: github })).toBe(
+      "Import tasks from GitHub Issues",
+    );
+    expect(issueImportActionLabel({ kind: "ready", provider: gitlab })).toBe(
+      "Import tasks from GitLab issues",
+    );
+    expect(issueImportActionLabel({ kind: "ready", provider: azure })).toBe(
+      "Import tasks from Azure DevOps work items",
+    );
   });
 });

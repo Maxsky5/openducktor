@@ -2,6 +2,7 @@ import type {
   PullRequestReviewActivity,
   PullRequestReviewAggregateStatus,
   PullRequestReviewCheck,
+  PullRequestReviewCheckConclusion,
   PullRequestReviewOutcome,
 } from "@openducktor/contracts";
 
@@ -35,7 +36,7 @@ export const aggregateLabel = (status: PullRequestReviewAggregateStatus): string
 
 export const checkBadgeVariant = (
   check: PullRequestReviewCheck,
-): "success" | "danger" | "info" | "secondary" => {
+): "success" | "danger" | "warning" | "info" | "secondary" => {
   if (isPendingCheck(check)) {
     return "info";
   }
@@ -45,14 +46,29 @@ export const checkBadgeVariant = (
   if (isFailingCheck(check)) {
     return "danger";
   }
+  if (isWarningCheck(check)) {
+    return "warning";
+  }
   return "secondary";
 };
+
+const CHECK_CONCLUSION_LABELS = {
+  success: "Success",
+  failure: "Failure",
+  cancelled: "Cancelled",
+  skipped: "Skipped",
+  timed_out: "Timed out",
+  action_required: "Action required",
+  neutral: "Neutral",
+  warning: "Warning",
+  unknown: "Unknown",
+} as const satisfies Record<PullRequestReviewCheckConclusion, string>;
 
 export const checkLabel = (check: PullRequestReviewCheck): string => {
   if (check.status !== "completed") {
     return check.status.replaceAll("_", " ");
   }
-  return check.conclusion?.replaceAll("_", " ") ?? "completed";
+  return check.conclusion ? CHECK_CONCLUSION_LABELS[check.conclusion] : "completed";
 };
 
 export const isFailingCheck = (check: PullRequestReviewCheck): boolean =>
@@ -68,6 +84,10 @@ export const isPendingCheck = (check: PullRequestReviewCheck): boolean =>
 export const isPassingCheck = (check: PullRequestReviewCheck): boolean =>
   check.status === "completed" &&
   (check.conclusion === "success" || check.conclusion === "skipped");
+
+/** A failed check that does not block the pull request. It is neither failing nor passing. */
+export const isWarningCheck = (check: PullRequestReviewCheck): boolean =>
+  check.status === "completed" && check.conclusion === "warning";
 
 const pluralize = (count: number, singular: string, plural = `${singular}s`): string =>
   `${count} ${count === 1 ? singular : plural}`;
@@ -121,6 +141,10 @@ const AUTOMATION_LOGIN_PATTERNS = [
   /actions/i,
   /renovate/i,
   /dependabot/i,
+  // GitLab project, group, and service account bot users.
+  /^project_\d+_bot_[a-f\d]+$/i,
+  /^group_\d+_bot_[a-f\d]+$/i,
+  /^service_account_/i,
 ];
 
 // Some AI/code-review services use regular GitHub users instead of GitHub Apps.
@@ -158,6 +182,11 @@ export const isBotCommentAuthor = (author: string | null): boolean => {
   }
   return AUTOMATION_LOGIN_PATTERNS.some((pattern) => pattern.test(trimmedAuthor));
 };
+
+/** The provider's bot flag decides when it sends one. Otherwise the author name decides. */
+export const isBotComment = (
+  comment: Pick<PullRequestReviewActivity, "author" | "authorIsBot">,
+): boolean => comment.authorIsBot ?? isBotCommentAuthor(comment.author);
 
 export const commentLocationLabel = (comment: PullRequestReviewActivity): string | null => {
   if (!comment.path) {

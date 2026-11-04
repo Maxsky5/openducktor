@@ -1,17 +1,16 @@
 import {
   TASK_ASSET_MAX_FILE_BYTES,
-  issueImageGetResultSchema,
   type GithubGitProviderRepository,
   type SourceIssue,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { fileTypeFromBuffer } from "file-type";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
 import { z } from "zod";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { GitProviderRepositoryPort, IssueReaderPort } from "../../../ports/git-provider-port";
+import { detectIssueImageMediaType } from "../issue-image";
 import { runGithubApi, type GithubCli } from "./cli";
 import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
@@ -410,27 +409,12 @@ export const createGithubIssueReader = ({
             "GitHub could not load this Issue image. Check your GitHub access and retry.",
         });
       }
-      const bytes = Buffer.from(result.stdout, "base64");
-      const detected = yield* Effect.tryPromise({
-        try: () => fileTypeFromBuffer(bytes),
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "github.issues.readImage",
-            message: "GitHub image data could not be checked. Retry the image.",
-            cause,
-          }),
+      const mediaType = yield* detectIssueImageMediaType(Buffer.from(result.stdout, "base64"), {
+        label: "GitHub",
+        operation: "github.issues.readImage",
+        unsupportedMessage: "GitHub returned an unsupported image format.",
       });
-      const mediaType = issueImageGetResultSchema.shape.mediaType.safeParse(detected?.mime);
-      if (!mediaType.success) {
-        return yield* new HostValidationError({
-          field: "url",
-          message: "GitHub returned an unsupported image format.",
-        });
-      }
-      return {
-        mediaType: mediaType.data,
-        bytesBase64: result.stdout,
-      };
+      return { mediaType, bytesBase64: result.stdout };
     });
   },
 });

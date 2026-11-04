@@ -25,7 +25,8 @@ export const createNodeEffectHostCommandRouter = (input: CreateNodeHostCommandRo
           return yield* Effect.gen(function* () {
             const { configDir, git, startupEnv, systemCommands, toolDiscovery } = defaultPorts;
             const gitProviders = yield* createNodeGitProviderComposition({
-              azureDevOpsFetch: input.azureDevOpsFetch,
+              gitProviderFetch: input.gitProviderFetch,
+              hostDatabase: defaultPorts.taskDatabase,
               configDir: configDir.root,
               gitPort: git,
               processEnv: startupEnv,
@@ -41,6 +42,7 @@ export const createNodeEffectHostCommandRouter = (input: CreateNodeHostCommandRo
                   gitProviders.resolver,
                   gitProviders.azureDevOpsConnection,
                   gitProviders.azureAreaPaths,
+                  gitProviders.gitlab,
                 ),
               catch: (cause) => toHostOperationError(cause, "host.create-router"),
             });

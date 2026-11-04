@@ -1,14 +1,16 @@
 import {
   AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
   GITHUB_PROVIDER_DESCRIPTOR,
+  GITLAB_PROVIDER_DESCRIPTOR,
 } from "@openducktor/contracts";
 import { Check, CircleOff, Github } from "lucide-react";
 import type { ComponentType, ReactElement } from "react";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
+import { AzureDevOpsIcon, GitlabIcon } from "./git-provider-icons";
 
-export type GitProviderSelection = "none" | "github" | "azure_devops" | "unsupported";
+export type GitProviderSelection = "none" | "github" | "gitlab" | "azure_devops" | "unsupported";
 
 type GitProviderSelectorProps = {
   disabled: boolean;
@@ -31,11 +33,10 @@ export function GitProviderSelector({
         aria-label="Git provider"
         value={selectedProviderId}
         disabled={disabled}
-        className="grid grid-cols-1 gap-2 md:grid-cols-3"
+        className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4"
         onValueChange={(providerId) => {
-          if (providerId === "none" || providerId === "github" || providerId === "azure_devops") {
-            onSelect(providerId);
-          }
+          const option = gitProviderOptions.find((candidate) => candidate.value === providerId);
+          if (option) onSelect(option.value);
         }}
       >
         {gitProviderOptions.map((option) => {
@@ -83,20 +84,6 @@ export function GitProviderSelector({
   );
 }
 
-function AzureDevOpsIcon({ className }: { className?: string }): ReactElement {
-  return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="currentColor"
-      focusable="false"
-      viewBox="0 0 24 24"
-    >
-      <path d="M0 8.899l2.247-2.966 8.405-3.416V.045l7.37 5.393L2.966 8.36v8.224L0 15.73zm24-4.45v14.652L18.247 24l-9.303-3.056V24l-5.978-7.416 15.057 1.798V5.438z" />
-    </svg>
-  );
-}
-
 const gitProviderOptions = [
   {
     value: "none",
@@ -107,6 +94,11 @@ const gitProviderOptions = [
     value: "github",
     label: GITHUB_PROVIDER_DESCRIPTOR.label,
     icon: Github,
+  },
+  {
+    value: "gitlab",
+    label: GITLAB_PROVIDER_DESCRIPTOR.label,
+    icon: GitlabIcon,
   },
   {
     value: "azure_devops",

@@ -1,17 +1,21 @@
+import { linkedGitlabAccountId } from "@openducktor/core";
 import { Effect } from "effect";
 import type { BrowserService } from "../../application/browser/browser-service-types";
 import type { WorkspaceStoragePort } from "../../application/workspaces/workspace-lifecycle-service";
 import { HostOperationError } from "../../effect/host-errors";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
+import type { GitlabConnectionPort } from "../../ports/gitlab-connection-port";
 
 /** The workspace data that workspace removal deletes beside its registration. */
 export const createNodeWorkspaceStorageRemoval = ({
   taskAssets,
   azureDevOpsConnection,
+  gitlabConnection,
   browserService,
 }: {
   taskAssets: Pick<WorkspaceStoragePort, "removeWorkspaceTaskAssets">;
   azureDevOpsConnection: AzureDevOpsConnectionPort | undefined;
+  gitlabConnection: Pick<GitlabConnectionPort, "release">;
   browserService: Pick<BrowserService, "removeWorkspace">;
 }): WorkspaceStoragePort => ({
   removeWorkspaceTaskAssets: taskAssets.removeWorkspaceTaskAssets,
@@ -37,6 +41,11 @@ export const createNodeWorkspaceStorageRemoval = ({
           }),
       ),
     );
+  },
+  // The workspace link blocks the account delete, so this runs after the registration is gone.
+  releaseWorkspaceAccounts: (repoConfig) => {
+    const accountId = linkedGitlabAccountId(repoConfig.git.provider);
+    return accountId ? gitlabConnection.release([accountId]) : Effect.void;
   },
   removeWorkspaceBrowserData: (workspaceId) =>
     browserService.removeWorkspace(workspaceId).pipe(

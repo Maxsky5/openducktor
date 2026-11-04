@@ -2,7 +2,7 @@ import { type ComponentProps, type ReactElement, useMemo } from "react";
 import type { Components } from "react-markdown";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { GithubIssueImage, type IssueImageContext } from "./github-issue-image";
-import { isGithubIssueAttachmentUrl } from "@openducktor/frontend-core/tasks/issue-import/issue-image-url";
+import { isHostLoadedIssueImageUrl } from "@openducktor/frontend-core/tasks/issue-import/issue-image-url";
 
 export type { IssueImageContext } from "./github-issue-image";
 
@@ -29,7 +29,7 @@ export function useIssueImageComponents(
     const context = { workspaceId, providerId, repoPath, sourceId, taskId };
     return {
       img: ({ node: _node, src, alt, title }) => {
-        if (providerId === "github" && isGithubIssueAttachmentUrl(src ?? "")) {
+        if (isHostLoadedIssueImageUrl(providerId, src ?? "")) {
           return <GithubIssueImage context={context} src={src ?? ""} alt={alt} title={title} />;
         }
         return <img src={src} alt={alt ?? ""} title={title} />;

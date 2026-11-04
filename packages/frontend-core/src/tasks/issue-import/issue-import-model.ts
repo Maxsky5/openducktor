@@ -4,7 +4,7 @@ import { connectionHost } from "../../connection/client-connection";
 import { issueItemsQueryKeys } from "../../queries/issue-items";
 import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "../../queries/skipped-query";
 import type { IssueImportProvider } from "./issue-import-provider";
-import { issueImportSourceLabel } from "./issue-import-provider";
+import { issueImportProviderCopy, issueImportSourceLabel } from "./issue-import-provider";
 import type { ImportOutcome, IssueReview } from "./issue-import-state";
 
 /** The import first selects source items, then reviews each task before import. */
@@ -135,9 +135,7 @@ export const issueImportSearchField = (
   provider: IssueImportProvider,
 ): { label: string; placeholder: string } | null => {
   if (provider.descriptor.capabilities.issueAccess !== "search") return null;
-  return provider.config.id === "github"
-    ? { label: "Search issues", placeholder: "Search titles or issue numbers" }
-    : { label: "Search work items", placeholder: "Search titles" };
+  return issueImportProviderCopy(provider.config.id).search;
 };
 
 export const issueImportLoadingText = (searchText: string): string =>

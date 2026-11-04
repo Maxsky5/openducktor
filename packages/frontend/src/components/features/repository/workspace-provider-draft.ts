@@ -14,13 +14,20 @@ import {
   type AzureRepositoryDraft,
   type AzureRemoteMappingDraft,
 } from "../settings/azure-devops-git-provider-form-model";
+import {
+  gitlabDraftErrors,
+  gitlabDraftFromConfig,
+  gitlabProviderConfig,
+  type GitlabDraft,
+} from "../settings/gitlab-provider-model";
 
 export type WorkspaceProviderDraft = {
-  providerId: "github" | "azure_devops" | null;
+  providerId: "github" | "azure_devops" | "gitlab" | null;
   enabled: boolean;
   autoDetected: boolean;
   github: { host: string; owner: string; name: string };
   azure: AzureRepositoryDraft;
+  gitlab: GitlabDraft;
   mappings: AzureRemoteMappingDraft[];
   consent: string | null;
   areaPath: string;
@@ -31,6 +38,7 @@ export const emptyWorkspaceProviderDraft = (): WorkspaceProviderDraft => ({
   autoDetected: false,
   github: { host: "github.com", owner: "", name: "" },
   azure: buildAzureRepositoryDraft(undefined),
+  gitlab: gitlabDraftFromConfig(undefined),
   mappings: [],
   consent: null,
   areaPath: "",
@@ -39,18 +47,19 @@ export const detectedWorkspaceProviderDraft = (
   config: GitProviderConfig,
 ): WorkspaceProviderDraft => {
   const draft = emptyWorkspaceProviderDraft();
-  if (config.id !== "github" && config.id !== "azure_devops")
+  if (config.id !== "github" && config.id !== "azure_devops" && config.id !== "gitlab")
     throw new Error("Unsupported Git provider.");
   draft.providerId = config.id;
   draft.enabled = config.enabled;
   draft.autoDetected = config.autoDetected;
   const repository = config.repository;
-  if (repository && "deployment" in repository) {
+  if (config.id === "gitlab") draft.gitlab = gitlabDraftFromConfig(config);
+  else if (repository && "deployment" in repository) {
     draft.azure = buildAzureRepositoryDraft(repository);
     draft.mappings = buildAzureRemoteMappingDrafts(config.settings?.remoteMappings);
     draft.consent = config.settings?.httpConsentCollectionUrl ?? null;
     draft.areaPath = config.settings?.areaPath ?? "";
-  } else if (repository) draft.github = repository;
+  } else if (repository && "host" in repository) draft.github = repository;
   return draft;
 };
 type WorkspaceProviderDraftResult = {
@@ -61,6 +70,7 @@ export const parseWorkspaceProviderDraft = (
   draft: WorkspaceProviderDraft,
 ): WorkspaceProviderDraftResult => {
   if (!draft.providerId) return { selection: { kind: "none" }, errors: {} };
+  if (draft.providerId === "gitlab") return parseGitlabSetupDraft(draft);
   const emptyIdentity =
     draft.providerId === "github"
       ? !draft.github.owner.trim() && !draft.github.name.trim()
@@ -116,4 +126,22 @@ export const parseWorkspaceProviderDraft = (
 export const httpConsentUrl = (draft: WorkspaceProviderDraft): string | null => {
   const parsed = parseAzureRepositoryDraft(draft.azure);
   return parsed.success ? azureDevOpsHttpConsentCollectionUrl(parsed.data) : null;
+};
+
+const parseGitlabSetupDraft = (draft: WorkspaceProviderDraft): WorkspaceProviderDraftResult => {
+  const errors: Record<string, string> = {};
+  if (draft.enabled)
+    for (const [field, message] of Object.entries(gitlabDraftErrors(draft.gitlab)))
+      errors[`repository.${field}`] = message;
+  const parsed = gitProviderConfigSchema.safeParse(
+    gitlabProviderConfig(draft.gitlab, {
+      enabled: draft.enabled,
+      autoDetected: draft.autoDetected,
+    }),
+  );
+  if (!parsed.success)
+    for (const issue of parsed.error.issues) errors[issue.path.join(".")] ??= issue.message;
+  if (parsed.success && !Object.keys(errors).length)
+    return { selection: { kind: "configured", config: parsed.data }, errors };
+  return { selection: { kind: "incomplete", providerId: "gitlab" }, errors };
 };

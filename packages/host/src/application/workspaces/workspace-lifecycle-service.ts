@@ -50,6 +50,8 @@ export type WorkspaceStoragePort = {
   removeWorkspaceCredentials(repoConfig: RepoConfig): Effect.Effect<void, HostOperationError>;
   /** Closes the browser tabs of the workspace and deletes its browser profile. Idempotent. */
   removeWorkspaceBrowserData(workspaceId: string): Effect.Effect<void, HostOperationError>;
+  /** Deletes provider accounts that only the removed workspace used. Logs failures. */
+  releaseWorkspaceAccounts(repoConfig: RepoConfig): Effect.Effect<void>;
 };
 
 export type WorkspaceLifecycleService = {
@@ -291,6 +293,7 @@ export const createWorkspaceLifecycleService = ({
         input.workspaceId,
         input.expectedRepoPath,
       );
+      yield* storage.releaseWorkspaceAccounts(repoConfig);
       admission.forgetWorkspace(input.workspaceId);
       return { catalog, result: { removedWorktrees } };
     });

@@ -142,11 +142,13 @@ function harness() {
         }),
     },
     newSetupId: () => crypto.randomUUID(),
-    detectRepositories: () => Effect.succeed({ outcome: "none", candidates: [] }),
+    detectRepositories: () =>
+      Effect.succeed({ outcome: "none", candidates: [], gitlabOrigin: null }),
     settings: createWorkspaceSettingsService(port, builtinTaskWorkflows),
     credentials,
     github: { health: () => ({ getStatus: checkHealth }) },
     azure: { health: () => ({ getStatus: checkHealth }) },
+    gitlab: { health: () => ({ getStatus: checkHealth }) },
     areas: { list: () => Effect.succeed(["project\\area"]) },
     inspectGithub: () =>
       Effect.succeed({

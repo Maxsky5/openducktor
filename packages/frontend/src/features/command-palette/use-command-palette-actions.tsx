@@ -207,7 +207,7 @@ export function useCommandPaletteActions({
         "import-tasks",
         issueImportActionLabel(importState),
         icon(Download),
-        ["import issues", "github", "azure devops", "work items", "provider"],
+        ["import issues", "github", "gitlab", "azure devops", "work items", "provider"],
         () =>
           runIssueImport(importState, {
             openImport: (provider) =>

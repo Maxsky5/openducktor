@@ -25,6 +25,8 @@ import {
   type WorkspaceProviderDraft,
 } from "./workspace-provider-draft";
 import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
+import { applyGitlabOrigin, gitlabDraftInstanceUrl } from "../settings/gitlab-provider-model";
+import { singleGitlabAccountId } from "@openducktor/frontend-core/queries/gitlab";
 import { useHostConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type Operation = { label: string; signInStartup: boolean };
@@ -91,10 +93,11 @@ export function useWorkspaceProviderSetup(
     setSession(next);
   };
   const update = (updater: (current: WorkspaceProviderDraft) => WorkspaceProviderDraft) => {
-    edited.current = true;
-    setDetectionProposal(detection?.outcome === "detected");
     const before = draftRef.current;
     let next = updater(before);
+    if (next === before) return;
+    edited.current = true;
+    setDetectionProposal(detection?.outcome === "detected");
     if (
       next.azure.project !== before.azure.project ||
       next.azure.organization !== before.azure.organization ||
@@ -110,7 +113,9 @@ export function useWorkspaceProviderSetup(
     }
     if (
       JSON.stringify(next.github) !== JSON.stringify(before.github) ||
-      JSON.stringify(next.azure) !== JSON.stringify(before.azure)
+      JSON.stringify(next.azure) !== JSON.stringify(before.azure) ||
+      next.gitlab.instanceUrl !== before.gitlab.instanceUrl ||
+      next.gitlab.projectPath !== before.gitlab.projectPath
     )
       next = { ...next, autoDetected: false };
     draftRef.current = next;
@@ -190,16 +195,61 @@ export function useWorkspaceProviderSetup(
     }
     return result;
   };
-  const retryDetection = async () => {
+  // A GitLab draft that the user did not fill in, from selection or detection, gets the only
+  // saved account of its instance. The read can end after an edit, which then wins. A failed read
+  // shows an error and leaves the draft without a link, so the readiness check still runs.
+  const linkSoleGitlabAccount = async () => {
+    const draft = draftRef.current;
+    const instanceUrl =
+      draft.providerId === "gitlab" && draft.gitlab.accountId === null
+        ? gitlabDraftInstanceUrl(draft.gitlab)
+        : null;
+    if (!instanceUrl) return;
+    let accountId: string | null;
+    try {
+      accountId = await singleGitlabAccountId(queryClient, instanceUrl);
+    } catch (cause) {
+      setError(`GitLab accounts could not load: ${errorMessage(cause)}`);
+      return;
+    }
+    const current = draftRef.current;
+    // The hook chose this link, so it is not a user edit: the detection state stays as it is.
+    if (
+      accountId &&
+      current.providerId === "gitlab" &&
+      current.gitlab.accountId === null &&
+      gitlabDraftInstanceUrl(current.gitlab) === instanceUrl
+    ) {
+      const next = { ...current, gitlab: { ...current.gitlab, accountId } };
+      draftRef.current = next;
+      version.current += 1;
+      setDraft(next);
+      clearStatus();
+    }
+  };
+  /** Chooses the provider. GitLab starts from the origin remote and its sole saved account. */
+  const selectProvider = (providerId: WorkspaceProviderDraft["providerId"]) => {
+    update((current) => {
+      const next = { ...current, providerId };
+      const origin = detection?.gitlabOrigin;
+      if (providerId === "gitlab" && origin && !current.gitlab.projectPath.trim())
+        next.gitlab = applyGitlabOrigin(current.gitlab, origin);
+      return next;
+    });
+    void linkSoleGitlabAccount();
+  };
+  const retryDetection = async (): Promise<WorkspaceProviderSetupDetection | null> => {
     const current = sessionRef.current;
-    if (!current) return;
+    if (!current) return null;
     const localVersion = version.current;
     let detected = false;
+    let found: WorkspaceProviderSetupDetection | null = null;
     setDetecting(true);
     setDetectionError(null);
     try {
       const result = await queryClient.fetchQuery(setupDetectionOptions(client, current));
-      if (sessionRef.current?.setupId !== current.setupId) return;
+      if (sessionRef.current?.setupId !== current.setupId) return null;
+      found = result;
       setDetection(result);
       if (
         !edited.current &&
@@ -222,8 +272,13 @@ export function useWorkspaceProviderSetup(
     } finally {
       if (sessionRef.current?.setupId === current.setupId) setDetecting(false);
     }
-    if (detected && mounted.current && sessionRef.current?.setupId === current.setupId)
-      await run("Check provider readiness", async () => readStatus(await ensureSelection()));
+    if (detected && mounted.current && sessionRef.current?.setupId === current.setupId) {
+      await run("Check provider readiness", async () => {
+        await linkSoleGitlabAccount();
+        return readStatus(await ensureSelection());
+      });
+    }
+    return found;
   };
   const acceptDetection = () =>
     run("Check provider readiness", async () => {
@@ -244,6 +299,7 @@ export function useWorkspaceProviderSetup(
       draftRef.current = next;
       setDraft(next);
       setDetectionProposal(false);
+      await linkSoleGitlabAccount();
       if (next.enabled) await readStatus(await ensureSelection());
     });
   const stopListening = () => {
@@ -517,10 +573,18 @@ export function useWorkspaceProviderSetup(
     detectionError,
     retryDetection,
     acceptDetection,
+    selectProvider,
+    /** The latest draft, for replies that arrive after the render that started them. */
+    readDraft: () => draftRef.current,
     status:
       operation || isCancelling || error || statusQuery.isFetching || statusQuery.isError
         ? null
         : (statusQuery.data ?? null),
+    /**
+     * The last readiness check found no single matching remote. A failed check hides `status`,
+     * but its fix, the Project remote field, needs this result.
+     */
+    remoteMappingFailed: statusQuery.data?.health?.repositoryMappingValid === false,
     areas,
     connection,
     pat,

@@ -964,7 +964,7 @@ describe("useSettingsModalController", () => {
               },
             };
           });
-          state.setAzureDevOpsValidationErrorCount(1);
+          state.setGitProviderValidationErrorCount(1);
         });
         await harness.run((state) => state.setSelectedWorkspaceId("repo-two"));
 

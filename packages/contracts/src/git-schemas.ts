@@ -5,6 +5,7 @@ import {
   azureDevOpsRepositorySchema,
   validateAzureDevOpsProviderSettings,
 } from "./azure-devops-schemas";
+import { gitlabProviderSettingsSchema, gitlabRepositorySchema } from "./gitlab-schemas";
 import {
   workspaceAbbreviationValueSchema,
   workspaceTileColorValueSchema,
@@ -50,7 +51,7 @@ export const gitWorktreeSummarySchema = z.object({
 });
 export type GitWorktreeSummary = z.infer<typeof gitWorktreeSummarySchema>;
 
-export const knownGitProviderIdValues = ["github", "azure_devops"] as const;
+export const knownGitProviderIdValues = ["github", "azure_devops", "gitlab"] as const;
 export const knownGitProviderIdSchema = z.enum(knownGitProviderIdValues);
 export type KnownGitProviderId = z.infer<typeof knownGitProviderIdSchema>;
 
@@ -106,6 +107,7 @@ export type GithubGitProviderRepository = z.infer<typeof githubGitProviderReposi
 
 export const gitProviderRepositorySchema = z.union([
   azureDevOpsRepositorySchema,
+  gitlabRepositorySchema,
   githubGitProviderRepositorySchema,
 ]);
 export type GitProviderRepository = z.infer<typeof gitProviderRepositorySchema>;
@@ -135,6 +137,12 @@ export const gitComparisonTargetSchema = z.union([
 ]);
 export type GitComparisonTarget = z.infer<typeof gitComparisonTargetSchema>;
 
+export const gitProviderSettingsSchema = z.strictObject({
+  ...azureDevOpsProviderSettingsSchema.shape,
+  ...gitlabProviderSettingsSchema.shape,
+});
+export type GitProviderSettings = z.infer<typeof gitProviderSettingsSchema>;
+
 export const gitProviderConfigSchema = z
   .object({
     id: gitProviderIdSchema,
@@ -144,28 +152,58 @@ export const gitProviderConfigSchema = z
       gitProviderRepositorySchema.optional(),
     ),
     autoDetected: z.boolean().default(false),
-    settings: azureDevOpsProviderSettingsSchema.optional(),
+    settings: gitProviderSettingsSchema.optional(),
   })
   .strict()
   .superRefine((config, context) => {
-    const azureRepository =
-      config.repository && "providerId" in config.repository ? config.repository : undefined;
+    const repository = config.repository;
+    const repositoryProviderId =
+      repository && "providerId" in repository ? repository.providerId : undefined;
     const issue = (path: (string | number)[], message: string): void => {
       context.addIssue({ code: z.ZodIssueCode.custom, message, path });
     };
+    const usedKeys = (keys: readonly (keyof GitProviderSettings)[]) =>
+      keys.filter((key) => config.settings?.[key] !== undefined);
+    const azureKeys = usedKeys(azureDevOpsProviderSettingsSchema.keyof().options);
+    const gitlabKeys = usedKeys(gitlabProviderSettingsSchema.keyof().options);
+
     if (config.id === "azure_devops") {
-      if (config.repository && !azureRepository) {
+      if (repository && repositoryProviderId !== "azure_devops") {
         issue(["repository"], "Azure DevOps provider settings require an Azure DevOps repository.");
       }
-      validateAzureDevOpsProviderSettings(azureRepository, config.settings, context);
+      for (const key of gitlabKeys) {
+        issue(["settings", key], "Only the GitLab provider can use GitLab settings.");
+      }
+      validateAzureDevOpsProviderSettings(
+        repository && "providerId" in repository && repository.providerId === "azure_devops"
+          ? repository
+          : undefined,
+        config.settings,
+        context,
+      );
+      return;
+    }
+    if (config.id === "gitlab") {
+      if (repository && repositoryProviderId !== "gitlab") {
+        issue(["repository"], "GitLab provider settings require a GitLab project.");
+      }
+      for (const key of azureKeys) {
+        issue(["settings", key], "Only the Azure DevOps provider can use Azure DevOps settings.");
+      }
+      if (config.settings?.accountId !== undefined && !repository) {
+        issue(["settings", "accountId"], "A GitLab account link requires a GitLab project.");
+      }
       return;
     }
 
-    if (azureRepository) {
+    if (repositoryProviderId === "azure_devops") {
       issue(["repository"], "Only the Azure DevOps provider can use an Azure DevOps repository.");
     }
+    if (repositoryProviderId === "gitlab") {
+      issue(["repository"], "Only the GitLab provider can use a GitLab project.");
+    }
     if (config.settings !== undefined) {
-      issue(["settings"], "Only the Azure DevOps provider can use Azure DevOps settings.");
+      issue(["settings"], "Only the Azure DevOps and GitLab providers can use provider settings.");
     }
   });
 export type GitProviderConfig = z.infer<typeof gitProviderConfigSchema>;

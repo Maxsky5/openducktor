@@ -51,7 +51,7 @@ export const ciBadgeColors = (theme: AppTheme, variant: CiBadgeVariant): CiBadge
 };
 
 /** The desktop text color families of a check status: `text-success-muted` and the others. */
-export type CiStatusText = "success" | "destructive" | "info" | "muted";
+export type CiStatusText = "success" | "destructive" | "warning" | "info" | "muted";
 
 export const ciStatusTextColor = (theme: AppTheme, status: CiStatusText): string => {
   switch (status) {
@@ -59,6 +59,8 @@ export const ciStatusTextColor = (theme: AppTheme, status: CiStatusText): string
       return theme.desktop.successMuted;
     case "destructive":
       return theme.desktop.destructiveMuted;
+    case "warning":
+      return theme.desktop.warningMuted;
     case "info":
       return theme.desktop.infoMuted;
     case "muted":
@@ -84,6 +86,7 @@ export const CHECK_STATUS_PRESENTATION = {
   info: { icon: "clock", text: "info" },
   secondary: { icon: "circle-dashed", text: "muted" },
   success: { icon: "circle-check", text: "success" },
+  warning: { icon: "triangle-alert", text: "warning" },
 } as const satisfies Record<
   ReturnType<typeof checkBadgeVariant>,
   { icon: IconName; text: CiStatusText }

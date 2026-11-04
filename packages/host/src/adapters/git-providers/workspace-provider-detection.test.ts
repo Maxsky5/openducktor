@@ -38,6 +38,17 @@ describe("workspace provider detection", () => {
       expect(result.candidates).toHaveLength(2);
     }
   });
+  test("reads the GitLab origin from the first fetch URL, then from the first push URL", () => {
+    const origin = (fetchUrls: string[], pushUrls: string[]) =>
+      detectWorkspaceProviders([{ name: "origin", fetchUrls, pushUrls }]).gitlabOrigin;
+
+    expect(
+      origin(["https://gitlab.com/group/fetch.git"], ["https://gitlab.com/group/push.git"]),
+    ).toMatchObject({ projectPath: "group/fetch" });
+    expect(origin([], ["https://gitlab.com/group/push.git"])).toMatchObject({
+      projectPath: "group/push",
+    });
+  });
   test("does not infer GitHub from a generic host or Azure from an SSH alias", () => {
     const result = detectWorkspaceProviders([
       {
@@ -50,6 +61,38 @@ describe("workspace provider detection", () => {
         pushUrls: [],
       },
     ]);
-    expect(result).toEqual({ outcome: "none", candidates: [] });
+    expect(result).toEqual({
+      outcome: "none",
+      candidates: [],
+      gitlabOrigin: {
+        providerId: "gitlab",
+        instanceUrl: "https://git.example.test",
+        projectPath: "org/repo",
+      },
+    });
+  });
+  test.each([
+    ["https://gitlab.com/group/sub/app.git", "https://gitlab.com", "group/sub/app"],
+    ["git@code-gitlab.corp:group/app.git", "https://code-gitlab.corp", "group/app"],
+    ["ssh://git@GitLab.example.com:2222/group/app", "https://gitlab.example.com", "group/app"],
+  ])("recognizes a GitLab remote by host name: %s", (url, instanceUrl, projectPath) => {
+    const result = detectWorkspaceProviders([{ name: "origin", fetchUrls: [url], pushUrls: [] }]);
+    expect(result.outcome).toBe("detected");
+    expect(result.candidates[0]?.config).toMatchObject({
+      id: "gitlab",
+      repository: { providerId: "gitlab", instanceUrl, projectPath },
+    });
+  });
+  test("uses a known GitLab instance with a sub-path", () => {
+    const result = detectWorkspaceProviders(
+      [{ name: "origin", fetchUrls: ["https://code.corp/gitlab/group/app.git"], pushUrls: [] }],
+      ["https://code.corp/gitlab"],
+    );
+    expect(result.outcome).toBe("detected");
+    expect(result.candidates[0]?.config.repository).toEqual({
+      providerId: "gitlab",
+      instanceUrl: "https://code.corp/gitlab",
+      projectPath: "group/app",
+    });
   });
 });

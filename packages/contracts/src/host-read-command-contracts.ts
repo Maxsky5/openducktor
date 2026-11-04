@@ -42,6 +42,7 @@ export const HOST_READ_COMMAND_NAMES = [
   "git_get_local_changes",
   "git_get_status",
   "git_get_worktree_status",
+  "gitlab_accounts_list",
   "issue_image_get",
   "issue_item_get",
   "issue_items_list",

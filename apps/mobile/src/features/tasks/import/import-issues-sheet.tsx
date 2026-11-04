@@ -120,7 +120,7 @@ function ImportIssuesContent({ workspace }: { workspace: WorkspaceRecord }): Rea
           <EmptyState
             icon="settings"
             title="No issue provider"
-            message={`Turn on GitHub or Azure DevOps with issue access in the repository settings. Then open Import Issues again. ${SETTINGS_ELSEWHERE}`}
+            message={`Turn on GitHub, GitLab, or Azure DevOps with issue access in the repository settings. Then open Import Issues again. ${SETTINGS_ELSEWHERE}`}
           />
         </GroupedSheet>
       );

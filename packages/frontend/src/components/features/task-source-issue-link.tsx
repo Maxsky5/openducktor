@@ -3,6 +3,7 @@ import { ExternalLink, CircleDot } from "lucide-react";
 import type { ReactElement } from "react";
 import { toast } from "sonner";
 import { badgeVariants } from "@/components/ui/badge-variants";
+import { sourceIssueLabel } from "@openducktor/frontend-core/git/git-provider-label";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
@@ -14,7 +15,6 @@ export function TaskSourceIssueLink({
   sourceIssue: SourceIssueReference;
   className?: string;
 }): ReactElement {
-  const provider = sourceIssue.providerId === "github" ? "GitHub" : "Azure DevOps";
   return (
     <button
       type="button"
@@ -31,9 +31,7 @@ export function TaskSourceIssueLink({
       )}
     >
       <CircleDot className="size-3.5" aria-hidden="true" />
-      <span>
-        {provider} #{sourceIssue.number}
-      </span>
+      <span>{sourceIssueLabel(sourceIssue)}</span>
       <ExternalLink className="size-3" aria-hidden="true" />
     </button>
   );

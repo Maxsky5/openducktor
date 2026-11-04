@@ -1,3 +1,4 @@
+import { invalidateGitlabQueries } from "@openducktor/frontend-core/queries/gitlab";
 import type {
   IncompleteWorkspaceRemoval,
   WorkspaceCatalog,
@@ -453,6 +454,8 @@ export function useWorkspaceSelectionOperations({
             repoPath: input.expectedRepoPath,
             workspaceId: input.workspaceId,
           });
+          // Removal deletes a GitLab account that only this workspace linked.
+          void invalidateGitlabQueries(queryClient);
           const removedWorktreeCount = result.removedWorktrees.length;
           return {
             title: "Workspace removed",

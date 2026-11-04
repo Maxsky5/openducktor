@@ -24,7 +24,7 @@ import {
   type PullRequestCommentAuthorFilter,
   useHideResolvedComments,
 } from "@openducktor/frontend-core/review/pull-request-comment-filters";
-import { isBotCommentAuthor } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
+import { isBotComment } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
 const COMMENT_BODY_BATCH_SIZE = 4;
@@ -112,7 +112,7 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
           <TaskExecutionCiCommentCard
             key={comment.id}
             comment={comment}
-            isBot={isBotCommentAuthor(comment.author)}
+            isBot={isBotComment(comment)}
             isBodyReady={readyBodyIds.has(comment.id)}
           />
         ))}

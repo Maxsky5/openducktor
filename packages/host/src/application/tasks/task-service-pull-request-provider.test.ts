@@ -148,9 +148,9 @@ const createProvider = (
   };
 };
 
-const gitlabDescriptor: GitProviderDescriptor = {
-  id: "gitlab",
-  label: "GitLab",
+const giteaDescriptor: GitProviderDescriptor = {
+  id: "gitea",
+  label: "Gitea",
   description: "Test Git provider",
   capabilities: {
     supportsPullRequests: true,
@@ -164,16 +164,16 @@ const workspaceSettingsService = createBuildWorkspaceSettingsService({
   hooks: { postComplete: [] },
   git: {
     provider: {
-      id: "gitlab",
+      id: "gitea",
       enabled: true,
-      repository: { host: "gitlab.example.com", owner: "openai", name: "openducktor" },
+      repository: { host: "gitea.example.com", owner: "openai", name: "openducktor" },
       autoDetected: false,
     },
   },
 });
 
 const createClosedLinkService = (persistedProviderId: string) => {
-  const provider = createProvider(gitlabDescriptor, createPullRequestPort("gitlab"));
+  const provider = createProvider(giteaDescriptor, createPullRequestPort("gitea"));
   const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
   const setPullRequest = mock(() => Effect.succeed(true));
   const transitionTask = mock(() => Effect.succeed(task({ status: "closed" })));
@@ -259,13 +259,13 @@ describe("createTaskService Pull Request provider ports", () => {
             workspaceId: workspace.workspaceId,
             repoPath: "/repo",
             taskId: created.id,
-            pullRequest: linkedPullRequest("gitlab"),
+            pullRequest: linkedPullRequest("gitea"),
           }),
         );
       const refreshedWorkspaces: string[] = [];
       const provider = createProvider(
-        gitlabDescriptor,
-        createPullRequestPort("gitlab", {
+        giteaDescriptor,
+        createPullRequestPort("gitea", {
           refresh: ({ repoConfig, linkedPullRequest: linked }) =>
             Effect.sync(() => {
               refreshedWorkspaces.push(repoConfig.workspaceId);
@@ -311,9 +311,9 @@ describe("createTaskService Pull Request provider ports", () => {
   });
 
   test("detects an open Pull Request through the configured provider port", async () => {
-    const findOpenForSourceBranch = mock(() => Effect.succeed(resolvedPullRequest("gitlab")));
-    const pullRequests = createPullRequestPort("gitlab", { findOpenForSourceBranch });
-    const provider = createProvider(gitlabDescriptor, pullRequests);
+    const findOpenForSourceBranch = mock(() => Effect.succeed(resolvedPullRequest("gitea")));
+    const pullRequests = createPullRequestPort("gitea", { findOpenForSourceBranch });
+    const provider = createProvider(giteaDescriptor, pullRequests);
     const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
     const setPullRequest = mock(() => Effect.succeed(true));
     const taskStore: TaskStorePort = {
@@ -345,7 +345,7 @@ describe("createTaskService Pull Request provider ports", () => {
 
     expect(result).toEqual({
       outcome: "linked",
-      pullRequest: linkedPullRequest("gitlab"),
+      pullRequest: linkedPullRequest("gitea"),
     });
     expect(findOpenForSourceBranch).toHaveBeenCalledWith({
       repoConfig: expect.objectContaining({ repoPath: "/repo" }),
@@ -357,11 +357,11 @@ describe("createTaskService Pull Request provider ports", () => {
     const findLatestMergedForSourceBranch = mock(() =>
       Effect.succeed(resolvedMergedPullRequest("github")),
     );
-    const pullRequests = createPullRequestPort("gitlab", {
+    const pullRequests = createPullRequestPort("gitea", {
       findOpenForSourceBranch: () => Effect.succeed(undefined),
       findLatestMergedForSourceBranch,
     });
-    const provider = createProvider(gitlabDescriptor, pullRequests);
+    const provider = createProvider(giteaDescriptor, pullRequests);
     const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
     const setPullRequest = mock(() => Effect.succeed(true));
     const service = createTaskService({
@@ -401,9 +401,9 @@ describe("createTaskService Pull Request provider ports", () => {
   });
 
   test("links a Pull Request through the configured provider port", async () => {
-    const getByNumber = mock(() => Effect.succeed(resolvedPullRequest("gitlab")));
-    const pullRequests = createPullRequestPort("gitlab", { getByNumber });
-    const provider = createProvider(gitlabDescriptor, pullRequests);
+    const getByNumber = mock(() => Effect.succeed(resolvedPullRequest("gitea")));
+    const pullRequests = createPullRequestPort("gitea", { getByNumber });
+    const provider = createProvider(giteaDescriptor, pullRequests);
     const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
     const setPullRequest = mock(() => Effect.succeed(true));
     const taskStore: TaskStorePort = {
@@ -431,7 +431,7 @@ describe("createTaskService Pull Request provider ports", () => {
       }),
     );
 
-    expect(result).toEqual(linkedPullRequest("gitlab"));
+    expect(result).toEqual(linkedPullRequest("gitea"));
     expect(getByNumber).toHaveBeenCalledWith({
       repoConfig: expect.objectContaining({ repoPath: "/repo" }),
       number: 42,
@@ -440,14 +440,14 @@ describe("createTaskService Pull Request provider ports", () => {
       workspaceId: "repo",
       repoPath: "/repo",
       taskId: "task-1",
-      pullRequest: linkedPullRequest("gitlab"),
+      pullRequest: linkedPullRequest("gitea"),
     });
   });
 
   test("rejects a Pull Request returned with a foreign provider identity", async () => {
     const getByNumber = mock(() => Effect.succeed(resolvedPullRequest("github")));
-    const pullRequests = createPullRequestPort("gitlab", { getByNumber });
-    const provider = createProvider(gitlabDescriptor, pullRequests);
+    const pullRequests = createPullRequestPort("gitea", { getByNumber });
+    const provider = createProvider(giteaDescriptor, pullRequests);
     const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
     const setPullRequest = mock(() => Effect.succeed(true));
     const service = createTaskService({
@@ -480,8 +480,8 @@ describe("createTaskService Pull Request provider ports", () => {
 
   test("rejects a linked Pull Request from a provider other than the configured provider", async () => {
     const refresh = mock(() => Effect.succeed(resolvedPullRequest("github")));
-    const pullRequests = createPullRequestPort("gitlab", { refresh });
-    const provider = createProvider(gitlabDescriptor, pullRequests);
+    const pullRequests = createPullRequestPort("gitea", { refresh });
+    const provider = createProvider(giteaDescriptor, pullRequests);
     const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
     const taskStore: TaskStorePort = {
       listPullRequestSyncCandidates: () =>
@@ -515,12 +515,12 @@ describe("createTaskService Pull Request provider ports", () => {
   test("uses the provider port to resolve the publish remote and upsert", async () => {
     const calls: unknown[] = [];
     const resolvePublishRemote = mock(() => Effect.succeed("publish"));
-    const upsert = mock(() => Effect.succeed(linkedPullRequest("gitlab")));
-    const pullRequests = createPullRequestPort("gitlab", {
+    const upsert = mock(() => Effect.succeed(linkedPullRequest("gitea")));
+    const pullRequests = createPullRequestPort("gitea", {
       resolvePublishRemote,
       upsert,
     });
-    const provider = createProvider(gitlabDescriptor, pullRequests);
+    const provider = createProvider(giteaDescriptor, pullRequests);
     const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
     const taskStore: TaskStorePort = {
       getTask: () => Effect.succeed(task({ status: "human_review" })),
@@ -593,8 +593,8 @@ describe("createTaskService Pull Request provider ports", () => {
   });
 
   test("rejects linking a merged Pull Request from another provider", async () => {
-    const pullRequests = createPullRequestPort("gitlab");
-    const provider = createProvider(gitlabDescriptor, pullRequests);
+    const pullRequests = createPullRequestPort("gitea");
+    const provider = createProvider(giteaDescriptor, pullRequests);
     const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
     const taskStore: TaskStorePort = {
       listTasks: () => Effect.succeed([task({ status: "human_review" })]),
@@ -633,7 +633,7 @@ describe("createTaskService Pull Request provider ports", () => {
   });
 
   test("returns a closed task unchanged when the persisted Pull Request matches the provider", async () => {
-    const { service, setPullRequest, transitionTask } = createClosedLinkService("gitlab");
+    const { service, setPullRequest, transitionTask } = createClosedLinkService("gitea");
 
     const result = await Effect.runPromise(
       service.linkMergedPullRequest({
@@ -641,7 +641,7 @@ describe("createTaskService Pull Request provider ports", () => {
         repoPath: "/repo",
         taskId: "task-1",
         removeWorktree: true,
-        pullRequest: mergedPullRequest("gitlab"),
+        pullRequest: mergedPullRequest("gitea"),
       }),
     );
 

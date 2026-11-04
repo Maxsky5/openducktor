@@ -108,6 +108,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(tableNames).not.toContain("task_documents");
     expect(readDrizzleMigrationRows(databasePath)).toEqual([
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
     const database = new Database(databasePath);
     try {
@@ -131,7 +132,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     );
 
     expect(results).toEqual(Array.from({ length: 8 }, () => []));
-    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(1);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(2);
   });
 
   test("enforces the approved task asset registry shape and cascades task deletion", async () => {

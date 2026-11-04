@@ -131,8 +131,8 @@ const renderPendingPanel = (): string => {
 };
 
 const renderCheckCard = (
-  status: "queued" | "in_progress" | "unknown",
-  conclusion: "failure" | "success" | null = null,
+  status: "queued" | "in_progress" | "unknown" | "completed",
+  conclusion: "failure" | "success" | "warning" | null = null,
 ): string =>
   renderToStaticMarkup(
     <TaskExecutionCiCheckCard
@@ -377,6 +377,16 @@ describe("TaskExecutionCiChecksPanel", () => {
       expect(unknownHtml).not.toContain("text-success-muted");
       expect(unknownHtml).not.toContain("text-destructive-muted");
     }
+  });
+
+  test("shows a warning check in amber, apart from failing and passing checks", () => {
+    const html = renderCheckCard("completed", "warning");
+
+    expect(html).toContain("Warning");
+    expect(html).toContain("lucide-triangle-alert");
+    expect(html).toContain("text-warning-muted");
+    expect(html).not.toContain("text-success-muted");
+    expect(html).not.toContain("text-destructive-muted");
   });
 
   test("opens check links through the external URL shell bridge", () => {

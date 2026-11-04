@@ -23,6 +23,21 @@ import {
   kanbanTaskCardViewSchema,
   sidebarSessionGroupingSchema,
   type AzureDevOpsConnectionState,
+  type GitlabAccount,
+  type GitlabAccountAddTokenInput,
+  type GitlabAccountsListInput,
+  type GitlabConnectionStatus,
+  type GitlabConnectionStatusInput,
+  type GitlabDeviceCode,
+  type GitlabRepository,
+  type GitlabSignInPollInput,
+  type GitlabSignInPollResult,
+  gitlabAccountSchema,
+  gitlabAccountsListResultSchema,
+  gitlabConnectionStatusSchema,
+  gitlabDeviceCodeSchema,
+  gitlabRepositorySchema,
+  gitlabSignInPollResultSchema,
   azureDevOpsConnectionStateSchema,
   type AzureDevOpsDeviceCode,
   azureDevOpsDeviceCodeSchema,
@@ -532,6 +547,36 @@ export class HostWorkspaceClient {
 
   async workspaceDisconnectAzureDevOps(input: AzureDevOpsConnectionInput): Promise<void> {
     await this.invokeFn("workspace_disconnect_azure_devops", input, voidResultSchema);
+  }
+
+  async workspaceDetectGitlabRepository(scope: WorkspaceRef): Promise<GitlabRepository> {
+    return this.invokeFn(
+      "workspace_detect_gitlab_repository",
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath },
+      gitlabRepositorySchema,
+    );
+  }
+
+  async gitlabAccountsList(input: GitlabAccountsListInput): Promise<GitlabAccount[]> {
+    return this.invokeFn("gitlab_accounts_list", input, gitlabAccountsListResultSchema);
+  }
+
+  async gitlabConnectionStatus(
+    input: GitlabConnectionStatusInput,
+  ): Promise<GitlabConnectionStatus> {
+    return this.invokeFn("gitlab_connection_status", input, gitlabConnectionStatusSchema);
+  }
+
+  async gitlabAccountAddToken(input: GitlabAccountAddTokenInput): Promise<GitlabAccount> {
+    return this.invokeFn("gitlab_account_add_token", input, gitlabAccountSchema);
+  }
+
+  async gitlabSignInStart(): Promise<GitlabDeviceCode> {
+    return this.invokeFn("gitlab_sign_in_start", {}, gitlabDeviceCodeSchema);
+  }
+
+  async gitlabSignInPoll(input: GitlabSignInPollInput): Promise<GitlabSignInPollResult> {
+    return this.invokeFn("gitlab_sign_in_poll", input, gitlabSignInPollResultSchema);
   }
 
   async workspaceGetGitProviderContext(scope: WorkspaceRef): Promise<RepositoryGitProviderContext> {

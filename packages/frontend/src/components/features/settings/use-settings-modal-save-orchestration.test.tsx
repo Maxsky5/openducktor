@@ -55,7 +55,7 @@ const createValidation = (
   overrides: Partial<SettingsSaveValidation> = {},
 ): SettingsSaveValidation => ({
   openCodePermissions: [],
-  azureDevOps: {
+  gitProvider: {
     hasErrors: false,
     errorCount: 0,
     invalidWorkspaceIds: [],

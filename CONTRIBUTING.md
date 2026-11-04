@@ -58,6 +58,7 @@ Notes:
 - Claude support uses an external Claude Code installation and its existing authentication. You can
   override its binary path with `OPENDUCKTOR_CLAUDE_BINARY`.
 - Azure DevOps Services sign-in uses the OpenDucktor Microsoft Entra public client registration. Register it for accounts in any organizational directory and personal Microsoft accounts, enable public client flows, and add the Azure DevOps delegated `user_impersonation` permission. Development builds can override its public client ID with `OPENDUCKTOR_AZURE_DEVOPS_CLIENT_ID`.
+- GitLab.com browser sign-in uses the OAuth device grant of an OpenDucktor GitLab.com application. Register it as a non-confidential application with the device authorization grant and the `api` scope. Its client ID is in `packages/host/src/config/gitlab.ts`. Development builds can override it with `OPENDUCKTOR_GITLAB_CLIENT_ID`.
 
 ## Main Development Commands
 

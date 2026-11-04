@@ -35,6 +35,20 @@ describe("classifyImageSource", () => {
     ).toBe("remote");
   });
 
+  test("loads GitLab project uploads through the host for a task from a GitLab issue", () => {
+    const url = "https://gitlab.com/group/project/uploads/0123456789abcdef0123456789abcdef/a.png";
+    const context = {
+      workspaceId: "w",
+      taskId: "t",
+      issue: { repoPath: "/repo", providerId: "gitlab" },
+    };
+    expect(classifyImageSource(url, context)).toEqual({ kind: "issue_image", url });
+    expect(
+      classifyImageSource(url, { ...context, issue: { repoPath: "/repo", providerId: "github" } })
+        .kind,
+    ).toBe("remote");
+  });
+
   test.each(["data:image/png;base64,AAAA", "file:///tmp/a.png", "images/a.png", "javascript:x"])(
     "does not show %s",
     (url) => {

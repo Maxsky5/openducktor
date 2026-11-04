@@ -16,6 +16,12 @@ Runtime permission policies use `agent_runtime_settings.policy_json`. Known runt
 
 Workspace removal deletes only the target registration and owned rows. It keeps the database file and other workspaces.
 
+### GitLab accounts
+
+- `gitlab_accounts` stores one row for each GitLab user on each instance. The OS secure store keeps the secret of each account under the service name `OpenDucktor GitLab`, keyed by the account ID.
+- `workspace_gitlab_config` stores the instance URL, project path, linked account, project remote, and HTTP consent of a GitLab repository. Its account key uses `ON DELETE RESTRICT`, so an account cannot go while a workspace links it.
+- The host deletes an account and its secret when no workspace links it: after a settings save that unlinks it, after workspace removal, and in the background at host start.
+
 ## Settings queries
 
 Use the settings port's narrow global, Autopilot, workspace, repository-path, or catalog read for each caller. Reserve the full snapshot for callers that need all settings. Workspace projections use indexed child queries and preserve collection order without joining independent lists together.
