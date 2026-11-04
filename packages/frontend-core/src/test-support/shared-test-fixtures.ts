@@ -292,6 +292,7 @@ export const createRepoSettingsConfigFixture = (
     workspaceId,
     workspaceName: workspaceId,
     repoPath,
+    defaultTargetBranch: { remote: "origin", branch: "main" },
     git: provider === undefined ? {} : { provider },
   });
 

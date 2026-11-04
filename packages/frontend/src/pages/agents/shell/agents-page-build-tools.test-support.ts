@@ -61,8 +61,6 @@ export const createBuildToolsSnapshotFixture = ({
   targetBranchState: {
     validationError: null,
     effectiveTargetBranch: { remote: "origin", branch: "main" },
-    selectionValue: "origin/main",
-    displayTargetBranch: "origin/main",
   },
   worktree: {
     path: "/repo/.worktrees/task-1",

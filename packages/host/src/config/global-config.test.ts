@@ -51,6 +51,40 @@ describe("global config", () => {
     );
   });
 
+  test("keeps the default target branch that settings files without one always used", () => {
+    const workspace = { workspaceId: "repo", workspaceName: "Repo", repoPath: "/repo" };
+    const legacy = parsePersistedGlobalConfig({ version: 4, workspaces: { repo: workspace } });
+    const saved = parsePersistedGlobalConfig({
+      version: 4,
+      workspaces: { repo: { ...workspace, defaultTargetBranch: { branch: "master" } } },
+    });
+
+    expect(legacy.workspaces.repo?.defaultTargetBranch).toEqual({
+      remote: "origin",
+      branch: "main",
+    });
+    expect(saved.workspaces.repo?.defaultTargetBranch).toEqual({ branch: "master" });
+  });
+
+  test.each([
+    { saved: {}, expected: { branch: "main" } },
+    { saved: { remote: "upstream" }, expected: { remote: "upstream", branch: "main" } },
+  ])("keeps the main branch of a saved target $saved without a branch", ({ saved, expected }) => {
+    const config = parsePersistedGlobalConfig({
+      version: 4,
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          defaultTargetBranch: saved,
+        },
+      },
+    });
+
+    expect(config.workspaces.repo?.defaultTargetBranch).toEqual(expected);
+  });
+
   test("normalizes missing and empty legacy repository Git config", () => {
     const withoutGit = parsePersistedGlobalConfig({
       version: 4,

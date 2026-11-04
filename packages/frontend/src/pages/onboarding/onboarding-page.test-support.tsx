@@ -5,7 +5,6 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeExecutableCheck,
-  type WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
@@ -142,21 +141,6 @@ export const createOnboardingTestHarness = () => {
       commitWorkspaceProviderSetup: async () => {
         throw new Error("Not used");
       },
-      addWorkspace: mock(
-        async (input) =>
-          ({
-            workspaceId: input.workspaceId,
-            workspaceName: input.workspaceName,
-            repoPath: input.repoPath,
-            abbreviation: null,
-            tileColor: null,
-            isActive: true,
-            hasConfig: true,
-            configuredWorktreeBasePath: null,
-            defaultWorktreeBasePath: null,
-            effectiveWorktreeBasePath: null,
-          }) satisfies WorkspaceRecord,
-      ),
       selectWorkspace: mock(async () => {}),
       reorderWorkspaces: mock(async () => {}),
       refreshBranches: mock(async () => {}),

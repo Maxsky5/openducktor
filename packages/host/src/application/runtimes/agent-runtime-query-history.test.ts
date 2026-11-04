@@ -2,11 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import {
-  RUNTIME_DESCRIPTORS_BY_KIND,
-  type RuntimeInstanceSummary,
-  repoConfigSchema,
-} from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeInstanceSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createWorktreeFileAdapter } from "../../adapters/filesystem/worktree-file-adapter";
@@ -20,6 +16,7 @@ import {
 } from "../../test-support/service-test-doubles";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createAgentRuntimeQueryService } from "./agent-runtime-query-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const temporaryRoots: string[] = [];
 afterEach(async () => {
@@ -112,7 +109,7 @@ const historyHarness = async (
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
       getRepoConfig: () =>
         Effect.succeed(
-          repoConfigSchema.parse({
+          repoConfigFixture({
             workspaceId: "workspace",
             workspaceName: "Workspace",
             repoPath,
@@ -121,7 +118,7 @@ const historyHarness = async (
         ),
       getRepoConfigByRepoPath: () =>
         Effect.succeed(
-          repoConfigSchema.parse({
+          repoConfigFixture({
             workspaceId: "workspace",
             workspaceName: "Workspace",
             repoPath,

@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight, FolderOpen, LoaderCircle } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
+import { DefaultTargetBranchField } from "./default-target-branch-field";
 import { ensureDraftAgentDefault } from "@/components/features/repository/model-defaults/model-defaults-model";
 import { RepositoryModelDefaultsFields } from "@/components/features/repository/model-defaults/repository-model-defaults-fields";
 import { WorkspaceIdentityFields } from "@/components/features/workspace-identity/workspace-identity-fields";
@@ -24,7 +25,7 @@ const STAGES: readonly StepperStep<WorkspaceCreationStage>[] = [
     id: "information",
     title: "Workspace details",
     shortTitle: "Details",
-    description: "Name and color",
+    description: "Name, branch, and color",
   },
   { id: "models", title: "Models", description: "Set your defaults" },
 ];
@@ -142,11 +143,7 @@ export function WorkspaceCreationSubmitAction({
     );
   if (controller.stage === "information") {
     return (
-      <Button
-        type="button"
-        disabled={controller.busy || controller.validationError !== null}
-        onClick={controller.next}
-      >
+      <Button type="button" disabled={!controller.canContinue} onClick={controller.next}>
         Continue to models <ArrowRight data-icon="inline-end" />
       </Button>
     );
@@ -236,6 +233,7 @@ function WorkspaceRepositoryFields({
           />
         </div>
       </div>
+      <WorkspaceDefaultTargetBranchField controller={controller} />
       <WorkspaceIdentityFields
         idPrefix="workspace-create"
         workspaceName={controller.workspaceName}
@@ -246,6 +244,26 @@ function WorkspaceRepositoryFields({
         onChangeTileColor={controller.updateTileColor}
       />
     </div>
+  );
+}
+
+function WorkspaceDefaultTargetBranchField({
+  controller,
+}: {
+  controller: WorkspaceCreationController;
+}): ReactElement {
+  const { branches, unknownReason, isLoading, error, retry } = controller.targetBranches;
+  return (
+    <DefaultTargetBranchField
+      value={controller.defaultTargetBranch}
+      branches={branches}
+      isLoading={isLoading}
+      error={error}
+      disabled={controller.busy || controller.createdWorkspaceId !== null}
+      note={unknownReason}
+      onRetry={retry}
+      onChange={controller.updateDefaultTargetBranch}
+    />
   );
 }
 

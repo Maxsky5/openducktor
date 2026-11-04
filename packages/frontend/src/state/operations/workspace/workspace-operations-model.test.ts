@@ -5,7 +5,6 @@ import {
   branchProbeErrorSignature,
   classifyBranchProbeError,
   hasBranchIdentityChanged,
-  normalizeRepoPath,
   shouldProbeExternalBranchChange,
   shouldReportBranchProbeError,
   shouldResetBranchStateForRepoChange,
@@ -23,10 +22,6 @@ const branch = (
 });
 
 describe("workspace-operations-model", () => {
-  test("normalizes repo path", () => {
-    expect(normalizeRepoPath("  /repo/path  ")).toBe("/repo/path");
-  });
-
   test("checks probe preconditions", () => {
     expect(
       shouldProbeExternalBranchChange({

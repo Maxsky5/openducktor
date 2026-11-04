@@ -18,7 +18,7 @@ describe("createGitCliAdapter", () => {
   test("lists branches with current local branches first and skips remote HEAD refs", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00 refs/heads refs/remotes":
+        "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00%(symref)%00 refs/heads refs/remotes":
           [
             "0\0origin/HEAD\0refs/remotes/origin/HEAD\0\0",
             "0\0origin/main\0refs/remotes/origin/main\0\0",
@@ -900,7 +900,7 @@ describe("createGitCliAdapter", () => {
           ok: true,
           stdout:
             {
-              "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00 refs/heads refs/remotes":
+              "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00%(symref)%00 refs/heads refs/remotes":
                 "1\0main\0refs/heads/main\0/repo\0\n0\0origin/main\0refs/remotes/origin/main\0\0\n0\0odt/task-1\0refs/heads/odt/task-1\0\0\n",
               "status --porcelain=v1 -z --untracked-files=all --find-renames": "",
               "switch --end-of-options main": "",
@@ -924,7 +924,7 @@ describe("createGitCliAdapter", () => {
       output: "Merge made by recursive.",
     });
     expect(calls).toEqual([
-      "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00 refs/heads refs/remotes",
+      "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00%(symref)%00 refs/heads refs/remotes",
       "status --porcelain=v1 -z --untracked-files=all --find-renames",
       "switch --end-of-options main",
       "branch --show-current",
@@ -951,7 +951,7 @@ describe("createGitCliAdapter", () => {
           ok: true,
           stdout:
             {
-              "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00 refs/heads refs/remotes":
+              "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00%(symref)%00 refs/heads refs/remotes":
                 "1\0main\0refs/heads/main\0/repo\0\n0\0odt/task-1\0refs/heads/odt/task-1\0\0\n",
               "status --porcelain=v1 -z --untracked-files=all --find-renames": mergeFailed
                 ? "UU src/main.ts\n"

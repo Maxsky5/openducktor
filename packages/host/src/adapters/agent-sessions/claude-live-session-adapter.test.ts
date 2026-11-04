@@ -2,7 +2,7 @@ import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
-import { RUNTIME_DESCRIPTORS_BY_KIND, repoConfigSchema } from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@openducktor/core";
 import { interruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
@@ -33,6 +33,7 @@ import {
   createClaudeAgentSdkEventHub,
   createClaudeLiveSessionAdapterPreparer,
 } from "./claude-live-session-adapter";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const runtime = {
   kind: "claude" as const,
@@ -56,23 +57,15 @@ const workingDirectoryDependencies = {
   workspaceSettingsService: {
     getRepoConfig: (workspaceId: string) =>
       Effect.succeed(
-        repoConfigSchema.parse(
+        repoConfigFixture(
           workspaceId === "other-repo"
             ? { workspaceId, workspaceName: "Other", repoPath: "/other-repo" }
-            : {
-                workspaceId: "repo",
-                workspaceName: "Repo",
-                repoPath: "/repo",
-                worktreeBasePath: "/worktrees/repo",
-              },
+            : { worktreeBasePath: "/worktrees/repo" },
         ),
       ),
     getRepoConfigByRepoPath: () =>
       Effect.succeed(
-        repoConfigSchema.parse({
-          workspaceId: "repo",
-          workspaceName: "Repo",
-          repoPath: "/repo",
+        repoConfigFixture({
           worktreeBasePath: "/worktrees/repo",
         }),
       ),

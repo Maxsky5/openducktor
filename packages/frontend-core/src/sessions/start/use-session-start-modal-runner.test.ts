@@ -1,11 +1,7 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import {
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  repoConfigSchema,
-  type RepoConfig,
-} from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RepoConfig } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import {
   createRuntimeHookHarness as createHookHarness,
@@ -22,6 +18,7 @@ import {
 } from "./use-session-start-modal-runner";
 import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
 import { observeStartupPreparation } from "../startup/startup-prepared-handoff";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const REQUEST_CONTEXT = {
   launchActionId: "build_pull_request_generation",
@@ -846,10 +843,9 @@ test("blocks confirmation while prompt settings load and uses the current branch
     postStartAction: "kickoff",
     selectedModel: SELECTED_MODEL,
   } as const;
-  const config = repoConfigSchema.parse({
+  const config = repoConfigFixture({
     workspaceId: "a",
     workspaceName: "A",
-    repoPath: "/repo",
     branchPrefix: "odt",
   });
   await harness.mount();

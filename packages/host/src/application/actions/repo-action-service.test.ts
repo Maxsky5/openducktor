@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { repoConfigSchema, type RepoAction } from "@openducktor/contracts";
+import { type RepoAction } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { TerminalCommandService } from "../terminals/terminal-command";
 import { actionCommandLines } from "./repo-action-command";
 import { createRepoActionService } from "./repo-action-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const action = (overrides: Partial<RepoAction> = {}): RepoAction => ({
   id: "checks",
@@ -27,10 +28,9 @@ const makeService = (actions: RepoAction[]) => {
     settings: {
       getRepoConfig: () =>
         Effect.succeed(
-          repoConfigSchema.parse({
+          repoConfigFixture({
             workspaceId: "workspace-1",
             workspaceName: "Workspace",
-            repoPath: "/repo",
             actions: { items: actions, defaultActionId: actions[0]?.id ?? null },
           }),
         ),

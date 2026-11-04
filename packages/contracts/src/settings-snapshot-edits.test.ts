@@ -22,6 +22,7 @@ describe("settings snapshot edits", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
           abbreviation: "RE",
           worktreeBasePath: "/worktrees",
         },
@@ -113,6 +114,7 @@ describe("settings snapshot edits", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
           defaultModel: {
             runtimeKind: "claude",
             providerId: "anthropic",

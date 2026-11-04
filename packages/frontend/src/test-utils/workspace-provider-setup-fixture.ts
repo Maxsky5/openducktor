@@ -1,9 +1,19 @@
 import type { HostClient } from "@openducktor/host-client";
-import type { WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import type {
+  GitTargetBranch,
   WorkspaceProviderSetupSession,
   WorkspaceProviderSetupCommit,
 } from "@openducktor/contracts";
+
+/** The details of a workspace that a local-only provider setup creates. */
+export type LocalWorkspaceDetails = {
+  workspaceId: string;
+  workspaceName: string;
+  repoPath: string;
+  defaultTargetBranch: GitTargetBranch;
+  abbreviation?: string;
+  tileColor?: string;
+};
 
 // Setup IDs are random, so parallel test files can share this map.
 const sessions = new Map<string, WorkspaceProviderSetupSession>();
@@ -19,11 +29,12 @@ type LocalOnlyProviderSetupClient = Pick<
   | "workspaceProviderSetupSet"
   | "workspaceProviderSetupDetect"
   | "workspaceProviderSetupStatus"
+  | "workspaceProviderSetupTargetBranches"
   | "workspaceProviderSetupDiscard"
 >;
 
 /**
- * Host commands for a provider setup that detects no provider. Give them to a test connection,
+ * Host commands for a provider setup that detects no provider and the default branch `main`. Give them to a test connection,
  * for example `createTestClientConnection({ client: localOnlyProviderSetupClient() })`.
  */
 export function localOnlyProviderSetupClient(): LocalOnlyProviderSetupClient {
@@ -42,6 +53,10 @@ export function localOnlyProviderSetupClient(): LocalOnlyProviderSetupClient {
     },
     workspaceProviderSetupDetect: async () => ({ outcome: "none", candidates: [] }),
     workspaceProviderSetupStatus: async () => ({ health: null, connection: null }),
+    workspaceProviderSetupTargetBranches: async () => ({
+      repositoryDefault: { kind: "detected", targetBranch: { branch: "main" } },
+      branches: [{ name: "main", isCurrent: true, isRemote: false }],
+    }),
     workspaceProviderSetupDiscard: async ({ setupId }) => {
       sessions.delete(setupId);
     },
@@ -49,10 +64,11 @@ export function localOnlyProviderSetupClient(): LocalOnlyProviderSetupClient {
 }
 
 export function localOnlyWorkspaceDetails(input: WorkspaceProviderSetupCommit) {
-  const details: WorkspaceSelectionOperationsInput = {
+  const details: LocalWorkspaceDetails = {
     workspaceId: input.workspaceId,
     workspaceName: input.workspaceName,
     repoPath: localOnlySetupPath(input.setupId),
+    defaultTargetBranch: input.defaultTargetBranch,
   };
   if (input.abbreviation) details.abbreviation = input.abbreviation;
   if (input.tileColor) details.tileColor = input.tileColor;

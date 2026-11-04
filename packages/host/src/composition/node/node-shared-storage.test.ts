@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
-import { repoConfigSchema } from "@openducktor/contracts";
+
 import { createLegacyTaskStore } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { SettingsFileError } from "../../effect/host-errors";
@@ -11,6 +11,7 @@ import { createUserEnvironment } from "../../infrastructure/process/user-environ
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createNodeSharedStorage, loadConfigToImport } from "./node-shared-storage";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -60,7 +61,7 @@ test("imports settings without the worker when no legacy task store exists", asy
 test("reports the worker import when a legacy task store exists", async () => {
   const ports = await makePorts();
   const config = createDefaultGlobalConfig();
-  config.workspaces.alpha = repoConfigSchema.parse({
+  config.workspaces.alpha = repoConfigFixture({
     workspaceId: "alpha",
     workspaceName: "Alpha",
     repoPath: "/repos/alpha",

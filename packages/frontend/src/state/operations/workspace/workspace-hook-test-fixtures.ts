@@ -23,7 +23,6 @@ export const createWorkspaceHostClient = (): HostClient =>
     workspaceProviderSetupCommit: async () => {
       throw new Error("Not used");
     },
-    workspaceAdd: async (input) => workspace(input.repoPath),
     workspaceSelect: async (workspaceId: string) => workspace(`/${workspaceId}`, true),
     workspaceCatalogGet: async () => ({
       catalogRevision: 0,

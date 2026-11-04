@@ -72,9 +72,6 @@ test("notification workspace selection keeps the draft on cancel and failure", a
     commitWorkspaceProviderSetup: async () => {
       throw new Error("Not used");
     },
-    addWorkspace: async () => {
-      throw new Error("Not used in this test");
-    },
     selectWorkspace,
     reorderWorkspaces: async () => {},
     refreshBranches: async () => {},

@@ -1,19 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { repoConfigSchema, type GithubGitProviderRepository } from "@openducktor/contracts";
+import { type GithubGitProviderRepository } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port";
 import type { GithubCli, ResolvedGithubCli } from "./cli";
 import { createGithubIssueReader } from "./issues";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const repository: GithubGitProviderRepository = {
   host: "github.com",
   owner: "example",
   name: "repo",
 };
-const repoConfig = repoConfigSchema.parse({
-  workspaceId: "repo",
-  workspaceName: "Repo",
-  repoPath: "/repo",
+const repoConfig = repoConfigFixture({
   git: { provider: { id: "github", enabled: true, repository } },
 });
 const repositoryPort: GitProviderRepositoryPort<GithubGitProviderRepository> = {

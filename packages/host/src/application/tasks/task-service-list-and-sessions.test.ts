@@ -1,7 +1,6 @@
 import type { TaskMetadataArtifact } from "@openducktor/contracts";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Effect } from "effect";
-import { repoConfigSchema } from "@openducktor/contracts";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
@@ -19,6 +18,7 @@ import {
   type TaskStorePort,
   task,
 } from "./test-support/task-workflow-harness";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 describe("createTaskService list and session reads", () => {
   test("loads Kanban tasks with zero and default host-owned retention settings", async () => {
@@ -519,7 +519,7 @@ describe("createTaskService list and session reads", () => {
       workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
         getRepoConfig: () =>
           Effect.succeed(
-            repoConfigSchema.parse({
+            repoConfigFixture({
               workspaceId: selected.workspaceId,
               workspaceName: selected.workspaceName,
               repoPath: selected.repoPath,

@@ -1,4 +1,5 @@
 import type {
+  GitTargetBranch,
   WorkspacePathResolution,
   WorkspaceRef,
   WorkspaceRecord,
@@ -9,6 +10,10 @@ import { useMemo, useReducer, useRef } from "react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { prepareModelDefaultsForSave } from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
+import {
+  useWorkspaceCreationTargetBranch,
+  type WorkspaceCreationTargetBranches,
+} from "./use-workspace-creation-target-branch";
 import {
   useWorkspaceProviderSetup,
   type WorkspaceProviderSetupController,
@@ -27,26 +32,22 @@ export function useWorkspaceCreation({
 }: WorkspaceCreationFormProps & { initialPickerOpen?: boolean }): WorkspaceCreationController {
   const [state, dispatch] = useReducer(reducer, { ...initialState, pickerOpen: initialPickerOpen });
   const provider = useWorkspaceProviderSetup();
+  const { defaultTargetBranch, targetBranches } = useWorkspaceCreationTargetBranch(
+    state.stage === "information" ? provider.session : null,
+    state.defaultTargetBranch,
+  );
   const resolvingRepo = useRef(false);
   const submitInFlight = useRef(false);
   const existingIds = useMemo(
     () => new Set(workspaces.map((workspace) => workspace.workspaceId)),
     [workspaces],
   );
-  const duplicateRepo = workspaces.find((workspace) => workspace.repoPath === state.repoPath);
-  let validationError: string | null = null;
-  if (state.repoPath && !state.createdWorkspaceId) {
-    if (duplicateRepo)
-      validationError = `Repository is already configured as ${duplicateRepo.workspaceName}.`;
-    else if (!state.workspaceName.trim()) validationError = "Workspace name cannot be blank.";
-    else if (!WORKSPACE_ID_PATTERN.test(state.workspaceId.trim()))
-      validationError =
-        "Workspace ID must contain only lowercase letters, digits, and single dashes.";
-    else if (existingIds.has(state.workspaceId.trim()))
-      validationError = `Workspace ID already exists: ${state.workspaceId.trim()}`;
-  }
+  const validationError = workspaceDetailsError(state, workspaces, existingIds);
   const submitting = state.progress !== "idle";
   const busy = disabled || submitting || provider.pending !== null;
+  // Continue saves the branch, because the setup can end before a retry of the submit.
+  const continueTargetBranch =
+    !busy && state.stage === "information" && !validationError ? defaultTargetBranch : null;
   const canAbandon =
     !disabled &&
     !submitting &&
@@ -97,12 +98,14 @@ export function useWorkspaceCreation({
   };
 
   const submit = async (): Promise<void> => {
+    const targetBranch = state.defaultTargetBranch;
     if (
       submitInFlight.current ||
       disabled ||
       state.stage !== "models" ||
       !state.repoPath ||
-      validationError
+      validationError ||
+      !targetBranch
     )
       return;
     submitInFlight.current = true;
@@ -126,6 +129,7 @@ export function useWorkspaceCreation({
         const outcome = await provider.commit(
           {
             ...details,
+            defaultTargetBranch: targetBranch,
             ...prepareModelDefaultsForSave(state.modelDraft),
           },
           async (input) => {
@@ -199,6 +203,8 @@ export function useWorkspaceCreation({
     workspaceId: state.workspaceId,
     abbreviation: state.abbreviation,
     tileColor: state.tileColor,
+    defaultTargetBranch,
+    targetBranches,
     modelDraft: state.modelDraft,
     createdWorkspaceId: state.createdWorkspaceId,
     committed: state.commitStatus === "complete",
@@ -227,9 +233,11 @@ export function useWorkspaceCreation({
       else if (state.stage === "provider" && !state.createdWorkspaceId)
         dispatch({ type: "stage", stage: "repository" });
     },
+    canContinue: continueTargetBranch !== null,
     next: () => {
-      if (!busy && state.stage === "information" && !validationError)
-        dispatch({ type: "stage", stage: "models" });
+      if (!continueTargetBranch) return;
+      dispatch({ type: "defaultTargetBranch", targetBranch: continueTargetBranch });
+      dispatch({ type: "stage", stage: "models" });
     },
     updateWorkspaceId: (workspaceId) => dispatch({ type: "id", workspaceId: workspaceId.trim() }),
     updateWorkspaceName: (workspaceName) =>
@@ -242,12 +250,31 @@ export function useWorkspaceCreation({
       }),
     updateAbbreviation: (abbreviation) => dispatch({ type: "abbreviation", abbreviation }),
     updateTileColor: (tileColor) => dispatch({ type: "tileColor", tileColor }),
+    updateDefaultTargetBranch: (targetBranch) =>
+      dispatch({ type: "defaultTargetBranch", targetBranch }),
     updateModelDraft: (updater) => dispatch({ type: "models", updater }),
     submit,
   };
 }
 
 const WORKSPACE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** Why the workspace details cannot be saved, or null. */
+const workspaceDetailsError = (
+  state: State,
+  workspaces: WorkspaceRecord[],
+  existingIds: Set<string>,
+): string | null => {
+  if (!state.repoPath || state.createdWorkspaceId) return null;
+  const duplicateRepo = workspaces.find((workspace) => workspace.repoPath === state.repoPath);
+  if (duplicateRepo) return `Repository is already configured as ${duplicateRepo.workspaceName}.`;
+  if (!state.workspaceName.trim()) return "Workspace name cannot be blank.";
+  const workspaceId = state.workspaceId.trim();
+  if (!WORKSPACE_ID_PATTERN.test(workspaceId))
+    return "Workspace ID must contain only lowercase letters, digits, and single dashes.";
+  if (existingIds.has(workspaceId)) return `Workspace ID already exists: ${workspaceId}`;
+  return null;
+};
 export type WorkspaceCreationStage = "repository" | "provider" | "information" | "models";
 
 const deriveWorkspaceNameFromRepoPath = (repoPath: string): string => {
@@ -283,6 +310,11 @@ type State = {
   workspaceId: string;
   abbreviation: string;
   tileColor: string | null;
+  /**
+   * The branch that the user chose, or the effective branch that Continue saved. Null shows the
+   * repository default.
+   */
+  defaultTargetBranch: GitTargetBranch | null;
   editedId: boolean;
   modelDraft: WorkspaceModelDefaultsDraft;
   createdWorkspaceId: string | null;
@@ -301,6 +333,7 @@ type Action =
   | { type: "id"; workspaceId: string }
   | { type: "abbreviation"; abbreviation: string }
   | { type: "tileColor"; tileColor: string | null }
+  | { type: "defaultTargetBranch"; targetBranch: GitTargetBranch }
   | {
       type: "models";
       updater: (current: WorkspaceModelDefaultsDraft) => WorkspaceModelDefaultsDraft;
@@ -319,6 +352,7 @@ const initialState: State = {
   workspaceId: "",
   abbreviation: "",
   tileColor: null,
+  defaultTargetBranch: null,
   editedId: false,
   modelDraft: emptyModelDraft(),
   createdWorkspaceId: null,
@@ -349,6 +383,7 @@ const reducer = (state: State, action: Action): State => {
         pickerOpen: false,
         abbreviation: "",
         tileColor: null,
+        defaultTargetBranch: null,
         editedId: false,
         modelDraft: emptyModelDraft(),
         commitStatus: "not_attempted",
@@ -364,6 +399,8 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, abbreviation: action.abbreviation };
     case "tileColor":
       return { ...state, tileColor: action.tileColor };
+    case "defaultTargetBranch":
+      return { ...state, defaultTargetBranch: action.targetBranch };
     case "models":
       return { ...state, modelDraft: action.updater(state.modelDraft), error: null };
     case "created":
@@ -404,6 +441,8 @@ export type WorkspaceCreationController = {
   workspaceId: string;
   abbreviation: string;
   tileColor: string | null;
+  defaultTargetBranch: GitTargetBranch | null;
+  targetBranches: WorkspaceCreationTargetBranches;
   modelDraft: WorkspaceModelDefaultsDraft;
   createdWorkspaceId: string | null;
   committed: boolean;
@@ -414,6 +453,8 @@ export type WorkspaceCreationController = {
   busy: boolean;
   canAbandon: boolean;
   validationError: string | null;
+  /** Whether the details step is complete and Continue can open the models step. */
+  canContinue: boolean;
   error: string | null;
   openPicker: () => void;
   closePicker: () => void;
@@ -425,6 +466,7 @@ export type WorkspaceCreationController = {
   updateWorkspaceName: (workspaceName: string) => void;
   updateAbbreviation: (abbreviation: string) => void;
   updateTileColor: (tileColor: string | null) => void;
+  updateDefaultTargetBranch: (targetBranch: GitTargetBranch) => void;
   updateModelDraft: (
     updater: (current: WorkspaceModelDefaultsDraft) => WorkspaceModelDefaultsDraft,
   ) => void;

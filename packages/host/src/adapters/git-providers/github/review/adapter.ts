@@ -2,7 +2,6 @@ import {
   GITHUB_PROVIDER_DESCRIPTOR,
   pullRequestReviewContextSchema,
   type GithubGitProviderRepository,
-  type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage, type HostError, HostValidationError } from "../../../../effect/host-errors";
@@ -10,6 +9,7 @@ import type { GitProviderRepositoryError } from "../../../../ports/git-provider-
 import type { PullRequestReviewProviderPort } from "../../../../ports/pull-request-review-provider-port";
 import type { GithubCli } from "../cli";
 import { createGithubPullRequestReviewReader, type GithubPullRequestReviewReader } from "./reader";
+import type { GitProviderWorkspace } from "../../../../ports/git-provider-workspace";
 
 const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
@@ -27,7 +27,7 @@ export const createGithubPullRequestReviewAdapter = ({
 }: {
   githubCli: GithubCli;
   getRepository: (
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
   ) => Effect.Effect<GithubGitProviderRepository, HostError | GitProviderRepositoryError>;
   reviewReader?: GithubPullRequestReviewReader;
 }): PullRequestReviewProviderPort => {

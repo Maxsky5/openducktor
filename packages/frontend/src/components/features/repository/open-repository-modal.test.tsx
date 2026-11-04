@@ -22,13 +22,11 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import {
+  type LocalWorkspaceDetails,
   localOnlyProviderSetupClient,
   localOnlyWorkspaceDetails,
 } from "@/test-utils/workspace-provider-setup-fixture";
-import type {
-  WorkspaceSelectionOperationsInput,
-  WorkspaceStateContextValue,
-} from "@/types/state-slices";
+import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { OpenRepositoryModal, type OpenRepositoryModalView } from "./open-repository-modal";
 
 const allowTransition = (apply: () => Promise<boolean>): void => {
@@ -41,7 +39,7 @@ afterEach(() => {
   views.clear();
 });
 
-const record = (input: WorkspaceSelectionOperationsInput): WorkspaceRecord => ({
+const record = (input: Omit<LocalWorkspaceDetails, "defaultTargetBranch">): WorkspaceRecord => ({
   workspaceId: input.workspaceId,
   workspaceName: input.workspaceName,
   repoPath: input.repoPath,
@@ -54,8 +52,10 @@ const record = (input: WorkspaceSelectionOperationsInput): WorkspaceRecord => ({
   effectiveWorktreeBasePath: null,
 });
 
+/** The setup commit creates the workspace with `createWorkspace`. */
 const workspaceState = (
   overrides: Partial<WorkspaceStateContextValue> = {},
+  createWorkspace = async (details: LocalWorkspaceDetails) => record(details),
 ): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
   workspaces: [],
@@ -68,16 +68,13 @@ const workspaceState = (
   isSwitchingBranch: false,
   branchSyncDegraded: false,
   commitWorkspaceProviderSetup: async (input) => ({
-    workspace: await (overrides.addWorkspace ?? (async (value) => record(value)))(
-      localOnlyWorkspaceDetails(input),
-    ),
+    workspace: await createWorkspace(localOnlyWorkspaceDetails(input)),
     registrationSaved: true,
     settingsSaved: true,
     credentialsSaved: true,
     phase: "complete",
     error: null,
   }),
-  addWorkspace: async (input) => record(input),
   selectWorkspace: async () => {},
   closeWorkspace: async () => {},
   removeWorkspace: async () => {},
@@ -323,7 +320,7 @@ describe("OpenRepositoryModal", () => {
     "keeps the dirty draft when %s fails",
     async (path) => {
       const action = createDeferred<void>();
-      const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => {
+      const createWorkspace = mock(async (input: LocalWorkspaceDetails) => {
         await action.promise;
         return record(input);
       });
@@ -333,13 +330,15 @@ describe("OpenRepositoryModal", () => {
         isActive: false,
       };
       renderGuardedModal(
-        workspaceState({
-          addWorkspace,
-          reopenWorkspace,
-          closedWorkspaces: path === "add" ? [] : [closed],
-          resolveWorkspacePath: async () =>
-            path === "closed folder" ? { kind: "closed", workspace: closed } : { kind: "new" },
-        }),
+        workspaceState(
+          {
+            reopenWorkspace,
+            closedWorkspaces: path === "add" ? [] : [closed],
+            resolveWorkspacePath: async () =>
+              path === "closed folder" ? { kind: "closed", workspace: closed } : { kind: "new" },
+          },
+          createWorkspace,
+        ),
       );
 
       fireEvent.click(screen.getByText("Edit draft"));
@@ -360,7 +359,7 @@ describe("OpenRepositoryModal", () => {
       await waitFor(() => expect(screen.getByTestId("pending-discard").textContent).toBe("true"));
       fireEvent.click(screen.getByText("Discard draft"));
       await waitFor(() =>
-        expect(path === "add" ? addWorkspace : reopenWorkspace).toHaveBeenCalledTimes(1),
+        expect(path === "add" ? createWorkspace : reopenWorkspace).toHaveBeenCalledTimes(1),
       );
       if (path === "add") {
         expect(screen.getByRole<HTMLButtonElement>("button", { name: "Close" }).disabled).toBe(
@@ -385,12 +384,12 @@ describe("OpenRepositoryModal", () => {
   });
 
   test("uses three stages and keeps Close left and Open repository right in the footer", async () => {
-    const addWorkspace = mock(async (input: WorkspaceSelectionOperationsInput) => record(input));
+    const createWorkspace = mock(async (input: LocalWorkspaceDetails) => record(input));
     const closed = {
       ...record({ workspaceId: "old", workspaceName: "Old", repoPath: "/old" }),
       isActive: false,
     };
-    renderModal({ state: workspaceState({ addWorkspace, closedWorkspaces: [closed] }) });
+    renderModal({ state: workspaceState({ closedWorkspaces: [closed] }, createWorkspace) });
     expect(screen.getByText("Open a new workspace")).toBeTruthy();
     expect(screen.getByText("Reopen a workspace")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Old.*\/old/ })).toBeTruthy();
@@ -398,7 +397,7 @@ describe("OpenRepositoryModal", () => {
     expect(screen.queryByText("Reopen a workspace")).toBeNull();
     expect(screen.queryByRole("button", { name: /Old.*\/old/ })).toBeNull();
     expect(screen.getByLabelText<HTMLInputElement>("Workspace ID").value).toBe("repo");
-    expect(addWorkspace).not.toHaveBeenCalled();
+    expect(createWorkspace).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
     expect(
       screen.getByText("Choose defaults for this workspace. You can leave every choice blank."),
@@ -406,7 +405,7 @@ describe("OpenRepositoryModal", () => {
     const footer = screen.getByRole("group", { name: "Repository actions" });
     expect(within(footer).getByRole("button", { name: "Close" })).toBeTruthy();
     fireEvent.click(within(footer).getByRole("button", { name: "Open repository" }));
-    await waitFor(() => expect(addWorkspace).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createWorkspace).toHaveBeenCalledTimes(1));
   });
 
   test("keeps model defaults in a scrollable body", async () => {

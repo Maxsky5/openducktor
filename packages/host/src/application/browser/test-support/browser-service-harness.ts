@@ -2,7 +2,6 @@ import {
   type BrowserHostEvent,
   type BrowserTabOwner,
   type BrowserTabSummary,
-  repoConfigSchema,
 } from "@openducktor/contracts";
 import { emptyArtifactSummary } from "@openducktor/workflows";
 import { Effect } from "effect";
@@ -23,6 +22,7 @@ import { createBrowserEngineTestDouble } from "../../../test-support/browser-eng
 import { workspaceSessionRecord } from "../../terminals/test-support/terminal-service-harness";
 import { createBrowserService } from "../browser-service";
 import { taskCardFixture } from "../../../test-support/task-card-fixture";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 export const taskOwner: Extract<BrowserTabOwner, { kind: "task" }> = {
   kind: "task",
@@ -36,10 +36,9 @@ export const sessionOwner: BrowserTabOwner = {
   sessionId: "session-1",
 };
 
-const repoConfig = repoConfigSchema.parse({
+const repoConfig = repoConfigFixture({
   workspaceId: "workspace-1",
   workspaceName: "Workspace",
-  repoPath: "/repo",
 });
 
 const unusedAutomation: BrowserAutomationPort = {

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  repoConfigSchema,
   type TaskCard,
   type TaskMergeStatusSnapshot,
   type WorkspaceCatalog,
@@ -16,6 +15,7 @@ import {
 } from "../../../test-support/service-test-doubles";
 import type { RemoteFetchService } from "../../git/remote-fetch-service";
 import { createTaskMergeDetectionService } from "./task-merge-detection-service";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
@@ -159,12 +159,8 @@ const createHarness = ({
     workspaceSettingsService: {
       getRepoConfig: () =>
         Effect.succeed(
-          repoConfigSchema.parse({
-            workspaceId: "repo",
-            workspaceName: "Repo",
-            repoPath: "/repo",
+          repoConfigFixture({
             worktreeBasePath: "/worktrees",
-            defaultTargetBranch: { remote: "origin", branch: "main" },
           }),
         ),
       getWorkspaceCatalog: () => Effect.succeed(catalog),

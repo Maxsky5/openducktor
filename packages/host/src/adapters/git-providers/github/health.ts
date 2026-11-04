@@ -2,7 +2,6 @@ import {
   GITHUB_PROVIDER_DESCRIPTOR,
   type GitProviderHealth,
   type GithubGitProviderRepository,
-  type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage } from "../../../effect/host-errors";
@@ -11,6 +10,7 @@ import type {
   GitProviderRepositoryPort,
 } from "../../../ports/git-provider-port";
 import type { GithubCli } from "./cli";
+import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
 const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
@@ -21,7 +21,7 @@ export const createGithubProviderHealthPort = ({
   githubCli: GithubCli;
   repositoryPort: GitProviderRepositoryPort<GithubGitProviderRepository>;
 }): GitProviderHealthPort => ({
-  getStatus: (repoConfig: RepoConfig) =>
+  getStatus: (repoConfig: GitProviderWorkspace) =>
     Effect.gen(function* () {
       const provider = repoConfig.git.provider;
       if (provider?.id !== GITHUB_PROVIDER_ID || !provider.enabled) {

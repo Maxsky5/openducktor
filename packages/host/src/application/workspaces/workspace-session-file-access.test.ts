@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
+import { type WorkspaceSession } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import {
   createGitPortTestDouble,
@@ -13,6 +13,7 @@ import {
   scopeFilesToChats,
 } from "./workspace-session-file-access";
 import { HostValidationError } from "../../effect/host-errors";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const repoPath = "/repo";
 const worktree = "/worktrees/shared";
@@ -48,7 +49,11 @@ const setup = (chat: WorkspaceSession = session) => {
     settings: {
       getRepoConfig: () =>
         Effect.succeed(
-          repoConfigSchema.parse({ workspaceId: "fairnest", workspaceName: "Fairnest", repoPath }),
+          repoConfigFixture({
+            workspaceId: "fairnest",
+            workspaceName: "Fairnest",
+            repoPath,
+          }),
         ),
     },
     store: { get: () => Effect.succeed(chat) },

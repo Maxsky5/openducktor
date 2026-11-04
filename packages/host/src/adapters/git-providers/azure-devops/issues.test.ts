@@ -8,6 +8,7 @@ import { Effect } from "effect";
 import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port";
 import { createAzureDevOpsAreaPathsReader, createAzureDevOpsIssueReader } from "./issues";
 import type { AzureDevOpsRequest, AzureDevOpsRestClient } from "./rest-client";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const repository = azureDevOpsRepositorySchema.parse({
   providerId: "azure_devops",
@@ -17,10 +18,7 @@ const repository = azureDevOpsRepositorySchema.parse({
   project: "Desktop App",
   name: "app",
 });
-const repoConfig = repoConfigSchema.parse({
-  workspaceId: "repo",
-  workspaceName: "Repo",
-  repoPath: "/repo",
+const repoConfig = repoConfigFixture({
   git: {
     provider: {
       id: "azure_devops",

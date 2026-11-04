@@ -2,18 +2,14 @@ import { describe, expect, test } from "bun:test";
 import {
   AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
   GITHUB_PROVIDER_DESCRIPTOR,
-  repoConfigSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { GitProviderPort } from "../../ports/git-provider-port";
 import type { GitProviderResolver } from "./git-provider-resolver";
 import { createAzureAreaPathsService } from "./azure-area-paths-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
-const repoConfig = repoConfigSchema.parse({
-  workspaceId: "repo",
-  workspaceName: "Repo",
-  repoPath: "/repo",
-});
+const repoConfig = repoConfigFixture();
 
 const fixture = (providerId: "github" | "azure_devops") => {
   const paths: string[] = [];

@@ -1,6 +1,6 @@
 import { withConfigCommit } from "../config/config-commit";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
-import { repoConfigSchema, settingsSnapshotSaveInputSchema } from "@openducktor/contracts";
+import { settingsSnapshotSaveInputSchema } from "@openducktor/contracts";
 import { saveSettingsSnapshot } from "../../test-support/save-settings-snapshot";
 import { createSharedSettingsFixture } from "../../test-support/shared-settings-fixture";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
@@ -19,6 +19,7 @@ import type { SharedSettingsDatabase } from "../../ports/settings-config-port";
 import { SettingsFileError } from "../../effect/host-errors";
 import { createSettingsConfigAdapter } from "./settings-config-adapter";
 import { loadLegacySettingsConfig, readSettingsConfigFile } from "./settings-config-file";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const withTempConfig = async (run: (configPath: string) => Promise<void>): Promise<void> => {
   const root = await mkdtemp(join(tmpdir(), "odt-settings-config-"));
@@ -168,7 +169,7 @@ describe("settings config files", () => {
     await withTempConfig(async (configPath) => {
       const config = createDefaultGlobalConfig();
       for (const id of ["one", "two"])
-        config.workspaces[id] = repoConfigSchema.parse({
+        config.workspaces[id] = repoConfigFixture({
           workspaceId: id,
           workspaceName: id,
           repoPath: `/${id}`,

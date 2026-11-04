@@ -36,7 +36,6 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     isSwitchingBranch,
     branchSyncDegraded,
     refreshWorkspaces,
-    addWorkspace,
     commitWorkspaceProviderSetup,
     selectWorkspace,
     closeWorkspace,
@@ -122,7 +121,6 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
         activeWorkspace: resolvedActiveWorkspace,
         branches,
         activeBranch,
-        addWorkspace,
         commitWorkspaceProviderSetup,
         selectWorkspace,
         closeWorkspace,
@@ -141,7 +139,6 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     [
       activeBranch,
       resolvedActiveWorkspace,
-      addWorkspace,
       commitWorkspaceProviderSetup,
       branches,
       closedWorkspaces,

@@ -38,11 +38,14 @@ import type {
   SettingsConfigPersistence,
 } from "../../ports/settings-config-port";
 
-export type RepoConfigDraft = Pick<
-  RepoConfig,
-  "defaultModel" | "repoPath" | "workspaceId" | "workspaceName"
-> &
-  Partial<Omit<RepoConfig, "defaultModel" | "repoPath" | "workspaceId" | "workspaceName">>;
+type RequiredRepoConfigDraftKey =
+  | "defaultModel"
+  | "defaultTargetBranch"
+  | "repoPath"
+  | "workspaceId"
+  | "workspaceName";
+export type RepoConfigDraft = Pick<RepoConfig, RequiredRepoConfigDraftKey> &
+  Partial<Omit<RepoConfig, RequiredRepoConfigDraftKey>>;
 
 export type WorkspaceSettingsError =
   | HostInvariantErrorAggregate
@@ -149,6 +152,7 @@ export type WorkspaceAddInput = {
   workspaceName: string;
   abbreviation?: string | undefined;
   tileColor?: string | undefined;
+  defaultTargetBranch: RepoConfig["defaultTargetBranch"];
   git?: RepoConfig["git"];
   defaultModel?: RepoConfig["defaultModel"];
   agentDefaults?: RepoConfig["agentDefaults"];

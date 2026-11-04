@@ -104,6 +104,7 @@ describe("HostClient", () => {
         workspaceName: "New repo",
         abbreviation: "NR",
         tileColor: "#ef4444",
+        defaultTargetBranch: { remote: "origin", branch: "develop" },
         defaultModel: model,
         agentDefaults: { build: model },
       };
@@ -1028,6 +1029,7 @@ describe("HostClient", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
           agentStudioState: {
             openTaskIds: ["task-1"],
             activeTask: {
@@ -1076,6 +1078,7 @@ describe("HostClient", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
           agentStudioState: { openTaskIds: ["task-1"] },
         };
       }

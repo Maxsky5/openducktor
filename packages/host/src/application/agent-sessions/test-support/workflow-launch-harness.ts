@@ -19,7 +19,6 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   GITHUB_PROVIDER_DESCRIPTOR,
   repositoryGitProviderContextSchema,
-  repoConfigSchema,
   taskCardSchema,
 } from "@openducktor/contracts";
 import { Deferred, Effect } from "effect";
@@ -55,6 +54,7 @@ import {
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import { taskCardFixture } from "../../../test-support/task-card-fixture";
 import { toSettingsSnapshot } from "../../workspaces/workspace-settings-model";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const unexpected = (operation: string) => () =>
   Effect.die(new Error(`Unexpected ${operation} in the workflow launch harness.`));
@@ -96,10 +96,9 @@ export const createLaunchHarness = async (
     },
     workflow,
   );
-  let config = repoConfigSchema.parse({
+  let config = repoConfigFixture({
     workspaceId: "workspace",
     workspaceName: "Workspace",
-    repoPath: "/repo",
     defaultModel: modelFor(runtimeKind),
     worktreeBasePath: "/worktrees",
   });

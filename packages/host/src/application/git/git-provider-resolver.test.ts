@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { repoConfigSchema, type GitProviderDescriptor } from "@openducktor/contracts";
+import { type GitProviderDescriptor } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type {
   GitProviderHealthPort,
@@ -15,6 +15,7 @@ import {
   createGitProviderResolver,
   type GitProviderResolver,
 } from "./git-provider-resolver";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const unexpectedPortCall = <Success>(): Effect.Effect<Success, never> =>
   Effect.die("Capability port operation is not expected in resolver tests");
@@ -112,10 +113,7 @@ const provider = ({
 });
 
 const repoConfig = (providerConfig?: { id: string; enabled: boolean }) =>
-  repoConfigSchema.parse({
-    workspaceId: "repo",
-    workspaceName: "Repo",
-    repoPath: "/repo",
+  repoConfigFixture({
     git: providerConfig ? { provider: providerConfig } : {},
   });
 

@@ -30,6 +30,7 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import { createGitService as createEffectGitService } from "./git-service";
 import { createRemoteFetchService } from "./remote-fetch-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const createGitService = (...args: Parameters<typeof createEffectGitService>) =>
   createEffectGitService(...args);
@@ -98,6 +99,7 @@ const createFakeGitPort = ({
     countCommitsAhead: () => Effect.die(new Error("unexpected ahead count")),
     mergeTreeOids: () => Effect.die(new Error("unexpected merge tree")),
     readReflogs: () => Effect.die(new Error("unexpected reflog read")),
+    readBranchRefs: () => Effect.die(new Error("unexpected branch refs read")),
     canonicalizePath(path) {
       return Effect.tryPromise({
         try: async () => {
@@ -663,12 +665,7 @@ const createConfig = (): GlobalConfig =>
   globalConfigSchema.parse({
     version: 4,
     workspaces: {
-      repo: {
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        repoPath: "/canonical/repo",
-        worktreeCopyPaths: [".env"],
-      },
+      repo: repoConfigFixture({ repoPath: "/canonical/repo", worktreeCopyPaths: [".env"] }),
     },
   });
 describe("createGitService", () => {

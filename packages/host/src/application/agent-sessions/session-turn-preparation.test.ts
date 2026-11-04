@@ -2,7 +2,6 @@ import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, mock, test } from "bun:test";
 import {
   agentModelCatalogSchema,
-  repoConfigSchema,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentMessageTarget,
   type AgentSessionModelSelection,
@@ -14,6 +13,7 @@ import { taskCardFixture } from "../../test-support/task-card-fixture";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { toSettingsSnapshot } from "../workspaces/workspace-settings-model";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const target: AgentMessageTarget = {
   repoPath: "/repo",
@@ -57,10 +57,8 @@ const setup = () => {
     settings: createWorkspaceSettingsServiceTestDouble({
       getRepoConfig: () =>
         Effect.succeed(
-          repoConfigSchema.parse({
-            workspaceId: "repo",
+          repoConfigFixture({
             workspaceName: "Workspace",
-            repoPath: "/repo",
           }),
         ),
       getSettingsSnapshot,

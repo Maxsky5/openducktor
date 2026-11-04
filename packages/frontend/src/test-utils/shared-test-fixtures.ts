@@ -122,9 +122,6 @@ export const createWorkspaceStateFixture = (
     activeWorkspace,
     branches: [],
     activeBranch: null,
-    addWorkspace: async () => {
-      throw new Error("addWorkspace is not configured for this test.");
-    },
     commitWorkspaceProviderSetup: async () => {
       throw new Error("commitWorkspaceProviderSetup is not configured for this test.");
     },

@@ -83,9 +83,6 @@ describe("WorkspaceRail", () => {
       commitWorkspaceProviderSetup: async () => {
         throw new Error("Not used");
       },
-      addWorkspace: async () => {
-        throw new Error("Not used");
-      },
       selectWorkspace: selectWorkspaceMock,
       reorderWorkspaces: reorderWorkspacesMock,
       refreshBranches: async () => {},

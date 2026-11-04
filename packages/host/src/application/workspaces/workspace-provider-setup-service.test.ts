@@ -133,6 +133,13 @@ function harness() {
     git: {
       canonicalizePath: (value) => Effect.succeed(value),
       isGitRepository: () => Effect.succeed(true),
+      readBranchRefs: () =>
+        Effect.succeed({
+          remotes: ["origin"],
+          branches: [{ name: "origin/develop", isCurrent: false, isRemote: true }],
+          remoteHeads: { origin: "develop" },
+          head: { kind: "detached" },
+        }),
     },
     newSetupId: () => crypto.randomUUID(),
     detectRepositories: () => Effect.succeed({ outcome: "none", candidates: [] }),
@@ -180,11 +187,29 @@ const details = (ref: { setupId: string; revision: number }): WorkspaceProviderS
   revision: ref.revision,
   workspaceId: "repo",
   workspaceName: "Repository",
+  defaultTargetBranch: { remote: "origin", branch: "develop" },
   agentDefaults: {},
   defaultModel: { runtimeKind: "opencode", providerId: "provider", modelId: "model" },
 });
 
 describe("workspace provider setup", () => {
+  test("reads the repository default branch and saves the chosen default target branch", async () => {
+    const h = harness();
+    const ref = await Effect.runPromise(h.service.begin("/repo"));
+    expect(await Effect.runPromise(h.service.targetBranches(ref))).toEqual({
+      repositoryDefault: {
+        kind: "detected",
+        targetBranch: { remote: "origin", branch: "develop" },
+      },
+      branches: [{ name: "origin/develop", isCurrent: false, isRemote: true }],
+    });
+    const chosen = { branch: "release" };
+    const result = await Effect.runPromise(
+      h.service.commit({ ...details(ref), defaultTargetBranch: chosen }),
+    );
+    expect(result.phase).toBe("complete");
+    expect(h.config().workspaces.repo?.defaultTargetBranch).toEqual(chosen);
+  });
   test.each(["github", "azure_devops"] as const)(
     "creates an unchanged %s workspace with accepted readiness after the provider becomes unavailable",
     async (providerId) => {

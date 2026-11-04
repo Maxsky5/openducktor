@@ -44,6 +44,7 @@ const baseRepoConfigInput = {
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
 };
 
 const expectedDefaultChatSettings = {
@@ -83,7 +84,7 @@ describe("config-schemas", () => {
       theme: "light",
       system: { preferredOpenInToolId: "zed" },
       workspaces: {
-        repo: { ...baseRepoConfigInput, defaultTargetBranch: { remote: "origin", branch: "main" } },
+        repo: { ...baseRepoConfigInput },
       },
     });
     const after = structuredClone(before);

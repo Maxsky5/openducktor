@@ -10,11 +10,7 @@ import {
   workspaceSessionOwnership,
 } from "../../test-support/workspace-session-ownership";
 import { createPrepareOpencodeSessionRuntime } from "@openducktor/adapters-opencode-sdk";
-import {
-  globalConfigSchema,
-  repoConfigSchema,
-  type WorkspaceSession,
-} from "@openducktor/contracts";
+import { globalConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
 import { Effect, Result, Stream } from "effect";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
@@ -30,6 +26,7 @@ import { noMessageQueues } from "../../test-support/message-queue-observer-test-
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createLiveSessionRootRefsReader } from "./live-session-root-refs";
 import { enrichTasks } from "../../application/tasks/support/task-workflow-helpers";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 test.each([
   { status: "closed", failure: "missing directory" },
@@ -41,7 +38,11 @@ test.each([
     const repoPath = await mkdtemp(path.join(tmpdir(), "odt-session-restoration-"));
     const db = await createSqliteTaskStoreHarness({ repoPath });
     const workspaceId = "fairnest";
-    const config = repoConfigSchema.parse({ workspaceId, workspaceName: "Fairnest", repoPath });
+    const config = repoConfigFixture({
+      workspaceId,
+      workspaceName: "Fairnest",
+      repoPath,
+    });
     const store = createSqliteWorkspaceSessionStore(db);
     const task = await Effect.runPromise(
       db.store.createTask({

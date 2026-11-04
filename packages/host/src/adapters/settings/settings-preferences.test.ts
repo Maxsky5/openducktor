@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { repoConfigSchema } from "@openducktor/contracts";
+
 import { Effect } from "effect";
 import { withConfigCommit } from "../config/config-commit";
 import { createDefaultGlobalConfig } from "../../config/global-config";
@@ -19,17 +19,18 @@ import {
 } from "./settings-config-file";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { createSharedSettingsFixture } from "../../test-support/shared-settings-fixture";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 test("preference-only edits use scoped reads and do not notify shared-config observers", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "odt-theme-preferences-"));
   const configPath = path.join(root, "config.json");
   const config = createDefaultGlobalConfig();
-  config.workspaces.first = repoConfigSchema.parse({
+  config.workspaces.first = repoConfigFixture({
     workspaceId: "first",
     workspaceName: "First",
     repoPath: "/first",
   });
-  config.workspaces.second = repoConfigSchema.parse({
+  config.workspaces.second = repoConfigFixture({
     workspaceId: "second",
     workspaceName: "Second",
     repoPath: "/second",
@@ -92,10 +93,9 @@ test("keeps shared edits and classified preferences after settings migration", a
   const configPath = path.join(root, "config.json");
   const legacy = createDefaultGlobalConfig();
   legacy.theme = "dark";
-  legacy.workspaces.first = repoConfigSchema.parse({
+  legacy.workspaces.first = repoConfigFixture({
     workspaceId: "first",
     workspaceName: "First",
-    repoPath: "/repo",
     agentStudioState: { openTaskIds: ["task-1"] },
   });
   const original = JSON.stringify(legacy);

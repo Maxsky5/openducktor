@@ -6,7 +6,12 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { errorMessage } from "../../lib/errors";
-import { resolveTaskTargetBranchState } from "../../lib/target-branch";
+import {
+  canonicalTargetBranch,
+  INVALID_TASK_TARGET_BRANCH_LABEL,
+  resolveTaskTargetBranchState,
+  type TaskTargetBranchState,
+} from "../../lib/target-branch";
 import type { AppVisibility } from "../../platform/app-visibility";
 import { checkoutReadIdentity, worktreeBranchQueryOptions } from "../../queries/git";
 import type { DiffDataState } from "../contracts";
@@ -51,7 +56,7 @@ export type TaskGitPanelInput = {
 };
 
 export type TaskGitPanel = {
-  targetBranchState: ReturnType<typeof resolveTaskTargetBranchState>;
+  targetBranchState: TaskTargetBranchState;
   worktree: TaskWorktreeState;
   /** The task worktree path that the host returned, before the session path replaces it. */
   queriedWorktreePath: string | null;
@@ -183,12 +188,11 @@ export function useTaskGitPanel(input: TaskGitPanelInput): TaskGitPanel {
 function taskComparisonLabel(
   contextMode: TaskGitContextMode,
   target: GitTargetBranch | null,
-  targetState: ReturnType<typeof resolveTaskTargetBranchState>,
+  targetState: TaskTargetBranchState,
 ) {
   if (contextMode === "repository") return UPSTREAM_TARGET_BRANCH;
-  return target || targetState.validationError
-    ? targetState.displayTargetBranch
-    : "Repository default";
+  if (targetState.validationError) return INVALID_TASK_TARGET_BRANCH_LABEL;
+  return target ? canonicalTargetBranch(target) : "Repository default";
 }
 
 type TaskComparisonInput = {
@@ -200,7 +204,7 @@ type TaskComparisonInput = {
   repoSettings: TaskGitRepoSettings | null;
   repoSettingsError: Error | null;
   loadRepoSettings: () => Promise<TaskGitRepoSettings>;
-  targetState: ReturnType<typeof resolveTaskTargetBranchState>;
+  targetState: TaskTargetBranchState;
   branchKey: string | null;
 };
 

@@ -1,4 +1,4 @@
-import { repoConfigSchema, type StartupOperationSnapshot } from "@openducktor/contracts";
+import { type StartupOperationSnapshot } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren } from "react";
 import type { HostClient } from "@openducktor/host-client";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -12,6 +12,7 @@ import { createStartupLiveSourceFake } from "@openducktor/frontend-core/test-sup
 import { createWorkflowLaunchClient } from "@/test-utils/workflow-launch-client";
 import { sonnerFeedback } from "@/lib/sonner-feedback";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
 
 export type AgentStudioWorkflowFixture = Parameters<typeof createWorkflowLaunchClient>[0];
 
@@ -31,12 +32,9 @@ export function createAgentStudioStartupTestHost(
       }),
       workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       workspaceGetRepoConfig: async () =>
-        repoConfigSchema.parse({
+        repoConfigFixture({
           workspaceId: "workspace-1",
-          workspaceName: "Repo",
-          repoPath: "/repo",
           branchPrefix: "odt",
-          defaultTargetBranch: { remote: "origin", branch: "main" },
         }),
       ...client,
       agentSessionWorkflowLaunch: async (request) => {

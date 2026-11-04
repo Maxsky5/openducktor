@@ -5,7 +5,6 @@ import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   readTaskArtifactsResultSchema,
   readTaskResultSchema,
-  repoConfigSchema,
   type ArtifactReadResult,
   type TaskArtifact,
   type McpTaskArtifact,
@@ -34,6 +33,7 @@ import { createOdtMcpBridgeService } from "./odt-mcp-bridge-service";
 
 import { createTaskEventStream } from "../../events/task-event-stream";
 import { createDefaultGlobalConfig } from "../../config/global-config";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 let harness: SqliteTaskStoreTestHarness;
 let service: EventPublishingTaskService;
@@ -154,7 +154,7 @@ const bridgeWith = (
       getRepoConfig: (workspaceId) => {
         scopeCalls.push(workspaceId);
         return Effect.succeed(
-          repoConfigSchema.parse({
+          repoConfigFixture({
             workspaceName: "Fixture",
             ...harness.scope,
           }),

@@ -18,7 +18,7 @@ import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useSt
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
-import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   dropWorkspaceQueries,
   dropWorkspaceConfigQueries,
@@ -31,10 +31,7 @@ import {
   writeWorkspaceCatalogToQuery,
   writeWorkspaceListToQuery,
 } from "@openducktor/frontend-core/queries/workspace";
-import {
-  normalizeRepoPath,
-  shouldResetBranchStateForRepoChange,
-} from "./workspace-operations-model";
+import { shouldResetBranchStateForRepoChange } from "./workspace-operations-model";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type UseWorkspaceSelectionOperationsArgs = {
@@ -55,7 +52,6 @@ type UseWorkspaceSelectionOperationsResult = {
   workspaceLoadError: Error | null;
   isSwitchingWorkspace: boolean;
   refreshWorkspaces: () => Promise<void>;
-  addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<WorkspaceRecord>;
   commitWorkspaceProviderSetup: (
     input: WorkspaceProviderSetupCommit,
   ) => Promise<WorkspaceProviderSetupProgress>;
@@ -345,41 +341,6 @@ export function useWorkspaceSelectionOperations({
     applyWorkspaceRecords(catalog.openWorkspaces);
   }, [applyWorkspaceRecords, queryClient]);
 
-  const addWorkspace = useCallback(
-    async (input: WorkspaceSelectionOperationsInput): Promise<WorkspaceRecord> => {
-      const normalizedRepoPath = normalizeRepoPath(input.repoPath);
-      if (!normalizedRepoPath) {
-        throw new Error("Choose a repository folder before opening a workspace.");
-      }
-
-      const workspaceInput: WorkspaceSelectionOperationsInput = {
-        workspaceId: input.workspaceId,
-        workspaceName: input.workspaceName,
-        repoPath: normalizedRepoPath,
-      };
-      if (input.abbreviation) {
-        workspaceInput.abbreviation = input.abbreviation;
-      }
-      if (input.tileColor) {
-        workspaceInput.tileColor = input.tileColor;
-      }
-      const workspace = await hostClient.workspaceAdd(workspaceInput);
-      applyWorkspaceRecord(workspace);
-      try {
-        await invalidateWorkspaceSettingsSnapshot(queryClient);
-      } catch (cause) {
-        toast.error("Repository added, but settings did not refresh", {
-          description: errorMessage(cause),
-        });
-      }
-      toast.success("Repository added", {
-        description: workspace.repoPath,
-      });
-      return workspace;
-    },
-    [applyWorkspaceRecord, hostClient, queryClient],
-  );
-
   const commitWorkspaceProviderSetup = useCallback(
     async (input: WorkspaceProviderSetupCommit) => {
       const outcome = await hostClient.workspaceProviderSetupCommit(input);
@@ -541,7 +502,6 @@ export function useWorkspaceSelectionOperations({
     workspaceLoadError,
     isSwitchingWorkspace,
     refreshWorkspaces,
-    addWorkspace,
     commitWorkspaceProviderSetup,
     selectWorkspace,
     closeWorkspace,

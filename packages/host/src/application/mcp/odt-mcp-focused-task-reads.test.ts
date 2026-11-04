@@ -1,7 +1,7 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { repoConfigSchema } from "@openducktor/contracts";
+
 import type { JSONType } from "zod";
 import { HostOperationError } from "../../effect/host-errors";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
@@ -19,6 +19,7 @@ import { createTaskService } from "../tasks/task-service";
 import { resolveTaskReference } from "./odt-mcp-bridge-model";
 import { executeOdtMcpReadTool } from "./odt-mcp-bridge-read-tools";
 import { createOdtMcpToolContext, type OdtMcpReadToolName } from "./odt-mcp-bridge-tool-context";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 type Read = { operation: string; columns: string[]; count: number };
 
@@ -368,7 +369,7 @@ describe("focused MCP task reads", () => {
       workspaceSettingsService: {
         getRepoConfig: () =>
           Effect.succeed(
-            repoConfigSchema.parse({
+            repoConfigFixture({
               workspaceName: "Fixture",
               ...harness.scope,
             }),

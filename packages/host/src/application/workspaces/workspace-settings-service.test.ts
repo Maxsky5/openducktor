@@ -984,6 +984,7 @@ describe("createWorkspaceSettingsService", () => {
         workspaceId: "repo-b",
         workspaceName: "Repo B",
         repoPath: "/repos/b",
+        defaultTargetBranch: { branch: "trunk" },
       }),
     );
     const addedRepoConfig = await Effect.runPromise(service.getRepoConfig("repo-b"));
@@ -995,6 +996,7 @@ describe("createWorkspaceSettingsService", () => {
       isActive: true,
     });
     expect(addedRepoConfig.defaultModel).toBeUndefined();
+    expect(addedRepoConfig.defaultTargetBranch).toEqual({ branch: "trunk" });
     expect(selected).toMatchObject({
       workspaceId: "repo-a",
       isActive: true,
@@ -1021,6 +1023,7 @@ describe("createWorkspaceSettingsService", () => {
         workspaceId: "repo-b",
         workspaceName: "Repo B",
         repoPath: "/repos/b",
+        defaultTargetBranch: { branch: "trunk" },
         abbreviation: " iOS ",
         tileColor: "#F08C00",
       }),
@@ -1047,6 +1050,7 @@ describe("createWorkspaceSettingsService", () => {
         workspaceId: "repo-b",
         workspaceName: "Repo B",
         repoPath: "/repos/b",
+        defaultTargetBranch: { branch: "trunk" },
       }),
     );
 
@@ -1068,6 +1072,7 @@ describe("createWorkspaceSettingsService", () => {
           workspaceId: "repo-b",
           workspaceName: "Repo B",
           repoPath: "/repos/b",
+          defaultTargetBranch: { branch: "trunk" },
           tileColor: "blue",
         }),
       ),
@@ -1100,6 +1105,7 @@ describe("createWorkspaceSettingsService", () => {
           workspaceId: "repo-b",
           workspaceName: "Repo B",
           repoPath: "/repos/b",
+          defaultTargetBranch: { branch: "trunk" },
         }),
       ),
     ).rejects.toThrow("Repository path is already registered to workspace repo-a: /repos/a");

@@ -2,8 +2,11 @@ import { z } from "zod";
 import { agentModelDefaultSchema, repoAgentDefaultsSchema } from "./config-schemas";
 import { azureDevOpsConnectionStateSchema } from "./azure-devops-schemas";
 import {
+  gitBranchSchema,
   gitProviderConfigSchema,
   gitProviderHealthSchema,
+  gitRepositoryDefaultBranchSchema,
+  gitTargetBranchSchema,
   workspaceRecordSchema,
 } from "./git-schemas";
 
@@ -56,6 +59,13 @@ export const workspaceProviderSetupGithubSchema = z.strictObject({
   reason: z.string().nullable(),
 });
 export type WorkspaceProviderSetupGithub = z.infer<typeof workspaceProviderSetupGithubSchema>;
+export const workspaceProviderSetupTargetBranchesSchema = z.strictObject({
+  repositoryDefault: gitRepositoryDefaultBranchSchema,
+  branches: z.array(gitBranchSchema),
+});
+export type WorkspaceProviderSetupTargetBranches = z.infer<
+  typeof workspaceProviderSetupTargetBranchesSchema
+>;
 export const workspaceProviderSetupCommitSchema = workspaceProviderSetupRefSchema.extend({
   workspaceId: z
     .string()
@@ -64,6 +74,7 @@ export const workspaceProviderSetupCommitSchema = workspaceProviderSetupRefSchem
   workspaceName: z.string().trim().min(1),
   abbreviation: z.string().optional(),
   tileColor: z.string().optional(),
+  defaultTargetBranch: gitTargetBranchSchema,
   defaultModel: agentModelDefaultSchema.optional(),
   agentDefaults: repoAgentDefaultsSchema,
 });

@@ -509,8 +509,6 @@ const persistedRepoGitConfigSchema = repoGitConfigSchema.safeExtend({
 
 export const workspaceNameSchema = trimmedRequiredString("Workspace name");
 
-const DEFAULT_REPO_TARGET_BRANCH = { remote: "origin", branch: "main" };
-
 export const repoConfigSchema = z.object({
   workspaceId: workspaceIdSchema,
   workspaceName: workspaceNameSchema,
@@ -520,7 +518,7 @@ export const repoConfigSchema = z.object({
   defaultModel: nullableToOptional(agentModelDefaultSchema),
   worktreeBasePath: nullableToOptional(z.string().min(1)),
   branchPrefix: z.string().min(1).default(DEFAULT_BRANCH_PREFIX),
-  defaultTargetBranch: gitTargetBranchSchema.default(DEFAULT_REPO_TARGET_BRANCH),
+  defaultTargetBranch: gitTargetBranchSchema,
   git: repoGitConfigSchema.default({}),
   hooks: repoHooksSchema.default({ postComplete: [] }),
   actions: repoActionsSchema.default(createEmptyRepoActions),
@@ -536,7 +534,7 @@ export type RepoConfig = z.infer<typeof repoConfigSchema>;
 const persistedRepoConfigSchema = repoConfigSchema
   .safeExtend({
     defaultModel: nullableToOptional(persistedAgentModelDefaultSchema),
-    defaultTargetBranch: gitTargetBranchSchema.strict().default(DEFAULT_REPO_TARGET_BRANCH),
+    defaultTargetBranch: gitTargetBranchSchema.strict(),
     git: persistedRepoGitConfigSchema.default({}),
     hooks: repoHooksSchema.strict().default({ postComplete: [] }),
     actions: persistedRepoActionsSchema.default(createEmptyRepoActions),

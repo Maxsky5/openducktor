@@ -21,7 +21,6 @@ import type {
 } from "@openducktor/contracts";
 import {
   globalConfigSchema,
-  repoConfigSchema,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeInstanceSummary,
   runtimeKindSchema,
@@ -50,6 +49,7 @@ import {
 } from "../task-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import { createDefaultGitProviderResolver } from "./git-provider-test-support";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
@@ -272,7 +272,9 @@ const createAgentSessionWorkspaceSettingsService = (
     defaultWorktreeBasePath: "/worktrees/repo",
     effectiveWorktreeBasePath: workspace.effectiveWorktreeBasePath,
   };
-  const config = repoConfigSchema.parse(record);
+  const config = repoConfigFixture({
+    ...record,
+  });
   return createWorkspaceSettingsServiceTestDouble({
     getRepoConfig: () => Effect.succeed(config),
     getWorkspaceCatalog: () =>
@@ -295,12 +297,7 @@ const createBuildSettingsConfig = (
         globalConfigSchema.parse({
           version: 4,
           workspaces: {
-            repo: {
-              workspaceId: "repo",
-              workspaceName: "Repo",
-              repoPath,
-              worktreeCopyPaths: [],
-            },
+            repo: repoConfigFixture({ repoPath, worktreeCopyPaths: [] }),
           },
         }),
       );

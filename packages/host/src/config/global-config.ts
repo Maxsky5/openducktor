@@ -13,6 +13,7 @@ import {
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../effect/host-errors";
 import { configValidationError } from "./config-validation-message";
+import { LEGACY_DEFAULT_TARGET_BRANCH, readLegacyTargetBranch } from "./legacy-target-branch";
 
 type PersistedConfigObject = Record<string, JSONType>;
 const persistedConfigObjectSchema = z.record(z.string(), z.json());
@@ -95,6 +96,16 @@ const migrateRepositoryGitConfig = (workspaceId: string, workspace: JSONType): J
   return git === workspace.git && provider === git.provider
     ? workspace
     : { ...workspace, git: { ...git, provider } };
+};
+
+const migrateDefaultTargetBranch = (workspace: JSONType): JSONType => {
+  if (!isPersistedConfigObject(workspace)) return workspace;
+  const saved = workspace.defaultTargetBranch;
+  return {
+    ...workspace,
+    defaultTargetBranch:
+      saved === undefined ? LEGACY_DEFAULT_TARGET_BRANCH : readLegacyTargetBranch(saved),
+  };
 };
 
 const migrateWorkspaces = (
@@ -203,9 +214,10 @@ const migratePersistedConfig = (payload: PersistedConfigObject) => {
       ),
     };
   }
-  return migrateWorkspaces(
-    migrateWorkspaces(migrateReusablePrompts(migrated), migrateRepositoryGitConfig),
-    migrateRepositoryActions,
+  return migrateWorkspaces(migrateReusablePrompts(migrated), (workspaceId, workspace) =>
+    migrateDefaultTargetBranch(
+      migrateRepositoryActions(workspaceId, migrateRepositoryGitConfig(workspaceId, workspace)),
+    ),
   );
 };
 

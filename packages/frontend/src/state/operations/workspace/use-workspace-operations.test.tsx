@@ -22,7 +22,6 @@ type WorkspaceIntegrationHostClient = Pick<
   | "gitGetBranches"
   | "gitGetCurrentBranch"
   | "gitSwitchBranch"
-  | "workspaceAdd"
   | "workspaceCatalogGet"
   | "workspaceClose"
   | "workspaceGetSettingsSnapshot"
@@ -42,7 +41,6 @@ const createWorkspaceHostClient = (
   workspaceProviderSetupCommit: async () => {
     throw new Error("Not used");
   },
-  workspaceAdd: async (input) => workspace(input.repoPath),
   workspaceSelect: async (repoPath: string) => workspace(repoPath, true),
   workspaceCatalogGet: async () => ({
     catalogRevision: 0,
@@ -502,108 +500,6 @@ describe("use-workspace-operations", () => {
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-b");
     } finally {
       await harness.unmount();
-    }
-  });
-
-  test("addWorkspace trims path then refreshes", async () => {
-    const setActiveRepo = mock(() => {});
-    const workspaceAdd = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-new"));
-    const workspaceCatalogGet = mock(async () => ({
-      catalogRevision: 0,
-      openWorkspaces: [workspace("/repo-new", true)],
-      closedWorkspaces: [],
-      incompleteRemovals: [],
-    }));
-    const hostClient = createWorkspaceHostClient({ workspaceAdd, workspaceCatalogGet });
-
-    const harness = createHookHarness(
-      {
-        activeRepo: null,
-        setActiveRepo,
-        clearTaskData: () => {},
-      },
-      hostClient,
-    );
-
-    try {
-      await harness.mount();
-      await harness.run(async (value) => {
-        await value.addWorkspace({
-          workspaceId: "repo-new",
-          workspaceName: "Repo New",
-          repoPath: "  /repo-new  ",
-        });
-      });
-
-      expect(workspaceAdd).toHaveBeenCalledWith({
-        workspaceId: "repo-new",
-        workspaceName: "Repo New",
-        repoPath: "/repo-new",
-      });
-      expect(workspaceCatalogGet).toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("addWorkspace clears cached settings snapshot for next read", async () => {
-    const setActiveRepo = mock(() => {});
-    const workspaceGetSettingsSnapshot = mock(async () => settingsSnapshot(["/repo-old"]));
-    const hostClient = createWorkspaceHostClient({
-      workspaceGetSettingsSnapshot,
-      workspaceAdd: mock(async (): Promise<WorkspaceRecord> => workspace("/repo-new", true)),
-      workspaceCatalogGet: mock(async () => ({
-        catalogRevision: 0,
-        openWorkspaces: [workspace("/repo-new", true)],
-        closedWorkspaces: [],
-        incompleteRemovals: [],
-      })),
-    });
-    let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
-
-    const SettingsSnapshotProbe = () => {
-      useQuery(settingsSnapshotQueryOptions());
-      return null;
-    };
-
-    const Harness = () => {
-      latest = useWorkspaceOperations({
-        ...normalizeHookArgs({ activeRepo: null, setActiveRepo }),
-        clearTaskData: () => {},
-      });
-      return createElement(SettingsSnapshotProbe);
-    };
-
-    const rendered = render(createElement(Harness), {
-      wrapper: createHostWrapper(hostClient),
-    });
-
-    try {
-      await waitFor(() => {
-        expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
-      });
-
-      workspaceGetSettingsSnapshot.mockImplementationOnce(async () =>
-        settingsSnapshot(["/repo-old", "/repo-new"]),
-      );
-
-      if (!latest) {
-        throw new Error("Hook not mounted");
-      }
-
-      await act(async () => {
-        await latest?.addWorkspace({
-          workspaceId: "repo-new",
-          workspaceName: "Repo New",
-          repoPath: "/repo-new",
-        });
-      });
-
-      await waitFor(() => {
-        expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
-      });
-    } finally {
-      rendered.unmount();
     }
   });
 

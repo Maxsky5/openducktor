@@ -3,7 +3,7 @@ import {
   SessionViewShownContext,
 } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { expect, mock, spyOn, test } from "bun:test";
-import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
+import type { WorkspaceSession } from "@openducktor/contracts";
 import { QueryClient, useQuery } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, memo, type ReactElement, useEffect, useLayoutEffect, useState } from "react";
@@ -46,6 +46,7 @@ import {
 } from "./workspace-session-content";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
+import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
 
 function mockTools(
   renderTools: (props: Parameters<typeof toolsModule.useWorkspaceSessionTools>[0]) => ReactElement,
@@ -57,7 +58,11 @@ function mockTools(
   }));
 }
 
-const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+const workspace = {
+  workspaceId: "workspace",
+  workspaceName: "Workspace",
+  repoPath: "/repo",
+};
 const record = {
   id: "chat",
   runtimeKind: "opencode" as const,
@@ -308,7 +313,7 @@ test("changing the chat owner resets its input and file preview", () => {
   const firstFile = { rootPath: "/repo", relativePath: "first.ts" };
   queryClient.setQueryData(
     repoConfigQueryOptions(workspace.workspaceId).queryKey,
-    repoConfigSchema.parse({ ...workspace, agentStudioState: { openTaskIds: [] } }),
+    repoConfigFixture({ ...workspace, agentStudioState: { openTaskIds: [] } }),
   );
   const view = renderClosedSession(
     queryClient,
@@ -370,11 +375,15 @@ test("changing the workspace owner resets its chat input and active effects", ()
     },
   );
   const queryClient = newQueryClient();
-  const otherWorkspace = { workspaceId: "other", workspaceName: "Other", repoPath: "/other" };
+  const otherWorkspace = {
+    workspaceId: "other",
+    workspaceName: "Other",
+    repoPath: "/other",
+  };
   for (const scope of [workspace, otherWorkspace]) {
     queryClient.setQueryData(
       repoConfigQueryOptions(scope.workspaceId).queryKey,
-      repoConfigSchema.parse({ ...scope, agentStudioState: { openTaskIds: [] } }),
+      repoConfigFixture({ ...scope, agentStudioState: { openTaskIds: [] } }),
     );
   }
   const otherRecord = {
@@ -420,7 +429,7 @@ test("opening and closing tools preserves question drafts, tabs, and collapse ch
   const queryClient = newQueryClient();
   queryClient.setQueryData(
     repoConfigQueryOptions(workspace.workspaceId).queryKey,
-    repoConfigSchema.parse({ ...workspace, agentStudioState: { openTaskIds: [] } }),
+    repoConfigFixture({ ...workspace, agentStudioState: { openTaskIds: [] } }),
   );
   const view = renderClosedSession(queryClient, "main", undefined, record, null);
   try {
@@ -743,7 +752,7 @@ test("the tools panel stays beside the chat", () => {
   const queryClient = newQueryClient();
   queryClient.setQueryData(
     repoConfigQueryOptions(workspace.workspaceId).queryKey,
-    repoConfigSchema.parse({ ...workspace, agentStudioState: { openTaskIds: [] } }),
+    repoConfigFixture({ ...workspace, agentStudioState: { openTaskIds: [] } }),
   );
   const view = render(
     <ClientConnectionProvider connection={connectionOf(queryClient)}>

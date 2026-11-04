@@ -1,9 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
-import { repoConfigSchema, type AzureDevOpsRepository } from "@openducktor/contracts";
+import { type AzureDevOpsRepository } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { createAzureDevOpsConnectionService } from "./azure-devops-connection-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 describe("AzureDevOpsConnectionService", () => {
   test("rejects credential changes while the provider is disabled", async () => {
@@ -34,10 +35,7 @@ describe("AzureDevOpsConnectionService", () => {
       disconnect: () => Effect.void,
       removeWorkspaceCredentials: () => Effect.void,
     };
-    const repoConfig = repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
+    const repoConfig = repoConfigFixture({
       git: {
         provider: {
           id: "azure_devops",

@@ -5,7 +5,6 @@ import {
   type PullRequest,
   type PullRequestReviewContext,
   type RepoConfig,
-  repoConfigSchema,
   type TaskCard,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -16,12 +15,10 @@ import type { TaskReader } from "../../ports/task-repository-ports";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import { createGitProviderResolver } from "../git/git-provider-resolver";
 import { createPullRequestReviewService } from "./pull-request-review-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const makeRepoConfig = (providerId: GitProviderId): RepoConfig =>
-  repoConfigSchema.parse({
-    workspaceId: "repo",
-    workspaceName: "Repo",
-    repoPath: "/repo",
+  repoConfigFixture({
     git: {
       provider: { id: providerId, enabled: true },
     },

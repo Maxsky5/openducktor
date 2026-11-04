@@ -1,7 +1,7 @@
 import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, repoConfigSchema } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { RunSessionStartWorkflow } from "../../sessions/start/session-start-orchestration";
 import type { AgentSessionSummary } from "../../sessions/agent-sessions-store";
 import { createFeedbackFake } from "../../test-support/feedback-fake";
@@ -17,6 +17,7 @@ import { createTestClientConnection } from "../../test-support/test-client-conne
 import { createStartupLiveSourceFake } from "../../test-support/startup-live-source-fake";
 import { observeStartupPreparation } from "../../sessions/startup/startup-prepared-handoff";
 import { type OpenTaskView, useTaskSessionStartFlow } from "./use-task-session-start-flow";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 type Args = Parameters<typeof useTaskSessionStartFlow>[0];
 
@@ -200,10 +201,9 @@ describe("useTaskSessionStartFlow", () => {
         feedback,
         client: {
           workspaceGetRepoConfig: async () =>
-            repoConfigSchema.parse({
+            repoConfigFixture({
               workspaceId: "workspace-1",
               workspaceName: "Workspace",
-              repoPath: "/repo",
               agentStudioState: { openTaskIds: [] },
             }),
         },

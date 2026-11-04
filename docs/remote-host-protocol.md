@@ -149,7 +149,7 @@ Native HTTP requests can omit Origin; browser headers do not identify a device.
 
 ## Compatibility
 
-The current remote protocol is `4`, as `REMOTE_PROTOCOL_VERSION` in `packages/contracts` sets. Version 4 requires full workspace references, typed settings edits, and client authorization, and adds workflow-qualified Autopilot outcomes. Hosts and clients must use this version together.
+The current remote protocol is `5`, as `REMOTE_PROTOCOL_VERSION` in `packages/contracts` sets. Version 4 requires full workspace references, typed settings edits, and client authorization, and adds workflow-qualified Autopilot outcomes. Version 5 requires the default target branch in the workspace setup commit and adds the setup target branch read. Hosts and clients must use this version together.
 The protocol version is independent of app release versions.
 Hosts and clients can use different app versions when they share a protocol version and the client receives all required capabilities.
 A breaking change to required behavior needs a new remote protocol version.
@@ -175,7 +175,7 @@ A client without the capability keeps a quiet stream, because an older host send
 
 Discovery returns `shell`, `appVersion`, `hostInstanceId`, `hostId`, `accessPolicy: "pairing"`, and supported protocol versions with capability names.
 `hostInstanceId` identifies the live host run; it is not a durable trust identity.
-`hostId` identifies the host approval scope across restarts. It grants no access. Legacy descriptors can be read only to report which peer needs an update. A remote connection requires protocol 4, pairing support, and a stable scoped host ID before the client sends proof.
+`hostId` identifies the host approval scope across restarts. It grants no access. Legacy descriptors can be read only to report which peer needs an update. A remote connection requires protocol 5, pairing support, and a stable scoped host ID before the client sends proof.
 Negotiation sends this client hello:
 
 ```json

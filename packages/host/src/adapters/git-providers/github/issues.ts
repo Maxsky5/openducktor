@@ -2,7 +2,6 @@ import {
   TASK_ASSET_MAX_FILE_BYTES,
   issueImageGetResultSchema,
   type GithubGitProviderRepository,
-  type RepoConfig,
   type SourceIssue,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -14,6 +13,7 @@ import { z } from "zod";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { GitProviderRepositoryPort, IssueReaderPort } from "../../../ports/git-provider-port";
 import { runGithubApi, type GithubCli } from "./cli";
+import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
 const githubIssueSchema = z.object({
   number: z.number().int().positive(),
@@ -131,7 +131,7 @@ const githubRepositoryIdentitySchema = z.object({ id: z.number().int().positive(
 
 const repositoryScope = (
   githubCli: GithubCli,
-  repoConfig: RepoConfig,
+  repoConfig: GitProviderWorkspace,
   repository: GithubGitProviderRepository,
 ) =>
   Effect.gen(function* () {

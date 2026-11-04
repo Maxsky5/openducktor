@@ -11,7 +11,6 @@ import {
   type RuntimeInstanceSummary,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeKind,
-  repoConfigSchema,
   type AgentModelCatalog,
 } from "@openducktor/contracts";
 import { emptyArtifactSummary } from "@openducktor/workflows";
@@ -35,6 +34,7 @@ import { createSessionCreationPreparation } from "../agent-sessions/session-crea
 import { createSessionTurnPreparation } from "../agent-sessions/session-turn-preparation";
 import { taskCardFixture } from "../../test-support/task-card-fixture";
 import { createDefaultGlobalConfig } from "../../config/global-config";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const repoPath = "/remote/repo";
 const workingDirectory = "/worktrees/workspace/task";
@@ -140,7 +140,7 @@ const harness = async (
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
       getRepoConfig: () =>
         Effect.succeed(
-          repoConfigSchema.parse({
+          repoConfigFixture({
             workspaceId: "workspace",
             workspaceName: "Workspace",
             repoPath,
@@ -149,7 +149,7 @@ const harness = async (
         ),
       getRepoConfigByRepoPath: () =>
         Effect.succeed(
-          repoConfigSchema.parse({
+          repoConfigFixture({
             workspaceId: "workspace",
             workspaceName: "Workspace",
             repoPath,
@@ -221,7 +221,7 @@ test("a fresh workflow session reads its catalog before native session ownership
     settings: {
       getRepoConfig: () =>
         Effect.succeed(
-          repoConfigSchema.parse({
+          repoConfigFixture({
             workspaceId: "workspace",
             workspaceName: "Workspace",
             repoPath,

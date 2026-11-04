@@ -50,6 +50,7 @@ const baseRepoConfigInput = {
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
 };
 
 const withRuntimeCapabilities = (
@@ -1908,6 +1909,7 @@ describe("runtime schemas", () => {
         workspaceId: "repo",
         workspaceName: "Repo",
         repoPath: "/repo",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
         branchPrefix: "obp",
         hooks: { postComplete: [] },
       }),

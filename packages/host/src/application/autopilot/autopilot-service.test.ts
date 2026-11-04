@@ -11,7 +11,6 @@ import {
   globalConfigSchema,
   type HostEventEnvelope,
   type NotificationActionOccurrence,
-  repoConfigSchema,
   type WorkflowLaunchResult,
 } from "@openducktor/contracts";
 import {
@@ -42,6 +41,7 @@ import {
   readHostSharedConfig,
 } from "../../adapters/sqlite/sqlite-host-settings-store";
 import { type AutopilotService, createAutopilotService } from "./autopilot-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const ALL_RULES: Array<{ eventId: string; actionIds: string[] }> = [
   { eventId: "taskProgressedToSpecReady", actionIds: ["startPlanner"] },
@@ -60,7 +60,7 @@ const configFor = (
     autopilot: { rules: rules.map((rule) => ({ workflowId: "openducktor", ...rule })) },
     workspaces: Object.fromEntries(
       ["alpha", "beta"].map((id) => {
-        const repo = repoConfigSchema.parse({
+        const repo = repoConfigFixture({
           workspaceId: id,
           workspaceName: id === "alpha" ? "Alpha" : "Beta",
           repoPath: `/repos/${id}`,

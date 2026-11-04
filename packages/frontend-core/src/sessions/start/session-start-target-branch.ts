@@ -3,7 +3,7 @@ import {
   type GitTargetBranch,
   UPSTREAM_TARGET_BRANCH,
 } from "@openducktor/contracts";
-import { toBranchSelectorOptions } from "../../lib/branch-selector-model";
+import { targetBranchOptions, toBranchSelectorOptions } from "../../lib/branch-selector-model";
 import type { SelectOption } from "../../lib/select-option";
 import { canonicalTargetBranch, targetBranchSelectionValue } from "../../lib/target-branch";
 
@@ -20,15 +20,17 @@ export type SessionStartTargetBranchChoices = {
  * The choices are the branches of the repository. The configured target of the task, or the
  * repository default, is a choice only when the repository has it, because the host refuses a
  * missing target when it creates the task worktree. An empty list is not loaded yet, so the
- * configured target is then the only choice. `@{upstream}` names no branch, so it stays a choice.
+ * configured target is then the only choice. Without a configured target, only the branches are
+ * choices. `@{upstream}` names no branch, so it stays a choice.
  */
 export const resolveSessionStartTargetBranchChoices = (
   branches: GitBranch[],
-  configured: GitTargetBranch,
+  configured: GitTargetBranch | null,
 ): SessionStartTargetBranchChoices => {
+  const branchOptions = toBranchSelectorOptions(branches, { valueFormat: "full_ref" });
+  if (!configured) return { options: branchOptions, missingValue: null, missingMessage: null };
   const value = targetBranchSelectionValue(configured);
   const label = canonicalTargetBranch(configured);
-  const branchOptions = toBranchSelectorOptions(branches, { valueFormat: "full_ref" });
   const missing =
     branches.length > 0 &&
     value !== UPSTREAM_TARGET_BRANCH &&
@@ -41,17 +43,7 @@ export const resolveSessionStartTargetBranchChoices = (
     };
   }
   return {
-    options: toBranchSelectorOptions(branches, {
-      valueFormat: "full_ref",
-      includeOptions: [
-        {
-          value,
-          label,
-          secondaryLabel: "configured",
-          searchKeywords: label.split("/").filter(Boolean),
-        },
-      ],
-    }),
+    options: targetBranchOptions(branches, configured),
     missingValue: null,
     missingMessage: null,
   };

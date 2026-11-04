@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { repoConfigSchema, type AgentSessionScope } from "@openducktor/contracts";
+import { type AgentSessionScope } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import {
@@ -27,6 +27,7 @@ import {
   requireManagedHistoryDirectory,
   type RuntimeHistoryWorkingDirectoryDependencies,
 } from "./runtime-history-working-directory";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const canonicalizePath = (inputPath: string) =>
   Effect.tryPromise({
@@ -59,7 +60,7 @@ test("checks real legacy directories when the workspace base is absent and rejec
       workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
         getRepoConfigByRepoPath: () =>
           Effect.succeed(
-            repoConfigSchema.parse({
+            repoConfigFixture({
               workspaceId: "workspace",
               workspaceName: "Workspace",
               repoPath,
@@ -142,7 +143,7 @@ test("accepts registered worktrees outside the managed worktree roots", async ()
       workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
         getRepoConfigByRepoPath: () =>
           Effect.succeed(
-            repoConfigSchema.parse({
+            repoConfigFixture({
               workspaceId: "workspace",
               workspaceName: "Workspace",
               repoPath,
@@ -196,10 +197,9 @@ for (const base of ["/workspace", "/legacy"]) {
               workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
                 getRepoConfigByRepoPath: () =>
                   Effect.succeed(
-                    repoConfigSchema.parse({
+                    repoConfigFixture({
                       workspaceId: "workspace",
                       workspaceName: "Workspace",
-                      repoPath: "/repo",
                     }),
                   ),
               }),
@@ -236,10 +236,9 @@ test.each(["workflow", "repository"] as const)(
       workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
         getRepoConfig: (workspaceId) =>
           Effect.succeed(
-            repoConfigSchema.parse({
+            repoConfigFixture({
               workspaceId,
               workspaceName: workspaceId,
-              repoPath: "/repo",
               worktreeBasePath: `/worktrees/${workspaceId}`,
             }),
           ),

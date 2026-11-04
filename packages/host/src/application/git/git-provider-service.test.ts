@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { GITHUB_PROVIDER_DESCRIPTOR, repoConfigSchema } from "@openducktor/contracts";
+import { GITHUB_PROVIDER_DESCRIPTOR } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type {
   GitProviderHealthPort,
@@ -9,6 +9,7 @@ import type {
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { createGitProviderResolver } from "./git-provider-resolver";
 import { createGitProviderService } from "./git-provider-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 describe("GitProviderService", () => {
   test("loads repository settings and returns the resolved provider context", async () => {
@@ -72,16 +73,10 @@ describe("GitProviderService", () => {
         }),
     };
     const resolver = await Effect.runPromise(createGitProviderResolver([provider]));
-    const detectionRepoConfig = repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
+    const detectionRepoConfig = repoConfigFixture({
       git: {},
     });
-    const contextRepoConfig = repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
+    const contextRepoConfig = repoConfigFixture({
       git: { provider: { id: "github", enabled: false } },
     });
     const repoConfigs = [detectionRepoConfig, contextRepoConfig];
@@ -128,10 +123,7 @@ describe("GitProviderService", () => {
   });
 
   test("returns null when no provider is configured", async () => {
-    const repoConfig = repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
+    const repoConfig = repoConfigFixture({
       git: {},
     });
     const resolver = await Effect.runPromise(createGitProviderResolver([]));

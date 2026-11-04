@@ -5,7 +5,6 @@ import {
   type PullRequestReviewActivity,
   type PullRequestReviewContext,
   type PullRequestReviewOutcome,
-  type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
@@ -40,6 +39,7 @@ import {
   type AzureDevOpsJson,
   type AzureDevOpsJsonRecord,
 } from "./json";
+import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
 const PROVIDER_ID = AZURE_DEVOPS_PROVIDER_DESCRIPTOR.id;
 
@@ -206,7 +206,7 @@ const unavailable = (reason: string): PullRequestReviewContext => ({
 
 const readBuilds = (
   client: AzureDevOpsRestClient,
-  repoConfig: RepoConfig,
+  repoConfig: GitProviderWorkspace,
   repository: AzureDevOpsRepository,
   buildIds: number[],
 ): Effect.Effect<Map<number, AzureDevOpsJson>, HostError> =>

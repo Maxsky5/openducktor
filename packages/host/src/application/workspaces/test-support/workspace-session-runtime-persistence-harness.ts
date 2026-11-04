@@ -20,7 +20,7 @@ import type {
 } from "@openducktor/contracts";
 import { randomUUID } from "node:crypto";
 import { assertAgentWorkStartCurrent } from "@openducktor/core";
-import { repoConfigSchema, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../../adapters/agent-sessions/live-session-adapter-registry";
 import type { SqliteTaskStoreTestHarness } from "../../../adapters/sqlite/sqlite-task-store-test-support";
@@ -51,6 +51,7 @@ import {
   type WorkspaceSessionServiceDependencies,
   createWorkspaceSessionService,
 } from "../workspace-session-service";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 type NativeTitleState = { nativeTitle: string | null };
 
@@ -465,7 +466,7 @@ export const createPersistenceHarness = async (
         ),
     );
   const get = () => Effect.runPromise(store.get(storeRef));
-  const config = repoConfigSchema.parse({
+  const config = repoConfigFixture({
     workspaceId: "fairnest",
     workspaceName: "Fairnest",
     repoPath: database.repoPath,

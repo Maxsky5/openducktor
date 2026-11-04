@@ -13,6 +13,7 @@ import {
   workspaceSessionQueryKeys,
 } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { WorkspaceSessionHistoryDialog } from "./workspace-session-history-dialog";
+import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
 
 const archivedRecord = (index: number): WorkspaceSession => ({
   id: `session-${index}`,
@@ -68,10 +69,7 @@ describe("Workspace Session archive refresh", () => {
       } finally {
         branches.resolve([]);
         config.resolve(
-          repoConfigSchema.parse({
-            workspaceId: "repo",
-            workspaceName: "Repo",
-            repoPath: "/repo",
+          repoConfigFixture({
             branchPrefix: "odt",
           }),
         );
@@ -237,7 +235,10 @@ test("an archived chat with a removed worktree picks the target branch that rest
     client: {
       workspaceSessionListArchived: async () => [removed],
       workspaceGetRepoConfig: async () =>
-        repoConfigSchema.parse({ workspaceId: "A", workspaceName: "A", repoPath: "/repo" }),
+        repoConfigFixture({
+          workspaceId: "A",
+          workspaceName: "A",
+        }),
       gitGetBranches: async () => [
         { name: "main", isRemote: false, isCurrent: true },
         { name: "origin/release", isRemote: true, isCurrent: false },

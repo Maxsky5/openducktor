@@ -30,6 +30,7 @@ import {
   createRuntimeSettingsSource,
 } from "./host-runtime-ports";
 import { createHostRuntimeService } from "./host-runtime-service";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const repoPath = "/repos/alpha";
 
@@ -44,7 +45,7 @@ const configWith = (
       ...runtimes,
     },
     workspaces: {
-      alpha: { workspaceId: "alpha", workspaceName: "Alpha", repoPath },
+      alpha: repoConfigFixture({ workspaceId: "alpha", workspaceName: "Alpha", repoPath }),
     },
   });
 

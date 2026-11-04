@@ -1,15 +1,13 @@
-import {
-  repoConfigSchema,
-  type RepoConfig,
-  type HostEventPayload,
-  type WorkspaceProviderSetupSelection,
-  type WorkspaceProviderSetupRef,
-  type WorkspaceProviderSetupSession,
-  type WorkspaceProviderSetupCommit,
-  type WorkspaceProviderSetupProgress,
-  type WorkspaceProviderSetupStatus,
-  type WorkspaceProviderSetupDetection,
-  type WorkspaceProviderSetupGithub,
+import type {
+  HostEventPayload,
+  WorkspaceProviderSetupSelection,
+  WorkspaceProviderSetupRef,
+  WorkspaceProviderSetupSession,
+  WorkspaceProviderSetupCommit,
+  WorkspaceProviderSetupProgress,
+  WorkspaceProviderSetupStatus,
+  WorkspaceProviderSetupDetection,
+  WorkspaceProviderSetupGithub,
 } from "@openducktor/contracts";
 import {
   azureDevOpsConnectionConfigurationFingerprint,
@@ -19,13 +17,15 @@ import { Effect } from "effect";
 import { HostValidationError, type HostError } from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { GitProviderPort } from "../../ports/git-provider-port";
+import type { GitProviderWorkspace } from "../../ports/git-provider-workspace";
+import { repositoryDefaultBranch } from "./repository-default-branch";
 import type { AzureAreaPathsPort } from "../../ports/azure-area-paths-port";
 import type { WorkspaceProviderSetupCredentialsPort } from "../../ports/workspace-provider-setup-credentials-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
 type Session = WorkspaceProviderSetupSession & {
   selection: WorkspaceProviderSetupSelection;
-  credentialConfig: RepoConfig | null;
+  credentialConfig: GitProviderWorkspace | null;
   cleanupRequired: boolean;
   writes: number;
   progress: WorkspaceProviderSetupProgress;
@@ -35,7 +35,7 @@ type Session = WorkspaceProviderSetupSession & {
 };
 /** Keeps completed sessions until acknowledgement so callers can recover a lost commit reply. */
 export const createWorkspaceProviderSetupService = (input: {
-  git: Pick<GitPort, "canonicalizePath" | "isGitRepository">;
+  git: Pick<GitPort, "canonicalizePath" | "isGitRepository" | "readBranchRefs">;
   newSetupId: () => string;
   detectRepositories: (
     repoPath: string,
@@ -235,6 +235,16 @@ export const createWorkspaceProviderSetupService = (input: {
     status(ref: WorkspaceProviderSetupRef) {
       return read(ref, statusFor);
     },
+    targetBranches(ref: WorkspaceProviderSetupRef) {
+      return read(ref, (session) =>
+        input.git.readBranchRefs(session.repoPath).pipe(
+          Effect.map((refs) => ({
+            repositoryDefault: repositoryDefaultBranch(refs),
+            branches: refs.branches,
+          })),
+        ),
+      );
+    },
     github(ref: WorkspaceProviderSetupRef, host: string) {
       return read(ref, (session) => input.inspectGithub(session.repoPath, host));
     },
@@ -433,16 +443,16 @@ function fail(message: string) {
   return new HostValidationError({ field: "workspaceProviderSetup", message });
 }
 
-function selectionConfig(session: Session): RepoConfig {
-  return repoConfigSchema.parse({
+/** The provider view of the setup. The setup ID scopes its temporary credentials. */
+function selectionConfig(session: Session): GitProviderWorkspace {
+  return {
     workspaceId: session.setupId,
-    workspaceName: "Workspace setup",
     repoPath: session.repoPath,
     git: session.selection.kind === "configured" ? { provider: session.selection.config } : {},
-  });
+  };
 }
 
-function credentialKey(config: RepoConfig | null): string | null {
+function credentialKey(config: GitProviderWorkspace | null): string | null {
   const provider = config?.git.provider;
   const repository = provider?.repository;
   if (!provider?.enabled || !repository || !("deployment" in repository)) return null;

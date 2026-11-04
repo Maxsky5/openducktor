@@ -1,9 +1,10 @@
-import { type AzureDevOpsRepository, type RepoConfig } from "@openducktor/contracts";
+import { type AzureDevOpsRepository } from "@openducktor/contracts";
 import { azureDevOpsCollectionUrl } from "@openducktor/core";
 import { Effect } from "effect";
 import { type HostError, HostOperationError } from "../../../effect/host-errors";
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
 import { azureDevOpsJsonListSchema, azureDevOpsJsonSchema, type AzureDevOpsJson } from "./json";
+import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
 const REQUEST_TIMEOUT = "30 seconds";
 
@@ -25,17 +26,17 @@ export type AzureDevOpsResponse = {
 
 export type AzureDevOpsRestClient = {
   request(
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
     repository: AzureDevOpsRepository,
     request: AzureDevOpsRequest,
   ): Effect.Effect<AzureDevOpsResponse, HostError>;
   readContinuationPages(
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
     repository: AzureDevOpsRepository,
     request: AzureDevOpsRequest,
   ): Effect.Effect<AzureDevOpsJson[], HostError>;
   readOffsetPages(
-    repoConfig: RepoConfig,
+    repoConfig: GitProviderWorkspace,
     repository: AzureDevOpsRepository,
     request: AzureDevOpsRequest,
   ): Effect.Effect<AzureDevOpsJson[], HostError>;

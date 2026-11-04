@@ -4,13 +4,13 @@ import {
   parseGitRepositoryUrl,
   type GitProviderRepository,
   type GithubGitProviderRepository,
-  type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import { GitProviderRepositoryError } from "../../../ports/git-provider-errors";
 import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port";
+import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
 const GITHUB_PROVIDER_ID = GITHUB_PROVIDER_DESCRIPTOR.id;
 
@@ -38,9 +38,9 @@ export const createGithubProviderRepositoryAdapter = ({ gitPort }: { gitPort: Gi
       return yield* Effect.fail(mappingError({ repoPath, repository, remoteNames }));
     });
 
-  const getRepository = (repoConfig: RepoConfig) => configuredRepository(repoConfig);
+  const getRepository = (repoConfig: GitProviderWorkspace) => configuredRepository(repoConfig);
 
-  const getMapping = (repoConfig: RepoConfig) =>
+  const getMapping = (repoConfig: GitProviderWorkspace) =>
     Effect.gen(function* () {
       const repository = yield* getRepository(repoConfig);
       const remoteName = yield* matchRemote(repoConfig.repoPath, repository);
@@ -81,7 +81,7 @@ export const createGithubProviderRepositoryAdapter = ({ gitPort }: { gitPort: Gi
   } satisfies GitProviderRepositoryPort<GithubGitProviderRepository>;
 };
 
-const configuredRepository = (repoConfig: RepoConfig) =>
+const configuredRepository = (repoConfig: GitProviderWorkspace) =>
   Effect.gen(function* () {
     const provider = repoConfig.git.provider;
     if (provider?.id !== GITHUB_PROVIDER_ID || !provider.enabled) {

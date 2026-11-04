@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { GITHUB_PROVIDER_DESCRIPTOR, repoConfigSchema } from "@openducktor/contracts";
+import { GITHUB_PROVIDER_DESCRIPTOR } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createGitProviderResolver } from "../../../application/git/git-provider-resolver";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
@@ -7,12 +7,10 @@ import { GitProviderRepositoryError } from "../../../ports/git-provider-errors";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../../ports/system-command-port";
 import { createGitPortTestDouble } from "../../../test-support/service-test-doubles";
 import { GithubProviderAdapter } from "./provider-adapter";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const repoConfig = (host = "github.com") =>
-  repoConfigSchema.parse({
-    workspaceId: "repo",
-    workspaceName: "Repo",
-    repoPath: "/repo",
+  repoConfigFixture({
     git: {
       provider: {
         id: "github",
@@ -65,10 +63,7 @@ describe("GithubProviderAdapter", () => {
       ...createHealthDependencies(),
     });
     const resolver = await Effect.runPromise(createGitProviderResolver([github]));
-    const config = repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
+    const config = repoConfigFixture({
       git: { provider: { id: "github", enabled: true } },
     });
 
@@ -138,10 +133,7 @@ describe("GithubProviderAdapter", () => {
     });
     const github = new GithubProviderAdapter({ ...dependencies, gitPort });
     const pullRequests = await Effect.runPromise(github.pullRequests());
-    const repoConfig = repoConfigSchema.parse({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
+    const repoConfig = repoConfigFixture({
       git: {
         provider: {
           id: "github",

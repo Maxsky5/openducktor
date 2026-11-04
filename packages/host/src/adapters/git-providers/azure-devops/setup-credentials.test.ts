@@ -12,6 +12,7 @@ import type { AzureDevOpsCredentialIndex, AzureDevOpsCredentialScope } from "./c
 import type { AzureDevOpsProtectedStorage } from "./protected-storage";
 import { connectionScope } from "./connection";
 import { createWorkspaceProviderSetupCredentials } from "./setup-credentials";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const repository: AzureDevOpsRepository = {
   providerId: "azure_devops",
@@ -21,10 +22,9 @@ const repository: AzureDevOpsRepository = {
   project: "project",
   name: "repo",
 };
-const source = repoConfigSchema.parse({
+const source = repoConfigFixture({
   workspaceId: "setup",
   workspaceName: "Setup",
-  repoPath: "/repo",
   git: { provider: { id: "azure_devops", enabled: true, repository } },
 });
 const destination = repoConfigSchema.parse({ ...source, workspaceId: "repo" });

@@ -4,7 +4,6 @@ import { mkdtemp, realpath, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
-  repoConfigSchema,
   type TaskCard,
   type TaskMergeStatus,
   type TaskMergeStatusSnapshot,
@@ -16,6 +15,7 @@ import { createSettingsConfigTestDouble } from "../../../test-support/service-te
 import { removeTestDirectory } from "../../../test-support/temp-directory";
 import { createRemoteFetchService } from "../../git/remote-fetch-service";
 import { createTaskMergeDetectionService } from "./task-merge-detection-service";
+import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
 
 const run = (cwd: string, ...args: string[]) =>
   execFileSync(
@@ -101,12 +101,9 @@ const createService = (tasks: TaskCard[]) => {
     workspaceSettingsService: {
       getRepoConfig: () =>
         Effect.succeed(
-          repoConfigSchema.parse({
-            workspaceId: "repo",
-            workspaceName: "Repo",
+          repoConfigFixture({
             repoPath: repo,
             worktreeBasePath: worktreeBase,
-            defaultTargetBranch: { remote: "origin", branch: "main" },
           }),
         ),
       getWorkspaceCatalog: () =>

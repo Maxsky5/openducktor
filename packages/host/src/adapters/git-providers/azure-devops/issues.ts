@@ -1,4 +1,4 @@
-import type { AzureDevOpsRepository, RepoConfig, SourceIssue } from "@openducktor/contracts";
+import type { AzureDevOpsRepository, SourceIssue } from "@openducktor/contracts";
 import { azureDevOpsCollectionUrl } from "@openducktor/core";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -7,6 +7,7 @@ import type { AzureAreaPathsPort } from "../../../ports/azure-area-paths-port";
 import type { GitProviderRepositoryPort, IssueReaderPort } from "../../../ports/git-provider-port";
 import type { AzureDevOpsRestClient } from "./rest-client";
 import type { AzureDevOpsJson } from "./json";
+import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
 type AreaNode = {
   name: string;
@@ -88,7 +89,7 @@ const areaPaths = (root: AreaNode, project: string): string[] => {
 
 const readAreaPaths = (
   client: AzureDevOpsRestClient,
-  config: RepoConfig,
+  config: GitProviderWorkspace,
   repository: AzureDevOpsRepository,
 ) =>
   Effect.gen(function* () {
@@ -110,7 +111,7 @@ const readAreaPaths = (
     });
   });
 
-const selectedArea = (config: RepoConfig, paths: string[]) => {
+const selectedArea = (config: GitProviderWorkspace, paths: string[]) => {
   const configured = config.git.provider?.settings?.areaPath;
   if (!configured) {
     throw new HostValidationError({
@@ -132,7 +133,7 @@ const selectedArea = (config: RepoConfig, paths: string[]) => {
 type TypeStates = Map<string, Map<string, string>>;
 const readTypeStates = (
   client: AzureDevOpsRestClient,
-  config: RepoConfig,
+  config: GitProviderWorkspace,
   repository: AzureDevOpsRepository,
 ) =>
   Effect.gen(function* () {
@@ -264,7 +265,7 @@ const toIssue = (
 
 const requireAreaAndStates = (
   client: AzureDevOpsRestClient,
-  config: RepoConfig,
+  config: GitProviderWorkspace,
   repository: AzureDevOpsRepository,
 ) =>
   Effect.gen(function* () {
@@ -282,7 +283,7 @@ const requireAreaAndStates = (
 
 const readIssue = (
   client: AzureDevOpsRestClient,
-  config: RepoConfig,
+  config: GitProviderWorkspace,
   repository: AzureDevOpsRepository,
   area: string,
   states: TypeStates,
@@ -317,7 +318,7 @@ const readIssue = (
 const prepareAzureIssueGet = (
   client: AzureDevOpsRestClient,
   repositoryPort: GitProviderRepositoryPort<AzureDevOpsRepository>,
-  repoConfig: RepoConfig,
+  repoConfig: GitProviderWorkspace,
 ) =>
   Effect.gen(function* () {
     const repository = yield* repositoryPort.getRepository(repoConfig);
@@ -333,7 +334,11 @@ export const createAzureDevOpsIssueReader = ({
   repositoryPort: GitProviderRepositoryPort<AzureDevOpsRepository>;
 }): IssueReaderPort => {
   const pageMetadata = new Map<string, { area: string; states: TypeStates }>();
-  const pageKey = (repoConfig: RepoConfig, repository: AzureDevOpsRepository, snapshot: string) =>
+  const pageKey = (
+    repoConfig: GitProviderWorkspace,
+    repository: AzureDevOpsRepository,
+    snapshot: string,
+  ) =>
     JSON.stringify([
       repoConfig.workspaceId,
       scopeForRepository(repository),

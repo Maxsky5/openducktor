@@ -10,6 +10,7 @@ import {
   workspaceProviderSetupSessionSchema,
   workspaceProviderSetupDetectionSchema,
   workspaceProviderSetupStatusSchema,
+  workspaceProviderSetupTargetBranchesSchema,
   workspaceProviderSetupGithubSchema,
   workspaceProviderSetupProgressSchema,
   workspaceProviderSetupProgressReadSchema,
@@ -67,21 +68,6 @@ const workspaceList = async (invokeFn: InvokeFn): Promise<WorkspaceRecord[]> => 
     undefined,
     arrayResultSchema(workspaceRecordSchema, "workspace_list"),
   );
-};
-
-export type WorkspaceCreateInput = {
-  workspaceId: string;
-  workspaceName: string;
-  repoPath: string;
-  abbreviation?: string;
-  tileColor?: string;
-};
-
-const workspaceAdd = async (
-  invokeFn: InvokeFn,
-  input: WorkspaceCreateInput,
-): Promise<WorkspaceRecord> => {
-  return invokeFn("workspace_add", input, workspaceRecordSchema);
 };
 
 const workspaceSelect = async (
@@ -313,6 +299,13 @@ export class HostWorkspaceClient {
       workspaceProviderSetupStatusSchema,
     );
   }
+  workspaceProviderSetupTargetBranches(input: WorkspaceProviderSetupRef) {
+    return this.invokeFn(
+      "workspace_provider_setup_target_branches",
+      { setupId: input.setupId, revision: input.revision },
+      workspaceProviderSetupTargetBranchesSchema,
+    );
+  }
   workspaceProviderSetupGithub(input: WorkspaceProviderSetupRef & { host: string }) {
     return this.invokeFn(
       "workspace_provider_setup_github",
@@ -365,6 +358,7 @@ export class HostWorkspaceClient {
         workspaceName: input.workspaceName,
         abbreviation: input.abbreviation,
         tileColor: input.tileColor,
+        defaultTargetBranch: input.defaultTargetBranch,
         defaultModel: input.defaultModel,
         agentDefaults: input.agentDefaults,
       },
@@ -405,10 +399,6 @@ export class HostWorkspaceClient {
 
   async workspaceList(): Promise<WorkspaceRecord[]> {
     return workspaceList(this.invokeFn);
-  }
-
-  async workspaceAdd(input: WorkspaceCreateInput): Promise<WorkspaceRecord> {
-    return workspaceAdd(this.invokeFn, input);
   }
 
   async workspaceSelect(workspaceId: string): Promise<WorkspaceRecord> {

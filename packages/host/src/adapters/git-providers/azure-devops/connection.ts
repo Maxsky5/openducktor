@@ -4,7 +4,6 @@ import {
   type AzureDevOpsDeviceCode,
   type AzureDevOpsRepository,
   type HostEventPayload,
-  type RepoConfig,
 } from "@openducktor/contracts";
 import {
   azureDevOpsConnectionConfigurationFingerprint,
@@ -31,6 +30,7 @@ import {
   type AzureDevOpsPublicClientFactory,
 } from "./public-client";
 import type { AzureDevOpsFetch } from "./rest-client";
+import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
 const AZURE_DEVOPS_SCOPE = "499b84ac-1321-427f-aa17-267ca6975798/.default";
 type SignInAttempt = {
@@ -439,13 +439,13 @@ export const createAzureDevOpsConnectionAdapter = ({
 };
 
 export const connectionScope = (
-  repoConfig: RepoConfig,
+  repoConfig: GitProviderWorkspace,
   repository: AzureDevOpsRepository,
 ): string =>
   [repoConfig.workspaceId, repoConfig.repoPath, azureDevOpsRepositoryKey(repository)].join("\n");
 
 const connectionUpdate = (
-  repoConfig: RepoConfig,
+  repoConfig: GitProviderWorkspace,
   repository: AzureDevOpsRepository,
   attemptId: string,
   state: AzureDevOpsConnectionState,

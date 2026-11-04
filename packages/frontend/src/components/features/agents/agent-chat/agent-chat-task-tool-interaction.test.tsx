@@ -48,9 +48,6 @@ function renderTaskCard() {
     commitWorkspaceProviderSetup: async () => {
       throw new Error("Not used");
     },
-    addWorkspace: async () => {
-      throw new Error("Not used");
-    },
     selectWorkspace: async () => {},
     closeWorkspace: async () => {},
     removeWorkspace: async () => {},

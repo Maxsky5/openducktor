@@ -7,7 +7,6 @@ import { noMessageQueues } from "../../test-support/message-queue-observer-test-
 import { expect, mock, test } from "bun:test";
 import {
   globalConfigSchema,
-  repoConfigSchema,
   type AgentSessionLiveSnapshot,
   type AgentSessionLiveRef,
   type ExternalTaskSyncEvent,
@@ -35,16 +34,17 @@ import {
 import { createNotificationService } from "./notification-service";
 import type { TaskService } from "../tasks/task-service";
 import { taskCardFixture } from "../../test-support/task-card-fixture";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 const config = () =>
   globalConfigSchema.parse({
     version: 4,
     workspaces: {
-      alpha: repoConfigSchema.parse({
+      alpha: repoConfigFixture({
         workspaceId: "alpha",
         workspaceName: "Alpha",
         repoPath: "/alpha",
       }),
-      beta: repoConfigSchema.parse({
+      beta: repoConfigFixture({
         workspaceId: "beta",
         workspaceName: "Beta",
         repoPath: "/beta",

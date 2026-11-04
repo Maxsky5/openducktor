@@ -10,6 +10,7 @@ import { gt, sql } from "drizzle-orm";
 import { getTableColumns } from "drizzle-orm";
 import { sqliteBatches } from "./sqlite-parameters";
 import { z, type JSONType } from "zod";
+import { readLegacyTargetBranch } from "../../config/legacy-target-branch";
 import { parseAgentSessionStartedAt } from "../../domain/agent-session-records";
 import type { HostValidationError } from "../../effect/host-errors";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
@@ -133,7 +134,7 @@ export const importLegacyWorkspaceTaskData = ({
             ? null
             : yield* parse(
                 gitTargetBranchSchema,
-                yield* json(row.targetBranchJson, "targetBranch", details),
+                readLegacyTargetBranch(yield* json(row.targetBranchJson, "targetBranch", details)),
                 "targetBranch",
                 details,
               );
@@ -364,7 +365,7 @@ export const importLegacyWorkspaceTaskData = ({
           targetBranch:
             row.targetBranchJson === null
               ? null
-              : yield* json(row.targetBranchJson, "targetBranch", details),
+              : readLegacyTargetBranch(yield* json(row.targetBranchJson, "targetBranch", details)),
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
           archivedAt: row.archivedAt,
