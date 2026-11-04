@@ -385,6 +385,7 @@ function FileDiffEntryHeader({
   return (
     <ContextMenu
       key={menu.generation}
+      open={menu.open}
       onOpenChange={(open) => setMenu((current) => ({ ...current, open, content: diff.diff }))}
     >
       <ContextMenuTrigger asChild>

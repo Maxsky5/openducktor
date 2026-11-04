@@ -6,6 +6,7 @@ import type { DiffScope, GitChangeIntent } from "@openducktor/frontend-core/git/
 import { gitChangeIntentKey } from "@openducktor/frontend-core/git/model/git-change-intent";
 import { toInlineCommentDraftStorageKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-storage";
 import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import { SessionViewShownContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { FILE_LIST_ROW_HEIGHT } from "./constants";
 import { FileDiffListWithHeader } from "./file-diff-list";
@@ -650,6 +651,31 @@ describe("FileDiffList", () => {
       expect(toggle.getAttribute("aria-expanded")).toBe("false");
     },
   );
+
+  test("reopens the row menu after the session view hides and returns", async () => {
+    const { actions } = createRowActions("unstaged");
+    const tree = (isShown: boolean) => (
+      <SessionViewShownContext value={isShown}>
+        <FileDiffListHarness file="root.ts" rowActions={actions} onViewFile={() => {}} />
+      </SessionViewShownContext>
+    );
+    const view = render(tree(true));
+
+    await openRowMenu("root.ts");
+    expect(screen.getByTestId("agent-studio-git-file-menu")).toBeDefined();
+
+    view.rerender(tree(false));
+    view.rerender(tree(true));
+
+    expect(screen.queryByTestId("agent-studio-git-file-menu")).toBeNull();
+    const menu = await openRowMenu("root.ts");
+    expect(menu.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      "View file",
+      "Stage file",
+      "Discard unstaged changes",
+      "Copy path",
+    ]);
+  });
 
   test("offers no View file for a deleted file or a panel without file previews", async () => {
     const viewFile = mock((_filePath: string) => {});
