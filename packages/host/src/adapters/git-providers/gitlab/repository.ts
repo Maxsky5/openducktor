@@ -29,31 +29,30 @@ export const gitlabOriginRepository = (
   return url ? gitlabRepositoryFromRemoteUrl(url, knownInstances) : null;
 };
 
-/** A remote matches when each of its URLs names the configured project on its instance. */
-const remoteMatches = (remote: GitRemoteEndpoint, repository: GitlabRepository): boolean => {
-  const urls = remoteUrls(remote);
-  const key = gitlabRepositoryKey(repository);
+/**
+ * A URL matches when it names the configured project on its instance. With `allowAlias`, an SSH
+ * URL also matches on its project path, because its host can be an SSH host alias. HTTP and HTTPS
+ * URLs name their real host, so only the instance match applies to them.
+ */
+const urlMatches = (url: string, repository: GitlabRepository, allowAlias: boolean): boolean => {
+  const parsed = gitlabRepositoryFromRemoteUrl(url, [repository.instanceUrl]);
+  if (parsed && gitlabRepositoryKey(parsed) === gitlabRepositoryKey(repository)) return true;
+  const remote = parseGitlabRemoteUrl(url);
   return (
-    urls.length > 0 &&
-    urls.every((url) => {
-      const parsed = gitlabRepositoryFromRemoteUrl(url, [repository.instanceUrl]);
-      return parsed !== null && gitlabRepositoryKey(parsed) === key;
-    })
+    allowAlias &&
+    remote?.kind === "ssh" &&
+    remote.path.toLowerCase() === repository.projectPath.toLowerCase()
   );
 };
 
-/** A named remote with an SSH host alias, which the instance cannot match, matches on its project path. */
-const aliasMatches = (remote: GitRemoteEndpoint, repository: GitlabRepository): boolean => {
+/** A remote matches when each of its URLs matches. Only a named remote allows SSH host aliases. */
+const remoteMatches = (
+  remote: GitRemoteEndpoint,
+  repository: GitlabRepository,
+  allowAlias: boolean,
+): boolean => {
   const urls = remoteUrls(remote);
-  const projectPath = repository.projectPath.toLowerCase();
-  return (
-    urls.length > 0 &&
-    urls.every((url) => {
-      // HTTP and HTTPS remotes name their real host, so only the instance match applies to them.
-      const remote = parseGitlabRemoteUrl(url);
-      return remote?.kind === "ssh" && remote.path.toLowerCase() === projectPath;
-    })
-  );
+  return urls.length > 0 && urls.every((url) => urlMatches(url, repository, allowAlias));
 };
 
 export const configuredGitlabRepository = (repoConfig: GitProviderWorkspace) =>
@@ -98,7 +97,7 @@ export const createGitlabRepositoryAdapter = ({
           providerId: PROVIDER_ID,
           repoPath: canonicalRepoPath,
           remoteNames: endpoints.map((endpoint) => endpoint.name),
-          message: origin
+          message: endpoints.some((endpoint) => endpoint.name === "origin")
             ? `The origin remote of ${canonicalRepoPath} does not name a GitLab project. Enter the instance URL and project path.`
             : `${canonicalRepoPath} has no origin remote. Enter the GitLab instance URL and project path.`,
         }),
@@ -111,14 +110,13 @@ export const createGitlabRepositoryAdapter = ({
       const repository = yield* configuredGitlabRepository(repoConfig);
       const endpoints = yield* gitPort.listRemoteEndpoints(repoConfig.repoPath);
       const configuredRemote = repoConfig.git.provider?.settings?.remoteName;
-      const remoteNames = endpoints.flatMap((remote) => {
-        if (configuredRemote !== undefined)
-          return remote.name === configuredRemote &&
-            (remoteMatches(remote, repository) || aliasMatches(remote, repository))
-            ? [remote.name]
-            : [];
-        return remoteMatches(remote, repository) ? [remote.name] : [];
-      });
+      const remoteNames = endpoints
+        .filter((remote) =>
+          configuredRemote === undefined
+            ? remoteMatches(remote, repository, false)
+            : remote.name === configuredRemote && remoteMatches(remote, repository, true),
+        )
+        .map((remote) => remote.name);
       const remoteName = remoteNames[0];
       if (remoteNames.length === 1 && remoteName) return { repository, remoteName };
       const project = repository.projectPath;

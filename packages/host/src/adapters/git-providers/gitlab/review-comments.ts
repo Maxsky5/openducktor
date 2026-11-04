@@ -48,7 +48,7 @@ type DiffLine = { text: string; oldLine: number; newLine: number; hunk: number }
  * Cuts the commented line and the lines above it in its hunk from a GitLab file diff, in the
  * format of a GitHub `diff_hunk`.
  */
-export const cutGitlabDiffHunk = (diff: string, position: GitlabPosition): string | null => {
+const cutGitlabDiffHunk = (diff: string, position: GitlabPosition): string | null => {
   const lines: DiffLine[] = [];
   let oldLine = 0;
   let newLine = 0;
@@ -196,7 +196,7 @@ const LOCATION_WARNING =
   "GitLab suggestion lines could not be located in the source file. Open the thread in GitLab to view it.";
 
 /** Turns each ```` ```suggestion:-N+M ```` block into a patch of the lines that it replaces. */
-export const parseGitlabNoteContent = (
+const parseGitlabNoteContent = (
   body: string,
   position: GitlabPosition,
   file: SuggestionFile | undefined,

@@ -17,7 +17,7 @@ import { type GitlabProjectContext, type GitlabRestClient, gitlabProjectPath } f
 type CheckState = Pick<PullRequestReviewCheck, "status" | "conclusion">;
 
 /** Maps a GitLab job or commit status. A failure that GitLab allows does not block. */
-export const gitlabCheckState = (status: string, allowFailure: boolean): CheckState => {
+const gitlabCheckState = (status: string, allowFailure: boolean): CheckState => {
   switch (status) {
     case "created":
     case "pending":

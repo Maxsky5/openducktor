@@ -31,7 +31,7 @@ import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace
 const REFRESH_MARGIN_MS = 60_000;
 
 /** The fix actions that the UI offers for a problem. */
-export const gitlabFixActions = (
+const gitlabFixActions = (
   problem: GitlabProblem,
   account: GitlabAccount | null,
 ): GitlabFixAction[] => {

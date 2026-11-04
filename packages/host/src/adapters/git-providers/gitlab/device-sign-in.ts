@@ -53,7 +53,7 @@ const signInFailureReason = (error: z.output<typeof oauthErrorSchema>): string =
   }
 };
 
-export const iso = (time: number) => new Date(time).toISOString();
+const iso = (time: number) => new Date(time).toISOString();
 
 /** The saved secret of an OAuth token reply. GitLab access tokens last two hours by default. */
 export const oauthSecretOf = (

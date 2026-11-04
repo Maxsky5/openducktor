@@ -7,7 +7,11 @@ import { createGitlabRepositoryAdapter } from "./repository";
 
 const adapterFor = (endpoints: GitRemoteEndpoint[]) =>
   createGitlabRepositoryAdapter({
-    gitPort: createGitPortTestDouble({ listRemoteEndpoints: () => Effect.succeed(endpoints) }),
+    gitPort: createGitPortTestDouble({
+      canonicalizePath: (path) => Effect.succeed(path),
+      isGitRepository: () => Effect.succeed(true),
+      listRemoteEndpoints: () => Effect.succeed(endpoints),
+    }),
     connection: { knownInstances: () => Effect.succeed([]) },
   });
 
@@ -53,6 +57,18 @@ describe("GitLab repository mapping", () => {
     expect(mapping.remoteName).toBe("work");
   });
 
+  test("maps a named remote with an HTTPS fetch URL and an SSH host alias push URL", async () => {
+    const adapter = adapterFor([
+      {
+        name: "work",
+        fetchUrls: ["https://gitlab.example.com/gitlab/group/app.git"],
+        pushUrls: ["git@gitlab-work:group/app.git"],
+      },
+    ]);
+    const mapping = await Effect.runPromise(adapter.getMapping(configFor("work")));
+    expect(mapping.remoteName).toBe("work");
+  });
+
   test("refuses a named HTTPS remote on another host", async () => {
     const adapter = adapterFor([
       { name: "origin", fetchUrls: ["https://unrelated.example/group/app.git"], pushUrls: [] },
@@ -68,4 +84,22 @@ describe("GitLab repository mapping", () => {
     const failure = await Effect.runPromise(adapter.getMapping(configFor()).pipe(Effect.flip));
     expect(failure.message).toContain("Several local Git remotes");
   });
+});
+
+describe("GitLab repository detection", () => {
+  test.each([
+    [[], "has no origin remote"],
+    [
+      [{ name: "origin", fetchUrls: ["/srv/git/app.git"], pushUrls: [] }],
+      "does not name a GitLab project",
+    ],
+  ] satisfies [GitRemoteEndpoint[], string][])(
+    "explains a repository without a GitLab origin",
+    async (endpoints, message) => {
+      const failure = await Effect.runPromise(
+        adapterFor(endpoints).detectRepository("/repo").pipe(Effect.flip),
+      );
+      expect(failure.message).toContain(message);
+    },
+  );
 });

@@ -23,6 +23,13 @@ import {
 
 export type GitlabConnectMode = "closed" | "token" | "sign_in";
 
+type GitlabAccountOperation = "add_token" | "sign_in";
+
+const OPERATION_LABELS = {
+  add_token: "Add token",
+  sign_in: "GitLab sign-in",
+} as const satisfies Record<GitlabAccountOperation, string>;
+
 type UseGitlabAccountControllerInput = {
   draft: GitlabDraft;
   enabled: boolean;
@@ -76,7 +83,7 @@ export function useGitlabAccountController({
   const [replaceAccountId, setReplaceAccountId] = useState<string | null>(null);
   const [token, setToken] = useState("");
   const [deviceCode, setDeviceCode] = useState<GitlabDeviceCode | null>(null);
-  const [pending, setPending] = useState<string | null>(null);
+  const [pendingOperation, setPendingOperation] = useState<GitlabAccountOperation | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   // After Disconnect, the user chooses the account of that instance. Another instance auto-links.
   const declinedInstanceRef = useRef<string | null>(
@@ -129,20 +136,20 @@ export function useGitlabAccountController({
     onLink(account.accountId, account.instanceUrl);
   };
 
-  const run = async (label: string, action: () => Promise<void>) => {
-    setPending(label);
+  const run = async (operation: GitlabAccountOperation, action: () => Promise<void>) => {
+    setPendingOperation(operation);
     setActionError(null);
     try {
       await action();
     } catch (cause) {
-      setActionError(`${label} failed: ${errorMessage(cause)}`);
+      setActionError(`${OPERATION_LABELS[operation]} failed: ${errorMessage(cause)}`);
     } finally {
-      setPending(null);
+      setPendingOperation(null);
     }
   };
 
   const addToken = () =>
-    run("Add token", async () => {
+    run("add_token", async () => {
       if (!instanceUrl) throw new Error("Enter a valid GitLab instance URL first.");
       const project = parseGitlabDraft(draft);
       const input: GitlabAccountAddTokenInput = { instanceUrl, token };
@@ -177,7 +184,7 @@ export function useGitlabAccountController({
   };
 
   const startSignIn = () =>
-    run("GitLab sign-in", async () => {
+    run("sign_in", async () => {
       const session = connectSessionRef.current;
       const code = await connectionHost(queryClient).gitlabSignInStart();
       if (connectSessionRef.current === session) {
@@ -241,7 +248,8 @@ export function useGitlabAccountController({
     addToken: () => void addToken(),
     deviceCode,
     startSignIn: () => void startSignIn(),
-    pending,
+    isAddingToken: pendingOperation === "add_token",
+    isStartingSignIn: pendingOperation === "sign_in",
     actionError,
   };
 }

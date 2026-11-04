@@ -24,7 +24,7 @@ const tokenSchema = z.object({
   user_id: z.number().int().positive(),
   expires_at: z.string().nullable(),
 });
-export const gitlabProjectSchema = z.object({
+const gitlabProjectSchema = z.object({
   id: z.number().int().positive(),
   path_with_namespace: z.string().min(1),
   web_url: z.url(),
@@ -38,7 +38,7 @@ const versionOf = (version: string) => {
 };
 
 /** Compares `major.minor` of a version such as `17.4.1-ee` with the minimum version. */
-export const isSupportedGitlabVersion = (version: string): boolean => {
+const isSupportedGitlabVersion = (version: string): boolean => {
   const found = versionOf(version);
   const minimum = versionOf(GITLAB_MINIMUM_VERSION);
   if (!found || !minimum) return false;

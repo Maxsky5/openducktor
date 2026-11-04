@@ -33,7 +33,7 @@ export function GitlabAccountPanel({
   disabled,
   onConfirmHttp,
 }: GitlabAccountPanelProps): ReactElement {
-  const locked = disabled || controller.pending !== null;
+  const locked = disabled || controller.isAddingToken || controller.isStartingSignIn;
   return (
     <section
       className="grid min-w-0 gap-3 border-t border-border pt-5"
@@ -355,7 +355,7 @@ function ConnectAccount({
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="sm" disabled={disabled || !controller.token.trim()}>
-          {controller.pending === "Add token" ? (
+          {controller.isAddingToken ? (
             <LoaderCircle data-icon="inline-start" className="animate-spin" />
           ) : (
             <KeyRound data-icon="inline-start" />

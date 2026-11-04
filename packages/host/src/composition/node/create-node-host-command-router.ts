@@ -399,13 +399,9 @@ export const assembleNodeEffectHostCommandRouter = (
     mcpHostBridge: resolvedMcpHostBridge,
     runtimeRegistry,
     initializeRuntimes: hostRuntimeService.initialize,
-    startupSweep: () =>
-      startupSweep().pipe(
-        Effect.tap(() =>
-          // Accounts that no workspace links, such as after a cancelled draft, go in the background.
-          Effect.sync(() => Effect.runFork(gitlab.connection.sweep())),
-        ),
-      ),
+    // Deletes GitLab accounts that no workspace links, such as after a cancelled draft. The sweep
+    // logs its failures, so it cannot stop the startup.
+    startupSweep: () => startupSweep().pipe(Effect.andThen(gitlab.connection.sweep())),
     taskAssetStagingService,
     taskSyncService,
     mergeDetection: taskSessions.mergeDetection,

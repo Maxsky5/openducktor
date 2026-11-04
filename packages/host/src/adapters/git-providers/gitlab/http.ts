@@ -103,7 +103,7 @@ const isTlsFailure = (failure: FetchFailure | undefined): boolean =>
     /ERR_CERT_|certificate/iu.test(failure.message ?? "") ||
     isTlsFailure(failure.cause));
 
-export const gitlabRequestUrl = (request: GitlabHttpRequest): URL => {
+const gitlabRequestUrl = (request: GitlabHttpRequest): URL => {
   const url = new URL(`${request.instanceUrl.replace(/\/+$/u, "")}${request.path}`);
   for (const [name, value] of Object.entries(request.query ?? {})) {
     if (value === undefined) continue;
