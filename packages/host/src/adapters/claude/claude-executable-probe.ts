@@ -18,11 +18,8 @@ import {
   runtimeExecutableStartError,
 } from "../runtimes/runtime-executable-guidance";
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
-import {
-  CLAUDE_CODE_ENTRYPOINT_ENV,
-  OPENDUCKTOR_CLAUDE_CODE_ENTRYPOINT,
-} from "./claude-agent-sdk-options";
 import { CLAUDE_CODE_GUIDANCE, getClaudeCodeCompatibilityError } from "./claude-code-compatibility";
+import { withOpenDucktorClaudeCodeEnv } from "./claude-code-process-env";
 
 const DEFAULT_INITIALIZATION_TIMEOUT_MS = 10_000;
 const claudeInitializationResponseSchema = z.object({
@@ -74,9 +71,7 @@ export const buildClaudeExecutableProbeOptions = ({
   allowedTools: [],
   cwd: process.cwd(),
   env: {
-    ...processEnv,
-    CLAUDE_AGENT_SDK_CLIENT_APP: "openducktor/runtime-probe",
-    [CLAUDE_CODE_ENTRYPOINT_ENV]: OPENDUCKTOR_CLAUDE_CODE_ENTRYPOINT,
+    ...withOpenDucktorClaudeCodeEnv(processEnv, "openducktor/runtime-probe"),
     ENABLE_CLAUDEAI_MCP_SERVERS: "false",
   },
   mcpServers: {},

@@ -20,7 +20,6 @@ import {
   buildClaudeAgentSdkBaseOptions,
   buildClaudeAgentSdkOptions,
   CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV,
-  CLAUDE_CODE_ENTRYPOINT_ENV,
   CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV,
   CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV,
 } from "./claude-agent-sdk-options";
@@ -455,10 +454,10 @@ describe("buildClaudeAgentSdkBaseOptions", () => {
     const options = buildClaudeAgentSdkBaseOptions({
       claudeExecutablePath: process.execPath,
       cwd: process.cwd(),
-      processEnv: { [CLAUDE_CODE_ENTRYPOINT_ENV]: "claude-desktop" },
+      processEnv: { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
     });
 
-    expect(options.env?.[CLAUDE_CODE_ENTRYPOINT_ENV]).toBe("openducktor");
+    expect(options.env?.CLAUDE_CODE_ENTRYPOINT).toBe("openducktor");
   });
 
   test("enables session state events and sets resume switches only for an explicit request", () => {
