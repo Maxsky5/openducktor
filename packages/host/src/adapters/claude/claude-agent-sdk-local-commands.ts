@@ -1,7 +1,7 @@
 import type { SDKMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-messages";
 import { z } from "zod";
-import { readStringProp } from "./claude-agent-sdk-utils";
+import { historyMessageText, readStringProp } from "./claude-agent-sdk-utils";
 
 const CLAUDE_SYNTHETIC_MODEL = "<synthetic>";
 const CLAUDE_NO_RESPONSE_TEXT = "No response requested.";
@@ -20,19 +20,10 @@ export const isClaudeSyntheticAssistantMessage = (
   return parsed.success && parsed.data.message.model === CLAUDE_SYNTHETIC_MODEL;
 };
 
-const claudeNoResponseMessageSchema = z.looseObject({
-  isApiErrorMessage: z.literal(false).optional(),
-  message: z.looseObject({
-    model: z.literal(CLAUDE_SYNTHETIC_MODEL),
-    content: z.tuple([
-      z.looseObject({ type: z.literal("text"), text: z.literal(CLAUDE_NO_RESPONSE_TEXT) }),
-    ]),
-  }),
-});
-
 /** On resume, the CLI writes this synthetic reply to close a turn that stopped before it finished. */
-export const isClaudeNoResponseAssistantMessage = (entry: ClaudeHistoryMessage): boolean =>
-  entry.type === "assistant" && claudeNoResponseMessageSchema.safeParse(entry).success;
+export const isClaudeNoResponseAssistantMessage = (entry: SessionStoreEntry): boolean =>
+  isClaudeSyntheticAssistantMessage(entry) &&
+  historyMessageText(entry.message) === CLAUDE_NO_RESPONSE_TEXT;
 
 /** The CLI writes one of these user entries when the user stops a turn. */
 export const CLAUDE_USER_STOP_MARKERS = [
@@ -41,26 +32,25 @@ export const CLAUDE_USER_STOP_MARKERS = [
 ] as const;
 
 const claudeUserStopMessageSchema = z.looseObject({
+  type: z.literal("user"),
   message: z.looseObject({
     content: z.union([
       z.string().transform((text) => [text]),
       z
-        .array(z.looseObject({ type: z.string(), text: z.string().optional() }))
-        .transform((blocks) =>
-          blocks.map((block) => (block.type === "text" ? block.text : undefined)),
-        ),
+        .array(z.looseObject({ type: z.literal("text"), text: z.string() }))
+        .nonempty()
+        .transform((blocks) => blocks.map((block) => block.text)),
     ]),
   }),
 });
 
 export const isClaudeUserStopMessage = (entry: ClaudeHistoryMessage): boolean => {
-  if (entry.type !== "user") return false;
   const parsed = claudeUserStopMessageSchema.safeParse(entry);
-  if (!parsed.success) return false;
-  const texts = parsed.data.message.content;
   return (
-    texts.length > 0 &&
-    texts.every((text) => CLAUDE_USER_STOP_MARKERS.some((marker) => text?.startsWith(marker)))
+    parsed.success &&
+    parsed.data.message.content.every((text) =>
+      CLAUDE_USER_STOP_MARKERS.some((marker) => text.startsWith(marker)),
+    )
   );
 };
 

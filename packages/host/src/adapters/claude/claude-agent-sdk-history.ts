@@ -148,6 +148,10 @@ export const toClaudeHistoryMessages = (
     lastFinalAssistantMessage = null;
     lastFinalAssistantText = undefined;
   };
+  const endCurrentTurn = () => {
+    replyStartedAt = undefined;
+    resetCurrentUserTurnAssistantTracking();
+  };
   const removeRetractedMessages = (messageIds: string[]) => {
     if (messageIds.length === 0) return;
     const retractedIds = new Set(messageIds);
@@ -189,8 +193,7 @@ export const toClaudeHistoryMessages = (
       if (entry.interruptedByShutdown === true) {
         if (lastFinalAssistantMessage)
           clearClaudeHistoryAssistantFinality(lastFinalAssistantMessage);
-        replyStartedAt = undefined;
-        resetCurrentUserTurnAssistantTracking();
+        endCurrentTurn();
       }
       const originKind = readClaudeTurnOriginKind(entry);
       if (originKind !== undefined && originKind !== "human") {
@@ -217,11 +220,10 @@ export const toClaudeHistoryMessages = (
     const projectedInput = projectHistoryInput(entry, timestamp);
     if (projectedInput.handled) {
       if (projectedInput.manualCompaction) {
-        replyStartedAt = undefined;
+        endCurrentTurn();
         pendingManualCompaction = projectedInput.manualCompaction;
         manualCompactionBoundaryReceived = unclaimedManualCompactionBoundary;
         unclaimedManualCompactionBoundary = false;
-        resetCurrentUserTurnAssistantTracking();
         continue;
       }
       const projectedMessage = projectedInput.message;
@@ -233,8 +235,7 @@ export const toClaudeHistoryMessages = (
         const previous = history.findLast((message) => message.role !== "system");
         history.push(projectedMessage);
         if (isClaudeUserStopMessage(entry)) {
-          replyStartedAt = undefined;
-          resetCurrentUserTurnAssistantTracking();
+          endCurrentTurn();
           continue;
         }
         // Steering keeps the first prompt's start, even before assistant output.
@@ -302,11 +303,6 @@ export const toClaudeHistoryMessages = (
         continue;
       }
       lastError = null;
-      if (isClaudeNoResponseAssistantMessage(entry)) {
-        replyStartedAt = undefined;
-        resetCurrentUserTurnAssistantTracking();
-        continue;
-      }
       const projection = projectClaudeHistoryAssistantMessage({
         entry,
         timestamp,
@@ -314,7 +310,10 @@ export const toClaudeHistoryMessages = (
         toolMessageIdsByCallId,
         toolNamesByCallId,
       });
-      if (!projection) continue;
+      if (!projection) {
+        if (isClaudeNoResponseAssistantMessage(entry)) endCurrentTurn();
+        continue;
+      }
       const { message: assistantSnapshot, stopReason } = projection;
       applyClaudeHistoryToolUses(toolResultState, assistantSnapshot, timestamp);
       assistantSnapshot.parts = assistantSnapshot.parts.flatMap((part) => {
