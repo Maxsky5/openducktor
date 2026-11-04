@@ -143,6 +143,38 @@ describe("SessionPanel", () => {
     expect(screen.getAllByRole("tab").length).toBeGreaterThan(0);
   });
 
+  test("keeps the tool content of a kept view mounted across a switch", () => {
+    let mounts = 0;
+    function Content(): ReactElement {
+      const [mount] = useState(() => {
+        mounts += 1;
+        return mounts;
+      });
+      return <p data-testid="tool-content">Diff content, mount {mount}</p>;
+    }
+    const model = createSessionPanelFixture({
+      tabs: [{ id: "diffs", kind: "diffs" }],
+      selectedTabId: "diffs",
+    });
+    const panel = (isShown: boolean) => (
+      <SessionViewContext value={{ id: "view", isActive: isShown }}>
+        <SessionViewShownContext value={isShown}>
+          <SessionPanel model={model} toolTabs={{ diffs: { content: <Content /> } }} />
+        </SessionViewShownContext>
+      </SessionViewContext>
+    );
+    const view = renderWithConnection(panel(true));
+    const content = view.getByTestId("tool-content");
+    expect(mounts).toBe(1);
+
+    view.rerender(panel(false));
+    view.rerender(panel(true));
+
+    expect(mounts).toBe(1);
+    expect(view.getByTestId("tool-content")).toBe(content);
+    view.unmount();
+  });
+
   test("shows each tab with its label, the selected tab, and a close button", () => {
     renderWithConnection(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
 
@@ -341,6 +373,82 @@ describe("SessionPanel", () => {
     expect(document.querySelector('[data-slot="tooltip-content"]')?.getAttribute("data-side")).toBe(
       "top",
     );
+  });
+
+  test("closes an open tab menu when the view hides and keeps it closed on return", async () => {
+    const model = createSessionPanelFixture();
+    const panel = (isShown: boolean) => (
+      <SessionViewContext value={{ id: "view", isActive: isShown }}>
+        <SessionViewShownContext value={isShown}>
+          <SessionPanel model={model} toolTabs={toolTabs} />
+        </SessionViewShownContext>
+      </SessionViewContext>
+    );
+    const view = renderWithConnection(panel(true));
+
+    await act(async () => {
+      fireEvent.contextMenu(screen.getByRole("tab", { name: "Diffs" }));
+    });
+    expect(screen.getByRole("menuitem", { name: "Close tab" })).toBeDefined();
+
+    view.rerender(panel(false));
+    view.rerender(panel(true));
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Close tab" })).toBeNull();
+    view.unmount();
+  });
+
+  test("closes a tab tooltip when the view hides and keeps it closed on return", async () => {
+    const model = createSessionPanelFixture();
+    const panel = (isShown: boolean) => (
+      <SessionViewContext value={{ id: "view", isActive: isShown }}>
+        <SessionViewShownContext value={isShown}>
+          <SessionPanel model={model} toolTabs={toolTabs} />
+        </SessionViewShownContext>
+      </SessionViewContext>
+    );
+    const view = renderWithConnection(panel(true));
+    const tab = screen.getByRole("tab", { name: "Diffs" });
+    const label = within(tab).getByText("Diffs");
+    // The test DOM has no layout, so the label width tells the tab that it cuts the label off.
+    Object.defineProperty(label, "scrollWidth", { configurable: true, value: 240 });
+    Object.defineProperty(label, "clientWidth", { configurable: true, value: 120 });
+
+    await act(async () => {
+      fireEvent.focus(tab);
+    });
+    expect(screen.getByRole("tooltip").textContent).toBe("Diffs");
+
+    view.rerender(panel(false));
+    view.rerender(panel(true));
+
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    view.unmount();
+  });
+
+  test("closes the new-tab tooltip when the view hides and keeps it closed on return", async () => {
+    const model = createSessionPanelFixture();
+    const panel = (isShown: boolean) => (
+      <SessionViewContext value={{ id: "view", isActive: isShown }}>
+        <SessionViewShownContext value={isShown}>
+          <SessionPanel model={model} toolTabs={toolTabs} />
+        </SessionViewShownContext>
+      </SessionViewContext>
+    );
+    const view = renderWithConnection(panel(true));
+    const addTab = screen.getByRole("button", { name: "New tab in the right panel" });
+
+    await act(async () => {
+      fireEvent.focus(addTab);
+    });
+    expect(screen.getByRole("tooltip").textContent).toBe("New tab");
+
+    view.rerender(panel(false));
+    view.rerender(panel(true));
+
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    view.unmount();
   });
 
   test("names a tool tab with its status when the page gives one", () => {

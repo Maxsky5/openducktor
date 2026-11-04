@@ -1,5 +1,8 @@
-import { Activity, type ReactNode, useEffect, useEffectEvent } from "react";
-import { useSessionViewShown } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
+import { Activity, type ReactNode } from "react";
+import {
+  useOnSessionViewHide,
+  useSessionViewShown,
+} from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
 /**
  * Shows its content while the session view is on screen. The content stops its effects while
@@ -16,10 +19,6 @@ export function WhileSessionViewShown({ children }: { children: ReactNode }): Re
 
 /** Runs `onHide` when the session view leaves the screen, so its dialogs stay closed on return. */
 export function OnSessionViewHide({ onHide }: { onHide: () => void }): null {
-  const isShown = useSessionViewShown();
-  const hide = useEffectEvent(onHide);
-  useEffect(() => {
-    if (!isShown) hide();
-  }, [isShown]);
+  useOnSessionViewHide(onHide);
   return null;
 }

@@ -25,6 +25,7 @@ import {
   useHideResolvedComments,
 } from "@openducktor/frontend-core/review/pull-request-comment-filters";
 import { isBotCommentAuthor } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
 const COMMENT_BODY_BATCH_SIZE = 4;
 
@@ -55,6 +56,9 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
   const [filter, setFilter] = useState<PullRequestCommentAuthorFilter>("all");
   const { hideResolved, setHideResolved } = useHideResolvedComments();
   const hideResolvedId = useId();
+  // The filter stays mounted with the hidden view, so a switch closes it.
+  const [isFilterOpen, setFilterOpen] = useState(false);
+  useOnSessionViewHide(() => setFilterOpen(false));
   const deferredComments = useDeferredValue(comments);
   const deferredFilter = useDeferredValue(filter);
   const deferredHideResolved = useDeferredValue(hideResolved);
@@ -149,7 +153,7 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
               );
             })}
           </div>
-          <Popover>
+          <Popover open={isFilterOpen} onOpenChange={setFilterOpen}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <PopoverTrigger asChild>

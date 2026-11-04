@@ -10,6 +10,7 @@ import { MarkdownPreviewModal } from "@/components/ui/markdown-preview-modal";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import type { ArtifactAction } from "./artifact-action-dialog";
 import { TaskArtifactPreviewDialog } from "./task-artifact-preview-dialog";
 
@@ -31,6 +32,11 @@ export function FreeArtifactControls({
   const [expanded, setExpanded] = useState(false);
   const [modalSnapshot, setModalSnapshot] = useState<TaskArtifactContent | null>(null);
   const modalPresence = useDialogPresence(expanded);
+  // The panel keeps its state with the kept view, so a switch closes the menu and the preview.
+  useOnSessionViewHide(() => {
+    setMenuOpen(false);
+    setExpanded(false);
+  });
   return (
     <>
       {content?.artifact.classification === "free" ? (
@@ -145,6 +151,8 @@ export function WorkflowArtifactControls({
     null,
   );
   const modalPresence = useDialogPresence(expanded);
+  // The panel keeps its state with the kept view, so a switch closes the preview.
+  useOnSessionViewHide(() => setExpanded(false));
   const editSection = isEditableWorkflowDocument(workflowCode) ? workflowCode : null;
   return (
     <>

@@ -23,7 +23,7 @@ describe("agent chat row windows", () => {
   });
 
   test("exports mounted row budgets", () => {
-    expect(AGENT_CHAT_ROW_WINDOW_SIZE).toBe(40);
+    expect(AGENT_CHAT_ROW_WINDOW_SIZE).toBe(20);
     expect(AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT).toBe(10);
   });
 });

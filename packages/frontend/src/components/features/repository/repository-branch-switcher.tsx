@@ -9,6 +9,7 @@ import { BranchSelector } from "@/components/features/repository/branch-selector
 import { toBranchSelectorOptions } from "@openducktor/frontend-core/lib/branch-selector-model";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { cn } from "@/lib/utils";
 import { useWorkspaceBranchState } from "@/state/app-state-provider";
 
@@ -162,6 +163,9 @@ function RepositoryBranchRow({
 }): ReactElement {
   const labelId = `${useId()}-repository-branch`;
   const classes = LAYOUT_CLASSES[layout];
+  // The picker stays mounted with the hidden view, so a switch closes it.
+  const [isPickerOpen, setPickerOpen] = useState(false);
+  useOnSessionViewHide(() => setPickerOpen(false));
   return (
     <div className={classes.row}>
       <p id={labelId} className={classes.label} title={repoPath}>
@@ -175,6 +179,8 @@ function RepositoryBranchRow({
         className={classes.selector}
         triggerClassName={classes.trigger}
         triggerAriaLabelledBy={labelId}
+        open={isPickerOpen}
+        onOpenChange={setPickerOpen}
         {...(layout === "inline"
           ? {
               trigger: (

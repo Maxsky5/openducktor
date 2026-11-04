@@ -1,5 +1,6 @@
 import { createGitConflictActionsModel } from "@openducktor/frontend-core/git/conflicts/git-conflict-actions-model";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import type { AgentStudioGitPanelModel } from "./types";
 
 export type GitPanelConflict = ReturnType<typeof useGitConflictPanel>;
@@ -17,6 +18,8 @@ export function useGitConflictPanel(model: AgentStudioGitPanelModel) {
   const active = gitConflict ?? null;
   const hasConflict = active != null;
   const [isModalOpen, setModalOpen] = useState(false);
+  // The panel keeps its state with the kept view, so a switch closes the conflict modal.
+  useOnSessionViewHide(() => setModalOpen(false));
   const initializedRef = useRef(false);
   const previousAutoOpenNonceRef = useRef(0);
   const previousCloseNonceRef = useRef(0);

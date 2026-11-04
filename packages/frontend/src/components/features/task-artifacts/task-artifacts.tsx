@@ -47,6 +47,7 @@ import {
   groupTaskArtifacts,
 } from "@openducktor/frontend-core/tasks/artifacts/artifact-presentation";
 import { humanDate } from "@openducktor/frontend-core/tasks/presentation/task-display";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { cn } from "@/lib/utils";
 import { ArtifactActionDialog, type ArtifactAction } from "./artifact-action-dialog";
 import { TaskArtifactPreview } from "./task-artifact-preview";
@@ -106,6 +107,8 @@ function useArtifactCollection({
   );
   const [action, setAction] = useState<ArtifactAction | null>(null);
   const [actionOpen, setActionOpen] = useState(false);
+  // The panel keeps its state with the kept view, so a switch closes the action dialog.
+  useOnSessionViewHide(() => setActionOpen(false));
   const sectionRef = useRef<HTMLElement>(null);
   const actionTrigger = useRef<HTMLElement | null>(null);
   const actionPresence = useDialogPresence(actionOpen);

@@ -1,5 +1,13 @@
 import type { RefObject } from "react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT,
   AGENT_CHAT_ROW_WINDOW_SIZE,
@@ -360,16 +368,16 @@ export function useAgentChatRowWindow({
     setRange({ startRow, endRowExclusive: currentRange.endRowExclusive });
   });
 
-  const fillViewport = useCallback(() => {
+  const fillViewport = useEffectEvent(() => {
+    const currentRange = rangeRef.current;
+    if (rowCountForRange(currentRange) >= MAX_MOUNTED_ROW_COUNT) return;
+
     const container = messagesContainerRef.current;
     if (!container) return;
-    const currentRange = rangeRef.current;
     const height = container.clientHeight;
     const scrollHeight = container.scrollHeight;
     if (height <= 0 || scrollHeight <= 0) return;
     if (scrollHeight - height > CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX) return;
-
-    if (rowCountForRange(currentRange) >= MAX_MOUNTED_ROW_COUNT) return;
 
     if (currentRange.startRow > 0) {
       expandBefore({ trimBottomAfterPrepend: false });
@@ -377,16 +385,39 @@ export function useAgentChatRowWindow({
     }
 
     expandAfter({ trimTopAfterAppend: false });
-  }, [expandAfter, expandBefore, messagesContainerRef]);
-  useLayoutEffect(fillViewport, [fillViewport, range]);
+  });
+  // The fill reads layout, so it waits for the next frame. A switch then paints the rows it
+  // already has, and a streamed row does not lay out the transcript before each paint.
+  const fillFrameRef = useRef<number | null>(null);
+  const scheduleFillViewport = useEffectEvent(() => {
+    if (fillFrameRef.current !== null) return;
+    if (rowCountForRange(rangeRef.current) >= MAX_MOUNTED_ROW_COUNT) return;
+    fillFrameRef.current = requestAnimationFrame(() => {
+      fillFrameRef.current = null;
+      fillViewport();
+    });
+  });
+  useEffect(() => {
+    return () => {
+      if (fillFrameRef.current !== null) {
+        cancelAnimationFrame(fillFrameRef.current);
+        fillFrameRef.current = null;
+      }
+    };
+  }, []);
+  // Row content can shrink without a range change, so fill again when the rows change.
+  useEffect(() => {
+    scheduleFillViewport();
+  }, [range, rows]);
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    // A pane resize can leave the row window too short even when the transcript stays the same.
-    const observer = new ResizeObserver(fillViewport);
+    // The observer lives once per container, so a row update does not re-observe it. A pane
+    // resize can leave the row window too short even when the transcript stays the same.
+    const observer = new ResizeObserver(scheduleFillViewport);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [fillViewport, messagesContainerRef]);
+  }, [messagesContainerRef]);
 
   useLayoutEffect(() => {
     const previousRowsLength = previousRowsLengthRef.current;

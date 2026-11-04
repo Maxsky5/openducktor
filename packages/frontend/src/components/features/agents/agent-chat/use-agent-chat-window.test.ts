@@ -444,7 +444,7 @@ describe("useAgentChatWindow", () => {
   });
 
   test("short transcripts start in the only row window", async () => {
-    const rows = createTurnRows(12);
+    const rows = createTurnRows(10);
     const harness = await mountHarness({
       rows,
       displayedSessionKey: "session-1",
@@ -581,11 +581,90 @@ describe("useAgentChatWindow", () => {
       await act(async () => {
         triggerResizeObservers(container);
       });
+      // The fill reads layout, so it waits for the next frame.
+      expect(harness.getLatestResult().visibleRows).toHaveLength(AGENT_CHAT_ROW_WINDOW_SIZE);
+      await animationFrameDriver.flushFrames();
       expect(harness.getLatestResult().visibleRows.length).toBeGreaterThan(
         AGENT_CHAT_ROW_WINDOW_SIZE,
       );
       expect(harness.getLatestResult().visibleRows.at(-1)).toBe(rows.at(-1));
       expect(getMaxScrollTop(container)).toBeGreaterThan(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps one row-window ResizeObserver across row updates", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 1);
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+    try {
+      // The row-window observer watches the container only. The scroll observer also watches
+      // the content, so the set with one observed element is the row-window observer.
+      const readRowWindowObservers = () =>
+        [...mockResizeObserverControllers].filter(
+          (controller) => controller.observedElements.size === 1,
+        );
+      const [rowWindowObserver] = readRowWindowObservers();
+      if (!rowWindowObserver) {
+        throw new Error("Expected a row-window ResizeObserver");
+      }
+
+      await harness.update({
+        rows: createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 2),
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      });
+
+      const rowWindowObservers = readRowWindowObservers();
+      expect(rowWindowObservers).toHaveLength(1);
+      expect(rowWindowObservers[0]?.observer).toBe(rowWindowObserver.observer);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("fills the viewport again when row content shrinks without a range change", async () => {
+    const rows = createSingleTurnRows(100);
+    let rowHeightPx = ROW_HEIGHT_PX;
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true, getRowHeightPx: () => rowHeightPx },
+    );
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+    try {
+      expect(getMaxScrollTop(container)).toBeGreaterThan(0);
+      expect(harness.getLatestResult().visibleRows).toHaveLength(AGENT_CHAT_ROW_WINDOW_SIZE);
+      await animationFrameDriver.flushFrames();
+
+      rowHeightPx = 1;
+      await harness.update({
+        rows: rows.map((row) =>
+          row.kind === "message" ? { ...row, message: { ...row.message, content: "Short" } } : row,
+        ),
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      });
+
+      // The range stays the same until the deferred fill adds rows.
+      expect(harness.getLatestResult().visibleRows).toHaveLength(AGENT_CHAT_ROW_WINDOW_SIZE);
+      await animationFrameDriver.flushFrames();
+      expect(harness.getLatestResult().visibleRows.length).toBeGreaterThan(
+        AGENT_CHAT_ROW_WINDOW_SIZE,
+      );
     } finally {
       await harness.unmount();
     }
@@ -1701,7 +1780,7 @@ describe("useAgentChatWindow", () => {
     }
 
     expect(harness.getLatestResult().windowStart).toBe(25);
-    container.scrollTop = 1_000;
+    container.scrollTop = getMaxScrollTop(container) - 50;
     await act(async () => {
       await dispatchWheelUp(container);
       await dispatchScroll(container);
@@ -1874,7 +1953,7 @@ describe("useAgentChatWindow", () => {
   });
 
   test("keeps the latest row window on the first populated render after an empty frame", async () => {
-    const rows = createTurnRows(12);
+    const rows = createTurnRows(10);
     const harness = await mountHarness({
       rows: [],
       displayedSessionKey: "session-1",
@@ -2009,8 +2088,8 @@ describe("useAgentChatWindow", () => {
   });
 
   test("switching sessions after selecting first history resets the next session to its latest row window", async () => {
-    const firstSessionRows = createTurnRows(12, "session-1");
-    const secondSessionRows = createTurnRows(12, "session-2");
+    const firstSessionRows = createTurnRows(10, "session-1");
+    const secondSessionRows = createTurnRows(10, "session-2");
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
@@ -2181,7 +2260,7 @@ describe("useAgentChatWindow", () => {
   });
 
   test("scrollToBottom selects the latest row window and jumps to bottom", async () => {
-    const rows = createTurnRows(12);
+    const rows = createTurnRows(10);
     const harness = await mountHarness(
       {
         rows,
@@ -2311,8 +2390,8 @@ describe("useAgentChatWindow", () => {
   });
 
   test("keeps the current transcript window when a new turn is appended while pinned", async () => {
-    const initialRows = createTurnRows(12);
-    const nextRows = createTurnRows(13);
+    const initialRows = createTurnRows(9);
+    const nextRows = createTurnRows(10);
     const harness = await mountHarness(
       {
         rows: initialRows,
@@ -2765,7 +2844,7 @@ describe("useAgentChatWindow", () => {
   });
 
   test("exports the expected row-window budget", () => {
-    expect(AGENT_CHAT_ROW_WINDOW_SIZE).toBe(40);
+    expect(AGENT_CHAT_ROW_WINDOW_SIZE).toBe(20);
   });
 
   test("navigates 10,000 rows in both directions within the row-window budget", async () => {

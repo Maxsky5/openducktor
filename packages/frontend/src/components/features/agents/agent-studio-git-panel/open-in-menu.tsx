@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   openInToolsQueryOptions,
@@ -32,6 +33,8 @@ export function OpenInMenu({
   onOpenInTool,
 }: OpenInMenuProps): ReactElement {
   const [isOpen, setIsOpen] = useState(false);
+  // The menu stays mounted with its kept view, so a switch closes it.
+  useOnSessionViewHide(() => setIsOpen(false));
   const [pendingToolId, setPendingToolId] = useState<SystemOpenInToolId | null>(null);
   const settingsQuery = useQuery(settingsSnapshotQueryOptions());
   const preferredToolId = settingsQuery.data?.system.preferredOpenInToolId;

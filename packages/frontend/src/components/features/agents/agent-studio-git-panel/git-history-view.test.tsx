@@ -14,6 +14,7 @@ import {
   waitForElementToBeRemoved,
   within,
 } from "@testing-library/react";
+import { SessionViewShownContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -606,6 +607,64 @@ describe("GitHistoryView", () => {
       screen.getByRole("list", { name: "Commits of feature compared with origin/main" }),
     );
     await waitFor(() => expect(details()).toBeNull());
+  });
+
+  test("closes the details card when the session view hides and keeps it closed on return", async () => {
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    const connection = createHistoryConnection();
+    const tree = (isShown: boolean) => (
+      <QueryProvider connection={connection}>
+        <TooltipProvider>
+          <SessionViewShownContext value={isShown}>
+            <div style={{ height: 600 }}>
+              <GitHistoryView {...props()} />
+            </div>
+          </SessionViewShownContext>
+        </TooltipProvider>
+      </QueryProvider>
+    );
+    const view = render(tree(true));
+
+    const [row] = await screen.findAllByTestId("agent-studio-git-history-row");
+    if (!row) throw new Error("History has no rows.");
+    fireEvent.click(row);
+    await screen.findByTestId("agent-studio-git-history-details");
+    expect(row.getAttribute("aria-expanded")).toBe("true");
+
+    view.rerender(tree(false));
+    expect(screen.queryByTestId("agent-studio-git-history-details")).toBeNull();
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+
+    view.rerender(tree(true));
+    expect(screen.queryByTestId("agent-studio-git-history-details")).toBeNull();
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("closes the columns menu when the session view hides and keeps it closed on return", async () => {
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    const connection = createHistoryConnection();
+    const tree = (isShown: boolean) => (
+      <QueryProvider connection={connection}>
+        <TooltipProvider>
+          <SessionViewShownContext value={isShown}>
+            <div style={{ height: 600 }}>
+              <GitHistoryView {...props()} />
+            </div>
+          </SessionViewShownContext>
+        </TooltipProvider>
+      </QueryProvider>
+    );
+    const view = render(tree(true));
+
+    await screen.findByText("Subject c2");
+    fireEvent.click(screen.getByTestId("agent-studio-git-history-columns-button"));
+    await screen.findByTestId("agent-studio-git-history-columns-menu");
+
+    view.rerender(tree(false));
+    view.rerender(tree(true));
+
+    expect(screen.queryByTestId("agent-studio-git-history-columns-menu")).toBeNull();
+    expect(document.activeElement?.closest('[data-slot="context-menu-content"]')).toBeNull();
   });
 
   test("explains a branch without commits and unrelated histories", async () => {
