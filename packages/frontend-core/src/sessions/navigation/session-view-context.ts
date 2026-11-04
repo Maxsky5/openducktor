@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useEffectEvent } from "react";
+import { createContext, useContext, useEffectEvent, useLayoutEffect } from "react";
 
 /** The kept view of the content. Its content turns active after the view shows. */
 export const SessionViewContext = createContext<{
@@ -20,13 +20,13 @@ export function useSessionViewShown(): boolean {
 /**
  * Runs `onHide` when the session view leaves the screen or the content unmounts. Content stays
  * mounted with its kept view, so a component that keeps a dialog open in its own state closes it
- * here. A hidden `SessionViewShownActivity` stops the effects of its content, so the hide runs as
- * the cleanup of the shown effect.
+ * here. A hidden `SessionViewShownActivity` destroys layout effects before the next paint, so the
+ * hide runs in the cleanup of the shown layout effect.
  */
 export function useOnSessionViewHide(onHide: () => void): void {
   const isShown = useSessionViewShown();
   const hide = useEffectEvent(onHide);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isShown) return;
     return () => hide();
   }, [isShown]);

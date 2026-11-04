@@ -405,9 +405,10 @@ export function useAgentChatRowWindow({
       }
     };
   }, []);
+  // Row content can shrink without a range change, so fill again when the rows change.
   useEffect(() => {
     scheduleFillViewport();
-  }, [range]);
+  }, [range, rows]);
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;

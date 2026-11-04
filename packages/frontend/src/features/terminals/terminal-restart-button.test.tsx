@@ -7,6 +7,7 @@ import {
 } from "@openducktor/contracts";
 import { act, fireEvent, render as renderComponent } from "@testing-library/react";
 import { createTerminalActivityStore } from "@openducktor/frontend-core/terminals/terminal-activity-store";
+import { SessionViewShownContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { TerminalRestartButton } from "./terminal-restart-button";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -14,6 +15,12 @@ import type { ReactElement } from "react";
 
 const render = (element: ReactElement) =>
   renderComponent(<TooltipProvider>{element}</TooltipProvider>);
+
+const sessionView = (element: ReactElement, isShown: boolean) => (
+  <SessionViewShownContext value={isShown}>
+    <TooltipProvider>{element}</TooltipProvider>
+  </SessionViewShownContext>
+);
 
 const summary: TerminalSummary = {
   terminalId: "terminal-1",
@@ -168,6 +175,29 @@ test("does not attach a late restart error to a later command", async () => {
     expect(view.getByRole("button", { name: "Restart command" }).hasAttribute("disabled")).toBe(
       false,
     );
+  } finally {
+    view.unmount();
+  }
+});
+
+test("drops a restart failure that arrives after the session view hides", async () => {
+  const { update, controller } = harness();
+  const pending = Promise.withResolvers<TerminalRestartResponse>();
+  const props = { summary, controller, onRestart: () => pending.promise };
+  const view = renderComponent(sessionView(<TerminalRestartButton {...props} />, true));
+  try {
+    update({ summary, command: "bun dev", restartable: true });
+    fireEvent.click(view.getByRole("button", { name: "Restart command" }));
+
+    view.rerender(sessionView(<TerminalRestartButton {...props} />, false));
+    await act(async () => {
+      pending.reject(new Error("Restart failed"));
+      await pending.promise.catch(() => {});
+    });
+
+    view.rerender(sessionView(<TerminalRestartButton {...props} />, true));
+    expect(view.queryByRole("alert")).toBeNull();
+    expect(view.getByRole("button", { name: "Restart command" })).toBeTruthy();
   } finally {
     view.unmount();
   }

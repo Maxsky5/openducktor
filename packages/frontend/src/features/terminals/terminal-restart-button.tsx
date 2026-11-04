@@ -3,7 +3,7 @@ import type {
   TerminalRestartResponse,
   TerminalSummary,
 } from "@openducktor/contracts";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { Loader2, RotateCw } from "lucide-react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -35,8 +35,13 @@ export function TerminalRestartButton({
   const activity = findTerminalActivity(state, summary.terminalId);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // The notice stays mounted with its kept view, so a switch closes it.
-  useOnSessionViewHide(() => setError(null));
+  // A restart result that arrives after the view hides belongs to the hidden view.
+  const restartGenerationRef = useRef(0);
+  // The notice stays mounted with its kept view, so a switch closes it and drops its result.
+  useOnSessionViewHide(() => {
+    restartGenerationRef.current += 1;
+    setError(null);
+  });
   const [lastCommand, setLastCommand] = useState(activity?.command);
 
   if (activity?.command !== lastCommand) {
@@ -46,12 +51,15 @@ export function TerminalRestartButton({
 
   const restart = async () => {
     if (!activity?.restartable || pending) return;
+    const generation = restartGenerationRef.current;
     setPending(true);
     setError(null);
     try {
       await restartTerminalCommand(activity, read, onRestart);
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (restartGenerationRef.current === generation) {
+        setError(errorMessage(cause));
+      }
     } finally {
       setPending(false);
     }

@@ -630,6 +630,46 @@ describe("useAgentChatWindow", () => {
     }
   });
 
+  test("fills the viewport again when row content shrinks without a range change", async () => {
+    const rows = createSingleTurnRows(100);
+    let rowHeightPx = ROW_HEIGHT_PX;
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true, getRowHeightPx: () => rowHeightPx },
+    );
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+    try {
+      expect(getMaxScrollTop(container)).toBeGreaterThan(0);
+      expect(harness.getLatestResult().visibleRows).toHaveLength(AGENT_CHAT_ROW_WINDOW_SIZE);
+      await animationFrameDriver.flushFrames();
+
+      rowHeightPx = 1;
+      await harness.update({
+        rows: rows.map((row) =>
+          row.kind === "message" ? { ...row, message: { ...row.message, content: "Short" } } : row,
+        ),
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      });
+
+      // The range stays the same until the deferred fill adds rows.
+      expect(harness.getLatestResult().visibleRows).toHaveLength(AGENT_CHAT_ROW_WINDOW_SIZE);
+      await animationFrameDriver.flushFrames();
+      expect(harness.getLatestResult().visibleRows.length).toBeGreaterThan(
+        AGENT_CHAT_ROW_WINDOW_SIZE,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("underfilled first history range appends rows until the user can keep scrolling", async () => {
     const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 3);
     const harness = await mountHarness(
