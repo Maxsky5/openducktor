@@ -20,6 +20,7 @@ import {
   buildClaudeAgentSdkBaseOptions,
   buildClaudeAgentSdkOptions,
   CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV,
+  CLAUDE_CODE_ENTRYPOINT_ENV,
   CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV,
   CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV,
 } from "./claude-agent-sdk-options";
@@ -448,6 +449,16 @@ describe("buildClaudeAgentSdkBaseOptions", () => {
     } finally {
       resolve.mockRestore();
     }
+  });
+
+  test("names OpenDucktor as the Claude Code entrypoint instead of an inherited value", () => {
+    const options = buildClaudeAgentSdkBaseOptions({
+      claudeExecutablePath: process.execPath,
+      cwd: process.cwd(),
+      processEnv: { [CLAUDE_CODE_ENTRYPOINT_ENV]: "claude-desktop" },
+    });
+
+    expect(options.env?.[CLAUDE_CODE_ENTRYPOINT_ENV]).toBe("openducktor");
   });
 
   test("enables session state events and sets resume switches only for an explicit request", () => {

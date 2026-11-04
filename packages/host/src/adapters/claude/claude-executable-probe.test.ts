@@ -207,10 +207,11 @@ describe("buildClaudeExecutableProbeOptions", () => {
 
     const options = buildClaudeExecutableProbeOptions({
       executablePath: "/opt/claude",
-      processEnv: {},
+      processEnv: { CLAUDE_CODE_ENTRYPOINT: "cli" },
       abortController,
     });
 
+    expect(options.env?.CLAUDE_CODE_ENTRYPOINT).toBe("openducktor");
     expect(options.pathToClaudeCodeExecutable).toBe("/opt/claude");
     expect(options.abortController).toBe(abortController);
     expect(options.settingSources).toEqual([]);

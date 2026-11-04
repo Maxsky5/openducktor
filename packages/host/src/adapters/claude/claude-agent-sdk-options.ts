@@ -53,6 +53,14 @@ export const CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV =
  */
 export const CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV = "CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS";
 
+/**
+ * Claude Code sends this value as `cc_entrypoint` on API requests.
+ * Without it, the SDK sends `sdk-ts`, and an inherited host value such as `cli` or `claude-desktop` names the wrong client.
+ */
+export const CLAUDE_CODE_ENTRYPOINT_ENV = "CLAUDE_CODE_ENTRYPOINT";
+
+export const OPENDUCKTOR_CLAUDE_CODE_ENTRYPOINT = "openducktor";
+
 type BuildClaudeAgentSdkOptionsInput = {
   input: ClaudeSessionInput;
   session: ClaudeSessionContext;
@@ -89,6 +97,7 @@ export const buildClaudeAgentSdkBaseOptions = ({
   const env = {
     ...inheritedEnv,
     CLAUDE_AGENT_SDK_CLIENT_APP: "openducktor",
+    [CLAUDE_CODE_ENTRYPOINT_ENV]: OPENDUCKTOR_CLAUDE_CODE_ENTRYPOINT,
     [CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]: "1",
   };
   const options: Options = {
