@@ -581,6 +581,8 @@ describe("useAgentChatWindow", () => {
       await act(async () => {
         triggerResizeObservers(container);
       });
+      // The fill reads layout, so it waits for the next frame.
+      expect(harness.getLatestResult().visibleRows).toHaveLength(AGENT_CHAT_ROW_WINDOW_SIZE);
       await animationFrameDriver.flushFrames();
       expect(harness.getLatestResult().visibleRows.length).toBeGreaterThan(
         AGENT_CHAT_ROW_WINDOW_SIZE,
