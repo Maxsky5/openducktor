@@ -20,7 +20,10 @@ export const isClaudeSyntheticAssistantMessage = (
   return parsed.success && parsed.data.message.model === CLAUDE_SYNTHETIC_MODEL;
 };
 
-/** On resume, the CLI writes this synthetic reply to close a turn that stopped before it finished. */
+/**
+ * The CLI writes this synthetic reply when a turn has no model reply: on resume after a stopped
+ * turn, and after a local command.
+ */
 export const isClaudeNoResponseAssistantMessage = (entry: SessionStoreEntry): boolean =>
   isClaudeSyntheticAssistantMessage(entry) &&
   historyMessageText(entry.message) === CLAUDE_NO_RESPONSE_TEXT;
@@ -34,13 +37,10 @@ export const CLAUDE_USER_STOP_MARKERS = [
 const claudeUserStopMessageSchema = z.looseObject({
   type: z.literal("user"),
   message: z.looseObject({
-    content: z.union([
-      z.string().transform((text) => [text]),
-      z
-        .array(z.looseObject({ type: z.literal("text"), text: z.string() }))
-        .nonempty()
-        .transform((blocks) => blocks.map((block) => block.text)),
-    ]),
+    content: z
+      .array(z.looseObject({ type: z.literal("text"), text: z.string() }))
+      .nonempty()
+      .transform((blocks) => blocks.map((block) => block.text)),
   }),
 });
 

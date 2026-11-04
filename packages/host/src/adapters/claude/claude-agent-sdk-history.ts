@@ -311,7 +311,7 @@ export const toClaudeHistoryMessages = (
         toolNamesByCallId,
       });
       if (!projection) {
-        // The projection skips synthetic replies, but this one still closes the stopped turn.
+        // The projection skips synthetic replies. The no-response reply still ends the current turn.
         if (isClaudeNoResponseAssistantMessage(entry)) endCurrentTurn();
         continue;
       }
