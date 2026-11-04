@@ -21,7 +21,6 @@ import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import {
   type HumanReviewFeedbackStartRequest,
   HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE,
-  prepareHumanReviewFeedback,
   submitHumanReviewFeedback,
 } from "./human-review-feedback-flow";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
@@ -66,16 +65,6 @@ const STARTED_SESSION = {
 } satisfies AgentSessionIdentity;
 
 describe("human-review-feedback-flow", () => {
-  test("prepareHumanReviewFeedback returns the created feedback state", () => {
-    const state = createState();
-
-    const result = prepareHumanReviewFeedback({
-      createState: () => state,
-    });
-
-    expect(result).toBe(state);
-  });
-
   test.each([
     { kind: "kickoff", override: false },
     { kind: "message", override: false },

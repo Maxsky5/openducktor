@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { describe, expect, mock, test } from "bun:test";
 import {
   createTaskCardFixture,
@@ -37,8 +38,10 @@ const runCommand = (command: Exclude<PaletteTaskCommand, { kind: "copy_id" }>) =
   const onEdit = mock((_taskId: string) => {});
   const onLaunch = mock((_taskId: string, _launchActionId: string) => {});
   const onOpenSession = mock(() => {});
-  const onResetTask = mock(async () => {});
-  const onCloseTask = mock(async () => {});
+  const onResetTask = mock(async (taskId: string) => createWireTaskCardFixture({ id: taskId }));
+  const onCloseTask = mock(async (taskId: string) =>
+    createWireTaskCardFixture({ id: taskId, status: "closed" }),
+  );
   const onConfirmTaskAction = mock((_taskId: string, _action: string) => {});
   const onOpenTaskDetails = mock((_taskId: string) => {});
   const intent = taskCommandIntent(task, command, taskView);

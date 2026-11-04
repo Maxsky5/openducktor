@@ -55,32 +55,33 @@ const asyncConfirmDialogReducer = (
   }
 };
 
-type UseTaskAsyncConfirmDialogOptions = {
+type UseTaskAsyncConfirmDialogOptions<Result> = {
   /** The dialog can open only while this is true. Turning it off closes the dialog. */
   enabled: boolean;
   /** Open the dialog on mount, for a host that mounts it to ask for one confirmation. */
   initiallyOpen?: boolean;
   /** A new key resets the dialog and ignores the result of a run that started before. */
   scopeKey: string | null;
-  run: (() => Promise<void>) | undefined;
+  run: (() => Promise<Result>) | undefined;
   onSucceeded: () => void;
-  onCommitted?: (() => Promise<void>) | undefined;
+  /** Gets the result of the committed run, such as the task card that the host returned. */
+  onCommitted?: ((result: Result) => Promise<void>) | undefined;
 };
 
-export type TaskAsyncConfirmDialog = {
-  openDialog: (onCommitted?: () => Promise<void>) => void;
+export type TaskAsyncConfirmDialog<Result> = {
+  openDialog: (onCommitted?: (result: Result) => Promise<void>) => void;
   dialog: Omit<TaskConfirmDialogState, "impact">;
 };
 
 /** A confirmation that runs an async action and keeps the dialog open with its error on failure. */
-export function useTaskAsyncConfirmDialog({
+export function useTaskAsyncConfirmDialog<Result>({
   enabled,
   initiallyOpen = false,
   scopeKey,
   run,
   onSucceeded,
   onCommitted,
-}: UseTaskAsyncConfirmDialogOptions): TaskAsyncConfirmDialog {
+}: UseTaskAsyncConfirmDialogOptions<Result>): TaskAsyncConfirmDialog<Result> {
   const [state, dispatch] = useReducer(asyncConfirmDialogReducer, {
     ...CLOSED_STATE,
     isOpen: initiallyOpen,
@@ -107,7 +108,7 @@ export function useTaskAsyncConfirmDialog({
     }
   }, [enabled]);
 
-  const openDialog = useCallback((onCommitted?: () => Promise<void>): void => {
+  const openDialog = useCallback((onCommitted?: (result: Result) => Promise<void>): void => {
     continuationRef.current = onCommitted;
     dispatch({ type: "opened" });
   }, []);
@@ -138,11 +139,11 @@ export function useTaskAsyncConfirmDialog({
     dispatch({ type: "started" });
 
     void run()
-      .then(async () => {
+      .then(async (result) => {
         if (requestToken !== requestTokenRef.current) {
           return;
         }
-        await continuation?.();
+        await continuation?.(result);
         dispatch({ type: "succeeded" });
         onSucceeded();
       })

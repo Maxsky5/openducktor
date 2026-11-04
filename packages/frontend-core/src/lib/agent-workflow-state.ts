@@ -72,9 +72,9 @@ export const buildHumanWorkflowState = (step: {
 };
 
 type WorkflowRailEntry = {
-  role: AgentRole;
   state: WorkflowStepPresentation;
-  sessionValue: string | null;
+  /** The step has a session to open. */
+  hasSession: boolean;
 };
 
 /** The hint and attention marker of one workflow rail step. */
@@ -112,7 +112,7 @@ const workflowStepHint = (
     return "Latest session failed";
   }
   if (entry.state.tone === "failed") {
-    if (entry.sessionValue) {
+    if (entry.hasSession) {
       return "Open latest failed session for this role";
     }
     return "Step failed before a session could start";
@@ -120,7 +120,7 @@ const workflowStepHint = (
   if (entry.state.completion === "rejected") {
     return "Latest review rejected this task";
   }
-  if (entry.sessionValue) {
+  if (entry.hasSession) {
     return "Open latest relevant session for this role";
   }
   if (entry.state.tone === "available") {

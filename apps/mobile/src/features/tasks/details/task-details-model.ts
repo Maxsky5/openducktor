@@ -28,7 +28,7 @@ import { TASK_PULL_REQUEST_ACTION_LABELS } from "@openducktor/frontend-core/task
 import {
   resolveTaskActionDestination,
   taskActionSendsCommand,
-} from "@/features/workflow/task-action-routing";
+} from "@openducktor/frontend-core/tasks/workflow/task-action-destination";
 import type { ActionMenuItem } from "@/ui/action-menu";
 import { taskActionIcon, taskActionRoleIcon } from "../presentation/task-action-paint";
 
@@ -112,10 +112,10 @@ export const resolveTaskDetailsActions = ({
     label: taskActionLabel(action, task),
     tone: taskActionTone(action, task),
     destructive: taskActionIsDestructive(action, task),
-    command: taskActionSendsCommand(action, task),
+    command: taskActionSendsCommand(task, action),
     icon: taskActionIcon(action, task),
     roleIconHint: taskActionRoleIcon(action, task),
-    disabled: resolveTaskActionDestination(action, task, sessionOptionsOf)?.kind === "no_session",
+    disabled: resolveTaskActionDestination(task, action, sessionOptionsOf).kind === "no_session",
   });
   return {
     primary: resolved.primaryAction ? describe(resolved.primaryAction) : null,

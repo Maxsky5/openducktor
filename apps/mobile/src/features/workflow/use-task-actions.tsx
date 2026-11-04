@@ -29,11 +29,8 @@ import {
   type ConfirmationOutcomeListener,
   useConfirmationOutcome,
 } from "./confirm/use-confirmation-outcome";
-import {
-  resolveTaskActionDestination,
-  showNoSession,
-  type TaskConfirmationAction,
-} from "./task-action-routing";
+import { resolveTaskActionDestination } from "@openducktor/frontend-core/tasks/workflow/task-action-destination";
+import { showNoSession, type TaskConfirmationAction } from "./task-action-routing";
 
 export type TaskActions = {
   /** Runs a workflow action of a task. `sessionOptionsOf` names the session of each role. */
@@ -116,7 +113,9 @@ export function useTaskActions({
       if (action === "reset_implementation") {
         openReset.current(task.id, {
           closeDetailsAfterReset: true,
-          onCommitted: continuation ? () => continueTaskWorkflow(task.id, continuation) : undefined,
+          onCommitted: continuation
+            ? (committed) => continueTaskWorkflow(committed, continuation)
+            : undefined,
         });
         return;
       }
@@ -125,7 +124,9 @@ export function useTaskActions({
         id: nextRequestId.current,
         taskId: task.id,
         action,
-        onCommitted: continuation ? () => continueTaskWorkflow(task.id, continuation) : undefined,
+        onCommitted: continuation
+          ? (committed) => continueTaskWorkflow(committed, continuation)
+          : undefined,
       });
     },
     [continueTaskWorkflow],
@@ -135,8 +136,7 @@ export function useTaskActions({
   const runAction = useCallback<TaskActions["runAction"]>(
     (task, action, sessionOptionsOf) => {
       try {
-        const destination = resolveTaskActionDestination(action, task, sessionOptionsOf);
-        if (!destination) return;
+        const destination = resolveTaskActionDestination(task, action, sessionOptionsOf);
         switch (destination.kind) {
           case "launch":
             launch(task.id, destination.launchActionId);
@@ -148,13 +148,9 @@ export function useTaskActions({
             router.push(routes.task(workspaceId, task.id));
             return;
           case "cleanup":
-            if (onRemoveWorktree) {
-              onRemoveWorktree();
-              return;
-            }
-            feedback.show("error", "Workflow action failed", {
-              description: "Open the task details to remove its worktree.",
-            });
+            // The task details read the worktree, so they own its removal.
+            if (onRemoveWorktree) onRemoveWorktree();
+            else router.push(routes.task(workspaceId, task.id));
             return;
           case "open_session":
             openSession(task, destination.role, destination.options);

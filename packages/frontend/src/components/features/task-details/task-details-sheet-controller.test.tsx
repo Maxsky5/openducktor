@@ -1,3 +1,5 @@
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
+import { createTaskWorkflowActionsFixture } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { render as renderUi, waitFor } from "@testing-library/react";
@@ -44,32 +46,33 @@ const activeWorkspace = {
 const taskDetailsSheetRenderMock = mock((_props: TaskDetailsSheetRenderProps) => null);
 let taskDetailsSheetSpy: { mockRestore(): void };
 
-const createWorkflowActions = (onDelete: TaskWorkflowActions["onDelete"]): TaskWorkflowActions => ({
-  onLaunch: () => {},
-  onApplyEvent: () => {},
-  onCreateTask: () => {},
-  onOpenSession: () => {},
-  onEdit: () => {},
-  onOpenTaskDetails: () => {},
-  onHumanApprove: () => {},
-  onHumanRequestChanges: () => {},
-  onResetImplementation: () => {},
-  onResetTask: async () => {},
-  onCloseTask: async () => {},
-  onRemoveTaskWorktree: async () => {},
-  onDelete,
-  onConfirmTaskAction: () => {},
-  onDetectPullRequest: () => {},
-  onUnlinkPullRequest: () => {},
-  detectingPullRequestTaskIds: new Set<string>(),
-  unlinkingPullRequestTaskIds: new Set<string>(),
-  gitProviderContext: undefined,
-  gitProviderReadError: null,
-  registerTaskDetailsClose: () => () => {},
-  claimWorkflowDialog: (_owner, run) => run(),
-  taskSessionsByTaskId: new Map(),
-  activeTaskSessionContextByTaskId: new Map(),
-});
+const createWorkflowActions = (onDelete: TaskWorkflowActions["onDelete"]): TaskWorkflowActions =>
+  createTaskWorkflowActionsFixture({
+    onLaunch: () => {},
+    onApplyEvent: () => {},
+    onCreateTask: () => {},
+    onOpenSession: () => {},
+    onEdit: () => {},
+    onOpenTaskDetails: () => {},
+    onHumanApprove: () => {},
+    onHumanRequestChanges: () => {},
+    onResetImplementation: () => {},
+    onResetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
+    onCloseTask: async (taskId: string) =>
+      createWireTaskCardFixture({ id: taskId, status: "closed" }),
+    onRemoveTaskWorktree: async () => {},
+    onDelete,
+    onConfirmTaskAction: () => {},
+    onDetectPullRequest: () => {},
+    onUnlinkPullRequest: () => {},
+    detectingPullRequestTaskIds: new Set<string>(),
+    unlinkingPullRequestTaskIds: new Set<string>(),
+    gitProviderContext: undefined,
+    gitProviderReadError: null,
+    registerTaskDetailsClose: () => () => {},
+    taskSessionsByTaskId: new Map(),
+    activeTaskSessionContextByTaskId: new Map(),
+  });
 
 async function importMockedTaskDetailsSheetController(): Promise<TaskDetailsSheetControllerComponent> {
   const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");

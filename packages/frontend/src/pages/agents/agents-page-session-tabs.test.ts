@@ -1,3 +1,4 @@
+import { buildRoleWorkflowState } from "@openducktor/frontend-core/lib/agent-workflow-state";
 import { createWorkflowAssociationFixture } from "./agent-studio-test-utils";
 import { resolveSessionContinuationLaunchAction } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
@@ -19,7 +20,6 @@ import {
   buildLiveSessionByRoleMap,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
-  buildWorkflowStateByRole,
 } from "./agents-page-session-tabs";
 
 const buildSession = (
@@ -45,6 +45,24 @@ const buildSession = (
   }
   return summary;
 };
+
+/** The step state of each role, from explicit role workflows. */
+const buildWorkflowStateByRole = (params: {
+  task: Parameters<typeof buildRoleWorkflowState>[0]["task"];
+  roleWorkflowsByTask: Record<string, Parameters<typeof buildRoleWorkflowState>[0]["workflow"]>;
+  liveSessionByRole: Record<string, Parameters<typeof buildRoleWorkflowState>[0]["liveSession"]>;
+}) =>
+  Object.fromEntries(
+    Object.entries(params.roleWorkflowsByTask).map(([role, workflow]) => [
+      role,
+      buildRoleWorkflowState({
+        task: params.task,
+        role,
+        workflow,
+        liveSession: params.liveSessionByRole[role] ?? "none",
+      }),
+    ]),
+  );
 
 describe("agents-page-session-tabs", () => {
   test("selects latest session per task", () => {

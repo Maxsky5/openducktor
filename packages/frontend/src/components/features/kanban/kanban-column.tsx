@@ -1,8 +1,4 @@
-import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
-import type {
-  KanbanColumn as KanbanColumnData,
-  WorkflowRoleId as AgentRole,
-} from "@openducktor/workflows";
+import type { KanbanColumn as KanbanColumnData } from "@openducktor/workflows";
 import type { KanbanTaskCardView } from "@openducktor/contracts";
 import { Inbox } from "lucide-react";
 import { type ComponentProps, memo, type ReactElement, useEffect, useMemo, useRef } from "react";
@@ -21,7 +17,6 @@ import {
   getCardLayout,
   type WorkflowPendingState,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
-import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { useKanbanVirtualization } from "@/components/features/kanban/use-kanban-virtualization";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -43,14 +38,6 @@ type KanbanColumnProps = {
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
-  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
-  onHumanApprove?: TaskWorkflowActions["onHumanApprove"];
-  onHumanRequestChanges?: TaskWorkflowActions["onHumanRequestChanges"];
-  onResetImplementation?: (taskId: string) => void;
-  onCloseTask?: (
-    taskId: string,
-    continuation?: import("@openducktor/frontend-core/tasks/workflow/task-workflow-continuation").TaskWorkflowContinuation,
-  ) => void;
 };
 
 export function KanbanColumn({
@@ -64,11 +51,6 @@ export function KanbanColumn({
   activeTaskSessionContextByTaskId,
   taskActivityStateByTaskId,
   onOpenDetails,
-  onOpenSession,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
-  onCloseTask,
 }: KanbanColumnProps): ReactElement {
   const theme = laneTheme(column.tone);
   const cardLayoutsByTaskId = useMemo(
@@ -124,17 +106,12 @@ export function KanbanColumn({
       hasActiveSession: Boolean(context),
       taskActivityState: getRequiredTaskActivityState(taskActivityStateByTaskId, task.id),
       onOpenDetails,
-      onOpenSession,
     };
     if (context?.role) cardProps.activeSessionRole = context.role;
     const mergedTarget = mergedTargetByTaskId.get(task.id);
     if (mergedTarget !== undefined) cardProps.mergedTarget = mergedTarget;
     const autoCloseFailure = autoCloseFailureByTaskId.get(task.id);
     if (autoCloseFailure !== undefined) cardProps.autoCloseFailure = autoCloseFailure;
-    if (onCloseTask) cardProps.onCloseTask = onCloseTask;
-    if (onHumanApprove) cardProps.onHumanApprove = onHumanApprove;
-    if (onHumanRequestChanges) cardProps.onHumanRequestChanges = onHumanRequestChanges;
-    if (onResetImplementation) cardProps.onResetImplementation = onResetImplementation;
     if (!isVirtualized) return <KanbanTaskCard key={task.id} {...cardProps} />;
     return (
       <MeasuredCard

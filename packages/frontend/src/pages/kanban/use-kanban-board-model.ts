@@ -1,18 +1,13 @@
-import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import type {
   AgentSessionRecord,
   KanbanEmptyColumnDisplay,
   KanbanTaskCardView,
 } from "@openducktor/contracts";
-import type {
-  WorkflowRoleId as AgentRole,
-  ResolvedTaskCard as TaskCard,
-} from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type {
   ActiveTaskSessionContext,
   KanbanTaskSession,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
-import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { useKanbanBoardColumns } from "@openducktor/frontend-core/tasks/board/use-kanban-board-columns";
 import type { WorkflowPendingState } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
@@ -38,14 +33,6 @@ type UseKanbanBoardModelArgs = {
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   activeTaskSessionContextByTaskId: Map<string, ActiveTaskSessionContext>;
   onOpenDetails: (taskId: string) => void;
-  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
-  onHumanApprove: TaskWorkflowActions["onHumanApprove"];
-  onHumanRequestChanges: TaskWorkflowActions["onHumanRequestChanges"];
-  onResetImplementation: (taskId: string) => void;
-  onCloseTask: (
-    taskId: string,
-    continuation?: import("@openducktor/frontend-core/tasks/workflow/task-workflow-continuation").TaskWorkflowContinuation,
-  ) => void;
 };
 
 export function useKanbanBoardModel({
@@ -66,11 +53,6 @@ export function useKanbanBoardModel({
   taskSessionsByTaskId,
   activeTaskSessionContextByTaskId,
   onOpenDetails,
-  onOpenSession,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
-  onCloseTask,
 }: UseKanbanBoardModelArgs): KanbanPageContentModel {
   const { columns, taskActivityStateByTaskId } = useKanbanBoardColumns(
     tasks,
@@ -96,10 +78,5 @@ export function useKanbanBoardModel({
     activeTaskSessionContextByTaskId,
     taskActivityStateByTaskId,
     onOpenDetails,
-    onOpenSession,
-    onHumanApprove,
-    onHumanRequestChanges,
-    onResetImplementation,
-    onCloseTask,
   };
 }

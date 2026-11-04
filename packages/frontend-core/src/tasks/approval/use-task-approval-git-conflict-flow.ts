@@ -1,3 +1,4 @@
+import type { OnTaskCommitted } from "../workflow/task-workflow-continuation";
 import { useCallback, useRef, useState } from "react";
 import type { GitConflict, GitConflictAction } from "../../git/contracts";
 import { abortGitConflict, isAbortableGitConflict } from "../../git/conflicts/abort-git-conflict";
@@ -20,7 +21,7 @@ interface TaskApprovalGitConflictState {
   taskId: string | null;
   conflict: GitConflict | null;
   conflictAction: GitConflictAction;
-  onCommitted?: (() => Promise<void>) | undefined;
+  onCommitted?: OnTaskCommitted | undefined;
 }
 
 type OpenTaskApproval = (taskId: string, options?: TaskApprovalOpenOptions) => void;
@@ -59,7 +60,7 @@ export function useTaskApprovalGitConflictFlow({
   }, []);
 
   const openGitConflictDialog = useCallback(
-    (taskId: string, conflict: GitConflict, onCommitted?: () => Promise<void>): void => {
+    (taskId: string, conflict: GitConflict, onCommitted?: OnTaskCommitted): void => {
       setGitConflictState({
         open: true,
         taskId,
@@ -188,7 +189,7 @@ export function useTaskApprovalGitConflictFlow({
     openGitConflictDialog: (
       taskId: string,
       conflict: GitConflict,
-      onCommitted?: () => Promise<void>,
+      onCommitted?: OnTaskCommitted,
     ) => void;
   };
 }

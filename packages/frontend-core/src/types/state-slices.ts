@@ -1,3 +1,4 @@
+import type { TaskCard as WireTaskCard } from "@openducktor/contracts";
 import type {
   GitTargetBranch,
   TaskAssetDescriptionMutation,
@@ -23,11 +24,11 @@ export type TasksStateContextValue = TaskPullRequestOperations & {
   ) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
-  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<void>;
+  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<WireTaskCard>;
   /** Removes the worktree and local branches of a closed task. */
   removeTaskWorktree: (taskId: string) => Promise<void>;
-  resetTaskImplementation: (taskId: string) => Promise<void>;
-  resetTask: (taskId: string) => Promise<void>;
+  resetTaskImplementation: (taskId: string) => Promise<WireTaskCard>;
+  resetTask: (taskId: string) => Promise<WireTaskCard>;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };
 

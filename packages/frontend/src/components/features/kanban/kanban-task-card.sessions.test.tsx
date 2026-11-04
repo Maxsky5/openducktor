@@ -24,7 +24,11 @@ const session = (role: WorkflowRoleId): AgentSessionRecord & { role: WorkflowRol
   startedAt: "2026-10-01T10:00:00Z",
   selectedModel: null,
 });
-type CardTestProps = ComponentProps<typeof KanbanTaskCard> & { onLaunch: ReturnType<typeof mock> };
+type CardTestProps = ComponentProps<typeof KanbanTaskCard> & {
+  onLaunch: ReturnType<typeof mock>;
+  onOpenSession: ReturnType<typeof mock>;
+  onResetImplementation: ReturnType<typeof mock>;
+};
 const cardProps = (): CardTestProps => ({
   onLaunch: mock(noop),
   task: createTaskCardFixture({
@@ -46,7 +50,7 @@ function Card(props: CardTestProps) {
           value={createTaskWorkflowActionsFixture({
             onLaunch: props.onLaunch,
             onOpenSession: props.onOpenSession,
-            onResetImplementation: props.onResetImplementation ?? noop,
+            onResetImplementation: props.onResetImplementation,
           })}
         >
           <KanbanTaskCard {...props} />

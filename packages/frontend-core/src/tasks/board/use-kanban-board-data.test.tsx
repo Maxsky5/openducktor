@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { workspaceRefFixture } from "../../test-support/workspace-ref-fixture";
 import { workflowQueryKeys } from "../../queries/workflows";
 import {
@@ -42,10 +43,10 @@ const tasksState = (tasks: TaskCard[]): TasksStateContextValue => ({
   updateTask: async () => {},
   setTaskTargetBranch: async () => {},
   deleteTask: async () => {},
-  closeTask: async () => {},
+  closeTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
   removeTaskWorktree: async () => {},
-  resetTaskImplementation: async () => {},
-  resetTask: async () => {},
+  resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
+  resetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
   humanRequestChangesTask: async () => {},
 });
 

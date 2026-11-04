@@ -48,7 +48,6 @@ describe("KanbanColumn", () => {
         activeTaskSessionContextByTaskId: new Map(),
         taskActivityStateByTaskId: new Map(tasks.map((task) => [task.id, "idle"])),
         onOpenDetails: noop,
-        onOpenSession: noop,
       };
       const view = render(
         <MemoryRouter>
@@ -183,7 +182,6 @@ describe("KanbanColumn", () => {
           taskActivityStateByTaskId,
           activeTaskSessionContextByTaskId: new Map(),
           onOpenDetails: noop,
-          onOpenSession: noop,
         }),
       ),
     );

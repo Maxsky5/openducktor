@@ -1,4 +1,8 @@
-import { useTaskWorkflowContinuation } from "../workflow/task-workflow-continuation";
+import type { TaskCard as WireTaskCard } from "@openducktor/contracts";
+import {
+  type TaskWorkflowContinuation,
+  useTaskWorkflowContinuation,
+} from "../workflow/task-workflow-continuation";
 import {
   sessionRoleForViewAction,
   type WorkflowRoleId as AgentRole,
@@ -10,7 +14,6 @@ import { useTaskStopImpact } from "../../queries/use-task-stop-impact";
 import { useTaskWorktreeOwners } from "../../queries/use-task-worktree-owners";
 import type { ActiveWorkspace } from "../../types/session-slices";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
-import { runTaskWorkflowAction } from "../workflow/run-task-workflow-action";
 import type { TaskWorkflowActions } from "../workflow/task-workflow-actions-context";
 import { toTaskLabels } from "./task-details-sheet-model";
 import { useTaskCleanupImpact } from "./use-task-cleanup-impact";
@@ -41,13 +44,9 @@ export type UseTaskDetailsSheetViewModelOptions = {
   open: boolean;
   /** Called with false after a confirmed action succeeds or a session view opens. */
   onOpenChange: (open: boolean) => void;
+  runAction?: TaskWorkflowActions["runAction"] | undefined;
   onLaunch?: TaskWorkflowActions["onLaunch"] | undefined;
-  onApplyEvent?: TaskWorkflowActions["onApplyEvent"] | undefined;
-  onOpenSession?: TaskWorkflowActions["onOpenSession"] | undefined;
   resolveSessionOptionsByRole?: ((role: AgentRole) => SessionTargetOptions | undefined) | undefined;
-  onHumanApprove?: TaskWorkflowActions["onHumanApprove"] | undefined;
-  onHumanRequestChanges?: TaskWorkflowActions["onHumanRequestChanges"] | undefined;
-  onResetImplementation?: TaskWorkflowActions["onResetImplementation"] | undefined;
   onResetTask?: TaskWorkflowActions["onResetTask"] | undefined;
   onCloseTask?: TaskWorkflowActions["onCloseTask"] | undefined;
   onRemoveTaskWorktree?: TaskWorkflowActions["onRemoveTaskWorktree"] | undefined;
@@ -62,13 +61,9 @@ export function useTaskDetailsSheetViewModel({
   task,
   open,
   onOpenChange,
+  runAction,
   onLaunch,
-  onApplyEvent,
-  onOpenSession,
   resolveSessionOptionsByRole,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
   onResetTask,
   onCloseTask,
   onRemoveTaskWorktree,
@@ -115,49 +110,33 @@ export function useTaskDetailsSheetViewModel({
   const { openDialog: openRemoveWorktreeDialog } = removeWorktreeConfirm;
   const runWorkflowAction = useCallback(
     (action: TaskWorkflowAction): void => {
-      runTaskWorkflowAction(
-        action,
-        taskId,
-        {
-          onLaunch,
-          onApplyEvent,
-          onOpenSession,
-          onHumanApprove,
-          onHumanRequestChanges,
-          onResetImplementation,
-          onResetTask: (_id, continuation) =>
-            openResetDialog(
-              continuation ? () => continueTaskWorkflow(task.id, continuation) : undefined,
-            ),
-          onCloseTask: (_id, continuation) =>
-            openCloseDialog(
-              continuation ? () => continueTaskWorkflow(task.id, continuation) : undefined,
-            ),
-          onRemoveTaskWorktree: openRemoveWorktreeDialog,
-        },
-        {
-          task,
-          resolveSessionOptions: resolveSessionOptionsByRole,
-        },
-      );
+      if (!runAction)
+        throw new Error("Task details need the task workflow actions to run a workflow action.");
+      const afterConfirm = (continuation?: TaskWorkflowContinuation) =>
+        continuation
+          ? (committed: WireTaskCard) => continueTaskWorkflow(committed, continuation)
+          : undefined;
+      runAction(task, action, {
+        sessionOptionsOf: resolveSessionOptionsByRole,
+        // The sheet is not modal, so its confirmations stay inside it to keep focus.
+        confirm: (confirmation, continuation) =>
+          confirmation === "close_task"
+            ? openCloseDialog(afterConfirm(continuation))
+            : openResetDialog(afterConfirm(continuation)),
+        onRemoveWorktree: openRemoveWorktreeDialog,
+      });
       // The session opens in place of the current view, so the sheet must not stay over it.
       if (sessionRoleForViewAction(action, task)) onOpenChange(false);
     },
     [
-      onOpenChange,
-      onOpenSession,
-      resolveSessionOptionsByRole,
-      onHumanApprove,
-      onHumanRequestChanges,
-      onLaunch,
-      onApplyEvent,
+      runAction,
       task,
-      onResetImplementation,
-      openResetDialog,
+      resolveSessionOptionsByRole,
       openCloseDialog,
+      openResetDialog,
       openRemoveWorktreeDialog,
-      taskId,
       continueTaskWorkflow,
+      onOpenChange,
     ],
   );
 

@@ -64,7 +64,6 @@ describe("KanbanTaskCard active sessions", () => {
             },
           ],
           onOpenDetails: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -119,7 +118,6 @@ describe("KanbanTaskCard active sessions", () => {
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -166,7 +164,6 @@ describe("KanbanTaskCard active sessions", () => {
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -208,7 +205,6 @@ describe("KanbanTaskCard active sessions", () => {
             },
           ],
           onOpenDetails: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -244,7 +240,6 @@ describe("KanbanTaskCard active sessions", () => {
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -270,7 +265,6 @@ describe("KanbanTaskCard active sessions", () => {
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -300,7 +294,6 @@ describe("KanbanTaskCard active sessions", () => {
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -336,7 +329,6 @@ describe("KanbanTaskCard active sessions", () => {
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -368,7 +360,6 @@ describe("KanbanTaskCard active sessions", () => {
             taskActivityState: "idle",
             taskSessions: [],
             onOpenDetails: noop,
-            onOpenSession: noop,
           }),
         ),
       ),
@@ -418,7 +409,6 @@ describe("KanbanTaskCard active sessions", () => {
             taskActivityState: "idle",
             taskSessions: [],
             onOpenDetails: noop,
-            onOpenSession: noop,
           }),
         ),
       ),
@@ -447,9 +437,6 @@ describe("KanbanTaskCard merged task branch", () => {
           taskActivityState: "idle",
           mergedTarget: "origin/main",
           onOpenDetails: noop,
-          onOpenSession: noop,
-          onHumanApprove: noop,
-          onCloseTask: noop,
         }),
       ),
     );
@@ -474,9 +461,6 @@ describe("KanbanTaskCard merged task branch", () => {
           taskActivityState: "idle",
           autoCloseFailure: "Pull request merged, but the task did not close. A chat needs it.",
           onOpenDetails: noop,
-          onOpenSession: noop,
-          onHumanApprove: noop,
-          onCloseTask: noop,
         }),
       ),
     );
@@ -500,8 +484,6 @@ describe("KanbanTaskCard merged task branch", () => {
           task,
           taskActivityState: "idle",
           onOpenDetails: noop,
-          onOpenSession: noop,
-          onHumanApprove: noop,
         }),
       ),
     );

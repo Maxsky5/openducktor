@@ -1,4 +1,3 @@
-import type { TaskWorkflowContinuation } from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
 import { DEFAULT_KANBAN_SETTINGS } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -92,12 +91,6 @@ export function useKanbanPageModels({
   }, [refreshTasks]);
   const mergedTargetByTaskId = useMergedTaskTargets(activeWorkspace, board.kanbanTasks);
   const autoCloseFailureByTaskId = useAutoCloseFailures(activeWorkspace, board.kanbanTasks);
-  const { onConfirmTaskAction } = actions;
-  const onCloseTask = useCallback(
-    (taskId: string, continuation?: TaskWorkflowContinuation): void =>
-      onConfirmTaskAction(taskId, "close", continuation),
-    [onConfirmTaskAction],
-  );
 
   const content = useKanbanBoardModel({
     boardDefinition: board.boardDefinition,
@@ -117,11 +110,6 @@ export function useKanbanPageModels({
     taskSessionsByTaskId: actions.taskSessionsByTaskId,
     activeTaskSessionContextByTaskId: actions.activeTaskSessionContextByTaskId,
     onOpenDetails,
-    onOpenSession: actions.onOpenSession,
-    onHumanApprove: actions.onHumanApprove,
-    onHumanRequestChanges: actions.onHumanRequestChanges,
-    onResetImplementation: actions.onResetImplementation,
-    onCloseTask,
   });
   return {
     header: {

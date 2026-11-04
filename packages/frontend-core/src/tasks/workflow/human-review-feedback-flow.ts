@@ -1,14 +1,9 @@
-import type { WorkspaceRef } from "@openducktor/contracts";
+import type { TaskCard, WorkspaceRef } from "@openducktor/contracts";
 import type { ContinueTaskWorkflow } from "./task-workflow-continuation";
 import type { QueryClient } from "@tanstack/react-query";
 import { connectionHost } from "../../connection/client-connection";
-import { getProductionTaskViewSync } from "../../queries/task-view-sync";
-import { resolveTaskCards } from "../../queries/workflows";
 import type { ClientFeedback } from "../../platform/client-feedback";
-import type {
-  ResolvedTaskCard,
-  WorkflowLaunchActionId as SessionLaunchActionId,
-} from "@openducktor/workflows";
+import type { WorkflowLaunchActionId as SessionLaunchActionId } from "@openducktor/workflows";
 import type { SessionStartExistingSessionOption } from "../../sessions/start/session-start-types";
 import { buildReusableSessionOptions } from "../../sessions/start/session-start-reuse-options";
 import type { AgentSessionSummary } from "../../sessions/agent-sessions-store";
@@ -31,10 +26,6 @@ export type HumanReviewFeedbackStartRequest = {
   humanFeedback: string;
 };
 
-type PrepareHumanReviewFeedbackInput = {
-  createState: () => HumanReviewFeedbackState;
-};
-
 export type SubmitHumanReviewFeedbackResult =
   | { outcome: "started" | "updated" }
   | { outcome: "cancelled" };
@@ -42,8 +33,8 @@ export type SubmitHumanReviewFeedbackResult =
 type SubmitHumanReviewFeedbackInput = {
   feedback: ClientFeedback;
   state: HumanReviewFeedbackState;
-  continueTaskWorkflow?: ContinueTaskWorkflow;
-  requestChangesTask: (taskId: string, note: string) => Promise<ResolvedTaskCard>;
+  continueTaskWorkflow?: ContinueTaskWorkflow | undefined;
+  requestChangesTask: (taskId: string, note: string) => Promise<TaskCard>;
   builderSessions: AgentSessionSummary[];
   startRequestChangesSession: (
     request: HumanReviewFeedbackStartRequest,
@@ -80,12 +71,6 @@ const buildRequestChangesSessionRequest = (
   return request;
 };
 
-export const prepareHumanReviewFeedback = ({
-  createState,
-}: PrepareHumanReviewFeedbackInput): HumanReviewFeedbackState => {
-  return createState();
-};
-
 export const submitHumanReviewFeedback = async ({
   feedback,
   state,
@@ -103,20 +88,8 @@ export const submitHumanReviewFeedback = async ({
   if (!state.launch) {
     if (state.continuation && !continueTaskWorkflow)
       throw new Error("This client cannot continue Request Changes. Update the client.");
-    let committedTask: ResolvedTaskCard;
-    try {
-      committedTask = await requestChangesTask(state.taskId, trimmedMessage);
-    } catch (cause) {
-      if (!(cause instanceof RequestChangesCommittedError)) throw cause;
-      feedback.show("error", "Task updated, but its view could not load", {
-        description: cause.message,
-      });
-      return { outcome: "updated" };
-    }
-    await continueTaskWorkflow?.(state.taskId, state.continuation, {
-      humanFeedback: trimmedMessage,
-      committedTask,
-    });
+    const committed = await requestChangesTask(state.taskId, trimmedMessage);
+    await continueTaskWorkflow?.(committed, state.continuation, { humanFeedback: trimmedMessage });
     return { outcome: "updated" };
   }
   const startResult = await startRequestChangesSession(
@@ -129,26 +102,13 @@ export const submitHumanReviewFeedback = async ({
   return { outcome: "started" };
 };
 
-class RequestChangesCommittedError extends Error {}
-
-/** Use the existing review command and refresh the connection-owned task views after commit. */
+/** Use the existing review command. The task stream updates every task view after the commit. */
 export const requestHumanReviewChanges = async (
   queryClient: QueryClient,
   scope: WorkspaceRef | null,
   taskId: string,
   note: string,
-): Promise<ResolvedTaskCard> => {
+): Promise<TaskCard> => {
   if (!scope) throw new Error("Select the task workspace before requesting changes.");
-  const result = await connectionHost(queryClient).humanRequestChanges(scope, taskId, note);
-  try {
-    const [committed] = await resolveTaskCards(queryClient, scope, [result]);
-    if (!committed) throw new Error("Host returned no committed task. Reload the workspace.");
-    await getProductionTaskViewSync(queryClient).refreshManually(scope);
-    return committed;
-  } catch (cause) {
-    throw new RequestChangesCommittedError(
-      `The changes were requested, but the task view could not load. Reload the task. Do not repeat the action. ${cause instanceof Error ? cause.message : String(cause)}`,
-      { cause },
-    );
-  }
+  return connectionHost(queryClient).humanRequestChanges(scope, taskId, note);
 };

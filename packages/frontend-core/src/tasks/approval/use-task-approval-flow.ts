@@ -1,3 +1,5 @@
+import type { TaskCard as WireTaskCard } from "@openducktor/contracts";
+import type { OnTaskCommitted } from "../workflow/task-workflow-continuation";
 import type { GitConflictAssistanceResult } from "../../git/conflicts/conflict-assistance";
 import type { PullRequest, RepositoryGitProviderContext } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,8 +49,7 @@ type UseTaskApprovalFlowArgs = {
   loadGitProviderContext: () => Promise<RepositoryGitProviderContext>;
   tasks: TaskCard[];
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
-  refreshTasks: () => Promise<void>;
-  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<void>;
+  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<WireTaskCard>;
   openResetImplementation: (taskId: string) => boolean;
   onResolveGitConflict?: (
     conflict: GitConflict,
@@ -78,7 +79,6 @@ export function useTaskApprovalFlow({
   loadGitProviderContext,
   tasks,
   requestPullRequestGeneration,
-  refreshTasks,
   closeTask,
   openResetImplementation,
   onResolveGitConflict = async (): Promise<GitConflictAssistanceResult> => {
@@ -112,7 +112,7 @@ export function useTaskApprovalFlow({
   const closeChoice = useTaskCloseChoice(openTask?.removeWorktreeOnClose ?? null);
   const { resetChoice: resetCloseChoice } = closeChoice;
   const removeWorktree = isTaskApprovalOpen(state) ? closeChoice.removeWorktree : null;
-  const continuationRef = useRef<(() => Promise<void>) | undefined>(undefined);
+  const continuationRef = useRef<OnTaskCommitted | undefined>(undefined);
   const approvalRequestVersionRef = useRef(0);
   const workspaceIdentityRef = useRef<TaskApprovalWorkspaceIdentity | null>(workspaceIdentity);
 
@@ -122,12 +122,16 @@ export function useTaskApprovalFlow({
     dispatch({ type: "close" });
   }, []);
 
-  const completeApproval = useCallback(async () => {
-    const continuation = continuationRef.current;
-    // Keep the sheet mounted while the committed task loads and its next form opens.
-    await continuation?.();
-    reset();
-  }, [reset]);
+  /** Without a committed task, the approval event has not run, so no following launch starts. */
+  const completeApproval = useCallback(
+    async (committed?: WireTaskCard) => {
+      const continuation = continuationRef.current;
+      // Keep the sheet mounted while the committed task loads and its next form opens.
+      if (committed) await continuation?.(committed);
+      reset();
+    },
+    [reset],
+  );
 
   useLayoutEffect(() => {
     if (hasSameWorkspaceIdentity(workspaceIdentityRef.current, workspaceIdentity)) {
@@ -335,11 +339,11 @@ export function useTaskApprovalFlow({
         dispatch({ type: "start_submitting" });
         try {
           // The close shows its own success and failure toasts.
-          await closeTask(submissionRoute.approval.taskId, { removeWorktree });
+          const committed = await closeTask(submissionRoute.approval.taskId, { removeWorktree });
           if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
             return;
           }
-          await completeApproval();
+          await completeApproval(committed);
         } catch (error) {
           if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
             return;
@@ -366,7 +370,6 @@ export function useTaskApprovalFlow({
             approval: approvalState,
             queryClient,
             repoPath,
-            refreshTasks,
             workspaceId: submissionWorkspace.workspaceId,
             removeWorktree,
           });
@@ -381,7 +384,7 @@ export function useTaskApprovalFlow({
           }
 
           if (directMergeResult.outcome === "task_closed") {
-            await completeApproval();
+            await completeApproval(directMergeResult.committed);
             feedback.show("success", "Task approved", {
               description: directMergeResult.successDescription,
             });
@@ -401,7 +404,6 @@ export function useTaskApprovalFlow({
           repoPath,
           workspaceId: submissionWorkspace.workspaceId,
           requestPullRequestGeneration,
-          refreshTasks,
         });
         if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
           return;
@@ -416,6 +418,7 @@ export function useTaskApprovalFlow({
         }
 
         showPullRequestCreated(pullRequestResult.pullRequest);
+        // A pull request leaves the task in review. The approval event runs when it merges.
         await completeApproval();
       } catch (error) {
         if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
@@ -441,7 +444,6 @@ export function useTaskApprovalFlow({
     isApprovalRequestCurrent,
     queryClient,
     openGitConflictDialog,
-    refreshTasks,
     removeWorktree,
     requestPullRequestGeneration,
     reset,
@@ -485,14 +487,13 @@ export function useTaskApprovalFlow({
           approval: approvalState,
           queryClient,
           repoPath: submissionWorkspace.repoPath,
-          refreshTasks,
           workspaceId: submissionWorkspace.workspaceId,
           removeWorktree,
         });
         if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
           return;
         }
-        await completeApproval();
+        await completeApproval(result.committed);
         feedback.show("success", "Task moved to Done", {
           description: result.successDescription,
         });
@@ -515,7 +516,6 @@ export function useTaskApprovalFlow({
     feedback,
     isApprovalRequestCurrent,
     queryClient,
-    refreshTasks,
     removeWorktree,
     state,
     submitFlight,

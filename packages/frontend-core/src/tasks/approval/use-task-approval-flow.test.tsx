@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
@@ -81,7 +82,8 @@ const defaultGitPushBranch: GitPushBranch = async () => ({
   output: "",
 });
 const defaultGitAbortConflict: HostClient["gitAbortConflict"] = async () => ({ output: "" });
-const defaultCloseTask = async (_taskId: string, _options: { removeWorktree: boolean }) => {};
+const defaultCloseTask = async (taskId: string, _options: { removeWorktree: boolean }) =>
+  createWireTaskCardFixture({ id: taskId, status: "closed" });
 const defaultOpenResetImplementation = (_taskId: string) => true;
 const createDefaultAgentSessions = (): Awaited<ReturnType<HostClient["agentSessionsList"]>> => [
   {
@@ -339,7 +341,6 @@ const createUseTaskApprovalFlowArgs = (
   gitProviderContextError: null,
   loadGitProviderContext: async () => null,
   requestPullRequestGeneration: async () => undefined,
-  refreshTasks: async () => {},
   closeTask: closeTaskMock,
   openResetImplementation: openResetImplementationMock,
   showPullRequestCreated,
@@ -677,7 +678,6 @@ describe("useTaskApprovalFlow", () => {
             }),
           ],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -744,7 +744,6 @@ describe("useTaskApprovalFlow", () => {
             }),
           ],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -801,7 +800,6 @@ describe("useTaskApprovalFlow", () => {
             }),
           ],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1023,7 +1021,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1058,7 +1055,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1097,7 +1093,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1149,7 +1144,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           closeTask: closeTaskMock,
         }),
       );
@@ -1211,7 +1205,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           closeTask: closeTaskMock,
         }),
       );
@@ -1257,7 +1250,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           closeTask: closeTaskMock,
         }),
       );
@@ -1306,7 +1298,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           openResetImplementation: openResetImplementationMock,
         }),
       );
@@ -1357,7 +1348,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           closeTask: closeTaskMock,
         }),
       );
@@ -1415,7 +1405,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1473,7 +1462,6 @@ describe("useTaskApprovalFlow", () => {
             createTaskCardFixture({ id: "TASK-2", title: "Task 2" }),
           ],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1556,7 +1544,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1627,7 +1614,6 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("closes after direct merge without offering a push step for local-only target branches", async () => {
-    const refreshTasksMock = mock(async () => {});
     const storage = createMemoryClientStorage();
     const draftIdentity = createDraftIdentity("builder-session");
     writeTestDraft(storage, draftIdentity, "direct merge draft");
@@ -1648,7 +1634,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: refreshTasksMock,
         }),
       );
       return null;
@@ -1682,7 +1667,6 @@ describe("useTaskApprovalFlow", () => {
       },
     );
     expect(gitPushBranchMock).not.toHaveBeenCalled();
-    expect(refreshTasksMock).toHaveBeenCalledTimes(1);
     expect(taskDirectMergeCompleteMock).not.toHaveBeenCalled();
     expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
     await waitForTaskApprovalModalClosed();
@@ -1711,7 +1695,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1784,7 +1767,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1841,7 +1823,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1892,7 +1873,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1945,7 +1925,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -2005,7 +1984,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           onResolveGitConflict: onResolveGitConflictMock,
         }),
       );
@@ -2073,7 +2051,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           onResolveGitConflict: onResolveGitConflictMock,
         }),
       );
@@ -2137,7 +2114,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           onResolveGitConflict: onResolveGitConflictMock,
         }),
       );
@@ -2176,7 +2152,6 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("creates a pull request manually, refreshes tasks, and closes the modal", async () => {
-    const refreshTasksMock = mock(async () => {});
     taskApprovalContextGetMock.mockResolvedValueOnce(createReadyTaskApprovalContextResult());
 
     const Harness = (): ReactElement | null => {
@@ -2197,7 +2172,6 @@ describe("useTaskApprovalFlow", () => {
             }),
           ],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: refreshTasksMock,
         }),
       );
       return null;
@@ -2231,7 +2205,6 @@ describe("useTaskApprovalFlow", () => {
       "Ship approval flow",
       "Task description",
     );
-    expect(refreshTasksMock).toHaveBeenCalledTimes(1);
     await waitForTaskApprovalModalClosed();
     expect(toastSuccessMock).toHaveBeenCalledWith(
       "Pull request created",
@@ -2244,7 +2217,6 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("closes the approval modal only after AI pull request generation starts a builder session", async () => {
-    const refreshTasksMock = mock(async () => {});
     const requestPullRequestGenerationDeferred = createDeferred<string | undefined>();
     const requestPullRequestGenerationMock = mock(
       async () => requestPullRequestGenerationDeferred.promise,
@@ -2263,7 +2235,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: requestPullRequestGenerationMock,
-          refreshTasks: refreshTasksMock,
         }),
       );
       return null;
@@ -2289,7 +2260,6 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(true);
     expect(requestPullRequestGenerationMock).toHaveBeenCalledWith("TASK-1");
     expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
-    expect(refreshTasksMock).not.toHaveBeenCalled();
     expect(toastSuccessMock).not.toHaveBeenCalled();
 
     requestPullRequestGenerationDeferred.resolve("builder-session-pr");
@@ -2322,7 +2292,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: requestPullRequestGenerationMock,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -2393,7 +2362,6 @@ describe("useTaskApprovalFlow", () => {
             createTaskCardFixture({ id: "TASK-2", title: "Task 2" }),
           ],
           requestPullRequestGeneration: requestPullRequestGenerationMock,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -2477,7 +2445,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: requestPullRequestGenerationMock,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -2541,7 +2508,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -2606,7 +2572,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;

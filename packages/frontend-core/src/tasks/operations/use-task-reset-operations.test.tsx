@@ -71,7 +71,9 @@ describe("useTaskResetOperations", () => {
 
     try {
       await setup.harness.mount();
-      await setup.harness.run(({ operations }) => operations.resetTaskImplementation("A"));
+      await setup.harness.run(async ({ operations }) => {
+        await operations.resetTaskImplementation("A");
+      });
 
       expect(setup.taskResetImplementation).toHaveBeenCalledWith(
         { workspaceId: "workspace-1", repoPath: "/repo" },
@@ -101,7 +103,9 @@ describe("useTaskResetOperations", () => {
 
     try {
       await setup.harness.mount();
-      await setup.harness.run(({ operations }) => operations.resetTask("A"));
+      await setup.harness.run(async ({ operations }) => {
+        await operations.resetTask("A");
+      });
 
       expect(setup.taskReset).toHaveBeenCalledWith(
         { workspaceId: "workspace-1", repoPath: "/repo" },
@@ -141,7 +145,9 @@ describe("useTaskResetOperations", () => {
         queryClient.setQueryData(queryKey, { stoppableSessionCount: 1 });
       });
       await expect(
-        setup.harness.run(({ operations }) => operations.resetTaskImplementation("A")),
+        setup.harness.run(async ({ operations }) => {
+          await operations.resetTaskImplementation("A");
+        }),
       ).rejects.toThrow("reset failed");
       let isInvalidated: boolean | undefined;
       await setup.harness.run(({ queryClient }) => {

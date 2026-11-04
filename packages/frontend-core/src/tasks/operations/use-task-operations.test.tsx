@@ -86,11 +86,15 @@ describe("useTaskOperations", () => {
       await harness.mount();
 
       await expect(
-        harness.run((operations) => operations.resetTaskImplementation("task-1")),
+        harness.run(async (operations) => {
+          await operations.resetTaskImplementation("task-1");
+        }),
       ).rejects.toThrow("Select a workspace first.");
-      await expect(harness.run((operations) => operations.resetTask("task-1"))).rejects.toThrow(
-        "Select a workspace first.",
-      );
+      await expect(
+        harness.run(async (operations) => {
+          await operations.resetTask("task-1");
+        }),
+      ).rejects.toThrow("Select a workspace first.");
 
       expect(agentSessionsListForTasks).not.toHaveBeenCalled();
     } finally {
@@ -133,8 +137,12 @@ describe("useTaskOperations", () => {
 
     try {
       await harness.mount();
-      await harness.run((operations) => operations.resetTaskImplementation("task-1"));
-      await harness.run((operations) => operations.resetTask("task-2"));
+      await harness.run(async (operations) => {
+        await operations.resetTaskImplementation("task-1");
+      });
+      await harness.run(async (operations) => {
+        await operations.resetTask("task-2");
+      });
 
       expect(taskResetImplementation).toHaveBeenCalledWith(
         { workspaceId: "workspace-1", repoPath: "/repo" },
@@ -195,11 +203,15 @@ describe("useTaskOperations", () => {
     try {
       await harness.mount();
       await expect(
-        harness.run((operations) => operations.resetTaskImplementation("task-1")),
+        harness.run(async (operations) => {
+          await operations.resetTaskImplementation("task-1");
+        }),
       ).rejects.toBe(resetFailure);
-      await expect(harness.run((operations) => operations.resetTask("task-2"))).rejects.toBe(
-        resetFailure,
-      );
+      await expect(
+        harness.run(async (operations) => {
+          await operations.resetTask("task-2");
+        }),
+      ).rejects.toBe(resetFailure);
 
       expect(refreshTaskData).not.toHaveBeenCalled();
       expect(feedback.shownOf("error")).toEqual([

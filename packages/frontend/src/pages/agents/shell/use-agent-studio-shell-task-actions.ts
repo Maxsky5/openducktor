@@ -1,4 +1,3 @@
-import { runTaskWorkflowAction } from "@openducktor/frontend-core/tasks/workflow/run-task-workflow-action";
 import type { ResolvedTaskCard } from "@openducktor/workflows";
 import { useCallback, useMemo } from "react";
 import type { AgentStudioTaskQuickAction } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
@@ -54,28 +53,16 @@ export function useAgentStudioShellTaskActions({
     cancelLinkMergedPullRequest();
   }, [cancelLinkMergedPullRequest]);
 
-  const workflowActions = useRequiredTaskWorkflowActions();
-  const { onOpenTaskDetails, onConfirmTaskAction } = workflowActions;
+  const { onOpenTaskDetails, runAction } = useRequiredTaskWorkflowActions();
   const selectedTaskId = selectedTask?.id ?? null;
   const openTaskDetails = useCallback((): void => {
     if (selectedTaskId) onOpenTaskDetails(selectedTaskId);
   }, [onOpenTaskDetails, selectedTaskId]);
   const runTaskQuickAction = useCallback(
     (action: AgentStudioTaskQuickAction): void => {
-      if (!selectedTask) return;
-      runTaskWorkflowAction(
-        action,
-        selectedTask.id,
-        {
-          ...workflowActions,
-          onCloseTask: (id, continuation) => onConfirmTaskAction(id, "close", continuation),
-          onResetTask: (id, continuation) => onConfirmTaskAction(id, "reset_task", continuation),
-          onRemoveTaskWorktree: (id) => onOpenTaskDetails(id),
-        },
-        { task: selectedTask },
-      );
+      if (selectedTask) runAction(selectedTask, action);
     },
-    [onOpenTaskDetails, onConfirmTaskAction, workflowActions, selectedTask],
+    [runAction, selectedTask],
   );
 
   const mergedPullRequestModal = useAgentStudioPullRequestModalModel({

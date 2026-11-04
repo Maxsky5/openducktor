@@ -23,7 +23,7 @@ import { requestHumanReviewChanges, submitHumanReviewFeedback } from "./human-re
 import { useTaskWorkflowContinuation } from "./task-workflow-continuation";
 
 test.each([false, true])(
-  "Request Changes uses its committed card and one refresh, observed=%s",
+  "Request Changes continues from its committed card without a task read, observed=%s",
   async (observed) => {
     const { alpha: original, beta, board, catalog } = createSharedBoardWorkflows();
     const definition = workflowDefinitionSchema.parse(original.definition);
@@ -128,8 +128,9 @@ test.each([false, true])(
         expect.objectContaining({ status: "alpha_work" }),
         "Revise the draft.",
       );
-      expect(list).toHaveBeenCalledTimes(1);
-      expect(listAll).toHaveBeenCalledTimes(observed ? 1 : 0);
+      // The task stream updates the views, so the command reads no task list.
+      expect(list).not.toHaveBeenCalled();
+      expect(listAll).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
       await connection.dispose();

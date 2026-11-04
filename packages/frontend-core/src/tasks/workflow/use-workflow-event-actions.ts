@@ -3,7 +3,6 @@ import { useCallback, useRef, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ResolvedTaskCard } from "@openducktor/workflows";
 import { useClientConnection } from "../../connection/client-connection-react";
-import { resolveTaskCards } from "../../queries/workflows";
 import {
   createProductionTaskChatDraftCleanup,
   runTaskStateMutation,
@@ -71,24 +70,8 @@ export function useWorkflowEventActions(
           mutation: () => host.client.taskApplyEvent(scope, taskId, eventId),
           shouldCleanup: (task) => previous.taskWorkflow.isTerminalState(task.status),
         });
-        if (!launchActionIds.length) {
-          await mutation;
-          return;
-        }
-        const committedTask = await resolveTaskCards(queryClient, scope, [await mutation]).then(
-          ([card]) => card!,
-          (cause: unknown) => {
-            throw new Error(
-              `Event "${eventId}" committed, but its next session could not load. Reload the task. Do not repeat the event. ${cause instanceof Error ? cause.message : String(cause)}`,
-              { cause },
-            );
-          },
-        );
-        await continueTaskWorkflow(
-          taskId,
-          { workflow: previous.workflow, launchActionIds },
-          { committedTask },
-        );
+        const committed = await mutation;
+        await continueTaskWorkflow(committed, { workflow: previous.workflow, launchActionIds });
       }),
     [run, tasks, host, feedback, queryClient, continueTaskWorkflow, scope],
   );

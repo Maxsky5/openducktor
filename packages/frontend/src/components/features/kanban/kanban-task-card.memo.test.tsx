@@ -1,6 +1,9 @@
 import { createElement, type ComponentProps } from "react";
 import { createTaskWorkflowActionsFixture } from "@/test-utils/shared-test-fixtures";
-import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
+import {
+  TaskWorkflowActionsContext,
+  type TaskWorkflowActions,
+} from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
@@ -12,10 +15,13 @@ import { KanbanTaskCard as ProductionKanbanTaskCard } from "./kanban-task-card";
 
 enableReactActEnvironment();
 const workflowActions = createTaskWorkflowActionsFixture();
-const KanbanTaskCard = (props: ComponentProps<typeof ProductionKanbanTaskCard>) =>
+const KanbanTaskCard = ({
+  actions = workflowActions,
+  ...props
+}: ComponentProps<typeof ProductionKanbanTaskCard> & { actions?: TaskWorkflowActions }) =>
   createElement(
     TaskWorkflowActionsContext,
-    { value: workflowActions },
+    { value: actions },
     createElement(ProductionKanbanTaskCard, props),
   );
 
@@ -48,8 +54,6 @@ describe("KanbanTaskCard rerender behavior", () => {
           taskActivityState="active"
           taskSessions={taskSessions}
           onOpenDetails={noop}
-
-          onOpenSession={noop}
         />
       </MemoryRouter>,
     );
@@ -63,8 +67,6 @@ describe("KanbanTaskCard rerender behavior", () => {
           taskActivityState="active"
           taskSessions={taskSessions.map((session) => ({ ...session }))}
           onOpenDetails={noop}
-
-          onOpenSession={noop}
         />
       </MemoryRouter>,
     );
@@ -89,8 +91,6 @@ describe("KanbanTaskCard rerender behavior", () => {
           taskActivityState="idle"
           taskSessions={[]}
           onOpenDetails={noop}
-
-          onOpenSession={noop}
         />
       </MemoryRouter>,
     );
@@ -108,9 +108,6 @@ describe("KanbanTaskCard rerender behavior", () => {
           taskActivityState="idle"
           taskSessions={[]}
           onOpenDetails={noop}
-
-          onOpenSession={noop}
-          onHumanRequestChanges={noop}
         />
       </MemoryRouter>,
     );
@@ -142,8 +139,6 @@ describe("KanbanTaskCard rerender behavior", () => {
             },
           ]}
           onOpenDetails={noop}
-
-          onOpenSession={noop}
         />
       </MemoryRouter>,
     );
@@ -165,8 +160,6 @@ describe("KanbanTaskCard rerender behavior", () => {
             },
           ]}
           onOpenDetails={noop}
-
-          onOpenSession={noop}
         />
       </MemoryRouter>,
     );
@@ -184,6 +177,7 @@ describe("KanbanTaskCard rerender behavior", () => {
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
     const onOpenSession = mock(() => {});
+    const actions = createTaskWorkflowActionsFixture({ onOpenSession });
 
     const { rerender, getByRole, unmount } = render(
       <MemoryRouter initialEntries={["/kanban"]}>
@@ -203,7 +197,7 @@ describe("KanbanTaskCard rerender behavior", () => {
           ]}
           onOpenDetails={noop}
 
-          onOpenSession={onOpenSession}
+          actions={actions}
         />
       </MemoryRouter>,
     );
@@ -226,7 +220,7 @@ describe("KanbanTaskCard rerender behavior", () => {
           ]}
           onOpenDetails={noop}
 
-          onOpenSession={onOpenSession}
+          actions={actions}
         />
       </MemoryRouter>,
     );
@@ -274,8 +268,6 @@ describe("KanbanTaskCard rerender behavior", () => {
           taskActivityState="idle"
           taskSessions={[]}
           onOpenDetails={noop}
-
-          onOpenSession={noop}
         />
       </MemoryRouter>,
     );
@@ -289,8 +281,6 @@ describe("KanbanTaskCard rerender behavior", () => {
           taskActivityState="idle"
           taskSessions={[]}
           onOpenDetails={noop}
-
-          onOpenSession={noop}
         />
       </MemoryRouter>,
     );

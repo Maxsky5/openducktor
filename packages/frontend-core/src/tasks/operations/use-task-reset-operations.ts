@@ -1,4 +1,4 @@
-import type { WorkspaceRef } from "@openducktor/contracts";
+import type { TaskCard, WorkspaceRef } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
@@ -22,8 +22,8 @@ type UseTaskResetOperationsArgs = {
 };
 
 export type TaskResetOperations = {
-  resetTaskImplementation: (taskId: string) => Promise<void>;
-  resetTask: (taskId: string) => Promise<void>;
+  resetTaskImplementation: (taskId: string) => Promise<TaskCard>;
+  resetTask: (taskId: string) => Promise<TaskCard>;
 };
 
 export function useTaskResetOperations({
@@ -37,12 +37,13 @@ export function useTaskResetOperations({
   const hostClient = host.client;
 
   const resetTaskImplementation = useCallback(
-    async (taskId: string): Promise<void> => {
+    async (taskId: string): Promise<TaskCard> => {
       const repoPath = requireActiveRepo(activeRepoPath);
       const scope = requireWorkspaceRef(repoPath, activeWorkspaceId);
+      let committed: TaskCard;
       try {
         try {
-          await hostClient.taskResetImplementation(scope, taskId);
+          committed = await hostClient.taskResetImplementation(scope, taskId);
         } finally {
           await invalidateTaskStopImpact(queryClient, scope);
         }
@@ -64,9 +65,10 @@ export function useTaskResetOperations({
         feedback.show("error", "Implementation reset, but metadata refresh failed", {
           description: `${repoPath} · ${taskId}: ${errorMessage(error)}`,
         });
-        return;
+        return committed;
       }
       feedback.show("success", "Implementation reset", { description: taskId });
+      return committed;
     },
     [
       activeRepoPath,
@@ -80,12 +82,13 @@ export function useTaskResetOperations({
   );
 
   const resetTask = useCallback(
-    async (taskId: string): Promise<void> => {
+    async (taskId: string): Promise<TaskCard> => {
       const repoPath = requireActiveRepo(activeRepoPath);
       const scope = requireWorkspaceRef(repoPath, activeWorkspaceId);
+      let committed: TaskCard;
       try {
         try {
-          await hostClient.taskReset(scope, taskId);
+          committed = await hostClient.taskReset(scope, taskId);
         } finally {
           await invalidateTaskStopImpact(queryClient, scope);
         }
@@ -105,9 +108,10 @@ export function useTaskResetOperations({
         feedback.show("error", "Task reset, but metadata refresh failed", {
           description: `${repoPath} · ${taskId}: ${errorMessage(error)}`,
         });
-        return;
+        return committed;
       }
       feedback.show("success", "Task reset", { description: taskId });
+      return committed;
     },
     [
       activeRepoPath,

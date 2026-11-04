@@ -1,18 +1,19 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { editBuiltinTaskWorkflow } from "../../test-support/workflow-fixtures";
-import { runTaskWorkflowAction } from "./run-task-workflow-action";
+import { resolveTaskActionDestination, taskActionSendsCommand } from "./task-action-destination";
 
-describe("runTaskWorkflowAction", () => {
+describe("resolveTaskActionDestination", () => {
   test("starts the task-declared launch", () => {
     const task = createTaskCardFixture({
       id: "T-1",
       availableActions: ["set_spec"],
       issueType: "feature",
     });
-    const onLaunch = mock(() => {});
-    runTaskWorkflowAction("set_spec", task.id, { onLaunch }, { task });
-    expect(onLaunch).toHaveBeenCalledWith(task.id, "spec_initial");
+    expect(resolveTaskActionDestination(task, "set_spec")).toEqual({
+      kind: "launch",
+      launchActionId: "spec_initial",
+    });
   });
 
   test("routes an unfamiliar effect action to the existing approval flow", () => {
@@ -28,9 +29,10 @@ describe("runTaskWorkflowAction", () => {
       }),
       taskWorkflow,
     };
-    const onHumanApprove = mock(() => {});
-    runTaskWorkflowAction("accept_review", task.id, { onHumanApprove }, { task });
-    expect(onHumanApprove).toHaveBeenCalledWith(task.id);
+    expect(resolveTaskActionDestination(task, "accept_review")).toEqual({
+      kind: "approve",
+      continuation: undefined,
+    });
   });
 
   test("keeps all Request Changes candidates for selection after commit", () => {
@@ -57,11 +59,9 @@ describe("runTaskWorkflowAction", () => {
       }),
       taskWorkflow,
     };
-    const onHumanRequestChanges = mock(() => {});
-    runTaskWorkflowAction("human_request_changes", task.id, { onHumanRequestChanges }, { task });
-    expect(onHumanRequestChanges).toHaveBeenCalledWith(task.id, {
-      workflow: task.workflow,
-      launchActionIds,
+    expect(resolveTaskActionDestination(task, "human_request_changes")).toEqual({
+      kind: "request_changes",
+      continuation: { workflow: task.workflow, launchActionIds },
     });
   });
 
@@ -85,9 +85,12 @@ describe("runTaskWorkflowAction", () => {
       ...createTaskCardFixture({ id: "T-1", availableActions: ["send_for_inspection"] }),
       taskWorkflow,
     };
-    const onApplyEvent = mock(() => {});
-    runTaskWorkflowAction("send_for_inspection", task.id, { onApplyEvent }, { task });
-    expect(onApplyEvent).toHaveBeenCalledWith(task.id, "inspection.requested", []);
+    expect(resolveTaskActionDestination(task, "send_for_inspection")).toEqual({
+      kind: "event",
+      eventId: "inspection.requested",
+      launchActionIds: [],
+    });
+    expect(taskActionSendsCommand(task, "send_for_inspection")).toBe(true);
   });
 
   test("opens the requested historical session even when its role cannot start", () => {
@@ -97,28 +100,21 @@ describe("runTaskWorkflowAction", () => {
       runtimeKind: "opencode" as const,
       workingDirectory: "/repo/worktree",
     };
-    const onOpenSession = mock(() => {});
-    runTaskWorkflowAction(
-      "open_builder",
-      task.id,
-      { onOpenSession },
-      { task, resolveSessionOptions: (role) => (role === "build" ? { session } : undefined) },
-    );
-    expect(onOpenSession).toHaveBeenCalledWith(task.id, "build", { session });
+    expect(
+      resolveTaskActionDestination(task, "open_builder", (role) =>
+        role === "build" ? { session } : undefined,
+      ),
+    ).toEqual({ kind: "open_session", role: "build", options: { session } });
+    expect(taskActionSendsCommand(task, "open_builder")).toBe(false);
   });
 
-  test("rejects missing support, unavailable actions, and a different task before dispatch", () => {
+  test("asks for confirmation before a close and rejects an unavailable action", () => {
     const task = createTaskCardFixture({ id: "T-1", availableActions: ["close_task"] });
-    expect(() => runTaskWorkflowAction("close_task", task.id, {}, { task })).toThrow(
-      "host capability",
-    );
-    const onLaunch = mock(() => {});
-    expect(() => runTaskWorkflowAction("set_spec", task.id, { onLaunch }, { task })).toThrow(
-      "unavailable",
-    );
-    expect(() => runTaskWorkflowAction("close_task", "T-2", {}, { task })).toThrow(
-      "does not match",
-    );
-    expect(onLaunch).not.toHaveBeenCalled();
+    expect(resolveTaskActionDestination(task, "close_task")).toEqual({
+      kind: "confirm",
+      action: "close_task",
+      continuation: undefined,
+    });
+    expect(() => resolveTaskActionDestination(task, "set_spec")).toThrow("unavailable");
   });
 });

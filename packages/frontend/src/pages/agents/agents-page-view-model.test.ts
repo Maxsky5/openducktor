@@ -1,3 +1,5 @@
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { buildWorkflowRail } from "@openducktor/frontend-core/tasks/presentation/workflow-rail";
 import { describe, expect, mock, test } from "bun:test";
 import { Sparkles } from "lucide-react";
 import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
@@ -109,32 +111,11 @@ describe("agents-page-view-model", () => {
         { role: "planner", label: "Plan option", icon: Sparkles },
         { role: "spec", label: "Specification option", icon: Sparkles },
       ],
-      workflowStateByRole: {
-        spec: {
-          tone: "in_progress",
-          availability: "available",
-          completion: "in_progress",
-          liveSession: "waiting_input",
-        },
-        planner: {
-          tone: "available",
-          availability: "available",
-          completion: "not_started",
-          liveSession: "none",
-        },
-        build: {
-          tone: "blocked",
-          availability: "blocked",
-          completion: "not_started",
-          liveSession: "none",
-        },
-        qa: {
-          tone: "blocked",
-          availability: "blocked",
-          completion: "not_started",
-          liveSession: "none",
-        },
-      },
+      workflowRail: buildWorkflowRail(createTaskCard("task-1"), (role) =>
+        role === "spec"
+          ? { session: agentSessionIdentityKey(activeSessionSummary), liveSession: "waiting_input" }
+          : { session: null, liveSession: "none" },
+      ),
       selectedRole: "spec",
       workflowSessionByRole: {
         spec: activeSessionSummary,
@@ -188,32 +169,7 @@ describe("agents-page-view-model", () => {
       selectedTask: null,
       onOpenTaskDetails: mock(() => {}),
       roleOptions: [],
-      workflowStateByRole: {
-        spec: {
-          tone: "blocked",
-          availability: "blocked",
-          completion: "not_started",
-          liveSession: "none",
-        },
-        planner: {
-          tone: "blocked",
-          availability: "blocked",
-          completion: "not_started",
-          liveSession: "none",
-        },
-        build: {
-          tone: "blocked",
-          availability: "blocked",
-          completion: "not_started",
-          liveSession: "none",
-        },
-        qa: {
-          tone: "blocked",
-          availability: "blocked",
-          completion: "not_started",
-          liveSession: "none",
-        },
-      },
+      workflowRail: [],
       selectedRole: null,
       workflowSessionByRole: {
         spec: null,

@@ -1,3 +1,5 @@
+import type { TaskCard as WireTaskCard } from "@openducktor/contracts";
+import type { OnTaskCommitted } from "./task-workflow-continuation";
 import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { useCallback, useMemo, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
@@ -39,7 +41,7 @@ export type TaskResetImplementationModalModel = {
 type ResetImplementationModalModel = TaskResetImplementationModalModel;
 type ResetImplementationOptions = {
   closeDetailsAfterReset?: boolean;
-  onCommitted?: (() => Promise<void>) | undefined;
+  onCommitted?: OnTaskCommitted | undefined;
 };
 
 type ResetFlowWorkspaceIdentity = {
@@ -50,13 +52,13 @@ type ResetFlowWorkspaceIdentity = {
 type ResetFlowRequest = ResetFlowWorkspaceIdentity & {
   taskId: string;
   closeDetailsAfterReset: boolean;
-  onCommitted?: (() => Promise<void>) | undefined;
+  onCommitted?: OnTaskCommitted | undefined;
 };
 
 type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
   workspaceIdentity: ResetFlowWorkspaceIdentity | null;
-  resetTaskImplementation: (taskId: string) => Promise<void>;
+  resetTaskImplementation: (taskId: string) => Promise<WireTaskCard>;
   closeTaskDetails: (taskId: string) => void;
 };
 
@@ -164,8 +166,8 @@ export function useTaskResetFlow({
       setIsSubmitting(true);
       setModalError(null);
       try {
-        await resetTaskImplementation(task.id);
-        await request.onCommitted?.();
+        const committed = await resetTaskImplementation(task.id);
+        await request.onCommitted?.(committed);
         setRequest(null);
         if (request.closeDetailsAfterReset) {
           closeTaskDetails(task.id);

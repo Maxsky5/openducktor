@@ -45,7 +45,7 @@ export const useAgentStudioHeaderModel = ({
         selectedTask,
         onOpenTaskDetails,
         roleOptions: roleOptionsForTask(selectedTask),
-        workflowStateByRole: workflow.workflowStateByRole,
+        workflowRail: workflow.workflowRail,
         selectedRole,
         workflowSessionByRole: workflow.workflowSessionByRole,
         sessionSelectorAutofocusByValue: workflow.sessionSelectorAutofocusByValue,
@@ -80,7 +80,7 @@ export const useAgentStudioHeaderModel = ({
       workflow.sessionSelectorGroups,
       workflow.sessionSelectorValue,
       workflow.workflowSessionByRole,
-      workflow.workflowStateByRole,
+      workflow.workflowRail,
     ],
   );
 };

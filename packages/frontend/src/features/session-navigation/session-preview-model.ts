@@ -1,28 +1,19 @@
+import { toAgentWorkflowStep } from "@/components/features/agents/agent-workflow-step";
 import type { AgentSessionLiveRef, AgentSessionScope } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
-import {
-  roleWorkflowForTask,
-  type WorkflowRoleId as AgentRole,
-  workflowRoleIcon,
-} from "@openducktor/workflows";
+import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import type { AgentWorkflowStep } from "@/components/features/agents/agent-studio-header.types";
 import type { WorkspaceActivityProjection } from "@openducktor/frontend-core/workspace-activity/workspace-activity-projection";
 import {
   foldWorkspaceSessionLiveFacts,
   resolveWorkspaceSessionOwnerKey,
 } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
-import { CircleUserRound } from "lucide-react";
-import { roleIconForHint } from "@/lib/agent-role-presentation";
 import {
   agentSessionIdentityKey,
   toAgentSessionIdentity,
 } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { compareAgentSessionRecency } from "@openducktor/frontend-core/lib/agent-session-options";
-import {
-  buildRoleWorkflowState,
-  buildHumanWorkflowState,
-  workflowStepRailState,
-} from "@openducktor/frontend-core/lib/agent-workflow-state";
+import { buildWorkflowRail } from "@openducktor/frontend-core/tasks/presentation/workflow-rail";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import type {
@@ -132,56 +123,28 @@ const previewWorkflow = (
   const facts = projection
     ? foldWorkspaceSessionLiveFacts(projection.sessions, projection.faults)
     : null;
-  const steps: AgentWorkflowStep[] = context.task.taskWorkflow.definition.steps.map((step) => {
-    if (step.kind === "human")
-      return {
-        id: step.id,
-        role: null,
-        human: true,
-        label: step.label,
-        icon: CircleUserRound,
-        state: buildHumanWorkflowState(
-          context.task.workflowSteps.find(({ id }) => id === step.id)!,
-        ),
-        sessionValue: null,
-        hint: step.label,
-        attentionVariant: "none",
-      };
+  const rail = buildWorkflowRail(context.task, (role) => {
     const latest = context.sessions
-      .filter((session) => session.role === step.roleId)
+      .filter((session) => session.role === role)
       .toSorted(compareAgentSessionRecency)[0];
     const sessionKey = latest ? agentSessionIdentityKey(latest) : null;
     roleTargets.set(
-      step.roleId,
+      role,
       latest
         ? {
             kind: "task_session",
             workspaceId: entry.workspace.workspaceId,
             taskId: context.task.id,
-            role: step.roleId,
+            role,
             identity: toAgentSessionIdentity(latest),
           }
-        : {
-            kind: "task",
-            workspaceId: entry.workspace.workspaceId,
-            taskId: context.task.id,
-            role: step.roleId,
-          },
+        : { kind: "task", workspaceId: entry.workspace.workspaceId, taskId: context.task.id, role },
     );
-    const workflowStep = {
-      id: step.id,
-      role: step.roleId,
-      label: step.label,
-      icon: roleIconForHint(workflowRoleIcon(context.task.taskWorkflow, step.roleId)),
-      state: buildRoleWorkflowState({
-        task: context.task,
-        role: step.roleId,
-        workflow: roleWorkflowForTask(context.task, step.roleId),
-        liveSession: sessionKey ? (facts?.get(sessionKey)?.activityState ?? "none") : "none",
-      }),
-      sessionValue: sessionKey,
+    return {
+      session: sessionKey,
+      liveSession: sessionKey ? (facts?.get(sessionKey)?.activityState ?? "none") : "none",
     };
-    return { ...workflowStep, ...workflowStepRailState(workflowStep) };
   });
+  const steps = rail.map(toAgentWorkflowStep);
   return { steps, roleTargets };
 };

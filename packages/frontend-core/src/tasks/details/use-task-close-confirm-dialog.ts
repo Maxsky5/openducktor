@@ -1,3 +1,5 @@
+import type { TaskCard as WireTaskCard } from "@openducktor/contracts";
+import type { OnTaskCommitted } from "../workflow/task-workflow-continuation";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
 import type { TaskConfirmDialogState } from "./task-confirm-dialog-types";
@@ -10,7 +12,7 @@ import {
   useTaskCloseLoader,
 } from "./use-task-close-impact";
 
-export type CloseTaskRun = (taskId: string, options: CloseTaskOptions) => Promise<void>;
+export type CloseTaskRun = (taskId: string, options: CloseTaskOptions) => Promise<WireTaskCard>;
 
 export type TaskCloseConfirmDialogModel = Omit<TaskConfirmDialogState, "impact"> & {
   impact: TaskCloseImpact;
@@ -23,7 +25,7 @@ export type TaskCloseConfirmDialogModel = Omit<TaskConfirmDialogState, "impact">
 };
 
 export type UseTaskCloseConfirmDialogResult = {
-  openDialog: (onCommitted?: () => Promise<void>) => void;
+  openDialog: (onCommitted?: OnTaskCommitted) => void;
   dialog: TaskCloseConfirmDialogModel;
 };
 
@@ -35,7 +37,7 @@ type UseTaskCloseConfirmDialogOptions = {
   /** The close. Without it, Confirm does nothing. */
   run: CloseTaskRun | undefined;
   onSucceeded: () => void;
-  onCommitted?: (() => Promise<void>) | undefined;
+  onCommitted?: OnTaskCommitted | undefined;
 };
 
 /** The shared close confirmation of a task, with its cleanup choice. */

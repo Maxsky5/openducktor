@@ -34,7 +34,7 @@ const createRunTaskMutation =
   ): TaskMutationRunner["runTaskMutation"] =>
   async (options) => {
     received.push(options);
-    await options.run("/repo");
+    return options.run("/repo");
   };
 
 describe("createTaskMutationCommands", () => {
@@ -55,9 +55,7 @@ describe("createTaskMutationCommands", () => {
       activeWorkspaceId: "workspace-1",
       queryClient: client,
       hostPort: { ...createHostPort(), taskUpdate: () => response },
-      runTaskMutation: async (options) => {
-        await options.run("/repo");
-      },
+      runTaskMutation: (options) => options.run("/repo"),
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
     try {
@@ -161,7 +159,7 @@ describe("createTaskMutationCommands", () => {
     const taskCreate = mock(async () => createTaskCardFixture());
     const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
       received.push(options);
-      await options.run("/current-repo");
+      return options.run("/current-repo");
     };
     const commands = createTaskMutationCommands({
       activeRepoPath: "/current-repo",
@@ -198,10 +196,11 @@ describe("createTaskMutationCommands", () => {
     const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
       received.push(options);
       try {
-        await options.run("/repo");
+        const result = await options.run("/repo");
         if (options.successTitle) {
           outcomes.push(`success:${options.successTitle}`);
         }
+        return result;
       } catch (error) {
         outcomes.push(`failure:${options.failureTitle}`);
         throw error;

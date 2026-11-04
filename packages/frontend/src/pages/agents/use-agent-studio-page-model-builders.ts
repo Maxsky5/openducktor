@@ -1,4 +1,8 @@
 import {
+  buildWorkflowRail,
+  type WorkflowRailStep,
+} from "@openducktor/frontend-core/tasks/presentation/workflow-rail";
+import {
   buildRoleWorkflowMapForTask,
   type WorkflowRoleId as AgentRole,
   type ResolvedTaskCard as TaskCard,
@@ -22,7 +26,6 @@ import {
   buildLiveSessionByRoleMap,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
-  buildWorkflowStateByRole,
 } from "./agents-page-session-tabs";
 
 export type AgentStudioSessionContextUsage = {
@@ -46,7 +49,8 @@ type BuildWorkflowModelContextArgs = {
 
 export type WorkflowModelContext = {
   workflowSessionByRole: Record<AgentRole, AgentSessionWorkflowSummary | null>;
-  workflowStateByRole: ReturnType<typeof buildWorkflowStateByRole>;
+  /** The workflow rail. Each role shows its latest session. */
+  workflowRail: WorkflowRailStep<string>[];
   sessionSelectorGroups: ComboboxGroup[];
   sessionSelectorAutofocusByValue: Record<string, boolean>;
   sessionSelectorValue: string;
@@ -75,11 +79,15 @@ export const buildWorkflowModelContext = ({
   const roleWorkflowsByTask = buildRoleWorkflowMapForTask(selectedTask);
   const workflowSessionByRole = buildLatestSessionByRoleMap(sessionsForTask);
   const liveSessionByRole = buildLiveSessionByRoleMap(sessionsForTask);
-  const workflowStateByRole = buildWorkflowStateByRole({
-    task: selectedTask,
-    roleWorkflowsByTask,
-    liveSessionByRole,
-  });
+  const workflowRail = selectedTask
+    ? buildWorkflowRail(selectedTask, (workflowRole) => {
+        const session = workflowSessionByRole[workflowRole] ?? null;
+        return {
+          session: session ? agentSessionIdentityKey(session) : null,
+          liveSession: liveSessionByRole[workflowRole] ?? "none",
+        };
+      })
+    : [];
   const selectedRoleAvailable = role !== null && roleWorkflowsByTask[role]?.available === true;
   const selectedRoleReadOnlyReason = selectedRoleAvailable
     ? null
@@ -119,7 +127,7 @@ export const buildWorkflowModelContext = ({
 
   return {
     workflowSessionByRole,
-    workflowStateByRole,
+    workflowRail,
     sessionSelectorGroups,
     sessionSelectorAutofocusByValue,
     sessionSelectorValue,

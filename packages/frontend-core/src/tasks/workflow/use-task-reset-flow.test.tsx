@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import "../../test-support/dom-environment";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
@@ -29,7 +30,7 @@ const impactSpies: Array<{ mockRestore(): void }> = [];
 const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   tasks: [task],
   workspaceIdentity: workspaceA,
-  resetTaskImplementation: async () => {},
+  resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
   closeTaskDetails: () => {},
   ...overrides,
 });
@@ -93,7 +94,9 @@ describe("useTaskResetFlow", () => {
   });
 
   test("resets the task once for a double tap that comes before the busy state renders", async () => {
-    const resetTaskImplementation = mock(async (_taskId: string) => {});
+    const resetTaskImplementation = mock(async (taskId: string) =>
+      createWireTaskCardFixture({ id: taskId }),
+    );
     const continuation = mock(async () => {});
     const harness = createHookHarness(createArgs({ resetTaskImplementation }));
 
@@ -133,7 +136,9 @@ describe("useTaskResetFlow", () => {
   });
 
   test("binds the modal to its opening workspace", async () => {
-    const resetTaskImplementation = mock(async () => {});
+    const resetTaskImplementation = mock(async (taskId: string) =>
+      createWireTaskCardFixture({ id: taskId }),
+    );
     const args = createArgs({ resetTaskImplementation });
     const harness = createHookHarness(args);
 

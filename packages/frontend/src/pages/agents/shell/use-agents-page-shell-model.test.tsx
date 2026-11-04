@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import type { SessionPanelsModel } from "@/features/session-panels";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
@@ -233,10 +234,14 @@ let tasksState: TasksStateContextValue = {
   updateTask: mock(async () => undefined),
   setTaskTargetBranch: mock(async () => undefined),
   deleteTask: mock(async () => undefined),
-  closeTask: mock(async () => undefined),
+  closeTask: mock(async (taskId: string) =>
+    createWireTaskCardFixture({ id: taskId, status: "closed" }),
+  ),
   removeTaskWorktree: mock(async () => {}),
-  resetTaskImplementation: mock(async () => undefined),
-  resetTask: mock(async () => undefined),
+  resetTaskImplementation: mock(async (taskId: string) =>
+    createWireTaskCardFixture({ id: taskId }),
+  ),
+  resetTask: mock(async (taskId: string) => createWireTaskCardFixture({ id: taskId })),
   humanRequestChangesTask: mock(async () => undefined),
   detectingPullRequestTaskIds: new Set<string>(),
   linkingMergedPullRequestTaskId: null,
@@ -683,10 +688,14 @@ beforeEach(async () => {
     updateTask: mock(async () => undefined),
     setTaskTargetBranch: mock(async () => undefined),
     deleteTask: mock(async () => undefined),
-    closeTask: mock(async () => undefined),
+    closeTask: mock(async (taskId: string) =>
+      createWireTaskCardFixture({ id: taskId, status: "closed" }),
+    ),
     removeTaskWorktree: mock(async () => {}),
-    resetTaskImplementation: mock(async () => undefined),
-    resetTask: mock(async () => undefined),
+    resetTaskImplementation: mock(async (taskId: string) =>
+      createWireTaskCardFixture({ id: taskId }),
+    ),
+    resetTask: mock(async (taskId: string) => createWireTaskCardFixture({ id: taskId })),
     humanRequestChangesTask: mock(async () => undefined),
     detectingPullRequestTaskIds: new Set<string>(),
     linkingMergedPullRequestTaskId: null,

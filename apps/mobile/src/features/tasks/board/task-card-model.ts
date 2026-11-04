@@ -1,7 +1,7 @@
 import type { WorkflowIcon } from "@openducktor/contracts";
 import { taskIssueType, workflowRoleIcon } from "@openducktor/workflows";
 import { taskReviewRejection } from "@openducktor/workflows";
-import { taskActionSendsCommand } from "@/features/workflow/task-action-routing";
+import { taskActionSendsCommand } from "@openducktor/frontend-core/tasks/workflow/task-action-destination";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
   isReviewRejectedTask,
@@ -170,7 +170,7 @@ export const buildTaskCardModel = ({
       label: taskActionLabel(primaryAction, task),
       icon: taskActionIcon(primaryAction, task),
       appearance,
-      command: taskActionSendsCommand(primaryAction, task),
+      command: taskActionSendsCommand(task, primaryAction),
       roleIconHint: taskActionRoleIcon(primaryAction, task),
       disabled: disabled.has(primaryAction),
       activeSession: session,
@@ -184,7 +184,7 @@ export const buildTaskCardModel = ({
         icon: taskActionIcon(action, task),
         destructive: taskActionIsDestructive(action, task),
         disabled: disabled.has(action),
-        command: taskActionSendsCommand(action, task),
+        command: taskActionSendsCommand(task, action),
       }));
   const shortcuts = footer.shortcuts.map((shortcut) => ({
     role: shortcut.role,

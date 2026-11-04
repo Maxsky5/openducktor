@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import { WorkflowTestProvider } from "@/test-utils/workflow-provider";
 import { TaskArtifactWorkflowScope } from "@/components/features/task-artifacts/task-artifact-workflow-context";
@@ -99,10 +100,10 @@ const createTasksState = (
   updateTask,
   setTaskTargetBranch: async () => {},
   deleteTask: async () => {},
-  closeTask: async () => {},
+  closeTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
   removeTaskWorktree: async () => {},
-  resetTaskImplementation: async () => {},
-  resetTask: async () => {},
+  resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
+  resetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
   humanRequestChangesTask: async () => {},
 });
 

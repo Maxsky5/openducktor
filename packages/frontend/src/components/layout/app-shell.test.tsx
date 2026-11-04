@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
@@ -336,10 +337,10 @@ const createTasksState = (tasks: TaskCard[] = []): TasksStateContextValue => ({
   updateTask: async () => undefined,
   setTaskTargetBranch: async () => undefined,
   deleteTask: async () => undefined,
-  closeTask: async () => undefined,
+  closeTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
   removeTaskWorktree: async () => undefined,
-  resetTaskImplementation: async () => undefined,
-  resetTask: async () => undefined,
+  resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
+  resetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
   humanRequestChangesTask: async () => undefined,
 });
 

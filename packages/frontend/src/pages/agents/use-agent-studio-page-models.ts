@@ -66,7 +66,7 @@ export function useAgentStudioPageModels({
 
   const {
     workflowSessionByRole,
-    workflowStateByRole,
+    workflowRail,
     sessionSelectorGroups,
     sessionSelectorAutofocusByValue,
     sessionSelectorValue,
@@ -87,7 +87,7 @@ export function useAgentStudioPageModels({
     onPrepareMessageFirstSession: sessionActions.handlePrepareMessageFirstSession,
     onQuickAction,
     workflow: {
-      workflowStateByRole,
+      workflowRail,
       workflowSessionByRole,
       sessionSelectorAutofocusByValue,
       sessionSelectorValue,

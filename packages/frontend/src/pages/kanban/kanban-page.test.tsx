@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { builtinTaskWorkflow } from "@openducktor/workflows";
 import { createAgentStudioStartupTestHost } from "../agents/agent-studio-startup-test-host";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
@@ -117,8 +118,10 @@ const sendAgentMessageMock = mock(async () => {
 const updateAgentSessionModelMock = mock(async () => {});
 const humanRequestChangesTaskMock = mock(async () => {});
 const deleteTaskMock = mock(async () => {});
-const resetTaskImplementationMock = mock(async () => {});
-const resetTaskMock = mock(async () => {});
+const resetTaskImplementationMock = mock(async (taskId: string) =>
+  createWireTaskCardFixture({ id: taskId }),
+);
+const resetTaskMock = mock(async (taskId: string) => createWireTaskCardFixture({ id: taskId }));
 const sonnerModule = await import("sonner");
 const toastSuccessMock = mock<typeof sonnerModule.toast.success>(() => "toast-success");
 const toastErrorMock = mock<typeof sonnerModule.toast.error>(() => "toast-error");
@@ -419,7 +422,7 @@ const createTasksStateValue = (
   unlinkingPullRequestTaskIds: new Set<string>(),
   pendingMergedPullRequest: renderState.pendingMergedPullRequest,
   deleteTask: deleteTaskMock,
-  closeTask: async () => {},
+  closeTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
   removeTaskWorktree: async () => {},
   resetTaskImplementation: resetTaskImplementationMock,
   resetTask: resetTaskMock,
@@ -506,11 +509,7 @@ const publishKanbanPageModels = (
         activeTaskSessionContextByTaskId: models.content.activeTaskSessionContextByTaskId,
         taskActivityStateByTaskId: models.content.taskActivityStateByTaskId,
         onOpenDetails: models.content.onOpenDetails,
-        onOpenSession: models.content.onOpenSession,
         pendingState: models.content.pendingState,
-        onHumanApprove: models.content.onHumanApprove,
-        onHumanRequestChanges: models.content.onHumanRequestChanges,
-        onResetImplementation: models.content.onResetImplementation,
       }
     : null;
   latest.isLoadingTasks = models.content.isLoadingTasks;
@@ -1515,7 +1514,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onOpenSession("TASK-123", "spec");
+        renderer.getTaskWorkflowActions()!.onOpenSession("TASK-123", "spec");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1535,14 +1534,14 @@ describe("KanbanPage session start modal flow", () => {
     async () => {
       const renderer = await renderPage();
 
-      const initialOnHumanRequestChanges = renderer.getKanbanColumnProps().onHumanRequestChanges;
+      const initialOnHumanRequestChanges = renderer.getTaskWorkflowActions()!.onHumanRequestChanges;
       expect(initialOnHumanRequestChanges).toBeDefined();
 
       await act(async () => {
         renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
       });
 
-      const nextOnHumanRequestChanges = renderer.getKanbanColumnProps().onHumanRequestChanges;
+      const nextOnHumanRequestChanges = renderer.getTaskWorkflowActions()!.onHumanRequestChanges;
       expect(nextOnHumanRequestChanges).toBe(initialOnHumanRequestChanges);
 
       await act(async () => {
@@ -1560,7 +1559,7 @@ describe("KanbanPage session start modal flow", () => {
 
     await act(async () => {
       await requireCallback(
-        renderer.getKanbanColumnProps().onHumanRequestChanges,
+        renderer.getTaskWorkflowActions()!.onHumanRequestChanges,
         "request human-review changes",
       )("TASK-123", {
         workflow: currentTaskFixture.workflow,
@@ -1589,7 +1588,7 @@ describe("KanbanPage session start modal flow", () => {
 
       await act(async () => {
         await requireCallback(
-          renderer.getKanbanColumnProps().onHumanRequestChanges,
+          renderer.getTaskWorkflowActions()!.onHumanRequestChanges,
           "request human-review changes",
         )("TASK-123", {
           workflow: currentTaskFixture.workflow,
@@ -1659,7 +1658,7 @@ describe("KanbanPage session start modal flow", () => {
 
       await act(async () => {
         await requireCallback(
-          renderer.getKanbanColumnProps().onHumanRequestChanges,
+          renderer.getTaskWorkflowActions()!.onHumanRequestChanges,
           "request human-review changes",
         )("TASK-123", {
           workflow: currentTaskFixture.workflow,
@@ -1707,7 +1706,7 @@ describe("KanbanPage session start modal flow", () => {
       try {
         await act(async () => {
           requireCallback(
-            renderer.getKanbanColumnProps().onHumanRequestChanges,
+            renderer.getTaskWorkflowActions()!.onHumanRequestChanges,
             "request human-review changes",
           )("TASK-123", {
             workflow: currentTaskFixture.workflow,
@@ -1799,7 +1798,7 @@ describe("KanbanPage session start modal flow", () => {
 
     await act(async () => {
       requireCallback(
-        renderer.getKanbanColumnProps().onResetImplementation,
+        renderer.getTaskWorkflowActions()!.onResetImplementation,
         "reset implementation",
       )("TASK-123");
       await Promise.resolve();
@@ -1854,7 +1853,7 @@ describe("KanbanPage session start modal flow", () => {
 
     await act(async () => {
       requireCallback(
-        renderer.getKanbanColumnProps().onResetImplementation,
+        renderer.getTaskWorkflowActions()!.onResetImplementation,
         "reset implementation",
       )("TASK-123");
       await Promise.resolve();
@@ -1893,7 +1892,7 @@ describe("KanbanPage session start modal flow", () => {
 
       await act(async () => {
         requireCallback(
-          renderer.getKanbanColumnProps().onResetImplementation,
+          renderer.getTaskWorkflowActions()!.onResetImplementation,
           "reset implementation",
         )("MISSING-1");
         await Promise.resolve();
@@ -1915,7 +1914,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      renderer.getKanbanColumnProps().onOpenSession("TASK-123", "build");
+      renderer.getTaskWorkflowActions()!.onOpenSession("TASK-123", "build");
     });
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1970,7 +1969,7 @@ describe("KanbanPage session start modal flow", () => {
         renderer = page;
         await act(async () => {
           requireCallback(
-            page.getKanbanColumnProps().onHumanApprove,
+            page.getTaskWorkflowActions()!.onHumanApprove,
             "approve human review",
           )("TASK-123");
           await Promise.resolve();
@@ -2035,7 +2034,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onOpenSession("TASK-123", "build");
+        renderer.getTaskWorkflowActions()!.onOpenSession("TASK-123", "build");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -2060,7 +2059,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onOpenSession("TASK-123", "build");
+        renderer.getTaskWorkflowActions()!.onOpenSession("TASK-123", "build");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -2083,7 +2082,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      renderer.getKanbanColumnProps().onOpenSession("TASK-123", "qa");
+      renderer.getTaskWorkflowActions()!.onOpenSession("TASK-123", "qa");
     });
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -2170,7 +2169,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onOpenSession("TASK-123", "build");
+        renderer.getTaskWorkflowActions()!.onOpenSession("TASK-123", "build");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();

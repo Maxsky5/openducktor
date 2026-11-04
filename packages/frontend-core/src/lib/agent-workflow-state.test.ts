@@ -59,7 +59,7 @@ describe("built-in workflow rail state", () => {
       liveSession: "stopped",
     });
     expect(state.tone).toBe("waiting_input");
-    expect(workflowStepRailState({ role: "build", state, sessionValue: null })).toEqual({
+    expect(workflowStepRailState({ state, hasSession: false })).toEqual({
       attentionVariant: "blocked_task",
       hint: "Task is blocked and waiting for user action",
     });

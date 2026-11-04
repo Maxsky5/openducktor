@@ -1,10 +1,11 @@
+import type { OnTaskCommitted } from "../workflow/task-workflow-continuation";
 import type { GitPublicationPreview, GitTargetBranch } from "@openducktor/contracts";
 import type { GitConflict, GitConflictAction } from "../../git/contracts";
 
 export type TaskApprovalMode = "direct_merge" | "pull_request" | "close_task";
 export type PullRequestDraftMode = "manual" | "generate_ai";
 export type TaskApprovalOpenOptions = {
-  onCommitted?: (() => Promise<void>) | undefined;
+  onCommitted?: OnTaskCommitted | undefined;
   mode?: TaskApprovalMode;
   pullRequestDraftMode?: PullRequestDraftMode;
   errorMessage?: string | null;

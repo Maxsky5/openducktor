@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
 import {
   useTaskWorkflowContinuation,
   type ContinueTaskWorkflow,
@@ -14,19 +13,17 @@ import {
   taskPullRequestLaunch,
   launchSessionCommand,
 } from "@openducktor/workflows";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
 import type { SessionStartModalModel } from "../../sessions/start/session-start-modal-model";
 import { isKanbanActiveTaskSession, toKanbanTaskSession } from "../board/kanban-task-activity";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
 import { resolvePreferredActiveSession } from "../board/session-target-resolution";
-import { requestHumanReviewChanges, submitHumanReviewFeedback } from "./human-review-feedback-flow";
-import {
-  buildHumanReviewFeedbackModalModel,
-  createHumanReviewFeedbackState,
-} from "./human-review-feedback-state";
 import type { HumanReviewFeedbackModalModel } from "./human-review-feedback-types";
-import { useHumanReviewFeedbackController } from "./use-human-review-feedback-controller";
+import {
+  useHumanReviewFeedbackForm,
+  useHumanReviewFeedbackState,
+} from "./use-human-review-feedback";
 import { buildReusableSessionOptions } from "../../sessions/start/session-start-reuse-options";
 import {
   buildSessionStartModalRequest,
@@ -151,7 +148,6 @@ export function useTaskSessionStartFlow({
   onBackgroundTransfer,
 }: UseTaskSessionStartFlowArgs): UseTaskSessionStartFlowResult {
   const { feedback, startupAttempts } = useClientConnection();
-  const queryClient = useQueryClient();
   const workflowScope = useMemo(
     () =>
       activeWorkspaceId && workspaceRepoPath
@@ -160,7 +156,6 @@ export function useTaskSessionStartFlow({
     [activeWorkspaceId, workspaceRepoPath],
   );
   const isCurrentContext = useSessionStartContext(activeWorkspaceId);
-  const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
   const { sessionStartModal, isSessionStarting, runSessionStartRequest } =
     useSessionStartModalRunner({
@@ -173,21 +168,9 @@ export function useTaskSessionStartFlow({
       onBackgroundTransfer,
     });
 
-  const {
-    clearHumanReviewFeedback,
-    humanReviewFeedbackState,
-    openHumanReviewFeedback,
-    setHumanReviewFeedbackState,
-  } = useHumanReviewFeedbackController({
-    createState: (taskId, launchActionId, requestChangesBeforeStart, continuation) =>
-      createHumanReviewFeedbackState(
-        tasks,
-        taskId,
-        launchActionId,
-        requestChangesBeforeStart,
-        continuation,
-      ),
-  });
+  const feedbackForm = useHumanReviewFeedbackState(tasks);
+  const { open: openHumanReviewFeedback, openForTask: openHumanReviewFeedbackForTask } =
+    feedbackForm;
 
   const openAgents = useCallback(
     (taskId: string, role: AgentRole): void => {
@@ -274,14 +257,6 @@ export function useTaskSessionStartFlow({
     ],
   );
 
-  const closeHumanReviewFeedbackModal = useCallback((): void => {
-    if (isSubmittingHumanReviewFeedback) {
-      return;
-    }
-
-    clearHumanReviewFeedback();
-  }, [clearHumanReviewFeedback, isSubmittingHumanReviewFeedback]);
-
   const onLaunch = useCallback(
     (
       taskId: string,
@@ -293,7 +268,7 @@ export function useTaskSessionStartFlow({
       if (!task) throw new Error("Task workflow is unavailable. Reload the task.");
       const launch = task.taskWorkflow.launchAction(launchActionId);
       if (launch.context === "human_feedback" && humanFeedback === undefined) {
-        setHumanReviewFeedbackState(createHumanReviewFeedbackState([task], taskId, launchActionId));
+        openHumanReviewFeedbackForTask(task, launchActionId);
         return;
       }
       const request: SessionStartFlowRequest = {
@@ -309,7 +284,7 @@ export function useTaskSessionStartFlow({
         }),
       );
     },
-    [tasks, startSessionIntent, setHumanReviewFeedbackState, feedback],
+    [tasks, startSessionIntent, openHumanReviewFeedbackForTask, feedback],
   );
 
   const continueTaskWorkflow = useTaskWorkflowContinuation(workflowScope, onLaunch);
@@ -417,86 +392,13 @@ export function useTaskSessionStartFlow({
     [openHumanReviewFeedback],
   );
 
-  const confirmHumanReviewFeedback = useCallback(async (): Promise<void> => {
-    if (!humanReviewFeedbackState) {
-      return;
-    }
-
-    setIsSubmittingHumanReviewFeedback(true);
-    try {
-      const result = await submitHumanReviewFeedback({
-        feedback,
-        state: humanReviewFeedbackState,
-        continueTaskWorkflow,
-        requestChangesTask: (taskId, note) =>
-          requestHumanReviewChanges(queryClient, workflowScope, taskId, note),
-        builderSessions: humanReviewFeedbackState.launch
-          ? findSessionsByRoleForTask(
-              sessions,
-              humanReviewFeedbackState.taskId,
-              humanReviewFeedbackState.launch.role,
-            )
-          : [],
-        startRequestChangesSession: (request) => {
-          const input: Parameters<typeof startSessionIntent>[0] = {
-            taskId: request.taskId,
-            role: request.role,
-            launchActionId: request.launchActionId,
-            existingSessionOptions: request.existingSessionOptions,
-            postStartAction: request.postStartAction,
-            humanFeedback: request.humanFeedback,
-          };
-          if (request.initialStartMode) {
-            input.initialStartMode = request.initialStartMode;
-          }
-          if (request.initialSourceSession !== undefined) {
-            input.initialSourceSession = request.initialSourceSession;
-          }
-          return startSessionIntent(input);
-        },
-      });
-      if (result.outcome !== "cancelled") {
-        clearHumanReviewFeedback();
-      }
-    } catch (error) {
-      feedback.show("error", "Failed to submit feedback.", {
-        description: error instanceof Error ? error.message : "Unknown error",
-      });
-    } finally {
-      setIsSubmittingHumanReviewFeedback(false);
-    }
-  }, [
-    clearHumanReviewFeedback,
+  const humanReviewFeedbackModal = useHumanReviewFeedbackForm(feedbackForm, {
+    scope: workflowScope,
     feedback,
-    humanReviewFeedbackState,
     sessions,
-    startSessionIntent,
-    queryClient,
-    workflowScope,
     continueTaskWorkflow,
-  ]);
-
-  const humanReviewFeedbackModal = useMemo<HumanReviewFeedbackModalModel | null>(() => {
-    if (!humanReviewFeedbackState) {
-      return null;
-    }
-
-    return buildHumanReviewFeedbackModalModel({
-      state: humanReviewFeedbackState,
-      isSubmitting: isSubmittingHumanReviewFeedback,
-      onDismiss: closeHumanReviewFeedbackModal,
-      onMessageChange: (message: string) => {
-        setHumanReviewFeedbackState((current) => (current ? { ...current, message } : current));
-      },
-      onConfirm: confirmHumanReviewFeedback,
-    });
-  }, [
-    closeHumanReviewFeedbackModal,
-    confirmHumanReviewFeedback,
-    humanReviewFeedbackState,
-    isSubmittingHumanReviewFeedback,
-    setHumanReviewFeedbackState,
-  ]);
+    startSession: startSessionIntent,
+  });
 
   return {
     continueTaskWorkflow,

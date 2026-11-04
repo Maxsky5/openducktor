@@ -5,7 +5,6 @@ import {
   type WorkflowRoleId as AgentRole,
   type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
-import type { AgentWorkflowState } from "@openducktor/contracts";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
@@ -15,12 +14,8 @@ import {
   formatAgentSessionOptionDescription,
   formatAgentSessionOptionLabel,
 } from "@openducktor/frontend-core/lib/agent-session-options";
-import { buildRoleWorkflowState } from "@openducktor/frontend-core/lib/agent-workflow-state";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import type {
-  WorkflowStepLiveSession,
-  WorkflowStepPresentation,
-} from "@openducktor/frontend-core/types/agent-workflow";
+import type { WorkflowStepLiveSession } from "@openducktor/frontend-core/types/agent-workflow";
 import { SESSION_BUSY_REASON } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 
 export type SessionCreateOption = {
@@ -77,20 +72,6 @@ export const buildLatestSessionByTaskMap = (
   }
   return next;
 };
-
-export const buildWorkflowStateByRole = (params: {
-  task: TaskCard | null;
-  roleWorkflowsByTask: Record<AgentRole, AgentWorkflowState>;
-  liveSessionByRole: Record<AgentRole, WorkflowStepLiveSession>;
-}): Record<AgentRole, WorkflowStepPresentation> =>
-  createRoleRecord(Object.keys(params.roleWorkflowsByTask), (role) =>
-    buildRoleWorkflowState({
-      task: params.task,
-      role,
-      workflow: params.roleWorkflowsByTask[role]!,
-      liveSession: params.liveSessionByRole[role] ?? "none",
-    }),
-  );
 
 export const buildLatestSessionByRoleMap = (
   sessionsForTask: AgentSessionWorkflowSummary[],

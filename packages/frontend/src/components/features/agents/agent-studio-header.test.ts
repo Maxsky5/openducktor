@@ -54,7 +54,7 @@ type BuiltinWorkflowFixture = Omit<
 const presentWorkflowStep = (step: BuiltinWorkflowFixture): AgentWorkflowStep => ({
   ...step,
   id: step.role,
-  ...workflowStepRailState(step),
+  ...workflowStepRailState({ state: step.state, hasSession: step.sessionValue !== null }),
 });
 
 const buildModel = () => ({

@@ -1,21 +1,27 @@
 import { useSessionStartContext } from "../../sessions/start/use-session-start-context";
-import type { WorkflowReference, WorkspaceRef } from "@openducktor/contracts";
+import type { TaskCard, WorkflowReference, WorkspaceRef } from "@openducktor/contracts";
 import { taskWorkflowInput, type ResolvedTaskCard } from "@openducktor/workflows";
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useClientConnection } from "../../connection/client-connection-react";
-import { unfilteredRepoTaskDataQueryOptions } from "../../queries/tasks";
+import { resolveTaskCards } from "../../queries/workflows";
 
 /** The original choices survive an effect even when its action is no longer available. */
 export type TaskWorkflowContinuation = {
   workflow: WorkflowReference;
   launchActionIds: readonly string[];
 };
+/**
+ * Starts the following launch of a committed effect. The effect owner passes the task card that its
+ * host command returned, so no task read runs after the commit.
+ */
 export type ContinueTaskWorkflow = (
-  taskId: string,
+  committed: TaskCard,
   continuation?: TaskWorkflowContinuation,
-  context?: { humanFeedback?: string; committedTask?: ResolvedTaskCard },
+  context?: { humanFeedback?: string },
 ) => Promise<void>;
+/** Called with the task card that a committed host command returned. */
+export type OnTaskCommitted = (committed: TaskCard) => Promise<void>;
 export type LaunchTaskWorkflow = (
   taskId: string,
   launchActionId: string,
@@ -49,34 +55,21 @@ export function useTaskWorkflowContinuation(
   const queryClient = useQueryClient();
   const { feedback } = useClientConnection();
   return useCallback(
-    async (taskId, continuation, context) => {
+    async (committed, continuation, context) => {
       if (!continuation?.launchActionIds.length) return;
       try {
         if (!scope || !onLaunch)
           throw new Error(
             "This client cannot continue the committed task action. Open its workspace and update the client.",
           );
-        // Commands without a task result need one explicit post-commit read.
-        let committed = context?.committedTask;
-        if (!committed) {
-          const data = await queryClient.fetchQuery({
-            ...unfilteredRepoTaskDataQueryOptions(scope),
-            staleTime: 0,
-          });
-          committed = data.tasks.find(({ id }) => id === taskId);
-        }
-        if (!committed)
-          throw new Error(
-            `Task "${taskId}" is unavailable after its action. Reload its workspace.`,
-          );
-        if (committed.id !== taskId)
-          throw new Error("The committed task does not match this continuation. Reload the task.");
+        const [task] = await resolveTaskCards(queryClient, scope, [committed]);
+        if (!task) throw new Error("The host returned no committed task. Reload the task.");
         if (!isCurrent())
           throw new Error(
             "The workspace changed. Open the task in its workspace to start its session.",
           );
-        const launch = selectTaskWorkflowContinuation(committed, continuation);
-        if (launch) onLaunch(taskId, launch, committed, context?.humanFeedback);
+        const launch = selectTaskWorkflowContinuation(task, continuation);
+        if (launch) onLaunch(task.id, launch, task, context?.humanFeedback);
       } catch (cause) {
         feedback.show("error", "Task updated, but its session could not start", {
           description: `Do not repeat the task action. ${cause instanceof Error ? cause.message : String(cause)}`,

@@ -64,7 +64,7 @@ function ApproveTaskContent({
     gitProvider,
     backgroundAttemptId,
   } = useTaskStartFlow(workspace);
-  const { refreshTasks, closeTask, resetTaskImplementation } = useRequiredContext(
+  const { closeTask, resetTaskImplementation } = useRequiredContext(
     TasksStateContext,
     "ApproveTaskContent",
   );
@@ -113,7 +113,6 @@ function ApproveTaskContent({
     loadGitProviderContext: gitProvider.load,
     tasks,
     requestPullRequestGeneration: flow.onPullRequestGenerate,
-    refreshTasks,
     closeTask,
     openResetImplementation: (id) => openResetImplementation(id, { closeDetailsAfterReset: true }),
     onResolveGitConflict: resolveConflict,
@@ -133,7 +132,7 @@ function ApproveTaskContent({
         approval.openTaskApproval(
           task.id,
           continuation
-            ? { onCommitted: () => flow.continueTaskWorkflow(task.id, continuation) }
+            ? { onCommitted: (committed) => flow.continueTaskWorkflow(committed, continuation) }
             : undefined,
         );
     },

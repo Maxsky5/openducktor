@@ -1,3 +1,4 @@
+import { buildWorkflowRail } from "@openducktor/frontend-core/tasks/presentation/workflow-rail";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { describe, expect, mock, test } from "bun:test";
 import { act } from "react";
@@ -54,32 +55,11 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   onPrepareMessageFirstSession: mock(() => {}),
   onQuickAction: mock(() => {}),
   workflow: {
-    workflowStateByRole: {
-      spec: {
-        tone: "in_progress",
-        availability: "available",
-        completion: "in_progress",
-        liveSession: "running",
-      },
-      planner: {
-        tone: "available",
-        availability: "available",
-        completion: "not_started",
-        liveSession: "none",
-      },
-      build: {
-        tone: "blocked",
-        availability: "blocked",
-        completion: "not_started",
-        liveSession: "none",
-      },
-      qa: {
-        tone: "blocked",
-        availability: "blocked",
-        completion: "not_started",
-        liveSession: "none",
-      },
-    },
+    workflowRail: buildWorkflowRail(createTaskCardFixture({ id: "task-1" }), (role) =>
+      role === "spec"
+        ? { session: specSessionSelectorValue, liveSession: "running" }
+        : { session: null, liveSession: "none" },
+    ),
     workflowSessionByRole: {
       spec: {
         role: "spec",

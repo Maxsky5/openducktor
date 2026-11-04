@@ -1,5 +1,4 @@
 import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
-import { runTaskWorkflowAction } from "@openducktor/frontend-core/tasks/workflow/run-task-workflow-action";
 import type { PaletteTaskCommand, PaletteTaskView } from "./command-palette-task-model";
 import type { PaletteTask } from "./command-palette-types";
 import type { WorkspaceIntent } from "./use-workspace-intent-runner";
@@ -32,22 +31,11 @@ export const taskCommandIntent = (
             }),
           );
           return;
-        case "workflow": {
-          // Only actions with their own confirmation or modal. Reset Task and Close Task stay out.
-          runTaskWorkflowAction(
-            command.action,
-            taskId,
-            {
-              ...workflow,
-              onCloseTask: (id, continuation) =>
-                workflow.onConfirmTaskAction(id, "close", continuation),
-              onResetTask: (id, continuation) =>
-                workflow.onConfirmTaskAction(id, "reset_task", continuation),
-            },
-            { task, resolveSessionOptions: (role) => taskView.sessionOptionsByRole[role] },
-          );
+        case "workflow":
+          workflow.runAction(task, command.action, {
+            sessionOptionsOf: (role) => taskView.sessionOptionsByRole[role],
+          });
           return;
-        }
         case "edit":
           workflow.onEdit(taskId);
           return;

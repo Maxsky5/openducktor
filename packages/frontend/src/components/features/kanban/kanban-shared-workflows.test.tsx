@@ -61,7 +61,6 @@ describe("mixed workflow Kanban", () => {
                   activeTaskSessionContextByTaskId={new Map()}
                   taskActivityStateByTaskId={new Map(tasks.map(({ id }) => [id, "idle"]))}
                   onOpenDetails={noop}
-                  onOpenSession={noop}
                 />
               ))}
             </TaskWorkflowActionsContext>

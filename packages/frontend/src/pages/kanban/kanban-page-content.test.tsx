@@ -43,11 +43,6 @@ const model: KanbanPageContentModel = {
   activeTaskSessionContextByTaskId: new Map(),
   taskActivityStateByTaskId: new Map(),
   onOpenDetails: () => {},
-  onOpenSession: () => {},
-  onHumanApprove: () => {},
-  onHumanRequestChanges: () => {},
-  onResetImplementation: () => {},
-  onCloseTask: () => {},
 };
 
 describe("KanbanPageContent", () => {
@@ -173,7 +168,6 @@ describe("KanbanPageContent", () => {
         ],
       ]),
       taskActivityStateByTaskId: new Map([[task.id, "idle"]]),
-      onOpenSession: mock(() => {}),
     };
     const view = render(
       <>

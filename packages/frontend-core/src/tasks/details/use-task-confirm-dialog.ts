@@ -9,28 +9,28 @@ import { useTaskCleanupImpact } from "./use-task-cleanup-impact";
 import type { TaskConfirmDialogState } from "./task-confirm-dialog-types";
 import { useTaskAsyncConfirmDialog } from "./use-task-async-confirm-dialog";
 
-type UseTaskConfirmDialogOptions = {
+type UseTaskConfirmDialogOptions<Result> = {
   action: TaskConfirmAction;
   task: TaskCard | null;
   /** The dialog can open only while this is true. The details sheet passes its open state. */
   enabled: boolean;
   initiallyOpen?: boolean;
   /** The action. Without it, Confirm does nothing. */
-  run: ((taskId: string) => Promise<void>) | undefined;
+  run: ((taskId: string) => Promise<Result>) | undefined;
   onSucceeded: () => void;
-  onCommitted?: (() => Promise<void>) | undefined;
+  onCommitted?: ((result: Result) => Promise<void>) | undefined;
   taskCleanupImpactHook?: typeof useTaskCleanupImpact;
   taskStopImpactHook?: typeof useTaskStopImpact;
   taskWorktreeOwnersHook?: typeof useTaskWorktreeOwners;
 };
 
-export type TaskConfirmDialog = {
-  openDialog: (onCommitted?: () => Promise<void>) => void;
+export type TaskConfirmDialog<Result = unknown> = {
+  openDialog: (onCommitted?: (result: Result) => Promise<void>) => void;
   dialog: TaskConfirmDialogState;
 };
 
 /** One confirmation of a task action, with the cleanup that the action runs. */
-export function useTaskConfirmDialog({
+export function useTaskConfirmDialog<Result>({
   action,
   task,
   enabled,
@@ -41,7 +41,7 @@ export function useTaskConfirmDialog({
   taskCleanupImpactHook = useTaskCleanupImpact,
   taskStopImpactHook = useTaskStopImpact,
   taskWorktreeOwnersHook = useTaskWorktreeOwners,
-}: UseTaskConfirmDialogOptions): TaskConfirmDialog {
+}: UseTaskConfirmDialogOptions<Result>): TaskConfirmDialog<Result> {
   const taskId = task?.id ?? null;
   const impactTaskIds = useMemo(() => collectSingleTaskCleanupImpactTaskIds(task), [task]);
   const { openDialog, dialog } = useTaskAsyncConfirmDialog({

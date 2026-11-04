@@ -1,5 +1,6 @@
 import type {
   GitTargetBranch,
+  TaskCard,
   WorkspaceRef,
   TaskAssetDescriptionMutation,
   TaskCreateInput,
@@ -47,7 +48,7 @@ export type TaskMutationCommands = {
   ) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
-  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<void>;
+  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<TaskCard>;
   /** Removes the worktree and local branches of a closed task. */
   removeTaskWorktree: (taskId: string) => Promise<void>;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
@@ -156,30 +157,30 @@ export const createTaskMutationCommands = ({
     ]);
   };
 
-  const closeTask = async (taskId: string, { removeWorktree }: CloseTaskOptions): Promise<void> => {
-    await runTaskMutation({
-      run: async (repoPath) => {
-        await taskChatDraftCleanup.runMutation({
+  const closeTask = (taskId: string, { removeWorktree }: CloseTaskOptions): Promise<TaskCard> =>
+    runTaskMutation({
+      run: (repoPath) =>
+        taskChatDraftCleanup.runMutation({
           queryClient,
           repoPath,
           workspaceId: activeWorkspaceId,
           taskIds: [taskId],
           mutation: async () => {
+            let committed: TaskCard;
             try {
-              await hostPort.taskClose(scopeFor(repoPath), taskId, removeWorktree);
+              committed = await hostPort.taskClose(scopeFor(repoPath), taskId, removeWorktree);
             } finally {
               await invalidateTaskStopImpact(queryClient, scopeFor(repoPath));
             }
             // The cleanup impact keeps no cache, so the next confirmation reads it again.
             await invalidateTaskWorktree(queryClient, scopeFor(repoPath), taskId);
+            return committed;
           },
-        });
-      },
+        }),
       successTitle: "Task closed",
       successDescription: worktreeCleanupDescription(taskId, removeWorktree),
       failureTitle: "Failed to close task",
     });
-  };
 
   const removeTaskWorktree = async (taskId: string): Promise<void> => {
     await runTaskMutation({

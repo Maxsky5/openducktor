@@ -1,5 +1,3 @@
-import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
-import { runTaskWorkflowAction } from "@openducktor/frontend-core/tasks/workflow/run-task-workflow-action";
 import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import {
   taskHasSessionPage,
@@ -27,7 +25,6 @@ import {
   getTaskFooter,
   type WorkflowPendingState,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
-import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { taskActionIcon } from "@/components/features/kanban/task-action-ui";
 import { taskSessionStatusLabel } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { useCardFocus } from "@/components/features/kanban/use-kanban-card-focus";
@@ -56,15 +53,10 @@ type CardProps = {
   taskActivityState: KanbanTaskActivityState;
   pendingState?: WorkflowPendingState | undefined;
   onOpenDetails: (taskId: string) => void;
-  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
-  onHumanApprove?: TaskWorkflowActions["onHumanApprove"];
-  onHumanRequestChanges?: TaskWorkflowActions["onHumanRequestChanges"];
-  onResetImplementation?: (taskId: string) => void;
   /** The target that the task branch is merged into. The card then proposes Close Task. */
   mergedTarget?: string | undefined;
   /** Why the pull request sync could not close the task. The card shows it and proposes Close Task. */
   autoCloseFailure?: string | undefined;
-  onCloseTask?: ((taskId: string) => void) | undefined;
 };
 
 export const KanbanTaskCard = memo(function KanbanTaskCard({
@@ -77,13 +69,8 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   taskActivityState,
   pendingState,
   onOpenDetails,
-  onOpenSession,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
   mergedTarget,
   autoCloseFailure,
-  onCloseTask,
 }: CardProps): ReactElement {
   const isActive =
     (hasActiveSession ?? true) &&
@@ -147,13 +134,8 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           taskActivityState={taskActivityState}
           pendingState={pendingState}
           compact={isCompact}
-          onOpenSession={onOpenSession}
-          {...(onHumanApprove ? { onHumanApprove } : {})}
-          {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
-          {...(onResetImplementation ? { onResetImplementation } : {})}
           mergedTarget={mergedTarget}
           autoCloseFailure={autoCloseFailure}
-          onCloseTask={onCloseTask}
         />
       </div>
     </article>
@@ -323,13 +305,8 @@ function sameProps(previous: CardProps, next: CardProps): boolean {
     previous.pendingState?.resettingImplementationTaskId ===
       next.pendingState?.resettingImplementationTaskId &&
     previous.onOpenDetails === next.onOpenDetails &&
-    previous.onOpenSession === next.onOpenSession &&
-    previous.onHumanApprove === next.onHumanApprove &&
-    previous.onHumanRequestChanges === next.onHumanRequestChanges &&
-    previous.onResetImplementation === next.onResetImplementation &&
     previous.mergedTarget === next.mergedTarget &&
-    previous.autoCloseFailure === next.autoCloseFailure &&
-    previous.onCloseTask === next.onCloseTask
+    previous.autoCloseFailure === next.autoCloseFailure
   );
 }
 
@@ -655,8 +632,6 @@ type TaskActionsProps = Omit<CardProps, "onOpenDetails" | "taskCardView"> & {
 /** Open only resolved sessions; use workflow handlers for session starts and task changes. */
 function TaskActions({
   task,
-  onOpenSession,
-  onCloseTask,
   mergedTarget,
   autoCloseFailure,
   taskSessions,
@@ -686,24 +661,10 @@ function TaskActions({
   const { primaryActiveSession, primarySessionIsWaitingInput } = footer;
   if (footer.actions.allActions.length === 0 && footer.shortcuts.length === 0) return null;
 
-  const runAction = (action: TaskWorkflowAction): void => {
-    runTaskWorkflowAction(
-      action,
-      task.id,
-      {
-        ...workflowActions,
-        onCloseTask,
-        onOpenSession,
-        onResetTask: (id, continuation) =>
-          workflowActions.onConfirmTaskAction(id, "reset_task", continuation),
-      },
-      {
-        task,
-        resolveSessionOptions: (role) =>
-          footer.sessions.find((session) => session.role === role)?.options,
-      },
-    );
-  };
+  const runAction = (action: TaskWorkflowAction): void =>
+    workflowActions.runAction(task, action, {
+      sessionOptionsOf: (role) => footer.sessions.find((session) => session.role === role)?.options,
+    });
   return (
     <div
       className={cn(
@@ -728,7 +689,7 @@ function TaskActions({
                   aria-label={`Open ${label} session`}
                   onClick={(event) => {
                     event.stopPropagation();
-                    onOpenSession(task.id, role, options);
+                    workflowActions.onOpenSession(task.id, role, options);
                   }}
                 >
                   <span className="underline decoration-muted-foreground/50 underline-offset-4">

@@ -152,7 +152,8 @@ export const taskActionLabel = (
 
 /** The command that a task action runs. The host still checks the action when it runs. */
 export type TaskActionCommand =
-  | { kind: "view"; target: "task_details" | "worktree_cleanup" | "session"; role?: string }
+  | { kind: "view"; target: "session"; role: string }
+  | { kind: "view"; target: "task_details" | "worktree_cleanup" }
   | { kind: "session"; launchActionId: string }
   | {
       kind: "event";
