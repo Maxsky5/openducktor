@@ -30,8 +30,8 @@ export type SystemCommandPort = {
     options?: SystemCommandResolveOptions,
   ): Effect.Effect<string | null, HostPathAccessErrorAggregate>;
   /**
-   * Reads the first non-empty line of a version command. Terminal color is always disabled so
-   * the result is safe for display.
+   * Reads the first non-empty line of a version command. It disables the standard terminal color
+   * environment variables, so CLIs that honor them return plain text.
    */
   versionCommand(
     command: string,

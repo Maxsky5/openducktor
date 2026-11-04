@@ -6,8 +6,8 @@ import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-discovery-port";
 
+// The shared version command keeps the output plain. This timeout limits a slow version read.
 const VERSION_TIMEOUT_MS = 2_000;
-// The shared version command keeps the output plain. This timeout only bounds a slow executable.
 const runtimeHealth = (
   kind: RuntimeKind,
   executablePath: string,
