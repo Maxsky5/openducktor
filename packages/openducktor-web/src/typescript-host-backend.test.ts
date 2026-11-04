@@ -170,7 +170,6 @@ const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
   ...createTestHostCommandRouter(),
   hostInstanceId: "test-host",
   hostSettings: {
-    readHostId: () => Effect.succeed("stable-host-a"),
     readRemoteAccessSettings: () => Effect.succeed({ enabled: false, configuration: null }),
     saveRemoteAccessSettings: () => Effect.void,
   },
@@ -400,6 +399,8 @@ describe("TypeScript web host backend", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           appVersion: "test",
+          clientKind: "browser",
+          pairingCode: (await Effect.runPromise(backend.remoteAccess.startPairing())).pairing!.code,
           supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
           requiredCapabilities: [],
           optionalCapabilities: [],
@@ -411,6 +412,7 @@ describe("TypeScript web host backend", () => {
         headers: {
           "content-type": "application/json",
           "x-openducktor-connection-id": connection.connectionId,
+          authorization: `Bearer ${connection.connectionToken}`,
         },
         body: "{}",
       });

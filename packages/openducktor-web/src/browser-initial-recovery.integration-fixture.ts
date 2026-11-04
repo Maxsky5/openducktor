@@ -1,3 +1,13 @@
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  value: createMemoryClientStorage(),
+});
+import { createMemoryClientStorage } from "@openducktor/frontend-core/platform/client-storage";
+import {
+  TEST_HOST_ID,
+  TEST_CONNECTION_TOKEN,
+  savedTestAuthorization,
+} from "../../host-client/src/remote/test-support/authorization";
 import assert from "node:assert/strict";
 import {
   REMOTE_BASELINE_CAPABILITIES,
@@ -22,7 +32,8 @@ const host: RemoteHostDescriptor = {
   shell: "web",
   appVersion: "test-host",
   hostInstanceId: "host-a",
-  accessPolicy: "network_reach",
+  hostId: TEST_HOST_ID,
+  accessPolicy: "pairing",
   protocols: [
     { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
   ],
@@ -87,6 +98,8 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
       if (url.endsWith("/connections"))
         return json({
           status: "accepted",
+          connectionToken: TEST_CONNECTION_TOKEN,
+          authorization: _headers.authorization ? undefined : savedTestAuthorization(),
           host,
           connectionId: crypto.randomUUID(),
           protocolVersion: REMOTE_PROTOCOL_VERSION,

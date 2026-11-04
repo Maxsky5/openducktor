@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import {
   REMOTE_CONNECTION_HEADER,
   REMOTE_TERMINAL_CONNECTION_PREFIX,
+  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
 } from "@openducktor/contracts";
 import { openRemoteTerminalSocket } from "./terminal-socket";
@@ -61,7 +62,10 @@ const setup = () => {
 };
 
 describe("openRemoteTerminalSocket", () => {
-  const headers = { [REMOTE_CONNECTION_HEADER]: "connection-1" };
+  const headers = {
+    [REMOTE_CONNECTION_HEADER]: "connection-1",
+    authorization: `Bearer ${"c".repeat(43)}`,
+  };
 
   test("offers the terminal and connection subprotocols and reads binary frames", async () => {
     const { sockets, create } = setup();
@@ -77,6 +81,7 @@ describe("openRemoteTerminalSocket", () => {
     expect(socket?.protocols).toEqual([
       TERMINAL_PROTOCOL_SUBPROTOCOL,
       `${REMOTE_TERMINAL_CONNECTION_PREFIX}connection-1`,
+      `${REMOTE_TERMINAL_AUTHORIZATION_PREFIX}${"c".repeat(43)}`,
     ]);
     expect(socket?.binaryType).toBe("arraybuffer");
 

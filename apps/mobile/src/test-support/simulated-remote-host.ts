@@ -1,7 +1,13 @@
 import {
+  TEST_HOST_ID,
+  TEST_CONNECTION_TOKEN,
+  savedTestAuthorization,
+} from "@openducktor/host-client/remote/test-support";
+import {
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_PROTOCOL_VERSION,
   REMOTE_CONNECTION_HEADER,
+  remoteConnectionRequestSchema,
   type RemoteFailure,
   type RemoteHostDescriptor,
 } from "@openducktor/contracts";
@@ -27,17 +33,28 @@ export const createSimulatedRemoteHost = (options?: {
   shell?: RemoteHostDescriptor["shell"];
   /** The stable host ID of the discovery reply. Without it, the host acts as an older host. */
   hostId?: string;
+  /** Enforces one code approval per host origin when a test needs real pairing behavior. */
+  pairingCode?: string;
 }) => {
   let admission: SimulatedAdmission = { kind: "accept" };
   let openStreams = 0;
   const notificationEpoch = crypto.randomUUID();
   const released: string[] = [];
-  const descriptor = (): RemoteHostDescriptor => {
+  const identities = new Map<string, string>();
+  const pairedOrigins = new Set<string>();
+  const hostIdFor = (url: string) => {
+    const origin = new URL(url).origin;
+    if (!identities.has(origin))
+      identities.set(origin, identities.size === 0 ? TEST_HOST_ID : crypto.randomUUID());
+    return options?.hostId ?? identities.get(origin)!;
+  };
+  const descriptor = (url: string): RemoteHostDescriptor => {
     const reply: RemoteHostDescriptor = {
       shell: options?.shell ?? "electron",
       appVersion: "host-test",
       hostInstanceId: "host-run-1",
-      accessPolicy: "network_reach",
+      hostId: hostIdFor(url),
+      accessPolicy: "pairing",
       protocols: [
         { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
       ],
@@ -84,16 +101,36 @@ export const createSimulatedRemoteHost = (options?: {
     });
 
   const transport: RemoteTransport = {
-    async request(method, url, headers, signal) {
+    async request(method, url, headers, signal, body) {
       const path = new URL(url).pathname;
       if (admission.kind === "unreachable") throw unreachable();
-      if (method === "GET" && (path === "/" || path === "")) return json(descriptor());
+      if (method === "GET" && (path === "/" || path === "")) return json(descriptor(url));
       if (method === "POST" && path.endsWith("/connections")) {
         if (admission.kind === "refuse")
           return json({ status: "rejected", failure: admission.failure }, admission.status);
+        if (options?.pairingCode !== undefined && !headers.authorization) {
+          const input = remoteConnectionRequestSchema.parse(JSON.parse(body ?? "{}"));
+          const origin = new URL(url).origin;
+          if (input.pairingCode !== options.pairingCode || pairedOrigins.has(origin))
+            return json(
+              {
+                status: "rejected",
+                failure: {
+                  code:
+                    input.pairingCode === undefined ? "authorization_required" : "pairing_refused",
+                  message: "Enter the current host code.",
+                  nextAction: "A code approves one client only.",
+                },
+              },
+              401,
+            );
+          pairedOrigins.add(origin);
+        }
         return json({
           status: "accepted",
-          host: descriptor(),
+          connectionToken: TEST_CONNECTION_TOKEN,
+          authorization: headers.authorization ? undefined : savedTestAuthorization(hostIdFor(url)),
+          host: descriptor(url),
           connectionId: crypto.randomUUID(),
           protocolVersion: REMOTE_PROTOCOL_VERSION,
           missingOptionalCapabilities: [],

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   REMOTE_CONNECTION_HEADER,
   REMOTE_TERMINAL_CONNECTION_PREFIX,
+  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
 } from "@openducktor/contracts";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
@@ -370,7 +371,10 @@ describe("createNativeRemoteTransport request", () => {
 describe("createNativeRemoteTransport openTerminal", () => {
   test("opens the React Native socket with the subprotocols and the connection header", async () => {
     const { sockets, transport } = setup();
-    const headers = { [REMOTE_CONNECTION_HEADER]: "connection-1" };
+    const headers = {
+      [REMOTE_CONNECTION_HEADER]: "connection-1",
+      authorization: `Bearer ${"c".repeat(43)}`,
+    };
     const pending = transport.openTerminal(
       "wss://host.test/terminal",
       headers,
@@ -384,6 +388,7 @@ describe("createNativeRemoteTransport openTerminal", () => {
     expect(socket?.protocols).toEqual([
       TERMINAL_PROTOCOL_SUBPROTOCOL,
       `${REMOTE_TERMINAL_CONNECTION_PREFIX}connection-1`,
+      `${REMOTE_TERMINAL_AUTHORIZATION_PREFIX}${"c".repeat(43)}`,
     ]);
     expect(socket?.options).toEqual({ headers });
 

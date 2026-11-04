@@ -1,16 +1,14 @@
-import { useId, useState, type FormEvent } from "react";
-import { ArrowRightLeft, Laptop, LoaderCircle, Server, Unplug } from "lucide-react";
+import { ArrowRightLeft, Laptop, LoaderCircle, Server, Settings, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DialogBody, DialogFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { DialogFooter } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { localHostLabel, type HostSelection } from "@/lib/host-location";
-import { parseRemoteHostEndpoint } from "@openducktor/frontend-core/recovery/remote-host-endpoint";
 import { cn } from "@/lib/utils";
 import { useRemoteAccess } from "@/state/remote-access-provider";
 import { HostSharing } from "./host-sharing";
-
-type Action = "connect" | "local" | "disconnect";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ConnectedView } from "@/components/features/remote-control/connection-feedback";
+import { HostConnectFields, useHostConnectForm, type HostAction } from "./host-connect-form";
 
 export function HostPicker({
   selection,
@@ -24,92 +22,83 @@ export function HostPicker({
   onOpenSettings?: (() => void) | undefined;
 }) {
   const { target } = selection;
-  const [endpoint, setEndpoint] = useState("");
-  const [error, setError] = useState<{ action: Action; message: string } | null>(
-    initialError ? { action: "connect", message: initialError } : null,
-  );
-  const [pending, setPending] = useState<Action | null>(null);
+  const { bridge } = useRemoteAccess();
+  const connect = useHostConnectForm(selection, initialError);
+  const { pending } = connect;
   const currentHost = target.kind !== "picker";
-  const Body = onCancel ? DialogBody : "div";
-  const Footer = onCancel ? DialogFooter : "div";
-  const run = async (action: Action, work: () => Promise<void>) => {
-    setPending(action);
-    setError(null);
-    try {
-      await work();
-    } catch (cause) {
-      setError({ action, message: cause instanceof Error ? cause.message : String(cause) });
-    } finally {
-      setPending(null);
-    }
-  };
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    void run("connect", async () => {
-      const address = parseRemoteHostEndpoint(endpoint, {
-        requireHttps: window.location.protocol === "https:",
-      });
-      if (target.kind === "remote" && address === target.endpoint) {
-        throw new Error("This host is already selected. Enter a different address.");
-      }
-      await selection.select(address);
-    });
-  };
+  const Body = onCancel ? ScrollArea : "div";
 
+  const connectForm = (
+    <form
+      noValidate
+      aria-busy={pending !== null}
+      onSubmit={connect.submit}
+      className="flex min-h-0 flex-1 flex-col"
+    >
+      <Body className={onCancel ? "flex min-h-0 flex-1 flex-col" : undefined}>
+        <div className={cn("flex flex-col gap-5", onCancel && "px-6 py-5")}>
+          {connect.connected ? (
+            <ConnectedView endpoint={connect.connected} />
+          ) : (
+            <>
+              {currentHost ? <SelectedHost selection={selection} /> : null}
+              <HostConnectFields
+                currentHost={currentHost}
+                address={connect.endpoint}
+                code={connect.code}
+                busy={pending !== null}
+                onAddressChange={connect.changeAddress}
+                onCodeChange={connect.changeCode}
+                failure={connect.failure}
+              />
+            </>
+          )}
+        </div>
+      </Body>
+      {connect.connected ? null : (
+        <ConnectionActions
+          selection={selection}
+          pending={pending}
+          run={connect.run}
+          onCancel={onCancel}
+          canSubmit={Boolean(connect.endpoint.trim())}
+        />
+      )}
+    </form>
+  );
+  if (!onCancel || target.kind !== "local" || !bridge) return connectForm;
   return (
-    <form noValidate onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-      <fieldset disabled={pending !== null} className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <Body
-          className={cn("flex min-h-0 flex-col gap-5", onCancel && "overflow-y-auto px-6 py-5")}
-        >
-          {currentHost ? (
-            <SelectedHost selection={selection} onOpenSettings={onOpenSettings} />
-          ) : null}
-          {error && error.action !== "connect" ? (
-            <p role="alert" className="text-sm text-destructive-surface-foreground">
-              {error.message}
-            </p>
-          ) : null}
-          <HostAddressFields
-            currentHost={currentHost}
-            value={endpoint}
-            onChange={(value) => {
-              setEndpoint(value);
-              setError(null);
-            }}
-            error={error?.action === "connect" ? error.message : undefined}
-          />
-        </Body>
-        <Footer
-          role="group"
-          aria-label="Connection actions"
-          className={
-            onCancel ? "mt-0 flex-wrap items-end gap-3 border-t border-border px-6 py-4" : "mt-5"
-          }
-        >
-          {onCancel ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="self-start sm:self-auto"
-              onClick={onCancel}
-            >
-              Cancel
+    <Tabs defaultValue="share" className="min-h-0 gap-0">
+      <TabsList aria-label="Host connection mode" className="mx-6 mt-2 grid h-9 w-auto grid-cols-2">
+        <TabsTrigger value="share" disabled={pending !== null}>
+          Remote control
+        </TabsTrigger>
+        <TabsTrigger value="connect" disabled={pending !== null}>
+          Connect to a host
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="share" className="mt-0 flex min-h-0 flex-col">
+        <ScrollArea className="flex min-h-0 flex-1 flex-col">
+          <div className="px-6 py-5">
+            <HostSharing bridge={bridge} />
+          </div>
+        </ScrollArea>
+        <DialogFooter className="mt-0 flex-row items-center gap-3 border-t border-border px-6 py-4">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          {onOpenSettings ? (
+            <Button type="button" variant="outline" onClick={onOpenSettings}>
+              <Settings data-icon="inline-start" />
+              Network settings
             </Button>
           ) : null}
-          <div
-            className={cn("flex gap-2", onCancel ? "ml-auto flex-wrap justify-end" : "flex-col")}
-          >
-            <HostActions selection={selection} pending={pending} run={run} />
-            <ConnectButton
-              currentHost={currentHost}
-              connecting={pending === "connect"}
-              disabled={!endpoint.trim()}
-            />
-          </div>
-        </Footer>
-      </fieldset>
-    </form>
+        </DialogFooter>
+      </TabsContent>
+      <TabsContent value="connect" className="mt-0 flex min-h-0 flex-col">
+        {connectForm}
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -135,31 +124,63 @@ function ConnectButton({
   );
 }
 
-function SelectedHost({
+function ConnectionActions({
   selection,
-  onOpenSettings,
+  pending,
+  run,
+  onCancel,
+  canSubmit,
 }: {
   selection: HostSelection;
-  onOpenSettings: (() => void) | undefined;
+  pending: HostAction | null;
+  run(action: HostAction, work: () => Promise<void>): Promise<void>;
+  onCancel: (() => void) | undefined;
+  canSubmit: boolean;
 }) {
+  const Footer = onCancel ? DialogFooter : "div";
+  return (
+    <Footer
+      role="group"
+      aria-label="Connection actions"
+      className={
+        onCancel ? "mt-0 flex-wrap items-end gap-3 border-t border-border px-6 py-4" : "mt-5"
+      }
+    >
+      {onCancel ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="self-start sm:self-auto"
+          onClick={onCancel}
+        >
+          Cancel
+        </Button>
+      ) : null}
+      <div className={cn("flex gap-2", onCancel ? "ml-auto flex-wrap justify-end" : "flex-col")}>
+        <HostActions selection={selection} pending={pending} run={run} />
+        <ConnectButton
+          currentHost={selection.target.kind !== "picker"}
+          connecting={pending === "connect"}
+          disabled={!canSubmit}
+        />
+      </div>
+    </Footer>
+  );
+}
+
+function SelectedHost({ selection }: { selection: HostSelection }) {
   const { target } = selection;
-  const { bridge } = useRemoteAccess();
   const Icon = target.kind === "remote" ? Server : Laptop;
   return (
-    <>
-      <dl className="flex items-center gap-3">
-        <Icon className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <div className="flex min-w-0 flex-col gap-1">
-          <dt className="text-xs text-muted-foreground">Selected host</dt>
-          <dd className="break-all text-sm font-medium">
-            {target.kind === "remote" ? target.endpoint : localHostLabel(selection.localHost)}
-          </dd>
-        </div>
-      </dl>
-      {target.kind === "local" && bridge ? (
-        <HostSharing bridge={bridge} onOpenSettings={onOpenSettings} />
-      ) : null}
-    </>
+    <dl className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-3">
+      <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <div className="flex min-w-0 flex-col gap-1">
+        <dt className="text-xs text-muted-foreground">Current host</dt>
+        <dd className="break-all text-sm font-medium">
+          {target.kind === "remote" ? target.endpoint : localHostLabel(selection.localHost)}
+        </dd>
+      </div>
+    </dl>
   );
 }
 
@@ -169,8 +190,8 @@ function HostActions({
   run,
 }: {
   selection: HostSelection;
-  pending: Action | null;
-  run(action: Action, work: () => Promise<void>): Promise<void>;
+  pending: HostAction | null;
+  run(action: HostAction, work: () => Promise<void>): Promise<void>;
 }) {
   return (
     <>
@@ -205,57 +226,6 @@ function HostActions({
           )}
           {pending === "disconnect" ? "Disconnecting…" : "Disconnect"}
         </Button>
-      ) : null}
-    </>
-  );
-}
-
-function HostAddressFields({
-  currentHost,
-  value,
-  onChange,
-  error,
-}: {
-  currentHost: boolean;
-  value: string;
-  onChange(value: string): void;
-  error: string | undefined;
-}) {
-  const id = useId();
-  return (
-    <>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor={`${id}-address`}>{currentHost ? "New host address" : "Host address"}</Label>
-        <Input
-          id={`${id}-address`}
-          type="url"
-          inputMode="url"
-          required
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="https://host.example"
-          value={value}
-          aria-invalid={Boolean(error)}
-          aria-describedby={`${id}-help${error ? ` ${id}-error` : ""}`}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <p id={`${id}-help`} className="text-xs leading-relaxed text-muted-foreground">
-          Copy the address from Settings, Remote control on the host.
-        </p>
-        {error ? (
-          <p
-            id={`${id}-error`}
-            role="alert"
-            className="text-sm text-destructive-surface-foreground"
-          >
-            {error}
-          </p>
-        ) : null}
-      </div>
-      {currentHost ? (
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Copy unsent drafts before changing hosts.
-        </p>
       ) : null}
     </>
   );

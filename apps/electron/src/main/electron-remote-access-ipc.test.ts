@@ -6,7 +6,7 @@ import { RemoteAccessError, type RemoteAccessController } from "@openducktor/rem
 import { ELECTRON_REMOTE_ACCESS_CHANNEL } from "../shared/electron-bridge-contract";
 import { registerElectronRemoteAccessIpc } from "./electron-remote-access-ipc";
 
-test("Electron operator IPC reads networks and keeps the next action when the network read fails", async () => {
+test("Electron operator IPC keeps the next action when network reads or client revocation fail", async () => {
   const handlers = new Map<string, Parameters<IpcMain["handle"]>[1]>();
   const ipc = {
     handle: (channel: string, handler: Parameters<IpcMain["handle"]>[1]) =>
@@ -14,11 +14,55 @@ test("Electron operator IPC reads networks and keeps the next action when the ne
   };
   const controller: RemoteAccessController = {
     readState: () =>
-      Effect.succeed({ status: "disabled", configuration: null, connectedClients: 0 }),
+      Effect.succeed({
+        status: "disabled",
+        configuration: null,
+        pairing: null,
+        clients: [],
+        connectedClients: 0,
+      }),
     readNetworks: () => Effect.succeed([{ name: "wifi", address: "192.168.1.9" }]),
     states: Stream.empty,
-    enable: () => Effect.succeed({ status: "available", configuration: null, connectedClients: 0 }),
-    disable: () => Effect.succeed({ status: "disabled", configuration: null, connectedClients: 0 }),
+    enable: () =>
+      Effect.succeed({
+        status: "available",
+        configuration: null,
+        pairing: null,
+        clients: [],
+        connectedClients: 0,
+      }),
+    revokeClient: () =>
+      Effect.succeed({
+        status: "disabled",
+        configuration: null,
+        pairing: null,
+        clients: [],
+        connectedClients: 0,
+      }),
+    disable: () =>
+      Effect.succeed({
+        status: "disabled",
+        configuration: null,
+        pairing: null,
+        clients: [],
+        connectedClients: 0,
+      }),
+    startPairing: () =>
+      Effect.succeed({
+        status: "available",
+        configuration: null,
+        pairing: { code: "012345", expiresAt: "2030-01-01T00:00:00.000Z" },
+        clients: [],
+        connectedClients: 0,
+      }),
+    stopPairing: () =>
+      Effect.succeed({
+        status: "available",
+        configuration: null,
+        pairing: null,
+        clients: [],
+        connectedClients: 0,
+      }),
     close: () => Effect.void,
     handleSharedRequest: () => null,
   };
@@ -53,6 +97,23 @@ test("Electron operator IPC reads networks and keeps the next action when the ne
     expect(failure).toEqual(
       new Error("Could not read networks. Check the network connection, then refresh."),
     );
+    controller.revokeClient = () =>
+      Effect.fail(
+        new RemoteAccessError({
+          failure: {
+            code: "authorization_storage_failed",
+            message: "Could not remove saved access.",
+            nextAction: "Check the host directory permissions, then retry.",
+          },
+        }),
+      );
+    const revokeFailure = await handle(event, {
+      action: "revoke",
+      clientId: "10000000-0000-4000-8000-000000000001",
+    }).catch((cause: unknown) => cause);
+    expect(revokeFailure).toMatchObject({
+      message: "Could not remove saved access. Check the host directory permissions, then retry.",
+    });
   } finally {
     await Effect.runPromise(Fiber.interrupt(fiber));
   }

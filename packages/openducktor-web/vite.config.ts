@@ -1,3 +1,7 @@
+import {
+  ARTIFACT_PREVIEW_BOOTSTRAP_PATH,
+  artifactPreviewBootstrapResponse,
+} from "@openducktor/remote-host/artifact-preview-bootstrap";
 import { createOpenDucktorStartupSplashPlugin } from "@openducktor/frontend/startup-splash/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -19,6 +23,7 @@ export default defineConfig(({ mode }) => ({
   ...(mode === "standalone" && { cacheDir: "node_modules/.vite-client" }),
   plugins: [
     createOpenDucktorStartupSplashPlugin(),
+    artifactPreviewBootstrapPlugin(),
     react(),
     tailwindcss(),
     ...(mode === "standalone" ? [clientHeaders()] : []),
@@ -68,3 +73,32 @@ const clientHeaders = (): Plugin => ({
     });
   },
 });
+
+/** The bootstrap contains no host data and keeps its own document isolation policy. */
+function artifactPreviewBootstrapPlugin(): Plugin {
+  const middleware: import("vite").Connect.NextHandleFunction = (request, response, next) => {
+    if (request.url !== ARTIFACT_PREVIEW_BOOTSTRAP_PATH || request.method !== "GET") return next();
+    const bootstrap = artifactPreviewBootstrapResponse();
+    bootstrap.headers.forEach((value, name) => response.setHeader(name, value));
+    void bootstrap
+      .text()
+      .then((html) => response.end(html))
+      .catch(next);
+  };
+  return {
+    name: "openducktor-artifact-preview-bootstrap",
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+    async generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: ARTIFACT_PREVIEW_BOOTSTRAP_PATH.slice(1),
+        source: await artifactPreviewBootstrapResponse().text(),
+      });
+    },
+  };
+}

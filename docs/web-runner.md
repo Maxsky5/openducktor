@@ -29,13 +29,13 @@ bun run browser:client
 
 This command serves only the frontend at `http://127.0.0.1:1421`. It starts with no selected host on the first visit and restores the host saved in this browser on later visits. It does not start a host process or fetch runtime configuration. It uses a separate Vite cache so it can run beside `bun run browser:dev`. The fixed frontend address keeps the same local storage across restarts.
 
-Keep the host runner open in a second terminal. In that app, enable Settings, Remote control and copy the host address. Paste the address into the standalone client's connection screen. A direct address looks like `http://192.168.1.9:14328`, with no path suffix.
+Keep the host runner open in a second terminal. In that app, turn on Remote control in Host connection or Settings, select Add device, and copy the host address. Enter the address and the pairing code on the standalone client's connection screen. A direct address looks like `http://192.168.1.9:14328`, with no path suffix.
 
 ## Standalone web client
 
 `https://app.openducktor.dev` serves the standalone web client of the latest stable release. The browser connects directly to the host; the site does not forward host work. A stable release deploys the site, as [Deploy the web client](release-process.md#deploy-the-web-client) explains.
 
-On the host computer, enable Remote control and copy its host address. Open the client on the other device and paste that address. The client remembers the host in this browser.
+On the host computer, turn on Remote control, select Add device, and copy its host address. Open the client on the other device and enter that address and the pairing code. The client remembers the host in this browser.
 
 ### Limits of a hosted client
 

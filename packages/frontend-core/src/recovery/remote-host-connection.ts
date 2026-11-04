@@ -5,6 +5,7 @@ import {
   REMOTE_STREAM_HEARTBEAT_CAPABILITY,
   type AgentSessionLiveAttachInput,
   type HostEventEnvelope,
+  type RemoteClientKind,
 } from "@openducktor/contracts";
 import {
   createAgentSessionLiveAttachment,
@@ -12,9 +13,12 @@ import {
 } from "@openducktor/host-client";
 import {
   createRemoteHostClient,
+  isRemotePairingFailure,
   type RemoteHostClient,
   type RemoteSynchronizationContext,
   type RemoteTransport,
+  type RemoteAuthorizationStore,
+  type RemoteConnectInput,
 } from "@openducktor/host-client/remote";
 import type { QueryClient } from "@tanstack/react-query";
 import {
@@ -51,6 +55,56 @@ export type RemoteHostConnectionOptions = {
   transport: RemoteTransport;
   /** The query client of the same client connection. Recovery refetches its active reads. */
   queryClient: QueryClient;
+  authorizationStore: RemoteAuthorizationStore;
+  clientKind: RemoteClientKind;
+  initialConnect?: RemoteConnectInput | undefined;
+};
+
+const remoteClientHello = (version: string) => ({
+  appVersion: version,
+  supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
+  requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
+  // Without heartbeats, the client keeps a silent stream, as an older host sends none. Without
+  // compact history, the client reads full history, as an older host rejects the request.
+  optionalCapabilities: [
+    REMOTE_STREAM_HEARTBEAT_CAPABILITY,
+    REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
+  ],
+});
+
+/**
+ * Connects once to confirm that this client can use the host, then releases the admission. With a
+ * code and no valid saved access, it pairs and saves the access first. The next connection to
+ * `endpoint` uses the saved access, so a page can check a host before it switches to it.
+ */
+export const confirmRemoteAccess = async ({
+  endpoint,
+  version,
+  transport,
+  authorizationStore,
+  clientKind,
+  pairingCode,
+  signal,
+}: Omit<RemoteHostConnectionOptions, "queryClient" | "initialConnect"> & {
+  pairingCode?: string | undefined;
+  signal?: AbortSignal;
+}): Promise<void> => {
+  const remote = createRemoteHostClient(
+    endpoint,
+    remoteClientHello(version),
+    transport,
+    // The check restores no work, so the admission needs no state recovery.
+    async () => {},
+    { store: authorizationStore, clientKind },
+  );
+  try {
+    await remote.connect({
+      ...(pairingCode !== undefined && { pairingCode }),
+      ...(signal && { signal }),
+    });
+  } finally {
+    await remote.disconnect();
+  }
 };
 
 /** Shares one remote host connection across views and waits for their recovery before work unlocks. */
@@ -59,6 +113,9 @@ export const createRemoteHostConnection = ({
   version,
   transport,
   queryClient,
+  authorizationStore,
+  clientKind,
+  initialConnect,
 }: RemoteHostConnectionOptions): RemoteHostConnection => {
   const notifications = createNotificationFrameRelay();
   const live = new Set<LiveOwner>();
@@ -118,19 +175,10 @@ export const createRemoteHostConnection = ({
   };
   const remote = createRemoteHostClient(
     endpoint,
-    {
-      appVersion: version,
-      supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
-      requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
-      // Without heartbeats, the client keeps a silent stream, as an older host sends none. Without
-      // compact history, the client reads full history, as an older host rejects the request.
-      optionalCapabilities: [
-        REMOTE_STREAM_HEARTBEAT_CAPABILITY,
-        REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
-      ],
-    },
+    remoteClientHello(version),
     transport,
     synchronize,
+    { store: authorizationStore, clientKind },
   );
   const taskOwners = createRemoteTaskSubscriptions(remote);
   remote.subscribeState((state) => {
@@ -161,8 +209,10 @@ export const createRemoteHostConnection = ({
   // Admission starts before mounting. View owners add their synchronization work as they mount.
   // A disconnect by the owner, as when the user cancels Add Host, ends the attempt and leaves the
   // connection idle. That is no failure, so only a real failure goes to the log.
-  void remote.connect().catch((cause) => {
-    if (remote.readState().status !== "idle") console.error("Remote host connection failed", cause);
+  void remote.connect(initialConnect).catch((cause) => {
+    const state = remote.readState();
+    if (state.status !== "idle" && !isRemotePairingFailure(state.failure?.code))
+      console.error("Remote host connection failed", cause);
   });
   return {
     client: remote.client,

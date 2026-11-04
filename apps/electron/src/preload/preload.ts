@@ -240,9 +240,24 @@ const electronApi: OpenDucktorElectronApi = {
           input: remoteAccessEnableInputSchema.parse(input),
         }),
       ),
+    revokeClient: async (clientId) =>
+      remoteAccessStateSchema.parse(
+        await ipcRenderer.invoke(ELECTRON_REMOTE_ACCESS_CHANNEL, { action: "revoke", clientId }),
+      ),
     disable: async () =>
       remoteAccessStateSchema.parse(
         await ipcRenderer.invoke(ELECTRON_REMOTE_ACCESS_CHANNEL, { action: "disable" }),
+      ),
+    startPairing: async (options) =>
+      remoteAccessStateSchema.parse(
+        await ipcRenderer.invoke(ELECTRON_REMOTE_ACCESS_CHANNEL, {
+          action: "start-pairing",
+          input: { renew: options?.renew === true },
+        }),
+      ),
+    stopPairing: async () =>
+      remoteAccessStateSchema.parse(
+        await ipcRenderer.invoke(ELECTRON_REMOTE_ACCESS_CHANNEL, { action: "stop-pairing" }),
       ),
     subscribeState: async (listener) => {
       const receive = (

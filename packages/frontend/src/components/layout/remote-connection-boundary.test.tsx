@@ -2,7 +2,8 @@ import { expect, mock, test } from "bun:test";
 import { act } from "react";
 import { toast } from "sonner";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { RemoteConnectionState } from "@openducktor/host-client/remote";
+import { RemoteConnectionError, type RemoteConnectionState } from "@openducktor/host-client/remote";
+import type { RemoteFailure } from "@openducktor/contracts";
 import { RemoteConnectionBoundary } from "./remote-connection-boundary";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 
@@ -16,6 +17,8 @@ test("blocks work until synchronization finishes and exposes the connection fail
       notify = listener;
       return () => {};
     },
+    connect: async () => {},
+    disconnect: async () => {},
     retry,
   };
   const tree = (open: boolean) => (
@@ -62,6 +65,45 @@ test("blocks work until synchronization finishes and exposes the connection fail
   expect(screen.getByRole("dialog", { name: "App diagnostics" })).toBeTruthy();
 });
 
+test.each(["authorization_required", "authorization_rejected", "pairing_refused"] as const)(
+  "a retry that reports %s leaves feedback to the pairing form",
+  async (code) => {
+    const state: RemoteConnectionState = { status: "idle", generation: 1 };
+    const retry = mock(async () => {
+      const failure: RemoteFailure = {
+        code,
+        message: "Enter the current code.",
+        nextAction: "Read the host pairing code.",
+      };
+      throw new RemoteConnectionError(failure);
+    });
+    const view = render(
+      <RemoteConnectionBoundary
+        connection={{
+          readState: () => state,
+          subscribeState: () => () => {},
+          connect: async () => {},
+          disconnect: async () => {},
+          retry,
+        }}
+      >
+        <button type="button">Send work</button>
+      </RemoteConnectionBoundary>,
+    );
+    try {
+      const button = view.getByRole("button", { name: "Retry connection" });
+      if (!(button instanceof HTMLButtonElement)) throw new Error("Expected a retry button.");
+      fireEvent.click(button);
+      await waitFor(() => expect(button.disabled).toBe(false), { timeout: 750 });
+      expect(retry).toHaveBeenCalledTimes(1);
+      expect(view.queryByText("Could not reconnect to host") === null).toBe(true);
+    } finally {
+      view.unmount();
+      toast.dismiss("host-connection-retry");
+    }
+  },
+);
+
 test("keeps a failed retry busy for 500 ms and reports it outside blocked work", async () => {
   let state: RemoteConnectionState = {
     status: "disconnected",
@@ -89,6 +131,8 @@ test("keeps a failed retry busy for 500 ms and reports it outside blocked work",
           notify = listener;
           return () => {};
         },
+        connect: async () => {},
+        disconnect: async () => {},
         retry,
       }}
       changeHost={() => {}}

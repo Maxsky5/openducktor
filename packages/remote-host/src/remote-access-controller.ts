@@ -1,16 +1,23 @@
 import {
   REMOTE_CONNECTION_HEADER,
   REMOTE_TERMINAL_CONNECTION_PREFIX,
+  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
   remoteAccessEnableInputSchema,
   type RemoteAccessEnableInput,
   type RemoteAccessConfiguration,
   type RemoteAccessNetwork,
   type RemoteAccessState,
-  type RemoteFailure,
+  failedRemoteAccessState,
+  type RemotePairingStartInput,
 } from "@openducktor/contracts";
-import { createSerialLane } from "@openducktor/host";
-import { Data, Effect, PubSub, Stream } from "effect";
+import {
+  createSerialLane,
+  type RemoteApprovalStore,
+  type RemoteApprovalStoreError,
+} from "@openducktor/host";
+import { Effect, PubSub, Stream } from "effect";
 import os from "node:os";
+import { RemoteAccessError, createRemoteAdmission, remoteDisabled } from "./remote-admission";
 import { createRemoteWorkInterface, type RemoteHostServices } from "./remote-work-interface";
 import { startNodeFetchServer, type NodeFetchServer } from "./node-fetch-server";
 import {
@@ -19,14 +26,22 @@ import {
 } from "./terminals/terminal-websocket-handler";
 import type { WebLogger } from "./logger";
 
-export class RemoteAccessError extends Data.TaggedError("RemoteAccessError")<{
-  readonly failure: RemoteFailure;
-}> {}
+export { RemoteAccessError };
 export type RemoteAccessController = {
   readState(): Effect.Effect<RemoteAccessState>;
   readNetworks(): Effect.Effect<RemoteAccessNetwork[], RemoteAccessError>;
   enable(input: RemoteAccessEnableInput): Effect.Effect<RemoteAccessState, RemoteAccessError>;
   disable(): Effect.Effect<RemoteAccessState, RemoteAccessError>;
+  revokeClient(clientId: string): Effect.Effect<RemoteAccessState, RemoteAccessError>;
+  /**
+   * Opens a pairing window with a new single-use code. A renewal of an expired code keeps the count
+   * of wrong codes.
+   */
+  startPairing(
+    options?: RemotePairingStartInput,
+  ): Effect.Effect<RemoteAccessState, RemoteAccessError>;
+  /** Closes the open pairing window, if any. */
+  stopPairing(): Effect.Effect<RemoteAccessState>;
   readonly states: Stream.Stream<RemoteAccessState>;
   close(): Effect.Effect<void, RemoteAccessError>;
   handleSharedRequest(
@@ -50,12 +65,42 @@ export const remoteAccessConfiguration = (
   };
 };
 
+/** Shared listener routes that only remote clients use. */
+const REMOTE_ROUTES = new Set(["/", "/connections"]);
+const REMOTE_REQUEST_HEADERS = ["authorization", REMOTE_CONNECTION_HEADER];
+const REMOTE_SUBPROTOCOLS = [
+  REMOTE_TERMINAL_CONNECTION_PREFIX,
+  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
+];
+
+/** A remote request header, a remote preflight, or a remote terminal subprotocol. */
+const carriesRemoteHeaders = (request: Request): boolean => {
+  const { headers } = request;
+  if (REMOTE_REQUEST_HEADERS.some((header) => headers.has(header))) return true;
+  const subprotocols = headers.get("sec-websocket-protocol");
+  if (subprotocols && REMOTE_SUBPROTOCOLS.some((prefix) => subprotocols.includes(prefix)))
+    return true;
+  if (request.method !== "OPTIONS") return false;
+  return (headers.get("access-control-request-headers") ?? "")
+    .toLowerCase()
+    .split(",")
+    .some((header) => REMOTE_REQUEST_HEADERS.includes(header.trim()));
+};
+
+/** The request path below the shared mount path. */
+const sharedRoute = (request: Request, mountPath: string): string => {
+  const path = new URL(request.url).pathname;
+  if (!mountPath || (path !== mountPath && !path.startsWith(`${mountPath}/`))) return path;
+  return path.slice(mountPath.length) || "/";
+};
+
 /** Listener changes run in order so a late start cannot reopen disabled access. */
 export const createRemoteAccessController = (
   services: RemoteHostServices,
   options: {
     shell: "electron" | "web";
     appVersion: string;
+    approvalStore: Effect.Effect<RemoteApprovalStore, RemoteApprovalStoreError>;
     frontendOrigins?: ReadonlySet<string>;
     logger: WebLogger;
     reportFailure(cause: unknown): void;
@@ -68,9 +113,17 @@ export const createRemoteAccessController = (
 ): RemoteAccessController => {
   const changes = Effect.runSync(PubSub.sliding<RemoteAccessState>({ capacity: 16, replay: 1 }));
   const lane = createSerialLane();
-  let state: RemoteAccessState = { status: "disabled", configuration: null, connectedClients: 0 };
+  let state: RemoteAccessState = {
+    status: "disabled",
+    configuration: null,
+    connectedClients: null,
+    clients: null,
+    pairing: null,
+  };
+  let connected = new Set<string>();
   let server: NodeFetchServer<TerminalWebSocketData> | null = null;
   let work: ReturnType<typeof createRemoteWorkInterface> | null = null;
+  let sharedMountPath = "";
   let sharedWork: ReturnType<typeof createRemoteWorkInterface> | null = null;
   let closed = false;
   const publish = (next: RemoteAccessState) => {
@@ -79,6 +132,17 @@ export const createRemoteAccessController = (
     return next;
   };
   publish(state);
+  const admission = createRemoteAdmission({
+    lane,
+    approvalStore: options.approvalStore,
+    available: () => state.status === "available",
+    onChange: () => publish(snapshot()),
+  });
+  const snapshot = (next = state): RemoteAccessState => ({
+    ...next,
+    ...admission.view(next.status === "available", connected),
+    connectedClients: connected.size,
+  });
   /** A bind failure names the port or the address that the operator can change. */
   const listenerFailure = (cause: unknown, listenHost: string, port: number): RemoteAccessError => {
     const code = cause instanceof Error && "code" in cause ? cause.code : undefined;
@@ -111,7 +175,9 @@ export const createRemoteAccessController = (
     });
   const stop = (): Effect.Effect<void, RemoteAccessError> =>
     Effect.gen(function* () {
+      admission.stop(null);
       work?.close();
+      connected.clear();
       work = null;
       const previous = server;
       if (previous) {
@@ -122,11 +188,52 @@ export const createRemoteAccessController = (
   const disable = () =>
     lane.run(
       stop().pipe(
-        Effect.map(() => publish({ status: "disabled", configuration: null, connectedClients: 0 })),
+        Effect.map(() =>
+          publish(
+            snapshot({ ...state, status: "disabled", configuration: null, failure: undefined }),
+          ),
+        ),
       ),
     );
   return {
-    readState: () => Effect.sync(() => state),
+    readState: () =>
+      lane.run(
+        admission.load.pipe(
+          Effect.map(() => publish(snapshot())),
+          Effect.catch((cause) =>
+            stop().pipe(
+              Effect.ignore,
+              Effect.map(() =>
+                publish(failedRemoteAccessState(cause.failure, state.configuration)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    revokeClient: (clientId) =>
+      lane.run(
+        Effect.gen(function* () {
+          yield* admission.load;
+          yield* admission.revoke(clientId);
+          work?.revokeClient(clientId);
+          return publish(snapshot());
+        }),
+      ),
+    startPairing: (pairingOptions) =>
+      lane.run(
+        Effect.gen(function* () {
+          if (state.status !== "available") return yield* remoteDisabled();
+          yield* pairingOptions?.renew ? admission.renew() : admission.start();
+          return publish(snapshot());
+        }),
+      ),
+    stopPairing: () =>
+      lane.run(
+        Effect.sync(() => {
+          admission.stop("stopped");
+          return publish(snapshot());
+        }),
+      ),
     readNetworks: () =>
       Effect.try({
         try: () =>
@@ -179,31 +286,39 @@ export const createRemoteAccessController = (
                       },
                     }),
                 });
-                const hostId = yield* services.hostSettings
-                  .readHostId()
-                  .pipe(Effect.mapError(toFailure));
+                const { hostId } = yield* admission.load;
                 publish({
-                  status: "starting",
+                  ...snapshot({
+                    ...state,
+                    status: "starting",
+                    configuration:
+                      parsed.publicEndpoint === undefined
+                        ? null
+                        : { ...parsed, publicEndpoint: parsed.publicEndpoint },
+                  }),
                   connectedClients: 0,
-                  configuration:
-                    parsed.publicEndpoint === undefined
-                      ? null
-                      : { ...parsed, publicEndpoint: parsed.publicEndpoint },
                 });
                 const configure = (port: number) => remoteAccessConfiguration(parsed, port);
                 const openWork = (configuration: RemoteAccessConfiguration) => {
                   const current = createRemoteWorkInterface(services, {
                     ...options,
                     hostId,
+                    admission: admission.port,
                     publicEndpoint: configuration.publicEndpoint,
                     listenHost: parsed.listenHost,
                     frontendOrigins: new Set([
                       ...(options.frontendOrigins ?? []),
                       ...(parsed.webOrigins ?? []),
                     ]),
-                    onClientsChanged: (connectedClients) => {
-                      if (work === current && state.connectedClients !== connectedClients)
-                        publish({ ...state, connectedClients });
+                    onClientsChanged: (clients) => {
+                      if (work !== current) return;
+                      if (
+                        clients.size === connected.size &&
+                        [...clients].every((clientId) => connected.has(clientId))
+                      )
+                        return;
+                      connected = new Set(clients);
+                      publish(snapshot());
                     },
                   });
                   work = current;
@@ -214,8 +329,14 @@ export const createRemoteAccessController = (
                   options.sharedListener.listenPort() === parsed.listenPort
                 ) {
                   const configuration = configure(parsed.listenPort);
+                  sharedMountPath = new URL(configuration.publicEndpoint).pathname.replace(
+                    /\/$/,
+                    "",
+                  );
                   sharedWork = openWork(configuration);
-                  return publish({ status: "available", configuration, connectedClients: 0 });
+                  return publish(
+                    snapshot({ ...state, status: "available", configuration, failure: undefined }),
+                  );
                 }
                 sharedWork = null;
                 let current: ReturnType<typeof createRemoteWorkInterface>;
@@ -234,10 +355,12 @@ export const createRemoteAccessController = (
                         if (work !== current) return;
                         current.close();
                         publish({
-                          status: "failed",
+                          ...snapshot({
+                            ...state,
+                            status: "failed",
+                            failure: toFailure(cause).failure,
+                          }),
                           connectedClients: 0,
-                          configuration: state.configuration,
-                          failure: toFailure(cause).failure,
                         });
                         void Effect.runPromise(lane.run(stop())).catch(options.reportFailure);
                       },
@@ -247,21 +370,19 @@ export const createRemoteAccessController = (
                     }),
                   catch: (cause) => listenerFailure(cause, parsed.listenHost, parsed.listenPort),
                 });
-                return publish({
-                  status: "available",
-                  configuration: configure(server.port),
-                  connectedClients: 0,
-                });
+                return publish(
+                  snapshot({
+                    ...state,
+                    status: "available",
+                    failure: undefined,
+                    configuration: configure(server.port),
+                  }),
+                );
               }),
             );
             if (result._tag === "Success") return result.success;
             yield* stop();
-            publish({
-              status: "failed",
-              connectedClients: 0,
-              configuration: state.configuration,
-              failure: result.failure.failure,
-            });
+            publish(failedRemoteAccessState(result.failure.failure, state.configuration));
             return yield* result.failure;
           }),
         ),
@@ -271,15 +392,17 @@ export const createRemoteAccessController = (
         Effect.gen(function* () {
           closed = true;
           yield* stop();
-          publish({ status: "disabled", configuration: null, connectedClients: 0 });
+          publish(
+            snapshot({ ...state, status: "disabled", configuration: null, failure: undefined }),
+          );
+          yield* admission.dispose();
           yield* PubSub.shutdown(changes);
         }),
       ),
     handleSharedRequest: (request, requestServer) => {
       if (!sharedWork || !options.sharedListener) return null;
       const explicitRemote =
-        request.headers.has(REMOTE_CONNECTION_HEADER) ||
-        request.headers.get("sec-websocket-protocol")?.includes(REMOTE_TERMINAL_CONNECTION_PREFIX);
+        carriesRemoteHeaders(request) || REMOTE_ROUTES.has(sharedRoute(request, sharedMountPath));
       if (!explicitRemote && options.sharedListener.isPrivateRequest(request)) return null;
       return sharedWork.handle(request, requestServer);
     },

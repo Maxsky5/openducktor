@@ -111,6 +111,7 @@ export function useHostTaskStream({
   }, [openRepoPaths]);
 
   useEffect(() => {
+    let active = true;
     const settleStart = eventsRef.current.trackStart?.();
     const controller = createController({
       queryClient,
@@ -125,13 +126,17 @@ export function useHostTaskStream({
     });
     controllerRef.current = controller;
     void controller.start().then(
-      () => settleStart?.("started"),
+      () => {
+        if (active) settleStart?.("started");
+      },
       (cause: unknown) => {
+        if (!active) return;
         settleStart?.("unavailable");
         eventsRef.current.onUnavailable(cause);
       },
     );
     return () => {
+      active = false;
       settleStart?.("stopped");
       controllerRef.current = null;
       void controller.stop();

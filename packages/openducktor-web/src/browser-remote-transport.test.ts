@@ -26,7 +26,10 @@ test("canceling terminal setup closes the pending WebSocket", async () => {
     const setup = createBrowserRemoteTransport()
       .openTerminal(
         `ws://127.0.0.1:${server.port}/terminal`,
-        { [REMOTE_CONNECTION_HEADER]: crypto.randomUUID() },
+        {
+          [REMOTE_CONNECTION_HEADER]: crypto.randomUUID(),
+          authorization: `Bearer ${"c".repeat(43)}`,
+        },
         owner.signal,
         () => {},
         () => {},

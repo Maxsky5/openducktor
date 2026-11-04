@@ -3,6 +3,7 @@ import { LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { isRemotePairingFailure, RemoteConnectionError } from "@openducktor/host-client/remote";
 import type { ShellBridge } from "@/lib/shell-bridge";
 
 export const CONNECTION_TOASTER_ID = "host-connection";
@@ -25,13 +26,17 @@ export function HostRetryButton({
         connection.retry(),
         new Promise<void>((resolve) => setTimeout(resolve, 500)),
       ]);
-      if (result.status === "rejected") {
-        toast.error("Could not reconnect to host", {
-          id: "host-connection-retry",
-          toasterId: CONNECTION_TOASTER_ID,
-          description: errorMessage(result.reason),
-        });
-      }
+      if (result.status !== "rejected") return;
+      if (
+        result.reason instanceof RemoteConnectionError &&
+        isRemotePairingFailure(result.reason.failure.code)
+      )
+        return;
+      toast.error("Could not reconnect to host", {
+        id: "host-connection-retry",
+        toasterId: CONNECTION_TOASTER_ID,
+        description: errorMessage(result.reason),
+      });
     } finally {
       setPending(false);
     }

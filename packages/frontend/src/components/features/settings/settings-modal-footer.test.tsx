@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, mock, test } from "bun:test";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { SettingsModalFooter } from "./settings-modal-footer";
@@ -34,6 +34,23 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
 };
 
 describe("SettingsModalFooter", () => {
+  test("closes remote control without offering an unrelated settings save", () => {
+    const close = mock(() => {});
+    const save = mock(() => {});
+    const view = renderFooter({
+      location: { section: "remote-access", repositorySection: "configuration" },
+      onCancel: close,
+      onSave: save,
+    });
+    try {
+      expect(screen.queryByRole("button", { name: /save settings/i })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(save).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+    }
+  });
   test.each([null, "Save failed"])(
     "preserves message priority and independent query errors with save error %s",
     (saveError) => {

@@ -1,84 +1,125 @@
-import { LoaderCircle, Power, Settings } from "lucide-react";
+import { LoaderCircle, RadioTower } from "lucide-react";
 import type { RemoteAccessBridge } from "@openducktor/contracts";
-import { RemoteAddress } from "@/components/features/remote-control/remote-address";
-import { Badge } from "@/components/ui/badge";
+import { NetworkChoice } from "@/components/features/remote-control/network-choice";
+import { RemoteAccessFailure } from "@/components/features/remote-control/remote-access-failure";
+import { RemoteDevices } from "@/components/features/remote-control/remote-devices";
+import { connectedDevicesLabel } from "@/components/features/remote-control/remote-control-status";
 import { Button } from "@/components/ui/button";
-import { useRemoteAccessAction } from "@/state/operations/remote-access";
-import { useRemoteAccess } from "@/state/remote-access-provider";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
+import { useRemoteAccessSetup, type RemoteAccessSetup } from "@/state/operations/remote-access";
 
-const labels = { disabled: "Off", starting: "Starting", available: "On", failed: "Failed" };
-
-export function HostSharing({
-  bridge,
-  onOpenSettings,
-}: {
-  bridge: RemoteAccessBridge;
-  onOpenSettings: (() => void) | undefined;
-}) {
-  const { state, pending, message, disable } = useSharingControls(bridge);
-  const available = state?.status === "available";
+/** Remote control of the local host in Host connection. Settings has the same controls. */
+export function HostSharing({ bridge }: { bridge: RemoteAccessBridge }) {
+  const setup = useRemoteAccessSetup(bridge);
+  const { state } = setup;
+  if (!state)
+    return (
+      <p role="status" className="py-6 text-center text-sm text-muted-foreground">
+        Reading remote control status...
+      </p>
+    );
+  if (state.status !== "available" || !state.configuration) return <SharingOff setup={setup} />;
   return (
-    <section aria-label="Remote control" className="grid gap-3 border-y border-border py-4">
-      <div className="flex items-center gap-2">
-        <h3 className="text-sm font-medium">Remote control</h3>
-        <Badge
-          variant={available ? "success" : state?.status === "failed" ? "danger" : "secondary"}
-        >
-          {state ? labels[state.status] : "Loading"}
-        </Badge>
-      </div>
-      {state?.status === "disabled" ? (
-        <p className="text-xs text-muted-foreground">Other devices cannot connect to this host.</p>
-      ) : null}
-      {available && state.configuration ? (
-        <RemoteAddress
-          key={state.configuration.publicEndpoint}
-          endpoint={state.configuration.publicEndpoint}
-          connectedClients={state.connectedClients}
+    <section aria-label="Remote control" className="grid gap-5">
+      <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-xs">
+        <RemoteControlIcon on />
+        <div className="grid min-w-0 flex-1 gap-0.5">
+          <p className="text-sm font-medium text-foreground">Remote control is on</p>
+          <p role="status" className="text-xs text-muted-foreground">
+            {setup.pending
+              ? "Turning off remote control..."
+              : connectedDevicesLabel(state.connectedClients)}
+          </p>
+        </div>
+        <Switch
+          checked
+          disabled={setup.pending}
+          aria-label="Enable Remote Control"
+          onCheckedChange={setup.disable}
         />
-      ) : null}
-      <fieldset disabled={pending} className="flex flex-wrap gap-2">
-        {onOpenSettings ? (
-          <Button type="button" variant="outline" size="sm" onClick={onOpenSettings}>
-            <Settings data-icon="inline-start" />
-            Remote control settings
-          </Button>
-        ) : null}
-        {available ? (
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            className="ml-auto"
-            onClick={disable}
-          >
-            {pending ? (
-              <LoaderCircle data-icon="inline-start" className="animate-spin" />
-            ) : (
-              <Power data-icon="inline-start" />
-            )}
-            {pending ? "Disabling…" : "Disable remote control"}
-          </Button>
-        ) : null}
-      </fieldset>
-      {message ? (
-        <p role="alert" className="text-sm text-destructive-surface-foreground">
-          {message}
-        </p>
-      ) : null}
+      </div>
+      {setup.message ? <RemoteAccessFailure setup={setup} /> : null}
+      <RemoteDevices bridge={bridge} state={state} />
     </section>
   );
 }
 
-function useSharingControls(bridge: RemoteAccessBridge) {
-  const { state, error } = useRemoteAccess();
-  const action = useRemoteAccessAction(bridge);
-  const failure = state?.failure;
-  return {
-    state,
-    pending: action.isPending || state?.status === "starting",
-    message:
-      action.error?.message ?? error ?? (failure && `${failure.message} ${failure.nextAction}`),
-    disable: () => action.mutate(null),
-  };
+/** The network to share on: the list to choose from, or the saved address. */
+function SharingNetwork({ setup }: { setup: RemoteAccessSetup }) {
+  const { fields } = setup;
+  if (setup.networksPending)
+    return (
+      <p role="status" className="text-xs text-muted-foreground">
+        Reading networks...
+      </p>
+    );
+  if (fields.publicEndpoint !== undefined)
+    return (
+      <p className="text-xs text-muted-foreground">
+        Other devices connect to{" "}
+        <span className="break-all font-mono text-foreground">{fields.publicEndpoint}</span>
+      </p>
+    );
+  return (
+    <NetworkChoice
+      networks={setup.networks}
+      value={fields.listenHost}
+      onChange={(listenHost) => setup.change({ listenHost, publicEndpoint: undefined })}
+      onRefresh={setup.refreshNetworks}
+      refreshing={setup.refreshingNetworks}
+      disabled={setup.pending}
+    />
+  );
+}
+
+function SharingOff({ setup }: { setup: RemoteAccessSetup }) {
+  const { pending, fields } = setup;
+  return (
+    <section
+      aria-label="Remote control"
+      className="grid gap-5 rounded-xl border border-border bg-card p-5 shadow-xs"
+    >
+      <div className="flex items-start gap-4">
+        <RemoteControlIcon on={false} />
+        <div className="grid gap-1">
+          <h3 className="text-sm font-semibold text-foreground">
+            Use this computer from another device
+          </h3>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Turn on remote control, then add your phone or another computer with a one-time code.
+          </p>
+        </div>
+      </div>
+      <SharingNetwork setup={setup} />
+      {setup.message ? <RemoteAccessFailure setup={setup} /> : null}
+      <Button
+        type="button"
+        className="w-full"
+        disabled={pending || setup.networksPending || !setup.ready}
+        onClick={() => setup.enable(fields)}
+      >
+        {pending ? (
+          <LoaderCircle data-icon="inline-start" className="animate-spin" />
+        ) : (
+          <RadioTower data-icon="inline-start" />
+        )}
+        {pending ? "Turning on..." : "Turn on remote control"}
+      </Button>
+    </section>
+  );
+}
+
+function RemoteControlIcon({ on }: { on: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex size-10 shrink-0 items-center justify-center rounded-full bg-muted",
+        on ? "text-status-running-foreground" : "text-muted-foreground",
+      )}
+    >
+      <RadioTower className="size-4" />
+    </span>
+  );
 }

@@ -1,8 +1,4 @@
 import { WebHostRequestError } from "./effect/web-errors";
-import {
-  ARTIFACT_PREVIEW_BOOTSTRAP_PATH,
-  artifactPreviewBootstrapResponse,
-} from "./artifact-preview-bootstrap";
 import { z } from "zod";
 import {
   HOST_COMMAND_NAMES,
@@ -12,7 +8,9 @@ import {
   REMOTE_CONNECTION_HEADER,
   REMOTE_PROTOCOL_VERSION,
   REMOTE_TERMINAL_CONNECTION_PREFIX,
+  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
+  remoteConnectionRequestSchema,
   remoteClientHelloSchema,
   systemListOpenInToolsRequestSchema,
   taskEventCursorSchema,
@@ -20,6 +18,10 @@ import {
   type RemoteFailure,
   type RemoteHostDescriptor,
   type RemoteNegotiationResult,
+  type RemoteConnectionRequest,
+  isRemotePairingFailure,
+  readBearerToken,
+  remoteConnectionTokenSchema,
 } from "@openducktor/contracts";
 import {
   createLocalAttachmentAdapter,
@@ -27,6 +29,8 @@ import {
   type EffectNodeHostCommandRouter,
 } from "@openducktor/host";
 import { Effect } from "effect";
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import type { RemoteAdmissionPort } from "./remote-admission";
 import { createCombinedHostSseResponse } from "./combined-host-event-http-server";
 import { localAttachmentPreviewResponse } from "./local-attachment-preview";
 import { routeTaskAssetHttpRequest } from "./task-asset-http-server";
@@ -52,6 +56,8 @@ export type RemoteHostServices = Pick<
   | "taskAssetReadService"
 > & { eventBus: BufferedHostEventBus };
 type Connection = {
+  clientId: string;
+  token: string;
   abort: AbortController;
   leases: Set<string>;
   activeStreams: number;
@@ -80,7 +86,9 @@ export const createRemoteWorkInterface = (
     frontendOrigins?: ReadonlySet<string>;
     logger: WebLogger;
     reportFailure(cause: unknown): void;
-    onClientsChanged?(count: number): void;
+    /** Checks saved access or a pairing code, in the host admission order. */
+    admission: RemoteAdmissionPort;
+    onClientsChanged?(clients: ReadonlySet<string>): void;
   },
 ) => {
   const descriptor: RemoteHostDescriptor = {
@@ -88,7 +96,7 @@ export const createRemoteWorkInterface = (
     appVersion: options.appVersion,
     hostInstanceId: services.hostInstanceId,
     hostId: options.hostId,
-    accessPolicy: "network_reach",
+    accessPolicy: "pairing",
     protocols: [{ version: REMOTE_PROTOCOL_VERSION, capabilities: [...HOST_CAPABILITIES] }],
   };
   const endpoint = new URL(options.publicEndpoint);
@@ -112,9 +120,14 @@ export const createRemoteWorkInterface = (
   let closed = false;
   const clientsChanged = () =>
     options.onClientsChanged?.(
-      [...connections.values()].filter((connection) => connection.activeStreams > 0).length,
+      new Set(
+        [...connections.values()]
+          .filter((connection) => connection.activeStreams > 0)
+          .map((connection) => connection.clientId),
+      ),
     );
-  const release = (id: string) => {
+  /** Ends a connection. A batch of releases sends one client notice at its end instead. */
+  const release = (id: string, notify = true) => {
     const connection = connections.get(id);
     if (!connection) return;
     connections.delete(id);
@@ -124,7 +137,7 @@ export const createRemoteWorkInterface = (
       const lease = leases.get(leaseId);
       if (lease) leases.delete(lease);
     }
-    clientsChanged();
+    if (notify) clientsChanged();
   };
   const armExpiry = (id: string, connection: Connection) => {
     if (connection.expiry) clearTimeout(connection.expiry);
@@ -140,7 +153,9 @@ export const createRemoteWorkInterface = (
     const detach = () => {
       signal.removeEventListener("abort", detach);
       connection.activeStreams -= 1;
-      if (connections.get(id) === connection) armExpiry(id, connection);
+      // A released connection already sent its notice.
+      if (connections.get(id) !== connection) return;
+      armExpiry(id, connection);
       clientsChanged();
     };
     signal.addEventListener("abort", detach, { once: true });
@@ -149,95 +164,108 @@ export const createRemoteWorkInterface = (
   };
   const close = () => {
     closed = true;
-    for (const id of connections.keys()) release(id);
+    for (const id of connections.keys()) release(id, false);
+    clientsChanged();
     leases.dispose();
   };
   const negotiate = (
-    hello: ReturnType<typeof remoteClientHelloSchema.parse>,
-  ): RemoteNegotiationResult => {
-    if (closed)
-      return {
-        status: "rejected",
-        failure: failure(
-          "remote_disabled",
-          "Remote access is disabled.",
-          "Ask the host operator to enable remote access.",
-        ),
-      };
-    if (!hello.supportedProtocolVersions.includes(REMOTE_PROTOCOL_VERSION)) {
-      let updateSide: RemoteFailure["updateSide"] = "both";
-      if (hello.supportedProtocolVersions.every((version) => version > REMOTE_PROTOCOL_VERSION))
-        updateSide = "host";
-      else if (
-        hello.supportedProtocolVersions.every((version) => version < REMOTE_PROTOCOL_VERSION)
-      )
-        updateSide = "client";
-      return {
-        status: "rejected",
-        failure: {
-          ...failure(
-            "protocol_mismatch",
-            `Client ${hello.appVersion} protocols ${hello.supportedProtocolVersions.join(", ")} do not match ${descriptor.shell} ${descriptor.appVersion} protocol ${REMOTE_PROTOCOL_VERSION}.`,
-            `Update ${updateSide} to a release that supports a shared remote protocol.`,
-          ),
+    hello: RemoteConnectionRequest,
+    proof: string | null,
+  ): Effect.Effect<RemoteNegotiationResult> =>
+    options.admission.run(
+      Effect.gen(function* () {
+        if (closed)
+          return {
+            status: "rejected",
+            failure: failure(
+              "remote_disabled",
+              "Remote access is disabled.",
+              "Ask the host operator to enable remote access.",
+            ),
+          };
+        if (!hello.supportedProtocolVersions.includes(REMOTE_PROTOCOL_VERSION)) {
+          let updateSide: RemoteFailure["updateSide"] = "both";
+          if (hello.supportedProtocolVersions.every((version) => version > REMOTE_PROTOCOL_VERSION))
+            updateSide = "host";
+          else if (
+            hello.supportedProtocolVersions.every((version) => version < REMOTE_PROTOCOL_VERSION)
+          )
+            updateSide = "client";
+          return {
+            status: "rejected",
+            failure: {
+              ...failure(
+                "protocol_mismatch",
+                `Client ${hello.appVersion} protocols ${hello.supportedProtocolVersions.join(", ")} do not match ${descriptor.shell} ${descriptor.appVersion} protocol ${REMOTE_PROTOCOL_VERSION}.`,
+                `Update ${updateSide} to a release that supports a shared remote protocol.`,
+              ),
+              host: descriptor,
+              client: remoteClientHelloSchema.strip().parse(hello),
+              updateSide,
+            },
+          };
+        }
+        const capabilities = HOST_CAPABILITIES;
+        const missing = hello.requiredCapabilities.filter((name) => !capabilities.includes(name));
+        if (missing.length) {
+          const legacyTerminal = missing.every((name) => name === "terminal.v2");
+          return {
+            status: "rejected",
+            failure: {
+              ...failure(
+                "capability_missing",
+                `Required capabilities are unavailable: ${missing.join(", ")}.`,
+                legacyTerminal
+                  ? "Update the client to a release that supports terminal.v3."
+                  : "Update the host or use supported capabilities.",
+              ),
+              host: descriptor,
+              client: remoteClientHelloSchema.strip().parse(hello),
+              updateSide: legacyTerminal ? "client" : "host",
+              missingCapabilities: missing.map((name) => ({
+                name,
+                reason: "This host does not implement this capability.",
+              })),
+            },
+          };
+        }
+        if (connections.size >= MAX_CONNECTIONS)
+          return {
+            status: "rejected",
+            failure: failure(
+              "unavailable",
+              "The host connection limit is reached.",
+              "Close unused connections and retry.",
+            ),
+          };
+        const admitted = yield* Effect.result(options.admission.authorize(hello, proof));
+        if (admitted._tag === "Failure")
+          return { status: "rejected", failure: admitted.failure.failure };
+        const connectionId = crypto.randomUUID();
+        const connectionToken = randomBytes(32).toString("base64url");
+        const connection: Connection = {
+          clientId: admitted.success.clientId,
+          token: connectionToken,
+          abort: new AbortController(),
+          leases: new Set(),
+          activeStreams: 0,
+          expiry: null,
+        };
+        connections.set(connectionId, connection);
+        armExpiry(connectionId, connection);
+        return {
+          status: "accepted",
           host: descriptor,
-          client: hello,
-          updateSide,
-        },
-      };
-    }
-    const capabilities = HOST_CAPABILITIES;
-    const missing = hello.requiredCapabilities.filter((name) => !capabilities.includes(name));
-    if (missing.length) {
-      const legacyTerminal = missing.every((name) => name === "terminal.v2");
-      return {
-        status: "rejected",
-        failure: {
-          ...failure(
-            "capability_missing",
-            `Required capabilities are unavailable: ${missing.join(", ")}.`,
-            legacyTerminal
-              ? "Update the client to a release that supports terminal.v3."
-              : "Update the host or use supported capabilities.",
+          connectionId,
+          connectionToken,
+          authorization: admitted.success.authorization,
+          protocolVersion: REMOTE_PROTOCOL_VERSION,
+          missingOptionalCapabilities: hello.optionalCapabilities.filter(
+            (name) => !capabilities.includes(name),
           ),
-          host: descriptor,
-          client: hello,
-          updateSide: legacyTerminal ? "client" : "host",
-          missingCapabilities: missing.map((name) => ({
-            name,
-            reason: "This host does not implement this capability.",
-          })),
-        },
-      };
-    }
-    if (connections.size >= MAX_CONNECTIONS)
-      return {
-        status: "rejected",
-        failure: failure(
-          "unavailable",
-          "The host connection limit is reached.",
-          "Close unused connections and retry.",
-        ),
-      };
-    const connectionId = crypto.randomUUID();
-    const connection: Connection = {
-      abort: new AbortController(),
-      leases: new Set(),
-      activeStreams: 0,
-      expiry: null,
-    };
-    connections.set(connectionId, connection);
-    armExpiry(connectionId, connection);
-    return {
-      status: "accepted",
-      host: descriptor,
-      connectionId,
-      protocolVersion: REMOTE_PROTOCOL_VERSION,
-      missingOptionalCapabilities: hello.optionalCapabilities.filter(
-        (name) => !capabilities.includes(name),
-      ),
-    };
-  };
+        };
+      }),
+    );
   const handle = async (
     request: Request,
     server: NodeFetchServer<TerminalWebSocketData>,
@@ -259,7 +287,7 @@ export const createRemoteWorkInterface = (
         status: 204,
         headers: {
           ...cors,
-          "access-control-allow-headers": `content-type, last-event-id, ${REMOTE_CONNECTION_HEADER}`,
+          "access-control-allow-headers": `content-type, authorization, last-event-id, ${REMOTE_CONNECTION_HEADER}`,
           "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
           // Custom headers make each command preflight. Browsers reuse a preflight for 10 minutes.
           "access-control-max-age": "600",
@@ -288,27 +316,50 @@ export const createRemoteWorkInterface = (
       return await bodyRequest.json();
     };
     try {
-      if (route === ARTIFACT_PREVIEW_BOOTSTRAP_PATH && request.method === "GET" && !url.search) {
-        return artifactPreviewBootstrapResponse();
-      }
       if (route === "/" && request.method === "GET") return remoteJson(descriptor, 200, cors);
       if (route === "/connections" && request.method === "POST") {
-        const result = negotiate(remoteClientHelloSchema.parse(await jsonBody(routed)));
+        const body = await jsonBody(routed);
+        const parsed = remoteConnectionRequestSchema.safeParse(body);
+        let input: RemoteConnectionRequest;
+        if (parsed.success) input = parsed.data;
+        else {
+          // Legacy hellos are read only to return the compatibility refusal, never for admission.
+          const legacy = remoteClientHelloSchema.safeParse(body);
+          if (
+            !legacy.success ||
+            legacy.data.supportedProtocolVersions.includes(REMOTE_PROTOCOL_VERSION)
+          )
+            throw parsed.error;
+          input = { ...legacy.data, clientKind: "browser" };
+        }
+        const result = await Effect.runPromise(
+          negotiate(input, request.headers.get("authorization")),
+        );
         if (result.status === "rejected") return remoteFailureResponse(result.failure, cors);
         return remoteJson(result, 201, cors);
       }
-      const terminalTag =
+      const protocols =
         route === "/terminal"
-          ? (request.headers.get("sec-websocket-protocol") ?? "")
-              .split(",")
-              .map((v) => v.trim())
-              .find((v) => v.startsWith(REMOTE_TERMINAL_CONNECTION_PREFIX))
-              ?.slice(REMOTE_TERMINAL_CONNECTION_PREFIX.length)
-          : undefined;
+          ? (request.headers.get("sec-websocket-protocol") ?? "").split(",").map((v) => v.trim())
+          : [];
+      const terminalTag = protocols
+        .find((v) => v.startsWith(REMOTE_TERMINAL_CONNECTION_PREFIX))
+        ?.slice(REMOTE_TERMINAL_CONNECTION_PREFIX.length);
+      const authorizationTag = protocols
+        .find((v) => v.startsWith(REMOTE_TERMINAL_AUTHORIZATION_PREFIX))
+        ?.slice(REMOTE_TERMINAL_AUTHORIZATION_PREFIX.length);
+      const authorizationHeader = request.headers.get("authorization");
+      const token =
+        authorizationHeader === null
+          ? authorizationTag
+          : readBearerToken(authorizationHeader, remoteConnectionTokenSchema);
       const headerId = request.headers.get(REMOTE_CONNECTION_HEADER);
       // Browser WebSockets cannot set request headers, so they send the ID as a subprotocol.
       const id = headerId === null ? terminalTag : headerId;
-      if (terminalTag && headerId !== null && terminalTag !== headerId)
+      if (
+        (terminalTag && headerId !== null && terminalTag !== headerId) ||
+        (authorizationTag && authorizationHeader !== null && token !== authorizationTag)
+      )
         return remoteFailureResponse(
           failure(
             "invalid_protocol",
@@ -324,6 +375,19 @@ export const createRemoteWorkInterface = (
             "connection_expired",
             "Remote compatibility negotiation is required or has expired.",
             "Connect again with supported protocol versions and capabilities.",
+          ),
+          cors,
+        );
+      if (
+        !token ||
+        token.length !== connection.token.length ||
+        !timingSafeEqual(Buffer.from(token), Buffer.from(connection.token))
+      )
+        return remoteFailureResponse(
+          failure(
+            "authorization_rejected",
+            "The remote access credential is missing or invalid.",
+            "Enter the current host pairing code.",
           ),
           cors,
         );
@@ -409,13 +473,11 @@ export const createRemoteWorkInterface = (
         }
       }
       if (route === "/terminal" && request.method === "GET") {
-        const protocols = (request.headers.get("sec-websocket-protocol") ?? "")
-          .split(",")
-          .map((v) => v.trim());
         if (
-          protocols.length !== 2 ||
+          protocols.length !== 3 ||
           protocols[0] !== TERMINAL_PROTOCOL_SUBPROTOCOL ||
-          protocols[1] !== `${REMOTE_TERMINAL_CONNECTION_PREFIX}${id}`
+          protocols[1] !== `${REMOTE_TERMINAL_CONNECTION_PREFIX}${id}` ||
+          protocols[2] !== `${REMOTE_TERMINAL_AUTHORIZATION_PREFIX}${token}`
         )
           return remoteFailureResponse(
             failure(
@@ -525,14 +587,23 @@ export const createRemoteWorkInterface = (
       return remoteFailureResponse(
         failure(
           "invalid_protocol",
-          cause instanceof Error ? cause.message : String(cause),
+          "The remote request is invalid.",
           "Correct the request or reconnect with the supported protocol.",
         ),
         cors,
       );
     }
   };
-  return { handle, close, descriptor };
+  return {
+    handle,
+    close,
+    descriptor,
+    revokeClient: (clientId: string) => {
+      for (const [id, connection] of connections)
+        if (connection.clientId === clientId) release(id, false);
+      clientsChanged();
+    },
+  };
 };
 
 export const remoteJson = <const Payload>(
@@ -555,6 +626,8 @@ export const remoteFailureResponse = (
   let status = 409;
   if (failure.code === "protocol_mismatch") status = 426;
   else if (failure.code === "invalid_protocol") status = 400;
+  else if (isRemotePairingFailure(failure.code)) status = 401;
+  else if (failure.code === "authorization_storage_failed") status = 503;
   else if (failure.code === "remote_disabled" || failure.code === "unavailable") status = 503;
   return remoteJson({ status: "rejected", failure }, status, headers);
 };

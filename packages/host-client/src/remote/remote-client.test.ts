@@ -1,3 +1,8 @@
+import {
+  createAuthorizedRemoteTestClient as createRemoteHostClient,
+  TEST_HOST_ID,
+  TEST_CONNECTION_TOKEN,
+} from "./test-support/authorization";
 import { expect, spyOn, test } from "bun:test";
 import {
   REMOTE_BASELINE_CAPABILITIES,
@@ -12,7 +17,6 @@ import {
   type TaskEventStreamFrame,
 } from "@openducktor/contracts";
 import {
-  createRemoteHostClient,
   readSse,
   RemoteConnectionError,
   RemoteReplyTooLargeError,
@@ -31,7 +35,8 @@ const descriptor: RemoteHostDescriptor = {
   shell: "web",
   appVersion: "host-2",
   hostInstanceId: "instance-1",
-  accessPolicy: "network_reach",
+  hostId: TEST_HOST_ID,
+  accessPolicy: "pairing",
   protocols: [
     { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
   ],
@@ -83,6 +88,7 @@ const fixture = (capabilities: readonly string[] = []) => {
       if (url.endsWith("/connections"))
         return json({
           status: "accepted",
+          connectionToken: TEST_CONNECTION_TOKEN,
           host,
           connectionId: crypto.randomUUID(),
           protocolVersion: REMOTE_PROTOCOL_VERSION,
@@ -186,6 +192,7 @@ test.each(["recovery read", "host restart"])(
         if (args[1].endsWith("/connections"))
           return json({
             status: "accepted",
+            connectionToken: TEST_CONNECTION_TOKEN,
             host: { ...descriptor, hostInstanceId: "restarted-host" },
             connectionId: crypto.randomUUID(),
             protocolVersion: REMOTE_PROTOCOL_VERSION,
@@ -1578,6 +1585,7 @@ test("replacement and scoped gaps survive failed synchronization until reported"
         status: "accepted",
         host,
         connectionId: crypto.randomUUID(),
+        connectionToken: TEST_CONNECTION_TOKEN,
         protocolVersion: REMOTE_PROTOCOL_VERSION,
         missingOptionalCapabilities: [],
       });

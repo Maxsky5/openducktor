@@ -23,6 +23,9 @@ import {
 } from "@openducktor/contracts";
 import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "@openducktor/frontend/startup-splash/theme";
 import {
+  createFilesystemRemoteApprovalStore,
+  remoteHostOwnerFromEnvironment,
+  resolveOpenDucktorBaseDir,
   checkStartupSettingsEffect,
   resolveOpenDucktorLogDirectory,
   type EffectHostCommandRouter,
@@ -404,6 +407,9 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
       {
         shell: "electron",
         appVersion: currentVersion,
+        approvalStore: createFilesystemRemoteApprovalStore(
+          resolveOpenDucktorBaseDir(app.isPackaged ? "production" : "dev"),
+        ).open(remoteHostOwnerFromEnvironment("electron")),
         logger: {
           info: electronMainLogger.info,
           error: (message) => electronMainLogger.error(message),

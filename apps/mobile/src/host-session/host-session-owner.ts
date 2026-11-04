@@ -12,7 +12,13 @@ import {
 } from "@openducktor/frontend-core/recovery/remote-host-connection";
 import { parseRemoteHostEndpoint } from "@openducktor/frontend-core/recovery/remote-host-endpoint";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import type { RemoteConnectionState, RemoteTransport } from "@openducktor/host-client/remote";
+import type {
+  RemoteConnectionState,
+  RemoteTransport,
+  RemoteAuthorizationStore,
+  RemoteConnectInput,
+} from "@openducktor/host-client/remote";
+import { RemoteConnectionError, waitWithAbort } from "@openducktor/host-client/remote";
 import {
   type DamagedSavedHost,
   type InvalidDeviceRecord,
@@ -56,7 +62,8 @@ export type HostSessionDependencies = {
   /** Opens the separate store of one saved host. */
   openHostStore: (hostId: string) => DeviceKeyValueStore;
   /** Deletes all local data of one saved host. */
-  deleteHostStore: (hostId: string) => void;
+  deleteHostStore: (hostId: string) => Promise<void>;
+  openAuthorizationStore: (hostId: string) => RemoteAuthorizationStore;
   createTransport: () => RemoteTransport;
   createHostId: () => string;
   /** The app version that the host shows in compatibility failures. */
@@ -93,6 +100,8 @@ export class DraftSaveBeforeSwitchError extends Error {
   }
 }
 
+type DraftLossConfirmation = (cause: DraftSaveBeforeSwitchError) => Promise<boolean>;
+
 export type HostSessionOwner = {
   getState(): HostSessionState;
   subscribe(listener: () => void): () => void;
@@ -103,19 +112,26 @@ export type HostSessionOwner = {
    * address of the active host fails with an `AddHostError`.
    * `label` names a new host; without it, the host takes the name of its address.
    * `discardUnsavedDrafts` continues when the drafts of the current host cannot be saved.
+   * `confirmDraftLoss` keeps this approval while the user decides whether to discard drafts.
    * An abort of `signal` before the switch starts keeps the current host and saves nothing.
    */
   addHost(
     address: string,
-    options?: { signal?: AbortSignal; discardUnsavedDrafts?: boolean; label?: string },
+    options?: {
+      signal?: AbortSignal;
+      discardUnsavedDrafts?: boolean;
+      label?: string;
+      pairingCode?: string;
+      confirmDraftLoss?: DraftLossConfirmation;
+    },
   ): Promise<AddHostResult>;
   selectHost(hostId: string, options?: { discardUnsavedDrafts?: boolean }): Promise<void>;
   renameHost(hostId: string, label: string): void;
   removeHost(hostId: string): Promise<void>;
   /** Removes a damaged entry from the record, and the store of its ID. */
-  removeDamagedHost(key: string): void;
+  removeDamagedHost(key: string): Promise<void>;
   /** Removes an unreadable record and the stores of the host IDs that it still names. */
-  resetInvalidRecord(): void;
+  resetInvalidRecord(): Promise<void>;
 };
 
 const failureText = (failure: RemoteFailure): string => `${failure.message} ${failure.nextAction}`;
@@ -165,13 +181,20 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
     else if (state.status !== "invalid_record") publish({ ...state, ...lists() });
   };
 
-  const openSession = (host: SavedHost, hostStore: DeviceKeyValueStore): OpenedHostSession => {
+  const openSession = (
+    host: SavedHost,
+    hostStore: DeviceKeyValueStore,
+    initialConnect?: RemoteConnectInput,
+  ): OpenedHostSession => {
     const queryClient = createClientQueryClient();
     const remote = createRemoteHostConnection({
       endpoint: host.endpoint,
       version: deps.appVersion,
       transport: deps.createTransport(),
       queryClient,
+      clientKind: "mobile",
+      authorizationStore: deps.openAuthorizationStore(host.id),
+      initialConnect,
     });
     const connection = createClientConnection({
       host: remote,
@@ -196,7 +219,7 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
     stopHostIdWatch = opened.remote.remote.subscribeState((current) => {
       const hostId = current.status === "connected" ? current.host?.hostId : undefined;
       const saved = record.hosts.find((candidate) => candidate.id === opened.host.id);
-      if (!hostId || !saved || saved.hostId) return;
+      if (!hostId || !saved || saved.hostId === hostId) return;
       saveRecord({
         ...record,
         hosts: record.hosts.map((host) => (host.id === saved.id ? { ...host, hostId } : host)),
@@ -218,18 +241,27 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
   const closeSession = async ({
     discardUnsavedDrafts,
     signal,
+    confirmDraftLoss,
   }: {
     discardUnsavedDrafts: boolean;
     signal?: AbortSignal | undefined;
+    confirmDraftLoss?: DraftLossConfirmation | undefined;
   }) => {
     const current = session;
-    if (current && !discardUnsavedDrafts) {
+    let discard = discardUnsavedDrafts;
+    if (current && !discard) {
       try {
         await current.connection.saveDrafts();
       } catch (cause) {
-        throw new DraftSaveBeforeSwitchError(
+        const failure = new DraftSaveBeforeSwitchError(
           `Some drafts for ${current.host.label} could not be saved: ${errorMessage(cause)} Stay on this host to keep them, or continue and lose the unsaved draft changes.`,
         );
+        if (!confirmDraftLoss) throw failure;
+        signal?.throwIfAborted();
+        const answer = confirmDraftLoss(failure);
+        const proceed = await (signal ? waitWithAbort(answer, signal) : answer);
+        if (!proceed) throw failure;
+        discard = true;
       }
     }
     signal?.throwIfAborted();
@@ -239,7 +271,7 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
     stopHostIdWatch = null;
     current.lifecycle.stop();
     publish({ status: "switching", ...lists(), host: current.host });
-    if (!discardUnsavedDrafts) {
+    if (!discard) {
       // The tree stayed open during the first save, so this save writes the edits made meanwhile.
       await current.connection.saveDrafts().catch((cause: unknown) =>
         deps.feedback.show("error", `Some draft changes for ${current.host.label} were not saved`, {
@@ -307,22 +339,70 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
     known: SavedHost,
     reached: Pick<SavedHost, "endpoint" | "shell">,
     candidate: OpenedHostSession,
-    options: { discardUnsavedDrafts: boolean; signal?: AbortSignal | undefined },
+    options: {
+      discardUnsavedDrafts: boolean;
+      signal?: AbortSignal | undefined;
+      confirmDraftLoss?: DraftLossConfirmation | undefined;
+    },
   ): Promise<AddHostResult> => {
     await release(candidate.connection);
-    deps.deleteHostStore(candidate.host.id);
-    await closeSession(options);
-    const moved: SavedHost = { ...known, ...reached };
-    saveRecord({
-      ...record,
-      activeHostId: known.id,
-      hosts: record.hosts.map((host) => (host.id === known.id ? moved : host)),
-    });
-    activate(openSession(moved, deps.openHostStore(known.id)));
-    deps.feedback.show("success", `${known.label} is at a new address`, {
-      description: reached.endpoint,
-    });
-    return { kind: "moved", host: moved };
+    try {
+      const grant = await deps.openAuthorizationStore(candidate.host.id).read(reached.endpoint);
+      if (!grant)
+        throw new AddHostError(
+          "Saved access is missing on this device. Enter a fresh host code.",
+          null,
+        );
+      // The old access stays until the new address connects, so a failed move keeps the host usable.
+      const knownAccess = deps.openAuthorizationStore(known.id);
+      const previous = await knownAccess.read(known.endpoint).catch((cause: unknown) => {
+        // Damaged saved access cannot connect, so the move has nothing to keep.
+        if (
+          cause instanceof RemoteConnectionError &&
+          cause.failure.code === "authorization_rejected"
+        )
+          return null;
+        throw cause;
+      });
+      await closeSession(options);
+      options.signal?.throwIfAborted();
+      await knownAccess.save(grant);
+      const moved: SavedHost = { ...known, ...reached, hostId: grant.authorization.hostId };
+      const opened = openSession(
+        moved,
+        deps.openHostStore(known.id),
+        options.signal ? { signal: options.signal } : undefined,
+      );
+      try {
+        await waitForConnected(opened.remote, options.signal);
+        options.signal?.throwIfAborted();
+        await deps.deleteHostStore(candidate.host.id);
+        options.signal?.throwIfAborted();
+        saveRecord({
+          ...record,
+          activeHostId: known.id,
+          hosts: record.hosts.map((host) => (host.id === known.id ? moved : host)),
+        });
+        activate(opened);
+      } catch (cause) {
+        await release(opened.connection);
+        if (previous) await knownAccess.save(previous);
+        throw cause;
+      }
+      deps.feedback.show("success", `${known.label} is at a new address`, {
+        description: reached.endpoint,
+      });
+      return { kind: "moved", host: moved };
+    } catch (cause) {
+      await deps.deleteHostStore(candidate.host.id);
+      if (!session) {
+        publishIdle();
+        deps.feedback.show("error", `Could not move ${known.label}`, {
+          description: errorMessage(cause),
+        });
+      }
+      throw cause;
+    }
   };
 
   const owner: HostSessionOwner = {
@@ -349,7 +429,15 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
     },
     addHost: (address, options) =>
       serialize(async () => {
-        const discardUnsavedDrafts = options?.discardUnsavedDrafts ?? false;
+        const switchOptions = {
+          discardUnsavedDrafts: options?.discardUnsavedDrafts ?? false,
+          signal: options?.signal,
+          confirmDraftLoss: options?.confirmDraftLoss,
+        };
+        // The first connection of the opened host takes only the code and the cancel signal.
+        const connectInput: RemoteConnectInput = {};
+        if (options?.signal) connectInput.signal = options.signal;
+        if (options?.pairingCode !== undefined) connectInput.pairingCode = options.pairingCode;
         let endpoint: string;
         try {
           endpoint = parseRemoteHostEndpoint(address, { requireHttps: false });
@@ -364,10 +452,25 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
               null,
             );
           }
-          await closeSession({ discardUnsavedDrafts, signal: options?.signal });
-          saveRecord({ ...record, activeHostId: existing.id });
-          activate(openSession(existing, deps.openHostStore(existing.id)));
-          return { kind: "selected", host: existing };
+          const opened = openSession(existing, deps.openHostStore(existing.id), connectInput);
+          try {
+            const current = await waitForConnected(opened.remote, options?.signal);
+            await closeSession(switchOptions);
+            options?.signal?.throwIfAborted();
+            const refreshed = { ...existing };
+            if (current.host?.hostId) refreshed.hostId = current.host.hostId;
+            saveRecord({
+              ...record,
+              activeHostId: existing.id,
+              hosts: record.hosts.map((host) => (host.id === existing.id ? refreshed : host)),
+            });
+            activate({ ...opened, host: refreshed });
+            return { kind: "selected", host: refreshed };
+          } catch (cause) {
+            await release(opened.connection);
+            if (!session) publishIdle();
+            throw cause;
+          }
         }
         const id = deps.createHostId();
         const candidateHost: SavedHost = {
@@ -376,31 +479,31 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
           label: options?.label?.trim() || defaultLabel(endpoint),
           shell: "web",
         };
-        const candidate = openSession(candidateHost, deps.openHostStore(id));
+        const candidate = openSession(candidateHost, deps.openHostStore(id), connectInput);
+        // A failed candidate leaves no saved host and no store behind.
+        const discardCandidate = async (cause: unknown): Promise<never> => {
+          await release(candidate.connection);
+          await deps.deleteHostStore(id);
+          if (!session) publishIdle();
+          throw cause;
+        };
         let connected: RemoteConnectionState;
         try {
           connected = await waitForConnected(candidate.remote, options?.signal);
         } catch (cause) {
-          await release(candidate.connection);
-          deps.deleteHostStore(id);
-          throw cause;
+          return discardCandidate(cause);
         }
         const shell = connected.host?.shell ?? "web";
         const hostId = connected.host?.hostId;
         const known = hostId ? record.hosts.find((saved) => saved.hostId === hostId) : undefined;
-        if (known)
-          return moveHost(known, { endpoint, shell }, candidate, {
-            discardUnsavedDrafts,
-            signal: options?.signal,
-          });
+        if (known) return moveHost(known, { endpoint, shell }, candidate, switchOptions);
         const host: SavedHost = { ...candidateHost, shell };
         if (hostId) host.hostId = hostId;
         try {
-          await closeSession({ discardUnsavedDrafts, signal: options?.signal });
+          await closeSession(switchOptions);
+          options?.signal?.throwIfAborted();
         } catch (cause) {
-          await release(candidate.connection);
-          deps.deleteHostStore(id);
-          throw cause;
+          return discardCandidate(cause);
         }
         saveRecord({ ...record, activeHostId: id, hosts: [...record.hosts, host] });
         activate({ ...candidate, host });
@@ -431,11 +534,21 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
     },
     removeHost: (hostId) =>
       serialize(async () => {
-        findHost(hostId);
+        const host = findHost(hostId);
         const wasActive = session?.host.id === hostId;
         // The user confirmed that unsent drafts of this host are deleted.
         if (wasActive) await closeSession({ discardUnsavedDrafts: true });
-        deps.deleteHostStore(hostId);
+        try {
+          await deps.deleteHostStore(hostId);
+        } catch (cause) {
+          if (wasActive) {
+            publishIdle();
+            deps.feedback.show("error", `Could not remove ${host.label}`, {
+              description: errorMessage(cause),
+            });
+          }
+          throw cause;
+        }
         saveRecord({
           ...record,
           activeHostId: record.activeHostId === hostId ? null : record.activeHostId,
@@ -444,27 +557,33 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
         if (session) publish({ status: "active", ...lists(), session });
         else publishIdle();
       }),
-    removeDamagedHost(key) {
-      const entry = record.damagedHosts.find((candidate) => candidate.key === key);
-      if (!entry) throw new Error("This damaged host is already removed.");
-      // A saved host with the same ID owns that store, so the store stays. The app never opens
-      // the store of a damaged entry, so the store can go.
-      if (entry.id !== null && !record.hosts.some((host) => host.id === entry.id)) {
-        deps.deleteHostStore(entry.id);
-      }
-      saveRecord({
-        ...record,
-        damagedHosts: record.damagedHosts.filter((candidate) => candidate !== entry),
-      });
-      publishLists();
-    },
-    resetInvalidRecord() {
-      if (state.status !== "invalid_record") return;
-      // The app opens no host store before it can read the record, so each store can go.
-      for (const hostId of state.hostIds) deps.deleteHostStore(hostId);
-      deps.appStore.remove(state.invalid.key);
-      owner.start();
-    },
+    removeDamagedHost: (key) =>
+      serialize(async () => {
+        const entry = record.damagedHosts.find((candidate) => candidate.key === key);
+        if (!entry) throw new Error("This damaged host is already removed.");
+        // A saved host with the same ID owns that store, so the store stays. The app never opens
+        // the store of a damaged entry, so the store can go.
+        if (entry.id !== null && !record.hosts.some((host) => host.id === entry.id)) {
+          await deps.deleteHostStore(entry.id);
+        }
+        saveRecord({
+          ...record,
+          damagedHosts: record.damagedHosts.filter((candidate) => candidate !== entry),
+        });
+        publishLists();
+      }),
+    resetInvalidRecord: () =>
+      serialize(async () => {
+        if (state.status !== "invalid_record") return;
+        // The app opens no host store before it can read the record, so each store can go.
+        for (const hostId of state.hostIds) {
+          // Stop at the first failed deletion and keep the record for a retry.
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop
+          await deps.deleteHostStore(hostId);
+        }
+        deps.appStore.remove(state.invalid.key);
+        owner.start();
+      }),
   };
   return owner;
 };

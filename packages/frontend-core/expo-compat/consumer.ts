@@ -37,6 +37,8 @@ const nativeFeedback: ClientFeedback = {
 export const connectToHost = (endpoint: string) => {
   const queryClient = createClientQueryClient();
   const host = createRemoteHostConnection({
+    clientKind: "mobile",
+    authorizationStore: { read: async () => null, save: async () => {} },
     endpoint,
     version: "mobile-release",
     transport: nativeTransport,

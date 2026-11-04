@@ -1,7 +1,10 @@
 import {
   REMOTE_CONNECTION_HEADER,
   REMOTE_TERMINAL_CONNECTION_PREFIX,
+  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
+  readBearerToken,
+  remoteConnectionTokenSchema,
 } from "@openducktor/contracts";
 import { remoteError, type RemoteTerminalConnection } from "./transport";
 
@@ -35,7 +38,8 @@ export const openRemoteTerminalSocket = (
 ): Promise<RemoteTerminalConnection> =>
   new Promise((resolve, reject) => {
     const connectionId = headers[REMOTE_CONNECTION_HEADER];
-    if (!connectionId) {
+    const token = readBearerToken(headers.authorization, remoteConnectionTokenSchema);
+    if (!connectionId || !token) {
       reject(
         remoteError(
           "connection_expired",
@@ -48,6 +52,7 @@ export const openRemoteTerminalSocket = (
     const socket = createSocket([
       TERMINAL_PROTOCOL_SUBPROTOCOL,
       `${REMOTE_TERMINAL_CONNECTION_PREFIX}${connectionId}`,
+      `${REMOTE_TERMINAL_AUTHORIZATION_PREFIX}${token}`,
     ]);
     socket.binaryType = "arraybuffer";
     let opened = false;

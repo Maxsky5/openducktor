@@ -73,9 +73,10 @@ flowchart TD
 
 - The app saves a host only after discovery, negotiation, and the first synchronization succeed.
 - One `ClientConnection` exists for the active saved host. A host switch saves drafts, unmounts the connection tree, disposes the connection, and creates a new one.
-- Each saved host has its own MMKV instance for drafts, the selected workspace, and UI state. Removing a host deletes that instance.
-- A saved host keeps the `hostId` of the discovery reply. A host from before host IDs gets it at its next connection.
-- When an added address answers with the `hostId` of a saved host, the app moves that saved host to the new address. It keeps its name and its MMKV instance, and the app adds no second entry.
+- Each saved host has its own MMKV instance for drafts, the selected workspace, and UI state. Credentials use Expo SecureStore. Host removal waits for both stores to be cleared and reports a failure before removing the saved entry.
+- A saved host keeps the scoped `hostId` after authorization. Pairing at a known address replaces a legacy host ID while retaining its device-local ID, label, and drafts. A legacy global ID never merges hosts.
+- After secure pairing at a new address, the app can move a saved host with the same scoped `hostId` to that address. It keeps its name and its MMKV instance, and the app adds no second entry.
+- If drafts cannot be saved during Add Host, the same attempt keeps its approved connection while the user confirms draft loss. Consent continues the switch without another code. Cancel keeps the current host and removes the temporary candidate.
 - The app reads each entry of the saved host record on its own. A damaged entry stays unchanged in the record until the user removes it. The host lists show it with its reason and a Remove action. Removing it deletes the MMKV instance of its ID. An active host ID of a damaged entry means no active host.
 - Only a saved host record that is not JSON or has no host list shows the reset screen. The reset deletes the record and the MMKV instance of each host ID that the record still names.
 - The lifecycle controller keeps the connection active in the foreground with a network link.
@@ -147,7 +148,7 @@ Follow these rules, or sheets and screens open and close late. React Native show
 
 The `ios` and `android` commands build the isolated pages first, so a new clone needs no other step.
 
-The app needs a host with Remote control turned on. Open Settings, Remote control on the host, enable it, and copy the address or show its QR code.
+The app needs a protocol 4 host with Remote control turned on. Scan its pairing QR code to connect directly, or enter its address and six-digit code. Typing the sixth digit connects. Tap a digit to replace it; a corrected full code waits for Connect. A failure shows its reason and next action in a callout below the code. Saved access needs no new code after restart or suspension. Wrong, expired, used, or revoked access keeps the address and asks for a current code. Codes and credentials do not encrypt HTTP traffic. Use HTTPS or a protected network. On the host, open Host connection or Settings, Remote control, turn it on, and select Add device. Then copy the address or open the QR code tab.
 
 ### Android setup
 
@@ -211,7 +212,7 @@ Run these commands in `apps/mobile`. `bun run ios`, `bun run android`, and `bun 
 | Lists | `@shopify/flash-list` v2, with `patches/@shopify%2Fflash-list@2.3.3.patch`. The patch applies the guard of the open upstream pull request [Shopify/flash-list#2293](https://github.com/Shopify/flash-list/pull/2293): a cell layout event that arrives after the list data shrank no longer stops the app. It also changes the anchor of an inverted list. See [Transcript list](#transcript-list). Remove each part when a release has it. |
 | Motion and gestures | `react-native-reanimated` 4, `react-native-worklets`, `react-native-gesture-handler` |
 | Keyboard | `react-native-keyboard-controller`, `modules/openducktor-keyboard` |
-| Storage | `react-native-mmkv` v4. The app stores no credential. Use Expo SecureStore for a later sensitive value. |
+| Storage | `react-native-mmkv` v4 for device data and `expo-secure-store` for host credentials. No biometric prompt or plaintext credential fallback. |
 | Network | `modules/openducktor-network`, `expo-network` for link state |
 | Files and images | `expo-file-system`, `expo-document-picker`, `expo-image-picker`, `expo-image-manipulator`, `expo-image` |
 | Camera | `expo-camera` for the host QR code only |

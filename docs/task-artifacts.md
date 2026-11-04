@@ -61,7 +61,7 @@ HTML previews block network access. Remote scripts, styles, images, fonts, frame
 
 In the tested Chromium 152 and 155 runtimes, constructing a WebRTC connection can stop the isolated preview frame. The app remains open, but the preview cannot recover from this runtime failure. Remove the WebRTC call from the file or download the original if this occurs.
 
-Both shells load the same constant trusted bootstrap response. It contains no task data or credentials. The response sets `Connection-Allowlist: ()`, a restrictive Content Security Policy, a restrictive Permissions Policy, `Referrer-Policy: no-referrer`, and `Cache-Control: no-store`. Browser hosts serve `/artifact-preview-bootstrap` under their configured mount path. Electron serves the fixed response through a dedicated secure protocol.
+Both shells load the same constant trusted bootstrap response. It contains no task data or credentials. The response sets `Connection-Allowlist: ()`, a restrictive Content Security Policy, a restrictive Permissions Policy, `Referrer-Policy: no-referrer`, and `Cache-Control: no-store`. Browser shells serve `/artifact-preview-bootstrap` from the frontend origin in development and static delivery. The work listener does not serve it. The standalone client output removes inherited app headers for this path and applies the bootstrap policy. Artifact content still requires an authorized host read. Electron serves the fixed response through a dedicated secure protocol, for the local host and for remote hosts.
 
 The bootstrap and its nested HTML frame use `sandbox="allow-scripts"` without same-origin permission. The app sends the selected HTML through a private MessageChannel only after the trusted bootstrap is ready. Each preview generation owns its frames and channel ports. Changing the HTML content, selecting another artifact, or closing the view disposes them. A startup failure reports an error and does not switch to an unrestricted preview.
 
@@ -104,7 +104,7 @@ For a new free code, the MCP caller chooses the code and supplies `name`, `fileN
 
 This release replaces document-named public tools and fields without aliases. `odt_read_task_documents` becomes `odt_read_task_artifacts`. `documentSummary` becomes `artifactSummary`, and task read `documents` becomes `artifacts`. All workflow saves use `odt_set_task_artifact` with a workflow code. Update custom prompt overrides to use the current reader, setter, and code inputs.
 
-The MCP bridge and remote host protocol use version 3. Update the host, clients, and MCP package together. Incompatible peers fail with an update action instead of translating old requests.
+The MCP bridge uses version 3. The remote host protocol uses version 4. Update the host, clients, and MCP package together. Incompatible peers fail with an update action instead of translating old requests.
 
 The SQLite migration copies workflow content, revisions, timestamps, provenance, and QA verdicts into `tasks_artifacts`, then removes `task_documents`. It preserves workflow Markdown as text and stores free files as BLOBs. All hosts that share an upgraded workspace must use the new schema. An older binary cannot use the migrated database. Downgrade requires a compatible database backup.
 

@@ -38,7 +38,6 @@ export const withSerializedConfigWrites = (
     updateSidebarSessionGrouping: (grouping) =>
       serialize(service.updateSidebarSessionGrouping(grouping)),
     setTheme: (theme) => serialize(service.setTheme(theme)),
-    readHostId: () => serialize(service.readHostId()),
     saveRemoteAccessSettings: (settings) => serialize(service.saveRemoteAccessSettings(settings)),
   };
 };

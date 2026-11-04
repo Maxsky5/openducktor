@@ -3,7 +3,10 @@ import "@openducktor/frontend/styles.css";
 import { createBrowserShellBridge } from "./browser-shell-bridge";
 import { loadBrowserRuntimeConfig } from "./runtime-config";
 import { getBrowserBackendUrl, isRemoteBrowserMode } from "./browser-config";
-import { createRemoteShellBridge } from "@openducktor/frontend/lib/remote/shell-bridge";
+import {
+  createRemoteShellBridge,
+  confirmBrowserRemoteAccess,
+} from "@openducktor/frontend/lib/remote/shell-bridge";
 import { createBrowserRemoteTransport } from "@openducktor/frontend/lib/remote/transport";
 import { getAppVersion } from "@openducktor/frontend/lib/app-version";
 import { createBrowserNotificationBridge } from "./browser-notification-bridge";
@@ -25,6 +28,17 @@ async function startClient(): Promise<void> {
           transport: createBrowserRemoteTransport(),
           notifications: createBrowserNotificationBridge({ scope: endpoint }),
           queryClient,
+        });
+      },
+      confirmRemoteAccess: (endpoint, pairingCode) => {
+        const version = getAppVersion();
+        if (!version) throw new Error("The client app version is missing. Rebuild the web client.");
+        return confirmBrowserRemoteAccess({
+          clientKind: "browser",
+          endpoint,
+          version,
+          pairingCode,
+          transport: createBrowserRemoteTransport(),
         });
       },
     },

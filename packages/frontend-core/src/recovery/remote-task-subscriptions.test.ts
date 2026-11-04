@@ -1,10 +1,11 @@
+import {
+  createAuthorizedRemoteTestClient as createRemoteHostClient,
+  TEST_HOST_ID,
+  TEST_CONNECTION_TOKEN,
+} from "../../../host-client/src/remote/test-support/authorization";
 import { expect, test } from "bun:test";
 import { REMOTE_PROTOCOL_VERSION, type ExternalTaskSyncEvent } from "@openducktor/contracts";
-import {
-  createRemoteHostClient,
-  type RemoteTransport,
-  type RemoteHttpResponse,
-} from "@openducktor/host-client/remote";
+import { type RemoteTransport, type RemoteHttpResponse } from "@openducktor/host-client/remote";
 import { createTaskStreamController } from "../tasks/task-stream-controller";
 import type { TaskViewSync } from "../queries/task-view-sync";
 import type { AgentSessionViewSync } from "../queries/agent-session-view-sync";
@@ -31,7 +32,8 @@ test("restores task delivery after disconnect during acknowledgement and after i
     shell: "web",
     appVersion: "1",
     hostInstanceId: "host",
-    accessPolicy: "network_reach",
+    hostId: TEST_HOST_ID,
+    accessPolicy: "pairing",
     protocols: [{ version: REMOTE_PROTOCOL_VERSION, capabilities: [] }],
   };
   const cursor = { epoch: crypto.randomUUID(), sequence: 0 };
@@ -70,6 +72,7 @@ test("restores task delivery after disconnect during acknowledgement and after i
       if (url.endsWith("/connections"))
         return json({
           status: "accepted",
+          connectionToken: TEST_CONNECTION_TOKEN,
           host,
           connectionId: crypto.randomUUID(),
           protocolVersion: REMOTE_PROTOCOL_VERSION,

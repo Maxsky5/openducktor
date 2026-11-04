@@ -106,6 +106,8 @@ configureShellBridge({
         listeners.delete(listener);
       };
     },
+    connect: async () => {},
+    disconnect: async () => {},
     retry: async () => {},
   },
 });

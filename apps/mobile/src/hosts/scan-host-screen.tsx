@@ -56,8 +56,8 @@ function CloseButton({
 }
 
 /**
- * Scans the QR code that Remote control shows on the host. The code contains only the host
- * address, so the app treats the text as typed input. The camera starts only on this screen.
+ * Scans a pairing QR code or a host address. The Add host form consumes the transient scan once.
+ * The camera starts only on this screen.
  */
 export function ScanHostScreen(): ReactElement {
   const navigation = useNavigation();

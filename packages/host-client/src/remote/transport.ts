@@ -1,4 +1,4 @@
-import type { RemoteFailure } from "@openducktor/contracts";
+import { type RemoteFailure, remoteFailureText } from "@openducktor/contracts";
 export type RemoteHttpResponse = {
   status: number;
   headers: Readonly<Record<string, string>>;
@@ -23,7 +23,7 @@ export interface RemoteTransport {
 }
 export class RemoteConnectionError extends Error {
   constructor(readonly failure: RemoteFailure) {
-    super(`${failure.message} ${failure.nextAction}`);
+    super(remoteFailureText(failure));
     this.name = "RemoteConnectionError";
   }
 }

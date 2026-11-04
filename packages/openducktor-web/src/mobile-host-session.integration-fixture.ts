@@ -71,9 +71,9 @@ const createLoopbackTransport = (port: number): RemoteTransport => {
   };
 };
 
-const waitFor = async (check: () => boolean, description: string) => {
+const waitFor = async (check: () => boolean | Promise<boolean>, description: string) => {
   const deadline = Date.now() + 8_000;
-  while (!check()) {
+  while (!(await check())) {
     if (Date.now() > deadline) throw new Error(`Timed out waiting for ${description}.`);
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
@@ -115,6 +115,7 @@ try {
     appStore,
     openHostStore: hostStores.open,
     deleteHostStore: hostStores.remove,
+    openAuthorizationStore: hostStores.authorization,
     createTransport: () => createLoopbackTransport(port),
     createHostId: () => "real-host",
     appVersion: "mobile-integration",
@@ -133,7 +134,9 @@ try {
   owner.start();
 
   // Discovery, negotiation, the event stream, and the first synchronization use the real host.
-  const added = await owner.addHost(endpoint.href);
+  const added = await owner.addHost(endpoint.href, {
+    pairingCode: (await Effect.runPromise(backend.remoteAccess.startPairing())).pairing!.code,
+  });
   assert.equal(added.kind, "added");
   assert.equal(added.host.shell, "web");
   const state = owner.getState();
@@ -141,6 +144,9 @@ try {
   if (state.status !== "active") throw new Error("The host did not become active.");
   const { connection, remote } = state.session;
   assert.equal(remote.remote.readState().status, "connected");
+  const connectedClients = async () =>
+    (await Effect.runPromise(backend.remoteAccess.readState())).connectedClients;
+  await waitFor(async () => (await connectedClients()) === 1, "the device to show as connected");
 
   // Host commands run through the admitted connection.
   const workspaces = await connection.host.client.workspaceList();
@@ -183,9 +189,15 @@ try {
       remote.remote.readState().generation > generation,
     "the reconnect",
   );
+  await waitFor(
+    async () => (await connectedClients()) === 1,
+    "one connected device after reconnect",
+  );
 
   // Removing the host releases the admission and deletes its local data.
   await owner.removeHost("real-host");
+  // Releasing the admission ends its streams, so the host shows the device offline at once.
+  await waitFor(async () => (await connectedClients()) === 0, "the device to show as offline");
   assert.deepEqual(hostStores.deleted, ["real-host"]);
   assert.equal(owner.getState().status, "no_host");
 } finally {

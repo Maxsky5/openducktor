@@ -1,13 +1,28 @@
-import { createRemoteHostConnection } from "@openducktor/frontend-core/recovery/remote-host-connection";
+import {
+  confirmRemoteAccess,
+  createRemoteHostConnection,
+} from "@openducktor/frontend-core/recovery/remote-host-connection";
 import { createRemoteTerminalBridge } from "@openducktor/frontend-core/terminals/remote-terminal-bridge";
 import {
   remoteError,
   type RemoteHostClient,
   type RemoteTransport,
 } from "@openducktor/host-client/remote";
+import { browserRemoteAuthorizationStore } from "./authorization-store";
+import type { RemoteClientKind } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { createDisabledAppUpdateBridge, type ShellBridge } from "../shell-bridge";
 import { browserArtifactPreviewEnvironment } from "../artifact-preview-environment";
+
+/** Confirms that a browser or desktop client can use a host, and pairs it when a code is given. */
+export const confirmBrowserRemoteAccess = (input: {
+  endpoint: string;
+  version: string;
+  transport: RemoteTransport;
+  pairingCode: string | undefined;
+  clientKind: RemoteClientKind;
+}): Promise<void> =>
+  confirmRemoteAccess({ ...input, authorizationStore: browserRemoteAuthorizationStore });
 
 /** Creates the browser shell of a remote host. The frontend core owns the connection recovery. */
 export const createRemoteShellBridge = ({
@@ -16,18 +31,28 @@ export const createRemoteShellBridge = ({
   transport,
   notifications,
   queryClient,
+  clientKind = "browser",
 }: {
   endpoint: string;
   version: string;
   transport: RemoteTransport;
   notifications: ShellBridge["notifications"];
   queryClient: QueryClient;
+  clientKind?: RemoteClientKind;
 }): ShellBridge => {
-  const connection = createRemoteHostConnection({ endpoint, version, transport, queryClient });
+  const connection = createRemoteHostConnection({
+    endpoint,
+    version,
+    transport,
+    queryClient,
+    authorizationStore: browserRemoteAuthorizationStore,
+    clientKind,
+  });
   const { remote, waitForAdmission, subscribeRecovery: _subscribeRecovery, ...host } = connection;
   return {
     ...host,
-    getArtifactPreviewEnvironment: async () => browserArtifactPreviewEnvironment(endpoint),
+    getArtifactPreviewEnvironment: async () =>
+      browserArtifactPreviewEnvironment(window.location.origin),
     remoteConnection: remote,
     dispose: () => remote.disconnect(),
     setActive: (active) => remote.setActive(active),
