@@ -3,7 +3,6 @@ import {
   createTaskWorkflow,
   resolveWorkflowBoard,
   taskWorkflowDescriptor,
-  workflowAction,
   workflowRoleCatalog,
 } from "@openducktor/workflows";
 import {
@@ -1100,7 +1099,7 @@ describe("useKanbanSessionStartFlow", () => {
         }
       }
     });
-    const action = workflowAction(workflow, "human_request_changes");
+    const action = workflow.action("human_request_changes");
     const task = createWorkflowTaskCardFixture(workflow, BUILTIN_BOARD, {
       id: "TASK-1",
       status: "human_review",

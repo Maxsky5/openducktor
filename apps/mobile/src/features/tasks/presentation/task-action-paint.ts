@@ -3,7 +3,6 @@ import {
   type TaskWorkflowAction,
   type ResolvedTaskCard,
   workflowRoleIcon,
-  workflowAction,
 } from "@openducktor/workflows";
 import type { IconName } from "@/ui/icon";
 
@@ -11,11 +10,8 @@ import type { IconName } from "@/ui/icon";
  * The role of an action that starts a role session. The desktop shows the role icon on these
  * actions, in place of the action icon.
  */
-export const taskActionRole = (
-  actionId: TaskWorkflowAction,
-  task: ResolvedTaskCard,
-): string | null => {
-  const action = workflowAction(task.taskWorkflow, actionId);
+const taskActionRole = (actionId: TaskWorkflowAction, task: ResolvedTaskCard): string | null => {
+  const action = task.taskWorkflow.action(actionId);
   if (action.kind !== "session") return null;
   const step = task.workflowSteps.find(({ id }) => id === action.stepId);
   return step?.kind === "agent" ? step.roleId : null;
@@ -28,12 +24,12 @@ export const taskActionRoleIcon = (
   return role ? workflowRoleIcon(task.taskWorkflow, role) : undefined;
 };
 export const taskActionIcon = (action: string, task: ResolvedTaskCard): IconName => {
-  const hint = workflowAction(task.taskWorkflow, action).icon;
+  const hint = task.taskWorkflow.action(action).icon;
   return hint ? TASK_ACTION_ICONS[hint] : "arrow-right";
 };
 
 /** The icon of each workflow action, on its button and in the actions menu, after the desktop. */
-export const TASK_ACTION_ICONS = {
+const TASK_ACTION_ICONS = {
   specification: "file-pen",
   planning: "route",
   building: "hammer",

@@ -20,7 +20,7 @@ export type BuiltinIssueTypeId = (typeof BUILTIN_ISSUE_TYPE_IDS)[number];
 export const BUILTIN_ROLE_IDS = ["spec", "planner", "build", "qa"] as const;
 export type BuiltinRoleId = (typeof BUILTIN_ROLE_IDS)[number];
 
-export const BUILTIN_ACTION_IDS = [
+const BUILTIN_ACTION_IDS = [
   "view_details",
   "set_spec",
   "set_plan",
@@ -39,7 +39,7 @@ export const BUILTIN_ACTION_IDS = [
 ] as const;
 export type BuiltinActionId = (typeof BUILTIN_ACTION_IDS)[number];
 
-export const BUILTIN_LAUNCH_ACTION_IDS = [
+const BUILTIN_LAUNCH_ACTION_IDS = [
   "spec_initial",
   "planner_initial",
   "build_implementation_start",
@@ -51,7 +51,7 @@ export const BUILTIN_LAUNCH_ACTION_IDS = [
 ] as const;
 export type BuiltinLaunchActionId = (typeof BUILTIN_LAUNCH_ACTION_IDS)[number];
 
-export const BUILTIN_SIGNAL_IDS = [
+const BUILTIN_SIGNAL_IDS = [
   "taskProgressedToSpecReady",
   "taskProgressedToReadyForDev",
   "taskProgressedToAiReview",
@@ -60,7 +60,7 @@ export const BUILTIN_SIGNAL_IDS = [
 ] as const;
 export type BuiltinSignalId = (typeof BUILTIN_SIGNAL_IDS)[number];
 
-export const BUILTIN_AUTOMATION_IDS = [
+const BUILTIN_AUTOMATION_IDS = [
   "startPlanner",
   "startBuilder",
   "startQa",
@@ -90,29 +90,3 @@ export const BUILTIN_PROMPT_TEMPLATE_IDS = [
 export type BuiltinPromptTemplateId = (typeof BUILTIN_PROMPT_TEMPLATE_IDS)[number];
 
 export type BuiltinNotificationKind = `workflow.${Exclude<BuiltinStateId, "open">}`;
-
-const parseId = <Id extends string>(ids: readonly Id[], kind: string, value: string): Id => {
-  const id = ids.find((candidate) => candidate === value);
-  if (id === undefined) {
-    throw new Error(
-      `The built-in workflow has no ${kind} "${value}". Report this host data error.`,
-    );
-  }
-  return id;
-};
-
-/** The built-in role of a role ID from host data. */
-export const builtinRoleId = (value: string): BuiltinRoleId =>
-  parseId(BUILTIN_ROLE_IDS, "role", value);
-
-/** The built-in state of a status from host data. */
-export const builtinStateId = (value: string): BuiltinStateId =>
-  parseId(BUILTIN_STATE_IDS, "state", value);
-
-/** The built-in issue type of an issue type from host data. */
-export const builtinIssueTypeId = (value: string): BuiltinIssueTypeId =>
-  parseId(BUILTIN_ISSUE_TYPE_IDS, "issue type", value);
-
-/** The built-in automation of an Autopilot action ID from host data. */
-export const builtinAutomationId = (value: string): BuiltinAutomationId =>
-  parseId(BUILTIN_AUTOMATION_IDS, "automation", value);

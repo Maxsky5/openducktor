@@ -44,8 +44,8 @@ export const qaRejected = {
   all: [{ stateIn: ["in_progress", "blocked"] }, { artifact: "qaReport", verdict: "rejected" }],
 } satisfies WorkflowCondition;
 
-export const PLANNING_COMPLETE_GUARD = "planning-complete";
-export const SPEC_COMPLETE_GUARD = "spec-complete";
+const PLANNING_COMPLETE_GUARD = "planning-complete";
+const SPEC_COMPLETE_GUARD = "spec-complete";
 
 /** Feature work enters in_progress only after planning. */
 export const planningComplete = {

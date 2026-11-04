@@ -1,6 +1,5 @@
 import type { TaskWorkflow } from "./task-workflow/task-workflow";
 
-export const workflowArtifact = (code: string, workflow: TaskWorkflow) => workflow.artifact(code);
 export const workflowArtifactLabel = (code: string, workflow: TaskWorkflow): string =>
   workflow.artifact(code)?.label ?? code;
 export const workflowArtifactShortLabel = (code: string, workflow: TaskWorkflow): string => {

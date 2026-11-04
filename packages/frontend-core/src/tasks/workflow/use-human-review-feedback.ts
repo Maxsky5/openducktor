@@ -18,9 +18,9 @@ import {
 } from "./human-review-feedback-state";
 import type {
   HumanReviewFeedbackModalModel,
+  HumanReviewFeedbackRequest,
   HumanReviewFeedbackState,
 } from "./human-review-feedback-types";
-import type { TaskWorkflowContinuation } from "./task-workflow-continuation";
 
 type UseHumanReviewFeedbackArgs = {
   /** The tasks that the form can open for. */
@@ -37,12 +37,7 @@ type UseHumanReviewFeedbackArgs = {
 export type HumanReviewFeedback = {
   modal: HumanReviewFeedbackModalModel | null;
   /** Opens the form of a feedback launch, or of Request Changes with its following launches. */
-  open: (
-    taskId: string,
-    launchActionId?: string,
-    requestChanges?: boolean,
-    continuation?: TaskWorkflowContinuation,
-  ) => void;
+  open: (taskId: string, request: HumanReviewFeedbackRequest) => void;
   /** Opens the form of a feedback launch of a task that the task list does not hold yet. */
   openForTask: (task: TaskCard, launchActionId: string) => void;
 };
@@ -68,21 +63,13 @@ export function useHumanReviewFeedback({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const open = useCallback<HumanReviewFeedback["open"]>(
-    (taskId, launchActionId, requestChanges, continuation) =>
-      setState(
-        createHumanReviewFeedbackState(
-          [...tasksRef.current],
-          taskId,
-          launchActionId,
-          requestChanges,
-          continuation,
-        ),
-      ),
+    (taskId, request) =>
+      setState(createHumanReviewFeedbackState(tasksRef.current, taskId, request)),
     [],
   );
   const openForTask = useCallback<HumanReviewFeedback["openForTask"]>(
     (task, launchActionId) =>
-      setState(createHumanReviewFeedbackState([task], task.id, launchActionId)),
+      setState(createHumanReviewFeedbackState([task], task.id, { kind: "launch", launchActionId })),
     [],
   );
 

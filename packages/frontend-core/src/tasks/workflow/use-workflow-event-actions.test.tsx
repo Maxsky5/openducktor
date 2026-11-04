@@ -189,7 +189,6 @@ test.each([
           before.id,
           "alpha_write_start",
           expect.objectContaining({ status: "shared_review" }),
-          undefined,
         );
       else {
         expect(launch).not.toHaveBeenCalled();

@@ -1,4 +1,4 @@
-import { renderWithWorkflow as render } from "@/test-utils/workflow-provider";
+import { renderWithWorkflow as render } from "@/test-utils/render-with-workflow";
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { claudeRuntimeConfigSchema, type ClaudeRuntimeConfig } from "@openducktor/contracts";
 import {

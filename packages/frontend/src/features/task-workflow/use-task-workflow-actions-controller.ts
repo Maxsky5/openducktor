@@ -1,4 +1,3 @@
-import type { TaskWorkflowContinuation } from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
 import { useTaskActionTasks } from "@openducktor/frontend-core/queries/use-task-action-tasks";
 import { useWorkflowEventActions } from "@openducktor/frontend-core/tasks/workflow/use-workflow-event-actions";
 import type { PullRequest } from "@openducktor/contracts";
@@ -225,19 +224,9 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       onSucceeded: closeTaskDetails,
     });
 
-  const onConfirmTaskAction = useCallback(
-    (
-      taskId: string,
-      action: Parameters<typeof openConfirmation>[1],
-      continuation?: TaskWorkflowContinuation,
-    ) => {
-      openConfirmation(
-        taskId,
-        action,
-        continuation ? (committed) => continueTaskWorkflow(committed, continuation) : undefined,
-      );
-    },
-    [openConfirmation, continueTaskWorkflow],
+  const onConfirmTaskAction = useCallback<TaskWorkflowActions["onConfirmTaskAction"]>(
+    (taskId, action) => openConfirmation(taskId, action),
+    [openConfirmation],
   );
 
   const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(sessions), [sessions]);
@@ -279,26 +268,6 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     onLaunch,
     activeWorkspaceId,
   );
-  const onHumanApprove = useCallback<TaskWorkflowActions["onHumanApprove"]>(
-    (taskId, continuation) =>
-      openTaskApproval(
-        taskId,
-        continuation
-          ? { onCommitted: (committed) => continueTaskWorkflow(committed, continuation) }
-          : undefined,
-      ),
-    [openTaskApproval, continueTaskWorkflow],
-  );
-  const onResetImplementation = useCallback<TaskWorkflowActions["onResetImplementation"]>(
-    (taskId, options) =>
-      openResetImplementation(taskId, {
-        ...options,
-        onCommitted: options?.continuation
-          ? (committed) => continueTaskWorkflow(committed, options.continuation)
-          : undefined,
-      }),
-    [openResetImplementation, continueTaskWorkflow],
-  );
   const runAction = useMemo(
     () =>
       createTaskActionRunner({
@@ -306,10 +275,20 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
         onApplyEvent,
         onOpenTaskDetails,
         onOpenSession,
-        onHumanApprove,
+        onHumanApprove: (taskId, continuation) =>
+          openTaskApproval(
+            taskId,
+            continuation
+              ? { onCommitted: (committed) => continueTaskWorkflow(committed, continuation) }
+              : undefined,
+          ),
         onHumanRequestChanges,
-        onResetImplementation,
-        onConfirmTaskAction,
+        onConfirm: (taskId, action, onCommitted) => {
+          if (action === "reset_implementation")
+            openResetImplementation(taskId, { closeDetailsAfterReset: true, onCommitted });
+          else openConfirmation(taskId, action, onCommitted);
+        },
+        continueTaskWorkflow,
         showError: showWorkflowActionError,
       }),
     [
@@ -317,10 +296,11 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       onApplyEvent,
       onOpenTaskDetails,
       onOpenSession,
-      onHumanApprove,
+      openTaskApproval,
       onHumanRequestChanges,
-      onResetImplementation,
-      onConfirmTaskAction,
+      openResetImplementation,
+      openConfirmation,
+      continueTaskWorkflow,
     ],
   );
   const actions = useMemo<TaskWorkflowActions>(
@@ -328,14 +308,10 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       runAction,
       kanbanPendingState,
       onLaunch,
-      onApplyEvent,
       onCreateTask,
       onOpenSession,
       onEdit,
       onOpenTaskDetails,
-      onHumanApprove,
-      onHumanRequestChanges,
-      onResetImplementation,
       onResetTask: resetTask,
       onCloseTask: closeTask,
       onRemoveTaskWorktree: removeTaskWorktree,
@@ -360,9 +336,6 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       runAction,
       kanbanPendingState,
       onLaunch,
-      onApplyEvent,
-      onHumanApprove,
-      onResetImplementation,
       activeTaskSessionContextByTaskId,
       closeTask,
       detectingPullRequestTaskIds,
@@ -372,7 +345,6 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       onCreateTask,
       onDelete,
       onEdit,
-      onHumanRequestChanges,
       onOpenSession,
       onOpenTaskDetails,
       registerTaskDetailsClose,

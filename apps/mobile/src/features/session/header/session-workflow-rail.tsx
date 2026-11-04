@@ -110,7 +110,10 @@ function WorkflowRailSteps({
             run: () =>
               router.push(
                 task.taskWorkflow.launchAction(startAction).context === "human_feedback"
-                  ? routes.requestChanges(workspaceId, task.id, startAction)
+                  ? routes.requestChanges(workspaceId, task.id, {
+                      kind: "launch",
+                      launchActionId: startAction,
+                    })
                   : routes.quickAction(workspaceId, task.id, startAction),
                 SINGLE_SHEET,
               ),

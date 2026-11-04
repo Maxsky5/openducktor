@@ -188,7 +188,7 @@ export function TaskConfirmations(props: TaskConfirmationsProps): ReactElement |
   const { resetTask, deleteTask } = useRequiredContext(TasksStateContext, "TaskConfirmations");
   const { request } = props;
   if (!request) return null;
-  if (request.action === "close_task") {
+  if (request.action === "close") {
     return <RequestedCloseConfirm key={request.id} {...props} request={request} />;
   }
   // Delete returns no task, and a reset returns the task that its continuation needs.

@@ -35,9 +35,12 @@ describe("Request Changes with a following launch", () => {
   test("starts the launch that the committed state selects and lets the host commit the change", async () => {
     const task = createReviewTask();
     const state = {
-      ...createHumanReviewFeedbackState([task], task.id, undefined, true, {
-        workflow: task.workflow,
-        launchActionIds: ["alpha_write_start", "alpha_write_revise"],
+      ...createHumanReviewFeedbackState([task], task.id, {
+        kind: "request_changes",
+        continuation: {
+          workflow: task.workflow,
+          launchActionIds: ["alpha_write_start", "alpha_write_revise"],
+        },
       }),
       message: "  Revise the draft.  ",
     };
@@ -68,7 +71,7 @@ describe("Request Changes with a following launch", () => {
   test("requests changes directly when no launch follows", async () => {
     const task = createReviewTask();
     const state = {
-      ...createHumanReviewFeedbackState([task], task.id, undefined, true),
+      ...createHumanReviewFeedbackState([task], task.id, { kind: "request_changes" }),
       message: "Revise the draft.",
     };
     expect(state.launch).toBeNull();

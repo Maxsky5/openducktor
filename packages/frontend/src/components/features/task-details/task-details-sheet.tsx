@@ -92,7 +92,6 @@ export function TaskDetailsSheetContent(
   useTaskDetailsCloseRegistration(workflowActions?.registerTaskDetailsClose, taskId, onOpenChange);
   const viewModel = useTaskDetailsSheetViewModel(
     createTaskDetailsViewModelOptions({
-      activeWorkspace,
       task,
       open,
       onOpenChange,
@@ -204,7 +203,6 @@ function getActiveTaskSessionContext(
 }
 
 function createTaskDetailsViewModelOptions({
-  activeWorkspace,
   task,
   open,
   onOpenChange,
@@ -213,7 +211,6 @@ function createTaskDetailsViewModelOptions({
   historicalSessions,
   taskSessions,
 }: {
-  activeWorkspace: TaskDetailsSheetProps["activeWorkspace"];
   task: TaskCard;
   open: boolean;
   onOpenChange: TaskDetailsSheetProps["onOpenChange"];
@@ -223,7 +220,6 @@ function createTaskDetailsViewModelOptions({
   taskSessions: KanbanTaskSession[];
 }): Parameters<typeof useTaskDetailsSheetViewModel>[0] {
   return {
-    activeWorkspace: activeWorkspace ?? null,
     task,
     open,
     onOpenChange,

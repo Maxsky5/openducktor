@@ -1,4 +1,7 @@
-import { createTaskActionRunner } from "@openducktor/frontend-core/tasks/workflow/task-action-runner";
+import {
+  createTaskActionRunner,
+  type TaskActionRunnerHandlers,
+} from "@openducktor/frontend-core/tasks/workflow/task-action-runner";
 import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import {
   createObservedCheckFixture,
@@ -27,28 +30,38 @@ export const createKanbanColumnFixture = (
   return { ...state, ...overrides, id, tasks };
 };
 
-/** Task workflow actions that do nothing, for views that only need the action context. */
+/**
+ * Task workflow actions that do nothing, for views that only need the action context. The shared
+ * runner calls the context handlers of the fixture and the given runner handlers.
+ */
 export const createTaskWorkflowActionsFixture = (
   overrides: Partial<TaskWorkflowActions> = {},
+  runner: Partial<TaskActionRunnerHandlers> = {},
 ): TaskWorkflowActions => {
   const actions: TaskWorkflowActions = {
-    // The shared runner calls the handlers of this fixture, overrides included.
     runAction: (task, action, options) =>
       createTaskActionRunner({
-        ...actions,
+        onLaunch: actions.onLaunch,
+        onApplyEvent: () => {},
+        onOpenTaskDetails: actions.onOpenTaskDetails,
+        onOpenSession: actions.onOpenSession,
+        onHumanApprove: () => {},
+        onHumanRequestChanges: () => {},
+        onConfirm: (taskId, confirmation) => {
+          if (confirmation !== "reset_implementation")
+            actions.onConfirmTaskAction(taskId, confirmation);
+        },
+        continueTaskWorkflow: async () => {},
         showError: (title, description) => {
           throw new Error(`${title}: ${description}`);
         },
+        ...runner,
       })(task, action, options),
     onLaunch: () => {},
-    onApplyEvent: () => {},
     onCreateTask: () => {},
     onOpenSession: () => {},
     onEdit: () => {},
     onOpenTaskDetails: () => {},
-    onHumanApprove: () => {},
-    onHumanRequestChanges: () => {},
-    onResetImplementation: () => {},
     onResetTask: async (taskId) => createWireTaskCardFixture({ id: taskId }),
     onCloseTask: async (taskId) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
     onRemoveTaskWorktree: async () => {},

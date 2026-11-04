@@ -29,7 +29,7 @@ describe("useHumanReviewFeedback", () => {
     const harness = renderFeedback([task]);
     await harness.mount();
     try {
-      await harness.run((form) => form.open("TASK-1", undefined, true));
+      await harness.run((form) => form.open("TASK-1", { kind: "request_changes" }));
       expect(harness.getLatest().modal).toMatchObject({ taskId: "TASK-1", roleLabel: null });
       await harness.run((form) => form.modal?.onMessageChange("Rework the API."));
       expect(harness.getLatest().modal?.message).toBe("Rework the API.");

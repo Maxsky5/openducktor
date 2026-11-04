@@ -1,3 +1,4 @@
+import type { TaskWorkflowContinuation } from "./task-workflow-continuation";
 export type HumanReviewFeedbackModalModel = {
   roleLabel: string | null;
   confirmLabel: string;
@@ -9,6 +10,11 @@ export type HumanReviewFeedbackModalModel = {
   onMessageChange: (message: string) => void;
   onConfirm: () => Promise<void>;
 };
+
+/** What the feedback form does: start a feedback launch, or run Request Changes. */
+export type HumanReviewFeedbackRequest =
+  | { kind: "launch"; launchActionId: string }
+  | { kind: "request_changes"; continuation?: TaskWorkflowContinuation | undefined };
 
 export type HumanReviewFeedbackLaunch = {
   role: string;

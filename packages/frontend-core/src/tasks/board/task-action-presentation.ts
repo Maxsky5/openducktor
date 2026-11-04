@@ -1,4 +1,4 @@
-import { workflowAction, actionEmphasis } from "@openducktor/workflows";
+import { actionEmphasis } from "@openducktor/workflows";
 import type { TaskWorkflowAction, ResolvedTaskCard } from "@openducktor/workflows";
 import type { KanbanTaskSession } from "./kanban-task-activity";
 
@@ -11,7 +11,7 @@ export type TaskActionTone = "prominent" | "neutral" | "destructive" | "warning"
 export const taskActionTone = (
   action: TaskWorkflowAction,
   task: ResolvedTaskCard,
-): TaskActionTone => actionEmphasis(workflowAction(task.taskWorkflow, action));
+): TaskActionTone => actionEmphasis(task.taskWorkflow.action(action));
 export const taskActionIsDestructive = (
   action: TaskWorkflowAction,
   task: ResolvedTaskCard,

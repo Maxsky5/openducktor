@@ -3,7 +3,6 @@ import {
   type WorkflowRailStep,
 } from "@openducktor/frontend-core/tasks/presentation/workflow-rail";
 import {
-  buildRoleWorkflowMapForTask,
   type WorkflowRoleId as AgentRole,
   type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
@@ -76,7 +75,7 @@ export const buildWorkflowModelContext = ({
   mergedTarget = null,
 }: BuildWorkflowModelContextArgs): WorkflowModelContext => {
   const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
-  const roleWorkflowsByTask = buildRoleWorkflowMapForTask(selectedTask);
+  const roleWorkflowsByTask = selectedTask?.agentWorkflows ?? {};
   const workflowSessionByRole = buildLatestSessionByRoleMap(sessionsForTask);
   const liveSessionByRole = buildLiveSessionByRoleMap(sessionsForTask);
   const workflowRail = selectedTask

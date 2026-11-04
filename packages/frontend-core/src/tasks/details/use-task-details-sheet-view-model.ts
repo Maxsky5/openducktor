@@ -1,10 +1,4 @@
-import type { TaskCard as WireTaskCard } from "@openducktor/contracts";
 import {
-  type TaskWorkflowContinuation,
-  useTaskWorkflowContinuation,
-} from "../workflow/task-workflow-continuation";
-import {
-  sessionRoleForViewAction,
   type WorkflowRoleId as AgentRole,
   type ResolvedTaskCard as TaskCard,
   type TaskWorkflowAction,
@@ -12,7 +6,6 @@ import {
 import { useCallback, useMemo } from "react";
 import { useTaskStopImpact } from "../../queries/use-task-stop-impact";
 import { useTaskWorktreeOwners } from "../../queries/use-task-worktree-owners";
-import type { ActiveWorkspace } from "../../types/session-slices";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
 import type { TaskWorkflowActions } from "../workflow/task-workflow-actions-context";
 import { toTaskLabels } from "./task-details-sheet-model";
@@ -38,14 +31,12 @@ export type TaskDetailsSheetViewModel = {
 };
 
 export type UseTaskDetailsSheetViewModelOptions = {
-  activeWorkspace?: ActiveWorkspace | null;
   task: TaskCard;
   /** The details view shows. Documents and confirmations load only while it is true. */
   open: boolean;
   /** Called with false after a confirmed action succeeds or a session view opens. */
   onOpenChange: (open: boolean) => void;
   runAction?: TaskWorkflowActions["runAction"] | undefined;
-  onLaunch?: TaskWorkflowActions["onLaunch"] | undefined;
   resolveSessionOptionsByRole?: ((role: AgentRole) => SessionTargetOptions | undefined) | undefined;
   onResetTask?: TaskWorkflowActions["onResetTask"] | undefined;
   onCloseTask?: TaskWorkflowActions["onCloseTask"] | undefined;
@@ -57,12 +48,10 @@ export type UseTaskDetailsSheetViewModelOptions = {
 };
 
 export function useTaskDetailsSheetViewModel({
-  activeWorkspace,
   task,
   open,
   onOpenChange,
   runAction,
-  onLaunch,
   resolveSessionOptionsByRole,
   onResetTask,
   onCloseTask,
@@ -72,7 +61,6 @@ export function useTaskDetailsSheetViewModel({
   taskStopImpactHook = useTaskStopImpact,
   taskWorktreeOwnersHook = useTaskWorktreeOwners,
 }: UseTaskDetailsSheetViewModelOptions): TaskDetailsSheetViewModel {
-  const continueTaskWorkflow = useTaskWorkflowContinuation(activeWorkspace ?? null, onLaunch);
   const taskId = task.id;
   const taskLabels = useMemo(() => toTaskLabels(task.labels), [task.labels]);
 
@@ -112,21 +100,15 @@ export function useTaskDetailsSheetViewModel({
     (action: TaskWorkflowAction): void => {
       if (!runAction)
         throw new Error("Task details need the task workflow actions to run a workflow action.");
-      const afterConfirm = (continuation?: TaskWorkflowContinuation) =>
-        continuation
-          ? (committed: WireTaskCard) => continueTaskWorkflow(committed, continuation)
-          : undefined;
       runAction(task, action, {
         sessionOptionsOf: resolveSessionOptionsByRole,
         // The sheet is not modal, so its confirmations stay inside it to keep focus.
-        confirm: (confirmation, continuation) =>
-          confirmation === "close_task"
-            ? openCloseDialog(afterConfirm(continuation))
-            : openResetDialog(afterConfirm(continuation)),
+        confirm: (confirmation, onCommitted) =>
+          confirmation === "close" ? openCloseDialog(onCommitted) : openResetDialog(onCommitted),
         onRemoveWorktree: openRemoveWorktreeDialog,
       });
       // The session opens in place of the current view, so the sheet must not stay over it.
-      if (sessionRoleForViewAction(action, task)) onOpenChange(false);
+      if (task.taskWorkflow.viewActionRole(action)) onOpenChange(false);
     },
     [
       runAction,
@@ -135,7 +117,6 @@ export function useTaskDetailsSheetViewModel({
       openCloseDialog,
       openResetDialog,
       openRemoveWorktreeDialog,
-      continueTaskWorkflow,
       onOpenChange,
     ],
   );

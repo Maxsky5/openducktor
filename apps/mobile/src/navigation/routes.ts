@@ -1,9 +1,10 @@
+import type { HumanReviewFeedbackRequest } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
 import type { TaskWorkflowContinuation } from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
 type RequestChangesParams = {
   workspaceId: string;
   taskId: string;
+  mode?: HumanReviewFeedbackRequest["kind"];
   launch?: string;
-  action?: string;
   continuation?: string;
 };
 import type { WorkflowLaunchActionId as SessionLaunchActionId } from "@openducktor/workflows";
@@ -134,17 +135,11 @@ export const routes = {
     if (continuation) params.continuation = JSON.stringify(continuation);
     return { pathname: "/approve-task", params } as const;
   },
-  requestChanges: (
-    workspaceId: string,
-    taskId: string,
-    launch?: string,
-    requestChangesBeforeStart = false,
-    continuation?: TaskWorkflowContinuation,
-  ) => {
-    const params: RequestChangesParams = { workspaceId, taskId };
-    if (launch) params.launch = launch;
-    if (continuation) params.continuation = JSON.stringify(continuation);
-    if (requestChangesBeforeStart) params.action = "human_request_changes";
+  /** The human feedback sheet of a feedback launch, or of Request Changes. */
+  requestChanges: (workspaceId: string, taskId: string, request: HumanReviewFeedbackRequest) => {
+    const params: RequestChangesParams = { workspaceId, taskId, mode: request.kind };
+    if (request.kind === "launch") params.launch = request.launchActionId;
+    else if (request.continuation) params.continuation = JSON.stringify(request.continuation);
     return { pathname: "/request-changes", params } as const;
   },
   // Model, runtime profile, effort, and speed of the session that the composer sends to.

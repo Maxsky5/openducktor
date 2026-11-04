@@ -49,14 +49,10 @@ let taskDetailsSheetSpy: { mockRestore(): void };
 const createWorkflowActions = (onDelete: TaskWorkflowActions["onDelete"]): TaskWorkflowActions =>
   createTaskWorkflowActionsFixture({
     onLaunch: () => {},
-    onApplyEvent: () => {},
     onCreateTask: () => {},
     onOpenSession: () => {},
     onEdit: () => {},
     onOpenTaskDetails: () => {},
-    onHumanApprove: () => {},
-    onHumanRequestChanges: () => {},
-    onResetImplementation: () => {},
     onResetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
     onCloseTask: async (taskId: string) =>
       createWireTaskCardFixture({ id: taskId, status: "closed" }),

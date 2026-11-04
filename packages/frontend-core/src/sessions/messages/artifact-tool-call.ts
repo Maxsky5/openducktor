@@ -1,6 +1,5 @@
 import { mcpArtifactSaveResultSchema, type McpTaskArtifact } from "@openducktor/contracts";
 import {
-  workflowArtifact,
   workflowArtifactLabel,
   workflowArtifactShortLabel,
   workflowArtifactVerdict,
@@ -38,7 +37,7 @@ export const readArtifactToolCall = (
   const code = saved?.code ?? readInputText(meta, "code");
   const verdict =
     saved?.classification === "workflow" ? saved.verdict : readInputText(meta, "verdict");
-  const artifact = code && taskWorkflow ? workflowArtifact(code, taskWorkflow) : undefined;
+  const artifact = code && taskWorkflow ? taskWorkflow.artifact(code) : undefined;
   if (code && artifact)
     return { ...workflowHeading(code, artifact.kind, verdict, taskWorkflow!), code, saved };
   const name = saved?.name ?? readInputText(meta, "name") ?? code;

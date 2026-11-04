@@ -228,7 +228,10 @@ const useTaskSessionMenus = ({
       // Apply Human Changes first asks for the feedback, as the desktop quick action does.
       router.push(
         option.requiresHumanFeedback
-          ? routes.requestChanges(workspaceId, taskId, option.launchActionId, false)
+          ? routes.requestChanges(workspaceId, taskId, {
+              kind: "launch",
+              launchActionId: option.launchActionId,
+            })
           : routes.quickAction(workspaceId, taskId, option.launchActionId),
         SINGLE_SHEET,
       );

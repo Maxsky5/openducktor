@@ -75,12 +75,7 @@ export type UseTaskSessionStartFlowResult = {
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onHumanRequestChanges: (taskId: string, continuation?: TaskWorkflowContinuation) => void;
   continueTaskWorkflow: ContinueTaskWorkflow;
-  onLaunch: (
-    taskId: string,
-    launchActionId: string,
-    committedTask?: TaskCard,
-    humanFeedback?: string,
-  ) => void;
+  onLaunch: (taskId: string, launchActionId: string, committedTask?: TaskCard) => void;
 };
 
 const findLatestSessionByRoleForTask = (
@@ -263,16 +258,11 @@ export function useTaskSessionStartFlow({
   });
 
   const onLaunch = useCallback(
-    (
-      taskId: string,
-      launchActionId: string,
-      committedTask?: TaskCard,
-      humanFeedback?: string,
-    ): void => {
+    (taskId: string, launchActionId: string, committedTask?: TaskCard): void => {
       const task = committedTask ?? tasks.find((task) => task.id === taskId);
       if (!task) throw new Error("Task workflow is unavailable. Reload the task.");
       const launch = task.taskWorkflow.launchAction(launchActionId);
-      if (launch.context === "human_feedback" && humanFeedback === undefined) {
+      if (launch.context === "human_feedback") {
         openHumanReviewFeedbackForTask(task, launchActionId);
         return;
       }
@@ -282,7 +272,6 @@ export function useTaskSessionStartFlow({
         launchActionId,
         postStartAction: launchSessionCommand(launch),
       };
-      if (humanFeedback !== undefined) request.humanFeedback = humanFeedback;
       void startSessionIntent(request, task).catch((cause) =>
         feedback.show("error", "Failed to start session", {
           description: cause instanceof Error ? cause.message : String(cause),
@@ -392,7 +381,7 @@ export function useTaskSessionStartFlow({
 
   const onHumanRequestChanges = useCallback(
     (taskId: string, continuation?: TaskWorkflowContinuation): void => {
-      openHumanReviewFeedback(taskId, undefined, true, continuation);
+      openHumanReviewFeedback(taskId, { kind: "request_changes", continuation });
     },
     [openHumanReviewFeedback],
   );

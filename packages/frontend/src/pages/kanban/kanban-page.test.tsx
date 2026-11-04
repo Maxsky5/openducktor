@@ -539,6 +539,17 @@ const getKanbanColumnProps = (latest: LatestKanbanPageModels): KanbanColumnTestP
   return latest.columnProps;
 };
 
+/** Runs a declared workflow action of the current task fixture through the shared runner. */
+const runTaskAction = (
+  renderer: { getTaskWorkflowActions: () => TaskWorkflowActionsController["actions"] | null },
+  action: string,
+  taskId = currentTaskFixture.id,
+): void => {
+  const actions = renderer.getTaskWorkflowActions();
+  if (!actions) throw new Error("Expected task workflow actions.");
+  actions.runAction({ ...currentTaskFixture, id: taskId, availableActions: [action] }, action);
+};
+
 const renderPage = async (
   options: {
     seedSettingsSnapshot?: boolean;
@@ -1529,26 +1540,22 @@ describe("KanbanPage session start modal flow", () => {
     },
   );
 
-  kanbanTest(
-    "keeps human request changes handler stable across modal state re-renders",
-    async () => {
-      const renderer = await renderPage();
+  kanbanTest("keeps the workflow action runner stable across modal state re-renders", async () => {
+    const renderer = await renderPage();
 
-      const initialOnHumanRequestChanges = renderer.getTaskWorkflowActions()!.onHumanRequestChanges;
-      expect(initialOnHumanRequestChanges).toBeDefined();
+    const initialRunAction = renderer.getTaskWorkflowActions()!.runAction;
+    expect(initialRunAction).toBeDefined();
 
-      await act(async () => {
-        renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
-      });
+    await act(async () => {
+      renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
+    });
 
-      const nextOnHumanRequestChanges = renderer.getTaskWorkflowActions()!.onHumanRequestChanges;
-      expect(nextOnHumanRequestChanges).toBe(initialOnHumanRequestChanges);
+    expect(renderer.getTaskWorkflowActions()!.runAction).toBe(initialRunAction);
 
-      await act(async () => {
-        renderer.unmount();
-      });
-    },
-  );
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
 
   kanbanTest("human request changes opens dedicated feedback modal before mutating", async () => {
     currentTaskFixture = createTaskCardFixture({
@@ -1558,13 +1565,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      await requireCallback(
-        renderer.getTaskWorkflowActions()!.onHumanRequestChanges,
-        "request human-review changes",
-      )("TASK-123", {
-        workflow: currentTaskFixture.workflow,
-        launchActionIds: ["build_after_human_request_changes"],
-      });
+      await runTaskAction(renderer, "human_request_changes");
     });
 
     expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
@@ -1587,13 +1588,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        await requireCallback(
-          renderer.getTaskWorkflowActions()!.onHumanRequestChanges,
-          "request human-review changes",
-        )("TASK-123", {
-          workflow: currentTaskFixture.workflow,
-          launchActionIds: ["build_after_human_request_changes"],
-        });
+        await runTaskAction(renderer, "human_request_changes");
       });
 
       const feedbackModal = renderer.getHumanReviewFeedbackModalModel();
@@ -1657,13 +1652,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        await requireCallback(
-          renderer.getTaskWorkflowActions()!.onHumanRequestChanges,
-          "request human-review changes",
-        )("TASK-123", {
-          workflow: currentTaskFixture.workflow,
-          launchActionIds: ["build_after_human_request_changes"],
-        });
+        await runTaskAction(renderer, "human_request_changes");
       });
 
       expect(renderer.getHumanReviewFeedbackModalModel()?.open).toBe(true);
@@ -1705,13 +1694,7 @@ describe("KanbanPage session start modal flow", () => {
 
       try {
         await act(async () => {
-          requireCallback(
-            renderer.getTaskWorkflowActions()!.onHumanRequestChanges,
-            "request human-review changes",
-          )("TASK-123", {
-            workflow: currentTaskFixture.workflow,
-            launchActionIds: ["build_after_human_request_changes"],
-          });
+          runTaskAction(renderer, "human_request_changes");
         });
 
         const feedbackModal = renderer.getHumanReviewFeedbackModalModel();
@@ -1801,10 +1784,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      requireCallback(
-        renderer.getTaskWorkflowActions()!.onResetImplementation,
-        "reset implementation",
-      )("TASK-123");
+      runTaskAction(renderer, "reset_implementation");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1856,10 +1836,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      requireCallback(
-        renderer.getTaskWorkflowActions()!.onResetImplementation,
-        "reset implementation",
-      )("TASK-123");
+      runTaskAction(renderer, "reset_implementation");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1895,10 +1872,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        requireCallback(
-          renderer.getTaskWorkflowActions()!.onResetImplementation,
-          "reset implementation",
-        )("MISSING-1");
+        runTaskAction(renderer, "reset_implementation", "MISSING-1");
         await Promise.resolve();
         await Promise.resolve();
       });
@@ -1972,10 +1946,7 @@ describe("KanbanPage session start modal flow", () => {
         const page = await renderPage();
         renderer = page;
         await act(async () => {
-          requireCallback(
-            page.getTaskWorkflowActions()!.onHumanApprove,
-            "approve human review",
-          )("TASK-123");
+          runTaskAction(page, "human_approve");
           await Promise.resolve();
         });
         await waitFor(() => {
@@ -2208,6 +2179,10 @@ describe("KanbanPage session start modal flow", () => {
         await Promise.resolve();
       });
     };
+    const runDeclaredAction =
+      (action: string) =>
+      (actions: TaskWorkflowActionsController["actions"]): void =>
+        actions.runAction({ ...currentTaskFixture, availableActions: [action] }, action);
     const closeDialog = async (dialog: WorkflowDialog): Promise<void> => {
       await act(async () => {
         dialog?.onOpenChange(false);
@@ -2230,19 +2205,19 @@ describe("KanbanPage session start modal flow", () => {
       {
         name: "Request Changes",
         status: "human_review",
-        open: (actions) => actions.onHumanRequestChanges("TASK-123"),
+        open: runDeclaredAction("human_request_changes"),
         dialog: (page) => page.getHumanReviewFeedbackModalModel(),
       },
       {
         name: "Reset Implementation",
         status: "in_progress",
-        open: (actions) => actions.onResetImplementation("TASK-123"),
+        open: runDeclaredAction("reset_implementation"),
         dialog: (page) => page.getResetImplementationModalModel(),
       },
       {
         name: "Approve",
         status: "human_review",
-        open: (actions) => actions.onHumanApprove("TASK-123"),
+        open: runDeclaredAction("human_approve"),
         dialog: (page) => page.getTaskApprovalModalModel(),
       },
       {
@@ -2275,7 +2250,7 @@ describe("KanbanPage session start modal flow", () => {
       currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
       const page = await renderPage();
       try {
-        await runFromSheet(page, (actions) => actions.onHumanRequestChanges("TASK-123"));
+        await runFromSheet(page, runDeclaredAction("human_request_changes"));
         await act(async () => {
           page.getHumanReviewFeedbackModalModel()?.onMessageChange("Apply the review changes.");
         });
@@ -2321,7 +2296,7 @@ describe("KanbanPage session start modal flow", () => {
       hostClientFakes.workspaceGetGitProviderContext = async () => null;
       const page = await renderPage();
       try {
-        await runFromSheet(page, (actions) => actions.onHumanApprove("TASK-123"));
+        await runFromSheet(page, runDeclaredAction("human_approve"));
         await waitFor(() => {
           expect(page.getTaskApprovalModalModel()?.stage).toBe("approval");
         });

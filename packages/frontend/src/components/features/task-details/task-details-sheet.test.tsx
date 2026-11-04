@@ -141,14 +141,10 @@ const createTaskStopImpactHookMock = () =>
 const createTaskWorkflowActionsValue = (): TaskWorkflowActions =>
   createTaskWorkflowActionsFixture({
     onLaunch: mock(() => {}),
-    onApplyEvent: () => {},
     onCreateTask: mock(() => {}),
     onOpenSession: mock(() => {}),
     onEdit: mock(() => {}),
     onOpenTaskDetails: mock(() => {}),
-    onHumanApprove: mock(() => {}),
-    onHumanRequestChanges: mock(() => {}),
-    onResetImplementation: mock(() => {}),
     onResetTask: mock(async (taskId: string) => createWireTaskCardFixture({ id: taskId })),
     onCloseTask: mock(async (taskId: string) =>
       createWireTaskCardFixture({ id: taskId, status: "closed" }),
@@ -220,7 +216,7 @@ describe("TaskDetailsSheet", () => {
     },
   );
 
-  test("passes activeWorkspace into task details view model", async () => {
+  test("does not load cleanup impact before a confirmation opens", async () => {
     const { useTaskDetailsSheetViewModel } =
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
 
@@ -237,11 +233,6 @@ describe("TaskDetailsSheet", () => {
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
       task,
       open: true,
       onOpenChange: () => {},
@@ -277,11 +268,6 @@ describe("TaskDetailsSheet", () => {
       (_args: Parameters<typeof useTaskStopImpact>[0]) => loadingStopImpact,
     );
     const harnessOptions = {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
       task,
       open: true,
       onOpenChange: () => {},
@@ -325,11 +311,6 @@ describe("TaskDetailsSheet", () => {
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
     const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
       task,
       open: true,
       onOpenChange: () => {},
@@ -367,11 +348,6 @@ describe("TaskDetailsSheet", () => {
     const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
       task,
       open: true,
       onOpenChange: () => {},
@@ -457,11 +433,6 @@ describe("TaskDetailsSheet", () => {
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
       task,
       open: true,
       onOpenChange,
@@ -500,11 +471,6 @@ describe("TaskDetailsSheet", () => {
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
       task,
       open: true,
       onOpenChange: () => {},

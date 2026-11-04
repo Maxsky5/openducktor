@@ -101,7 +101,10 @@ describe("human-review-feedback-flow", () => {
           alpha_review: { present: true, verdict: "revise" },
         },
       });
-      const state = createHumanReviewFeedbackState([task], task.id, "alpha_write_revise");
+      const state = createHumanReviewFeedbackState([task], task.id, {
+        kind: "launch",
+        launchActionId: "alpha_write_revise",
+      });
       expect(state.confirmLabel).toBe("alpha Revise");
       state.message = "Revise this draft.";
       const templateId = "alpha.kickoff.write_revise";

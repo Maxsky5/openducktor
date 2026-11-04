@@ -343,9 +343,6 @@ export const PROMPT_TEMPLATES = {
   },
 } satisfies Record<BuiltinPromptTemplateId, PromptTemplate>;
 
-export const builtinPromptTemplate = (id: BuiltinPromptTemplateId): PromptTemplate =>
-  PROMPT_TEMPLATES[id];
-
 function joinBlocks(...blocks: string[]): string {
   return blocks
     .map((block) => block.trim())

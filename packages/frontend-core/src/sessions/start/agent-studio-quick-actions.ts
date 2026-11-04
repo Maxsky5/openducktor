@@ -1,7 +1,6 @@
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import { type AgentSessionStartMode } from "@openducktor/core";
 import {
-  actionEffect,
   actionShowsOn,
   launchSessionCommand,
   taskLaunchOrder,
@@ -9,7 +8,6 @@ import {
   taskWorkflowInput,
   taskActionLabel,
   taskGitConflictLaunch,
-  workflowAction,
   type WorkflowRoleId as AgentRole,
   type WorkflowLaunchActionId as SessionLaunchActionId,
   type ResolvedTaskCard as TaskCard,
@@ -85,7 +83,6 @@ export const buildAgentStudioQuickActions = (
   if (!task) return [];
   const { evaluator } = task.taskWorkflow;
   const input = taskWorkflowInput(task);
-  const availableActions = new Set(task.availableActions);
   const options: AgentStudioSessionQuickActionOption[] = [];
   const availableSteps = new Set(
     task.workflowSteps.filter(({ available }) => available).map(({ id }) => id),
@@ -146,63 +143,53 @@ export const buildAgentStudioQuickActions = (
       taskActionLabel(id, task, { surface: "studio" }),
     );
   }
-  const effectLaunches = new Set(
-    task.taskWorkflow.definition.actions.flatMap((action) =>
-      action.kind === "event" &&
-      availableActions.has(action.id) &&
-      actionEffect(task.taskWorkflow, action) === "review.request_changes"
-        ? (action.launchActionIds ?? [])
-        : [],
-    ),
-  );
+  // One record per available task action. Request Changes with following launches places itself
+  // among the session starts, and its launches leave the step starts.
+  const taskEntries = evaluator
+    .orderActions(input, task.availableActions)
+    .filter((id) => !launchActionIds.has(id))
+    .map((id) => {
+      const action = task.taskWorkflow.action(id);
+      const effect = task.taskWorkflow.actionEffect(id);
+      const followingLaunches =
+        effect === "review.request_changes" && action.kind === "event"
+          ? (action.launchActionIds ?? [])
+          : [];
+      return { id, action, effect, follows: followingLaunches.length > 0, followingLaunches };
+    });
+  const effectLaunches = new Set(taskEntries.flatMap(({ followingLaunches }) => followingLaunches));
   for (const step of task.taskWorkflow.definition.steps) {
     if (step.kind !== "agent" || !availableSteps.has(step.id)) continue;
     const launch = evaluator.stepLaunchAction(input, step.id);
     if (!effectLaunches.has(launch)) append(launch);
   }
   for (const launch of taskSurfaceLaunches(task, "studio")) append(launch.id);
+  const leading: AgentStudioTaskQuickActionOption[] = [];
+  const following: AgentStudioTaskQuickActionOption[] = [];
+  const trailing: AgentStudioTaskQuickActionOption[] = [];
+  for (const { id, action, effect, follows } of taskEntries) {
+    const merged = effect === "task.close" && !!params.mergedTarget;
+    if (!actionShowsOn(action, "studio") && !merged) continue;
+    const approvalLeads =
+      effect === "review.approve" &&
+      hasNoEnabledGitProvider(params.gitProviderContext, params.gitProviderReadError);
+    const placement =
+      merged || approvalLeads || effect === "review.request_changes" ? "leading" : "trailing";
+    const option: AgentStudioTaskQuickActionOption = {
+      kind: "task_action",
+      id: `task:${id}`,
+      taskAction: id,
+      placement,
+      label: taskActionLabel(id, task, { surface: "studio" }),
+      description: merged ? `The task branch is merged into ${params.mergedTarget}.` : action.label,
+      disabled: follows && params.createSessionDisabled,
+    };
+    if (merged) option.mergedTarget = params.mergedTarget!;
+    if (follows) following.push(option);
+    else if (placement === "leading") leading.push(option);
+    else trailing.push(option);
+  }
   const launchOrder = taskLaunchOrder(task);
-  const taskOptions = evaluator
-    .orderActions(input, task.availableActions)
-    .flatMap((id): AgentStudioTaskQuickActionOption[] => {
-      const action = workflowAction(task.taskWorkflow, id);
-      const effect = actionEffect(task.taskWorkflow, action);
-      const merged = effect === "task.close" && !!params.mergedTarget;
-      if (launchActionIds.has(id) || (!actionShowsOn(action, "studio") && !merged)) return [];
-      const approvalLeads =
-        effect === "review.approve" &&
-        hasNoEnabledGitProvider(params.gitProviderContext, params.gitProviderReadError);
-      const option: AgentStudioTaskQuickActionOption = {
-        kind: "task_action",
-        id: `task:${id}`,
-        taskAction: id,
-        placement:
-          merged || approvalLeads || effect === "review.request_changes" ? "leading" : "trailing",
-        label: taskActionLabel(id, task, { surface: "studio" }),
-        description: merged
-          ? `The task branch is merged into ${params.mergedTarget}.`
-          : action.label,
-        disabled:
-          effect === "review.request_changes" &&
-          action.kind === "event" &&
-          !!action.launchActionIds?.length &&
-          params.createSessionDisabled,
-      };
-      if (merged) option.mergedTarget = params.mergedTarget!;
-      return [option];
-    });
-  const followsEffect = (option: AgentStudioTaskQuickActionOption) => {
-    const action = workflowAction(task.taskWorkflow, option.taskAction);
-    return (
-      action.kind === "event" &&
-      !!action.launchActionIds?.length &&
-      actionEffect(task.taskWorkflow, action) === "review.request_changes"
-    );
-  };
-  const ordered: AgentStudioQuickActionOption[] = [
-    ...options,
-    ...taskOptions.filter(followsEffect),
-  ];
   const rank = (option: AgentStudioQuickActionOption) => {
     const id =
       option.kind === "session_start"
@@ -211,12 +198,8 @@ export const buildAgentStudioQuickActions = (
     const index = launchOrder.indexOf(id);
     return index < 0 ? launchOrder.length : index;
   };
-  ordered.sort((left, right) => rank(left) - rank(right));
-  return [
-    ...taskOptions.filter((option) => option.placement === "leading" && !followsEffect(option)),
-    ...ordered,
-    ...taskOptions.filter((option) => option.placement === "trailing" && !followsEffect(option)),
-  ];
+  const ordered = [...options, ...following].sort((left, right) => rank(left) - rank(right));
+  return [...leading, ...ordered, ...trailing];
 };
 
 export const buildGitConflictQuickAction = (params: {

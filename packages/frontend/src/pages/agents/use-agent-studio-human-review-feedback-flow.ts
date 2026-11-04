@@ -55,7 +55,7 @@ export function useAgentStudioHumanReviewFeedbackFlow({
   );
   const openHumanReviewFeedback = useCallback(
     (launchActionId: string): void => {
-      if (taskId) open(taskId, launchActionId);
+      if (taskId) open(taskId, { kind: "launch", launchActionId });
     },
     [open, taskId],
   );

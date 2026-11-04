@@ -1,5 +1,4 @@
 import { useState, type PropsWithChildren } from "react";
-import { render, type RenderOptions } from "@testing-library/react";
 import { ActiveWorkspaceContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -51,6 +50,3 @@ export function WorkflowTestProvider({ children }: PropsWithChildren) {
     </ClientConnectionProvider>
   );
 }
-
-export const renderWithWorkflow = (ui: Parameters<typeof render>[0], options?: RenderOptions) =>
-  render(ui, { wrapper: WorkflowTestProvider, ...options });

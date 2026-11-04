@@ -1,6 +1,5 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
-  sessionViewActions,
   resolveTaskCardActions,
   taskHasSessionPage,
   type TaskWorkflowAction,
@@ -48,7 +47,7 @@ export const getTaskFooter = ({
     activeSessionRole: activeSessionRole || undefined,
     leadingAction: proposesClose ? task.taskWorkflow.effectActions("task.close")[0] : undefined,
   });
-  const sessions = sessionViewActions(task).map((view) => ({
+  const sessions = task.taskWorkflow.sessionViews.map((view) => ({
     ...view,
     options: resolveSessionTargetOptions(historicalSessions, taskSessions, view.role),
   }));

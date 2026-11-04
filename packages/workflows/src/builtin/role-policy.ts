@@ -6,18 +6,13 @@ import {
   resolveCodexEffectivePolicy,
   type RuntimeSupportedScope,
 } from "@openducktor/contracts";
-import { BUILTIN_ROLES, builtinRole, byRole } from "./roles";
+import { builtinRole, byRole } from "./roles";
 import type { BuiltinRoleId } from "./ids";
 
 /** The ODT tools of each role. */
 export const AGENT_ROLE_TOOL_POLICY = byRole((role) => role.tools);
 
-/** Roles whose sessions run in the task worktree. */
-export const WORKTREE_AGENT_ROLES: readonly BuiltinRoleId[] = BUILTIN_ROLES.filter(
-  (role) => role.location === "task_worktree",
-).map((role) => role.id);
-
-export const runtimeRequiredScopesByRole = byRole((role) => role.runtimeScopes);
+const runtimeRequiredScopesByRole = byRole((role) => role.runtimeScopes);
 
 const requiredRuntimeSupportedScopeSet = new Set<RuntimeSupportedScope>(
   Object.values(runtimeRequiredScopesByRole).flat(),

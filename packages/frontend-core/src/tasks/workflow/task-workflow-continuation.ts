@@ -18,7 +18,6 @@ export type TaskWorkflowContinuation = {
 export type ContinueTaskWorkflow = (
   committed: TaskCard,
   continuation?: TaskWorkflowContinuation,
-  context?: { humanFeedback?: string },
 ) => Promise<void>;
 /** Called with the task card that a committed host command returned. */
 export type OnTaskCommitted = (committed: TaskCard) => Promise<void>;
@@ -26,7 +25,6 @@ export type LaunchTaskWorkflow = (
   taskId: string,
   launchActionId: string,
   committedTask?: ResolvedTaskCard,
-  humanFeedback?: string,
 ) => void;
 
 export const selectTaskWorkflowContinuation = (
@@ -55,7 +53,7 @@ export function useTaskWorkflowContinuation(
   const queryClient = useQueryClient();
   const { feedback } = useClientConnection();
   return useCallback(
-    async (committed, continuation, context) => {
+    async (committed, continuation) => {
       if (!continuation?.launchActionIds.length) return;
       try {
         if (!scope || !onLaunch)
@@ -69,7 +67,7 @@ export function useTaskWorkflowContinuation(
             "The workspace changed. Open the task in its workspace to start its session.",
           );
         const launch = selectTaskWorkflowContinuation(task, continuation);
-        if (launch) onLaunch(task.id, launch, task, context?.humanFeedback);
+        if (launch) onLaunch(task.id, launch, task);
       } catch (cause) {
         feedback.show("error", "Task updated, but its session could not start", {
           description: `Do not repeat the task action. ${cause instanceof Error ? cause.message : String(cause)}`,

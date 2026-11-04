@@ -1,4 +1,3 @@
-import { workflowAction } from "@openducktor/workflows";
 import { ArrowRight } from "lucide-react";
 import type { ReactElement } from "react";
 import { WORKFLOW_ICONS } from "@/lib/agent-role-presentation";
@@ -32,7 +31,7 @@ export const taskMenuActionVariant = (
   MENU_ACTION_VARIANTS[taskActionTone(action, task)];
 
 export const taskActionIcon = (action: string, task: ResolvedTaskCard): ReactElement => {
-  const hint = workflowAction(task.taskWorkflow, action).icon;
+  const hint = task.taskWorkflow.action(action).icon;
   const Icon = hint ? WORKFLOW_ICONS[hint] : ArrowRight;
   return <Icon className="size-3.5" />;
 };

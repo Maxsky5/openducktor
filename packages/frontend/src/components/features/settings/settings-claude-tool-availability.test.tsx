@@ -1,4 +1,4 @@
-import { renderWithWorkflow as render } from "@/test-utils/workflow-provider";
+import { renderWithWorkflow as render } from "@/test-utils/render-with-workflow";
 import { afterEach, expect, test } from "bun:test";
 import {
   claudeRuntimeConfigSchema,

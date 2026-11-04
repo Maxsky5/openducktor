@@ -1,4 +1,4 @@
-import { renderWithWorkflow as render } from "@/test-utils/workflow-provider";
+import { renderWithWorkflow as render } from "@/test-utils/render-with-workflow";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { type AutopilotSettings, createDefaultAutopilotSettings } from "@openducktor/contracts";
 import { cleanup, fireEvent, screen } from "@testing-library/react";

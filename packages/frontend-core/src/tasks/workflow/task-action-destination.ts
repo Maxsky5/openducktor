@@ -1,7 +1,5 @@
 import {
   resolveWorkflowAction,
-  sessionRoleForViewAction,
-  workflowAction,
   type ResolvedTaskCard,
   type TaskWorkflowAction,
 } from "@openducktor/workflows";
@@ -9,7 +7,7 @@ import type { SessionTargetOptions } from "../board/session-target-resolution";
 import type { TaskWorkflowContinuation } from "./task-workflow-continuation";
 
 /** A workflow action that asks for confirmation before its host command. */
-export type TaskActionConfirmation = "reset_implementation" | "reset_task" | "close_task";
+export type TaskActionConfirmation = "reset_implementation" | "reset_task" | "close";
 
 /** The client operation of a workflow action. Each client runs it with its own controls. */
 export type TaskActionDestination =
@@ -39,7 +37,7 @@ export const resolveTaskActionDestination = (
   action: TaskWorkflowAction,
   sessionOptionsOf?: SessionOptionsOf,
 ): TaskActionDestination => {
-  const role = sessionRoleForViewAction(action, task);
+  const role = task.taskWorkflow.viewActionRole(action);
   const options = role ? sessionOptionsOf?.(role) : undefined;
   const command = resolveWorkflowAction(task, action, options ? role : undefined);
   if (command.kind === "session") return { kind: "launch", launchActionId: command.launchActionId };
@@ -67,7 +65,7 @@ export const resolveTaskActionDestination = (
     case "task.reset":
       return { kind: "confirm", action: "reset_task", continuation };
     case "task.close":
-      return { kind: "confirm", action: "close_task", continuation };
+      return { kind: "confirm", action: "close", continuation };
     default:
       throw new Error(
         `Action "${action}" uses unsupported host effect "${command.effect}". Update the client to use this action.`,
@@ -80,8 +78,8 @@ export const taskActionSendsCommand = (
   task: ResolvedTaskCard,
   action: TaskWorkflowAction,
 ): boolean => {
-  if (sessionRoleForViewAction(action, task)) return false;
-  const declaration = workflowAction(task.taskWorkflow, action);
+  if (task.taskWorkflow.viewActionRole(action)) return false;
+  const declaration = task.taskWorkflow.action(action);
   return !(
     declaration.kind === "view" &&
     declaration.stepId === undefined &&

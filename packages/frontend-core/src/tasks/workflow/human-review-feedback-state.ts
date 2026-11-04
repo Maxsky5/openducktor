@@ -1,23 +1,19 @@
-import type { TaskWorkflowContinuation } from "./task-workflow-continuation";
 import type {
   HumanReviewFeedbackLaunch,
+  HumanReviewFeedbackRequest,
   HumanReviewFeedbackModalModel,
   HumanReviewFeedbackState,
 } from "./human-review-feedback-types";
 import { type ResolvedTaskCard as TaskCard, launchSessionCommand } from "@openducktor/workflows";
 
 export const createHumanReviewFeedbackState = (
-  tasks: TaskCard[],
+  tasks: readonly TaskCard[],
   taskId: string,
-  launchActionId?: string,
-  requestChanges = false,
-  continuation?: TaskWorkflowContinuation,
+  request: HumanReviewFeedbackRequest,
 ): HumanReviewFeedbackState => {
   const task = tasks.find(({ id }) => id === taskId);
   if (!task)
     throw new Error("Task workflow is unavailable. Reload the task before requesting changes.");
-  if (!launchActionId && !requestChanges)
-    throw new Error(`Task "${taskId}" feedback launch is missing. Open the action again.`);
   const toLaunch = (id: string): HumanReviewFeedbackLaunch => {
     const launch = task.taskWorkflow.launchAction(id);
     return {
@@ -27,14 +23,15 @@ export const createHumanReviewFeedbackState = (
       postStartAction: launchSessionCommand(launch),
     };
   };
-  if (!requestChanges)
+  if (request.kind === "launch")
     return {
-      confirmLabel: task.taskWorkflow.launchAction(launchActionId!).label,
-      launch: toLaunch(launchActionId!),
+      confirmLabel: task.taskWorkflow.launchAction(request.launchActionId).label,
+      launch: toLaunch(request.launchActionId),
       requestChanges: false,
       taskId,
       message: "",
     };
+  const { continuation } = request;
   const eventId = task.taskWorkflow.effectEvent("review.request_changes");
   if (!eventId)
     throw new Error(`Task "${taskId}" declares no Request Changes effect. Reload the task.`);
@@ -44,7 +41,7 @@ export const createHumanReviewFeedbackState = (
       continuation.workflow.revision !== task.workflow.revision)
   )
     throw new Error("The task workflow changed. Reload the task before requesting changes.");
-  const candidates = continuation?.launchActionIds ?? (launchActionId ? [launchActionId] : []);
+  const candidates = continuation?.launchActionIds ?? [];
   // The launch is selected in the state that Request Changes gives, so the host can commit the
   // change only after the session start succeeds.
   const following = candidates.length

@@ -1,12 +1,10 @@
 import {
-  sessionRoleForViewAction,
   type TaskWorkflowAction,
   taskHasSessionPage,
   taskActionLabel,
   type WorkflowRoleId as AgentRole,
   type ResolvedTaskCard as TaskCard,
   workflowRoleIcon,
-  workflowAction as workflowActionDefinition,
   actionEmphasis,
   taskEffectAction,
 } from "@openducktor/workflows";
@@ -121,7 +119,7 @@ export const buildPaletteTaskView = ({
   const disabledActions = new Set(footer.disabledActions);
   // The session actions already open the session of each role.
   const workflowActions = allActions.flatMap((action): PaletteTaskAction[] =>
-    sessionRoleForViewAction(action, task)
+    task.taskWorkflow.viewActionRole(action)
       ? []
       : [workflowAction(task, action, disabledActions.has(action))],
   );
@@ -226,8 +224,7 @@ const workflowAction = (
   label: taskActionLabel(action, task),
   keywords: ["workflow", "start", "run"],
   icon: taskActionIcon(action, task),
-  destructive:
-    actionEmphasis(workflowActionDefinition(task.taskWorkflow, action)) === "destructive",
+  destructive: actionEmphasis(task.taskWorkflow.action(action)) === "destructive",
   disabled,
   command: { kind: "workflow", action },
 });

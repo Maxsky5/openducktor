@@ -47,11 +47,14 @@ function Card(props: CardTestProps) {
     <MemoryRouter>
       <TooltipProvider>
         <TaskWorkflowActionsContext
-          value={createTaskWorkflowActionsFixture({
-            onLaunch: props.onLaunch,
-            onOpenSession: props.onOpenSession,
-            onResetImplementation: props.onResetImplementation,
-          })}
+          value={createTaskWorkflowActionsFixture(
+            { onLaunch: props.onLaunch, onOpenSession: props.onOpenSession },
+            {
+              onConfirm: (taskId, action) => {
+                if (action === "reset_implementation") props.onResetImplementation(taskId);
+              },
+            },
+          )}
         >
           <KanbanTaskCard {...props} />
         </TaskWorkflowActionsContext>

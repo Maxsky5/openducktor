@@ -13,8 +13,6 @@ export type TaskWorkflowAction = string;
 const ALL_SURFACES = workflowActionSurfaceSchema.options;
 type WorkflowActionDefinition = TaskWorkflow["definition"]["actions"][number];
 
-export const workflowAction = (workflow: TaskWorkflow, id: string): WorkflowActionDefinition =>
-  workflow.action(id);
 const actionSurfaces = (action: WorkflowActionDefinition): readonly WorkflowActionSurface[] =>
   action.surfaces ?? ALL_SURFACES;
 /** Whether a surface shows the action. */
@@ -24,11 +22,6 @@ export const actionShowsOn = (
 ): boolean => actionSurfaces(action).includes(surface);
 export const actionEmphasis = (action: WorkflowActionDefinition): WorkflowActionEmphasis =>
   action.emphasis ?? "neutral";
-/** The host effect of an event action, if any. */
-export const actionEffect = (
-  workflow: TaskWorkflow,
-  action: WorkflowActionDefinition,
-): WorkflowEventEffect | undefined => workflow.actionEffect(action.id);
 
 export const taskIssueType = (
   task: Pick<ResolvedTaskCard, "id" | "issueType" | "taskWorkflow">,
@@ -40,14 +33,6 @@ export const taskIssueType = (
     );
   return choice;
 };
-
-/** The agent role whose session a view action with a step opens. */
-export const sessionRoleForViewAction = (
-  actionId: string,
-  task: Pick<ResolvedTaskCard, "taskWorkflow">,
-): string | undefined => task.taskWorkflow.viewActionRole(actionId);
-export const sessionViewActions = (task: Pick<ResolvedTaskCard, "taskWorkflow">) =>
-  task.taskWorkflow.sessionViews;
 
 export const roleWorkflowForTask = (
   task: ResolvedTaskCard | null | undefined,
@@ -61,9 +46,6 @@ export const roleWorkflowForTask = (
     );
   return state;
 };
-export const buildRoleWorkflowMapForTask = (
-  task: ResolvedTaskCard | null | undefined,
-): Record<string, AgentWorkflowState> => task?.agentWorkflows ?? {};
 export const isRoleAvailableForTask = (
   task: ResolvedTaskCard | null | undefined,
   role: string,
@@ -108,7 +90,7 @@ export const resolveTaskCardActions = (
   const allowed = (id: string) =>
     (!options.include || options.include.includes(id)) &&
     actionShowsOn(declared.action(id), surface);
-  const views = sessionViewActions(task);
+  const views = task.taskWorkflow.sessionViews;
   let enabled = task.availableActions.filter(allowed);
   if (options.hasActiveSession)
     enabled = enabled.filter((id) => declared.action(id).kind !== "session");
@@ -142,7 +124,7 @@ export const taskActionLabel = (
 ): string => {
   const { evaluator } = task.taskWorkflow;
   const label = evaluator.actionLabel(taskWorkflowInput(task), action);
-  const declaration = workflowAction(task.taskWorkflow, action);
+  const declaration = task.taskWorkflow.action(action);
   return options.surface === "studio" &&
     declaration.studioLabel !== undefined &&
     label === declaration.label
@@ -167,8 +149,8 @@ export const resolveWorkflowAction = (
   id: string,
   accessibleSessionRole?: string,
 ): TaskActionCommand => {
-  const action = workflowAction(task.taskWorkflow, id);
-  const sessionRole = sessionRoleForViewAction(id, task);
+  const action = task.taskWorkflow.action(id);
+  const sessionRole = task.taskWorkflow.viewActionRole(id);
   if (
     !task.availableActions.includes(id) &&
     !(sessionRole && sessionRole === accessibleSessionRole)
@@ -188,18 +170,18 @@ export const resolveWorkflowAction = (
   return {
     kind: "event",
     eventId: action.eventId,
-    effect: actionEffect(task.taskWorkflow, action),
+    effect: task.taskWorkflow.actionEffect(action.id),
     launchActionIds: action.launchActionIds ?? [],
   };
 };
 
-/** Whether the task can run an available event action whose event has the host effect. */
 /** The available event action of the task whose event runs the host effect, if any. */
 export const taskEffectAction = (
   task: Pick<ResolvedTaskCard, "availableActions" | "taskWorkflow">,
   effect: WorkflowEventEffect,
 ): string | undefined =>
   task.taskWorkflow.effectActions(effect).find((id) => task.availableActions.includes(id));
+/** Whether the task can run an available event action whose event has the host effect. */
 export const taskEffectAvailable = (
   task: Pick<ResolvedTaskCard, "availableActions" | "taskWorkflow">,
   effect: WorkflowEventEffect,
