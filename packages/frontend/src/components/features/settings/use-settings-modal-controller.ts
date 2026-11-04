@@ -7,6 +7,7 @@ import { validateOpenCodePermissions } from "./opencode-permission-validation";
 import type {
   AgentRuntimes,
   GitBranch,
+  GitProviderConfig,
   GitProviderRepository,
   SettingsRepoConfig,
   RepoPromptOverrides,
@@ -88,6 +89,8 @@ export type SettingsModalController = {
   workspaceIds: string[];
   selectedWorkspaceId: string | null;
   selectedRepoConfig: SettingsRepoConfig | null;
+  /** The provider that the draft of the selected repository started from. */
+  savedSelectedRepoGitProvider: GitProviderConfig | null;
   requiredWorkspaceSelectionUnresolved: boolean;
   requiredWorkspaceRepoPath: string | null;
   selectedWorkspace: WorkspaceRecord | null;
@@ -520,6 +523,9 @@ export const useSettingsModalController = ({
     detectGithubRepository,
     updateSelectedRepoConfig,
   });
+  const savedSelectedRepoGitProvider = selectedWorkspaceId
+    ? (draftBaseline?.workspaces[selectedWorkspaceId]?.git.provider ?? null)
+    : null;
 
   return {
     customAgentRoleValidationState,
@@ -548,6 +554,7 @@ export const useSettingsModalController = ({
     workspaceIds,
     selectedWorkspaceId,
     selectedRepoConfig,
+    savedSelectedRepoGitProvider,
     requiredWorkspaceSelectionUnresolved,
     requiredWorkspaceRepoPath,
     selectedWorkspace,

@@ -74,6 +74,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   workspaceIds: [],
   selectedWorkspaceId: null,
   selectedRepoConfig: null,
+  savedSelectedRepoGitProvider: null,
   requiredWorkspaceSelectionUnresolved: false,
   requiredWorkspaceRepoPath: null,
   selectedWorkspace: null,

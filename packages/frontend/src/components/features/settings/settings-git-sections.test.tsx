@@ -1947,4 +1947,57 @@ describe("settings git sections", () => {
       rendered.unmount();
     }
   });
+
+  test("restores the saved GitLab settings after a switch to another provider and back", async () => {
+    const savedProvider = {
+      id: "gitlab",
+      enabled: true,
+      autoDetected: false,
+      repository: {
+        providerId: "gitlab",
+        instanceUrl: "https://gitlab.com",
+        projectPath: "group/app",
+      },
+      settings: { accountId: gitlabAccount.accountId },
+    } satisfies GitProviderConfig;
+    const savedRepoConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: { provider: savedProvider },
+    };
+    const connection = createTestClientConnection({
+      client: { gitlabAccountsList: async () => [gitlabAccount] },
+    });
+    let latest = savedRepoConfig;
+    const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
+      const [repoConfig, setRepoConfig] = useState(savedRepoConfig);
+      latest = repoConfig;
+      return createElement(
+        QueryProvider,
+        { connection },
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          savedGitProvider: savedProvider,
+          providerState: { status: "draft" },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onUpdateSelectedRepoConfig: setRepoConfig,
+        }),
+      );
+    };
+    const rendered = render(createElement(ControlledRepositoryGitSection));
+
+    try {
+      fireEvent.click(screen.getByRole("radio", { name: /GitHub/ }));
+      expect(latest.git.provider?.id).toBe("github");
+
+      fireEvent.click(screen.getByRole("radio", { name: /GitLab/ }));
+      expect(latest.git.provider).toEqual(savedProvider);
+      await waitFor(() =>
+        expect(screen.getByLabelText("Project path")).toHaveProperty("value", "group/app"),
+      );
+    } finally {
+      rendered.unmount();
+    }
+  });
 });

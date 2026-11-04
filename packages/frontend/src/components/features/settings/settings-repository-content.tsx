@@ -305,6 +305,7 @@ export function SettingsRepositoryContent({
           <RepositoryGitSection
             selectedRepoPath={selectedWorkspace?.repoPath ?? null}
             selectedRepoConfig={selectedRepoConfig}
+            savedGitProvider={controller.savedSelectedRepoGitProvider}
             providerState={providerState}
             disabled={isInteractionDisabled}
             onDetectGithubRepository={controller.detectSelectedRepoGithubRepository}

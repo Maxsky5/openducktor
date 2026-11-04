@@ -2,6 +2,7 @@ import {
   AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
   GITLAB_PROVIDER_DESCRIPTOR,
   knownGitProviderIdSchema,
+  type GitProviderConfig,
   type GitProviderRepository,
   type SettingsRepoConfig,
 } from "@openducktor/contracts";
@@ -18,6 +19,8 @@ import { GitProviderSelector, type GitProviderSelection } from "./git-provider-s
 type RepositoryGitSectionProps = {
   selectedRepoPath: string | null;
   selectedRepoConfig: SettingsRepoConfig | null;
+  /** The saved provider of the repository. A switch back to it restores its saved settings. */
+  savedGitProvider?: GitProviderConfig | null;
   providerState: GitProviderState;
   disabled: boolean;
   onDetectGithubRepository: () => Promise<GitProviderRepository | null>;
@@ -34,6 +37,7 @@ const ignoreSaveSettings = async (): Promise<boolean> => false;
 export function RepositoryGitSection({
   selectedRepoPath,
   selectedRepoConfig,
+  savedGitProvider = null,
   providerState,
   disabled,
   onDetectGithubRepository,
@@ -60,7 +64,9 @@ export function RepositoryGitSection({
 
   const selectedProviderId = selectedRepoConfig.git.provider?.id;
   const selectProvider = (providerId: Exclude<GitProviderSelection, "unsupported">): void => {
-    if (providerId !== "azure_devops" && providerId !== "gitlab") {
+    const restoresSaved = savedGitProvider?.id === providerId;
+    // Saved settings passed validation when they were saved.
+    if (restoresSaved || (providerId !== "azure_devops" && providerId !== "gitlab")) {
       onGitProviderValidationChange(0);
     }
     onUpdateSelectedRepoConfig((repoConfig) => {
@@ -70,6 +76,8 @@ export function RepositoryGitSection({
         return { ...repoConfig, git };
       }
       if (repoConfig.git.provider?.id === providerId) return repoConfig;
+      if (restoresSaved)
+        return { ...repoConfig, git: { ...repoConfig.git, provider: savedGitProvider } };
       return {
         ...repoConfig,
         git: {
