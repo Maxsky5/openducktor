@@ -22,6 +22,16 @@ export class CodexAppServerRpcError extends HostOperationError<{
   method: CodexAppServerRequestMethod;
 }> {}
 
+/**
+ * The Codex app-server process closed. `stderr` holds what it wrote, which often names the cause,
+ * and `exit` tells how it stopped.
+ */
+export class CodexAppServerClosedError extends HostOperationError<{
+  runtimeId: string;
+  stderr: string;
+  exit: string;
+}> {}
+
 export type CodexAppServerError =
   | HostOperationErrorAggregate
   | HostResourceErrorAggregate

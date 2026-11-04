@@ -15,14 +15,23 @@ import {
   terminateProcessTree,
   waitForChildProcessClose,
 } from "../../infrastructure/process/process-tree";
+import { CodexAppServerClosedError } from "../../ports/codex-app-server-port";
 import {
   RuntimeExecutableIncompatibleError,
   type RuntimeExecutableProbeError,
   type RuntimeExecutableProbePort,
 } from "../../ports/runtime-executable-probe-port";
+import {
+  incompatibleRuntimeExecutableMessage,
+  type RuntimeExecutableGuidance,
+  runtimeExecutableStartError,
+} from "../runtimes/runtime-executable-guidance";
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
-import type { CodexAppServerChildTransport } from "./codex-app-server-transport-types";
+import type {
+  CodexAppServerChildTransport,
+  CodexTransportBaseError,
+} from "./codex-app-server-transport-types";
 import type { CodexChildProcess } from "./codex-runtime-cleanup";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
@@ -33,9 +42,24 @@ type CodexProbeTransport = Pick<
   "close" | "notify" | "rejectPendingRequestsForShutdown" | "request"
 >;
 
+const CODEX_GUIDANCE: RuntimeExecutableGuidance = {
+  kind: "codex",
+  requirement: "OpenDucktor needs a Codex version with the `codex app-server` command.",
+  update:
+    "update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`",
+};
+
+/** Shows what a closed Codex process wrote and how it stopped, without the internal runtime ID. */
+const codexFailureDetail = (cause: CodexTransportBaseError): string => {
+  if (!(cause instanceof CodexAppServerClosedError) || !cause.details) return cause.message;
+  const status = `Codex app-server ${cause.details.exit}`;
+  return cause.details.stderr ? `${cause.details.stderr} (${status})` : status;
+};
+
 export const verifyCodexAppServerProtocol = (
   transport: CodexProbeTransport,
   clientVersion: string,
+  executablePath: string,
 ): Effect.Effect<void, RuntimeExecutableProbeError> =>
   Effect.gen(function* () {
     yield* transport.request({
@@ -58,11 +82,20 @@ export const verifyCodexAppServerProtocol = (
     Effect.mapError((cause) =>
       cause instanceof HostValidationError
         ? new RuntimeExecutableIncompatibleError({
-            message:
-              "The executable did not complete the Codex app-server initialization protocol.",
+            message: incompatibleRuntimeExecutableMessage(
+              CODEX_GUIDANCE,
+              executablePath,
+              "did not complete the Codex app-server initialization protocol",
+            ),
             cause,
           })
-        : toHostOperationError(cause, "codexExecutableProbe.initialize"),
+        : runtimeExecutableStartError({
+            guidance: CODEX_GUIDANCE,
+            operation: "codexExecutableProbe.initialize",
+            executablePath,
+            detail: codexFailureDetail(cause),
+            cause,
+          }),
     ),
   );
 
@@ -171,7 +204,8 @@ export const createCodexExecutableProbe = ({
         child.off("error", handleEarlySpawnError);
         return { child, closed: () => closed, pid, transport };
       }),
-      probe: ({ transport }) => verifyCodexAppServerProtocol(transport, clientVersion),
+      probe: ({ transport }) =>
+        verifyCodexAppServerProtocol(transport, clientVersion, executablePath),
       release: ({ child, closed, pid, transport }) =>
         cleanupCodexProbe({
           child,

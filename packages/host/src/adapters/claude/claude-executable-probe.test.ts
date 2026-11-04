@@ -98,7 +98,9 @@ describe("createClaudeExecutableProbe", () => {
       throw new Error(`Expected HostOperationError, received ${failure._tag}`);
     }
     expect(failure.operation).toBe("claudeExecutableProbe.initialize");
-    expect(failure.message).toContain("failed to start Claude Code");
+    expect(failure.message).toBe(
+      "Claude Code at '/usr/local/bin/claude' did not start. Failed to start Claude Code. Fix the reported problem, or run `claude update`. Then try again.",
+    );
     expect(cleanupFinished).toBe(true);
   });
 
@@ -150,7 +152,7 @@ describe("createClaudeExecutableProbe", () => {
       expect(result.failure._tag).toBe("RuntimeExecutableIncompatibleError");
       expect(result.failure.message).toContain("2.1.306 or later");
       expect(result.failure.message).toContain("/usr/local/bin/claude");
-      expect(result.failure.message).toContain("Update Claude Code");
+      expect(result.failure.message).toContain("Run `claude update`");
       expect(closed).toBe(true);
     },
   );

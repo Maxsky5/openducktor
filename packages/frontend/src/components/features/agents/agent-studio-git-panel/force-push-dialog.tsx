@@ -1,7 +1,7 @@
 import { ArrowUp } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import type { AgentStudioPendingForcePush } from "@openducktor/frontend-core/git/contracts";
-import { INLINE_CODE_CLASS_NAME } from "./constants";
+import { INLINE_CODE_CLASS_NAME } from "@/components/ui/inline-code-text";
 import { GitConfirmationDialog } from "./git-confirmation-dialog";
 
 type ForcePushDialogProps = {

@@ -9,6 +9,7 @@ import {
   type HostRuntimeStatus,
   hostRuntimeSnapshotSchema,
   type RepoConfig,
+  type RuntimeHealth,
   type RuntimeKind,
   type RuntimeRoute,
   runtimeLifecycleImpactSchema,
@@ -36,7 +37,6 @@ import {
   createElectronEffectHostCommandRouter,
   createElectronHostCommandRouter as createProductionElectronHostCommandRouter,
 } from "./electron-host";
-import { HostOperationError } from "../../../../packages/host/src/effect/host-errors";
 import { createTaskStoreTestDouble } from "../../../../packages/host/src/test-support/task-store-test-double";
 import { createFakeOpenCodeV2 } from "../../../../packages/host/src/test-support/opencode-v2-standalone";
 import { createBrowserEngineTestDouble } from "../../../../packages/host/src/test-support/browser-engine-test-double";
@@ -1357,10 +1357,6 @@ describe("createElectronHostCommandRouter", () => {
       configDirectories.push(configRoot);
       await writeFile(path.join(configRoot, "config.json"), JSON.stringify(globalConfig()));
       let runtimeProbes = 0;
-      const unrelatedError = new HostOperationError({
-        operation: "test.runtime",
-        message: "OpenCode is unavailable.",
-      });
       const router = await Effect.runPromise(
         createElectronEffectHostCommandRouter({
           isPackaged: false,
@@ -1379,7 +1375,16 @@ describe("createElectronHostCommandRouter", () => {
             ...createRuntimeHealth(),
             getRuntimeHealth: () => {
               runtimeProbes += 1;
-              return failure === "runtime hang" ? Effect.never : Effect.fail(unrelatedError);
+              return failure === "runtime hang"
+                ? Effect.never
+                : Effect.succeed({
+                    kind: "opencode",
+                    enabled: true,
+                    ok: false,
+                    executablePath: null,
+                    version: null,
+                    error: "OpenCode is unavailable.",
+                  } satisfies RuntimeHealth);
             },
           },
           systemCommands: createSystemCommands(),

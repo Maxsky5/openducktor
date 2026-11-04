@@ -1,10 +1,7 @@
 import type { RuntimeHealth, RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
-import {
-  RuntimeExecutableIncompatibleError,
-  type RuntimeExecutableProbesByKind,
-} from "../../ports/runtime-executable-probe-port";
+import type { RuntimeExecutableProbesByKind } from "../../ports/runtime-executable-probe-port";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SystemCommandPort, SystemCommandRunOptions } from "../../ports/system-command-port";
 import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-discovery-port";
@@ -18,23 +15,18 @@ const VERSION_OPTIONS_BY_KIND = {
   codex: { timeoutMs: VERSION_TIMEOUT_MS },
   opencode: OPENCODE_VERSION_OPTIONS,
 } satisfies Record<RuntimeKind, SystemCommandRunOptions>;
-const RUNTIME_LABELS = {
-  claude: "Claude",
-  codex: "Codex",
-  opencode: "OpenCode",
-} satisfies Record<RuntimeKind, string>;
-
-const runtimeHealthFailure = (
+const runtimeHealth = (
   kind: RuntimeKind,
   executablePath: string,
-  detail: string,
+  version: string | null,
+  error: string | null,
 ): RuntimeHealth => ({
   kind,
   enabled: true,
-  ok: false,
+  ok: error === null,
   executablePath,
-  version: null,
-  error: detail,
+  version,
+  error,
 });
 
 export const createRuntimeHealthProbe = (
@@ -56,7 +48,7 @@ export const createRuntimeHealthProbe = (
           validateExactToolPath(toolDiscovery, kind, executablePath),
         );
         if (validatedPath._tag === "Failure") {
-          return runtimeHealthFailure(kind, executablePath, errorMessage(validatedPath.failure));
+          return runtimeHealth(kind, executablePath, null, errorMessage(validatedPath.failure));
         }
         const binary = validatedPath.success.path;
         const [probeResult, version] = yield* Effect.all(
@@ -66,24 +58,13 @@ export const createRuntimeHealthProbe = (
           ] as const,
           { concurrency: 2 },
         );
-        if (probeResult._tag === "Failure") {
-          if (probeResult.failure instanceof RuntimeExecutableIncompatibleError) {
-            return runtimeHealthFailure(
-              kind,
-              binary,
-              `The executable at ${binary} is not a compatible ${RUNTIME_LABELS[kind]} runtime.`,
-            );
-          }
-          return yield* Effect.fail(probeResult.failure);
-        }
-        return {
+        // Probe failures carry their own guidance. Keep the installed version beside each one.
+        return runtimeHealth(
           kind,
-          enabled: true,
-          ok: true,
-          executablePath: binary,
+          binary,
           version,
-          error: null,
-        } satisfies RuntimeHealth;
+          probeResult._tag === "Failure" ? probeResult.failure.message : null,
+        );
       });
     },
   };

@@ -7,13 +7,18 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { z } from "zod";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import { errorMessage, toHostOperationError } from "../../effect/host-errors";
 import {
   RuntimeExecutableIncompatibleError,
   type RuntimeExecutableProbePort,
 } from "../../ports/runtime-executable-probe-port";
+import {
+  incompatibleRuntimeExecutableMessage,
+  notReadyWithin,
+  runtimeExecutableStartError,
+} from "../runtimes/runtime-executable-guidance";
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
-import { getClaudeCodeCompatibilityError } from "./claude-code-compatibility";
+import { CLAUDE_CODE_GUIDANCE, getClaudeCodeCompatibilityError } from "./claude-code-compatibility";
 
 const DEFAULT_INITIALIZATION_TIMEOUT_MS = 10_000;
 const claudeInitializationResponseSchema = z.object({
@@ -108,13 +113,23 @@ export const createClaudeExecutableProbe = ({
         Effect.tryPromise({
           try: () => sdkQuery.initializationResult(),
           catch: (cause) =>
-            toHostOperationError(cause, "claudeExecutableProbe.initialize", { executablePath }),
+            runtimeExecutableStartError({
+              guidance: CLAUDE_CODE_GUIDANCE,
+              operation: "claudeExecutableProbe.initialize",
+              executablePath,
+              detail: errorMessage(cause),
+              cause,
+            }),
         }).pipe(
           Effect.filterOrFail(
             isClaudeInitializationResponse,
             () =>
               new RuntimeExecutableIncompatibleError({
-                message: `The executable at ${executablePath} returned an invalid Claude Agent SDK initialization response.`,
+                message: incompatibleRuntimeExecutableMessage(
+                  CLAUDE_CODE_GUIDANCE,
+                  executablePath,
+                  "returned an invalid Claude Agent SDK initialization response",
+                ),
               }),
           ),
           Effect.flatMap((initialization) => {
@@ -128,10 +143,11 @@ export const createClaudeExecutableProbe = ({
             duration: `${initializationTimeoutMs} millis`,
             orElse: () =>
               Effect.fail(
-                new HostOperationError({
+                runtimeExecutableStartError({
+                  guidance: CLAUDE_CODE_GUIDANCE,
                   operation: "claudeExecutableProbe.initialize",
-                  message: `Timed out initializing Claude Agent SDK with ${executablePath}.`,
-                  details: { executablePath, initializationTimeoutMs },
+                  executablePath,
+                  detail: notReadyWithin(initializationTimeoutMs),
                 }),
               ),
           }),

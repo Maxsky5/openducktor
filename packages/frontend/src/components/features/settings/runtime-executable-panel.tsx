@@ -5,6 +5,7 @@ import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-ico
 import { FolderPickerDialog } from "@/components/features/repository/folder-picker-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { InlineCodeText } from "@/components/ui/inline-code-text";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -53,6 +54,8 @@ function RuntimeStatusBadge({
   if (isChecking) return <Badge variant="outline">Checking</Badge>;
   if (result?.ok === true) return <Badge variant="success">Available</Badge>;
   if (showInvalidState && enabled) return <Badge variant="danger">Needs attention</Badge>;
+  // A disabled runtime with a path exists but failed its check, so it is not missing.
+  if (showInvalidState && result?.path) return <Badge variant="outline">Unavailable</Badge>;
   return <Badge variant="outline">Not found</Badge>;
 }
 
@@ -80,12 +83,24 @@ function RuntimeStatusMessage({
   }
   if (showInvalidState && result?.ok === false) {
     return (
-      <span className="inline-flex items-center gap-1.5">
+      <span className="inline-flex items-start gap-1.5">
         <CircleAlert
-          className={cn("size-3.5", enabled ? "text-destructive" : "text-muted-foreground")}
+          className={cn(
+            "mt-0.5 size-3.5 shrink-0",
+            enabled ? "text-destructive" : "text-muted-foreground",
+          )}
           aria-hidden="true"
         />
-        {result.error}
+        <span className="flex flex-col gap-0.5">
+          {result.error ? (
+            <span>
+              <InlineCodeText text={result.error} />
+            </span>
+          ) : null}
+          {result.version ? (
+            <span className="text-muted-foreground">Found version: {result.version}</span>
+          ) : null}
+        </span>
       </span>
     );
   }

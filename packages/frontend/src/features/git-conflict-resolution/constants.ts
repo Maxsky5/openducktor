@@ -1,6 +1,3 @@
-export const INLINE_CODE_CLASS_NAME =
-  "rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground";
-
 export const GIT_CONFLICT_TEST_IDS = {
   dialog: "agent-studio-git-conflict-modal",
   abortButton: "agent-studio-git-abort-conflict-button",

@@ -14,7 +14,8 @@ import {
   getGitConflictCopy,
   getGitConflictTitle,
 } from "@openducktor/frontend-core/git/conflicts/conflict-copy";
-import { GIT_CONFLICT_TEST_IDS, INLINE_CODE_CLASS_NAME } from "./constants";
+import { INLINE_CODE_CLASS_NAME } from "@/components/ui/inline-code-text";
+import { GIT_CONFLICT_TEST_IDS } from "./constants";
 import { GitConflictActions } from "./git-conflict-actions";
 import type { GitConflictActionsModel } from "@openducktor/frontend-core/git/conflicts/git-conflict-actions-model";
 

@@ -35,6 +35,7 @@ import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-e
 import { SettingsNotificationsSection } from "@/components/features/settings/settings-notifications-section";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InlineCodeText } from "@/components/ui/inline-code-text";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { RuntimeExecutableValidationResult } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
@@ -291,7 +292,7 @@ export function RuntimeStage({
               role="alert"
               tabIndex={-1}
             >
-              {stageError}
+              <InlineCodeText text={stageError} />
             </p>
           ) : null}
         </CardContent>

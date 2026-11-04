@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { CodexAppServerClosedError } from "../../ports/codex-app-server-port";
 import type { CodexAppServerChildTransport } from "./codex-app-server-transport-types";
 import { createCodexExecutableProbe, verifyCodexAppServerProtocol } from "./codex-executable-probe";
 
@@ -30,7 +31,9 @@ describe("verifyCodexAppServerProtocol", () => {
       rejectPendingRequestsForShutdown: () => Effect.void,
     };
 
-    await Effect.runPromise(verifyCodexAppServerProtocol(transport, "1.2.3"));
+    await Effect.runPromise(
+      verifyCodexAppServerProtocol(transport, "1.2.3", "/usr/local/bin/codex"),
+    );
 
     expect(calls).toEqual([
       {
@@ -70,14 +73,73 @@ describe("verifyCodexAppServerProtocol", () => {
     };
 
     const failure = await Effect.runPromise(
-      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3")),
+      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3", "/usr/local/bin/codex")),
     );
 
     expect(failure._tag).toBe("RuntimeExecutableIncompatibleError");
     expect(notified).toBe(false);
   });
 
-  test("preserves operational initialization failures", async () => {
+  test("reports the stderr of a Codex process that stops before initialization", async () => {
+    const transport: CodexProbeTransport = {
+      request: () =>
+        Effect.fail(
+          new CodexAppServerClosedError({
+            operation: "codexAppServerTransport.childProcess",
+            message:
+              "Codex app-server closed: process exited with code 1 for runtime executable-probe-1: Error loading configuration",
+            details: {
+              runtimeId: "executable-probe-1",
+              stderr: "Error loading configuration",
+              exit: "closed: process exited with code 1",
+            },
+          }),
+        ),
+      notify: () => Effect.void,
+      close: () => Effect.void,
+      rejectPendingRequestsForShutdown: () => Effect.void,
+    };
+
+    const failure = await Effect.runPromise(
+      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3", "/usr/local/bin/codex")),
+    );
+
+    expect(failure.message).toBe(
+      "Codex at '/usr/local/bin/codex' did not start. Error loading configuration (Codex app-server closed: process exited with code 1). Fix the reported problem, or update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`. Then try again.",
+    );
+  });
+
+  test("reports how a silent Codex process stopped without its internal runtime ID", async () => {
+    const transport: CodexProbeTransport = {
+      request: () =>
+        Effect.fail(
+          new CodexAppServerClosedError({
+            operation: "codexAppServerTransport.childProcess",
+            message:
+              "Codex app-server closed: process exited from signal SIGKILL for runtime executable-probe-1",
+            details: {
+              runtimeId: "executable-probe-1",
+              stderr: "",
+              exit: "closed: process exited from signal SIGKILL",
+            },
+          }),
+        ),
+      notify: () => Effect.void,
+      close: () => Effect.void,
+      rejectPendingRequestsForShutdown: () => Effect.void,
+    };
+
+    const failure = await Effect.runPromise(
+      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3", "/usr/local/bin/codex")),
+    );
+
+    expect(failure.message).toContain(
+      "did not start. Codex app-server closed: process exited from signal SIGKILL. Fix",
+    );
+    expect(failure.message).not.toContain("executable-probe-1");
+  });
+
+  test("keeps operational initialization failures apart from incompatible executables", async () => {
     const operationFailure = new HostOperationError({
       operation: "codexAppServerTransport.request.initialize",
       message: "initialize request timed out",
@@ -90,10 +152,15 @@ describe("verifyCodexAppServerProtocol", () => {
     };
 
     const failure = await Effect.runPromise(
-      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3")),
+      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3", "/usr/local/bin/codex")),
     );
 
-    expect(failure).toBe(operationFailure);
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "codexExecutableProbe.initialize",
+      cause: operationFailure,
+    });
+    expect(failure.message).toContain("did not start. Initialize request timed out.");
   });
 });
 

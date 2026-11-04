@@ -1,5 +1,9 @@
-import { Cause, Effect, Exit } from "effect";
-import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import { Effect, Exit } from "effect";
+import {
+  causeMessage,
+  HostOperationError,
+  type HostOperationErrorAggregate,
+} from "../../effect/host-errors";
 
 export const useRuntimeProbeResource = <Resource, ProbeError>({
   acquire,
@@ -22,7 +26,7 @@ export const useRuntimeProbeResource = <Resource, ProbeError>({
           return yield* Effect.fail(
             new HostOperationError({
               operation: cleanupOperation,
-              message: `${Cause.pretty(probeExit.cause)}\nCleanup failed: ${Cause.pretty(
+              message: `${causeMessage(probeExit.cause)}\nCleanup failed: ${causeMessage(
                 releaseExit.cause,
               )}`,
             }),
@@ -34,7 +38,7 @@ export const useRuntimeProbeResource = <Resource, ProbeError>({
         return yield* Effect.fail(
           new HostOperationError({
             operation: cleanupOperation,
-            message: Cause.pretty(releaseExit.cause),
+            message: causeMessage(releaseExit.cause),
           }),
         );
       }

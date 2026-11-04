@@ -20,6 +20,7 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import type { OpenCodeRuntimeConnection } from "@openducktor/adapters-opencode-sdk";
+import { createFakeOpenCodeV2 } from "../../test-support/opencode-v2-standalone";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import { createToolDiscoveryAdapter } from "../system/tool-discovery";
@@ -551,6 +552,37 @@ describe("createOpenCodeRuntimeStarter", () => {
     }
   }, 10_000);
 
+  test("reports an executable that is not OpenCode 2 on the saved path", async () => {
+    const fixture = await createFakeOpenCodeV2("malformed");
+    const ownedCleanups: OwnedCleanup[] = [];
+    try {
+      const starter = createOpenCodeRuntimeStarter({
+        systemCommands: createSystemCommands(),
+        toolDiscovery: createFakeToolDiscovery({ opencode: fixture.executablePath }),
+      });
+
+      const failure = await Effect.runPromise(
+        Effect.flip(
+          starter.startRuntime(
+            startInput(fixture.executablePath, undefined, undefined, ownedCleanups),
+          ),
+        ),
+      );
+
+      expect(failure).toMatchObject({
+        _tag: "HostValidationError",
+        field: "agentRuntimes.opencode.executablePath",
+      });
+      expect(failure.message).toContain("OpenDucktor needs OpenCode 2 or later.");
+    } finally {
+      try {
+        if (ownedCleanups.length > 0) await Effect.runPromise(runOwnedCleanup(ownedCleanups));
+      } finally {
+        await fixture.cleanup();
+      }
+    }
+  });
+
   test("bounds native readiness by the startup deadline", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-readiness-timeout-"));
     const acquired = Promise.withResolvers<void>();
@@ -603,7 +635,9 @@ describe("createOpenCodeRuntimeStarter", () => {
       );
       expect(result._tag).toBe("Failure");
       if (result._tag === "Failure")
-        expect(result.failure.message).toContain("authenticated V2 readiness URL within 40ms");
+        expect(result.failure.message).toContain(
+          "did not start. It was not ready within 0.04 seconds.",
+        );
     } finally {
       try {
         if (ownedCleanups.length > 0) await Effect.runPromise(runOwnedCleanup(ownedCleanups));
@@ -995,7 +1029,7 @@ describe("createOpenCodeRuntimeStarter", () => {
             const result = yield* Fiber.join(startup);
             expect(result._tag).toBe("Failure");
             if (result._tag === "Failure") {
-              expect(result.failure.message).toContain("authenticated V2 readiness URL");
+              expect(result.failure.message).toContain("did not start. It was not ready within");
             }
           }).pipe(Effect.ensuring(Fiber.interrupt(startup)));
         }).pipe(Effect.provide(TestClock.layer())),
@@ -1134,7 +1168,7 @@ describe("createOpenCodeRuntimeStarter", () => {
           starter.startRuntime(startInput(opencodeBinary, undefined, undefined, ownedCleanups)),
         ),
       );
-      expect(failure.message).toContain("authenticated V2 readiness URL");
+      expect(failure.message).toContain("did not start. It was not ready within");
       await expect(Effect.runPromise(runOwnedCleanup(ownedCleanups))).rejects.toThrow(
         "process tree cleanup failed",
       );
