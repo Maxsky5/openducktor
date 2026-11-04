@@ -49,6 +49,10 @@ import {
   isFailedClaudeResult,
   successfulClaudeResultText,
 } from "./claude-agent-sdk-result-lifecycle";
+import {
+  isClaudeNoResponseAssistantMessage,
+  isClaudeUserStopMessage,
+} from "./claude-agent-sdk-local-commands";
 import { readClaudeTaskNotifications } from "./claude-agent-sdk-runtime-messages";
 import { emitClaudeAgentToolResultSubagentPart } from "./claude-agent-sdk-subagents";
 import {
@@ -144,6 +148,10 @@ export const toClaudeHistoryMessages = (
     lastFinalAssistantMessage = null;
     lastFinalAssistantText = undefined;
   };
+  const endCurrentTurn = () => {
+    replyStartedAt = undefined;
+    resetCurrentUserTurnAssistantTracking();
+  };
   const removeRetractedMessages = (messageIds: string[]) => {
     if (messageIds.length === 0) return;
     const retractedIds = new Set(messageIds);
@@ -185,8 +193,7 @@ export const toClaudeHistoryMessages = (
       if (entry.interruptedByShutdown === true) {
         if (lastFinalAssistantMessage)
           clearClaudeHistoryAssistantFinality(lastFinalAssistantMessage);
-        replyStartedAt = undefined;
-        resetCurrentUserTurnAssistantTracking();
+        endCurrentTurn();
       }
       const originKind = readClaudeTurnOriginKind(entry);
       if (originKind !== undefined && originKind !== "human") {
@@ -213,11 +220,10 @@ export const toClaudeHistoryMessages = (
     const projectedInput = projectHistoryInput(entry, timestamp);
     if (projectedInput.handled) {
       if (projectedInput.manualCompaction) {
-        replyStartedAt = undefined;
+        endCurrentTurn();
         pendingManualCompaction = projectedInput.manualCompaction;
         manualCompactionBoundaryReceived = unclaimedManualCompactionBoundary;
         unclaimedManualCompactionBoundary = false;
-        resetCurrentUserTurnAssistantTracking();
         continue;
       }
       const projectedMessage = projectedInput.message;
@@ -228,6 +234,10 @@ export const toClaudeHistoryMessages = (
         // Native history can omit a notification's result and assistant output.
         const previous = history.findLast((message) => message.role !== "system");
         history.push(projectedMessage);
+        if (isClaudeUserStopMessage(entry)) {
+          endCurrentTurn();
+          continue;
+        }
         // Steering keeps the first prompt's start, even before assistant output.
         if (!lastAssistantMessage || hasFinalStopStep(lastAssistantMessage)) {
           if (
@@ -300,7 +310,11 @@ export const toClaudeHistoryMessages = (
         toolMessageIdsByCallId,
         toolNamesByCallId,
       });
-      if (!projection) continue;
+      if (!projection) {
+        // The projection skips synthetic replies. The no-response reply still ends the current turn.
+        if (isClaudeNoResponseAssistantMessage(entry)) endCurrentTurn();
+        continue;
+      }
       const { message: assistantSnapshot, stopReason } = projection;
       applyClaudeHistoryToolUses(toolResultState, assistantSnapshot, timestamp);
       assistantSnapshot.parts = assistantSnapshot.parts.flatMap((part) => {

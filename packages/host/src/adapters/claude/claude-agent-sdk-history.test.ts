@@ -223,6 +223,186 @@ describe("claude-agent-sdk-history", () => {
     expect(history.at(-1)).toMatchObject({ messageId: "next-response", durationMs: 1_000 });
   });
 
+  test("starts the next human clock after Claude closes a stopped turn on resume", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "user",
+          uuid: "stopped-user",
+          timestamp: "2026-10-27T23:01:19.586Z",
+          message: { role: "user", content: "Ask me a question." },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "stopped-assistant",
+          timestamp: "2026-10-27T23:01:24.910Z",
+          message: {
+            id: "stopped-response",
+            role: "assistant",
+            content: [{ type: "tool_use", id: "ask", name: "AskUserQuestion", input: {} }],
+            stop_reason: "tool_use",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "interrupted-result",
+          timestamp: "2026-11-04T12:38:24.912Z",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "ask",
+                is_error: true,
+                content:
+                  "[Tool call interrupted: the session ended before this call's result was recorded, so its outcome is unknown. Check whether it took effect before relying on it or running it again.]",
+              },
+            ],
+          },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "no-response",
+          timestamp: "2026-11-04T12:38:24.912Z",
+          message: {
+            id: "no-response-message",
+            role: "assistant",
+            model: "<synthetic>",
+            content: [{ type: "text", text: "No response requested." }],
+            stop_reason: "stop_sequence",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "next-user",
+          timestamp: "2026-11-04T12:38:44.927Z",
+          message: { role: "user", content: "Ask me again." },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "next-assistant",
+          timestamp: "2026-11-04T12:46:09.541Z",
+          message: {
+            id: "next-response",
+            role: "assistant",
+            content: [{ type: "text", text: "Done." }],
+            stop_reason: "end_turn",
+          },
+        }),
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
+      () => "2026-11-04T13:00:00.000Z",
+    );
+
+    expect(history.at(-1)).toMatchObject({ messageId: "next-response", durationMs: 444_614 });
+  });
+
+  test.each(["[Request interrupted by user]", "[Request interrupted by user for tool use]"])(
+    "starts the next human clock after the user stops a turn with %s",
+    (stopMarker) => {
+      const history = toClaudeHistoryMessages(
+        [
+          toSessionMessage({
+            type: "user",
+            uuid: "stopped-user",
+            timestamp: "2026-11-01T15:24:50.685Z",
+            message: { role: "user", content: "Run sleep 30, then reply DONE." },
+          }),
+          toSessionMessage({
+            type: "assistant",
+            uuid: "stopped-assistant",
+            timestamp: "2026-11-01T15:24:51.659Z",
+            message: {
+              id: "stopped-response",
+              role: "assistant",
+              content: [
+                { type: "tool_use", id: "sleep", name: "Bash", input: { command: "sleep 30" } },
+              ],
+              stop_reason: null,
+            },
+          }),
+          toSessionMessage({
+            type: "user",
+            uuid: "stop-marker",
+            timestamp: "2026-11-01T15:24:51.683Z",
+            message: {
+              role: "user",
+              content: [{ type: "text", text: stopMarker }],
+            },
+          }),
+          toSessionMessage({
+            type: "user",
+            uuid: "next-user",
+            timestamp: "2026-11-04T15:24:51.692Z",
+            message: { role: "user", content: "Reply with OK only." },
+          }),
+          toSessionMessage({
+            type: "assistant",
+            uuid: "next-assistant",
+            timestamp: "2026-11-04T15:24:52.364Z",
+            message: {
+              id: "next-response",
+              role: "assistant",
+              content: [{ type: "text", text: "OK" }],
+              stop_reason: "end_turn",
+            },
+          }),
+        ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
+        () => "2026-11-04T16:00:00.000Z",
+      );
+
+      expect(history.at(-1)).toMatchObject({ messageId: "next-response", durationMs: 672 });
+    },
+  );
+
+  test("keeps the turn clock for a steered prompt that starts like a stop marker", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "user",
+          uuid: "first-user",
+          timestamp: "2026-11-04T15:00:00.000Z",
+          message: { role: "user", content: "Run sleep 30, then reply DONE." },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "running-assistant",
+          timestamp: "2026-11-04T15:00:01.000Z",
+          message: {
+            id: "running-response",
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "sleep", name: "Bash", input: { command: "sleep 30" } },
+            ],
+            stop_reason: "tool_use",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "steered-user",
+          timestamp: "2026-11-04T15:00:02.000Z",
+          message: {
+            role: "user",
+            content: [{ type: "text", text: "[Request interrupted by user] please continue" }],
+          },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "final-assistant",
+          timestamp: "2026-11-04T15:00:03.000Z",
+          message: {
+            id: "final-response",
+            role: "assistant",
+            content: [{ type: "text", text: "DONE" }],
+            stop_reason: "end_turn",
+          },
+        }),
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
+      () => "2026-11-04T16:00:00.000Z",
+    );
+
+    expect(history.at(-1)).toMatchObject({ messageId: "final-response", durationMs: 3_000 });
+  });
+
   test("does not hydrate current context usage from Claude result totals", () => {
     const history = toClaudeHistoryMessages(
       [

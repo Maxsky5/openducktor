@@ -5,6 +5,7 @@ import {
   claudeProtocolValueSchema,
   type ClaudeProtocolObject,
 } from "./claude-agent-sdk-ingress-schemas";
+import { CLAUDE_USER_STOP_MARKERS } from "./claude-agent-sdk-local-commands";
 
 const contentSchema = z.union([z.string(), z.array(claudeProtocolValueSchema)]);
 const contentBlockSchema = z.looseObject({
@@ -55,9 +56,8 @@ type Event = {
 };
 
 const interruptionPrefixes = [
-  "[Request interrupted by user]",
+  ...CLAUDE_USER_STOP_MARKERS,
   "[Request interrupted: the session ended before this agent finished. Nobody asked it to stop.]",
-  "[Request interrupted by user for tool use]",
   "[Tool call did not complete: the turn was ended to deliver the message that follows. Nothing refused it; re-run it if still needed.]",
   "[Tool call interrupted: the session ended before this call's result was recorded, so its outcome is unknown. Check whether it took effect before relying on it or running it again.]",
   "[Tool call result not in this copy: this session was copied from another session before that session recorded this call's result. The call may have finished there, may still be running there, or may never have run. Check whether it took effect before relying on it or running it again.]",
