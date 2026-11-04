@@ -188,9 +188,13 @@ export const createClaudeHistoryInputProjector = (options: {
     if (promptId && compactPromptIds.has(promptId) && !command) {
       return handledWithoutMessage;
     }
-    const text = command ? (queuedCommand(command)?.text ?? command) : rawText;
-    const queuedPromptTimestamp =
-      pendingQueuedPrompt?.text === text ? pendingQueuedPrompt.timestamp : undefined;
+    const queued = command
+      ? queuedCommand(command)
+      : pendingQueuedPrompt?.text === rawText
+        ? pendingQueuedPrompt
+        : null;
+    const text = queued?.text ?? command ?? rawText;
+    const queuedPromptTimestamp = queued?.timestamp;
     if (text.trim().toLowerCase() === "/compact") {
       const commandTimestamp = queuedPromptTimestamp ?? timestamp;
       pendingQueuedPrompt = null;

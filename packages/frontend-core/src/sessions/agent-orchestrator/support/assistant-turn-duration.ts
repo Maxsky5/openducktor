@@ -158,7 +158,7 @@ export const readAssistantActivityStartedAtMsFromMessages = ({
   previousAssistantCompletedAtMs,
   completedAtMs,
 }: {
-  messages: AgentChatMessage[];
+  messages: readonly AgentChatMessage[];
   previousAssistantCompletedAtMs: number | undefined;
   completedAtMs: number;
 }): number | undefined => {
@@ -197,7 +197,7 @@ export const resolvePreviousAssistantCompletedAtMs = ({
   previousAssistantCompletedAtMs,
   completedAtMs,
 }: {
-  messages: AgentChatMessage[];
+  messages: readonly AgentChatMessage[];
   previousAssistantCompletedAtMs: number | undefined;
   completedAtMs: number;
 }): number | undefined => {
@@ -208,12 +208,10 @@ export const resolvePreviousAssistantCompletedAtMs = ({
       continue;
     }
     const timestampMs = readChatMessageTimestampMs(message);
-    if (!isFiniteTimestamp(timestampMs) || timestampMs > completedAtMs) {
+    if (!isFiniteTimestamp(timestampMs) || timestampMs >= completedAtMs) {
       continue;
     }
-    latestCompletedAtMs = isFiniteTimestamp(latestCompletedAtMs)
-      ? Math.max(latestCompletedAtMs, timestampMs)
-      : timestampMs;
+    latestCompletedAtMs = Math.max(latestCompletedAtMs ?? timestampMs, timestampMs);
   }
 
   return latestCompletedAtMs;

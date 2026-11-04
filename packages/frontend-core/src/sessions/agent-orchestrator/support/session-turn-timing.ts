@@ -6,7 +6,7 @@ import {
   resolvePreviousAssistantCompletedAtMs,
   resolveAssistantTurnDurationMs,
 } from "./assistant-turn-duration";
-import { createSessionMessagesState, getSessionMessagesSlice } from "./messages";
+import { createSessionMessagesState, getSessionMessages } from "./messages";
 
 export type SessionTurnTiming = {
   recordTurnActivityTimestamp: (sessionKey: string, timestamp: string | number) => void;
@@ -80,19 +80,21 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
     ) => {
       const completedAtMs = toTimestampMs(timestamp) ?? Date.now();
       const currentTiming = timingBySession[sessionKey] ?? {};
-      const sessionMessages = getSessionMessagesSlice({ externalSessionId, messages }, 0);
-      const previousAssistantCompletedAtMs = resolvePreviousAssistantCompletedAtMs({
-        messages: sessionMessages,
-        previousAssistantCompletedAtMs: currentTiming.previousAssistantCompletedAtMs,
-        completedAtMs,
-      });
-      const activityStartedAtMs =
-        currentTiming.activityStartedAtMs ??
-        readAssistantActivityStartedAtMsFromMessages({
+      let { activityStartedAtMs, previousAssistantCompletedAtMs } = currentTiming;
+      // Live timing knows the current turn. After a reload, the loaded replies bound the turn.
+      if (activityStartedAtMs === undefined) {
+        const sessionMessages = getSessionMessages({ externalSessionId, messages });
+        previousAssistantCompletedAtMs = resolvePreviousAssistantCompletedAtMs({
           messages: sessionMessages,
           previousAssistantCompletedAtMs,
           completedAtMs,
         });
+        activityStartedAtMs = readAssistantActivityStartedAtMsFromMessages({
+          messages: sessionMessages,
+          previousAssistantCompletedAtMs,
+          completedAtMs,
+        });
+      }
       const userAnchorAtMs = currentTiming.userAnchorAtMs;
       const timing: Parameters<typeof resolveAssistantTurnDurationMs>[0] = { completedAtMs };
       if (activityStartedAtMs !== undefined) {
