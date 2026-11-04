@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RuntimeKind } from "@openducktor/contracts";
+import { knownRuntimeKindValues, type RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, HostPathAccessError } from "../../effect/host-errors";
 import {
@@ -18,6 +18,8 @@ const executablePaths = {
   codex: "/usr/local/bin/codex",
   opencode: "/usr/local/bin/opencode",
 } satisfies Record<RuntimeKind, string>;
+
+const versionCommandOptions = { timeoutMs: 2_000 };
 
 const createSystemCommands = ({
   version = "runtime version output",
@@ -207,7 +209,7 @@ describe("createRuntimeHealthProbe", () => {
     expect(health.error).toBeNull();
   });
 
-  test("runs version display with a short bounded timeout", async () => {
+  test("runs version display for every runtime with a short bounded timeout", async () => {
     const versionCalls: Array<Parameters<SystemCommandPort["versionCommand"]>> = [];
     const systemCommands: SystemCommandPort = {
       ...createSystemCommands(),
@@ -218,17 +220,20 @@ describe("createRuntimeHealthProbe", () => {
     };
     const probe = createProbe(systemCommands);
 
-    await Effect.runPromise(probe.getRuntimeHealth("opencode", executablePaths.opencode));
+    await Effect.runPromise(
+      Effect.all(
+        knownRuntimeKindValues.map((kind) => probe.getRuntimeHealth(kind, executablePaths[kind])),
+        { concurrency: 1 },
+      ),
+    );
 
-    expect(versionCalls).toEqual([
-      [
-        executablePaths.opencode,
+    expect(versionCalls).toEqual(
+      knownRuntimeKindValues.map((kind) => [
+        executablePaths[kind],
         ["--version"],
-        {
-          timeoutMs: 2_000,
-        },
-      ],
-    ]);
+        versionCommandOptions,
+      ]),
+    );
   });
 
   test("reads the version of a running runtime without starting a second runtime", async () => {
@@ -245,11 +250,11 @@ describe("createRuntimeHealthProbe", () => {
       createExecutableProbes((kind) => Effect.sync(() => void protocolProbes.push(kind))),
     );
 
-    await expect(
-      Effect.runPromise(probe.readVersion("codex", executablePaths.codex)),
-    ).resolves.toBe("codex-cli 0.160.0");
+    await expect(Effect.runPromise(probe.readVersion(executablePaths.codex))).resolves.toBe(
+      "codex-cli 0.160.0",
+    );
 
-    expect(versionCalls).toEqual([[executablePaths.codex, ["--version"], { timeoutMs: 2_000 }]]);
+    expect(versionCalls).toEqual([[executablePaths.codex, ["--version"], versionCommandOptions]]);
     expect(protocolProbes).toEqual([]);
   });
 
@@ -267,8 +272,6 @@ describe("createRuntimeHealthProbe", () => {
       },
     });
 
-    await expect(
-      Effect.runPromise(probe.readVersion("claude", executablePaths.claude)),
-    ).resolves.toBeNull();
+    await expect(Effect.runPromise(probe.readVersion(executablePaths.claude))).resolves.toBeNull();
   });
 });

@@ -94,6 +94,37 @@ describe("createSystemCommandRunner", () => {
     expect(result.stdout.trim()).toBe("0|0|1");
   });
 
+  test("disables terminal color for version reads", async () => {
+    const port = createSystemCommandRunner({
+      readEnv: () => ({
+        PATH: process.env.PATH,
+        CLICOLOR: "1",
+        CLICOLOR_FORCE: "1",
+        FORCE_COLOR: "1",
+        NO_COLOR: "0",
+      }),
+      platform: process.platform,
+    });
+
+    const version = await Effect.runPromise(
+      port.versionCommand("bun", ["-e", "console.log(JSON.stringify(process.env))"], {
+        env: {
+          FORCE_COLOR: "1",
+          NO_COLOR: "0",
+          OPENDUCKTOR_VERSION_TEST: "kept",
+        },
+      }),
+    );
+
+    expect(JSON.parse(version ?? "{}")).toMatchObject({
+      CLICOLOR: "0",
+      CLICOLOR_FORCE: "0",
+      FORCE_COLOR: "0",
+      NO_COLOR: "1",
+      OPENDUCKTOR_VERSION_TEST: "kept",
+    });
+  });
+
   test("fails before spawn when command discovery cannot resolve the executable", async () => {
     const port = createSystemCommandRunner({
       readEnv: () => ({ PATH: "" }),

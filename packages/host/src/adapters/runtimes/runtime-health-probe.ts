@@ -3,18 +3,11 @@ import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
 import type { RuntimeExecutableProbesByKind } from "../../ports/runtime-executable-probe-port";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
-import type { SystemCommandPort, SystemCommandRunOptions } from "../../ports/system-command-port";
+import type { SystemCommandPort } from "../../ports/system-command-port";
 import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-discovery-port";
 
+// The shared version command keeps the output plain. This timeout limits a slow version read.
 const VERSION_TIMEOUT_MS = 2_000;
-const OPENCODE_VERSION_OPTIONS: SystemCommandRunOptions = {
-  timeoutMs: VERSION_TIMEOUT_MS,
-};
-const VERSION_OPTIONS_BY_KIND = {
-  claude: { timeoutMs: VERSION_TIMEOUT_MS },
-  codex: { timeoutMs: VERSION_TIMEOUT_MS },
-  opencode: OPENCODE_VERSION_OPTIONS,
-} satisfies Record<RuntimeKind, SystemCommandRunOptions>;
 const runtimeHealth = (
   kind: RuntimeKind,
   executablePath: string,
@@ -36,9 +29,9 @@ export const createRuntimeHealthProbe = (
 ): RuntimeHealthPort => {
   // A failed version read only leaves the version unknown. The protocol probe or the runtime
   // start reports whether the executable works.
-  const readVersion = (kind: RuntimeKind, executablePath: string) =>
+  const readVersion = (executablePath: string) =>
     systemCommands
-      .versionCommand(executablePath, ["--version"], VERSION_OPTIONS_BY_KIND[kind])
+      .versionCommand(executablePath, ["--version"], { timeoutMs: VERSION_TIMEOUT_MS })
       .pipe(Effect.orElseSucceed(() => null));
   return {
     readVersion,
@@ -54,7 +47,7 @@ export const createRuntimeHealthProbe = (
         const [probeResult, version] = yield* Effect.all(
           [
             Effect.result(executableProbes[kind].probeExecutable(binary)),
-            readVersion(kind, binary),
+            readVersion(binary),
           ] as const,
           { concurrency: 2 },
         );

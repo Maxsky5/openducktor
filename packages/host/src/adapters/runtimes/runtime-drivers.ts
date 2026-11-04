@@ -31,7 +31,7 @@ export const createRuntimeDrivers = ({
       start: (context) =>
         starters[kind].startRuntime({ ...context, runtimeKind: kind, descriptor }),
       // The start already ran the runtime, so the version read must not start a second one.
-      probeVersion: (executablePath) => runtimeHealth.readVersion(kind, executablePath),
+      probeVersion: runtimeHealth.readVersion,
       validateExecutable: (executablePath) =>
         toolDiscovery.validateToolPath(kind, executablePath).pipe(Effect.asVoid),
       stopSession: (target, runtime) => operations.stopSession(target, runtime),
