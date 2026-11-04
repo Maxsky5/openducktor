@@ -218,4 +218,14 @@ describe("buildClaudeExecutableProbeOptions", () => {
     expect(options.mcpServers).toEqual({});
     expect(options.persistSession).toBe(false);
   });
+
+  test("names OpenDucktor as the Claude Code entrypoint instead of an inherited value", () => {
+    const options = buildClaudeExecutableProbeOptions({
+      executablePath: "/opt/claude",
+      processEnv: { CLAUDE_CODE_ENTRYPOINT: "cli" },
+      abortController: new AbortController(),
+    });
+
+    expect(options.env?.CLAUDE_CODE_ENTRYPOINT).toBe("openducktor");
+  });
 });

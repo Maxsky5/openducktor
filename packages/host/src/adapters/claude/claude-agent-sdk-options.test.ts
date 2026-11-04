@@ -450,6 +450,16 @@ describe("buildClaudeAgentSdkBaseOptions", () => {
     }
   });
 
+  test("names OpenDucktor as the Claude Code entrypoint instead of an inherited value", () => {
+    const options = buildClaudeAgentSdkBaseOptions({
+      claudeExecutablePath: process.execPath,
+      cwd: process.cwd(),
+      processEnv: { CLAUDE_CODE_ENTRYPOINT: "claude-desktop" },
+    });
+
+    expect(options.env?.CLAUDE_CODE_ENTRYPOINT).toBe("openducktor");
+  });
+
   test("enables session state events and sets resume switches only for an explicit request", () => {
     const normal = buildClaudeAgentSdkBaseOptions({
       claudeExecutablePath: process.execPath,

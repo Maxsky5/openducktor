@@ -31,6 +31,7 @@ import type {
 } from "./claude-agent-sdk-types";
 import type { WorkflowRolePolicy } from "@openducktor/core";
 import { claudeWorkflowScope } from "./claude-agent-sdk-utils";
+import { withOpenDucktorClaudeCodeEnv } from "./claude-code-process-env";
 import { getDisabledTools } from "./claude-tool-availability";
 
 export type ClaudeAgentSdkOptionsDependencies = {
@@ -87,8 +88,7 @@ export const buildClaudeAgentSdkBaseOptions = ({
   delete inheritedEnv[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV];
   delete inheritedEnv[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV];
   const env = {
-    ...inheritedEnv,
-    CLAUDE_AGENT_SDK_CLIENT_APP: "openducktor",
+    ...withOpenDucktorClaudeCodeEnv(inheritedEnv, "openducktor"),
     [CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]: "1",
   };
   const options: Options = {
