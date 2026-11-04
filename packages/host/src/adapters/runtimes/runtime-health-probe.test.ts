@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RuntimeKind } from "@openducktor/contracts";
+import { knownRuntimeKindValues, type RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, HostPathAccessError } from "../../effect/host-errors";
 import {
@@ -18,6 +18,8 @@ const executablePaths = {
   codex: "/usr/local/bin/codex",
   opencode: "/usr/local/bin/opencode",
 } satisfies Record<RuntimeKind, string>;
+
+const versionCommandOptions = { timeoutMs: 2_000 };
 
 const createSystemCommands = ({
   version = "runtime version output",
@@ -207,7 +209,7 @@ describe("createRuntimeHealthProbe", () => {
     expect(health.error).toBeNull();
   });
 
-  test("reads every runtime version without terminal color and with a short timeout", async () => {
+  test("runs version display for every runtime with a short bounded timeout", async () => {
     const versionCalls: Array<Parameters<SystemCommandPort["versionCommand"]>> = [];
     const systemCommands: SystemCommandPort = {
       ...createSystemCommands(),
@@ -217,24 +219,17 @@ describe("createRuntimeHealthProbe", () => {
       },
     };
     const probe = createProbe(systemCommands);
-    const kinds = ["claude", "codex", "opencode"] satisfies readonly RuntimeKind[];
+    const kinds = knownRuntimeKindValues;
 
     await Effect.runPromise(
-      Effect.all(kinds.map((kind) => probe.getRuntimeHealth(kind, executablePaths[kind]))),
+      Effect.all(
+        kinds.map((kind) => probe.getRuntimeHealth(kind, executablePaths[kind])),
+        { concurrency: 1 },
+      ),
     );
 
     expect(versionCalls).toEqual(
-      kinds.map((kind) => [
-        executablePaths[kind],
-        ["--version"],
-        {
-          env: {
-            FORCE_COLOR: "0",
-            NO_COLOR: "1",
-          },
-          timeoutMs: 2_000,
-        },
-      ]),
+      kinds.map((kind) => [executablePaths[kind], ["--version"], versionCommandOptions]),
     );
   });
 
@@ -256,19 +251,7 @@ describe("createRuntimeHealthProbe", () => {
       "codex-cli 0.160.0",
     );
 
-    expect(versionCalls).toEqual([
-      [
-        executablePaths.codex,
-        ["--version"],
-        {
-          env: {
-            FORCE_COLOR: "0",
-            NO_COLOR: "1",
-          },
-          timeoutMs: 2_000,
-        },
-      ],
-    ]);
+    expect(versionCalls).toEqual([[executablePaths.codex, ["--version"], versionCommandOptions]]);
     expect(protocolProbes).toEqual([]);
   });
 

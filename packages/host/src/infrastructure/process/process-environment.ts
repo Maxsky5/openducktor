@@ -8,6 +8,14 @@ import { ProcessEnvironmentError, processEnvironmentError } from "./process-envi
 
 const LOGIN_SHELL_TIMEOUT_MS = 15_000;
 
+/** Environment values that keep machine-readable command output free of terminal color. */
+export const MACHINE_OUTPUT_ENV = {
+  CLICOLOR: "0",
+  CLICOLOR_FORCE: "0",
+  FORCE_COLOR: "0",
+  NO_COLOR: "1",
+} as const;
+
 const HOST_CONTROL_ENV_NAMES = [
   "ODT_WORKSPACE_ID",
   "ODT_HOST_URL",

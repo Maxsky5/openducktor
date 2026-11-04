@@ -7,13 +7,8 @@ import type { SystemCommandPort, SystemCommandRunOptions } from "../../ports/sys
 import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-discovery-port";
 
 const VERSION_TIMEOUT_MS = 2_000;
-// OpenCode adds color to `--version` output when FORCE_COLOR is set. Its CLI gives NO_COLOR
-// priority, and FORCE_COLOR=0 covers CLIs that check FORCE_COLOR first. Keep the version plain.
+// The shared version command keeps the output plain. This only bounds a slow executable.
 const VERSION_OPTIONS: SystemCommandRunOptions = {
-  env: {
-    FORCE_COLOR: "0",
-    NO_COLOR: "1",
-  },
   timeoutMs: VERSION_TIMEOUT_MS,
 };
 const runtimeHealth = (

@@ -7,10 +7,14 @@ import {
 } from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
 import { resolveProcessCommandPath } from "../../infrastructure/process/process-command-resolution";
-import { normalizeProcessEnvironment } from "../../infrastructure/process/process-environment";
+import {
+  MACHINE_OUTPUT_ENV,
+  normalizeProcessEnvironment,
+} from "../../infrastructure/process/process-environment";
 import type {
   SystemCommandPort,
   SystemCommandResolveOptions,
+  SystemCommandRunOptions,
   SystemCommandRunResult,
 } from "../../ports/system-command-port";
 
@@ -218,9 +222,18 @@ export const createSystemCommandRunner = ({
         platform,
       );
     },
-    versionCommand(command, args, options) {
+    versionCommand(command, args, options = {}) {
+      // Version text goes to the UI. Disable terminal color even when the host environment forces
+      // it, and keep the other environment values of the caller.
+      const versionOptions: SystemCommandRunOptions = {
+        ...options,
+        env: {
+          ...options.env,
+          ...MACHINE_OUTPUT_ENV,
+        },
+      };
       return Effect.gen(function* () {
-        const result = yield* runCommandAllowFailure(command, args, options).pipe(
+        const result = yield* runCommandAllowFailure(command, args, versionOptions).pipe(
           Effect.catch(() => Effect.succeed(null)),
         );
         return result?.ok ? firstNonEmptyLine(result.stdout) : null;

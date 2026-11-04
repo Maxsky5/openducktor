@@ -5,6 +5,7 @@ import type {
   HostPathAccessErrorAggregate,
 } from "../../../effect/host-errors";
 import { HostValidationError } from "../../../effect/host-errors";
+import { MACHINE_OUTPUT_ENV } from "../../../infrastructure/process/process-environment";
 import type {
   SystemCommandPort,
   SystemCommandRunOptions,
@@ -12,11 +13,8 @@ import type {
 import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 
 const GITHUB_CLI_MACHINE_ENV = {
+  ...MACHINE_OUTPUT_ENV,
   GH_PROMPT_DISABLED: "1",
-  NO_COLOR: "1",
-  CLICOLOR: "0",
-  CLICOLOR_FORCE: "0",
-  FORCE_COLOR: "0",
 };
 
 export type GithubCliAuth = {
