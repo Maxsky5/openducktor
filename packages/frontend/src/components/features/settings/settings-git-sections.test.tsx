@@ -1036,7 +1036,7 @@ describe("settings git sections", () => {
         finishStart();
         await Promise.resolve();
       });
-      expect(screen.queryByText("Waiting for GitLab sign-in…")).toBeNull();
+      expect(screen.queryByText("Waiting for your approval…")).toBeNull();
       expect(screen.queryByText("CODE")).toBeNull();
       expect(pollSignIn).not.toHaveBeenCalled();
     } finally {

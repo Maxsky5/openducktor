@@ -67,7 +67,7 @@ export function GitlabProviderFields({
             Detect from origin
           </Button>
         </div>
-        <div className="grid min-w-0 gap-3 md:grid-cols-2">
+        <div className="grid min-w-0 gap-4 md:grid-cols-2">
           <Field
             id="gitlab-instance-url"
             label="Instance URL"
@@ -146,7 +146,7 @@ function Field({
   onChange: (value: string) => void;
 }): ReactElement {
   return (
-    <div className="grid min-w-0 gap-1.5">
+    <div className="grid min-w-0 gap-2">
       <Label htmlFor={id}>{label}</Label>
       <Input
         id={id}

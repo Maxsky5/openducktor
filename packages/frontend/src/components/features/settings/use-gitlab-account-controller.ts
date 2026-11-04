@@ -239,7 +239,6 @@ export function useGitlabAccountController({
       setActionError(null);
       setConnectMode("token");
     },
-    useToken: () => setConnectMode("token"),
     closeConnect,
     replacing: replaceAccountId !== null,
     pickAccount: (accountId: string) => {
