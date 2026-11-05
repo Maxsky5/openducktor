@@ -741,7 +741,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("feedback launch submits feedback without adding an undeclared task effect", async () => {
+  test("feedback launch that Request Changes starts commits Request Changes with its start", async () => {
     let submitted: import("@openducktor/contracts").WorkflowLaunchRequest | undefined;
     const calls: string[] = [];
     const startAgentSession = mock(async () => {
@@ -830,7 +830,10 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
-    expect(submitted?.beforeStartAction).toBeUndefined();
+    expect(submitted?.beforeStartAction).toEqual({
+      action: "human_request_changes",
+      note: "Please address the review comments.",
+    });
     expect(submitted?.instruction).toMatchObject({
       kind: "kickoff",
       feedback: "Please address the review comments.",

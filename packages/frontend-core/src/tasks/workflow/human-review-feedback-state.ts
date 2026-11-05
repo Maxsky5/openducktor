@@ -23,14 +23,27 @@ export const createHumanReviewFeedbackState = (
       postStartAction: launchSessionCommand(launch),
     };
   };
-  if (request.kind === "launch")
+  if (request.kind === "launch") {
+    // A launch that an available Request Changes action starts next also commits Request
+    // Changes, so the task leaves review as it does from the Request Changes action.
+    const requestChangesLaunches = new Set(
+      task.availableActions.flatMap((id) => {
+        if (task.taskWorkflow.actionEffect(id) !== "review.request_changes") return [];
+        const action = task.taskWorkflow.action(id);
+        return action.kind === "event" ? (action.launchActionIds ?? []) : [];
+      }),
+    );
+    const requestChanges = requestChangesLaunches.has(request.launchActionId);
     return {
-      confirmLabel: task.taskWorkflow.launchAction(request.launchActionId).label,
+      confirmLabel: requestChanges
+        ? HUMAN_REVIEW_FEEDBACK_COPY.confirmLabel
+        : task.taskWorkflow.launchAction(request.launchActionId).label,
       launch: toLaunch(request.launchActionId),
-      requestChanges: false,
+      requestChanges,
       taskId,
       message: "",
     };
+  }
   const { continuation } = request;
   const eventId = task.taskWorkflow.effectEvent("review.request_changes");
   if (!eventId)
