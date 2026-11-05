@@ -753,7 +753,7 @@ describe("TaskApprovalModal", () => {
 
     expect(html).toContain("Ask Builder");
     expect(html).toContain("Let Builder create or update the pull request.");
-    expect(html).toContain("Next, choose the Builder session to fork.");
+    expect(html).toContain("Next, choose the Builder session to use.");
     expect(html).toContain("Choose Builder session");
     expect(html).not.toContain("generate the pull request title and description");
   });

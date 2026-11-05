@@ -83,7 +83,7 @@ export const TASK_APPROVAL_COPY = {
   pullRequestDraftLabel: "Pull request draft",
   pullRequestTitleLabel: "Pull request title",
   pullRequestDescriptionLabel: "Pull request description",
-  generatePullRequestNotice: "Next, choose the Builder session to fork.",
+  generatePullRequestNotice: "Next, choose the Builder session to use.",
   openExistingPullRequest: "Open existing pull request",
   cancel: "Cancel",
   recoveryFailedTitle: "Could not finish this action",
