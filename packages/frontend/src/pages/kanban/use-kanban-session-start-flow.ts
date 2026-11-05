@@ -12,15 +12,19 @@ type UseKanbanSessionStartFlowArgs = Omit<
   "openTaskView"
 > & {
   navigate: NavigateFunction;
+  closeTaskDetails: (taskId: string) => void;
 };
 
 /** The task session start flow with desktop routes. */
 export function useKanbanSessionStartFlow({
   navigate,
+  closeTaskDetails,
   ...args
 }: UseKanbanSessionStartFlowArgs): UseTaskSessionStartFlowResult {
   const openTaskView = useCallback<OpenTaskView>(
     (target, selected) => {
+      // The task view replaces the current view, so the task details must not stay over it.
+      closeTaskDetails(target.taskId);
       const href = buildSessionNavigationHref(target);
       if (!selected || target.kind !== "task_session") {
         navigate(href);
@@ -37,7 +41,7 @@ export function useKanbanSessionStartFlow({
         },
       });
     },
-    [navigate],
+    [closeTaskDetails, navigate],
   );
   return useTaskSessionStartFlow({
     ...args,

@@ -71,6 +71,8 @@ for (const [name, config] of [
       const bashrc = [
         'PS1="fixture> "',
         'PROMPT_COMMAND="printf user-prompt"',
+        // Bash 5.1 runs each element. Distribution profiles, such as systemd's, append to the array.
+        'PROMPT_COMMAND+=("printf user-prompt-hook")',
         "trap 'printf user-debug' DEBUG",
       ].join("\n");
       try {
@@ -178,6 +180,7 @@ for (const [name, config] of [
           }
         } else if (name === "bash") {
           expect(output).toContain("user-prompt");
+          expect(output).toContain("user-prompt-hook");
           expect(output).toContain("user-debug");
         }
         expect(failure).toBeNull();

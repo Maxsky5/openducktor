@@ -279,6 +279,7 @@ const createBaseArgs = (): HookArgs => ({
     }),
   ],
   navigate: mock(() => {}),
+  closeTaskDetails: mock(() => {}),
   runSessionStartWorkflow: createRunSessionStartWorkflow(),
 });
 
@@ -633,6 +634,26 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
+  test("closes the task details before a task view opens in their place", async () => {
+    const calls: string[] = [];
+    const args = createBaseArgs();
+    args.navigate = mock(() => {
+      calls.push("navigate");
+    });
+    args.closeTaskDetails = mock((taskId: string) => {
+      calls.push(`close ${taskId}`);
+    });
+    const harness = createHookHarness(args);
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.onOpenSession("TASK-1", "build", { session: sessionIdentity("builder-session-1") });
+    });
+
+    expect(calls).toEqual(["close TASK-1", "navigate"]);
+    await harness.unmount();
+  });
+
   test("background starts keep the current page without writing tab state", async () => {
     const toastSuccess = mock(() => "toast-id");
     const toastSuccessSpy = spyOn(toast, "success").mockImplementation(toastSuccess);
@@ -663,6 +684,7 @@ describe("useKanbanSessionStartFlow", () => {
 
       expect(applyAgentStudioStateAction).not.toHaveBeenCalled();
       expect(navigate).not.toHaveBeenCalled();
+      expect(args.closeTaskDetails).not.toHaveBeenCalled();
       expect(toastSuccess).not.toHaveBeenCalled();
 
       await harness.run((state) => {
