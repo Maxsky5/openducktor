@@ -187,7 +187,8 @@ function bashScript(plan: TerminalPtyLaunchPlan, nonce: string): string {
     "    _odt_executing=1",
     '    return "$code"',
     "  }",
-    "  PROMPT_COMMAND=_odt_prompt",
+    // A scalar assignment keeps the other elements of a Bash 5.1 PROMPT_COMMAND array.
+    "  PROMPT_COMMAND=(_odt_prompt)",
     // trap -p prints quoted shell words. Read those words without splitting the user's trap body.
     '  eval "_odt_debug=( $(trap -p DEBUG) )"',
     "  if [[ -n ${_odt_debug[2]} ]]; then",
