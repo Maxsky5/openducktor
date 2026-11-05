@@ -18,6 +18,10 @@ test.each([
     "compresses HTTP text and delivers live events promptly",
     "node-fetch-server.http-node-fixture.ts",
   ],
+  [
+    "ends a WebSocket whose peer went away without a close",
+    "node-fetch-server.peer-node-fixture.ts",
+  ],
 ])(
   "%s",
   async (_name, fixture) => {

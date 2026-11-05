@@ -278,6 +278,8 @@ An `error` frame has one of these kinds:
 
 A network path, such as a NAT, a proxy, or the Android emulator, can drop an idle socket without closing it. The heartbeat keeps the path busy. A client treats a channel without frames for 45 seconds as a lost connection.
 
+A client can also go away without a close, for example when a phone loses its network. TCP keeps such a socket open for many minutes, and the host would keep its admission, its task leases, and its connected status. So the host sends a WebSocket ping to each channel and terminal socket every 15 seconds. Browsers and React Native answer pings by themselves. When a socket gets no byte for three checks in a row, the host ends it. Bytes of a large message also count, so a slow upload does not end its socket.
+
 The host compresses frames of 1 KiB or more when the client negotiated `permessage-deflate`. Task frames wait while the socket buffers 1 MiB or more and resume when it drains. A client that lets 64 MiB of events queue up cannot keep up, so the host closes its channel with code 1013, and the client reconnects and replays.
 
 A client can stop waiting for a request with an `AbortSignal`, for example at a diagnostics deadline. The client drops the request at once, holds no connection for it, and sends `{ "type": "cancel", "id": ... }`. The host interrupts a running command of `HOST_READ_COMMAND_NAMES`, which runs its cleanup, and sends no answer. A closed socket also interrupts its running reads. A command that can change host state keeps running after a cancel or a socket loss, because an interrupted change can leave partial state. The diagnostics checks `path_check`, `git_check`, and `task_store_check` refresh or prepare host state, so they also keep running.

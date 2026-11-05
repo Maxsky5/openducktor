@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { type AddressInfo } from "node:net";
+import { type AddressInfo, type Socket } from "node:net";
 import { Readable, type Duplex } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
@@ -8,6 +8,33 @@ import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { nodeReadableStream } from "./node-readable-stream";
 
 const MIN_GZIP_BYTES = 1024;
+/** The server pings each WebSocket peer at this interval. */
+const PEER_CHECK_INTERVAL_MS = 15_000;
+/** A peer that sends no byte for this many checks went away without a close. */
+const PEER_SILENT_CHECKS = 3;
+
+/**
+ * Ends a socket whose peer went away without a close, as a phone that lost its network does. TCP
+ * keeps such a socket for many minutes, and the host would keep its admission and leases. A live
+ * peer answers each ping, and a peer that uploads a large message sends bytes too, so only a gone
+ * peer reads as silent.
+ */
+const watchPeer = (nativeSocket: WebSocket, connection: Socket): void => {
+  let bytesRead = connection.bytesRead;
+  let silentChecks = 0;
+  const timer = setInterval(() => {
+    if (connection.bytesRead !== bytesRead) {
+      bytesRead = connection.bytesRead;
+      silentChecks = 0;
+    } else if (++silentChecks >= PEER_SILENT_CHECKS) {
+      nativeSocket.terminate();
+      return;
+    }
+    nativeSocket.ping();
+  }, PEER_CHECK_INTERVAL_MS);
+  timer.unref();
+  nativeSocket.once("close", () => clearInterval(timer));
+};
 
 export type NodeServerSocket<Data> = {
   data: Data;
@@ -154,6 +181,8 @@ export const startNodeFetchServer = async <Data>({
         webSocketServer.handleUpgrade(incoming, socket, head, (nativeSocket) => {
           upgraded = true;
           sockets.add(nativeSocket);
+          // SAFETY: an HTTP server emits `upgrade` with the TCP socket of the connection.
+          watchPeer(nativeSocket, socket as Socket);
           let backpressured = false;
           const wrapped: NodeServerSocket<Data> = {
             data: options.data,
