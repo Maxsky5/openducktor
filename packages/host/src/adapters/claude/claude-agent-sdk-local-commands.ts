@@ -75,7 +75,7 @@ export const readClaudeLocalCommandOutput = (content: SessionStoreEntry[string])
   return match[1]?.trim() ?? "";
 };
 
-export const readClaudeQueuedPrompt = (entry: ClaudeHistoryMessage): string | null => {
+export const readClaudeQueueEntry = (entry: ClaudeHistoryMessage): string | null => {
   const value = entry;
   if (entry.type !== "queue-operation" || readStringProp(value, "operation") !== "enqueue") {
     return null;

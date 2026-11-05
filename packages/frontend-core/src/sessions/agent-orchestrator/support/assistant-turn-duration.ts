@@ -1,6 +1,7 @@
 import type { AgentStreamPart } from "@openducktor/core";
 import type { AgentChatMessage } from "../../../types/agent-orchestrator";
 import { messageTimestampMs } from "./message-timestamp-ordering";
+import { isFinalAssistantChatMessage } from "./messages";
 
 export type AssistantTurnTimingState = {
   activityStartedAtMs?: number;
@@ -157,7 +158,7 @@ export const readAssistantActivityStartedAtMsFromMessages = ({
   previousAssistantCompletedAtMs,
   completedAtMs,
 }: {
-  messages: AgentChatMessage[];
+  messages: readonly AgentChatMessage[];
   previousAssistantCompletedAtMs: number | undefined;
   completedAtMs: number;
 }): number | undefined => {
@@ -185,4 +186,58 @@ export const readAssistantActivityStartedAtMsFromMessages = ({
   }
 
   return activityStartedAtMs;
+};
+
+const resolvePreviousAssistantCompletedAtMs = ({
+  messages,
+  previousAssistantCompletedAtMs,
+  completedAtMs,
+}: {
+  messages: readonly AgentChatMessage[];
+  previousAssistantCompletedAtMs: number | undefined;
+  completedAtMs: number;
+}): number | undefined => {
+  let latestCompletedAtMs = previousAssistantCompletedAtMs;
+
+  for (const message of messages) {
+    if (!isFinalAssistantChatMessage(message)) {
+      continue;
+    }
+    const timestampMs = readChatMessageTimestampMs(message);
+    if (!isFiniteTimestamp(timestampMs) || timestampMs >= completedAtMs) {
+      continue;
+    }
+    latestCompletedAtMs = Math.max(latestCompletedAtMs ?? timestampMs, timestampMs);
+  }
+
+  return latestCompletedAtMs;
+};
+
+type LoadedTurnTiming = {
+  activityStartedAtMs: number | undefined;
+  previousAssistantCompletedAtMs: number | undefined;
+};
+
+export const readTurnTimingFromLoadedMessages = ({
+  messages,
+  previousAssistantCompletedAtMs,
+  completedAtMs,
+}: {
+  messages: readonly AgentChatMessage[];
+  previousAssistantCompletedAtMs: number | undefined;
+  completedAtMs: number;
+}): LoadedTurnTiming => {
+  const loadedPreviousAssistantCompletedAtMs = resolvePreviousAssistantCompletedAtMs({
+    messages,
+    previousAssistantCompletedAtMs,
+    completedAtMs,
+  });
+  return {
+    activityStartedAtMs: readAssistantActivityStartedAtMsFromMessages({
+      messages,
+      previousAssistantCompletedAtMs: loadedPreviousAssistantCompletedAtMs,
+      completedAtMs,
+    }),
+    previousAssistantCompletedAtMs: loadedPreviousAssistantCompletedAtMs,
+  };
 };

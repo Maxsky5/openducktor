@@ -273,6 +273,32 @@ describe("Claude native background activity", () => {
     ).toThrow("Update Claude Code");
   });
 
+  test("shows no subagent and no reply for a task of the previous process", () => {
+    const { session, events, result } = setup();
+    const orphanNotification = claudeSdkMessageFixture({
+      type: "system",
+      subtype: "task_notification",
+      task_id: "bpm0l55fl",
+      tool_use_id: "toolu_previous_process",
+      status: "stopped",
+      output_file: "",
+      summary: "Background shell command didn't finish before the previous session ended",
+    });
+    delete orphanNotification.run_id;
+    handleClaudeSdkMessage({
+      session,
+      message: orphanNotification,
+      emit: (event) => events.push(event),
+      timestamp: "2026-10-23T19:00:00.000Z",
+      modelSelection: (modelId) => ({ providerId: "claude", runtimeKind: "claude", modelId }),
+    });
+    result({ result: "", num_turns: 0 });
+
+    expect(events.filter((event) => event.type === "assistant_part")).toEqual([]);
+    expect(events.filter((event) => event.type === "assistant_message")).toEqual([]);
+    expect(session.activity).toBe("idle");
+  });
+
   test("keeps verified descendants active and routable after their parent ends", () => {
     const { session, events, send, membership, idle } = setup();
     session.toolNamesByCallId.set("parent-tool", "Agent");
