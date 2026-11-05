@@ -16,7 +16,7 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { repoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 import { useAgentSessionSummaries } from "@openducktor/frontend-core/sessions/session-store-hooks";
 import {
-  buildActiveTaskSessionContextByTaskId,
+  deriveActiveTaskSessionContextByTaskId,
   buildTaskSessionsByTaskId,
 } from "@openducktor/frontend-core/tasks/board/kanban-board-sessions";
 import type {
@@ -98,8 +98,8 @@ export function useTaskBoard(workspace: WorkspaceRecord): TaskBoard {
   );
   const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(summaries), [summaries]);
   const activeContextByTaskId = useMemo(
-    () => buildActiveTaskSessionContextByTaskId(summaries),
-    [summaries],
+    () => deriveActiveTaskSessionContextByTaskId(taskSessionsByTaskId),
+    [taskSessionsByTaskId],
   );
   const { columns: kanbanColumns, taskActivityStateByTaskId } = useKanbanBoardColumns(
     matchingTasks,

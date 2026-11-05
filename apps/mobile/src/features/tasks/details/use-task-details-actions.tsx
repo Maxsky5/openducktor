@@ -4,7 +4,7 @@ import {
   useRequiredContext,
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import {
-  buildActiveTaskSessionContextByTaskId,
+  deriveActiveTaskSessionContextByTaskId,
   buildTaskSessionsByTaskId,
 } from "@openducktor/frontend-core/tasks/board/kanban-board-sessions";
 import type { TaskReadState } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
@@ -85,13 +85,17 @@ export function useTaskDetailsActions({
       },
     },
   });
-  const taskSessions = useMemo(
-    () => buildTaskSessionsByTaskId(summaries).get(task.id) ?? [],
+  const taskSessionsByTaskId = useMemo(
+    () => buildTaskSessionsByTaskId(summaries.filter((session) => session.taskId === task.id)),
     [summaries, task.id],
   );
+  const taskSessions = useMemo(
+    () => taskSessionsByTaskId.get(task.id) ?? [],
+    [taskSessionsByTaskId, task.id],
+  );
   const activeContext = useMemo(
-    () => buildActiveTaskSessionContextByTaskId(summaries).get(task.id),
-    [summaries, task.id],
+    () => deriveActiveTaskSessionContextByTaskId(taskSessionsByTaskId).get(task.id),
+    [taskSessionsByTaskId, task.id],
   );
   // The worktree reads use the selected workspace, so they wait until it is this one.
   const removeWorktree = useTaskRemoveWorktreeConfirmDialog({
