@@ -208,6 +208,7 @@ export const resolvePreviousAssistantCompletedAtMs = ({
       continue;
     }
     const timestampMs = readChatMessageTimestampMs(message);
+    // The reply that this event finishes can already be in the list. It must not end its own turn.
     if (!isFiniteTimestamp(timestampMs) || timestampMs >= completedAtMs) {
       continue;
     }

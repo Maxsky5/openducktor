@@ -107,7 +107,7 @@ export const handleClaudeResultMessage = ({
     }
     // A notification can finish without any assistant output. On resume, Claude Code also
     // sends an empty result for notifications that it only writes to the transcript. That
-    // result ends no turn of this session.
+    // result has no reply in this session, so it gets no final reply marker.
     if (
       resultText.length === 0 &&
       isClaudeForegroundTurnActive(session) &&

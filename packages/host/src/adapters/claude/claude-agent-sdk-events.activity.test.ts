@@ -275,7 +275,7 @@ describe("Claude native background activity", () => {
 
   // Claude Code 2.1.318 sends these frames when it resumes a session whose previous process
   // still ran a background shell command.
-  test("shows no subagent and no finished turn for a task of the previous process", () => {
+  test("shows no subagent and no reply for a task of the previous process", () => {
     const { session, events, result } = setup();
     const orphanNotification = claudeSdkMessageFixture({
       type: "system",
