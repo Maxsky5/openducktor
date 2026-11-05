@@ -627,24 +627,34 @@ describe("createLocalHostChannel", () => {
     expect(channel.readConnectionWarning()).toBeNull();
   });
 
-  test("loses the channel when the host never answers a task subscription", async () => {
+  test("waits for a late task subscription answer and keeps the channel", async () => {
+    const opening = Promise.withResolvers<() => void>();
     const test = setup({
-      answer: (request) => (request.method === "task_events.subscribe" ? "none" : undefined),
+      answer: (request, socket) => {
+        if (request.method !== "task_events.subscribe") return undefined;
+        opening.resolve(() =>
+          socket.send(
+            { type: "result", id: request.id },
+            JSON.stringify({
+              subscriptionId: crypto.randomUUID(),
+              replayBoundary: { epoch: "00000000-0000-4000-8000-000000000002", sequence: 0 },
+            }),
+          ),
+        );
+        return "none";
+      },
     });
     listen(test.channel);
     await test.channel.ready;
-    const subscription = test.channel
-      .subscribeTaskEvents({ cursor: null }, () => {}, undefined)
-      .catch((cause: unknown) => cause);
-    await waitFor(
-      () => methods(test.host().requests).includes("task_events.subscribe"),
-      "the subscription request",
-    );
+    const subscription = test.channel.subscribeTaskEvents({ cursor: null }, () => {}, undefined);
+    const answer = await opening.promise;
+    // A large reply ahead of the answer can hold it back. Only a silent channel is lost.
     test.timers.runSetupDeadline();
+    answer();
 
-    expect(String(await subscription)).toContain("did not answer a task stream request");
-    expect(test.channel.readConnectionWarning()).toContain("did not answer a task stream request");
-    await waitFor(() => test.timers.pendingReconnects() > 0, "the reconnect timer");
+    await subscription;
+    expect(test.channel.readConnectionWarning()).toBeNull();
+    expect(test.timers.pendingReconnects()).toBe(0);
   });
 
   test("closes the channel when its last listener leaves", async () => {

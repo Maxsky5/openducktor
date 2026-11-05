@@ -305,8 +305,6 @@ export const createLocalHostChannel = ({
         );
       case "silent":
         return new Error("The host channel went silent.");
-      case "unanswered":
-        return new Error("The host did not answer a task stream request.");
       case "unreadable":
       case "send_failed":
         return loss.cause instanceof Error ? loss.cause : new Error(errorMessage(loss.cause));
@@ -477,8 +475,8 @@ export const createLocalHostChannel = ({
     subscribeTaskEvents: (input, onFrame, onTerminalFailure) =>
       withOpen(async (opened) => {
         const record: TaskRecord = { onFrame, onTerminalFailure };
-        const lease = await opened.withinDeadline(
-          opened.session.subscribeTaskEvents(input, (frame) => record.onFrame(frame)),
+        const lease = await opened.session.subscribeTaskEvents(input, (frame) =>
+          record.onFrame(frame),
         );
         const { subscriptionId } = lease;
         tasks.set(subscriptionId, record);
@@ -487,13 +485,11 @@ export const createLocalHostChannel = ({
           subscriptionId,
           acknowledge: async (acknowledged) => {
             await withOpen((current) =>
-              current.withinDeadline(
-                current.session.request({
-                  method: "task_events.ack",
-                  subscriptionId,
-                  cursor: acknowledged,
-                }),
-              ),
+              current.session.request({
+                method: "task_events.ack",
+                subscriptionId,
+                cursor: acknowledged,
+              }),
             );
           },
           unsubscribe: () => {
@@ -502,8 +498,7 @@ export const createLocalHostChannel = ({
               const current = open;
               try {
                 // A lease without a channel expires on the host.
-                if (current)
-                  await current.withinDeadline(current.session.releaseTaskEvents(subscriptionId));
+                if (current) await current.session.releaseTaskEvents(subscriptionId);
               } finally {
                 releaseIfUnused();
               }

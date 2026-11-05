@@ -10,7 +10,7 @@ Select the host icon at the bottom of the workspace rail, left of Settings, to o
 
 For a selected local host, the Remote control and Connect to a host tabs separate sharing from host selection. Remote control opens first, because the host icon shows its status. While sharing is off, the tab shows the network list with the saved or only network chosen, and Turn on remote control starts sharing on that network. While sharing is on, the tab shows the sharing switch, the live client count, Add device, and the paired devices. Network settings opens Remote control in Settings. These controls use the same host state and operations as Settings.
 
-Connecting to the current host again reloads the window, for example after a new pairing. Switching to a different host or disconnecting also reloads the window and clears the old host's reads, events, and work state. The client stops local delivery at once and waits for pending admission cleanup before it reloads. Cleanup uses the existing setup and release deadlines. Host work keeps running. Remote drafts stay in the memory of their client connection and are lost on reload or host change. Copy any unsent draft first. Existing local drafts stay on this device.
+Connecting to the current host again reloads the window, for example after a new pairing. Switching to a different host or disconnecting also reloads the window and clears the old host's reads, events, and work state. The client stops local delivery at once and waits for pending admission cleanup before it reloads. Cleanup uses the existing setup deadline. A lease release waits for the host answer or for the loss of the channel. Host work keeps running. Remote drafts stay in the memory of their client connection and are lost on reload or host change. Copy any unsent draft first. Existing local drafts stay on this device.
 
 The standalone client starts at the connection page on its first visit. Use `bun run browser:client` to test this mode. It reads no host settings or work until the connection is ready. The connection page has Light, Dark, and System theme choices and saves its theme in this browser.
 
@@ -333,7 +333,8 @@ Selected terminal owners join synchronization through `subscribeRecovery` before
 They wait for the attachment snapshot and consumption through its output boundary, or an explicit lost-terminal result.
 Later output does not extend that boundary, and terminal restoration fails after a 10-second deadline or a protocol failure.
 
-Discovery, negotiation, resource responses, channel or terminal setup, and task stream requests have bounded deadlines. A host that keeps its channel open but answers no task subscription, acknowledgement, or release within 10 seconds loses the connection, so recovery does not wait forever.
+Discovery, negotiation, resource responses, and channel or terminal setup have bounded deadlines.
+Task stream requests have no fixed deadline, because a large message ahead of their answer can hold it back on a slow link. A channel without frames for 45 seconds is lost, so recovery does not wait forever.
 Host commands use the connection's cancellation signal and the caller's optional signal, and have no fixed client deadline.
 The host sends the command result when work completes.
 The client reports state and event listener errors without stopping connection or event delivery.

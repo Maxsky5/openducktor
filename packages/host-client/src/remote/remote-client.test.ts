@@ -1771,9 +1771,20 @@ test("runs a command that starts while the channel opens on that channel", async
   }
 });
 
-test("a task subscription that the host never answers loses the connection at the setup deadline", async () => {
+test("a task subscription waits for a late host answer and keeps the connection", async () => {
+  const opening = latch<() => void>();
   const f = fixture([], {
-    answer: (request) => (request.method === "task_events.subscribe" ? "none" : undefined),
+    initialTaskFrames: () => [],
+    answer: (request, socket) => {
+      if (request.method !== "task_events.subscribe") return undefined;
+      opening.resolve(() =>
+        socket.send(
+          { type: "result", id: request.id },
+          JSON.stringify({ subscriptionId: crypto.randomUUID(), replayBoundary: f.boundary }),
+        ),
+      );
+      return "none";
+    },
   });
   const nativeSetTimeout = globalThis.setTimeout;
   const nativeClearTimeout = globalThis.clearTimeout;
@@ -1790,16 +1801,15 @@ test("a task subscription that the host never answers loses the connection at th
   const remote = createRemoteHostClient("https://host.example", hello, f.transport, async () => {});
   try {
     await remote.connect();
-    const subscription = remote
-      .subscribeTaskStream({ cursor: null }, () => {})
-      .catch((cause: unknown) => cause);
-    await until(() => f.channel.requests.some((r) => r.method === "task_events.subscribe"));
+    const subscription = remote.subscribeTaskStream({ cursor: null }, () => {});
+    // A large reply ahead of the answer can hold it back. Only a silent channel is lost.
+    const answer = await opening.promise;
     for (const expire of deadlines.values()) expire();
+    answer();
 
-    expect(await subscription).toMatchObject({
-      failure: { message: "The host did not answer a task stream request." },
-    });
-    expect(remote.readState().status).toBe("disconnected");
+    const handle = await subscription;
+    expect(remote.readState().status).toBe("connected");
+    await handle.unsubscribe();
   } finally {
     timers.mockRestore();
     clears.mockRestore();

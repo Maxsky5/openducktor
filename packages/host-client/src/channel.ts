@@ -17,9 +17,6 @@ import type { JSONType } from "zod";
 import { HostInvokeError } from "./invoke-utils";
 import type { RemoteSocketConnection } from "./remote/transport";
 
-/** A host that does not answer a task stream request within this time lost its channel. */
-export const HOST_CHANNEL_REQUEST_TIMEOUT_MS = 10_000;
-
 /** The host answered a request without a result. */
 export class HostChannelRequestError extends Error {
   constructor(readonly error: HostChannelError) {
@@ -312,7 +309,6 @@ export type HostChannelLoss =
   | { reason: "closed"; cause: unknown }
   | { reason: "silent" }
   | { reason: "unreadable"; cause: unknown }
-  | { reason: "unanswered" }
   | { reason: "send_failed"; cause: unknown };
 
 export type OpenHostChannelOptions = {
@@ -335,11 +331,6 @@ export type OpenHostChannelOptions = {
 export type OpenedHostChannel = {
   session: HostChannelSession;
   socket: RemoteSocketConnection;
-  /**
-   * Bounds a request by `HOST_CHANNEL_REQUEST_TIMEOUT_MS`. A host that keeps the socket open but
-   * does not answer would otherwise hold its caller, so a missed deadline loses the channel.
-   */
-  withinDeadline<T>(operation: Promise<T>): Promise<T>;
 };
 
 const scheduleTimeout = (callback: () => void, delayMs: number): (() => void) => {
@@ -396,15 +387,5 @@ export const openHostChannel = async ({
     (cause) => onLost({ reason: "closed", cause }),
   );
   watchSilence();
-  return {
-    session,
-    socket,
-    withinDeadline: (operation) => {
-      const cancel = schedule(
-        () => onLost({ reason: "unanswered" }),
-        HOST_CHANNEL_REQUEST_TIMEOUT_MS,
-      );
-      return operation.finally(cancel);
-    },
-  };
+  return { session, socket };
 };
