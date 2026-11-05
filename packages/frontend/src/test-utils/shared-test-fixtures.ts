@@ -41,6 +41,7 @@ export const createTaskWorkflowActionsFixture = (
   gitProviderContext: undefined,
   gitProviderReadError: null,
   registerTaskDetailsClose: () => () => {},
+  claimWorkflowDialog: (_owner, run) => run(),
   taskSessionsByTaskId: new Map(),
   activeTaskSessionContextByTaskId: new Map(),
   ...overrides,

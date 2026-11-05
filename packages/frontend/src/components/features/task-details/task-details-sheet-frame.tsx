@@ -1,5 +1,29 @@
-import { type ReactElement, type ReactNode, useRef } from "react";
+import {
+  TaskWorkflowDialogOwnerContext,
+  useTaskWorkflowActions,
+} from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
+import {
+  createContext,
+  type ReactElement,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useId,
+  useRef,
+} from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+
+type ClaimDialog = (run: () => void) => void;
+
+const TaskDetailsSheetClaimDialogContext = createContext<ClaimDialog | null>(null);
+
+/** Runs a sheet action. The shared workflow dialog that it opens keeps the sheet open. */
+export function useTaskDetailsSheetClaimDialog(): ClaimDialog {
+  const claimDialog = useContext(TaskDetailsSheetClaimDialogContext);
+  if (claimDialog === null)
+    throw new Error("The task details sheet content requires TaskDetailsSheetFrame");
+  return claimDialog;
+}
 
 /**
  * The task details sheet. Callers swap the loading, empty, and task content inside one frame,
@@ -15,6 +39,16 @@ export function TaskDetailsSheetFrame({
   children: ReactNode;
 }): ReactElement {
   const contentRef = useRef<HTMLDivElement>(null);
+  const dialogOwner = useId();
+  const ownsWorkflowDialog = useContext(TaskWorkflowDialogOwnerContext) === dialogOwner;
+  const claimWorkflowDialog = useTaskWorkflowActions()?.claimWorkflowDialog;
+  const claimDialog = useCallback<ClaimDialog>(
+    (run) => {
+      if (claimWorkflowDialog) claimWorkflowDialog(dialogOwner, run);
+      else run();
+    },
+    [claimWorkflowDialog, dialogOwner],
+  );
   return (
     <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -27,8 +61,14 @@ export function TaskDetailsSheetFrame({
           event.preventDefault();
           contentRef.current?.focus({ preventScroll: true });
         }}
+        onFocusOutside={(event) => {
+          // The workflow dialogs mount outside the sheet. Focus in another dialog closes it.
+          if (ownsWorkflowDialog) event.preventDefault();
+        }}
       >
-        {children}
+        <TaskDetailsSheetClaimDialogContext.Provider value={claimDialog}>
+          {children}
+        </TaskDetailsSheetClaimDialogContext.Provider>
       </SheetContent>
     </Sheet>
   );

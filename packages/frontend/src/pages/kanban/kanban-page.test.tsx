@@ -190,6 +190,7 @@ type LatestKanbanPageModels = {
   showHorizontalScrollbars: boolean | null;
   composerModel: TaskWorkflowActionsController["composer"] | null;
   taskWorkflowActions: TaskWorkflowActionsController["actions"] | null;
+  workflowDialogOwner: TaskWorkflowActionsController["workflowDialogOwner"];
   humanReviewFeedbackModalModel: HumanReviewFeedbackModalModel | null;
   taskApprovalModalModel: TaskWorkflowActionsController["taskApprovalModal"];
   taskGitConflictDialogModel: TaskWorkflowActionsController["taskGitConflictDialog"];
@@ -215,6 +216,7 @@ type KanbanPageHarness = RenderResult & {
   getShowHorizontalScrollbars: () => boolean | null;
   getComposerModel: () => TaskWorkflowActionsController["composer"] | null;
   getTaskWorkflowActions: () => TaskWorkflowActionsController["actions"] | null;
+  getWorkflowDialogOwner: () => TaskWorkflowActionsController["workflowDialogOwner"];
   getActionRenderCount: () => number;
   getHumanReviewFeedbackModalModel: () => HumanReviewFeedbackModalModel | null;
   getTaskApprovalModalModel: () => TaskWorkflowActionsController["taskApprovalModal"];
@@ -519,6 +521,7 @@ const publishTaskWorkflowController = (
 ): void => {
   latest.composerModel = controller.composer;
   latest.taskWorkflowActions = controller.actions;
+  latest.workflowDialogOwner = controller.workflowDialogOwner;
   latest.humanReviewFeedbackModalModel = controller.humanReviewFeedbackModal;
   latest.taskApprovalModalModel = controller.taskApprovalModal;
   latest.taskGitConflictDialogModel = controller.taskGitConflictDialog;
@@ -555,6 +558,7 @@ const renderPage = async (
     showHorizontalScrollbars: null,
     composerModel: null,
     taskWorkflowActions: null,
+    workflowDialogOwner: null,
     humanReviewFeedbackModalModel: null,
     taskApprovalModalModel: null,
     taskGitConflictDialogModel: null,
@@ -707,6 +711,7 @@ const renderPage = async (
     getShowHorizontalScrollbars: () => latest.showHorizontalScrollbars,
     getComposerModel: () => latest.composerModel,
     getTaskWorkflowActions: () => latest.taskWorkflowActions,
+    getWorkflowDialogOwner: () => latest.workflowDialogOwner,
     getActionRenderCount: () => actionRenders,
     getHumanReviewFeedbackModalModel: () => latest.humanReviewFeedbackModalModel,
     getTaskApprovalModalModel: () => latest.taskApprovalModalModel,
@@ -2148,4 +2153,165 @@ describe("KanbanPage session start modal flow", () => {
       });
     },
   );
+
+  describe("workflow dialog owner", () => {
+    // The details sheet claims the dialog of each action that it runs. The claim holds only for a
+    // dialog that opens in the same update, so every action must open its dialog at once.
+    const SHEET = "task-details-sheet";
+    type WorkflowDialog = { open: boolean; onOpenChange: (open: boolean) => void } | null;
+
+    const runFromSheet = async (
+      page: KanbanPageHarness,
+      run: (actions: TaskWorkflowActionsController["actions"]) => void,
+    ): Promise<void> => {
+      const actions = page.getTaskWorkflowActions();
+      if (!actions) throw new Error("Expected published task workflow actions.");
+      // A sync act renders the claim before any later update, as a click in the app does.
+      act(() => {
+        actions.claimWorkflowDialog(SHEET, () => run(actions));
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+    };
+    const closeDialog = async (dialog: WorkflowDialog): Promise<void> => {
+      await act(async () => {
+        dialog?.onOpenChange(false);
+        await Promise.resolve();
+      });
+    };
+
+    const sheetDialogs: {
+      name: string;
+      status: TaskCard["status"];
+      open: (actions: TaskWorkflowActionsController["actions"]) => void;
+      dialog: (page: KanbanPageHarness) => WorkflowDialog;
+    }[] = [
+      {
+        name: "Edit task",
+        status: "open",
+        open: (actions) => actions.onEdit("TASK-123"),
+        dialog: (page) => page.getComposerModel(),
+      },
+      {
+        name: "Request Changes",
+        status: "human_review",
+        open: (actions) => actions.onHumanRequestChanges("TASK-123"),
+        dialog: (page) => page.getHumanReviewFeedbackModalModel(),
+      },
+      {
+        name: "Reset Implementation",
+        status: "in_progress",
+        open: (actions) => actions.onResetImplementation("TASK-123"),
+        dialog: (page) => page.getResetImplementationModalModel(),
+      },
+      {
+        name: "Approve",
+        status: "human_review",
+        open: (actions) => actions.onHumanApprove("TASK-123"),
+        dialog: (page) => page.getTaskApprovalModalModel(),
+      },
+      {
+        name: "session start",
+        status: "ready_for_dev",
+        open: (actions) => actions.onDelegate("TASK-123"),
+        dialog: (page) => page.getSessionStartModalModel(),
+      },
+    ];
+
+    for (const entry of sheetDialogs) {
+      kanbanTest(`gives the ${entry.name} dialog to the sheet until it closes`, async () => {
+        currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: entry.status });
+        const page = await renderPage();
+        try {
+          await runFromSheet(page, entry.open);
+          expect(entry.dialog(page)?.open).toBe(true);
+          expect(page.getWorkflowDialogOwner()).toBe(SHEET);
+
+          await closeDialog(entry.dialog(page));
+          expect(entry.dialog(page)?.open ?? false).toBe(false);
+          expect(page.getWorkflowDialogOwner()).toBeNull();
+        } finally {
+          await unmountPageIfRendered(page);
+        }
+      });
+    }
+
+    kanbanTest("keeps the claim when Request Changes opens the session start", async () => {
+      currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+      const page = await renderPage();
+      try {
+        await runFromSheet(page, (actions) => actions.onHumanRequestChanges("TASK-123"));
+        await act(async () => {
+          page.getHumanReviewFeedbackModalModel()?.onMessageChange("Apply the review changes.");
+        });
+        await act(async () => {
+          void page.getHumanReviewFeedbackModalModel()?.onConfirm?.();
+          await Promise.resolve();
+        });
+        await waitForSessionStartModalReady(page);
+
+        expect(page.getWorkflowDialogOwner()).toBe(SHEET);
+      } finally {
+        await unmountPageIfRendered(page);
+      }
+    });
+
+    kanbanTest("keeps the claim when a direct merge opens the git conflict dialog", async () => {
+      currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+      hostClientFakes.taskApprovalContextGet = async () => ({
+        outcome: "ready",
+        approvalContext: {
+          taskId: "TASK-123",
+          taskStatus: "human_review",
+          workingDirectory: "/repo/worktrees/conflict",
+          sourceBranch: "odt/TASK-123",
+          targetBranch: { remote: "origin", branch: "main" },
+          publishTarget: { remote: "origin", branch: "main" },
+          defaultMergeMethod: "merge_commit",
+          hasUncommittedChanges: false,
+          uncommittedFileCount: 0,
+        },
+      });
+      hostClientFakes.taskDirectMerge = async () => ({
+        outcome: "conflicts",
+        conflict: {
+          operation: "direct_merge_merge_commit",
+          currentBranch: "odt/TASK-123",
+          targetBranch: "main",
+          conflictedFiles: ["src/app.ts"],
+          output: "conflict output",
+          workingDir: "/repo/worktrees/conflict",
+        },
+      });
+      hostClientFakes.workspaceGetGitProviderContext = async () => null;
+      const page = await renderPage();
+      try {
+        await runFromSheet(page, (actions) => actions.onHumanApprove("TASK-123"));
+        await waitFor(() => {
+          expect(page.getTaskApprovalModalModel()?.stage).toBe("approval");
+        });
+        const approvalModal = page.getTaskApprovalModalModel();
+        if (approvalModal?.stage !== "approval")
+          throw new Error("Expected the task approval modal.");
+        await act(async () => {
+          approvalModal.onConfirm();
+          await Promise.resolve();
+        });
+        await waitFor(() => {
+          expect(page.getTaskGitConflictDialogModel()?.open).toBe(true);
+        });
+        expect(page.getWorkflowDialogOwner()).toBe(SHEET);
+
+        await act(async () => {
+          page.getTaskGitConflictDialogModel()?.onAskBuilder();
+          await Promise.resolve();
+        });
+        await waitForSessionStartModalReady(page);
+        expect(page.getWorkflowDialogOwner()).toBe(SHEET);
+      } finally {
+        await unmountPageIfRendered(page);
+      }
+    });
+  });
 });

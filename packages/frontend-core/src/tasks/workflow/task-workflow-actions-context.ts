@@ -7,6 +7,7 @@ import type { EditTaskSection } from "../create/task-composer-types";
 import type { TaskConfirmRequestAction } from "./task-confirm-actions";
 import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
+import type { WorkflowDialogOwnership } from "./use-workflow-dialog-owner";
 
 export type TaskWorkflowActions = {
   kanbanPendingState?: WorkflowPendingState;
@@ -38,11 +39,20 @@ export type TaskWorkflowActions = {
   gitProviderContext: RepositoryGitProviderContext | undefined;
   gitProviderReadError: string | null;
   registerTaskDetailsClose: (taskId: string, close: () => void) => () => void;
+  /** Read `useWorkflowDialogOwner` for the rule that each action must follow. */
+  claimWorkflowDialog: WorkflowDialogOwnership["claimWorkflowDialog"];
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   activeTaskSessionContextByTaskId: Map<string, ActiveTaskSessionContext>;
 };
 
 export const TaskWorkflowActionsContext = createContext<TaskWorkflowActions | null>(null);
+
+/**
+ * The owner of the open shared dialog, such as Request Changes or Edit task. It has its own
+ * context, so a change of owner does not render every consumer of the workflow actions.
+ */
+export const TaskWorkflowDialogOwnerContext =
+  createContext<WorkflowDialogOwnership["workflowDialogOwner"]>(null);
 
 export const useTaskWorkflowActions = (): TaskWorkflowActions | null =>
   useContext(TaskWorkflowActionsContext);

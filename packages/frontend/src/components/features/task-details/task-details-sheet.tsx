@@ -24,7 +24,10 @@ import {
   TaskDetailsSheetFooter,
   type TaskDetailsSheetFooterProps,
 } from "@/components/features/task-details/task-details-sheet-footer";
-import { TaskDetailsSheetFrame } from "@/components/features/task-details/task-details-sheet-frame";
+import {
+  TaskDetailsSheetFrame,
+  useTaskDetailsSheetClaimDialog,
+} from "@/components/features/task-details/task-details-sheet-frame";
 import { TaskDetailsSheetHeader } from "@/components/features/task-details/task-details-sheet-header";
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
 import { useTaskDetailsSheetViewModel } from "@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model";
@@ -76,6 +79,7 @@ export function TaskDetailsSheetContent(
     onDelete = workflowActions?.onDelete,
   } = props;
   const open = useDialogOpen("TaskDetailsSheetContent", "TaskDetailsSheetFrame");
+  const claimDialog = useTaskDetailsSheetClaimDialog();
   const taskId = task.id;
   const contextTaskSessions = getContextTaskSessions(workflowActions, taskId);
   const activeSessionContext = getActiveTaskSessionContext(workflowActions, taskId);
@@ -115,9 +119,9 @@ export function TaskDetailsSheetContent(
     hasActiveSession,
     activeSessionRole,
     historicalSessionRoles,
-    onEdit,
+    onEdit: onEdit && ((editTaskId) => claimDialog(() => onEdit(editTaskId))),
     onDelete,
-    runWorkflowAction: viewModel.runWorkflowAction,
+    runWorkflowAction: (action) => claimDialog(() => viewModel.runWorkflowAction(action)),
     openDeleteDialog: viewModel.deleteConfirm.openDialog,
   });
 

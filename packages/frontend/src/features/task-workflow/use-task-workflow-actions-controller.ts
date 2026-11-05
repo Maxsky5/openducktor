@@ -25,6 +25,7 @@ import {
   type TaskResetImplementationModalModel,
   useTaskResetFlow,
 } from "@openducktor/frontend-core/tasks/workflow/use-task-reset-flow";
+import { useWorkflowDialogOwner } from "@openducktor/frontend-core/tasks/workflow/use-workflow-dialog-owner";
 import { useAgentSessionSummaries } from "@openducktor/frontend-core/sessions/session-store-hooks";
 import { useTasksState, useWorkspaceState } from "@/state/app-state-provider";
 import { useAgentModelFavorites } from "@openducktor/frontend-core/sessions/model-selection/use-agent-model-favorites";
@@ -49,6 +50,7 @@ import {
 
 export type TaskWorkflowActionsController = {
   actions: TaskWorkflowActions;
+  workflowDialogOwner: string | null;
   composer: TaskWorkflowTaskComposerModel;
   taskDetailsSheet: TaskWorkflowTaskDetailsSheetModel;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
@@ -95,31 +97,6 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     notifications: sessionStartNotifications,
   });
 
-  const {
-    humanReviewFeedbackModal,
-    sessionStartModal,
-    isSessionStarting,
-    startSessionIntent,
-    onPullRequestGenerate,
-    onDelegate,
-    onOpenSession,
-    onPlan,
-    onQaStart,
-    onQaOpen,
-    onBuild,
-    onHumanRequestChanges,
-  } = useKanbanSessionStartFlow({
-    activeWorkspaceId,
-    branches: branches ?? [],
-    favoriteState,
-    repoSettings,
-    tasks,
-    sessions,
-    navigate,
-    workspaceRepoPath,
-    runSessionStartWorkflow,
-  });
-
   const taskDetailsCloseByTaskIdRef = useRef(new Map<string, Set<() => void>>());
   const registerTaskDetailsClose = useCallback(
     (taskId: string, close: () => void): (() => void) => {
@@ -148,6 +125,32 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       close();
     }
   }, []);
+
+  const {
+    humanReviewFeedbackModal,
+    sessionStartModal,
+    isSessionStarting,
+    startSessionIntent,
+    onPullRequestGenerate,
+    onDelegate,
+    onOpenSession,
+    onPlan,
+    onQaStart,
+    onQaOpen,
+    onBuild,
+    onHumanRequestChanges,
+  } = useKanbanSessionStartFlow({
+    activeWorkspaceId,
+    branches: branches ?? [],
+    favoriteState,
+    repoSettings,
+    tasks,
+    sessions,
+    navigate,
+    closeTaskDetails,
+    workspaceRepoPath,
+    runSessionStartWorkflow,
+  });
 
   const workspaceIdentity = useMemo(
     () =>
@@ -233,6 +236,17 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       humanReviewFeedbackModal,
       resetImplementationModal,
     });
+  // The shared dialogs that a task details sheet opens. The composer also shows New task.
+  const { workflowDialogOwner, claimWorkflowDialog } = useWorkflowDialogOwner(
+    [
+      composer,
+      humanReviewFeedbackModal,
+      sessionStartModal,
+      taskApprovalModal,
+      resetImplementationModal,
+      taskGitConflictDialog,
+    ].some((dialog) => dialog?.open === true),
+  );
   const kanbanPendingState = useMemo<WorkflowPendingState>(
     () => ({
       isSessionStarting,
@@ -276,6 +290,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       gitProviderContext: gitProvider.context,
       gitProviderReadError: toGitProviderReadError(gitProvider.error),
       registerTaskDetailsClose,
+      claimWorkflowDialog,
       taskSessionsByTaskId,
       activeTaskSessionContextByTaskId,
     }),
@@ -307,6 +322,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       taskSessionsByTaskId,
       unlinkingPullRequestTaskIds,
       unlinkPullRequest,
+      claimWorkflowDialog,
     ],
   );
 
@@ -322,6 +338,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
 
   return {
     actions,
+    workflowDialogOwner,
     composer,
     taskDetailsSheet,
     humanReviewFeedbackModal,
