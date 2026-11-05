@@ -18,6 +18,7 @@ import { readLocalHostErrorPayloadEffect } from "./local-host-errors";
 const HOST_CHANNEL_PATH = "channel";
 export const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SESSION_PATH = "session";
+const SESSION_TIMEOUT_MS = 10_000;
 
 type LocalHostRequestErrorInput = {
   message: string;
@@ -25,8 +26,6 @@ type LocalHostRequestErrorInput = {
   cause?: HostErrorResponse;
   failureKind?: string;
 };
-
-let sessionPromise: Promise<void> | null = null;
 
 const createLocalHostRequestError = (
   response: Response,
@@ -51,19 +50,21 @@ const localHostRequestErrorEffect = (
     return yield* createLocalHostRequestError(response, message, payload);
   });
 
-export const ensureLocalHostSessionEffect = (): Effect.Effect<void, WebError> =>
+/** Sets the app session cookie. `signal` aborts the request and releases its connection. */
+export const ensureLocalHostSessionEffect = (signal?: AbortSignal): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
     const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
     const appToken = yield* getBrowserAuthTokenEffect();
+    const init: RequestInit = {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        [APP_TOKEN_HEADER]: appToken,
+      },
+    };
+    if (signal) init.signal = signal;
     const response = yield* Effect.tryPromise({
-      try: () =>
-        fetch(`${baseUrl}/${SESSION_PATH}`, {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            [APP_TOKEN_HEADER]: appToken,
-          },
-        }),
+      try: () => fetch(`${baseUrl}/${SESSION_PATH}`, init),
       catch: (cause) =>
         new WebDependencyError({
           dependency: "local-web-host",
@@ -78,22 +79,86 @@ export const ensureLocalHostSessionEffect = (): Effect.Effect<void, WebError> =>
     }
   });
 
-export const ensureLocalHostSession = (): Promise<void> => {
-  if (sessionPromise) {
-    return sessionPromise;
+/** One session request that every waiting caller shares. */
+type SessionAttempt = {
+  promise: Promise<void>;
+  abort: AbortController;
+  /** The callers that wait with a signal. */
+  waiters: number;
+  /** A caller without a signal needs the request to finish. */
+  pinned: boolean;
+};
+
+let sessionAttempt: SessionAttempt | null = null;
+let sessionReady = false;
+
+const startSessionAttempt = (): SessionAttempt => {
+  const abort = new AbortController();
+  // A stalled request ends at the deadline, so a later attempt can start.
+  const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(SESSION_TIMEOUT_MS)]);
+  const attempt: SessionAttempt = {
+    promise: runWebBoundary(ensureLocalHostSessionEffect(signal)),
+    abort,
+    waiters: 0,
+    pinned: false,
+  };
+  attempt.promise.then(
+    () => {
+      sessionReady = true;
+      if (sessionAttempt === attempt) sessionAttempt = null;
+    },
+    () => {
+      if (sessionAttempt === attempt) sessionAttempt = null;
+    },
+  );
+  return attempt;
+};
+
+/**
+ * Sets the app session cookie once for this page. Callers share one request. When every caller
+ * that waits with a signal stops waiting, and no caller without a signal waits, the request aborts
+ * and a later call starts a new one.
+ */
+export const ensureLocalHostSession = (signal?: AbortSignal): Promise<void> => {
+  if (sessionReady) return Promise.resolve();
+  signal?.throwIfAborted();
+  sessionAttempt ??= startSessionAttempt();
+  const attempt = sessionAttempt;
+  if (!signal) {
+    attempt.pinned = true;
+    return attempt.promise;
   }
-
-  sessionPromise = runWebBoundary(ensureLocalHostSessionEffect()).catch((cause: unknown) => {
-    sessionPromise = null;
-    throw cause;
+  attempt.waiters += 1;
+  return new Promise<void>((resolve, reject) => {
+    const leave = () => {
+      signal.removeEventListener("abort", stop);
+      attempt.waiters -= 1;
+    };
+    const stop = () => {
+      leave();
+      reject(signal.reason);
+      if (attempt.waiters > 0 || attempt.pinned) return;
+      if (sessionAttempt === attempt) sessionAttempt = null;
+      attempt.abort.abort(signal.reason);
+    };
+    signal.addEventListener("abort", stop, { once: true });
+    attempt.promise.then(
+      () => {
+        leave();
+        resolve();
+      },
+      (cause: unknown) => {
+        leave();
+        reject(cause);
+      },
+    );
   });
-
-  return sessionPromise;
 };
 
 export const ensureLocalHostSessionDedupedEffect = (): Effect.Effect<void, WebError> =>
   Effect.tryPromise({
-    try: () => ensureLocalHostSession(),
+    // Fiber interruption aborts `signal`, so the caller stops holding the shared request.
+    try: (signal) => ensureLocalHostSession(signal),
     catch: (cause) =>
       isWebError(cause)
         ? cause
@@ -144,8 +209,9 @@ const localChannelError = (
 
 /** The host channel of this tab. The session cookie authorizes its socket. */
 const connection = createLocalHostConnection({
-  prepare: async () => {
-    await ensureLocalHostSession();
+  // The channel setup deadline aborts `signal`, so a stalled session request ends with it.
+  prepare: async (signal) => {
+    await ensureLocalHostSession(signal);
     return {
       url: channelSocketUrl(await runWebBoundary(getBrowserBackendUrlEffect())),
       token: null,
@@ -154,7 +220,6 @@ const connection = createLocalHostConnection({
   openSocket: (url, protocols, signal, onFrame, onClose) =>
     openWebSocket((offered) => new WebSocket(url, offered), protocols, signal, onFrame, onClose),
   mapError: localChannelError,
-  beforeSubscribe: ensureLocalHostSession,
 });
 
 export const createLocalHostClient = (): HostClient => connection.client;

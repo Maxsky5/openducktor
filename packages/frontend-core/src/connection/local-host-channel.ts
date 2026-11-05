@@ -86,7 +86,11 @@ export type LocalHostChannelEndpoint = { url: string; token: string | null };
 
 export type LocalHostChannelDependencies = {
   /** Prepares the app session cookie and returns the channel WebSocket URL. */
-  prepare(): Promise<LocalHostChannelEndpoint>;
+  /**
+   * Prepares the session and returns the endpoint. It runs inside the setup deadline, and `signal`
+   * aborts when the attempt ends, so a shell must stop its requests then.
+   */
+  prepare(signal: AbortSignal): Promise<LocalHostChannelEndpoint>;
   /**
    * Opens a binary WebSocket that must select the first protocol, as `openWebSocket` of
    * `@openducktor/host-client/remote/socket` does with the platform socket.
@@ -299,7 +303,7 @@ export const createLocalHostChannel = ({
       SETUP_TIMEOUT_MS,
     );
     const attempt = (async (): Promise<Open> => {
-      const { url, token } = await waitWithAbort(prepare(), abort.signal);
+      const { url, token } = await waitWithAbort(prepare(abort.signal), abort.signal);
       let current: Open | null = null;
       let silenceTimer: (() => void) | null = null;
       const watchSilence = () => {

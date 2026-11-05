@@ -66,8 +66,6 @@ export type LocalHostConnectionOptions = Pick<
    * `HostInvokeError` and keeps other errors.
    */
   mapError?(cause: unknown, operation: string): Error;
-  /** Runs before each subscription, such as a session setup that it must not wait for later. */
-  beforeSubscribe?(): Promise<void>;
 };
 
 /** The default shell error of a failed channel request. */
@@ -98,7 +96,6 @@ export const createLocalHostConnection = ({
   openSocket,
   schedule,
   mapError = hostChannelInvokeError,
-  beforeSubscribe = async () => {},
 }: LocalHostConnectionOptions): LocalHostConnection => {
   let channel: LocalHostChannel | null = null;
   const current = (notificationCursor: NotificationCursor | null = null): LocalHostChannel => {
@@ -136,7 +133,6 @@ export const createLocalHostConnection = ({
     listener: LocalHostChannelListener,
     eventName = DEFAULT_EVENT_NAME,
   ): Promise<() => void> => {
-    await beforeSubscribe();
     const opened = current();
     let active = true;
     const remove = opened.addListener({
@@ -275,7 +271,6 @@ export const createLocalHostConnection = ({
       };
     },
     subscribeTaskStream: async (input, onFrame, onTerminalFailure) => {
-      await beforeSubscribe();
       let subscription: Awaited<ReturnType<LocalHostChannel["subscribeTaskEvents"]>>;
       try {
         subscription = await current().subscribeTaskEvents(input, onFrame, onTerminalFailure);
@@ -296,11 +291,9 @@ export const createLocalHostConnection = ({
     },
     subscribeNotificationStream: async (input, onFrame, onFailure) => {
       const parsed = notificationStreamSubscribeSchema.parse(input);
-      await beforeSubscribe();
       return current(parsed.cursor).subscribeNotifications(parsed, onFrame, onFailure);
     },
     observeRemoteAccess: async (listener) => {
-      await beforeSubscribe();
       return current().observeRemoteAccess(listener);
     },
   };

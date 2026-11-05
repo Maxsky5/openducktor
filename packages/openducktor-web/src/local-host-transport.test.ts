@@ -641,3 +641,54 @@ describe("local host resource URLs", () => {
     );
   });
 });
+
+describe("local host session", () => {
+  /** A session endpoint whose first request stays pending until its signal aborts. */
+  const stallFirstSession = () => {
+    const signals: AbortSignal[] = [];
+    const fetchMock = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+      const signal = init?.signal;
+      if (!signal) throw new Error("The session request has no signal.");
+      signals.push(signal);
+      if (signals.length > 1) return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    });
+    globalThis.fetch = createFetchFixture(fetchMock);
+    return { signals, fetchMock };
+  };
+
+  test("aborts a stalled request when its last waiter leaves, and a later call succeeds", async () => {
+    const { signals } = stallFirstSession();
+    const { ensureLocalHostSession } = await loadLocalHostTransport();
+    const leave = new AbortController();
+    const waiting = ensureLocalHostSession(leave.signal);
+    await waitFor(() => signals.length === 1, "the session request");
+    const reason = new Error("The host channel did not finish setup.");
+    leave.abort(reason);
+
+    await expect(waiting).rejects.toBe(reason);
+    expect(signals[0]?.aborted).toBe(true);
+    await ensureLocalHostSession(new AbortController().signal);
+    expect(signals).toHaveLength(2);
+  });
+
+  test("keeps the shared request while another waiter needs it", async () => {
+    const { signals } = stallFirstSession();
+    const { ensureLocalHostSession } = await loadLocalHostTransport();
+    const first = new AbortController();
+    const firstWait = ensureLocalHostSession(first.signal);
+    const secondWaiter = new AbortController();
+    const second = ensureLocalHostSession(secondWaiter.signal);
+    await waitFor(() => signals.length === 1, "the session request");
+    first.abort(new Error("Left."));
+
+    await expect(firstWait).rejects.toThrow("Left.");
+    expect(signals[0]?.aborted).toBe(false);
+    expect(signals).toHaveLength(1);
+    secondWaiter.abort(new Error("Done."));
+    await expect(second).rejects.toThrow("Done.");
+    expect(signals[0]?.aborted).toBe(true);
+  });
+});

@@ -596,6 +596,40 @@ describe("createLocalHostChannel", () => {
     expect(channel.readConnectionWarning()).toBeNull();
   });
 
+  test("ends a stalled session preparation at the setup deadline and reconnects", async () => {
+    const timers = createManualSchedule();
+    const host = createFakeHostChannel();
+    const prepareSignals: AbortSignal[] = [];
+    const channel = createLocalHostChannel({
+      prepare: (signal) => {
+        prepareSignals.push(signal);
+        // The first preparation stalls until its attempt ends.
+        if (prepareSignals.length === 1) return new Promise(() => {});
+        return Promise.resolve({ url: "ws://127.0.0.1:1/channel", token: null });
+      },
+      openSocket: socketOf((protocols) => host.createSocket(protocols)),
+      notificationCursor: null,
+      onDispose: () => {},
+      schedule: timers.schedule,
+    });
+    releases.push(
+      channel.addListener({
+        channel: "openducktor://workspace-provider-setup-updated",
+        eventName: "message",
+        listener: () => {},
+        receivesControlEvents: true,
+      }),
+    );
+    await waitFor(() => prepareSignals.length === 1, "the session preparation");
+    timers.runSetupDeadline();
+    await waitFor(() => timers.pendingReconnects() > 0, "the reconnect timer");
+    expect(prepareSignals[0]?.aborted).toBe(true);
+    expect(channel.readConnectionWarning()).toContain("did not finish setup");
+    timers.runReconnects();
+    await channel.ready;
+    expect(channel.readConnectionWarning()).toBeNull();
+  });
+
   test("closes the channel when its last listener leaves", async () => {
     const test = setup();
     const { remove } = listen(test.channel);

@@ -15,6 +15,7 @@ import { request as httpRequest } from "node:http";
 import WebSocket from "ws";
 import { createNotificationStream } from "../../../../packages/host/src/application/notifications/notification-stream";
 import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
+import { resolveElectronRendererSocketOrigins } from "./electron-loopback-cors-policy";
 import {
   startElectronHostChannelServer,
   type ElectronHostChannelServer,
@@ -28,14 +29,16 @@ afterEach(async () => {
 });
 
 /** A started desktop channel server with real host event, notification, and task streams. */
-const startServer = async (): Promise<ElectronHostChannelServer> => {
+const startServer = async (
+  rendererOrigins: ReadonlySet<string> = new Set([RENDERER_ORIGIN]),
+): Promise<ElectronHostChannelServer> => {
   const notifications = createNotificationStream();
   const leases = createTaskEventLeaseManager({
     taskEventStream: createTaskEventStream({ reporter: { report: () => {} } }),
     reportDeliveryFailure: () => {},
   });
   const server = await startElectronHostChannelServer({
-    rendererOrigins: new Set([RENDERER_ORIGIN]),
+    rendererOrigins,
     onError: () => {},
     createChannel: () =>
       createHostChannelSocketData({
@@ -186,4 +189,23 @@ test("answers events.open on an authorized socket and closes it on stop", async 
 
   await server.stop();
   await closed;
+});
+
+test("accepts the file origin of a packaged window and refuses the null fetch origin", async () => {
+  const server = await startServer(resolveElectronRendererSocketOrigins(undefined));
+  const socket = new WebSocket(
+    server.endpoint.url,
+    [HOST_CHANNEL_SUBPROTOCOL, authorization(server.endpoint.token)],
+    { origin: "file://" },
+  );
+  await new Promise<void>((resolve, reject) => {
+    socket.once("open", () => resolve());
+    socket.once("error", reject);
+  });
+  expect(socket.protocol).toBe(HOST_CHANNEL_SUBPROTOCOL);
+  socket.close();
+
+  expect(
+    await refusalStatus(server.endpoint.url, { ...validHeaders(server), origin: "null" }),
+  ).toBe(403);
 });
