@@ -188,11 +188,7 @@ export const readAssistantActivityStartedAtMsFromMessages = ({
   return activityStartedAtMs;
 };
 
-/**
- * Returns when the last completed reply before `completedAtMs` ended. Loaded history can hold
- * completed replies that the live timing state never saw.
- */
-export const resolvePreviousAssistantCompletedAtMs = ({
+const resolvePreviousAssistantCompletedAtMs = ({
   messages,
   previousAssistantCompletedAtMs,
   completedAtMs,
@@ -208,7 +204,6 @@ export const resolvePreviousAssistantCompletedAtMs = ({
       continue;
     }
     const timestampMs = readChatMessageTimestampMs(message);
-    // The reply that this event finishes can already be in the list. It must not end its own turn.
     if (!isFiniteTimestamp(timestampMs) || timestampMs >= completedAtMs) {
       continue;
     }
@@ -216,4 +211,33 @@ export const resolvePreviousAssistantCompletedAtMs = ({
   }
 
   return latestCompletedAtMs;
+};
+
+type LoadedTurnTiming = {
+  activityStartedAtMs: number | undefined;
+  previousAssistantCompletedAtMs: number | undefined;
+};
+
+export const readTurnTimingFromLoadedMessages = ({
+  messages,
+  previousAssistantCompletedAtMs,
+  completedAtMs,
+}: {
+  messages: readonly AgentChatMessage[];
+  previousAssistantCompletedAtMs: number | undefined;
+  completedAtMs: number;
+}): LoadedTurnTiming => {
+  const loadedPreviousAssistantCompletedAtMs = resolvePreviousAssistantCompletedAtMs({
+    messages,
+    previousAssistantCompletedAtMs,
+    completedAtMs,
+  });
+  return {
+    activityStartedAtMs: readAssistantActivityStartedAtMsFromMessages({
+      messages,
+      previousAssistantCompletedAtMs: loadedPreviousAssistantCompletedAtMs,
+      completedAtMs,
+    }),
+    previousAssistantCompletedAtMs: loadedPreviousAssistantCompletedAtMs,
+  };
 };

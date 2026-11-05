@@ -2,8 +2,7 @@ import type { AgentSessionState } from "../../../types/agent-orchestrator";
 import { z } from "zod";
 import {
   type AssistantTurnTimingState,
-  readAssistantActivityStartedAtMsFromMessages,
-  resolvePreviousAssistantCompletedAtMs,
+  readTurnTimingFromLoadedMessages,
   resolveAssistantTurnDurationMs,
 } from "./assistant-turn-duration";
 import { createSessionMessagesState, getSessionMessages } from "./messages";
@@ -80,21 +79,14 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
     ) => {
       const completedAtMs = toTimestampMs(timestamp) ?? Date.now();
       const currentTiming = timingBySession[sessionKey] ?? {};
-      let { activityStartedAtMs, previousAssistantCompletedAtMs } = currentTiming;
-      // Live timing knows the current turn. After a reload, the loaded replies bound the turn.
-      if (activityStartedAtMs === undefined) {
-        const sessionMessages = getSessionMessages({ externalSessionId, messages });
-        previousAssistantCompletedAtMs = resolvePreviousAssistantCompletedAtMs({
-          messages: sessionMessages,
-          previousAssistantCompletedAtMs,
-          completedAtMs,
-        });
-        activityStartedAtMs = readAssistantActivityStartedAtMsFromMessages({
-          messages: sessionMessages,
-          previousAssistantCompletedAtMs,
-          completedAtMs,
-        });
-      }
+      const { activityStartedAtMs, previousAssistantCompletedAtMs } =
+        currentTiming.activityStartedAtMs === undefined
+          ? readTurnTimingFromLoadedMessages({
+              messages: getSessionMessages({ externalSessionId, messages }),
+              previousAssistantCompletedAtMs: currentTiming.previousAssistantCompletedAtMs,
+              completedAtMs,
+            })
+          : currentTiming;
       const userAnchorAtMs = currentTiming.userAnchorAtMs;
       const timing: Parameters<typeof resolveAssistantTurnDurationMs>[0] = { completedAtMs };
       if (activityStartedAtMs !== undefined) {

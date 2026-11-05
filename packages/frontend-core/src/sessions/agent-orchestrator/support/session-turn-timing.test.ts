@@ -19,7 +19,6 @@ const previousTurnTool: AgentChatMessage = {
 };
 
 describe("session turn timing", () => {
-  // After a reload, the timing state has no record of the turns in the loaded history.
   test("does not measure a reply from turns that ended before the reload", () => {
     const timing = createSessionTurnTiming();
     const messages = createSessionMessagesState("session-1", [previousTurnTool, completedReply]);

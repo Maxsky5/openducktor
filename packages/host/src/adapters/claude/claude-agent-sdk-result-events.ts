@@ -105,15 +105,14 @@ export const handleClaudeResultMessage = ({
     if (resultText.length === 0 && hasCurrentFinalText) {
       emitClaudeDeferredReplyForkPoint({ emit, session, timestamp });
     }
-    // A notification can finish without any assistant output. On resume, Claude Code also
-    // sends an empty result for notifications that it only writes to the transcript. That
-    // result has no reply in this session, so it gets no final reply marker.
-    if (
+    // On resume, Claude Code sends an empty result for notifications that it writes only to the
+    // transcript.
+    const endsOwnTurnWithoutText =
       resultText.length === 0 &&
       isClaudeForegroundTurnActive(session) &&
       !hasCurrentFinalText &&
-      (!session.sdkInitiatedTurnActive || hasCurrentAssistant)
-    ) {
+      (!session.sdkInitiatedTurnActive || hasCurrentAssistant);
+    if (endsOwnTurnWithoutText) {
       emitFinalAssistantMarker({ emit, message, session, timestamp });
     }
   }

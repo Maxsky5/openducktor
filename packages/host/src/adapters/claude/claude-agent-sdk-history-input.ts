@@ -12,7 +12,7 @@ import {
   isClaudeMetaHistoryMessage,
   readClaudeCommandEnvelope,
   readClaudeLocalCommandOutput,
-  readClaudeQueuedPrompt,
+  readClaudeQueueEntry,
 } from "./claude-agent-sdk-local-commands";
 import { createClaudeFinishStepPart } from "./claude-agent-sdk-transcript-parts";
 import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
@@ -23,7 +23,7 @@ type ClaudeVisibleHistoryMessage = Extract<
   { role: "assistant" | "user" }
 >;
 
-type PendingQueuedPrompt = {
+type PendingQueueEntry = {
   text: string;
   timestamp: string;
 };
@@ -52,7 +52,7 @@ export const createClaudeHistoryInputProjector = (options: {
 }) => {
   const resolveLiveUserMessage = createLiveUserMessageResolver(options.liveUserMessages);
   const compactPromptIds = new Set<string>();
-  let pendingQueuedPrompt: PendingQueuedPrompt | null = null;
+  let pendingQueueEntry: PendingQueueEntry | null = null;
 
   const createUserMessage = (input: {
     fallbackMessageId: string;
@@ -86,18 +86,16 @@ export const createClaudeHistoryInputProjector = (options: {
     return message;
   };
 
-  // The queue also holds task notifications and peer messages. A queued prompt labels a command
-  // only when it queued that command.
-  const queuedCommand = (command: string): PendingQueuedPrompt | null =>
-    pendingQueuedPrompt && commandName(pendingQueuedPrompt.text) === commandName(command)
-      ? pendingQueuedPrompt
+  const queuedCommand = (command: string): PendingQueueEntry | null =>
+    pendingQueueEntry && commandName(pendingQueueEntry.text) === commandName(command)
+      ? pendingQueueEntry
       : null;
 
   return (entry: ClaudeHistoryMessage, timestamp: string): ClaudeHistoryInputProjection => {
     const entryValue = entry;
-    const queuedPrompt = readClaudeQueuedPrompt(entry);
-    if (queuedPrompt) {
-      pendingQueuedPrompt = { text: queuedPrompt, timestamp };
+    const queuedText = readClaudeQueueEntry(entry);
+    if (queuedText) {
+      pendingQueueEntry = { text: queuedText, timestamp };
       return handledWithoutMessage;
     }
 
@@ -114,7 +112,7 @@ export const createClaudeHistoryInputProjector = (options: {
         const text = queued?.text ?? command;
         if (text.trim().toLowerCase() === "/compact") {
           const commandTimestamp = queued?.timestamp ?? timestamp;
-          pendingQueuedPrompt = null;
+          pendingQueueEntry = null;
           return {
             handled: true,
             manualCompaction: {
@@ -130,7 +128,7 @@ export const createClaudeHistoryInputProjector = (options: {
           text,
           timestamp: queued?.timestamp ?? timestamp,
         });
-        pendingQueuedPrompt = null;
+        pendingQueueEntry = null;
         return message ? { handled: true, message } : handledWithoutMessage;
       }
       const output =
@@ -179,7 +177,7 @@ export const createClaudeHistoryInputProjector = (options: {
       return handledWithoutMessage;
     }
 
-    if (pendingQueuedPrompt?.text.trim().toLowerCase() === "/compact" && promptId) {
+    if (pendingQueueEntry?.text.trim().toLowerCase() === "/compact" && promptId) {
       compactPromptIds.add(promptId);
     }
 
@@ -188,16 +186,16 @@ export const createClaudeHistoryInputProjector = (options: {
     if (promptId && compactPromptIds.has(promptId) && !command) {
       return handledWithoutMessage;
     }
-    let queued: PendingQueuedPrompt | null = null;
+    let queued: PendingQueueEntry | null = null;
     if (command) {
       queued = queuedCommand(command);
-    } else if (pendingQueuedPrompt?.text === rawText) {
-      queued = pendingQueuedPrompt;
+    } else if (pendingQueueEntry?.text === rawText) {
+      queued = pendingQueueEntry;
     }
     const text = queued?.text ?? command ?? rawText;
     if (text.trim().toLowerCase() === "/compact") {
       const commandTimestamp = queued?.timestamp ?? timestamp;
-      pendingQueuedPrompt = null;
+      pendingQueueEntry = null;
       return {
         handled: true,
         manualCompaction: {
@@ -213,7 +211,7 @@ export const createClaudeHistoryInputProjector = (options: {
       text,
       timestamp: queued?.timestamp ?? timestamp,
     });
-    pendingQueuedPrompt = null;
+    pendingQueueEntry = null;
     return message ? { handled: true, message } : handledWithoutMessage;
   };
 };

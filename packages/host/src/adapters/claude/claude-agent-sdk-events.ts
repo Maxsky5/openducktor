@@ -19,7 +19,7 @@ import {
 } from "./claude-agent-sdk-forwarded-subagent-events";
 import { applyClaudeLifecycleEvent, publishClaudeActivity } from "./claude-agent-sdk-lifecycle";
 import { claudeReplyDurationMs } from "./claude-agent-sdk-message-timestamp";
-import { updateBackgroundTasks, applyTaskEvent } from "./claude-agent-sdk-activity";
+import { updateBackgroundTasks, acceptTaskEvent } from "./claude-agent-sdk-activity";
 import {
   isClaudeMetaStreamMessage,
   isClaudeSyntheticAssistantMessage,
@@ -244,7 +244,7 @@ export const handleClaudeSdkMessage = ({
       message.subtype === "task_updated" ||
       message.subtype === "task_notification")
   ) {
-    if (!applyTaskEvent(session, message)) return;
+    if (!acceptTaskEvent(session, message)) return;
     const taskSession =
       findClaudeSubagentTaskSession(
         session,
