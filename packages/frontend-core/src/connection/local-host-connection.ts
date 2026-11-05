@@ -59,7 +59,7 @@ export type LocalHostConnection = Pick<
 
 export type LocalHostConnectionOptions = Pick<
   LocalHostChannelDependencies,
-  "prepare" | "openSocket" | "schedule"
+  "prepare" | "openSocket"
 >;
 
 const isControlEvent = (event: LocalHostChannelEvent): event is ConnectionControlEvent =>
@@ -72,21 +72,18 @@ const isControlEvent = (event: LocalHostChannelEvent): event is ConnectionContro
 export const createLocalHostConnection = ({
   prepare,
   openSocket,
-  schedule,
 }: LocalHostConnectionOptions): LocalHostConnection => {
   let channel: LocalHostChannel | null = null;
   const current = (notificationCursor: NotificationCursor | null = null): LocalHostChannel => {
     if (channel) return channel;
-    const dependencies: LocalHostChannelDependencies = {
+    const created = createLocalHostChannel({
       prepare,
       openSocket,
       notificationCursor,
       onDispose: () => {
         if (channel === created) channel = null;
       },
-    };
-    if (schedule) dependencies.schedule = schedule;
-    const created = createLocalHostChannel(dependencies);
+    });
     channel = created;
     return created;
   };

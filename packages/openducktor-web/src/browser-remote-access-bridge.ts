@@ -1,4 +1,5 @@
 import {
+  type RemoteAccessState,
   remoteAccessStateSchema,
   remoteAccessNetworksSchema,
   type RemoteAccessBridge,
@@ -6,8 +7,11 @@ import {
   type RemotePairingStartInput,
 } from "@openducktor/contracts";
 import { getBrowserBackendUrl, getBrowserAuthToken } from "./browser-config";
-import { ensureLocalHostSession, observeLocalHostRemoteAccess } from "./local-host-transport";
-export const createBrowserRemoteAccessBridge = (): RemoteAccessBridge => {
+import { ensureLocalHostSession } from "./local-host-transport";
+/** `observeState` delivers the live remote access state of the local operator. */
+export const createBrowserRemoteAccessBridge = (
+  observeState: (listener: (state: RemoteAccessState) => void) => Promise<() => void>,
+): RemoteAccessBridge => {
   const request = async (
     path: string,
     body?: RemoteAccessEnableInput | RemotePairingStartInput | Record<string, never>,
@@ -52,6 +56,6 @@ export const createBrowserRemoteAccessBridge = (): RemoteAccessBridge => {
       ),
     stopPairing: async () =>
       remoteAccessStateSchema.parse(await request("/remote-access/pairing/stop", {})),
-    subscribeState: (listener) => observeLocalHostRemoteAccess(listener),
+    subscribeState: observeState,
   };
 };

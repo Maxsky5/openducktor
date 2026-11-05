@@ -1,5 +1,4 @@
 import { createLocalHostConnection } from "@openducktor/frontend-core/connection/local-host-connection";
-import type { HostClient } from "@openducktor/host-client";
 import { openWebSocket } from "@openducktor/host-client/remote/socket";
 import { Effect } from "effect";
 import { getBrowserAuthTokenEffect, getBrowserBackendUrlEffect } from "./browser-config";
@@ -161,7 +160,7 @@ export const hostSocketUrl = (backendUrl: string, route: string): string => {
 };
 
 /** The host channel of this tab. The session cookie authorizes its socket. */
-const connection = createLocalHostConnection({
+export const localHostConnection = createLocalHostConnection({
   // The channel setup deadline aborts `signal`, so a stalled session request ends with it.
   prepare: async (signal) => {
     await ensureLocalHostSession(signal);
@@ -173,24 +172,6 @@ const connection = createLocalHostConnection({
   openSocket: (url, protocols, signal, onFrame, onClose) =>
     openWebSocket((offered) => new WebSocket(url, offered), protocols, signal, onFrame, onClose),
 });
-
-export const createLocalHostClient = (): HostClient => connection.client;
-export const subscribeLocalHostRunEvents = connection.subscribeRunEvents;
-export const subscribeLocalHostAzureDevOpsConnectionUpdates =
-  connection.subscribeAzureDevOpsConnectionUpdates;
-export const subscribeLocalHostWorkspaceProviderSetupUpdates =
-  connection.subscribeWorkspaceProviderSetupUpdates;
-export const subscribeLocalHostWorkspaceSessionUpdates =
-  connection.subscribeWorkspaceSessionUpdates;
-export const subscribeLocalHostStartupProgress = connection.subscribeStartupProgress;
-export const subscribeLocalHostRuntimeChanges = connection.subscribeRuntimeChanges;
-export const subscribeLocalHostTaskMergeStatusUpdates = connection.subscribeTaskMergeStatusUpdates;
-export const subscribeLocalHostBrowserTabEvents = connection.subscribeBrowserTabEvents;
-export const observeLocalHostAgentSessions = connection.observeAgentSessionLive;
-export const subscribeLocalHostTaskStream = connection.subscribeTaskStream;
-export const subscribeLocalHostNotificationStream = connection.subscribeNotificationStream;
-/** Delivers the live remote access state of the local operator. */
-export const observeLocalHostRemoteAccess = connection.observeRemoteAccess;
 
 export const buildLocalAttachmentPreviewUrl = (browserBackendUrl: string, path: string): string => {
   const baseUrl = browserBackendUrl.replace(/\/$/, "");

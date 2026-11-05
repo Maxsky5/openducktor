@@ -12,6 +12,8 @@ import {
   createHostChannelSession,
   HostChannelProtocolError,
   HostChannelRequestError,
+  openHostChannel,
+  type HostChannelCursors,
   type HostChannelEvent,
   type HostChannelHandlers,
 } from "./channel";
@@ -265,5 +267,96 @@ describe("createHostChannelSession", () => {
     const frame = new Uint8Array([...header, 0x0a, ...new TextEncoder().encode("{")]);
     expect(() => session.receive(frame)).toThrow(HostChannelProtocolError);
     expect((await settled(request)).cause).toBeInstanceOf(HostChannelProtocolError);
+  });
+});
+
+describe("openHostChannel", () => {
+  const notificationCursor = { epoch: "00000000-0000-4000-8000-000000000004", sequence: 4 };
+
+  /** Opens a channel on an in-memory socket. `answer` gets each request that the client sends. */
+  const open = (
+    cursors: HostChannelCursors,
+    answer: (request: HostChannelClientMessage, reply: (frame: Uint8Array) => void) => void,
+  ) => {
+    const hostEvents: number[] = [];
+    const lifetime = new AbortController();
+    const opening = openHostChannel({
+      open: async (onFrame) => ({
+        send: async (frame) =>
+          answer(
+            hostChannelClientMessageSchema.parse(JSON.parse(new TextDecoder().decode(frame))),
+            onFrame,
+          ),
+        close: () => {},
+      }),
+      signal: lifetime.signal,
+      cursors,
+      handlers: { hostEvent: (event) => hostEvents.push(event.id), notification: () => {} },
+      onHandlerError: () => {},
+      onLost: () => {},
+    });
+    return { opening, hostEvents, lifetime };
+  };
+
+  test("replays from the cursors, moves them with each frame, and returns the replay", async () => {
+    const cursors: HostChannelCursors = {
+      hostEvents: { hostEpoch: "epoch-1", hostEventId: 2 },
+      notifications: notificationCursor,
+    };
+    const requests: HostChannelClientMessage[] = [];
+    const { opening, hostEvents, lifetime } = open(cursors, (request, reply) => {
+      requests.push(request);
+      if (request.type !== "request") return;
+      reply(encodeHostChannelFrame({ type: "host_event", id: 3, name: "message" }, "{}"));
+      reply(
+        encodeHostChannelFrame({
+          type: "notification",
+          frame: {
+            type: "attached",
+            cursor: { ...notificationCursor, sequence: 5 },
+            reason: "replay",
+            health: [],
+          },
+        }),
+      );
+      reply(
+        encodeHostChannelFrame(
+          { type: "result", id: request.id },
+          JSON.stringify({ hostEpoch: "epoch-1", hostEventId: 3, hostChanged: false, gaps: ["x"] }),
+        ),
+      );
+    });
+
+    const { replay } = await opening;
+
+    expect(requests).toEqual([
+      {
+        type: "request",
+        id: 0,
+        method: "events.open",
+        cursor: { hostEpoch: "epoch-1", hostEventId: 2 },
+        notificationCursor,
+      },
+    ]);
+    expect(hostEvents).toEqual([3]);
+    expect(replay).toEqual({ hostChanged: false, gaps: ["x"] });
+    expect(cursors).toEqual({
+      hostEvents: { hostEpoch: "epoch-1", hostEventId: 3 },
+      notifications: { ...notificationCursor, sequence: 5 },
+    });
+    lifetime.abort();
+  });
+
+  test("rejects an invalid replay result as a protocol error", async () => {
+    const { opening, lifetime } = open(
+      { hostEvents: null, notifications: null },
+      (request, reply) => {
+        if (request.type === "request")
+          reply(encodeHostChannelFrame({ type: "result", id: request.id }, "{}"));
+      },
+    );
+
+    expect((await settled(opening)).cause).toBeInstanceOf(HostChannelProtocolError);
+    lifetime.abort();
   });
 });

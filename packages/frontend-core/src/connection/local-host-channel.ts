@@ -2,12 +2,9 @@ import {
   failedRemoteAccessState,
   HOST_CHANNEL_SUBPROTOCOL,
   REMOTE_SOCKET_AUTHORIZATION_PREFIX,
-  hostEventsOpenedSchema,
-  type HostEventsOpened,
   parseHostEventEnvelope,
   type HostChannelRequest,
   type HostEventChannel,
-  type HostEventCursor,
   type HostEventEnvelope,
   type NotificationCursor,
   type NotificationStreamFrame,
@@ -23,7 +20,9 @@ import {
 import { createNotificationFrameRelay } from "../recovery/notification-frame-relay";
 import {
   openHostChannel,
+  type HostChannelCursors,
   type HostChannelHandlers,
+  type HostChannelReplay,
   type HostChannelLoss,
   type HostChannelSession,
   type OpenedHostChannel,
@@ -154,8 +153,10 @@ export const createLocalHostChannel = ({
   let opening: { attempt: Attempt; promise: Promise<Open> } | null = null;
   let cancelRetry: (() => void) | null = null;
   let attempts = 0;
-  let cursor: HostEventCursor | null = null;
-  let notificationCursor = initialNotificationCursor;
+  const cursors: HostChannelCursors = {
+    hostEvents: null,
+    notifications: initialNotificationCursor,
+  };
   let hasOpened = false;
   let hasReportedFailure = false;
   let connectionWarning: string | null = null;
@@ -246,7 +247,6 @@ export const createLocalHostChannel = ({
   };
 
   const deliverHostEvent = (event: { id: number; name: string; body(): string }) => {
-    if (cursor) cursor.hostEventId = event.id;
     const targets = listeners.get(event.name);
     // Events of unobserved repositories advance the cursor without parsing.
     if (!targets?.size) return;
@@ -287,10 +287,7 @@ export const createLocalHostChannel = ({
 
   const sessionHandlers: HostChannelHandlers = {
     hostEvent: deliverHostEvent,
-    notification: (frame) => {
-      notificationCursor = frame.cursor;
-      notifications.accept(frame);
-    },
+    notification: (frame) => notifications.accept(frame),
     remoteAccessState: (state) => {
       for (const observer of remoteAccessObservers) observer(state);
     },
@@ -331,6 +328,7 @@ export const createLocalHostChannel = ({
     return openHostChannel({
       open: (onFrame, onClose) => openSocket(url, protocols, signal, onFrame, onClose),
       signal,
+      cursors,
       handlers: sessionHandlers,
       onHandlerError: (cause) => console.error("Host channel delivery failed.", cause),
       onLost: (loss) => failAttempt(attempt, loss),
@@ -338,24 +336,8 @@ export const createLocalHostChannel = ({
     });
   };
 
-  /** Replays the missed host events, then restores the task leases and observers. */
-  const resume = async (
-    session: HostChannelSession,
-    signal: AbortSignal,
-  ): Promise<HostEventsOpened> => {
-    const opened = hostEventsOpenedSchema.parse(
-      await waitWithAbort(
-        session.request({ method: "events.open", cursor, notificationCursor }),
-        signal,
-      ),
-    );
-    cursor = { hostEpoch: opened.hostEpoch, hostEventId: opened.hostEventId };
-    await waitWithAbort(restoreDelivery(session), signal);
-    return opened;
-  };
-
   /** Clears the failure state and tells control listeners what the reconnect missed. */
-  const announceOpen = (opened: HostEventsOpened) => {
+  const announceOpen = (opened: HostChannelReplay) => {
     attempts = 0;
     const recovers = connectionWarning !== null;
     connectionWarning = null;
@@ -394,14 +376,15 @@ export const createLocalHostChannel = ({
     const promise = (async (): Promise<Open> => {
       try {
         const endpoint = await waitWithAbort(prepare(signal), signal);
-        const hostChannel = await openSession(attempt, endpoint);
-        const replay = await resume(hostChannel.session, signal);
+        // The session replays the missed host events. Then the task leases and observers return.
+        const hostChannel = await waitWithAbort(openSession(attempt, endpoint), signal);
+        await waitWithAbort(restoreDelivery(hostChannel.session), signal);
         signal.throwIfAborted();
         attempt.open = { ...hostChannel, abort };
         open = attempt.open;
         // A loss of this channel must schedule a reconnect, so the attempt ends here.
         opening = null;
-        announceOpen(replay);
+        announceOpen(hostChannel.replay);
         return attempt.open;
       } catch (cause) {
         abort.abort(cause);

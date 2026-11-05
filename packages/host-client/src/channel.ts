@@ -2,11 +2,15 @@ import {
   HOST_CHANNEL_SILENCE_LIMIT_MS,
   encodeHostChannelFrame,
   hostChannelMessageSchema,
+  hostEventsOpenedSchema,
   remoteFailureText,
   splitHostChannelFrame,
   taskEventLeaseSchema,
   type HostChannelError,
   type HostChannelRequest,
+  type HostEventCursor,
+  type HostEventsOpened,
+  type NotificationCursor,
   type NotificationStreamFrame,
   type RemoteAccessState,
   type TaskEventLease,
@@ -338,6 +342,18 @@ export type HostChannelLoss =
   | { reason: "unreadable"; cause: unknown }
   | { reason: "send_failed"; cause: unknown };
 
+/**
+ * Where a client stands in the host event and notification replay. One object lives across the
+ * channels of a client: each channel advances it, and the next channel replays from it.
+ */
+export type HostChannelCursors = {
+  hostEvents: HostEventCursor | null;
+  notifications: NotificationCursor | null;
+};
+
+/** What the replay of a new channel says about the events that the client missed. */
+export type HostChannelReplay = Pick<HostEventsOpened, "hostChanged" | "gaps">;
+
 export type OpenHostChannelOptions = {
   /** Opens the socket. It must close when `signal` aborts. */
   open(
@@ -346,6 +362,7 @@ export type OpenHostChannelOptions = {
   ): Promise<RemoteSocketConnection>;
   /** The lifetime of this channel. Its abort closes the session. */
   signal: AbortSignal;
+  cursors: HostChannelCursors;
   handlers: HostChannelHandlers;
   onHandlerError(cause: unknown): void;
   /** Runs once a received frame arrives, before the session reads it. */
@@ -357,7 +374,7 @@ export type OpenHostChannelOptions = {
 
 export type OpenedHostChannel = {
   session: HostChannelSession;
-  socket: RemoteSocketConnection;
+  replay: HostChannelReplay;
 };
 
 const scheduleTimeout = (callback: () => void, delayMs: number): (() => void) => {
@@ -366,13 +383,17 @@ const scheduleTimeout = (callback: () => void, delayMs: number): (() => void) =>
 };
 
 /**
- * Opens a socket and the protocol session on it. It watches for silence, because a network path can
- * drop an idle socket without closing it and the host sends heartbeats. It reports each loss of the
- * channel to `onLost`.
+ * Opens a socket and the protocol session on it, and opens host events from `cursors`. The host
+ * replays the retained events and notifications after the cursors before this resolves, and later
+ * frames advance the cursors. It watches for silence, because a network path can drop an idle
+ * socket without closing it and the host sends heartbeats. It reports each loss of the channel to
+ * `onLost`. A host refusal rejects with `HostChannelRequestError`, and an invalid replay result
+ * with `HostChannelProtocolError`.
  */
 export const openHostChannel = async ({
   open,
   signal,
+  cursors,
   handlers,
   onHandlerError,
   onFrame,
@@ -390,7 +411,18 @@ export const openHostChannel = async ({
       if (!socket) throw new Error("The host channel is not open.");
       void socket.send(frame).catch((cause: unknown) => onLost({ reason: "send_failed", cause }));
     },
-    handlers,
+    handlers: {
+      ...handlers,
+      hostEvent: (event) => {
+        // A replay runs only for a cursor of this host process, so the cursor follows it.
+        if (cursors.hostEvents) cursors.hostEvents.hostEventId = event.id;
+        handlers.hostEvent(event);
+      },
+      notification: (frame) => {
+        cursors.notifications = frame.cursor;
+        handlers.notification(frame);
+      },
+    },
     onHandlerError,
   });
   signal.addEventListener(
@@ -414,5 +446,20 @@ export const openHostChannel = async ({
     (cause) => onLost({ reason: "closed", cause }),
   );
   watchSilence();
-  return { session, socket };
+  const opened = hostEventsOpenedSchema.safeParse(
+    await session.request(
+      {
+        method: "events.open",
+        cursor: cursors.hostEvents,
+        notificationCursor: cursors.notifications,
+      },
+      signal,
+    ),
+  );
+  if (!opened.success)
+    throw new HostChannelProtocolError("The host sent an invalid events.open result.", {
+      cause: opened.error,
+    });
+  cursors.hostEvents = { hostEpoch: opened.data.hostEpoch, hostEventId: opened.data.hostEventId };
+  return { session, replay: { hostChanged: opened.data.hostChanged, gaps: opened.data.gaps } };
 };

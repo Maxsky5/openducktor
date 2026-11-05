@@ -1,4 +1,5 @@
 import { createBrowserRemoteAccessBridge } from "./browser-remote-access-bridge";
+import type { HostClient } from "@openducktor/host-client";
 import { browserArtifactPreviewEnvironment } from "@openducktor/frontend/lib/artifact-preview-environment";
 import { getAppVersion } from "@openducktor/frontend/lib/app-version";
 import {
@@ -19,19 +20,8 @@ import {
 import {
   buildLocalAttachmentPreviewUrl,
   buildTaskAssetUrl,
-  createLocalHostClient,
   ensureLocalHostSessionDedupedEffect,
-  observeLocalHostAgentSessions,
-  subscribeLocalHostAzureDevOpsConnectionUpdates,
-  subscribeLocalHostBrowserTabEvents,
-  subscribeLocalHostWorkspaceProviderSetupUpdates,
-  subscribeLocalHostRunEvents,
-  subscribeLocalHostRuntimeChanges,
-  subscribeLocalHostTaskMergeStatusUpdates,
-  subscribeLocalHostStartupProgress,
-  subscribeLocalHostNotificationStream,
-  subscribeLocalHostTaskStream,
-  subscribeLocalHostWorkspaceSessionUpdates,
+  localHostConnection,
 } from "./local-host-transport";
 import { createBrowserTabBridge } from "./browser-tabs/browser-tab-bridge";
 import { createBrowserTerminalBridge } from "./terminals/browser-terminal-transport";
@@ -54,7 +44,7 @@ const openExternalUrlEffect = (url: string): Effect.Effect<void, WebError> =>
   });
 
 const resolveLocalAttachmentPreviewSrcEffect = (
-  client: ReturnType<typeof createLocalHostClient>,
+  client: HostClient,
   path: string,
 ): Effect.Effect<string, WebError> =>
   Effect.gen(function* () {
@@ -83,14 +73,14 @@ export const createBrowserShellBridge = (): ShellBridge => {
       field: "VITE_ODT_APP_VERSION",
     });
   }
-  const client = createLocalHostClient();
+  const { observeRemoteAccess, ...hostConnection } = localHostConnection;
+  const { client } = hostConnection;
 
   return {
+    ...hostConnection,
     getArtifactPreviewEnvironment: () =>
       Promise.resolve(browserArtifactPreviewEnvironment(window.location.origin)),
-    remoteAccess: createBrowserRemoteAccessBridge(),
-    client,
-    subscribeWorkspaceSessionUpdates: subscribeLocalHostWorkspaceSessionUpdates,
+    remoteAccess: createBrowserRemoteAccessBridge(observeRemoteAccess),
     appUpdates: createDisabledAppUpdateBridge({
       status: "disabled",
       currentVersion,
@@ -102,16 +92,6 @@ export const createBrowserShellBridge = (): ShellBridge => {
       canPreviewLocalAttachments: true,
     },
     notifications: createBrowserNotificationBridge(),
-    subscribeRuntimeChanges: subscribeLocalHostRuntimeChanges,
-    subscribeTaskMergeStatusUpdates: subscribeLocalHostTaskMergeStatusUpdates,
-    subscribeBrowserTabEvents: subscribeLocalHostBrowserTabEvents,
-    subscribeRunEvents: subscribeLocalHostRunEvents,
-    subscribeStartupProgress: subscribeLocalHostStartupProgress,
-    subscribeAzureDevOpsConnectionUpdates: subscribeLocalHostAzureDevOpsConnectionUpdates,
-    subscribeWorkspaceProviderSetupUpdates: subscribeLocalHostWorkspaceProviderSetupUpdates,
-    observeAgentSessionLive: observeLocalHostAgentSessions,
-    subscribeNotificationStream: subscribeLocalHostNotificationStream,
-    subscribeTaskStream: subscribeLocalHostTaskStream,
     openExternalUrl: (url) => runWebBoundary(openExternalUrlEffect(url)),
     resolveLocalAttachmentPreview: async (path, signal) => {
       signal.throwIfAborted();

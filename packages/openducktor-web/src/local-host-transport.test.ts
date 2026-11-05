@@ -15,7 +15,7 @@ import {
   type FakeHostChannelOptions,
   type FakeHostChannelReply,
 } from "@openducktor/host-client/remote/test-support/host-channel";
-import type { HostReplay } from "@openducktor/host-client/remote";
+import type { HostChannelReplay } from "@openducktor/host-client/channel";
 import { configureBrowserRuntimeConfig } from "./browser-config";
 import { createFetchFixture } from "./test-support";
 import type {
@@ -156,7 +156,7 @@ describe("readLocalHostErrorPayload", () => {
   });
 });
 
-describe("createLocalHostClient", () => {
+describe("local host client", () => {
   test("rejects local host session failures with a typed web host request error", async () => {
     const { ensureLocalHostSession } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
@@ -173,9 +173,9 @@ describe("createLocalHostClient", () => {
   test("sends commands over the host channel after the session cookie request", async () => {
     const gitCheck = { ok: true, executablePath: "/usr/bin/git", version: "2.50.0", error: null };
     const setup = setupHost({ invoke: () => ({ result: gitCheck }) });
-    const { createLocalHostClient } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
 
-    await expect(createLocalHostClient().gitCheck()).resolves.toEqual(gitCheck);
+    await expect(host.client.gitCheck()).resolves.toEqual(gitCheck);
 
     expect(setup.fetchMock).toHaveBeenCalledTimes(1);
     expect(setup.fetchMock).toHaveBeenCalledWith(
@@ -209,10 +209,10 @@ describe("createLocalHostClient", () => {
           },
         }),
     });
-    const { createLocalHostClient } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
 
     await expect(
-      createLocalHostClient().terminalCreate({ workingDir: "/repo", context: {} }),
+      host.client.terminalCreate({ workingDir: "/repo", context: {} }),
     ).rejects.toMatchObject({ name: "HostTerminalClientError", code: "unsupported_runtime" });
   });
 
@@ -244,10 +244,10 @@ describe("createLocalHostClient", () => {
           failure,
         }),
     });
-    const { createLocalHostClient } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
 
     await expect(
-      createLocalHostClient().agentSessionMessageSubmit({
+      host.client.agentSessionMessageSubmit({
         ...sessionRef,
         sessionScope: { kind: "repository", workspaceId: "workspace-1" },
         submissionId: "submission-1",
@@ -270,9 +270,9 @@ describe("createLocalHostClient", () => {
         },
       }),
     });
-    const { createLocalHostClient } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
 
-    await expect(createLocalHostClient().gitCheck()).rejects.toMatchObject({
+    await expect(host.client.gitCheck()).rejects.toMatchObject({
       name: "HostInvokeError",
       message: "The host is shutting down. Reopen OpenDucktor.",
     });
@@ -287,19 +287,19 @@ describe("createLocalHostClient", () => {
           failure: { kind: "terminal", terminalFailure: { code: "missing_code" } } as never,
         }),
     });
-    const { createLocalHostClient } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
 
     await expect(
-      createLocalHostClient().terminalCreate({ workingDir: "/repo", context: {} }),
+      host.client.terminalCreate({ workingDir: "/repo", context: {} }),
     ).rejects.toMatchObject({ name: "HostChannelProtocolError" });
   });
 
   test("rejects an aborted command with the abort reason at once", async () => {
     const setup = setupHost({ invoke: () => "none" });
-    const { createLocalHostClient } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
     const abort = new AbortController();
 
-    const pending = createLocalHostClient().pathCheck(false, { signal: abort.signal });
+    const pending = host.client.pathCheck(false, { signal: abort.signal });
     await waitFor(() => methods(setup.host().requests).includes("invoke"), "the command");
     const reason = new Error("Timed out after 30000ms");
     abort.abort(reason);
@@ -320,18 +320,14 @@ describe("local host event subscriptions", () => {
 
   test("shares one channel across host event subscribers and closes it with the last one", async () => {
     const setup = setupHost();
-    const {
-      subscribeLocalHostRunEvents,
-      subscribeLocalHostWorkspaceProviderSetupUpdates,
-      subscribeLocalHostAzureDevOpsConnectionUpdates,
-    } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
     const runListener = mock(() => {});
     const setupListener = mock(() => {});
     const azureListener = mock(() => {});
 
-    const stopRun = await subscribeLocalHostRunEvents(runListener);
-    const stopSetup = await subscribeLocalHostWorkspaceProviderSetupUpdates(setupListener);
-    const stopAzure = await subscribeLocalHostAzureDevOpsConnectionUpdates(azureListener);
+    const stopRun = await host.subscribeRunEvents(runListener);
+    const stopSetup = await host.subscribeWorkspaceProviderSetupUpdates(setupListener);
+    const stopAzure = await host.subscribeAzureDevOpsConnectionUpdates(azureListener);
     expect(setup.socketUrls).toHaveLength(1);
 
     const run = { type: "autopilot_failure", failure: null } as const;
@@ -360,10 +356,10 @@ describe("local host event subscriptions", () => {
           ? { result: liveSnapshot(String(args.repoPath), 0) }
           : { result: null },
     });
-    const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
     const listener = mock((_envelope: AgentSessionLiveEnvelope) => {});
 
-    const stop = await observeLocalHostAgentSessions({ repoPath: "/repo" }, listener);
+    const stop = await host.observeAgentSessionLive({ repoPath: "/repo" }, listener);
     const live = (repoPath: string, sequence: number): HostEventEnvelope => ({
       channel: "openducktor://agent-session-live-event",
       payload: liveSnapshot(repoPath, sequence),
@@ -382,17 +378,17 @@ describe("local host event subscriptions", () => {
   test("reports reconnects and the coverage of the startup event name", async () => {
     const reconnects = runReconnectsAtOnce();
     let opens = 0;
-    let replay: HostReplay = { hostChanged: false, gaps: [] };
+    let replay: HostChannelReplay = { hostChanged: false, gaps: [] };
     const setup = setupHost({
       answer: (request) => {
         if (request.method !== "events.open" || ++opens === 1) return undefined;
         return { result: { hostEpoch: "fake-host-epoch", hostEventId: 0, ...replay } };
       },
     });
-    const { subscribeLocalHostStartupProgress } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
     const listener = mock<StartupProgressListener>(() => {});
-    const stop = await subscribeLocalHostStartupProgress(listener);
-    const reconnectWith = async (next: HostReplay) => {
+    const stop = await host.subscribeStartupProgress(listener);
+    const reconnectWith = async (next: HostChannelReplay) => {
       replay = next;
       const calls = listener.mock.calls.length;
       setup.host().closeAll();
@@ -416,14 +412,14 @@ describe("local host event subscriptions", () => {
 
   test("gives a subscriber that joins during a connection failure the current warning", async () => {
     const setup = setupHost();
-    const { subscribeLocalHostRuntimeChanges } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
     const existing = mock<RuntimeChangeListener>(() => {});
-    const stopExisting = await subscribeLocalHostRuntimeChanges(existing);
+    const stopExisting = await host.subscribeRuntimeChanges(existing);
     setup.host().closeAll();
     await waitFor(() => existing.mock.calls.length === 1, "the warning");
 
     const late = mock<RuntimeChangeListener>(() => {});
-    const stopLate = await subscribeLocalHostRuntimeChanges(late);
+    const stopLate = await host.subscribeRuntimeChanges(late);
 
     expect(existing).toHaveBeenCalledWith(
       connectionStreamWarningEvent(
@@ -453,9 +449,9 @@ describe("local host event subscriptions", () => {
         };
       },
     });
-    const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
     const listener = mock((_envelope: AgentSessionLiveEnvelope) => {});
-    const stop = await observeLocalHostAgentSessions({ repoPath: "/repo" }, listener);
+    const stop = await host.observeAgentSessionLive({ repoPath: "/repo" }, listener);
     const reconnectAndWait = async () => {
       const sockets = setup.host().sockets.length;
       setup.host().closeAll();
@@ -499,10 +495,10 @@ describe("local host task and status streams", () => {
 
   test("delivers task frames, acknowledges cursors, and releases the lease", async () => {
     const setup = setupHost({ initialTaskFrames: () => [frame] });
-    const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
     const frames: TaskEventStreamFrame[] = [];
 
-    const subscription = await subscribeLocalHostTaskStream({ cursor: null }, (next) =>
+    const subscription = await host.subscribeTaskStream({ cursor: null }, (next) =>
       frames.push(next),
     );
     await waitFor(() => frames.length === 1, "the first frame");
@@ -536,9 +532,9 @@ describe("local host task and status streams", () => {
             }
           : undefined,
     });
-    const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
 
-    await expect(subscribeLocalHostTaskStream({ cursor: null }, () => {})).rejects.toMatchObject({
+    await expect(host.subscribeTaskStream({ cursor: null }, () => {})).rejects.toMatchObject({
       name: "HostInvokeError",
       message: "The host is shutting down. Reopen OpenDucktor.",
     });
@@ -546,9 +542,9 @@ describe("local host task and status streams", () => {
 
   test("delivers remote access states to the local operator", async () => {
     const setup = setupHost();
-    const { observeLocalHostRemoteAccess } = await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
     const states: RemoteAccessState[] = [];
-    const stop = await observeLocalHostRemoteAccess((state) => states.push(state));
+    const stop = await host.observeRemoteAccess((state) => states.push(state));
     await waitFor(
       () => methods(setup.host().requests).includes("remote_access.observe"),
       "the observe request",
@@ -570,26 +566,21 @@ describe("local host task and status streams", () => {
   test("shares the channel with notification subscribers and replays their retained frames", async () => {
     const cursor = { epoch: "11111111-1111-4111-8111-111111111111", sequence: 42 };
     const setup = setupHost();
-    const { subscribeLocalHostNotificationStream, subscribeLocalHostRunEvents } =
-      await loadLocalHostTransport();
+    const { localHostConnection: host } = await loadLocalHostTransport();
     const frames = mock(() => {});
     const failures = mock(() => {});
 
-    const stopNotifications = await subscribeLocalHostNotificationStream(
-      { cursor },
-      frames,
-      failures,
-    );
+    const stopNotifications = await host.subscribeNotificationStream({ cursor }, frames, failures);
     await waitFor(() => frames.mock.calls.length === 1, "the attached frame");
     expect(setup.host().requests[0]).toMatchObject({
       method: "events.open",
       notificationCursor: cursor,
     });
-    const stopRun = await subscribeLocalHostRunEvents(() => {});
+    const stopRun = await host.subscribeRunEvents(() => {});
     expect(setup.socketUrls).toHaveLength(1);
 
     const late = mock(() => {});
-    const stopLate = await subscribeLocalHostNotificationStream({ cursor: null }, late, () => {});
+    const stopLate = await host.subscribeNotificationStream({ cursor: null }, late, () => {});
     expect(late).toHaveBeenCalledWith(expect.objectContaining({ type: "attached" }));
     setup.host().closeAll();
     await waitFor(() => failures.mock.calls.length === 1, "the notification failure");

@@ -93,19 +93,16 @@ const connectFrameChannel = async (
 export const createElectronShellBridge = (): ShellBridge => {
   const electronApi = getElectronApi();
   // The desktop host channel. Its per-launch token reaches only OpenDucktor windows.
-  const host = createLocalHostConnection({
+  const { observeRemoteAccess, ...hostConnection } = createLocalHostConnection({
     prepare: () => electronApi.hostChannelEndpoint(),
     openSocket: (url, protocols, signal, onFrame, onClose) =>
       openWebSocket((offered) => new WebSocket(url, offered), protocols, signal, onFrame, onClose),
   });
 
   return {
-    remoteAccess: { ...electronApi.remoteAccess, subscribeState: host.observeRemoteAccess },
+    ...hostConnection,
+    remoteAccess: { ...electronApi.remoteAccess, subscribeState: observeRemoteAccess },
     getArtifactPreviewEnvironment: () => electronApi.getArtifactPreviewEnvironment(),
-    client: host.client,
-    subscribeWorkspaceSessionUpdates: host.subscribeWorkspaceSessionUpdates,
-    subscribeRuntimeChanges: host.subscribeRuntimeChanges,
-    subscribeTaskMergeStatusUpdates: host.subscribeTaskMergeStatusUpdates,
     capabilities: {
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,
@@ -122,13 +119,6 @@ export const createElectronShellBridge = (): ShellBridge => {
       subscribeClicks: (listener) => electronApi.notifications.subscribeClicks(listener),
       dispose: () => {},
     },
-    subscribeRunEvents: host.subscribeRunEvents,
-    subscribeStartupProgress: host.subscribeStartupProgress,
-    subscribeWorkspaceProviderSetupUpdates: host.subscribeWorkspaceProviderSetupUpdates,
-    subscribeAzureDevOpsConnectionUpdates: host.subscribeAzureDevOpsConnectionUpdates,
-    observeAgentSessionLive: host.observeAgentSessionLive,
-    subscribeNotificationStream: host.subscribeNotificationStream,
-    subscribeTaskStream: host.subscribeTaskStream,
     appUpdates: {
       getState: () => electronApi.appUpdates.getState(),
       check: (input) => electronApi.appUpdates.check(input),
@@ -159,7 +149,6 @@ export const createElectronShellBridge = (): ShellBridge => {
         return electronApi.editorClipboard.readText(type);
       },
     },
-    subscribeBrowserTabEvents: host.subscribeBrowserTabEvents,
     // Mount each browser tab as `<webview partition={partition(workspaceId)} src="about:blank"
     // allowpopups>`, then call `bindGuest` with its `getWebContentsId()`. The engine takes control
     // of the page first, then loads the tab URL, so the page never runs without the host.

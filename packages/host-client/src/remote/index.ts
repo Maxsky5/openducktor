@@ -5,7 +5,6 @@ import {
   HOST_CHANNEL_HEARTBEAT_INTERVAL_MS,
   HOST_CHANNEL_SUBPROTOCOL,
   hostErrorResponseSchema,
-  hostEventsOpenedSchema,
   isHostReadCommand,
   hostEventEnvelopeSchema,
   remoteEndpointSchema,
@@ -14,10 +13,7 @@ import {
   REMOTE_CONNECTION_HEADER,
   REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
-  type HostEventCursor,
-  type HostEventsOpened,
   type HostEventEnvelope,
-  type NotificationCursor,
   type NotificationStreamFrame,
   type RemoteClientHello,
   type RemoteClientKind,
@@ -32,9 +28,12 @@ import {
 import { createHostClient, HostInvokeError, type HostClient } from "../index";
 import {
   hostChannelInvokeError,
+  HostChannelProtocolError,
   HostChannelRequestError,
   openHostChannel,
+  type HostChannelCursors,
   type HostChannelLoss,
+  type HostChannelReplay,
   type OpenedHostChannel,
 } from "../channel";
 import {
@@ -69,10 +68,9 @@ export type RemoteSynchronizationContext = {
   previousHostInstanceId: string | null;
   /** Confirmed replacement retained until synchronization reports it. */
   hostChanged: boolean;
-  hostReplay: HostReplay;
+  hostReplay: HostChannelReplay;
 };
 /** The end of a host event replay: a host change, and the event names with missed events. */
-export type HostReplay = Pick<HostEventsOpened, "hostChanged" | "gaps">;
 export type RemoteSynchronizer = (context: RemoteSynchronizationContext) => Promise<void>;
 export type RemoteTaskSubscription = {
   readonly ready: Promise<void>;
@@ -156,8 +154,7 @@ export const createRemoteHostClient = (
   let attempts = 0;
   let pendingHostChanged = false;
   const pendingReplayGaps = new Set<string>();
-  let cursor: HostEventCursor | null = null;
-  let notificationCursor: NotificationCursor | null = null;
+  const cursors: HostChannelCursors = { hostEvents: null, notifications: null };
   let channel: Channel | null = null;
   /** The host of this admission cuts long tool details from history on request. */
   let compactHistory = false;
@@ -373,7 +370,7 @@ export const createRemoteHostClient = (
    * Opens the host channel of attempt `current`, receives the replay of missed host events, and
    * waits for notification attachment. A closed or silent channel loses the connection.
    */
-  const openChannel = async (current: number, signal: AbortSignal): Promise<HostReplay> => {
+  const openChannel = async (current: number, signal: AbortSignal): Promise<HostChannelReplay> => {
     const setup = new AbortController();
     const setupTimer = setTimeout(
       () =>
@@ -398,6 +395,7 @@ export const createRemoteHostClient = (
     try {
       const hostChannel = await waitWithAbort(
         openHostChannel({
+          cursors,
           open: (onFrame, onClose) =>
             transport.openSocket(
               socketUrl("/channel"),
@@ -417,12 +415,9 @@ export const createRemoteHostClient = (
                 lost(current, invalidFrame());
                 return;
               }
-              // A replay runs only for a cursor of this host process, so the cursor follows it.
-              if (cursor) cursor = { ...cursor, hostEventId: event.id };
               deliver(eventListeners, envelope);
             },
             notification: (frame) => {
-              notificationCursor = frame.cursor;
               deliver(notificationListeners, frame);
               if (frame.type === "attached") attached.resolve();
             },
@@ -435,18 +430,10 @@ export const createRemoteHostClient = (
           onLost: (loss) => lost(current, channelLossError(loss)),
         }),
         setupSignal,
-      );
-      channel = { generation: current, opened: hostChannel };
-      const { session } = hostChannel;
-      const openedValue = await waitWithAbort(
-        session.request({ method: "events.open", cursor, notificationCursor }),
-        setupSignal,
       ).catch(throwChannelRequestError);
-      const opened = hostEventsOpenedSchema.safeParse(openedValue);
-      if (!opened.success) throw invalidFrame();
-      cursor = { hostEpoch: opened.data.hostEpoch, hostEventId: opened.data.hostEventId };
+      channel = { generation: current, opened: hostChannel };
       await waitWithAbort(attached.promise, setupSignal);
-      return { hostChanged: opened.data.hostChanged, gaps: opened.data.gaps };
+      return hostChannel.replay;
     } finally {
       clearTimeout(setupTimer);
       unlink();
@@ -518,11 +505,11 @@ export const createRemoteHostClient = (
           negotiatedProtocol.capabilities.includes(REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY);
         state = { ...state, host: accepted.host };
         if (previousHostInstanceId !== accepted.host.hostInstanceId) {
-          cursor = null;
-          notificationCursor = null;
+          cursors.hostEvents = null;
+          cursors.notifications = null;
           if (previousHostInstanceId !== null) pendingHostChanged = true;
         }
-        let hostReplay: HostReplay = await openChannel(current, abort.signal);
+        let hostReplay: HostChannelReplay = await openChannel(current, abort.signal);
         for (const gap of hostReplay.gaps) pendingReplayGaps.add(gap);
         hostReplay = { ...hostReplay, gaps: [...pendingReplayGaps] };
         publish("synchronizing");
@@ -961,6 +948,7 @@ const invalidFrame = (): RemoteConnectionError =>
 class RemoteRefusalError extends RemoteConnectionError {}
 /** Throws the remote error of a failed channel request that is no command. */
 const throwChannelRequestError = (cause: unknown): never => {
+  if (cause instanceof HostChannelProtocolError) throw invalidFrame();
   if (!(cause instanceof HostChannelRequestError)) throw cause;
   const { error } = cause;
   if (error.kind === "refused") throw new RemoteRefusalError(error.failure);
