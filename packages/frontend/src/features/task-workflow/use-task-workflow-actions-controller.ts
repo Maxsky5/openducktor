@@ -31,7 +31,7 @@ import { useTasksState, useWorkspaceState } from "@/state/app-state-provider";
 import { useAgentModelFavorites } from "@openducktor/frontend-core/sessions/model-selection/use-agent-model-favorites";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import {
-  buildActiveTaskSessionContextByTaskId,
+  deriveActiveTaskSessionContextByTaskId,
   buildTaskSessionsByTaskId,
 } from "@openducktor/frontend-core/tasks/board/kanban-board-sessions";
 import {
@@ -226,8 +226,8 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
 
   const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(sessions), [sessions]);
   const activeTaskSessionContextByTaskId = useMemo(
-    () => buildActiveTaskSessionContextByTaskId(sessions),
-    [sessions],
+    () => deriveActiveTaskSessionContextByTaskId(taskSessionsByTaskId),
+    [taskSessionsByTaskId],
   );
   const { approvingTaskId, requestingChangesTaskId, resettingImplementationTaskId } =
     buildWorkflowPendingState({

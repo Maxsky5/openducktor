@@ -1,6 +1,6 @@
+import { isAgentSessionActivityActive } from "../../lib/agent-session-activity-state";
 import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
 import {
-  type ActiveAgentSessionSummary,
   type ActiveTaskSessionContext,
   isKanbanActiveTaskSession,
   type KanbanTaskActivityState,
@@ -18,31 +18,21 @@ const comparePrimaryTaskSession = (
   return compareActiveSessionForPrimary(toKanbanTaskSession(left), toKanbanTaskSession(right));
 };
 
-export const buildActiveTaskSessionContextByTaskId = (
-  sessions: AgentSessionSummary[],
+/** Derives context from groups sorted by compareActiveSessionForPrimary. */
+export const deriveActiveTaskSessionContextByTaskId = (
+  taskSessionsByTaskId: Map<string, KanbanTaskSession[]>,
 ): Map<string, ActiveTaskSessionContext> => {
-  const activeTaskSessionContextByTaskId = new Map<string, ActiveAgentSessionSummary>();
-
-  for (const session of sessions) {
-    if (!isKanbanActiveTaskSession(session)) {
-      continue;
-    }
-
-    const current = activeTaskSessionContextByTaskId.get(session.taskId);
-    if (!current || comparePrimaryTaskSession(session, current) < 0) {
-      activeTaskSessionContextByTaskId.set(session.taskId, session);
+  const contexts = new Map<string, ActiveTaskSessionContext>();
+  for (const [taskId, sessions] of taskSessionsByTaskId) {
+    const primary = sessions[0];
+    if (
+      primary &&
+      isAgentSessionActivityActive(primary.activityState, primary.statusUnavailableReason)
+    ) {
+      contexts.set(taskId, { role: primary.role, activityState: primary.activityState });
     }
   }
-
-  return new Map(
-    Array.from(activeTaskSessionContextByTaskId.entries()).map(([taskId, session]) => [
-      taskId,
-      {
-        role: session.role,
-        activityState: session.activityState,
-      },
-    ]),
-  );
+  return contexts;
 };
 
 export const buildTaskActivityStateByTaskId = (

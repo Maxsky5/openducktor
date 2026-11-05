@@ -8,7 +8,7 @@ import {
   createAgentSessionFixture,
 } from "../../test-support/shared-test-fixtures";
 import {
-  buildActiveTaskSessionContextByTaskId,
+  deriveActiveTaskSessionContextByTaskId,
   buildTaskActivityStateByTaskId,
   buildTaskSessionsByTaskId,
   sortTasksByActivityState,
@@ -75,7 +75,7 @@ describe("use-kanban-board-model helpers", () => {
     expect(sessionsByTask.get("task-1")).toMatchObject([
       { statusUnavailableReason: unavailable.statusUnavailableReason },
     ]);
-    expect(buildActiveTaskSessionContextByTaskId([unavailable]).size).toBe(0);
+    expect(deriveActiveTaskSessionContextByTaskId(sessionsByTask).size).toBe(0);
     expect(buildTaskActivityStateByTaskId([createTaskCard()], sessionsByTask).get("task-1")).toBe(
       "idle",
     );
@@ -85,7 +85,9 @@ describe("use-kanban-board-model helpers", () => {
       activityState: "waiting_input" as const,
       pendingQuestionCount: 1,
     };
-    expect(buildActiveTaskSessionContextByTaskId([waiting]).get("task-1")).toEqual({
+    expect(
+      deriveActiveTaskSessionContextByTaskId(buildTaskSessionsByTaskId([waiting])).get("task-1"),
+    ).toEqual({
       role: "build",
       activityState: "waiting_input",
     });
@@ -94,6 +96,48 @@ describe("use-kanban-board-model helpers", () => {
         "task-1",
       ),
     ).toBe("waiting_input");
+  });
+
+  test("derives primary context across tasks without changing task insertion order", () => {
+    const base = createSession();
+    const sessionsByTask = buildTaskSessionsByTaskId([
+      { ...base, taskId: "unavailable", statusUnavailableReason: "Reconnect runtime." },
+      { ...base, taskId: "mixed", role: "spec", statusUnavailableReason: "Reconnect runtime." },
+      { ...base, taskId: "waiting", role: "qa", activityState: "waiting_input" },
+      { ...base, taskId: "mixed", role: "build", externalSessionId: "active" },
+      { ...base, taskId: "waiting", role: "build" },
+      { ...base, taskId: "inactive", activityState: "stopped" },
+      { ...base, taskId: "starting", role: "planner", activityState: "starting" },
+    ]);
+    const contexts = deriveActiveTaskSessionContextByTaskId(sessionsByTask);
+
+    expect([...sessionsByTask.keys()]).toEqual(["unavailable", "mixed", "waiting", "starting"]);
+    expect([...contexts]).toEqual([
+      ["mixed", { role: "build", activityState: "running" }],
+      ["waiting", { role: "qa", activityState: "waiting_input" }],
+      ["starting", { role: "planner", activityState: "starting" }],
+    ]);
+    for (const [taskId, context] of contexts) {
+      expect(sessionsByTask.get(taskId)?.[0]).toMatchObject(context);
+    }
+  });
+
+  test("keeps the first input session as primary on an exact comparator tie", () => {
+    const first = createSession();
+    const second = { ...first, role: "qa" as const };
+    for (const sessions of [
+      [first, second],
+      [second, first],
+    ]) {
+      const sessionsByTask = buildTaskSessionsByTaskId(sessions);
+      expect(sessionsByTask.get("task-1")?.map((session) => session.role)).toEqual(
+        sessions.map((session) => session.role),
+      );
+      expect(deriveActiveTaskSessionContextByTaskId(sessionsByTask).get("task-1")).toEqual({
+        role: sessions[0]!.role,
+        activityState: "running",
+      });
+    }
   });
 
   test("buildTaskSessionsByTaskId keeps waiting-input sessions even when they are idle", () => {
@@ -392,8 +436,8 @@ describe("use-kanban-board-model helpers", () => {
     expect(taskActivityStateByTaskId.get("task-idle")).toBe("idle");
   });
 
-  test("buildActiveTaskSessionContextByTaskId prioritizes waiting-input session role", () => {
-    const activeTaskSessionContextByTaskId = buildActiveTaskSessionContextByTaskId([
+  test("deriveActiveTaskSessionContextByTaskId prioritizes waiting-input session role", () => {
+    const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({
         sessionAssociation: {
           kind: "workflow",
@@ -432,6 +476,8 @@ describe("use-kanban-board-model helpers", () => {
       }),
     ]);
 
+    const activeTaskSessionContextByTaskId =
+      deriveActiveTaskSessionContextByTaskId(taskSessionsByTaskId);
     expect(activeTaskSessionContextByTaskId.get("task-1")).toEqual({
       role: "qa",
       activityState: "waiting_input",
