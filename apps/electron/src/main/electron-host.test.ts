@@ -2342,8 +2342,9 @@ describe("createElectronHostCommandRouter", () => {
         },
       }),
     ).toMatchObject({
+      // A merge with a publish target keeps the task state until its publication.
       outcome: "completed",
-      task: { id: "task-1", status: "human_review" },
+      task: { id: "task-1", status: "ai_review" },
     });
   });
 

@@ -1,5 +1,4 @@
 import { HumanFeedbackSheet, useFeedbackSheetClose } from "../request-changes/human-feedback-sheet";
-import type { TaskWorkflowContinuation } from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
 import { getGitConflictTitle } from "@openducktor/frontend-core/git/conflicts/conflict-copy";
 import type { PullRequest, WorkspaceRecord } from "@openducktor/contracts";
 import {
@@ -34,22 +33,18 @@ const TITLE = "Approve task";
 
 /** Approve Task: Direct Merge, Pull Request, or Close Task, with the conflict and publish steps. */
 export function ApproveTaskRoute(): ReactElement {
-  const { workspaceId, taskId, continuation } = useWorkflowSheetParams();
+  const { workspaceId, taskId } = useWorkflowSheetParams();
   return (
     <WorkflowSheetFrame title={TITLE} workspaceId={workspaceId} taskId={taskId}>
-      {(workspace, id) => (
-        <ApproveTaskContent workspace={workspace} taskId={id} continuation={continuation} />
-      )}
+      {(workspace, id) => <ApproveTaskContent workspace={workspace} taskId={id} />}
     </WorkflowSheetFrame>
   );
 }
 
 function ApproveTaskContent({
-  continuation,
   workspace,
   taskId,
 }: {
-  continuation: TaskWorkflowContinuation | undefined;
   workspace: WorkspaceRecord;
   taskId: string;
 }): ReactElement {
@@ -128,13 +123,7 @@ function ApproveTaskContent({
   useWorkflowSheetLifecycle({
     ready: task !== null,
     run: () => {
-      if (task)
-        approval.openTaskApproval(
-          task.id,
-          continuation
-            ? { onCommitted: (committed) => flow.continueTaskWorkflow(committed, continuation) }
-            : undefined,
-        );
+      if (task) approval.openTaskApproval(task.id);
     },
     anyOpen:
       start?.open === true ||

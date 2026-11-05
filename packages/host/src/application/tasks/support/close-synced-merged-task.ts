@@ -8,12 +8,13 @@ import type { TaskServiceError } from "../task-service";
 import type { TaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
 import type { requireMergedTaskCleanupDependencies } from "./required-task-dependencies";
 import { completeTaskClosure } from "./task-closure";
-import { effectTransition, requireEffect } from "./task-workflow-events";
+import { coreTaskTransition, decideCoreTaskAction } from "./task-workflow-events";
 import { cleanupMergedTaskState } from "./task-worktree-cleanup";
 
 /**
- * Closes a task whose linked pull request merged, when its workflow allows the close. No user
- * confirms this close, so its cleanup follows the task value, else the global setting.
+ * Closes a task whose linked pull request merged. The close is an OpenDucktor rule, so no workflow
+ * event controls it. No user confirms this close, so its cleanup follows the task value, else the
+ * global setting.
  */
 export const closeSyncedMergedTask = (
   services: ReturnType<typeof requireMergedTaskCleanupDependencies> & {
@@ -36,7 +37,7 @@ export const closeSyncedMergedTask = (
     const { workspaceId, repoPath, taskId } = input;
     const current = yield* taskStore.getTask({ workspaceId, repoPath, taskId });
     const workflow = taskWorkflows.forTask(current);
-    const decision = yield* requireEffect(workflow, "pull_request.merged", current);
+    const decision = yield* Effect.fromResult(decideCoreTaskAction("close", current));
     if (decision.kind === "unchanged") return;
     yield* completeTaskClosure({
       workspaceId,
@@ -53,7 +54,7 @@ export const closeSyncedMergedTask = (
       gitPort: services.gitPort,
       operation: "sync merged pull request",
       repoPath,
-      decide: effectTransition(taskWorkflows, "pull_request.merged"),
+      decide: coreTaskTransition(taskWorkflows, "close"),
       taskId,
       taskSessionLifecycleCoordinator,
       taskStore,

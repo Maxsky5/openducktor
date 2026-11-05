@@ -275,13 +275,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
         onApplyEvent,
         onOpenTaskDetails,
         onOpenSession,
-        onHumanApprove: (taskId, continuation) =>
-          openTaskApproval(
-            taskId,
-            continuation
-              ? { onCommitted: (committed) => continueTaskWorkflow(committed, continuation) }
-              : undefined,
-          ),
+        onHumanApprove: (taskId) => openTaskApproval(taskId),
         onHumanRequestChanges,
         onConfirm: (taskId, _action, onCommitted) =>
           openResetImplementation(taskId, { closeDetailsAfterReset: true, onCommitted }),

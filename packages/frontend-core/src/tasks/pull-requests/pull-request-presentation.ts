@@ -37,8 +37,7 @@ export type TaskPullRequestActions = {
 
 /**
  * Detect PR shows for a task without a pull request when the provider supports pull requests or
- * its read failed. Unlink PR shows for a linked pull request. Both need a task status that keeps
- * pull request data.
+ * its read failed. Unlink PR shows for a linked pull request. Both need a task that is not closed.
  */
 export const resolveTaskPullRequestActions = (
   task: TaskCard,

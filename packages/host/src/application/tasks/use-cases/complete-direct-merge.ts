@@ -1,10 +1,10 @@
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import {
   requireDependencies,
   requireMergedTaskCleanupDependencies,
 } from "../support/required-task-dependencies";
-import { requireEffectEvent, taskEventPolicyError } from "../support/task-workflow-events";
 import { enrichTask } from "../support/task-workflow-helpers";
 import { closeMergedTask } from "../support/close-merged-task";
 import type { TaskServiceUseCaseInput, TaskServiceWithMutationProgress } from "../task-service";
@@ -58,9 +58,8 @@ export const createTaskCompleteDirectMergeUseCase = ({
         });
       const state = completionState.ensure({ workspaceId: input.workspaceId, repoPath, taskId });
       const workflow = taskWorkflows.forTask(current);
-      const completeEvent = yield* requireEffectEvent(workflow, "direct_merge.completed");
-      const decision = workflow.decide(completeEvent, current);
-      if (decision.kind === "unchanged") {
+      // A completed publication closes the task. A closed task stays closed.
+      if (current.status === TASK_CLOSED_STATE) {
         delete state.observation.failure;
         state.observation.taskClosed = true;
         state.observation.phase = "settled";
@@ -86,9 +85,6 @@ export const createTaskCompleteDirectMergeUseCase = ({
             details: { repoPath, taskId },
           });
       }
-      if (decision.kind === "denied") {
-        return yield* taskEventPolicyError(completeEvent, current, decision);
-      }
       return yield* closeMergedTask(
         {
           ...dependencies,
@@ -104,7 +100,6 @@ export const createTaskCompleteDirectMergeUseCase = ({
         merge,
         current,
         state,
-        decision,
         "complete-direct-merge",
       );
     }).pipe(Effect.scoped);

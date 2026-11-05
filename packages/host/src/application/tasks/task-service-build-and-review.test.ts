@@ -895,19 +895,7 @@ describe("createTaskService build and review", () => {
           };
         });
       },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not load task");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
+      getTask: () => Effect.succeed(task({ id: "task-1", status: "human_review" })),
       transitionTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -982,6 +970,6 @@ describe("createTaskService build and review", () => {
           taskId: "task-1",
         }),
       ),
-    ).rejects.toThrow("local direct merge");
+    ).rejects.toThrow("Task task-1 has a local direct merge that is not published.");
   });
 });

@@ -190,7 +190,7 @@ export const buildAgentStudioQuickActions = (
   for (const { id, action, effect, follows } of taskEntries) {
     if (!actionShowsOn(action, "studio")) continue;
     const approvalLeads =
-      effect === "review.approve" &&
+      action.kind === "approval" &&
       hasNoEnabledGitProvider(params.gitProviderContext, params.gitProviderReadError);
     const placement = approvalLeads || effect === "review.request_changes" ? "leading" : "trailing";
     const option: AgentStudioTaskQuickActionOption = {

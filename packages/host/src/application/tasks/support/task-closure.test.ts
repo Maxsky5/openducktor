@@ -11,7 +11,7 @@ import { HostOperationError } from "../../../effect/host-errors";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
 import { createTaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
 import { completeTaskClosure } from "./task-closure";
-import { coreTaskTransition, effectTransition } from "./task-workflow-events";
+import { coreTaskTransition } from "./task-workflow-events";
 
 const closeDecision = coreTaskTransition(builtinTaskWorkflows, "close");
 
@@ -209,11 +209,9 @@ test("does not begin cleanup while another task lifecycle operation is active", 
   expect(transitioned).toBe(false);
 });
 
-test("commits the signal and source role of the closing event", async () => {
+test("closes a task of a workflow that declares no close event", async () => {
   const transitions: unknown[] = [];
   const definition = reviewTaskDefinition();
-  const closing = definition.events.find((event) => event.effect === "pull_request.merged")!;
-  closing.outcomes = [{ when: true, to: "closed", signal: "reviewAccepted", sourceRole: "editor" }];
   const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
   const taskStore: Pick<TaskStorePort, "transitionTask"> = {
     transitionTask: (input) =>
@@ -243,7 +241,7 @@ test("commits the signal and source role of the closing event", async () => {
       cleanup: Effect.void,
       operation: "close task",
       repoPath: "/repo",
-      decide: effectTransition(singleTaskWorkflow(workflow), "pull_request.merged"),
+      decide: coreTaskTransition(singleTaskWorkflow(workflow), "close"),
       taskId: "task-1",
       taskStore,
     }),
@@ -254,7 +252,7 @@ test("commits the signal and source role of the closing event", async () => {
       repoPath: "/repo",
       taskId: "task-1",
       status: "closed",
-      cause: { signal: "reviewAccepted", sourceRole: "editor" },
+      cause: {},
     },
   ]);
 });

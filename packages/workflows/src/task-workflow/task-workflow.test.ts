@@ -41,8 +41,32 @@ describe("createTaskWorkflow", () => {
 
   test("finds host effects through the definition", () => {
     expect(review.effectEvent("build.completed")).toBe("finish-writing");
-    expect(review.effectEvent("pull_request.merged")).toBe("pr-merged");
-    expect(specPlanBuildWorkflow.effectEvent("review.approve")).toBe("human-approve");
+    expect(review.effectEvent("review.request_changes")).toBe("request-rewrite");
+    expect(specPlanBuildWorkflow.effectEvent("implementation.reset")).toBe("reset-implementation");
+  });
+
+  test("evaluates the approval action of the workflow", () => {
+    expect(review.approvalAction?.id).toBe("approve");
+    expect(review.approvalAvailable(reviewTask({ status: "approval" }))).toBe(true);
+    expect(review.approvalAvailable(reviewTask({ status: "reviewing" }))).toBe(false);
+    const withoutApproval = withChange((definition) => {
+      definition.actions = definition.actions.filter(({ kind }) => kind !== "approval");
+      definition.actionOrder = [{ when: true, actions: ["start_write", "request_review"] }];
+    })();
+    expect(withoutApproval.approvalAction).toBeUndefined();
+    expect(withoutApproval.approvalAvailable(reviewTask({ status: "approval" }))).toBe(false);
+    expect(
+      withChange((definition) => {
+        definition.actions.push({
+          id: "approve_again",
+          kind: "approval",
+          label: "Approve again",
+          availableWhen: true,
+        });
+      }),
+    ).toThrow(
+      "The approval actions at actions[2] and actions[5] open the same approval. Keep one approval action.",
+    );
   });
 
   test("decides events with their signal, source role, and guard recovery", () => {
@@ -210,11 +234,11 @@ describe("createTaskWorkflow", () => {
     const agent = { roles: ["writer"], note: "optional" as const, description: "Send it." };
     expect(
       withChange((definition) => {
-        const event = definition.events.find(({ id }) => id === "approve-copy");
+        const event = definition.events.find(({ id }) => id === "request-rewrite");
         if (event) event.agent = agent;
       }),
     ).toThrow(
-      "The event at events[8] has the review.approve effect, so agents cannot send it. Remove events[8].agent, or use no effect or one of build.blocked, build.resumed, build.completed.",
+      "The event at events[8] has the review.request_changes effect, so agents cannot send it. Remove events[8].agent, or use no effect or one of build.blocked, build.resumed, build.completed.",
     );
     expect(
       withChange((definition) => {
@@ -264,9 +288,9 @@ describe("createTaskWorkflow", () => {
     expect(
       withChange((definition) => {
         const event = definition.events.find(({ id }) => id === "hold");
-        if (event) event.effect = "pull_request.merged";
+        if (event) event.effect = "implementation.reset";
       }),
-    ).toThrow('The effect "pull_request.merged" is at');
+    ).toThrow('The effect "implementation.reset" is at');
     expect(() =>
       createTaskWorkflow(
         reviewTaskDefinition(),

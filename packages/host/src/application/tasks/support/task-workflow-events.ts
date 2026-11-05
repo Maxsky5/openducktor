@@ -29,12 +29,6 @@ export const decideTaskTransition = (workflow: TaskWorkflow, eventId: string, ta
       });
 };
 
-/** The store decision of a host effect, made again for each locked task row. */
-export const effectTransition =
-  (taskWorkflows: Pick<TaskWorkflowResolver, "forTask">, effect: WorkflowEventEffect) =>
-  (task: TaskFacts) =>
-    decideEffectTransition(taskWorkflows.forTask(task), effect, task);
-
 export const decideEffectTransition = (
   workflow: TaskWorkflow,
   effect: WorkflowEventEffect,
@@ -51,7 +45,7 @@ export const decideEffectTransition = (
 };
 
 /** The event of a host effect. A workflow without that event cannot run the command. */
-export const requireEffectEvent = (
+const requireEffectEvent = (
   workflow: TaskWorkflow,
   effect: WorkflowEventEffect,
 ): Effect.Effect<string, TaskPolicyError> => {
@@ -113,51 +107,55 @@ export const coreTaskTransition =
       workflowId: taskWorkflows.forTask(task).definition.id,
     }));
 
-/** Decides the event of a host effect. */
-export const requireEffect = (
-  workflow: TaskWorkflow,
-  effect: WorkflowEventEffect,
-  task: TaskFacts,
-): Effect.Effect<AdmittedTaskEvent, TaskPolicyError> =>
-  requireEffectEvent(workflow, effect).pipe(
-    Effect.flatMap((eventId) => requireTaskEvent(workflow, eventId, task)),
-  );
-
 /** The store write of an admitted event. A repeat writes the current status without a cause. */
 export const decisionTransition = (decision: AdmittedTaskEvent) => ({
   status: decision.kind === "transition" ? decision.to : decision.status,
   cause: decision.kind === "transition" ? decision.cause : {},
 });
 
+/**
+ * Pull request management is an OpenDucktor feature, so no workflow event controls it. A closed
+ * task keeps its pull request.
+ */
 export const requirePullRequestManagement = (
-  workflow: TaskWorkflow,
   task: TaskFacts,
 ): Effect.Effect<void, TaskPolicyError> =>
-  Effect.gen(function* () {
-    const eventId = yield* requireEffectEvent(workflow, "pull_request.manage");
-    if (workflow.isEventAvailable(eventId, task)) return;
-    return yield* TaskPolicyError.policy(
-      `Pull request management is only available from ${formatStatusList(workflow.eventSourceStates(eventId))}.`,
-    );
-  });
+  task.status === TASK_CLOSED_STATE
+    ? Effect.fail(
+        TaskPolicyError.policy(
+          `Task ${task.id} is closed, so its pull request cannot change. Manage pull requests only for a task that is not closed.`,
+        ),
+      )
+    : Effect.void;
 
-/** A person approves only an open task that the approval event admits. */
-export const requireHumanReviewStatus = (
+/** A person approves only a task that is not closed and whose workflow approval is available. */
+export const requireApprovalAvailable = (
   workflow: TaskWorkflow,
   task: TaskFacts,
-): Effect.Effect<void, TaskPolicyError | HostValidationError> =>
-  Effect.gen(function* () {
-    const eventId = yield* requireEffectEvent(workflow, "review.approve");
-    if (task.status !== TASK_CLOSED_STATE && workflow.isEventAvailable(eventId, task)) return;
-    const reviewStatuses = workflow
-      .eventSourceStates(eventId)
-      .filter((status) => status !== TASK_CLOSED_STATE);
-    return yield* new HostValidationError({
-      message: `Human approval is only allowed from ${formatStatusList(reviewStatuses)}.`,
-    });
-  });
+): Effect.Effect<void, HostValidationError> => {
+  if (task.status !== TASK_CLOSED_STATE && workflow.approvalAvailable(task)) return Effect.void;
+  if (workflow.approvalAction === undefined)
+    return Effect.fail(
+      new HostValidationError({
+        message: `Task workflow "${workflow.definition.id}" has no approval action. Add one to approve its tasks.`,
+      }),
+    );
+  const approvalStates = workflow.definition.states
+    .map(({ id }) => id)
+    .filter(
+      (status) => status !== TASK_CLOSED_STATE && workflow.approvalAvailable({ ...task, status }),
+    );
+  return Effect.fail(
+    new HostValidationError({
+      message:
+        approvalStates.length === 0
+          ? `Human approval is not available for task ${task.id}. Complete the workflow steps that its approval needs first.`
+          : `Human approval is only allowed from ${formatStatusList(approvalStates)}.`,
+    }),
+  );
+};
 
-export const taskEventPolicyError = (
+const taskEventPolicyError = (
   eventId: string,
   task: TaskFacts,
   denial: TaskEventDenial,

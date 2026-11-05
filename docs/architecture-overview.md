@@ -198,9 +198,23 @@ Issue types are fixed: `ISSUE_TYPE_VALUES` in `packages/contracts/src/issue-type
 
 Each prompt has one owner: a role or a workflow. A role owns its instructions, with the prompt ID `instructions`, for example `build.instructions`. A workflow owns its base prompts and its `messages.` prompts. A prompt ID is unique only within its owner, so two workflows can use one prompt ID with different text. A prompt override is keyed by `promptOverrideKey({ ownerKind, ownerId, promptId })` from `packages/contracts`. A role prompt override applies to the role in every workflow. A workflow prompt override applies to every revision of that workflow.
 
-An event can name one host effect from `workflowEventEffectValues`, such as `build.completed` or `pull_request.merged`. Each effect has at most one event. An event without an effect only changes the state.
+An event can name one host effect from `workflowEventEffectValues`, such as `build.completed` or `implementation.reset`. Each effect has at most one event. An event without an effect only changes the state.
 
 Close Task and Reset Task are core task actions. A workflow does not declare them, and no event or guard controls them. Close Task (`task_close`) moves any task except a closed one to `closed`. A close of a closed task changes nothing. Reset Task (`task_reset`) moves any task except a closed one to `open`. A reset of an open task keeps the status and still clears the task. The host decides both with `decideCoreTaskAction` in `packages/host/src/application/tasks/support/task-workflow-events.ts`, and commits the state through `transitionTask`. `CLOSE_TASK_ACTION` and `RESET_TASK_ACTION` in `packages/frontend-core/src/tasks/workflow/core-task-actions.ts` give their label, icon, emphasis, and confirmation. Every client shows them from `coreTaskActions(task)` after the workflow actions, and opens their confirmation without the workflow action runner.
+
+Approve is an OpenDucktor feature. A workflow only tells when it is available, with one action of kind `approval` and its `availableWhen` condition. The action has no event. `approvalAvailable(task)` on the task workflow evaluates it. The host commands of the approval (`task_approval_context_get`, `task_direct_merge`, and `task_pull_request_upsert`) fail when the approval is not available for a task that is not closed. Every client runner opens the approval dialog for an `approval` action. The approval outcomes are core decisions, so no workflow event controls them:
+
+- A direct merge without a publish target closes the task.
+- A direct merge with a publish target keeps the task state. Its publication (`task_direct_merge_complete`) then closes the task.
+- A pull request upsert keeps the task state.
+- A merged pull request closes the task. The pull request sync and a manual link of a merged pull request use this rule.
+- Close in the approval dialog is the core Close Task.
+
+Each close uses `decideCoreTaskAction("close", task)`, so a close of a closed task changes nothing.
+
+Pull request management is an OpenDucktor feature. The host allows link, detect, unlink, and `odt_set_pull_request` for a task that is not closed. No workflow event controls it. Detection and the upsert read the task branch from the task worktree, so they also need that branch. Link and unlink do not read the branch, because that read needs a Git call. `canUnlinkTaskPullRequest` and `canDetectTaskPullRequest` in `packages/frontend-core/src/tasks/presentation/task-display.ts` give the same rule to the clients.
+
+A recorded local direct merge waits for its publication until the publication closes the task. While it waits, the host rejects every workflow event and Reset Task with an error that tells the user to publish the merge, close the task, or reset the implementation. `commitWorkflowEvent` in `packages/host/src/application/tasks/support/task-workflow-helpers.ts` commits each workflow event transition and runs this check on the locked task row. Workflow artifact submits use the same check, and a role session start checks it before it prepares the worktree. The publication, Close Task, and the `implementation.reset` event stay allowed.
 
 An event can declare `agent`: the roles that can send it with `odt_apply_workflow_event`, its description, and if it requires a note. Only an event without an effect or with `build.blocked`, `build.resumed`, or `build.completed` can declare `agent`. Each role must be a role of the workflow, and its catalog role must have the `odt_apply_workflow_event` tool. `agentEvents(roleId)` on the task workflow gives the events of a role, and the system prompt of the role lists them. The host bridge checks the event, the role of the calling session, and a required note. Then it runs the command of the effect, or commits the transition of an event without one.
 

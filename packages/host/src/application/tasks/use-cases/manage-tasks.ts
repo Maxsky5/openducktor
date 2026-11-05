@@ -8,7 +8,7 @@ import { TaskAssetError, TaskCreatedAssetError } from "../../../effect/task-asse
 import type { TaskStoreError } from "../../../ports/task-repository-ports";
 import { TaskPolicyError } from "../../../domain/task";
 import { decideTaskTransition, requireWorkflowIssueType } from "../support/task-workflow-events";
-import { enrichTask } from "../support/task-workflow-helpers";
+import { commitWorkflowEvent, enrichTask } from "../support/task-workflow-helpers";
 import {
   TaskMutationProgressFailure,
   TaskCreationProgressFailure,
@@ -97,11 +97,10 @@ export const createTaskCrudUseCases = ({
   applyTaskEvent(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, eventId } = input;
-      const updated = yield* taskStore.transitionTask<
-        TaskPolicyError | HostValidationErrorAggregate
-      >({
-        ...input,
-        decide: (current) => {
+      const updated = yield* commitWorkflowEvent<TaskPolicyError | HostValidationErrorAggregate>(
+        taskStore,
+        input,
+        (current) => {
           const workflow = taskWorkflows.forTask(current);
           const event = workflow.definition.events.find(({ id }) => id === eventId);
           const actionIds = workflow.definition.actions.flatMap((action) =>
@@ -135,7 +134,7 @@ export const createTaskCrudUseCases = ({
           }
           return decideTaskTransition(workflow, eventId, current);
         },
-      });
+      );
       return enrichTask(taskWorkflows.forTask(updated), updated);
     });
   },
@@ -143,11 +142,10 @@ export const createTaskCrudUseCases = ({
   applyStartEvent(input) {
     const { repoPath, taskId, eventId } = input;
     return Effect.gen(function* () {
-      const updated = yield* taskStore.transitionTask<
-        HostValidationErrorAggregate | TaskPolicyError
-      >({
-        ...input,
-        decide: (current) => {
+      const updated = yield* commitWorkflowEvent<HostValidationErrorAggregate | TaskPolicyError>(
+        taskStore,
+        input,
+        (current) => {
           const workflow = taskWorkflows.forTask(current);
           if (workflow.startEventRole(eventId) === undefined)
             return Result.fail(
@@ -159,7 +157,7 @@ export const createTaskCrudUseCases = ({
             );
           return decideTaskTransition(workflow, eventId, current);
         },
-      });
+      );
       return enrichTask(taskWorkflows.forTask(updated), updated);
     });
   },

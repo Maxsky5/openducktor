@@ -43,6 +43,20 @@ describe("createTaskActionRunner", () => {
     });
   });
 
+  test("opens the approval of OpenDucktor for an approval action", () => {
+    const task = createTaskCardFixture({
+      id: "T-1",
+      status: "human_review",
+      availableActions: ["human_approve"],
+    });
+    expect(task.taskWorkflow.action("human_approve").kind).toBe("approval");
+    const handlers = createHandlers();
+    createTaskActionRunner(handlers)(task, "human_approve");
+    expect(handlers.onHumanApprove).toHaveBeenCalledWith("T-1");
+    expect(handlers.onApplyEvent).not.toHaveBeenCalled();
+    expect(handlers.showError).not.toHaveBeenCalled();
+  });
+
   test("lets a surface own its worktree removal", () => {
     const task = createTaskCardFixture({
       id: "T-1",

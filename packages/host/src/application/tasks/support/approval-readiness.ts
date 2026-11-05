@@ -18,11 +18,7 @@ import type { TaskServiceUseCaseInput } from "../task-service";
 import type { DirectMergeInput } from "../task-inputs";
 import { requireDependencies, requireDirectMergeDependencies } from "./required-task-dependencies";
 import { ensureNoDirectMergeEffect } from "./direct-merge-block";
-import {
-  requireEffect,
-  requireHumanReviewStatus,
-  startWorktreeSessionHint,
-} from "./task-workflow-events";
+import { requireApprovalAvailable, startWorktreeSessionHint } from "./task-workflow-events";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import type { TaskRecord } from "../../../ports/task-repository-ports";
 
@@ -102,7 +98,7 @@ export const loadOpenApprovalContext = (
   repoConfig: RepoConfig,
 ) =>
   Effect.gen(function* () {
-    yield* requireHumanReviewStatus(workflow, current);
+    yield* requireApprovalAvailable(workflow, current);
     const effectiveRepoPath = repoConfig.repoPath;
     const defaultMergeMethod = yield* loadDefaultMergeMethod(dependencies.settingsConfig);
     const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
@@ -276,12 +272,6 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
           cause,
         }),
     });
-    const decision = yield* requireEffect(
-      workflow,
-      approval.publishTarget ? "direct_merge.publish" : "direct_merge.local",
-      current,
-    );
-
     return {
       dependencies,
       effectiveRepoPath,
@@ -289,6 +279,5 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
       workflow,
       approval,
       state,
-      decision,
     };
   });

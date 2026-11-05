@@ -4,6 +4,8 @@ The backend returns allowed workflow actions in `TaskCard.availableActions`. The
 
 OpenDucktor also gives every task the core task actions Close Task and Reset Task. No workflow declares them, so they are not in `availableActions`. Each client shows them for every task that is not `closed`, from `coreTaskActions(task)` in `packages/frontend-core`.
 
+Approve is also an OpenDucktor feature. A workflow only declares when it is available, with one action of kind `approval`. Read [the architecture overview](architecture-overview.md#change-task-workflow-state) for the approval and pull request rules.
+
 Read [the status model](task-workflow-status-model.md) for status and issue type rules. Read [the transition matrix](task-workflow-transition-matrix.md) for all transition guards.
 
 ## Action IDs
@@ -32,13 +34,13 @@ The built-in workflow declares these workflow actions:
 | `qa_start` | Open QA from `blocked`, `ai_review`, or `human_review`. No direct transition. |
 | `open_qa` | Open the linked QA session. No transition. |
 | `human_request_changes` | Move `ai_review` or `human_review` to `in_progress`. |
-| `human_approve` | Open the approval modal for an `ai_review` or `human_review` task. No direct transition. |
+| `human_approve` | The `approval` action. Open the approval modal for an `ai_review` or `human_review` task. No direct transition. |
 
 ## Event actions
 
 An event action sends one workflow event. When the event names a host effect, the client calls the command of that effect, such as `task_reset_implementation` for `implementation.reset`. When the event has no effect, the client calls `task_apply_event` with the event ID. The host rejects `task_apply_event` for an event that has an effect, that no event action sends, or whose action is not available for the task. All event actions of the built-in workflow have an effect.
 
-`human_approve` opens the approval modal and sends no event. The host uses its `review.approve` event only to allow the approval reads.
+`human_approve` is an `approval` action, not an event action. It opens the approval modal and sends no event. The host allows the approval reads and writes while the `availableWhen` condition of this action matches the task.
 
 ## Session startup
 
@@ -68,13 +70,15 @@ Users and workflow agents can create, rename, replace, and delete free artifacts
 
 Stop all running sessions for the task before direct merge or its completion. The host checks linked roots and verified descendants before it changes Git. While either operation runs, the host rejects conflicting starts, resumes, forks, continuation, model actions, and message delivery.
 
-The host waits for publication consent, then completes publication, cleanup, and closure in one operation. An unfinished merge requires manual Git review after a host restart because its original applied-commit evidence is no longer available.
+A direct merge without a publish target closes the task. A direct merge with a publish target keeps the task state. The host waits for publication consent, then completes publication, cleanup, and closure in one operation. An unfinished merge requires manual Git review after a host restart because its original applied-commit evidence is no longer available.
+
+While a recorded local merge waits for its publication, the host rejects every workflow event, artifact submit event, session start event, Request Changes, and Reset Task. Publish the merge, close the task, or reset the implementation.
 
 Cleanup releases the live state of the task sessions before it removes the task worktree. A later runtime read then does not report the removed worktree as a session fault, so Delete can run on the closed task.
 
 ## Approval modal
 
-The approval modal offers Direct Merge, Pull Request, and Close Task. Pull Request needs a provider that supports pull requests. Close Task runs `task_close`, so it merges no code and changes no pull request.
+The approval modal offers Direct Merge, Pull Request, and Close Task. Pull Request needs a provider that supports pull requests. A pull request keeps the task state. Close Task runs `task_close`, so it merges no code and changes no pull request.
 
 Uncommitted changes block Direct Merge and Pull Request. When merge detection reports the task branch as merged, the modal selects Close Task. When the builder worktree is missing, the modal offers Close Task and Reset Implementation. When the approval context read fails, it offers only Close Task.
 
@@ -190,7 +194,7 @@ Use "Sync pull requests" in the command palette to start a manual sync. Each run
 
 Manual sync keeps its chosen targets when you change pages or workspaces. The progress toast names the scope, and this client cannot start another manual run until it finishes. A batch run ignores workspaces without a configured, enabled Git provider. These workspaces do not cause a warning or appear in the result. If none can sync, the result explains that no open workspace has an enabled provider. Other skipped or failed workspaces remain in the result, with recovery instructions. A workspace that closes before its turn is skipped. Manual sync does not change the automatic schedule.
 
-Pull request sync records the merged pull request. Before it closes the task, it stops task terminals and live task sessions and releases the task sessions. It removes the task worktree and local source branch when the task value or the global setting asks for it. If cleanup fails, the task keeps its current status and the host reports the error.
+Pull request sync records the merged pull request. A merged pull request closes the task in any state that is not `closed`, with no workflow event. Before it closes the task, it stops task terminals and live task sessions and releases the task sessions. It removes the task worktree and local source branch when the task value or the global setting asks for it. If cleanup fails, the task keeps its current status and the host reports the error.
 
 ## UI rules
 
@@ -204,6 +208,6 @@ Each session shortcut opens the preferred active session for its role or the lat
 
 Current card and detail views use all action IDs except `view_details`, which the card click and details panel already provide.
 
-The session page header shows Approve Task for a task that allows `human_approve`. It leads for a `human_review` task when the repository has no enabled Git provider.
+The session page header shows Approve Task for a task whose `approval` action is available. It leads for a `human_review` task when the repository has no enabled Git provider.
 
 When you add an action ID, update backend derivation, the transition matrix, the status and action docs, and UI mapping in one change.

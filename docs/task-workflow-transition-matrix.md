@@ -37,7 +37,7 @@ When task Markdown contains `odt-asset:<assetId>` images needed for the work, co
 
 Then call `odt_read_task_artifacts` with a nonempty array of distinct `codes` from `task.artifacts`. For example, `{ "taskId": "repo-123", "codes": ["spec"] }` returns the full spec. The built-in workflow declares the codes `spec`, `plan`, and `qaReport`; free artifacts have their own stable codes. Each read returns the complete content or fails. Internal artifact IDs remain within the UI and store.
 
-Human actions are `human_request_changes(taskId, note)` and `human_approve(taskId)`. `human_approve` opens the approval modal. The core task actions of every workflow are `reset_task(taskId)` and `close_task(taskId, removeWorktree)`. No workflow event controls them. Other native task actions are `reset_implementation(taskId)` and `remove_worktree(taskId)`.
+Human actions are `human_request_changes(taskId, note)` and `human_approve(taskId)`. `human_approve` is the `approval` action of the workflow, and it opens the approval modal. The core task actions of every workflow are `reset_task(taskId)` and `close_task(taskId, removeWorktree)`. No workflow event controls them. The approval outcomes and pull request management are also core rules. Other native task actions are `reset_implementation(taskId)` and `remove_worktree(taskId)`.
 
 Free-artifact creation, rename, replacement, and deletion require a non-closed task. They preserve task status, QA verdict, and workflow readiness. The setter routes workflow codes through the existing workflow actions and enforces managed role access. Delete rejects workflow codes. Manual Specification and Implementation Plan saves keep status unchanged, including on closed tasks.
 
@@ -62,7 +62,7 @@ A trigger such as `build-completed` is an event that `odt_apply_workflow_event` 
 | `build-completed` | `in_progress`, `blocked` | The latest QA result is not `approved`. | `ai_review` |
 | `build-completed` | `in_progress`, `blocked` | The latest QA result is `approved`. | `human_review` |
 | `build-completed` | `ai_review`, `human_review` | Idempotent. No hook or patch runs. | Unchanged. |
-| `odt_set_pull_request` | `in_progress`, `ai_review`, `human_review` | A pull request number is present and the repository has a configured provider. | Unchanged. |
+| `odt_set_pull_request` | Any status except `closed`. | A pull request number is present and the repository has a configured provider. | Unchanged. |
 | `odt_set_task_artifact`, code `qaReport`, verdict `rejected` | `blocked`, `ai_review`, `human_review` | Report Markdown is present. | `in_progress` |
 | `odt_set_task_artifact`, code `qaReport`, verdict `approved` | `blocked`, `ai_review`, `human_review` | Report Markdown is present. | `human_review` |
 | `human_request_changes` | `ai_review`, `human_review` | `note` is optional. | `in_progress` |
@@ -70,10 +70,12 @@ A trigger such as `build-completed` is an event that `odt_apply_workflow_event` 
 | `human_approve` | `ai_review`, `human_review` | Opens the approval modal. | Unchanged. |
 | Core `close_task` | Any status. | No live role activity. Cleanup succeeds. | `closed`. A `closed` task stays unchanged and no cleanup runs. |
 | `remove_worktree` | `closed` | No live role activity. Cleanup succeeds. | Unchanged. |
-| Local direct merge | `ai_review`, `human_review` | Merge and cleanup succeed. | `closed` |
-| Direct merge with a publish target | `ai_review`, `human_review` | Merge succeeds. Publication remains pending. | `human_review` |
-| Complete direct merge | `ai_review`, `human_review` | Publication and cleanup succeed. | `closed` |
-| Link or sync a merged pull request | `ai_review`, `human_review` | Provider confirms the merge. Cleanup succeeds. | `closed` |
+| Core local direct merge | `ai_review`, `human_review` | The approval is available. Merge and cleanup succeed. | `closed` |
+| Core direct merge with a publish target | `ai_review`, `human_review` | The approval is available. Merge succeeds. Publication remains pending. | Unchanged. |
+| Core complete direct merge | Any status. | Publication and cleanup succeed. | `closed`. A `closed` task stays unchanged. |
+| Core link or sync of a merged pull request | Any status except `closed`. | Provider confirms the merge. Cleanup succeeds. | `closed` |
+
+While a recorded local direct merge waits for its publication, the host rejects every workflow event and `reset_task`. Complete the direct merge, use `close_task`, or use `reset_implementation`.
 
 `reset_task` clears all workflow and free artifacts, linked sessions, delivery data, and in-memory runs. `close_task` stops task terminals. It removes task worktrees and related local branches when `removeWorktree` is `true`. `remove_worktree` stops task terminals, then removes task worktrees and related local branches.
 

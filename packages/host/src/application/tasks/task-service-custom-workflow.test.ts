@@ -250,7 +250,7 @@ describe("task service with a custom task workflow", () => {
   });
 
   test.each([
-    ["approve-copy", "review.approve host effect"],
+    ["request-rewrite", "review.request_changes host effect"],
     ["submit-draft", "not sent by an event action"],
     ["missing", "not sent by an event action"],
   ])("rejects event %s through the event command", async (eventId, message) => {
@@ -331,6 +331,73 @@ describe("task service with a custom task workflow", () => {
     const denied = await Effect.runPromiseExit(service().resetTask(input));
     expect(String(denied)).toContain("is closed, so it cannot reset");
     expect(await status(reviewed.id)).toBe("closed");
+  });
+
+  test("an unpublished local merge blocks workflow events and Reset Task until Close Task", async () => {
+    const { id } = await createArticle();
+    const input = { ...harness.scope, taskId: id };
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
+    await save(id, "draft", "writer");
+    await save(id, "review", "editor", "accept");
+    await Effect.runPromise(
+      harness.store.setDirectMerge({
+        ...input,
+        directMerge: {
+          method: "merge_commit",
+          sourceBranch: "odt/launch-post",
+          targetBranch: { remote: "origin", branch: "main" },
+          mergedAt: "2026-05-10T00:00:00.000Z",
+        },
+      }),
+    );
+    const blocked = "has a local direct merge that is not published";
+    const rejections = await Promise.all([
+      Effect.runPromiseExit(service().applyTaskEvent({ ...input, eventId: "hold" })),
+      Effect.runPromiseExit(service().applyStartEvent({ ...input, eventId: "start-writing" })),
+      Effect.runPromiseExit(service().buildBlocked(input)),
+      Effect.runPromiseExit(service().humanRequestChanges({ ...input, note: "Shorter intro" })),
+      Effect.runPromiseExit(service().resetTask(input)),
+    ]);
+    for (const rejection of rejections) expect(String(rejection)).toContain(blocked);
+    const submit = await Effect.runPromiseExit(
+      service().workflowArtifactSave({
+        ...input,
+        code: "draft",
+        markdown: "# Draft",
+        submit: true,
+        sourceTool: "odt_set_task_artifact",
+        updatedBy: "writer",
+      }),
+    );
+    expect(String(submit)).toContain(blocked);
+    expect(await status(id)).toBe("approval");
+
+    const closed = await Effect.runPromise(service().closeTask({ ...input, removeWorktree: true }));
+    expect(closed.status).toBe("closed");
+  });
+
+  test("an unpublished local merge allows Reset Implementation", async () => {
+    const { id } = await createArticle();
+    const input = { ...harness.scope, taskId: id };
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
+    await save(id, "draft", "writer");
+    await save(id, "review", "editor", "accept");
+    await Effect.runPromise(
+      harness.store.setDirectMerge({
+        ...input,
+        directMerge: {
+          method: "merge_commit",
+          sourceBranch: "odt/launch-post",
+          targetBranch: { remote: "origin", branch: "main" },
+          mergedAt: "2026-05-10T00:00:00.000Z",
+        },
+      }),
+    );
+
+    const reset = await Effect.runPromise(service().resetImplementation(input));
+    expect(reset.status).toBe("writing");
+    const delivery = await Effect.runPromise(harness.store.getTaskDelivery(input));
+    expect(delivery.directMerge).toBeUndefined();
   });
 
   test("commits the start event of a role step and rejects other events", async () => {

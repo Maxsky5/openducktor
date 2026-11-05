@@ -252,7 +252,8 @@ const workflowActionDefinitionFields = {
 /**
  * An action is available only when its condition matches and its event, if any, admits the input.
  * An event action sends its event. A session action starts one of its launch actions. A view action
- * changes no state. A view action with a step opens the latest session of the step role.
+ * changes no state. A view action with a step opens the latest session of the step role. An
+ * approval action opens the OpenDucktor approval. The workflow only gives when it is available.
  */
 export const workflowActionDefinitionSchema = z.discriminatedUnion("kind", [
   z.strictObject({
@@ -273,6 +274,10 @@ export const workflowActionDefinitionSchema = z.discriminatedUnion("kind", [
     kind: z.literal("view"),
     /** The destination of a view action without a step. The default is the task details. */
     target: z.enum(["task_details", "worktree_cleanup"]).optional(),
+  }),
+  z.strictObject({
+    ...workflowActionDefinitionFields,
+    kind: z.literal("approval"),
   }),
 ]);
 export type WorkflowActionDefinition = z.infer<typeof workflowActionDefinitionSchema>;
@@ -302,14 +307,8 @@ export const workflowEventEffectValues = [
   "build.blocked",
   "build.resumed",
   "build.completed",
-  "review.approve",
   "review.request_changes",
   "implementation.reset",
-  "pull_request.manage",
-  "pull_request.merged",
-  "direct_merge.local",
-  "direct_merge.publish",
-  "direct_merge.completed",
 ] as const;
 export const workflowEventEffectSchema = z.enum(workflowEventEffectValues);
 export type WorkflowEventEffect = z.infer<typeof workflowEventEffectSchema>;

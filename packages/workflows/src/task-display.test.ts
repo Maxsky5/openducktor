@@ -7,7 +7,6 @@ import {
   resolveTaskCardActions,
   resolveWorkflowAction,
   taskActionLabel,
-  taskEffectAvailable,
 } from "./task-presentation";
 import {
   roleDefaultPanel,
@@ -45,19 +44,16 @@ describe("definition display fields", () => {
     );
   });
 
-  test("view targets and event effects resolve from the definition", () => {
+  test("view targets and the approval action resolve from the definition", () => {
     const closed = createTaskCardFixture({ status: "closed" });
     expect(resolveWorkflowAction(closed, "remove_worktree")).toEqual({
       kind: "view",
       target: "worktree_cleanup",
     });
     const review = createTaskCardFixture({ status: "human_review" });
-    expect(resolveWorkflowAction(review, "human_approve")).toMatchObject({
-      kind: "event",
-      effect: "review.approve",
-    });
-    expect(taskEffectAvailable(review, "review.approve")).toBe(true);
-    expect(taskEffectAvailable(closed, "review.approve")).toBe(false);
+    expect(resolveWorkflowAction(review, "human_approve")).toEqual({ kind: "approval" });
+    expect(review.taskWorkflow.approvalAvailable(review)).toBe(true);
+    expect(closed.taskWorkflow.approvalAvailable(closed)).toBe(false);
   });
 
   test("launch order rules match the pull request presence", () => {

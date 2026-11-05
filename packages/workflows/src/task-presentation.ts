@@ -133,6 +133,7 @@ export type TaskActionCommand =
   | { kind: "view"; target: "session"; role: string }
   | { kind: "view"; target: "task_details" | "worktree_cleanup" }
   | { kind: "session"; launchActionId: string }
+  | { kind: "approval" }
   | {
       kind: "event";
       eventId: string;
@@ -163,6 +164,7 @@ export const resolveWorkflowAction = (
       kind: "session",
       launchActionId: task.taskWorkflow.evaluator.actionLaunchAction(taskWorkflowInput(task), id),
     };
+  if (action.kind === "approval") return { kind: "approval" };
   return {
     kind: "event",
     eventId: action.eventId,
@@ -170,15 +172,3 @@ export const resolveWorkflowAction = (
     launchActionIds: action.launchActionIds ?? [],
   };
 };
-
-/** The available event action of the task whose event runs the host effect, if any. */
-export const taskEffectAction = (
-  task: Pick<ResolvedTaskCard, "availableActions" | "taskWorkflow">,
-  effect: WorkflowEventEffect,
-): string | undefined =>
-  task.taskWorkflow.effectActions(effect).find((id) => task.availableActions.includes(id));
-/** Whether the task can run an available event action whose event has the host effect. */
-export const taskEffectAvailable = (
-  task: Pick<ResolvedTaskCard, "availableActions" | "taskWorkflow">,
-  effect: WorkflowEventEffect,
-): boolean => taskEffectAction(task, effect) !== undefined;

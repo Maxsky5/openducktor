@@ -5,7 +5,7 @@ import { normalizeApprovalTargetBranch, publishTargetFromTargetBranch } from "..
 import { requireApprovalContextDependencies } from "../support/approval-context-dependencies";
 import { requireDependencies } from "../support/required-task-dependencies";
 import { loadDefaultMergeMethod } from "../support/task-workflow-helpers";
-import { requireHumanReviewStatus } from "../support/task-workflow-events";
+import { requireApprovalAvailable } from "../support/task-workflow-events";
 import { findLatestCleanupTarget } from "../support/task-worktree-cleanup";
 import { loadLiveApprovalPreparation } from "../support/approval-readiness";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -32,7 +32,7 @@ export const createTaskApprovalContextUseCase = ({
 
       const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
-      yield* requireHumanReviewStatus(workflow, current);
+      yield* requireApprovalAvailable(workflow, current);
       const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = repoConfig.repoPath;
       const metadata = yield* taskStore.getTaskMetadata({

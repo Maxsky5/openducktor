@@ -20,7 +20,7 @@ export type TaskActionDestination =
   | { kind: "cleanup" }
   | { kind: "open_session"; role: string; options: SessionTargetOptions }
   | { kind: "no_session"; role: string }
-  | { kind: "approve"; continuation?: TaskWorkflowContinuation | undefined }
+  | { kind: "approve" }
   | { kind: "request_changes"; continuation?: TaskWorkflowContinuation | undefined }
   | {
       kind: "confirm";
@@ -51,14 +51,13 @@ export const resolveTaskActionDestination = (
         : { kind: "no_session", role: command.role };
     return command.target === "task_details" ? { kind: "details" } : { kind: "cleanup" };
   }
+  if (command.kind === "approval") return { kind: "approve" };
   const continuation: TaskWorkflowContinuation | undefined = command.launchActionIds.length
     ? { workflow: task.workflow, launchActionIds: command.launchActionIds }
     : undefined;
   switch (command.effect) {
     case undefined:
       return { kind: "event", eventId: command.eventId, launchActionIds: command.launchActionIds };
-    case "review.approve":
-      return { kind: "approve", continuation };
     case "review.request_changes":
       return { kind: "request_changes", continuation };
     case "implementation.reset":

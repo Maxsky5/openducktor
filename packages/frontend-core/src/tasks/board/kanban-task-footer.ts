@@ -89,11 +89,10 @@ export const getTaskFooter = ({
   const disabledActions = workflowActions.allActions.filter((action) => {
     const session = sessions.find((entry) => entry.action === action);
     if (session) return !session.options;
-    if (task.taskWorkflow.action(action).kind === "session")
-      return pendingState?.isSessionStarting ?? false;
+    const { kind } = task.taskWorkflow.action(action);
+    if (kind === "session") return pendingState?.isSessionStarting ?? false;
+    if (kind === "approval") return pendingState?.approvingTaskId === task.id;
     switch (task.taskWorkflow.actionEffect(action)) {
-      case "review.approve":
-        return pendingState?.approvingTaskId === task.id;
       case "review.request_changes":
         return pendingState?.requestingChangesTaskId === task.id;
       case "implementation.reset":

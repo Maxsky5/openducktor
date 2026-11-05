@@ -1,5 +1,4 @@
 import type { HumanReviewFeedbackRequest } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
-import type { TaskWorkflowContinuation } from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
 type RequestChangesParams = {
   workspaceId: string;
   taskId: string;
@@ -127,14 +126,8 @@ export const routes = {
   /** The start sheet of a desktop quick action, which names its session launch action. */
   quickAction: (workspaceId: string, taskId: string, launch: SessionLaunchActionId) =>
     ({ pathname: "/start-session", params: { workspaceId, taskId, launch } }) as const,
-  approveTask: (workspaceId: string, taskId: string, continuation?: TaskWorkflowContinuation) => {
-    const params: Pick<RequestChangesParams, "workspaceId" | "taskId" | "continuation"> = {
-      workspaceId,
-      taskId,
-    };
-    if (continuation) params.continuation = JSON.stringify(continuation);
-    return { pathname: "/approve-task", params } as const;
-  },
+  approveTask: (workspaceId: string, taskId: string) =>
+    ({ pathname: "/approve-task", params: { workspaceId, taskId } }) as const,
   /** The human feedback sheet of a feedback launch, or of Request Changes. */
   requestChanges: (workspaceId: string, taskId: string, request: HumanReviewFeedbackRequest) => {
     const params: RequestChangesParams = { workspaceId, taskId, mode: request.kind };

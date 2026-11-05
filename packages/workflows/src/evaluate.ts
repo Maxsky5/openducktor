@@ -166,9 +166,13 @@ export const createWorkflow = <const Definition extends WorkflowDefinition>(
     })),
     available: compile(action.availableWhen),
     event:
-      action.kind !== "view" && action.eventId !== undefined ? eventById(action.eventId) : null,
+      (action.kind === "event" || action.kind === "session") && action.eventId !== undefined
+        ? eventById(action.eventId)
+        : null,
     launchCandidates:
-      action.kind === "view" ? null : launchCandidates(action.launchActionIds ?? []),
+      action.kind === "event" || action.kind === "session"
+        ? launchCandidates(action.launchActionIds ?? [])
+        : null,
   }));
   const actionsById = new Map(actions.map((action) => [action.id, action]));
   const steps = definition.steps.map((step) => ({
@@ -743,6 +747,7 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
       checkCondition(rule.when, `${path}.displayRules[${ruleIndex}].when`),
     );
   });
+  const approvalPaths: string[] = [];
   definition.actions.forEach((action, index) => {
     const path = `actions[${index}]`;
     if (action.stepId !== undefined)
@@ -751,6 +756,10 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
     action.labels?.forEach((variant, variantIndex) =>
       checkCondition(variant.when, `${path}.labels[${variantIndex}].when`),
     );
+    if (action.kind === "approval") {
+      approvalPaths.push(path);
+      return;
+    }
     if (action.kind === "view") {
       if (action.stepId === undefined) return;
       if (action.target !== undefined)
@@ -770,6 +779,10 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
       ),
     );
   });
+  if (approvalPaths.length > 1)
+    invalid(
+      `The approval actions at ${approvalPaths.join(" and ")} open the same approval. Keep one approval action.`,
+    );
   const effectPaths = new Map<string, string>();
   definition.events.forEach((event, index) => {
     const path = `events[${index}]`;

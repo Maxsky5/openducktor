@@ -44,10 +44,17 @@ describe("resolveTaskPullRequestActions", () => {
     ).toEqual({ showDetect: false, showUnlink: true, detectDisabledReason: null });
   });
 
-  test("offers neither action in a status that does not keep pull request data", () => {
+  test("offers pull request actions in every status except closed", () => {
     expect(
       resolveTaskPullRequestActions(createTaskCardFixture({ status: "open" }), provider, null),
-    ).toMatchObject({ showDetect: false, showUnlink: false });
+    ).toMatchObject({ showDetect: true, showUnlink: false });
+    expect(
+      resolveTaskPullRequestActions(
+        createTaskCardFixture({ status: "ready_for_dev", pullRequest }),
+        provider,
+        null,
+      ),
+    ).toMatchObject({ showDetect: false, showUnlink: true });
     expect(
       resolveTaskPullRequestActions(
         createTaskCardFixture({ status: "closed", pullRequest }),

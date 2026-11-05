@@ -132,8 +132,8 @@ export function useTaskActions({
         onOpenTaskDetails: (taskId) => router.push(routes.task(workspaceId, taskId)),
         onOpenSession: (_taskId, role, options) =>
           options ? openSession(task, role, options) : showNoSession(feedback, task, role),
-        onHumanApprove: (taskId, continuation) =>
-          router.push(routes.approveTask(workspaceId, taskId, continuation), SINGLE_SHEET),
+        onHumanApprove: (taskId) =>
+          router.push(routes.approveTask(workspaceId, taskId), SINGLE_SHEET),
         onHumanRequestChanges: (taskId, continuation) =>
           router.push(
             routes.requestChanges(workspaceId, taskId, { kind: "request_changes", continuation }),

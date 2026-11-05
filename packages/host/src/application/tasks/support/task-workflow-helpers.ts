@@ -11,27 +11,50 @@ import type { TaskWorkflow } from "@openducktor/workflows";
 import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 import { Effect } from "effect";
 import type { TaskPolicyError } from "../../../domain/task";
-import { HostValidationError } from "../../../effect/host-errors";
+import {
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../../ports/settings-config-port";
 import type {
+  DecideTaskTransition,
   TaskRecord,
   TaskStoreError,
   TaskStorePort,
 } from "../../../ports/task-repository-ports";
+import { blockUnpublishedDirectMerge } from "./direct-merge-block";
 import { decideEffectTransition } from "./task-workflow-events";
+
+/**
+ * Commits the transition of a workflow event. Every workflow event commits here, so a local direct
+ * merge that waits for its publication blocks each of them.
+ */
+export const commitWorkflowEvent = <E>(
+  taskStore: Pick<TaskStorePort, "getTaskDelivery" | "transitionTask">,
+  input: TaskIdInput,
+  decide: DecideTaskTransition<E>,
+) =>
+  Effect.gen(function* () {
+    const { directMerge } = yield* taskStore.getTaskDelivery(input);
+    return yield* taskStore.transitionTask({
+      workspaceId: input.workspaceId,
+      repoPath: input.repoPath,
+      taskId: input.taskId,
+      decide: blockUnpublishedDirectMerge(directMerge, input.repoPath, decide),
+    });
+  });
 
 /** Decides the event of a host effect for a task and commits its transition. */
 export const applyEffect = (
-  taskStore: Pick<TaskStorePort, "transitionTask">,
+  taskStore: Pick<TaskStorePort, "getTaskDelivery" | "transitionTask">,
   taskWorkflows: TaskWorkflowResolver,
   input: TaskIdInput,
   effect: WorkflowEventEffect,
-): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError> =>
+): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError | HostValidationErrorAggregate> =>
   Effect.gen(function* () {
-    const updated = yield* taskStore.transitionTask({
-      ...input,
-      decide: (task) => decideEffectTransition(taskWorkflows.forTask(task), effect, task),
-    });
+    const updated = yield* commitWorkflowEvent(taskStore, input, (task) =>
+      decideEffectTransition(taskWorkflows.forTask(task), effect, task),
+    );
     return enrichTask(taskWorkflows.forTask(updated), updated);
   });
 

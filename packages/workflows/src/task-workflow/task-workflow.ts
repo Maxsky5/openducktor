@@ -148,6 +148,10 @@ export type TaskWorkflow = {
   project(task: TaskFacts): TaskProjection;
   launchAction(launchActionId: string): TaskWorkflowLaunchAction;
   action(actionId: string): TaskWorkflowAction;
+  /** The approval action of the workflow. Without it, no task of the workflow can be approved. */
+  readonly approvalAction: TaskWorkflowAction | undefined;
+  /** Whether the approval action of the workflow is available for the task. */
+  approvalAvailable(task: TaskFacts): boolean;
   /** The host effect of an event action, if any. */
   actionEffect(actionId: string): WorkflowEventEffect | undefined;
   /** The event actions whose event runs the host effect. */
@@ -286,6 +290,7 @@ export const createTaskWorkflow = (
     "action",
     definition.actions.map((entry) => [entry.id, entry] as const),
   );
+  const approvalAction = definition.actions.find(({ kind }) => kind === "approval");
   const actionEffects = new Map(
     definition.actions.flatMap((entry) => {
       const effect = entry.kind === "event" ? eventsById.get(entry.eventId)?.effect : undefined;
@@ -435,6 +440,9 @@ export const createTaskWorkflow = (
     project,
     launchAction,
     action,
+    approvalAction,
+    approvalAvailable: (task) =>
+      approvalAction !== undefined && project(task).availableActions.includes(approvalAction.id),
     actionEffect: (actionId) => actionEffects.get(actionId),
     effectActions: (effect) => effectActions.get(effect) ?? [],
     agentStep: (roleId) => stepByRole.get(roleId),

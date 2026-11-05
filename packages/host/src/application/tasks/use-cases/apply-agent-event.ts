@@ -5,7 +5,7 @@ import {
   type HostValidationErrorAggregate,
 } from "../../../effect/host-errors";
 import { decideTaskTransition } from "../support/task-workflow-events";
-import { enrichTask } from "../support/task-workflow-helpers";
+import { commitWorkflowEvent, enrichTask } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 /**
@@ -19,11 +19,10 @@ export const createTaskAgentEventUseCase = ({
   applyAgentEvent(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, eventId } = input;
-      const updated = yield* taskStore.transitionTask<
-        TaskPolicyError | HostValidationErrorAggregate
-      >({
-        ...input,
-        decide: (current) => {
+      const updated = yield* commitWorkflowEvent<TaskPolicyError | HostValidationErrorAggregate>(
+        taskStore,
+        input,
+        (current) => {
           const workflow = taskWorkflows.forTask(current);
           const event = workflow.agentEvent(eventId);
           if (!event || event.effect !== undefined)
@@ -36,7 +35,7 @@ export const createTaskAgentEventUseCase = ({
             );
           return decideTaskTransition(workflow, eventId, current);
         },
-      });
+      );
       return enrichTask(taskWorkflows.forTask(updated), updated);
     });
   },

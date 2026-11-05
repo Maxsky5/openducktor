@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { HostDependencyError } from "../../../effect/host-errors";
 import { decideEffectTransition, requireEffectInput } from "../support/task-workflow-events";
-import { applyEffect, enrichTask } from "../support/task-workflow-helpers";
+import { applyEffect, commitWorkflowEvent, enrichTask } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskServiceWithMutationProgress } from "../task-service";
 
 export const createTaskBuildStateUseCases = ({
@@ -63,13 +63,9 @@ export const createTaskBuildStateUseCases = ({
         return enrichTask(workflow, current);
       }
 
-      const updated = yield* taskStore.transitionTask({
-        workspaceId: input.workspaceId,
-        repoPath,
-        taskId,
-        decide: (task) =>
-          decideEffectTransition(taskWorkflows.forTask(task), "build.completed", task),
-      });
+      const updated = yield* commitWorkflowEvent(taskStore, input, (task) =>
+        decideEffectTransition(taskWorkflows.forTask(task), "build.completed", task),
+      );
       return enrichTask(workflow, updated);
     });
   },

@@ -10,6 +10,7 @@ import {
   coreTaskTransition,
   decideCoreTaskAction,
   formatStatusList,
+  requireApprovalAvailable,
   requirePullRequestManagement,
   requireTaskEvent,
   requireTaskEventInput,
@@ -121,15 +122,37 @@ describe("task workflow events", () => {
     );
   });
 
-  test("keeps pull request management to its workflow statuses", async () => {
-    const error = await policyError(requirePullRequestManagement(specPlanBuildWorkflow, task()));
+  test.each(["open", "in_progress", "ai_review", "human_review"])(
+    "allows pull request management in %s without a workflow event",
+    async (status) => {
+      await Effect.runPromise(requirePullRequestManagement(task({ status })));
+    },
+  );
+
+  test("rejects pull request management of a closed task", async () => {
+    const error = await policyError(requirePullRequestManagement(task({ status: "closed" })));
     expect(error.code).toBe("TASK_POLICY_ERROR");
     expect(error.message).toBe(
-      "Pull request management is only available from in_progress, ai_review, or human_review.",
+      "Task task-1 is closed, so its pull request cannot change. Manage pull requests only for a task that is not closed.",
     );
+  });
+
+  test("allows approval when the approval action of the workflow is available", async () => {
     await Effect.runPromise(
-      requirePullRequestManagement(specPlanBuildWorkflow, task({ status: "ai_review" })),
+      requireApprovalAvailable(specPlanBuildWorkflow, task({ status: "ai_review" })),
     );
+    const error = await Effect.runPromise(
+      Effect.flip(requireApprovalAvailable(specPlanBuildWorkflow, task({ status: "in_progress" }))),
+    );
+    expect(error.message).toBe("Human approval is only allowed from ai_review or human_review.");
+    const review = createReviewTaskWorkflow();
+    const reviewTask = (status: string) =>
+      task({ status, workflow: review.reference, artifactSummary: review.emptyArtifactSummary() });
+    await Effect.runPromise(requireApprovalAvailable(review, reviewTask("approval")));
+    const closed = await Effect.runPromise(
+      Effect.flip(requireApprovalAvailable(review, reviewTask("closed"))),
+    );
+    expect(closed.message).toBe("Human approval is only allowed from approval.");
   });
 
   test("formats status lists for messages", () => {

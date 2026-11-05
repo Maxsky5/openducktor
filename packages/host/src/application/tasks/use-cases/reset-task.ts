@@ -22,6 +22,7 @@ import {
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
 import { acquireRemovableWorktrees } from "../support/task-worktree-owner-guard";
+import { requireNoUnpublishedDirectMerge } from "../support/direct-merge-block";
 import { coreTaskTransition, decideCoreTaskAction } from "../support/task-workflow-events";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
@@ -57,6 +58,7 @@ export const createTaskFullResetUseCase = ({
       const workflowRoles = workflowRoleIds(workflow);
       // A reset of an open task keeps the status and still clears the task.
       yield* Effect.fromResult(decideCoreTaskAction("reset", current));
+      yield* requireNoUnpublishedDirectMerge(taskStore, input, current.status);
       const currentSessions = yield* loadTaskSessions(taskStore, input);
       const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);

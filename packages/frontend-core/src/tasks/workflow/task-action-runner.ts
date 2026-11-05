@@ -19,8 +19,9 @@ export type TaskActionRunnerHandlers = {
   onOpenTaskDetails: (taskId: string) => void;
   /** Without options, the role has no session that the surface can open. */
   onOpenSession: (taskId: string, role: string, options?: SessionTargetOptions) => void;
-  /** Approval and Request Changes open their own forms, which can be routes, so they get the continuation. */
-  onHumanApprove: (taskId: string, continuation?: TaskWorkflowContinuation) => void;
+  /** The approval of OpenDucktor opens its own form, which can be a route. */
+  onHumanApprove: (taskId: string) => void;
+  /** Request Changes opens its own form, which can be a route, so it gets the continuation. */
   onHumanRequestChanges: (taskId: string, continuation?: TaskWorkflowContinuation) => void;
   onConfirm: (
     taskId: string,
@@ -75,7 +76,7 @@ export const createTaskActionRunner =
           handlers.onOpenSession(task.id, destination.role);
           return;
         case "approve":
-          handlers.onHumanApprove(task.id, destination.continuation);
+          handlers.onHumanApprove(task.id);
           return;
         case "request_changes":
           handlers.onHumanRequestChanges(task.id, destination.continuation);

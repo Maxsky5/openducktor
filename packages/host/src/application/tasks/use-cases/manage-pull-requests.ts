@@ -38,7 +38,7 @@ export const createTaskPullRequestManagementUseCases = ({
         }),
       );
       const current = yield* taskStore.getTask(input);
-      yield* requirePullRequestManagement(taskWorkflows.forTask(current), current);
+      yield* requirePullRequestManagement(current);
       const metadata = yield* taskStore.getTaskMetadata(input);
       if (metadata.pullRequest !== undefined) {
         return yield* new HostValidationError({
@@ -177,7 +177,7 @@ export const createTaskPullRequestManagementUseCases = ({
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const current = yield* taskStore.getTask(input);
-      yield* requirePullRequestManagement(taskWorkflows.forTask(current), current);
+      yield* requirePullRequestManagement(current);
       if (current.pullRequest === undefined) {
         return yield* new HostValidationError({
           field: "taskId",

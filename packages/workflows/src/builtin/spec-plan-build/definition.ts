@@ -89,7 +89,6 @@ type SpecPlanBuildAction = WorkflowActionDefinition & {
 };
 
 const nonClosedStates = SPEC_PLAN_BUILD_STATE_IDS.filter((status) => status !== "closed");
-const reviewOrClosed: SpecPlanBuildStateId[] = [...humanReview.stateIn, "closed"];
 
 const moveTo = (to: SpecPlanBuildStateId, signal?: Omit<SpecPlanBuildOutcome, "when" | "to">) => [
   { when: true, to, ...signal },
@@ -186,36 +185,6 @@ const specPlanBuildEvents = {
     outcomes: moveTo("in_progress"),
     effect: "review.request_changes",
   },
-  "human-approve": {
-    from: reviewOrClosed,
-    guards: [],
-    outcomes: moveTo("closed"),
-    effect: "review.approve",
-  },
-  "direct-merge-local": {
-    from: humanReview.stateIn,
-    guards: [],
-    outcomes: moveTo("closed"),
-    effect: "direct_merge.local",
-  },
-  "direct-merge-publish": {
-    from: humanReview.stateIn,
-    guards: [],
-    outcomes: moveTo("human_review"),
-    effect: "direct_merge.publish",
-  },
-  "complete-direct-merge": {
-    from: reviewOrClosed,
-    guards: [],
-    outcomes: moveTo("closed"),
-    effect: "direct_merge.completed",
-  },
-  "close-merged-pull-request": {
-    from: reviewOrClosed,
-    guards: [],
-    outcomes: moveTo("closed"),
-    effect: "pull_request.merged",
-  },
   "reset-implementation": {
     from: activeOrReview.stateIn,
     guards: [],
@@ -225,12 +194,6 @@ const specPlanBuildEvents = {
       { when: true, to: "open" },
     ],
     effect: "implementation.reset",
-  },
-  "manage-pull-request": {
-    from: ["in_progress", ...humanReview.stateIn],
-    guards: [],
-    outcomes: [{ when: true, to: null }],
-    effect: "pull_request.manage",
   },
 } satisfies Record<string, SpecPlanBuildEvent>;
 
@@ -691,9 +654,8 @@ const specPlanBuildActions = [
   },
   {
     id: "human_approve",
-    kind: "event",
+    kind: "approval",
     label: "Approve Task",
-    eventId: "human-approve",
     availableWhen: humanReview,
     icon: "complete",
     emphasis: "prominent",

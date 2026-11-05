@@ -35,10 +35,12 @@ describe("resolveTaskActionDestination", () => {
     });
   });
 
-  test("routes an unfamiliar effect action to the existing approval flow", () => {
+  test("maps an approval action of any ID to the existing approval flow", () => {
     const taskWorkflow = editBuiltinTaskWorkflow(({ definition }) => {
       const action = definition.actions.find(({ id }) => id === "human_approve")!;
-      definition.actions.push({ ...action, id: "accept_review" });
+      action.id = "accept_review";
+      for (const rule of [...definition.actionOrder, ...definition.actionPriority])
+        rule.actions = rule.actions.map((id) => (id === "human_approve" ? "accept_review" : id));
     });
     const task = {
       ...createTaskCardFixture({
@@ -48,10 +50,7 @@ describe("resolveTaskActionDestination", () => {
       }),
       taskWorkflow,
     };
-    expect(resolveTaskActionDestination(task, "accept_review")).toEqual({
-      kind: "approve",
-      continuation: undefined,
-    });
+    expect(resolveTaskActionDestination(task, "accept_review")).toEqual({ kind: "approve" });
   });
 
   test("keeps all Request Changes candidates for selection after commit", () => {

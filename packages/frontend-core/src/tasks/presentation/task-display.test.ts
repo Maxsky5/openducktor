@@ -1,6 +1,6 @@
 import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { describe, expect, test } from "bun:test";
-import { canDetectTaskPullRequest } from "./task-display";
+import { canDetectTaskPullRequest, canUnlinkTaskPullRequest } from "./task-display";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const makeTask = (overrides: Partial<TaskCard> = {}): TaskCard =>
@@ -49,5 +49,18 @@ describe("canDetectTaskPullRequest", () => {
         }),
       ),
     ).toBe(true);
+  });
+});
+
+describe("canUnlinkTaskPullRequest", () => {
+  test.each(["open", "ready_for_dev", "in_progress", "human_review"])(
+    "allows pull request management in %s without a workflow event",
+    (status) => {
+      expect(canUnlinkTaskPullRequest(makeTask({ status }))).toBe(true);
+    },
+  );
+
+  test("rejects pull request management of a closed task", () => {
+    expect(canUnlinkTaskPullRequest(makeTask({ status: "closed" }))).toBe(false);
   });
 });
