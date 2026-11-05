@@ -10,8 +10,8 @@ import {
 import { taskStopImpactQueryKeys } from "../../queries/task-stop-impact";
 
 /**
- * Plain and `status.set` events use the event command. Other host effects keep their existing
- * operation owners. The task stream applies the committed change to every task view.
+ * Plain events use the event command. Host effects keep their existing operation owners. The task
+ * stream applies the committed change to every task view.
  */
 export function useWorkflowEventActions(
   repoPath: string | null,
@@ -53,7 +53,7 @@ export function useWorkflowEventActions(
         const previous = tasks.find(({ id }) => id === taskId);
         if (!previous) throw new Error(`Task "${taskId}" is unavailable. Reload its workspace.`);
         const event = previous.taskWorkflow.definition.events.find(({ id }) => id === eventId);
-        if (!event || (event.effect && event.effect !== "status.set"))
+        if (!event || event.effect)
           throw new Error(`Event "${eventId}" requires its host effect command.`);
         const finishes = event.outcomes.some(
           ({ to }) => to !== null && previous.taskWorkflow.isTerminalState(to),

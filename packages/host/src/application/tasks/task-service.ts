@@ -1,5 +1,4 @@
 import type { TaskSearchInput } from "../../ports/task-repository-ports";
-import { createTaskBuildStartUseCase } from "./use-cases/start-build";
 import {
   type AgentSessionRecord,
   type ArtifactReadResult,
@@ -11,7 +10,6 @@ import {
   type ArtifactReplaceRequest,
   type ArtifactSaveResult,
   type ArtifactScope,
-  type BuildSessionBootstrap,
   type PullRequest,
   type RepoPullRequestSyncRequest,
   type RepoPullRequestSyncResponse,
@@ -68,7 +66,6 @@ import type {
   AgentSessionDeleteInput,
   AgentSessionUpdateModelInput,
   AgentSessionUpsertInput,
-  BuildStartInput,
   CloseTaskInput,
   CreateTaskUseCaseInput,
   DeleteTaskInput,
@@ -83,7 +80,6 @@ import type {
   PullRequestUpsertInput,
   RepoPathInput,
   TaskIdInput,
-  TransitionTaskInput,
   ApplyTaskEventInput,
   UpdateTaskInput,
 } from "./task-inputs";
@@ -203,11 +199,10 @@ export type TaskService = {
   resetImplementation(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   resetTask(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   updateTask(input: UpdateTaskInput): Effect.Effect<TaskCard, TaskServiceError>;
-  transitionTask(input: TransitionTaskInput): Effect.Effect<TaskCard, TaskServiceError>;
   applyTaskEvent(input: ApplyTaskEventInput): Effect.Effect<TaskCard, TaskServiceError>;
   /** Commits the start event of a role step. A session start sends it after session creation. */
   applyStartEvent(input: ApplyTaskEventInput): Effect.Effect<TaskCard, TaskServiceError>;
-  /** Commits an agent event that has no host effect, or a `status.set` effect. */
+  /** Commits an agent event that has no host effect. */
   applyAgentEvent(input: ApplyTaskEventInput): Effect.Effect<TaskCard, TaskServiceError>;
   workflowArtifactGet(
     input: WorkflowArtifactInput,
@@ -216,7 +211,6 @@ export type TaskService = {
     input: WorkflowArtifactSaveInput,
   ): Effect.Effect<WorkflowArtifactSaveResult, TaskServiceError>;
   buildBlocked(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
-  buildStart(input: BuildStartInput): Effect.Effect<BuildSessionBootstrap, TaskServiceError>;
   buildResumed(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildCompleted(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   humanRequestChanges(input: OptionalNoteInput): Effect.Effect<TaskCard, TaskServiceError>;
@@ -326,7 +320,6 @@ const createTaskServiceImplementation = (
     ...createTaskImplementationResetUseCase(useCaseInput),
     ...createTaskFullResetUseCase(useCaseInput),
     ...createWorkflowArtifactUseCases(useCaseInput),
-    ...createTaskBuildStartUseCase(useCaseInput),
     ...createTaskBuildStateUseCases(useCaseInput),
     ...createTaskReviewUseCases(useCaseInput),
     ...createTaskPullRequestSyncUseCases(useCaseInput),
@@ -348,7 +341,6 @@ const createTaskServiceImplementation = (
     buildBlocked: (input) => mapTaskServiceErrors(service.buildBlocked(input)),
     buildCompleted: (input) => mapTaskMutationProgressErrors(service.buildCompleted(input)),
     buildResumed: (input) => mapTaskServiceErrors(service.buildResumed(input)),
-    buildStart: (input) => mapTaskServiceErrors(service.buildStart(input)),
     completeDirectMerge: (input) =>
       mapTaskMutationProgressErrors(service.completeDirectMerge(input)),
     createTask: (input) => mapTaskCreationProgressErrors(service.createTask(input)),
@@ -382,7 +374,6 @@ const createTaskServiceImplementation = (
     workflowArtifactGet: (input) => mapTaskServiceErrors(service.workflowArtifactGet(input)),
     workflowArtifactSave: (input) =>
       mapTaskMutationProgressErrors(service.workflowArtifactSave(input)),
-    transitionTask: (input) => mapTaskServiceErrors(service.transitionTask(input)),
     applyTaskEvent: (input) => mapTaskServiceErrors(service.applyTaskEvent(input)),
     applyStartEvent: (input) => mapTaskServiceErrors(service.applyStartEvent(input)),
     applyAgentEvent: (input) => mapTaskServiceErrors(service.applyAgentEvent(input)),

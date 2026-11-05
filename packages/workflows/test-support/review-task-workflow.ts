@@ -165,24 +165,10 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
   ],
   events: [
     {
-      id: "move-writing",
-      from: ["backlog", "paused"],
-      guards: [],
-      outcomes: [{ when: true, to: "writing" }],
-      effect: "status.set",
-    },
-    {
       id: "hold",
       from: ["reviewing", "approval"],
       guards: [],
       outcomes: [{ when: true, to: "paused" }],
-    },
-    {
-      id: "move-approval",
-      from: ["reviewing"],
-      guards: [],
-      outcomes: [{ when: true, to: "approval" }],
-      effect: "status.set",
     },
     {
       id: "start-writing",
@@ -192,7 +178,6 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
         { when: { stateIn: ["backlog"] }, to: "writing" },
         { when: true, to: null },
       ],
-      effect: "build.start",
     },
     {
       id: "submit-draft",

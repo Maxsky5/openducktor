@@ -74,7 +74,6 @@ import {
   taskArtifactSaveResultSchema,
   taskMetadataArtifactSchema,
   taskMetadataPayloadSchema,
-  taskStatusSchema,
   taskStopImpactSchema,
   taskUpdatePatchSchema,
 } from "@openducktor/contracts";
@@ -86,7 +85,6 @@ import {
   okResultSchema,
   voidResultSchema,
 } from "./invoke-utils";
-type TaskStatus = string;
 
 /** A submit sends the event that the artifact or its verdict declares. */
 export type WorkflowArtifactSaveInput = WorkspaceRef & {
@@ -111,11 +109,6 @@ type TaskUpdateArgs = WorkspaceRef & {
   taskId: string;
   patch: TaskUpdatePatch;
   descriptionAssets?: TaskAssetDescriptionMutation;
-};
-type TaskTransitionArgs = WorkspaceRef & {
-  taskId: string;
-  status: TaskStatus;
-  reason?: string;
 };
 
 /**
@@ -387,25 +380,6 @@ export class HostTaskClient {
       { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
       taskCardSchema,
     );
-  }
-
-  async taskTransition(
-    scope: WorkspaceRef,
-    taskId: string,
-    status: TaskStatus,
-    reason?: string,
-  ): Promise<TaskCard> {
-    taskStatusSchema.parse(status);
-    const args: TaskTransitionArgs = {
-      workspaceId: scope.workspaceId,
-      repoPath: scope.repoPath,
-      taskId,
-      status,
-    };
-    if (reason !== undefined) {
-      args.reason = reason;
-    }
-    return this.invokeFn("task_transition", args, taskCardSchema);
   }
 
   async taskApplyEvent(scope: WorkspaceRef, taskId: string, eventId: string): Promise<TaskCard> {

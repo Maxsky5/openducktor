@@ -177,7 +177,6 @@ const applyAgentEventEffect = (
     case "build.completed":
       return context.taskService.buildCompleted(scope);
     case undefined:
-    case "status.set":
       return context.taskService.applyAgentEvent({ ...scope, eventId });
   }
 };

@@ -15,8 +15,6 @@ import {
   runtimeRestartResultSchema,
   type AgentSessionStopTarget,
   agentSessionStopTargetSchema,
-  type BuildSessionBootstrap,
-  buildSessionBootstrapSchema,
   type PullRequest,
   pullRequestSchema,
   type GitCheck,
@@ -104,19 +102,6 @@ const runtimeRestart = async (
   confirmation: string,
 ): Promise<RuntimeRestartResult> => {
   return invokeFn("runtime_restart", { runtimeKind, confirmation }, runtimeRestartResultSchema);
-};
-
-const buildStart = async (
-  invokeFn: InvokeFn,
-  scope: WorkspaceRef,
-  taskId: string,
-  runtimeKind: RuntimeKind,
-): Promise<BuildSessionBootstrap> => {
-  return invokeFn(
-    "build_start",
-    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, runtimeKind },
-    buildSessionBootstrapSchema,
-  );
 };
 
 const humanRequestChanges = async (
@@ -302,14 +287,6 @@ export class HostAgentClient {
     confirmation: string,
   ): Promise<RuntimeRestartResult> {
     return runtimeRestart(this.invokeFn, runtimeKind, confirmation);
-  }
-
-  async buildStart(
-    scope: WorkspaceRef,
-    taskId: string,
-    runtimeKind: RuntimeKind,
-  ): Promise<BuildSessionBootstrap> {
-    return buildStart(this.invokeFn, scope, taskId, runtimeKind);
   }
 
   async humanRequestChanges(scope: WorkspaceRef, taskId: string, note?: string): Promise<TaskCard> {

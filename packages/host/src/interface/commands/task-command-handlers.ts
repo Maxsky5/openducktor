@@ -13,7 +13,6 @@ import type { HostCommandHandlerDefinitions } from "../router/host-command-route
 import type { HostCommandArgs } from "./command-inputs";
 import {
   parseAgentSessionDeleteInput,
-  parseBuildStartInput,
   parseCloseTaskInput,
   parseCreateTaskInput,
   parseApplyTaskEventInput,
@@ -29,7 +28,6 @@ import {
   parseTaskIdInput,
   parseTaskStopImpactInput,
   parseTaskWorktreeOwnersInput,
-  parseTransitionTaskInput,
   parseUpdateTaskInput,
   parseWorkflowArtifactInput,
   parseWorkflowArtifactSaveInput,
@@ -54,7 +52,6 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
       taskService.agentSessionsList(parseTaskIdInput(args, "agent_sessions_list input")),
     agent_sessions_list_for_tasks: (args) =>
       taskService.agentSessionsListForTasks(parseListAgentSessionsForTasksInput(args)),
-    build_start: (args) => taskService.buildStart(parseBuildStartInput(args)),
     human_request_changes: (args) =>
       taskService.humanRequestChanges(
         parseOptionalNoteInput(args, "human_request_changes input", "human_request_changes note"),
@@ -104,7 +101,6 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
       taskService.getTaskWorktreeOwners(parseTaskWorktreeOwnersInput(args)),
     task_worktree_remove: (args) =>
       taskService.removeTaskWorktree(parseTaskIdInput(args, "task_worktree_remove input")),
-    task_transition: (args) => taskService.transitionTask(parseTransitionTaskInput(args)),
     task_apply_event: (args) => taskService.applyTaskEvent(parseApplyTaskEventInput(args)),
     task_update: (args) => taskService.updateTask(parseUpdateTaskInput(args)),
     tasks_list: (args) => taskService.listKanbanTasks(parseRepoPathInput(args, "tasks_list input")),

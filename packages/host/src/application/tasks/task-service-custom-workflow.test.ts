@@ -152,15 +152,11 @@ describe("task service with a custom task workflow", () => {
     }
   });
 
-  test("moves a task with status events, artifact saves, and review verdicts", async () => {
+  test("moves a task with its start event, artifact saves, and review verdicts", async () => {
     const { id } = await createArticle();
 
     await Effect.runPromise(
-      service().transitionTask({
-        ...harness.scope,
-        taskId: id,
-        status: "writing",
-      }),
+      service().applyStartEvent({ ...harness.scope, taskId: id, eventId: "start-writing" }),
     );
     expect(await status(id)).toBe("writing");
 
@@ -218,11 +214,7 @@ describe("task service with a custom task workflow", () => {
   test("applies an event action without a host effect", async () => {
     const { id } = await createArticle();
     await Effect.runPromise(
-      service().transitionTask({
-        ...harness.scope,
-        taskId: id,
-        status: "writing",
-      }),
+      service().applyStartEvent({ ...harness.scope, taskId: id, eventId: "start-writing" }),
     );
     await save(id, "draft", "writer");
     await save(id, "review", "editor", "accept");
@@ -241,11 +233,7 @@ describe("task service with a custom task workflow", () => {
   test("rejects an event whose action is not available for the task", async () => {
     const { id } = await createArticle();
     await Effect.runPromise(
-      service().transitionTask({
-        ...harness.scope,
-        taskId: id,
-        status: "writing",
-      }),
+      service().applyStartEvent({ ...harness.scope, taskId: id, eventId: "start-writing" }),
     );
     await save(id, "draft", "writer");
 
@@ -261,38 +249,9 @@ describe("task service with a custom task workflow", () => {
     expect(await status(id)).toBe("reviewing");
   });
 
-  test("applies a status.set event that an event action sends", async () => {
-    const definition = reviewTaskDefinition();
-    definition.actions.push({
-      id: "move_to_writing",
-      kind: "event",
-      label: "Move to writing",
-      eventId: "move-writing",
-      availableWhen: { stateIn: ["backlog"] },
-    });
-    const taskWorkflows = singleTaskWorkflow(
-      createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles),
-    );
-    await harness.cleanup();
-    harness = await createSqliteTaskStoreHarness({ taskWorkflows });
-    const tasks = service(taskWorkflows);
-    const { id } = await Effect.runPromise(
-      tasks.createTask({
-        ...harness.scope,
-        task: { title: "Launch post", issueType: "feature", priority: 2 },
-      }),
-    );
-
-    const card = await Effect.runPromise(
-      tasks.applyTaskEvent({ ...harness.scope, taskId: id, eventId: "move-writing" }),
-    );
-
-    expect(card.status).toBe("writing");
-  });
-
   test.each([
     ["approve-copy", "review.approve host effect"],
-    ["move-writing", "not sent by an event action"],
+    ["submit-draft", "not sent by an event action"],
     ["missing", "not sent by an event action"],
   ])("rejects event %s through the event command", async (eventId, message) => {
     const { id } = await createArticle();
@@ -312,7 +271,7 @@ describe("task service with a custom task workflow", () => {
   test("pauses, resumes, and completes a build with the effect events of the workflow", async () => {
     const { id } = await createArticle();
     const input = { ...harness.scope, taskId: id };
-    await Effect.runPromise(service().transitionTask({ ...input, status: "writing" }));
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
 
     await Effect.runPromise(service().buildBlocked(input));
     expect(await status(id)).toBe("paused");
@@ -340,7 +299,7 @@ describe("task service with a custom task workflow", () => {
   test("requests changes on a reviewed task with the review effect event", async () => {
     const { id } = await createArticle();
     const input = { ...harness.scope, taskId: id };
-    await Effect.runPromise(service().transitionTask({ ...input, status: "writing" }));
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
     await save(id, "draft", "writer");
     await save(id, "review", "editor", "accept");
 
@@ -365,7 +324,7 @@ describe("task service with a custom task workflow", () => {
       ...harness.scope,
       taskId: second.id,
     };
-    await Effect.runPromise(service().transitionTask({ ...input, status: "writing" }));
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
     await save(second.id, "draft", "writer");
     const reset = await Effect.runPromise(service().resetTask(input));
     expect(reset.status).toBe("backlog");
@@ -377,7 +336,7 @@ describe("task service with a custom task workflow", () => {
     const input = { ...harness.scope, taskId: id };
 
     const rejected = await Effect.runPromiseExit(
-      service().applyStartEvent({ ...input, eventId: "move-writing" }),
+      service().applyStartEvent({ ...input, eventId: "hold" }),
     );
     expect(String(rejected)).toContain("starts no step");
     expect(await status(id)).toBe("backlog");
@@ -441,13 +400,13 @@ describe("task service with a workflow for each task", () => {
       taskId,
     });
     const moved = await Effect.runPromise(
-      tasks.transitionTask({ ...input(article.id), status: "writing" }),
+      tasks.applyStartEvent({ ...input(article.id), eventId: "start-writing" }),
     );
     expect(moved.status).toBe("writing");
     const rejected = await Effect.runPromiseExit(
-      tasks.transitionTask({ ...input(builtinTask.id), status: "writing" }),
+      tasks.applyStartEvent({ ...input(builtinTask.id), eventId: "start-writing" }),
     );
-    expect(String(rejected)).toContain("task_transition cannot move tasks to writing");
+    expect(String(rejected)).toContain("Event start-writing starts no step");
 
     await Effect.runPromise(tasks.closeTask({ ...input(article.id), removeWorktree: true }));
     await Effect.runPromise(tasks.closeTask({ ...input(builtinTask.id), removeWorktree: true }));

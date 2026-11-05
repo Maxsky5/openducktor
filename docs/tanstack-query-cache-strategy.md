@@ -52,7 +52,6 @@ Runtime catalog reads follow these rules:
 - A live runtime catalog read starts only when the host status of its runtime kind is `ready`.
 - Read a live catalog through `useRuntimeCatalogQuery`, `useRuntimeModelCatalogQuery`, `useRuntimeModelCatalogs`, or `useRefreshStaleRuntimeCatalog`. Each of these hooks applies the readiness check.
 - A catalog view does not show an earlier read error or offer Retry while its runtime is not ready.
-- Delegation reads without the readiness check. It shows the host error.
 - A model catalog preview does not use the shared runtime. It does not wait for readiness.
 - A view shows a cached catalog during a background refresh.
 - A view shows no loading state during a background refresh.
@@ -193,7 +192,7 @@ Keep these values outside TanStack Query:
 - Pending permission and question state.
 - Composer input.
 - Event-driven orchestration state.
-- Commands such as `runtimeRestart`, `buildStart`, `gitPushBranch`, and `taskTransition`.
+- Commands such as `runtimeRestart`, `gitPushBranch`, and `taskApplyEvent`.
 
 ## Local images
 

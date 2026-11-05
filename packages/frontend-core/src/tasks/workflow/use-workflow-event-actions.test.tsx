@@ -1,12 +1,7 @@
 import "../../test-support/dom-environment";
 import { expect, mock, test } from "bun:test";
 import { useQuery } from "@tanstack/react-query";
-import { workflowDefinitionSchema } from "@openducktor/contracts";
-import {
-  createTaskWorkflow,
-  taskWorkflowDescriptor,
-  workflowRoleCatalog,
-} from "@openducktor/workflows";
+import { taskWorkflowDescriptor } from "@openducktor/workflows";
 import type { PropsWithChildren } from "react";
 import {
   createSharedBoardWorkflows,
@@ -106,20 +101,11 @@ test.each([
   { outcome: "denied", observed: false },
   { outcome: "changed_workflow", observed: false },
 ] as const)(
-  "status effects retain their following launch without a task reread: %j",
+  "plain events retain their following launch without a task reread: %j",
   async ({ outcome, observed }) => {
-    const { alpha: original, beta, board, catalog } = createSharedBoardWorkflows();
-    const definition = workflowDefinitionSchema.parse(original.definition);
-    definition.events = definition.events.map((event) =>
-      event.id === "alpha_submit" ? { ...event, effect: "status.set" } : event,
-    );
-    const alpha = createTaskWorkflow(
-      definition,
-      original.workflowTemplates,
-      workflowRoleCatalog([original]),
-    );
+    const { alpha, beta, board, catalog } = createSharedBoardWorkflows();
     const before = createWorkflowTaskCardFixture(alpha, board, {
-      id: "transition-task",
+      id: "event-task",
       status: "shared_review",
     });
     const after = toWireTaskCard(
@@ -203,116 +189,102 @@ test.each([
   },
 );
 
-test.each([
-  { kind: "event", outcome: "terminal" },
-  { kind: "event", outcome: "nonterminal" },
-  { kind: "event", outcome: "denied" },
-  { kind: "status", outcome: "terminal" },
-  { kind: "status", outcome: "nonterminal" },
-  { kind: "status", outcome: "denied" },
-] as const)("workflow draft cleanup follows the host result: %j", async ({ kind, outcome }) => {
-  const { alpha: original, beta, board, catalog } = createSharedBoardWorkflows();
-  const definition = workflowDefinitionSchema.parse(original.definition);
-  const eventId = outcome === "nonterminal" ? "alpha_hold" : "alpha_approve";
-  if (kind === "status")
-    definition.events = definition.events.map((event) =>
-      event.id === eventId ? { ...event, effect: "status.set" } : event,
-    );
-  const alpha = createTaskWorkflow(
-    definition,
-    original.workflowTemplates,
-    workflowRoleCatalog([original]),
-  );
-  const before = createWorkflowTaskCardFixture(alpha, board, {
-    id: "draft-task",
-    status: "alpha_approval",
-    artifactSummary: {
-      ...alpha.emptyArtifactSummary(),
-      alpha_review: { present: true, verdict: "accept" },
-    },
-  });
-  const after = toWireTaskCard(
-    createWorkflowTaskCardFixture(alpha, board, {
-      ...toWireTaskCard(before),
-      status: outcome === "nonterminal" ? "alpha_hold" : "shared_done",
-    }),
-  );
-  const session = {
-    externalSessionId: "writer-session",
-    runtimeKind: "codex" as const,
-    workingDirectory: "/repo/task",
-    role: "alpha_writer",
-    startedAt: "2026-11-01T00:00:00.000Z",
-    selectedModel: null,
-  };
-  const saved = createDeferred<typeof after>();
-  const mutation = mock(() => saved.promise);
-  const feedback = createFeedbackFake();
-  const connection = createTestClientConnection({
-    feedback,
-    scheduleTask: () => () => {},
-    client: {
-      workflowCatalogGet: async () => ({
-        ...catalog,
-        workflows: [taskWorkflowDescriptor(alpha), taskWorkflowDescriptor(beta)],
-      }),
-      workspaceWorkflowGet: async () => ({
-        hostInstanceId: "mixed-host",
-        board,
-        workflows: [alpha.reference, beta.reference],
-        newTaskWorkflow: before.workflow,
-      }),
-      taskApplyEvent: mutation,
-      tasksList: async () => [after],
-      agentSessionsListForTasks: async (_repo, ids) =>
-        ids.map((taskId) => ({ taskId, agentSessions: [session] })),
-    },
-  });
-  const identity = { workspaceId: "workspace", ...session };
-  const draft = {
-    segments: [{ id: "text", kind: "text" as const, text: "Unsent instructions" }],
-    attachments: [
-      { id: "attachment", kind: "pdf" as const, name: "notes.pdf", path: "/repo/notes.pdf" },
-    ],
-  };
-  connection.drafts.chat.set(identity, before.id, draft);
-  await connection.drafts.chat.flush(identity);
-  const impact = taskStopImpactQueryKeys.get(
-    { workspaceId: "workspace", repoPath: "/repo" },
-    [before.id],
-    "close",
-  );
-  connection.queryClient.setQueryData(impact, {});
-  const harness = createHookHarness(
-    () => useWorkflowEventActions("/repo", [before], () => {}, "workspace"),
-    undefined,
-    {
-      wrapper: ({ children }: PropsWithChildren) => (
-        <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
-      ),
-    },
-  );
-  await harness.mount();
-  try {
-    await harness.run((flow) => flow.onApplyEvent(before.id, eventId, []));
-    await harness.waitFor(() => mutation.mock.calls.length === 1);
-    expect(connection.drafts.chat.hydrate(identity, before.id)).toEqual(draft);
-    await harness.run(() => {
-      if (outcome === "denied") saved.reject(new Error("Host denied action"));
-      else saved.resolve(after);
+test.each([{ outcome: "terminal" }, { outcome: "nonterminal" }, { outcome: "denied" }] as const)(
+  "workflow draft cleanup follows the host result: %j",
+  async ({ outcome }) => {
+    const { alpha, beta, board, catalog } = createSharedBoardWorkflows();
+    const eventId = outcome === "nonterminal" ? "alpha_hold" : "alpha_approve";
+    const before = createWorkflowTaskCardFixture(alpha, board, {
+      id: "draft-task",
+      status: "alpha_approval",
+      artifactSummary: {
+        ...alpha.emptyArtifactSummary(),
+        alpha_review: { present: true, verdict: "accept" },
+      },
     });
-    await harness.waitFor(() => feedback.dismissed.length > 0);
-    expect(mutation).toHaveBeenCalledTimes(1);
-    const stored = connection.drafts.chat.hydrate(identity, before.id);
-    if (outcome === "terminal") {
-      expect(draftHasMeaningfulContent(stored)).toBe(false);
-    } else expect(stored).toEqual(draft);
-    expect(connection.queryClient.getQueryState(impact)?.isInvalidated).toBe(
-      outcome !== "nonterminal",
+    const after = toWireTaskCard(
+      createWorkflowTaskCardFixture(alpha, board, {
+        ...toWireTaskCard(before),
+        status: outcome === "nonterminal" ? "alpha_hold" : "shared_done",
+      }),
     );
-    expect(feedback.shownOf("error")).toHaveLength(outcome === "denied" ? 1 : 0);
-  } finally {
-    await harness.unmount();
-    await connection.dispose();
-  }
-});
+    const session = {
+      externalSessionId: "writer-session",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/task",
+      role: "alpha_writer",
+      startedAt: "2026-11-01T00:00:00.000Z",
+      selectedModel: null,
+    };
+    const saved = createDeferred<typeof after>();
+    const mutation = mock(() => saved.promise);
+    const feedback = createFeedbackFake();
+    const connection = createTestClientConnection({
+      feedback,
+      scheduleTask: () => () => {},
+      client: {
+        workflowCatalogGet: async () => ({
+          ...catalog,
+          workflows: [taskWorkflowDescriptor(alpha), taskWorkflowDescriptor(beta)],
+        }),
+        workspaceWorkflowGet: async () => ({
+          hostInstanceId: "mixed-host",
+          board,
+          workflows: [alpha.reference, beta.reference],
+          newTaskWorkflow: before.workflow,
+        }),
+        taskApplyEvent: mutation,
+        tasksList: async () => [after],
+        agentSessionsListForTasks: async (_repo, ids) =>
+          ids.map((taskId) => ({ taskId, agentSessions: [session] })),
+      },
+    });
+    const identity = { workspaceId: "workspace", ...session };
+    const draft = {
+      segments: [{ id: "text", kind: "text" as const, text: "Unsent instructions" }],
+      attachments: [
+        { id: "attachment", kind: "pdf" as const, name: "notes.pdf", path: "/repo/notes.pdf" },
+      ],
+    };
+    connection.drafts.chat.set(identity, before.id, draft);
+    await connection.drafts.chat.flush(identity);
+    const impact = taskStopImpactQueryKeys.get(
+      { workspaceId: "workspace", repoPath: "/repo" },
+      [before.id],
+      "close",
+    );
+    connection.queryClient.setQueryData(impact, {});
+    const harness = createHookHarness(
+      () => useWorkflowEventActions("/repo", [before], () => {}, "workspace"),
+      undefined,
+      {
+        wrapper: ({ children }: PropsWithChildren) => (
+          <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
+        ),
+      },
+    );
+    await harness.mount();
+    try {
+      await harness.run((flow) => flow.onApplyEvent(before.id, eventId, []));
+      await harness.waitFor(() => mutation.mock.calls.length === 1);
+      expect(connection.drafts.chat.hydrate(identity, before.id)).toEqual(draft);
+      await harness.run(() => {
+        if (outcome === "denied") saved.reject(new Error("Host denied action"));
+        else saved.resolve(after);
+      });
+      await harness.waitFor(() => feedback.dismissed.length > 0);
+      expect(mutation).toHaveBeenCalledTimes(1);
+      const stored = connection.drafts.chat.hydrate(identity, before.id);
+      if (outcome === "terminal") {
+        expect(draftHasMeaningfulContent(stored)).toBe(false);
+      } else expect(stored).toEqual(draft);
+      expect(connection.queryClient.getQueryState(impact)?.isInvalidated).toBe(
+        outcome !== "nonterminal",
+      );
+      expect(feedback.shownOf("error")).toHaveLength(outcome === "denied" ? 1 : 0);
+    } finally {
+      await harness.unmount();
+      await connection.dispose();
+    }
+  },
+);

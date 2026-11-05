@@ -32,10 +32,6 @@ export type TasksStateContextValue = TaskPullRequestOperations & {
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };
 
-export type DelegationStateContextValue = {
-  delegateTask: (taskId: string) => Promise<void>;
-};
-
 /** Reads and saves the workflow documents of the active workspace by artifact code. */
 export type DocumentStateContextValue = {
   loadDocument: (

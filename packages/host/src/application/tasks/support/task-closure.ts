@@ -9,7 +9,8 @@ import type {
   TaskStorePort,
 } from "../../../ports/task-repository-ports";
 import type { TaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
-import { decideEffectTransition, type HostEffect } from "./task-workflow-events";
+import type { WorkflowEventEffect } from "@openducktor/contracts";
+import { decideEffectTransition } from "./task-workflow-events";
 
 type TaskClosureStore = Pick<TaskStorePort, "transitionTask">;
 
@@ -27,7 +28,7 @@ export const completeTaskClosure = <CleanupError>({
 }: {
   cleanup: Effect.Effect<void, CleanupError, Scope.Scope>;
   taskWorkflows: TaskWorkflowResolver;
-  effect: HostEffect;
+  effect: WorkflowEventEffect;
   gitPort: Pick<GitPort, "canonicalizePath"> | undefined;
   operation: string;
   repoPath: string;

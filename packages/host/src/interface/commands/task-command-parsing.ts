@@ -63,17 +63,6 @@ export const parseDescriptionAssets = (
   throw invalidInput(`descriptionAssets is invalid: ${result.error.message}`, "descriptionAssets");
 };
 
-export const parseTransitionStatus = (result: z.ZodSafeParseResult<string>): string => {
-  if (result.success) {
-    return result.data;
-  }
-
-  throw invalidInput(
-    `task_transition input.status is invalid: ${result.error.message}`,
-    "input.status",
-  );
-};
-
 export const parseRequiredBoolean = (
   result: z.ZodSafeParseResult<boolean>,
   label: string,

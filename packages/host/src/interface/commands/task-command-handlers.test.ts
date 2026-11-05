@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import type {
-  BuildSessionBootstrap,
   PullRequest,
   TaskApprovalContextLoadResult,
   TaskCard,
@@ -74,10 +73,6 @@ const directMergeFixture: TaskDirectMergeResult = {
 const metadataFixture: TaskMetadataPayload = {
   artifacts: { spec: artifactFixture, plan: artifactFixture },
   agentSessions: [],
-};
-const buildSessionFixture: BuildSessionBootstrap = {
-  runtimeKind: "opencode",
-  workingDirectory: "/repo/task-1",
 };
 
 const runHandler = <T>(
@@ -279,20 +274,6 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildStart(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "build_start", input });
-            return buildSessionFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       createTask(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -439,20 +420,6 @@ describe("createTaskCommandHandlers", () => {
           try: async () => {
             calls.push({ command: "repo_pull_request_sync_detailed", input });
             return { ran: true as const, changedTaskIds: [], autoCloseFailures: [] };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "task_transition", input });
-            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -645,31 +612,11 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_transition?.({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          status: "in_progress",
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
         handlers.task_apply_event?.({
           workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           eventId: "defer",
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.build_start?.({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          runtimeKind: "opencode",
         }),
       ),
     ).resolves.toBeDefined();
@@ -844,21 +791,8 @@ describe("createTaskCommandHandlers", () => {
         },
       },
       {
-        command: "task_transition",
-        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", status: "in_progress" },
-      },
-      {
         command: "task_apply_event",
         input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", eventId: "defer" },
-      },
-      {
-        command: "build_start",
-        input: {
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          runtimeKind: "opencode",
-        },
       },
       {
         command: "task_update",

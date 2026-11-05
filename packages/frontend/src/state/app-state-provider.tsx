@@ -1,7 +1,6 @@
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import type { RemoteAccessBridge } from "@openducktor/contracts";
 import type {
-  DelegationStateContextValue,
   DocumentStateContextValue,
   TasksStateContextValue,
 } from "@openducktor/frontend-core/types/state-slices";
@@ -16,7 +15,6 @@ import type {
 } from "@/types/state-slices";
 import { createAgentRuntimeServices } from "@openducktor/frontend-core/sessions/agent-runtime-services";
 import {
-  DelegationStateContext,
   DocumentStateContext,
   TasksStateContext,
   useActiveWorkspaceContext,
@@ -37,7 +35,6 @@ import { AppLifecycleStateProvider } from "./providers/app-lifecycle-state-provi
 import { AppRuntimeProvider } from "@openducktor/frontend-core/app-state/providers/app-runtime-provider";
 import { AutopilotProvider } from "./providers/autopilot-provider";
 import { ChecksStateProvider } from "./providers/checks-state-provider";
-import { DelegationStateProvider } from "@openducktor/frontend-core/app-state/providers/delegation-state-provider";
 import { DiagnosticsAutoOpenProvider } from "./providers/diagnostics-auto-open-provider";
 import { HostRuntimeStatusProvider } from "@openducktor/frontend-core/app-state/providers/host-runtime-status-provider";
 import { ManualMergeCheckProvider } from "./providers/manual-merge-check-provider";
@@ -81,19 +78,17 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
                 <WorkspaceStateProvider>
                   <WorkspaceActivityProvider>
                     <NotificationProvider>
-                      <DelegationStateProvider>
-                        <AgentStudioStateProvider agentEngine={agentEngine}>
-                          <AppLifecycleStateProvider>
-                            <TerminalActivityProvider>
-                              <AutopilotProvider>
-                                <ManualPullRequestSyncProvider>
-                                  <ManualMergeCheckProvider>{children}</ManualMergeCheckProvider>
-                                </ManualPullRequestSyncProvider>
-                              </AutopilotProvider>
-                            </TerminalActivityProvider>
-                          </AppLifecycleStateProvider>
-                        </AgentStudioStateProvider>
-                      </DelegationStateProvider>
+                      <AgentStudioStateProvider agentEngine={agentEngine}>
+                        <AppLifecycleStateProvider>
+                          <TerminalActivityProvider>
+                            <AutopilotProvider>
+                              <ManualPullRequestSyncProvider>
+                                <ManualMergeCheckProvider>{children}</ManualMergeCheckProvider>
+                              </ManualPullRequestSyncProvider>
+                            </AutopilotProvider>
+                          </TerminalActivityProvider>
+                        </AppLifecycleStateProvider>
+                      </AgentStudioStateProvider>
                     </NotificationProvider>
                   </WorkspaceActivityProvider>
                 </WorkspaceStateProvider>
@@ -122,9 +117,6 @@ export const useChecksState = (): ChecksStateContextValue =>
 
 export const useTasksState = (): TasksStateContextValue =>
   useRequiredContext(TasksStateContext, "useTasksState");
-
-export const useDelegationState = (): DelegationStateContextValue =>
-  useRequiredContext(DelegationStateContext, "useDelegationState");
 
 export const useDocumentState = (): DocumentStateContextValue =>
   useRequiredContext(DocumentStateContext, "useDocumentState");

@@ -41,7 +41,7 @@ export const createTaskCrudUseCases = ({
   taskStore,
   taskWorkflows,
 }: CreateTaskServiceInput): Pick<TaskServiceWithMutationProgress, "createTask" | "updateTask"> &
-  Pick<TaskService, "transitionTask" | "applyTaskEvent" | "applyStartEvent"> => ({
+  Pick<TaskService, "applyTaskEvent" | "applyStartEvent"> => ({
   createTask(input) {
     return Effect.gen(function* () {
       const { repoPath, task, descriptionAssets } = input;
@@ -93,31 +93,6 @@ export const createTaskCrudUseCases = ({
     });
   },
 
-  transitionTask(input) {
-    return Effect.gen(function* () {
-      const { repoPath, taskId, status } = input;
-      const updated = yield* taskStore.transitionTask<
-        TaskPolicyError | HostValidationErrorAggregate
-      >({
-        ...input,
-        decide: (current) => {
-          const workflow = taskWorkflows.forTask(current);
-          const eventId = workflow.statusEvent(status);
-          return eventId === undefined
-            ? Result.fail(
-                new HostValidationError({
-                  field: "status",
-                  message: `task_transition cannot move tasks to ${status}. Use task_close or an explicit delivery completion command.`,
-                  details: { repoPath, taskId, status },
-                }),
-              )
-            : decideTaskTransition(workflow, eventId, current);
-        },
-      });
-      return enrichTask(taskWorkflows.forTask(updated), updated);
-    });
-  },
-
   applyTaskEvent(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, eventId } = input;
@@ -140,8 +115,7 @@ export const createTaskCrudUseCases = ({
               }),
             );
           }
-          // A status.set event has no host effect beyond its transition.
-          if (event.effect !== undefined && event.effect !== "status.set") {
+          if (event.effect !== undefined) {
             return Result.fail(
               new HostValidationError({
                 field: "eventId",

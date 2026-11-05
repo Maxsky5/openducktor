@@ -26,8 +26,7 @@ export const createTaskAgentEventUseCase = ({
         decide: (current) => {
           const workflow = taskWorkflows.forTask(current);
           const event = workflow.agentEvent(eventId);
-          // A status.set event has no host effect beyond its transition.
-          if (!event || (event.effect !== undefined && event.effect !== "status.set"))
+          if (!event || event.effect !== undefined)
             return Result.fail(
               new HostValidationError({
                 field: "eventId",

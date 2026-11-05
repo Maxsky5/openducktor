@@ -14,7 +14,6 @@ export type TaskMutationOperation =
   | "build-blocked"
   | "build-completed"
   | "build-resumed"
-  | "build-start"
   | "close-task"
   | "complete-direct-merge"
   | "create-task"
@@ -28,7 +27,6 @@ export type TaskMutationOperation =
   | "reset-implementation"
   | "reset-task"
   | "save-workflow-artifact"
-  | "transition-task"
   | "unlink-pull-request"
   | "update-task"
   | "upsert-pull-request";

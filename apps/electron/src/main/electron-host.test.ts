@@ -1647,13 +1647,6 @@ describe("createElectronHostCommandRouter", () => {
     expect(await router.invoke("tasks_list", workspace)).toEqual([
       expect.objectContaining({ id: task.id, title: "Task 1" }),
     ]);
-    expect(
-      await router.invoke("task_transition", { ...taskRef, status: "in_progress" }),
-    ).toMatchObject({
-      id: task.id,
-      status: "in_progress",
-      availableActions: expect.arrayContaining(["open_builder"]),
-    });
     expect(await router.invoke("task_metadata_get", taskRef)).toMatchObject({
       artifacts: {},
       agentSessions: [],
@@ -2575,43 +2568,5 @@ describe("createElectronHostCommandRouter", () => {
         "close_task",
       ],
     });
-  });
-
-  test("registers migrated build start host command", async () => {
-    const config = globalConfig({
-      workspaces: { repo: repoConfig() },
-      workspaceOrder: ["repo"],
-    });
-    const runtimeStarter = createRuntimeStarter();
-    const worktreeFiles = createWorktreeFiles({ pathIsWithinRoot: () => Effect.succeed(true) });
-    const router = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      runtimeHealth: createRuntimeHealth(),
-      runtimeStarter,
-      config,
-      taskStore: createTaskStore(),
-      worktreeFiles,
-    });
-
-    try {
-      await router.initialize();
-      await waitForRuntimeState(router, ["opencode"], "ready");
-      expect(
-        await router.invoke("build_start", {
-          workspaceId: "repo",
-          repoPath,
-          taskId: "task-1",
-          runtimeKind: "opencode",
-        }),
-      ).toEqual({
-        runtimeKind: "opencode",
-        workingDirectory: path.join(worktreeBasePath, "task-1"),
-      });
-      expect(runtimeStarter.starts.map((start) => start.runtimeKind)).toEqual(["opencode"]);
-    } finally {
-      await router.dispose();
-    }
   });
 });

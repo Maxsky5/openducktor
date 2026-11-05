@@ -332,13 +332,6 @@ export const createEventPublishingTaskService = ({
         changeForTask(input.taskId),
         taskService.updateTask(input),
       ),
-    transitionTask: (input) =>
-      publishAfterMutation(
-        "transition-task",
-        input,
-        changeForTask(input.taskId),
-        taskService.transitionTask(input),
-      ),
     applyTaskEvent: (input) =>
       publishAfterMutation(
         "apply-task-event",
@@ -366,13 +359,6 @@ export const createEventPublishingTaskService = ({
         input,
         changeForTask(input.taskId),
         taskService.buildBlocked(input),
-      ),
-    buildStart: (input) =>
-      publishAfterMutation(
-        "build-start",
-        input,
-        changeForTask(input.taskId),
-        taskService.buildStart(input),
       ),
     buildResumed: (input) =>
       publishAfterMutation(

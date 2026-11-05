@@ -238,7 +238,7 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
       if (verdict !== undefined) save.verdict = verdict;
       return run(workflow.tasks.workflowArtifactSave(save));
     };
-    await run(workflow.tasks.transitionTask({ ...input, status: "writing" }));
+    await run(workflow.tasks.applyStartEvent({ ...input, eventId: "start-writing" }));
     await save("draft", "writer");
     await workflow.waitForOutcomes(1);
     await save("review", "editor", "revise");
@@ -256,7 +256,7 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
         statusChange.task.status,
       ]),
     ).toEqual([
-      ["transition-task", undefined, "backlog", "writing"],
+      ["apply-task-event", undefined, "backlog", "writing"],
       ["save-workflow-artifact", "draftSubmitted", "writing", "reviewing"],
       ["save-workflow-artifact", "reviewRejected", "reviewing", "writing"],
       ["save-workflow-artifact", "draftSubmitted", "writing", "reviewing"],

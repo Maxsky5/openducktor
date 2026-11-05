@@ -96,48 +96,6 @@ const moveTo = (to: SpecPlanBuildStateId, signal?: Omit<SpecPlanBuildOutcome, "w
 ];
 
 const specPlanBuildEvents = {
-  "set-status:open": {
-    from: ["open"],
-    guards: [],
-    outcomes: moveTo("open"),
-    effect: "status.set",
-  },
-  "set-status:spec_ready": {
-    from: ["open", "spec_ready"],
-    guards: [],
-    outcomes: moveTo("spec_ready"),
-    effect: "status.set",
-  },
-  "set-status:ready_for_dev": {
-    from: ["open", "spec_ready", "ready_for_dev"],
-    guards: [specComplete],
-    outcomes: moveTo("ready_for_dev"),
-    effect: "status.set",
-  },
-  "set-status:in_progress": {
-    from: nonClosedStates,
-    guards: [planningComplete],
-    outcomes: moveTo("in_progress"),
-    effect: "status.set",
-  },
-  "set-status:blocked": {
-    from: ["in_progress", "blocked", "ai_review", "human_review"],
-    guards: [],
-    outcomes: moveTo("blocked"),
-    effect: "status.set",
-  },
-  "set-status:ai_review": {
-    from: ["in_progress", "blocked", "ai_review"],
-    guards: [],
-    outcomes: moveTo("ai_review"),
-    effect: "status.set",
-  },
-  "set-status:human_review": {
-    from: ["in_progress", "blocked", "ai_review", "human_review"],
-    guards: [],
-    outcomes: moveTo("human_review"),
-    effect: "status.set",
-  },
   "set-spec": {
     from: nonClosedStates,
     guards: [],
@@ -165,7 +123,6 @@ const specPlanBuildEvents = {
       { when: { stateIn: ["open", "spec_ready", "ready_for_dev"] }, to: "in_progress" },
       { when: true, to: null },
     ],
-    effect: "build.start",
   },
   "build-blocked": {
     from: activeOrReview.stateIn,

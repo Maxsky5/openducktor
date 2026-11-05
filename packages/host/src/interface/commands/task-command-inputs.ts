@@ -8,7 +8,6 @@ import {
   taskCreateInputSchema,
   taskDirectMergeInputSchema,
   taskCloseInputSchema,
-  taskStatusSchema,
   type TaskStopImpactRequest,
   taskStopImpactRequestSchema,
   taskUpdatePatchSchema,
@@ -18,7 +17,6 @@ import {
 import { z } from "zod";
 import type {
   AgentSessionDeleteInput,
-  BuildStartInput,
   CloseTaskInput,
   CreateTaskUseCaseInput,
   DeleteTaskInput,
@@ -31,7 +29,6 @@ import type {
   PullRequestUpsertInput,
   RepoPathInput,
   TaskIdInput,
-  TransitionTaskInput,
   ApplyTaskEventInput,
   UpdateTaskInput,
 } from "../../application/tasks/task-inputs";
@@ -47,7 +44,6 @@ import {
   parseRequiredBoolean,
   parseRequiredMarkdown,
   parseTaskDirectMergeInput,
-  parseTransitionStatus,
   parseUpdatePatch,
   requireString,
 } from "./task-command-parsing";
@@ -257,19 +253,6 @@ export const parseUpdateTaskInput = (input: HostCommandArgs): UpdateTaskInput =>
   return result;
 };
 
-export const parseTransitionTaskInput = (input: HostCommandArgs): TransitionTaskInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "task_transition input",
-  );
-  return {
-    workspaceId: readRequiredString(record, "workspaceId"),
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    status: parseTransitionStatus(taskStatusSchema.safeParse(record.status)),
-  };
-};
-
 export const parseApplyTaskEventInput = (input: HostCommandArgs): ApplyTaskEventInput => {
   const record = requireParsedRecord(
     commandInputRecordSchema.safeParse(input),
@@ -323,19 +306,6 @@ export const parseWorkflowArtifactSaveInput = (
   };
   if (record.verdict !== undefined) parsed.verdict = readRequiredString(record, "verdict");
   return parsed;
-};
-
-export const parseBuildStartInput = (input: HostCommandArgs): BuildStartInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "build_start input",
-  );
-  return {
-    workspaceId: readRequiredString(record, "workspaceId"),
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    runtimeKind: readRequiredString(record, "runtimeKind"),
-  };
 };
 
 export const parseOptionalNoteInput = (

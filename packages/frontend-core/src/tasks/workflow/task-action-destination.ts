@@ -52,9 +52,7 @@ export const resolveTaskActionDestination = (
     ? { workflow: task.workflow, launchActionIds: command.launchActionIds }
     : undefined;
   switch (command.effect) {
-    // A status.set event has no host effect beyond its transition, so the event command runs it.
     case undefined:
-    case "status.set":
       return { kind: "event", eventId: command.eventId, launchActionIds: command.launchActionIds };
     case "review.approve":
       return { kind: "approve", continuation };

@@ -770,20 +770,9 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
     );
   });
   const effectPaths = new Map<string, string>();
-  const statusTargets = new Set<string>();
   definition.events.forEach((event, index) => {
     const path = `events[${index}]`;
-    if (event.effect === "status.set") {
-      const [outcome] = event.outcomes;
-      const target = event.outcomes.length === 1 && outcome?.when === true ? outcome.to : null;
-      if (target === null)
-        return invalid(
-          `The status.set event at ${path} needs one outcome with when true and a state.`,
-        );
-      if (statusTargets.has(target))
-        invalid(`Two status.set events move to "${target}". Keep one of them.`);
-      statusTargets.add(target);
-    } else if (event.effect !== undefined) {
+    if (event.effect !== undefined) {
       const firstPath = effectPaths.get(event.effect);
       if (firstPath !== undefined)
         invalid(

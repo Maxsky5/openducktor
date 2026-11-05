@@ -7,7 +7,6 @@ import {
   agentSessionApprovalRequestSchema,
   agentSessionRecordSchema,
   agentSessionStopTargetSchema,
-  buildSessionBootstrapSchema,
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   formatRuntimeDescriptorSchemaIssue,
@@ -401,20 +400,6 @@ describe("runtime schemas", () => {
 
     expect(parsed.targetBranch).toBeUndefined();
     expect(parsed.targetBranchError).toContain("Invalid openducktor.targetBranch metadata");
-  });
-
-  test("build session bootstrap exposes runtime kind and working directory only", () => {
-    const parsed = buildSessionBootstrapSchema.parse({
-      runtimeKind: "opencode",
-      runtimeId: " runtime-1 ",
-      runtimeRoute: { type: "stdio", identity: " runtime-build-1 " },
-      workingDirectory: "/repo/.worktrees/task-1",
-    });
-
-    expect(parsed.runtimeKind).toBe("opencode");
-    expect("runtimeId" in parsed).toBe(false);
-    expect("runtimeRoute" in parsed).toBe(false);
-    expect(parsed.workingDirectory).toBe("/repo/.worktrees/task-1");
   });
 
   test("repo config accepts null worktree base path", () => {

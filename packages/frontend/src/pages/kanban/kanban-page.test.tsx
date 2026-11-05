@@ -32,7 +32,6 @@ import { createAgentSessionCollection } from "@openducktor/frontend-core/session
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
-  DelegationStateContext,
   RuntimeDefinitionsContext,
   DocumentStateContext,
   TasksStateContext,
@@ -68,7 +67,6 @@ import type {
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { readyAgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import type {
-  DelegationStateContextValue,
   DocumentStateContextValue,
   TasksStateContextValue,
 } from "@openducktor/frontend-core/types/state-slices";
@@ -449,10 +447,6 @@ const createChecksStateValue = (): ChecksStateContextValue => ({
   refreshChecks: async () => {},
 });
 
-const delegationStateValue: DelegationStateContextValue = {
-  delegateTask: async () => {},
-};
-
 const documentStateValue: DocumentStateContextValue = {
   loadDocument: async () => ({ markdown: "", updatedAt: null }),
   saveDocument: async () => ({ updatedAt: "2026-01-01T00:00:00.000Z" }),
@@ -668,47 +662,45 @@ const renderPage = async (
               <HostRuntimeStatusContext.Provider value={createHostRuntimeStatusContextValue()}>
                 <ChecksStateContext.Provider value={checksStateValue}>
                   <TasksStateContext.Provider value={createTasksStateValue(renderState)}>
-                    <DelegationStateContext.Provider value={delegationStateValue}>
-                      <DocumentStateContext.Provider value={documentStateValue}>
-                        <AgentSessionsContext.Provider value={sessionStore}>
-                          <AgentOperationsContext.Provider value={createAgentOperationsValue()}>
-                            <AgentSessionReadModelStateContext.Provider
+                    <DocumentStateContext.Provider value={documentStateValue}>
+                      <AgentSessionsContext.Provider value={sessionStore}>
+                        <AgentOperationsContext.Provider value={createAgentOperationsValue()}>
+                          <AgentSessionReadModelStateContext.Provider
+                            value={{
+                              sessionReadModelLoadState:
+                                readyAgentSessionReadModelLoadState("/repo"),
+                              reloadSessionReadModel: () => undefined,
+                              getSessionFault: () => null,
+                              workspaceSessionRecordsError: null,
+                            }}
+                          >
+                            <RuntimeDefinitionsContext.Provider
                               value={{
-                                sessionReadModelLoadState:
-                                  readyAgentSessionReadModelLoadState("/repo"),
-                                reloadSessionReadModel: () => undefined,
-                                getSessionFault: () => null,
-                                workspaceSessionRecordsError: null,
+                                runtimeDefinitions: [...RUNTIME_DEFINITIONS],
+                                availableRuntimeDefinitions: [...RUNTIME_DEFINITIONS],
+                                agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+                                isLoadingRuntimeDefinitions: false,
+                                runtimeDefinitionsError: null,
+                                isLoadingRuntimeSettings: false,
+                                runtimeSettingsError: null,
+                                hasRuntimeSettingsSnapshot: true,
+                                refreshRuntimeSettings: async () => {},
+                                refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
+                                loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
+                                loadRepoRuntimeFileSearch: async () => [],
                               }}
                             >
-                              <RuntimeDefinitionsContext.Provider
-                                value={{
-                                  runtimeDefinitions: [...RUNTIME_DEFINITIONS],
-                                  availableRuntimeDefinitions: [...RUNTIME_DEFINITIONS],
-                                  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-                                  isLoadingRuntimeDefinitions: false,
-                                  runtimeDefinitionsError: null,
-                                  isLoadingRuntimeSettings: false,
-                                  runtimeSettingsError: null,
-                                  hasRuntimeSettingsSnapshot: true,
-                                  refreshRuntimeSettings: async () => {},
-                                  refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
-                                  loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
-                                  loadRepoRuntimeFileSearch: async () => [],
-                                }}
-                              >
-                                <NotificationContext.Provider value={notificationContextValue}>
-                                  <MemoryRouter initialEntries={["/"]}>
-                                    <LocationProbe />
-                                    <KanbanModelsProbe />
-                                  </MemoryRouter>
-                                </NotificationContext.Provider>
-                              </RuntimeDefinitionsContext.Provider>
-                            </AgentSessionReadModelStateContext.Provider>
-                          </AgentOperationsContext.Provider>
-                        </AgentSessionsContext.Provider>
-                      </DocumentStateContext.Provider>
-                    </DelegationStateContext.Provider>
+                              <NotificationContext.Provider value={notificationContextValue}>
+                                <MemoryRouter initialEntries={["/"]}>
+                                  <LocationProbe />
+                                  <KanbanModelsProbe />
+                                </MemoryRouter>
+                              </NotificationContext.Provider>
+                            </RuntimeDefinitionsContext.Provider>
+                          </AgentSessionReadModelStateContext.Provider>
+                        </AgentOperationsContext.Provider>
+                      </AgentSessionsContext.Provider>
+                    </DocumentStateContext.Provider>
                   </TasksStateContext.Provider>
                 </ChecksStateContext.Provider>
               </HostRuntimeStatusContext.Provider>

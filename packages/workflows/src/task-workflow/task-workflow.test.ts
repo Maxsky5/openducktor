@@ -43,14 +43,10 @@ describe("createTaskWorkflow", () => {
     expect(() => review.role("build")).toThrow('Task workflow "review" has no role "build".');
   });
 
-  test("finds host effects and status events through the definition", () => {
+  test("finds host effects through the definition", () => {
     expect(review.effectEvent("build.completed")).toBe("finish-writing");
     expect(review.effectEvent("task.close")).toBe("shelve");
-    expect(review.statusEvent("approval")).toBe("move-approval");
-    expect(review.statusEvent("published")).toBeUndefined();
     expect(specPlanBuildWorkflow.effectEvent("review.approve")).toBe("human-approve");
-    expect(specPlanBuildWorkflow.statusEvent("blocked")).toBe("set-status:blocked");
-    expect(specPlanBuildWorkflow.statusEvent("closed")).toBeUndefined();
   });
 
   test("decides events with their signal, source role, and guard recovery", () => {
@@ -222,7 +218,7 @@ describe("createTaskWorkflow", () => {
         if (event) event.agent = agent;
       }),
     ).toThrow(
-      "The event at events[10] has the review.approve effect, so agents cannot send it. Remove events[10].agent, or use no effect or one of status.set, build.blocked, build.resumed, build.completed.",
+      "The event at events[8] has the review.approve effect, so agents cannot send it. Remove events[8].agent, or use no effect or one of build.blocked, build.resumed, build.completed.",
     );
     expect(
       withChange((definition) => {
@@ -275,12 +271,6 @@ describe("createTaskWorkflow", () => {
         if (event) event.effect = "task.close";
       }),
     ).toThrow('The effect "task.close" is at');
-    expect(
-      withChange((definition) => {
-        const event = definition.events.find(({ id }) => id === "start-writing");
-        if (event) event.effect = "status.set";
-      }),
-    ).toThrow("needs one outcome with when true and a state");
     expect(() =>
       createTaskWorkflow(
         reviewTaskDefinition(),

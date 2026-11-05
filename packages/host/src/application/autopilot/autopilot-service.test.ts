@@ -199,7 +199,6 @@ const createAutopilotHarness = async ({
     buildResumed: decided("build-resumed"),
     humanRequestChanges: decided("human-request-changes"),
     resetImplementation: move("ready_for_dev"),
-    transitionTask: (input) => move(input.status)(input),
     deleteTask: (input) =>
       store(input.repoPath)
         .deleteTask(input)
@@ -606,7 +605,6 @@ describe("host Autopilot", () => {
     const rejected = await h.createTask("/repos/alpha", "human_review");
     const blocked = await h.createTask("/repos/alpha", "blocked");
     const building = await h.createTask("/repos/alpha", "in_progress");
-    const planned = await h.createTask("/repos/alpha", "spec_ready");
     await run(h.start().initialize());
     const repoPath = "/repos/alpha";
 
@@ -626,14 +624,6 @@ describe("host Autopilot", () => {
         workspaceId: repoPath.split("/").at(-1)!,
         repoPath,
         taskId: building,
-      }),
-    );
-    await run(
-      h.tasks.transitionTask({
-        workspaceId: repoPath.split("/").at(-1)!,
-        repoPath,
-        taskId: planned,
-        status: "ai_review",
       }),
     );
     await run(

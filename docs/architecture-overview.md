@@ -196,11 +196,11 @@ Issue types are fixed: `ISSUE_TYPE_VALUES` in `packages/contracts/src/issue-type
 
 Each prompt has one owner: a role or a workflow. A role owns its instructions, with the prompt ID `instructions`, for example `build.instructions`. A workflow owns its base prompts and its `messages.` prompts. A prompt ID is unique only within its owner, so two workflows can use one prompt ID with different text. A prompt override is keyed by `promptOverrideKey({ ownerKind, ownerId, promptId })` from `packages/contracts`. A role prompt override applies to the role in every workflow. A workflow prompt override applies to every revision of that workflow.
 
-An event can name one host effect from `workflowEventEffectValues`, such as `build.start`, `task.close`, or `pull_request.merged`. Each effect has at most one event. The exception is `status.set`, which has at most one event for each target state.
+An event can name one host effect from `workflowEventEffectValues`, such as `build.completed`, `task.close`, or `pull_request.merged`. Each effect has at most one event. An event without an effect only changes the state.
 
-An event can declare `agent`: the roles that can send it with `odt_apply_workflow_event`, its description, and if it requires a note. Only an event without an effect or with `status.set`, `build.blocked`, `build.resumed`, or `build.completed` can declare `agent`. Each role must be a role of the workflow, and its catalog role must have the `odt_apply_workflow_event` tool. `agentEvents(roleId)` on the task workflow gives the events of a role, and the system prompt of the role lists them. The host bridge checks the event, the role of the calling session, and a required note. Then it runs the command of the effect, or commits the transition of an event without one.
+An event can declare `agent`: the roles that can send it with `odt_apply_workflow_event`, its description, and if it requires a note. Only an event without an effect or with `build.blocked`, `build.resumed`, or `build.completed` can declare `agent`. Each role must be a role of the workflow, and its catalog role must have the `odt_apply_workflow_event` tool. `agentEvents(roleId)` on the task workflow gives the events of a role, and the system prompt of the role lists them. The host bridge checks the event, the role of the calling session, and a required note. Then it runs the command of the effect, or commits the transition of an event without one.
 
-The command of an effect decides its event once and branches on the decision, so a repeat needs no status check. `task_transition` sends the `status.set` event of its target state. `task_apply_event` sends the event of an available event action that has no effect. A role session start sends the start event of its step after it creates the session. `packages/host/src/application/tasks/support/task-workflow-events.ts` maps denials to typed errors and gives the store the signal and source role of each transition.
+The command of an effect decides its event once and branches on the decision, so a repeat needs no status check. `task_apply_event` sends the event of an available event action that has no effect. A role session start sends the start event of its step after it creates the session. `packages/host/src/application/tasks/support/task-workflow-events.ts` maps denials to typed errors and gives the store the signal and source role of each transition.
 
 `createTaskWorkflow` in `packages/workflows/src/task-workflow` gives the host one API for any workflow: task projection, event decisions, roles, artifacts, launch actions, automations, notifications, and prompts. Only `issueType` is a fact. Artifact states come from the task `artifactSummary`, keyed by artifact code. Host code reads the workflow of a stored task with `forTask` and the workflow of a new task with `forNewTask` on the `TaskWorkflowResolver` port. Code that reads many tasks resolves the workflow of each task, and settings cover every workflow of the host. Runtime adapters read the tools and workspace access of a session role through a `WorkflowRolePolicyResolver`, which takes the task and role of the session scope.
 
@@ -234,7 +234,7 @@ Workflow notifications use these committed transitions. A `snapshot_required` re
 For a human action:
 
 1. The user selects an action from `availableActions`.
-2. The frontend calls a host method such as `taskTransition`, `taskClose`, or `taskApplyEvent`.
+2. The frontend calls a host method such as `taskApplyEvent`, `taskClose`, or `taskReset`.
 3. The shell maps the method to a host command.
 4. The host decides the workflow event of the action.
 5. The task store writes status, fields, or artifacts.

@@ -3,6 +3,7 @@ import type {
   GlobalGitConfig,
   RepoConfig,
   TaskCard,
+  WorkflowEventEffect,
 } from "@openducktor/contracts";
 import { pathStartsWith } from "@openducktor/path-support";
 import type { TaskIdInput } from "../task-inputs";
@@ -18,34 +19,14 @@ import type {
   TaskStorePort,
 } from "../../../ports/task-repository-ports";
 import { taskWorktreeIdError } from "../worktrees/task-worktree-id";
-import {
-  decideTaskTransition,
-  decideEffectTransition,
-  startWorktreeSessionHint,
-  type HostEffect,
-} from "./task-workflow-events";
-
-/** Decides a named event for a task and commits its transition. A repeat returns the task. */
-export const applyTaskEvent = (
-  taskStore: Pick<TaskStorePort, "transitionTask">,
-  taskWorkflows: TaskWorkflowResolver,
-  input: TaskIdInput,
-  eventId: string,
-): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError> =>
-  Effect.gen(function* () {
-    const updated = yield* taskStore.transitionTask({
-      ...input,
-      decide: (task) => decideTaskTransition(taskWorkflows.forTask(task), eventId, task),
-    });
-    return enrichTask(taskWorkflows.forTask(updated), updated);
-  });
+import { decideEffectTransition, startWorktreeSessionHint } from "./task-workflow-events";
 
 /** Decides the event of a host effect for a task and commits its transition. */
 export const applyEffect = (
   taskStore: Pick<TaskStorePort, "transitionTask">,
   taskWorkflows: TaskWorkflowResolver,
   input: TaskIdInput,
-  effect: HostEffect,
+  effect: WorkflowEventEffect,
 ): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError> =>
   Effect.gen(function* () {
     const updated = yield* taskStore.transitionTask({

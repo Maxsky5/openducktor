@@ -52,8 +52,6 @@ const createServices = (
   const base = createTaskServiceWithMutationProgressTestDouble({
     listTasks: (input) =>
       store.listTasks(input).pipe(Effect.map((tasks) => enrichTasks(builtinTaskWorkflows, tasks))),
-    transitionTask: (input) =>
-      transition(store, input).pipe(Effect.map((task) => enrichTask(specPlanBuildWorkflow, task))),
     ...overrides,
   });
   const sync = createTaskSyncService({
@@ -208,10 +206,11 @@ test.each([false, true])(
             taskId: task.id,
             status: "ready_for_dev",
           }).pipe(Effect.as({ ran: true, changedTaskIds: [task.id], autoCloseFailures: [] })),
-        transitionTask: (input) =>
+        // The test event ID names the target status.
+        applyTaskEvent: ({ eventId, ...scope }) =>
           Effect.gen(function* () {
-            const result = yield* transition(store, input);
-            if (input.status === "spec_ready") {
+            const result = yield* transition(store, { ...scope, status: eventId });
+            if (eventId === "spec_ready") {
               committed.resolve();
               yield* Effect.promise(() => release.promise);
             }
@@ -219,14 +218,14 @@ test.each([false, true])(
           }),
       });
       const first = Effect.runPromise(
-        service.transitionTask({ workspaceId, repoPath, taskId: task.id, status: "spec_ready" }),
+        service.applyTaskEvent({ workspaceId, repoPath, taskId: task.id, eventId: "spec_ready" }),
       );
       await committed.promise;
       const secondStarted = deferred();
       const secondMutation = viaSync
         ? sync.syncRepoPullRequests(repoPath, workspaceId).pipe(Effect.asVoid)
         : service
-            .transitionTask({ workspaceId, repoPath, taskId: task.id, status: "ready_for_dev" })
+            .applyTaskEvent({ workspaceId, repoPath, taskId: task.id, eventId: "ready_for_dev" })
             .pipe(Effect.asVoid);
       const second = Effect.runFork(
         Effect.sync(secondStarted.resolve).pipe(Effect.andThen(secondMutation)),
@@ -256,7 +255,12 @@ test.each([false, true])(
       ]);
       // A metadata/no-op status update must not repeat either transition.
       await Effect.runPromise(
-        service.transitionTask({ workspaceId, repoPath, taskId: task.id, status: "ready_for_dev" }),
+        service.applyTaskEvent({
+          workspaceId,
+          repoPath,
+          taskId: task.id,
+          eventId: "ready_for_dev",
+        }),
       );
       expect(
         events.flatMap((event) => (event.kind === "tasks_updated" ? event.statusChanges : [])),

@@ -131,9 +131,7 @@ export type TaskWorkflow = {
   artifactSubmitEvent(code: string, verdict: string | undefined): string | undefined;
   emptyArtifactSummary(): TaskArtifactSummary;
   /** The event of a host effect. A host command fails when the workflow has no event for it. */
-  effectEvent(effect: Exclude<WorkflowEventEffect, "status.set">): string | undefined;
-  /** The status.set event that moves a task to the status. */
-  statusEvent(status: string): string | undefined;
+  effectEvent(effect: WorkflowEventEffect): string | undefined;
   /** The events that agents of the role may send, in declaration order. */
   agentEvents(roleId: string): readonly TaskWorkflowAgentEvent[];
   /** The agent declaration of an event, or undefined when agents cannot send it. */
@@ -254,16 +252,8 @@ export const createTaskWorkflow = (
   const event = lookup(definition.id, "event", eventsById);
   const effectEvents = new Map(
     definition.events.flatMap((entry) =>
-      entry.effect !== undefined && entry.effect !== "status.set"
-        ? [[entry.effect, entry.id] as const]
-        : [],
+      entry.effect !== undefined ? [[entry.effect, entry.id] as const] : [],
     ),
-  );
-  const statusEvents = new Map(
-    definition.events.flatMap((entry) => {
-      const target = entry.outcomes[0]?.to;
-      return entry.effect === "status.set" && target ? [[target, entry.id] as const] : [];
-    }),
   );
   const agentSteps = definition.steps.filter((step): step is AgentStep => step.kind === "agent");
   const stepByRole = new Map(agentSteps.map((step) => [step.roleId, step]));
@@ -417,7 +407,6 @@ export const createTaskWorkflow = (
     },
     emptyArtifactSummary: inputs.emptyArtifactSummary,
     effectEvent: (effect) => effectEvents.get(effect),
-    statusEvent: (status) => statusEvents.get(status),
     agentEvents,
     agentEvent: (eventId) => agentEventsById.get(eventId),
     launchAfterEvent: (eventId, task, launchActionIds) => {

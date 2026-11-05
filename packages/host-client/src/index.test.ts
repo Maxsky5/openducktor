@@ -983,16 +983,6 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("taskTransition validates status before invoking host", async () => {
-    const { client, calls } = createClient(() => makeTaskCardPayload());
-
-    await expect(
-      // @ts-expect-error This negative test verifies runtime validation of a blank task status.
-      client.taskTransition(workspace, "task-1", " "),
-    ).rejects.toThrow();
-    expect(calls).toHaveLength(0);
-  });
-
   test("workspaceGetSettingsSnapshot uses snapshot IPC route", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "workspace_get_settings_snapshot") {

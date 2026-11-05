@@ -11,7 +11,6 @@ import { TaskPolicyError } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 
 export type AdmittedTaskEvent = Exclude<TaskEventDecision, { kind: "denied" }>;
-export type HostEffect = Exclude<WorkflowEventEffect, "status.set">;
 
 /** Re-evaluates policy against the row locked by the repository write transaction. */
 export const decideTaskTransition = (workflow: TaskWorkflow, eventId: string, task: TaskFacts) => {
@@ -26,7 +25,7 @@ export const decideTaskTransition = (workflow: TaskWorkflow, eventId: string, ta
 
 export const decideEffectTransition = (
   workflow: TaskWorkflow,
-  effect: HostEffect,
+  effect: WorkflowEventEffect,
   task: TaskFacts,
 ) => {
   const eventId = workflow.effectEvent(effect);
@@ -42,7 +41,7 @@ export const decideEffectTransition = (
 /** The event of a host effect. A workflow without that event cannot run the command. */
 export const requireEffectEvent = (
   workflow: TaskWorkflow,
-  effect: HostEffect,
+  effect: WorkflowEventEffect,
 ): Effect.Effect<string, TaskPolicyError> => {
   const eventId = workflow.effectEvent(effect);
   return eventId === undefined
@@ -69,7 +68,7 @@ export const requireTaskEvent = (
 /** Decides the event of a host effect. */
 export const requireEffect = (
   workflow: TaskWorkflow,
-  effect: HostEffect,
+  effect: WorkflowEventEffect,
   task: TaskFacts,
 ): Effect.Effect<AdmittedTaskEvent, TaskPolicyError> =>
   requireEffectEvent(workflow, effect).pipe(
@@ -129,7 +128,7 @@ export const taskEventPolicyError = (
 export const requireEffectInput = <Details extends object>(
   subject: string,
   workflow: TaskWorkflow,
-  effect: HostEffect,
+  effect: WorkflowEventEffect,
   task: TaskFacts,
   details: Details,
 ): Effect.Effect<AdmittedTaskEvent, TaskPolicyError | HostValidationError<Details>> =>

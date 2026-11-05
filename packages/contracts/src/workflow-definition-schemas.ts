@@ -283,11 +283,9 @@ export type WorkflowEventGuard = z.infer<typeof workflowEventGuardSchema>;
 
 /**
  * The host effects. A host command finds its event through its effect and runs the effect when the
- * event admits the task. A `status.set` event moves the task to the state of its one outcome.
+ * event admits the task.
  */
 export const workflowEventEffectValues = [
-  "status.set",
-  "build.start",
   "build.blocked",
   "build.resumed",
   "build.completed",
@@ -307,7 +305,6 @@ export type WorkflowEventEffect = z.infer<typeof workflowEventEffectSchema>;
 
 /** The effects of an event that agents may send. An agent event can also have no effect. */
 export const workflowAgentEventEffectValues = [
-  "status.set",
   "build.blocked",
   "build.resumed",
   "build.completed",

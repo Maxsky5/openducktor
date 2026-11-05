@@ -278,7 +278,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentWorkflowSessionStartInputSchema",
   "agentWorkflowSessionForkInputSchema",
   "agentWorkflowSessionForkResultSchema",
-  "buildSessionBootstrapSchema",
   "mcpBridgeDevelopmentDiscoveryPathSegments",
   "mcpBridgeDiscoveryFileSchema",
   "isDevelopmentInstanceId",

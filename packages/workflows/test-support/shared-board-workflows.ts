@@ -187,7 +187,6 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
         from: [queue, work, hold],
         guards: [],
         outcomes: move(work),
-        effect: "build.start",
       },
       { id: `${prefix}_submit`, from: open, guards: [], outcomes: move("shared_review") },
       { id: `${prefix}_accept`, from: ["shared_review"], guards: [], outcomes: move(approval) },

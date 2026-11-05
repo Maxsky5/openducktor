@@ -349,11 +349,6 @@ export const createLaunchHarness = async (
           records[index] = { ...records[index]!, selectedModel: input.selectedModel };
           return true;
         }),
-      transitionTask: (input) =>
-        Effect.sync(() => {
-          task = { ...task, status: input.status };
-          return task;
-        }),
       applyStartEvent: (input) =>
         Effect.sync(() => {
           const decision = workflow.decide(input.eventId, task);
