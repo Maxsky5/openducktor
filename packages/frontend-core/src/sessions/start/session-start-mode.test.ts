@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { describe, expect, test } from "bun:test";
 import { resolveLaunchStartMode } from "./session-start-mode";
@@ -7,7 +7,7 @@ describe("resolveLaunchStartMode", () => {
   test("keeps the default fresh mode when it does not require an existing session", () => {
     expect(
       resolveLaunchStartMode({
-        taskWorkflow: builtinTaskWorkflow,
+        taskWorkflow: specPlanBuildWorkflow,
         launchActionId: "build_implementation_start",
         existingSessionOptions: [],
       }),
@@ -17,7 +17,7 @@ describe("resolveLaunchStartMode", () => {
   test("prefers reuse when reusable sessions exist", () => {
     expect(
       resolveLaunchStartMode({
-        taskWorkflow: builtinTaskWorkflow,
+        taskWorkflow: specPlanBuildWorkflow,
         launchActionId: "build_after_human_request_changes",
         existingSessionOptions: [
           {
@@ -38,7 +38,7 @@ describe("resolveLaunchStartMode", () => {
   test("falls back to the first allowed non-reuse mode when no reusable sessions exist", () => {
     expect(
       resolveLaunchStartMode({
-        taskWorkflow: builtinTaskWorkflow,
+        taskWorkflow: specPlanBuildWorkflow,
         launchActionId: "build_implementation_start",
         existingSessionOptions: [],
       }),
@@ -48,7 +48,7 @@ describe("resolveLaunchStartMode", () => {
   test("keeps reuse as the default when the launch action allows reuse and fork", () => {
     expect(
       resolveLaunchStartMode({
-        taskWorkflow: builtinTaskWorkflow,
+        taskWorkflow: specPlanBuildWorkflow,
         launchActionId: "build_pull_request_generation",
         existingSessionOptions: [],
       }),
@@ -58,7 +58,7 @@ describe("resolveLaunchStartMode", () => {
   test("keeps reuse as the manual QA default when a QA session exists", () => {
     expect(
       resolveLaunchStartMode({
-        taskWorkflow: builtinTaskWorkflow,
+        taskWorkflow: specPlanBuildWorkflow,
         launchActionId: "qa_review",
         existingSessionOptions: [
           {

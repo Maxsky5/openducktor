@@ -179,24 +179,24 @@ test("0002 moves prompt overrides to their owners and Autopilot rules to the bui
     ),
   );
 
-  const rpi = "openducktor-research-plan-implement";
+  const specPlanBuild = "openducktor-spec-plan-build";
   expect(result.globalOverrides).toEqual([
     ["role", "build", "instructions", "global build", 1, 1],
-    ["workflow", rpi, "messages.qa_review", "global kickoff", 3, null],
-    ["workflow", rpi, "workflow.rules", "global guards", 2, 0],
+    ["workflow", specPlanBuild, "messages.qa_review", "global kickoff", 3, null],
+    ["workflow", specPlanBuild, "workflow.rules", "global guards", 2, 0],
   ]);
   expect(result.workspaceOverrides).toEqual([
     ["ws", "role", "qa", "instructions", "workspace qa", 1, 1],
-    ["ws", "workflow", rpi, "messages.build_git_conflict", "workspace message", 4, 0],
+    ["ws", "workflow", specPlanBuild, "messages.build_git_conflict", "workspace message", 4, 0],
   ]);
   expect(result.rules).toEqual([
     ["custom", "taskProgressedToSpecReady"],
-    [rpi, "taskProgressedToSpecReady"],
+    [specPlanBuild, "taskProgressedToSpecReady"],
   ]);
   expect(result.actions).toEqual([
     ["custom", "taskProgressedToSpecReady", 0, "startPlanner"],
-    [rpi, "taskProgressedToSpecReady", 0, "startPlanner"],
-    [rpi, "taskProgressedToSpecReady", 1, "startBuilder"],
+    [specPlanBuild, "taskProgressedToSpecReady", 0, "startPlanner"],
+    [specPlanBuild, "taskProgressedToSpecReady", 1, "startBuilder"],
   ]);
   expect(result.foreignKeyViolations).toEqual([]);
 });

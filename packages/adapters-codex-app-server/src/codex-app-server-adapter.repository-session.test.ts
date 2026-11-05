@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import {
   codexSessionRuntimeRef,
   codexThreadStartResultFixture,
@@ -843,7 +843,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     ).toMatchObject({
       config: {
         "mcp_servers.openducktor.enabled": true,
-        "mcp_servers.openducktor.enabled_tools": [...builtinTaskWorkflow.role("build").tools],
+        "mcp_servers.openducktor.enabled_tools": [...specPlanBuildWorkflow.role("build").tools],
       },
     });
   });

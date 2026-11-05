@@ -30,7 +30,7 @@ const closedTask = (): TaskCard => ({
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
-  workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
   workflowSteps: [],
   availableActions: [],
   labels: [],

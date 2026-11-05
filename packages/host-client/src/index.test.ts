@@ -30,7 +30,7 @@ type ClientResult<Method extends keyof HostClientType> = Awaited<
 type HostWirePayload = ClientResult<keyof HostClientType> | JSONType | undefined;
 
 const makeTaskCardPayload = () => ({
-  workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
   workflowSteps: [],
   id: "task-1",
   title: "Task",
@@ -248,7 +248,7 @@ describe("HostClient", () => {
   test("reads held Autopilot outcomes and claims one first-message recovery", async () => {
     const outcome: ClientResult<"autopilotStateRead">["outcomes"][number] = {
       outcomeId: "outcome-1",
-      workflowId: "openducktor-research-plan-implement",
+      workflowId: "openducktor-spec-plan-build",
       workspaceId: "alpha",
       repoPath: "/repo",
       task: { id: "task-1", title: "Task" },

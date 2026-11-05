@@ -3,7 +3,7 @@ import { type NotificationOccurrence, type NotificationSettings } from "@openduc
 import { createNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
 import { createBrowserNotificationBridge } from "./browser-notification-bridge";
 import { createBrowserNotificationCoordinator } from "./browser-notification-coordinator";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 type CoordinatorMessage =
   | {
@@ -22,7 +22,7 @@ type CoordinatorMessage =
 const EXTERNAL_DELIVERY_LOCK_NAME = "openducktor:notifications:external-delivery";
 const TAB_LOCK_NAME_PREFIX = "openducktor:notifications:tab:";
 const APP_FOCUS_LOCK_NAME = "openducktor:notifications:app-focus";
-const settings = createBuiltinNotificationSettings();
+const settings = createSpecPlanBuildNotificationSettings();
 
 type LockRequest = {
   name: string;
@@ -324,7 +324,7 @@ const observeSettlement = async (promise: Promise<unknown>): Promise<string> =>
 const occurrence: NotificationOccurrence = {
   occurrenceId: "workflow.closed:/repo:task-1:event-1",
   kind: "workflow.closed",
-  workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
   copy: { title: "Task closed", body: "Task moved to Closed." },
   repoPath: "/repo",
   repositoryLabel: "Repo",
@@ -379,7 +379,7 @@ describe("browser notification coordinator", () => {
     const second = makeHost("https://second.test/remote", false);
     try {
       await waitFor(() => first.isExternalDeliveryOwner() && second.isExternalDeliveryOwner());
-      const settings = createBuiltinNotificationSettings();
+      const settings = createSpecPlanBuildNotificationSettings();
       await first.publishOccurrence(occurrence, settings);
       const other = { ...occurrence, repositoryLabel: "Other host" };
       expect((await second.publishOccurrence(other, settings)).occurrence.repositoryLabel).toBe(
@@ -426,7 +426,7 @@ describe("browser notification coordinator", () => {
           canGuaranteeSilent: true,
           focusWindow: () => {},
         });
-        const config = createBuiltinNotificationSettings();
+        const config = createSpecPlanBuildNotificationSettings();
         config.volumePercent = rule === "sound" ? 30 : 0;
         config.kinds["workflow.closed"] = {
           enabled: true,
@@ -643,13 +643,13 @@ describe("browser notification coordinator", () => {
       tabId: "publisher-b",
     });
     await waitFor(() => owner.isExternalDeliveryOwner());
-    const enabledSettings = createBuiltinNotificationSettings();
+    const enabledSettings = createSpecPlanBuildNotificationSettings();
     enabledSettings.kinds["workflow.closed"] = {
       enabled: true,
       target: "in_app",
       sound: "inherit",
     };
-    const disabledSettings = createBuiltinNotificationSettings();
+    const disabledSettings = createSpecPlanBuildNotificationSettings();
     disabledSettings.kinds["workflow.closed"] = {
       enabled: false,
       target: "in_app",

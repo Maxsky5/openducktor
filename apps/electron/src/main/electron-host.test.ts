@@ -260,27 +260,27 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
     alwaysStartQaReviewsFresh: false,
     rules: [
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToSpecReady",
         actionIds: [],
       },
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToReadyForDev",
         actionIds: [],
       },
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToAiReview",
         actionIds: [],
       },
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskRejectedByQa",
         actionIds: [],
       },
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToHumanReview",
         actionIds: [],
       },

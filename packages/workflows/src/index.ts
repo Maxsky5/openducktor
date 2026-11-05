@@ -1,15 +1,17 @@
 export {
   type AgentPromptGitContext,
+  BUILTIN_ROLES,
+  BUILTIN_TASK_WORKFLOWS,
   type BuildAgentKickoffPromptInput,
   buildGitConflictAssistancePrompt,
   buildReadOnlyPermissionRejectionMessage,
   gitConflictPromptContext,
+  resolveCodexRolePolicy,
   resolvePullRequestTarget,
-} from "./builtin/agent-prompts";
-export { BUILTIN_ROLES } from "./builtin/roles";
-export { resolveCodexRolePolicy } from "./builtin/role-policy";
-export { BUILTIN_BOARD_LAYOUT } from "./builtin/board";
-export { BUILTIN_BOARD, builtinTaskWorkflow } from "./builtin/task-workflow";
+  SPEC_PLAN_BUILD_BOARD,
+  SPEC_PLAN_BUILD_BOARD_LAYOUT,
+  specPlanBuildWorkflow,
+} from "./builtin";
 export {
   createWorkflow,
   WorkflowEvaluationError,

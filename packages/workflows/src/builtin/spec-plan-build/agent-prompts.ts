@@ -10,10 +10,11 @@ import {
   type BuiltAgentPrompt,
   type MergePromptOverridesInput,
   type OwnedPromptTemplate,
-} from "../task-workflow/task-prompts";
+} from "../../task-workflow/task-prompts";
 import { GIT_CONFLICT_INSTRUCTIONS } from "./prompt-templates";
-import { builtinTaskWorkflow } from "./task-workflow";
-import type { BuiltinWorkflowPromptId, BuiltinRoleId } from "./ids";
+import { specPlanBuildWorkflow } from "./workflow";
+import type { BuiltinRoleId } from "../roles/ids";
+import type { SpecPlanBuildPromptId } from "./ids";
 
 export type {
   AgentPromptGitContext,
@@ -21,7 +22,7 @@ export type {
   BuiltAgentPrompt,
   MergePromptOverridesInput,
   ResolvedAgentPromptTemplate,
-} from "../task-workflow/task-prompts";
+} from "../../task-workflow/task-prompts";
 
 export type AgentPromptTaskContext = {
   taskId: string;
@@ -37,11 +38,11 @@ export type BuildAgentPromptInput = {
   overrides?: RepoPromptOverrides;
 };
 
-/** The prompt of the built-in workflow that a launch sends into a running session. */
+/** The prompt of the Spec, Plan, Build workflow that a launch sends into a running session. */
 export type AgentMessageTemplateId = "messages.build_git_conflict";
-/** The prompts of the built-in workflow that start a session. */
+/** The prompts of the Spec, Plan, Build workflow that start a session. */
 export type AgentKickoffTemplateId = Exclude<
-  Extract<BuiltinWorkflowPromptId, `messages.${string}`>,
+  Extract<SpecPlanBuildPromptId, `messages.${string}`>,
   AgentMessageTemplateId
 >;
 
@@ -86,11 +87,11 @@ export type BuildReadOnlyPermissionRejectionMessageInput = {
   overrides?: RepoPromptOverrides;
 };
 
-const prompts = builtinTaskWorkflow.prompts;
+const prompts = specPlanBuildWorkflow.prompts;
 
 /** The launch action of each kickoff and message template. Built-in templates have one each. */
 const launchActionByTemplate = new Map(
-  builtinTaskWorkflow.definition.steps.flatMap((step) =>
+  specPlanBuildWorkflow.definition.steps.flatMap((step) =>
     step.kind === "agent"
       ? step.launchActions.map((launch) => [launch.template.id, launch.id] as const)
       : [],
@@ -152,8 +153,8 @@ export const buildGitConflictAssistancePrompt = (input: {
 export const resolvePullRequestTarget = (targetBranch: GitTargetBranch | undefined): string =>
   requirePullRequestTarget("messages.build_pull_request", targetBranch);
 
-/** The prompts of the built-in workflow and of the roles that it binds. */
-export const listBuiltinAgentPromptTemplates = (): OwnedPromptTemplate[] =>
+/** The prompts of the Spec, Plan, Build workflow and of the roles that it binds. */
+export const listSpecPlanBuildPromptTemplates = (): OwnedPromptTemplate[] =>
   prompts.templates.map((definition) => ({ ...definition }));
 
 export const buildAgentSystemPromptBundle = (input: BuildAgentPromptInput): BuiltAgentPrompt =>

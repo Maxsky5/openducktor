@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -45,7 +45,7 @@ const event = (taskId: string, repoPath = "/repo"): ExternalTaskSyncEvent => ({
   removedTaskIds: [],
   statusChanges: [],
   taskSnapshots: [
-    { workflow: builtinTaskWorkflow.reference, id: taskId, title: taskId, status: "open" },
+    { workflow: specPlanBuildWorkflow.reference, id: taskId, title: taskId, status: "open" },
   ],
   emittedAt: "2026-04-10T13:10:00.000Z",
 });

@@ -14,8 +14,8 @@ import {
 } from "@/state/notifications/notification-context";
 import { SettingsNotificationsSection } from "./settings-notifications-section";
 import { createCuelumeNotificationSoundAdapter } from "@/features/notifications/notification-delivery";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 afterEach(cleanup);
 
@@ -48,7 +48,7 @@ const createNotificationContext = (
 });
 
 function NotificationsHarness({ context }: { context: NotificationContextValue }): ReactElement {
-  const [settings, setSettings] = useState(createBuiltinNotificationSettings);
+  const [settings, setSettings] = useState(createSpecPlanBuildNotificationSettings);
   return (
     <QueryProvider>
       <NotificationContext.Provider value={context}>
@@ -82,7 +82,7 @@ describe("SettingsNotificationsSection", () => {
     ["scan", "Select"],
     ["arrival", "Navigate"],
   ] as const)("shows saved %s as %s without rewriting it", async (cue, label) => {
-    const notifications = createBuiltinNotificationSettings();
+    const notifications = createSpecPlanBuildNotificationSettings();
     notifications.globalCue = cue;
     notifications.kinds["agent.permission_requested"].sound = cue;
     const onUpdate = mock(
@@ -325,7 +325,7 @@ describe("SettingsNotificationsSection", () => {
     expect(screen.getAllByRole("switch")).toHaveLength(
       AGENT_NOTIFICATION_KIND_VALUES.length +
         TASK_NOTIFICATION_KIND_VALUES.length +
-        Object.keys(builtinTaskWorkflow.notificationDefaults()).length,
+        Object.keys(specPlanBuildWorkflow.notificationDefaults()).length,
     );
     const delivery = screen.getByRole("radiogroup", {
       name: "Delivery for Permission request",

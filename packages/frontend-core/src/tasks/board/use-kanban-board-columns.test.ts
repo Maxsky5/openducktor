@@ -1,4 +1,4 @@
-import { BUILTIN_BOARD } from "@openducktor/workflows";
+import { SPEC_PLAN_BUILD_BOARD } from "@openducktor/workflows";
 type TaskStatus = string;
 import { describe, expect, test } from "bun:test";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
@@ -20,7 +20,7 @@ describe("buildKanbanBoardColumns", () => {
     const { columns } = buildKanbanBoardColumns(
       [task("TASK-1", "closed"), task("TASK-2", "open"), task("TASK-3", "blocked")],
       new Map(),
-      BUILTIN_BOARD,
+      SPEC_PLAN_BUILD_BOARD,
     );
 
     expect(columns.map((column) => column.title)).toEqual([
@@ -57,7 +57,7 @@ describe("buildKanbanBoardColumns", () => {
         ["TASK-ACTIVE", [session("running")]],
         ["TASK-WAITING", [session("running"), session("waiting_input")]],
       ]),
-      BUILTIN_BOARD,
+      SPEC_PLAN_BUILD_BOARD,
     );
 
     const inProgress = columns.find((column) => column.id === "in_progress");

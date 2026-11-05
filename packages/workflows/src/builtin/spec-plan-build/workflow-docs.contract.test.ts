@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadWorkflowContractFixture } from "../../test-support/workflow-contract-fixture";
+import { loadWorkflowContractFixture } from "../../../test-support/workflow-contract-fixture";
 
 describe("workflow docs contract", () => {
   test("transition matrix references canonical workflow tools and statuses", () => {
     const fixture = loadWorkflowContractFixture();
     const transitionDocPath = join(
       import.meta.dir,
-      "../../../../docs/task-workflow-transition-matrix.md",
+      "../../../../../docs/task-workflow-transition-matrix.md",
     );
     const transitionDoc = readFileSync(transitionDocPath, "utf8");
 
@@ -38,7 +38,10 @@ describe("workflow docs contract", () => {
   });
 
   test("status model names the stored sourceTool values of new workflow rows", () => {
-    const statusModelPath = join(import.meta.dir, "../../../../docs/task-workflow-status-model.md");
+    const statusModelPath = join(
+      import.meta.dir,
+      "../../../../../docs/task-workflow-status-model.md",
+    );
     const statusModelDoc = readFileSync(statusModelPath, "utf8");
 
     expect(statusModelDoc).toContain(

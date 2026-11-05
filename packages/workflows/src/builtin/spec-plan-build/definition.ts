@@ -31,71 +31,71 @@ import {
   specPresent,
 } from "./definition-conditions";
 import {
-  BUILTIN_STATE_IDS,
-  type BuiltinActionId,
-  type BuiltinAutomationId,
-  type BuiltinLaunchActionId,
-  type BuiltinNotificationKind,
-  type BuiltinRoleId,
-  type BuiltinSignalId,
-  type BuiltinStateId,
+  SPEC_PLAN_BUILD_STATE_IDS,
+  type SpecPlanBuildActionId,
+  type SpecPlanBuildAutomationId,
+  type SpecPlanBuildLaunchActionId,
+  type SpecPlanBuildNotificationKind,
+  type SpecPlanBuildSignalId,
+  type SpecPlanBuildStateId,
 } from "./ids";
+import type { BuiltinRoleId } from "../roles/ids";
 
-type BuiltinOutcome = {
+type SpecPlanBuildOutcome = {
   when: WorkflowCondition;
-  to: BuiltinStateId | null;
-  signal?: BuiltinSignalId;
+  to: SpecPlanBuildStateId | null;
+  signal?: SpecPlanBuildSignalId;
   sourceRole?: BuiltinRoleId;
 };
-type BuiltinEvent = {
-  from: BuiltinStateId[];
+type SpecPlanBuildEvent = {
+  from: SpecPlanBuildStateId[];
   guards: WorkflowEventGuard[];
-  outcomes: BuiltinOutcome[];
+  outcomes: SpecPlanBuildOutcome[];
   effect?: WorkflowEventEffect;
   agent?: WorkflowAgentEvent & { roles: BuiltinRoleId[] };
 };
 
-export type BuiltinArtifactId = "spec" | "plan" | "qaReport";
-export type BuiltinRole = WorkflowRoleDefinition & {
+export type SpecPlanBuildArtifactId = "spec" | "plan" | "qaReport";
+export type SpecPlanBuildRole = WorkflowRoleDefinition & {
   id: BuiltinRoleId;
-  writes: BuiltinArtifactId[];
+  writes: SpecPlanBuildArtifactId[];
 };
-export type BuiltinLaunchAction = WorkflowLaunchActionDefinition & {
-  id: BuiltinLaunchActionId;
+export type SpecPlanBuildLaunchAction = WorkflowLaunchActionDefinition & {
+  id: SpecPlanBuildLaunchActionId;
   template:
     | { kind: "kickoff"; id: AgentKickoffTemplateId }
     | { kind: "message"; id: AgentMessageTemplateId };
 };
-export type BuiltinState = WorkflowStateDefinition & {
-  id: BuiltinStateId;
+export type SpecPlanBuildState = WorkflowStateDefinition & {
+  id: SpecPlanBuildStateId;
   notification?: WorkflowStateDefinition["notification"] & {
-    kind: BuiltinNotificationKind;
+    kind: SpecPlanBuildNotificationKind;
     role?: BuiltinRoleId;
   };
   studioRole?: BuiltinRoleId;
 };
-export type BuiltinSignal = Omit<WorkflowSignalDefinition, "id" | "automations"> & {
-  id: BuiltinSignalId;
-  automations: BuiltinAutomationId[];
+export type SpecPlanBuildSignal = Omit<WorkflowSignalDefinition, "id" | "automations"> & {
+  id: SpecPlanBuildSignalId;
+  automations: SpecPlanBuildAutomationId[];
 };
-export type BuiltinAutomation = WorkflowAutomationDefinition & {
-  id: BuiltinAutomationId;
-  launchActionId: BuiltinLaunchActionId;
+export type SpecPlanBuildAutomation = WorkflowAutomationDefinition & {
+  id: SpecPlanBuildAutomationId;
+  launchActionId: SpecPlanBuildLaunchActionId;
 };
-type BuiltinAction = WorkflowActionDefinition & {
-  id: BuiltinActionId;
-  eventId?: BuiltinTaskEventId;
-  launchActionIds?: BuiltinLaunchActionId[];
+type SpecPlanBuildAction = WorkflowActionDefinition & {
+  id: SpecPlanBuildActionId;
+  eventId?: SpecPlanBuildTaskEventId;
+  launchActionIds?: SpecPlanBuildLaunchActionId[];
 };
 
-const nonClosedStates = BUILTIN_STATE_IDS.filter((status) => status !== "closed");
-const reviewOrClosed: BuiltinStateId[] = [...humanReview.stateIn, "closed"];
+const nonClosedStates = SPEC_PLAN_BUILD_STATE_IDS.filter((status) => status !== "closed");
+const reviewOrClosed: SpecPlanBuildStateId[] = [...humanReview.stateIn, "closed"];
 
-const moveTo = (to: BuiltinStateId, signal?: Omit<BuiltinOutcome, "when" | "to">) => [
+const moveTo = (to: SpecPlanBuildStateId, signal?: Omit<SpecPlanBuildOutcome, "when" | "to">) => [
   { when: true, to, ...signal },
 ];
 
-const builtinEvents = {
+const specPlanBuildEvents = {
   "set-status:open": {
     from: ["open"],
     guards: [],
@@ -287,11 +287,11 @@ const builtinEvents = {
     outcomes: [{ when: true, to: null }],
     effect: "pull_request.manage",
   },
-} satisfies Record<string, BuiltinEvent>;
+} satisfies Record<string, SpecPlanBuildEvent>;
 
-export type BuiltinTaskEventId = keyof typeof builtinEvents;
+export type SpecPlanBuildTaskEventId = keyof typeof specPlanBuildEvents;
 
-const builtinArtifacts = [
+const specPlanBuildArtifacts = [
   {
     id: "spec",
     label: "Specification",
@@ -319,37 +319,37 @@ const builtinArtifacts = [
     ],
   },
 ] satisfies (WorkflowArtifactDefinition & {
-  id: BuiltinArtifactId;
-  saveEventId?: BuiltinTaskEventId;
-  verdicts?: (WorkflowArtifactVerdict & { eventId: BuiltinTaskEventId })[];
+  id: SpecPlanBuildArtifactId;
+  saveEventId?: SpecPlanBuildTaskEventId;
+  verdicts?: (WorkflowArtifactVerdict & { eventId: SpecPlanBuildTaskEventId })[];
 })[];
 
-const builtinRoles = [
+const specPlanBuildRoles = [
   { id: "spec", writes: ["spec"] },
   { id: "planner", writes: ["plan"] },
   // Builder may revise the spec and plan.
   { id: "build", writes: ["spec", "plan"] },
   { id: "qa", writes: ["qaReport"] },
-] satisfies BuiltinRole[];
+] satisfies SpecPlanBuildRole[];
 
-type BuiltinStateNotification = NonNullable<BuiltinState["notification"]>;
+type SpecPlanBuildStateNotification = NonNullable<SpecPlanBuildState["notification"]>;
 
 /** A notification is on, shows in the app and the OS, and plays the global cue by default. */
 const notification = (
-  status: Exclude<BuiltinStateId, "open">,
+  status: Exclude<SpecPlanBuildStateId, "open">,
   {
     defaultSetting,
     ...copy
-  }: Omit<BuiltinStateNotification, "kind" | "defaultSetting"> & {
-    defaultSetting?: Partial<BuiltinStateNotification["defaultSetting"]>;
+  }: Omit<SpecPlanBuildStateNotification, "kind" | "defaultSetting"> & {
+    defaultSetting?: Partial<SpecPlanBuildStateNotification["defaultSetting"]>;
   },
-): BuiltinStateNotification => ({
+): SpecPlanBuildStateNotification => ({
   kind: `workflow.${status}`,
   defaultSetting: { enabled: true, target: "both", sound: "inherit", ...defaultSetting },
   ...copy,
 });
 
-const builtinStates = [
+const specPlanBuildStates = [
   { id: "open", label: "Backlog", title: "Backlog", tone: "neutral" },
   {
     id: "spec_ready",
@@ -483,13 +483,13 @@ const builtinStates = [
     tone: "success",
     historyRoles: ["build"],
   },
-] satisfies BuiltinState[];
+] satisfies SpecPlanBuildState[];
 
-const fresh = (): Pick<BuiltinLaunchAction, "startModes" | "defaultStartMode"> => ({
+const fresh = (): Pick<SpecPlanBuildLaunchAction, "startModes" | "defaultStartMode"> => ({
   startModes: ["fresh"],
   defaultStartMode: "fresh",
 });
-const freshOrReuse = (): Pick<BuiltinLaunchAction, "startModes" | "defaultStartMode"> => ({
+const freshOrReuse = (): Pick<SpecPlanBuildLaunchAction, "startModes" | "defaultStartMode"> => ({
   startModes: ["fresh", "reuse"],
   defaultStartMode: "reuse",
 });
@@ -498,7 +498,7 @@ const implementationComplete = {
   stateIn: ["ai_review", "human_review", "closed"],
 } satisfies WorkflowCondition;
 
-const builtinSteps = [
+const specPlanBuildSteps = [
   {
     id: "specification",
     label: "Spec",
@@ -644,12 +644,12 @@ const builtinSteps = [
 ] satisfies (WorkflowDefinition["steps"][number] & {
   kind: "agent";
   roleId: BuiltinRoleId;
-  launchActions: BuiltinLaunchAction[];
-  startEventId?: BuiltinTaskEventId;
+  launchActions: SpecPlanBuildLaunchAction[];
+  startEventId?: SpecPlanBuildTaskEventId;
 })[];
 
 /** Action labels are the default UI labels. Label variants and the Studio label adapt them. */
-const builtinActions = [
+const specPlanBuildActions = [
   { id: "view_details", kind: "view", label: "View details", availableWhen: true, surfaces: [] },
   {
     id: "set_spec",
@@ -784,9 +784,9 @@ const builtinActions = [
     surfaces: ["details", "palette"],
     target: "worktree_cleanup",
   },
-] satisfies BuiltinAction[];
+] satisfies SpecPlanBuildAction[];
 
-const builtinSignals = [
+const specPlanBuildSignals = [
   {
     id: "taskProgressedToSpecReady",
     label: "When a task progresses to Spec Ready",
@@ -821,9 +821,9 @@ const builtinSignals = [
       "Runs when a build completion or a QA approval moves a task to Human Review. A direct merge does not count.",
     automations: ["startGeneratePullRequest"],
   },
-] satisfies BuiltinSignal[];
+] satisfies SpecPlanBuildSignal[];
 
-const builtinAutomations = [
+const specPlanBuildAutomations = [
   {
     id: "startPlanner",
     label: "Start Planner",
@@ -856,11 +856,11 @@ const builtinAutomations = [
     launchActionId: "build_pull_request_generation",
     startMode: "fork",
   },
-] satisfies BuiltinAutomation[];
+] satisfies SpecPlanBuildAutomation[];
 
 const automationGuidance =
   "Define enough detail for Planner/Builder automation to execute with minimal ambiguity.";
-const builtinIssueTypes = [
+const specPlanBuildIssueTypes = [
   {
     id: "feature",
     label: "Feature",
@@ -884,7 +884,7 @@ const builtinIssueTypes = [
   },
 ] satisfies WorkflowIssueTypeDefinition[];
 
-const secondaryActions: BuiltinActionId[] = [
+const secondaryActions: SpecPlanBuildActionId[] = [
   "open_spec",
   "open_planner",
   "open_builder",
@@ -897,24 +897,24 @@ const secondaryActions: BuiltinActionId[] = [
   "remove_worktree",
 ];
 
-/** The source of the built-in definition. */
-export const BUILTIN_DEFINITION = {
+/** The source of the Spec, Plan, Build definition. */
+export const SPEC_PLAN_BUILD_DEFINITION = {
   schemaVersion: 1,
-  id: "openducktor-research-plan-implement",
+  id: "openducktor-spec-plan-build",
   revision: 2,
-  label: "Research, Plan, Implement",
+  label: "Spec, Plan, Build",
   initialState: "open",
   facts: [],
-  issueTypes: builtinIssueTypes,
+  issueTypes: specPlanBuildIssueTypes,
   defaultIssueType: "task",
-  roles: builtinRoles,
-  artifacts: builtinArtifacts,
-  states: builtinStates,
-  steps: builtinSteps,
-  actions: builtinActions,
-  events: Object.entries(builtinEvents).map(([id, event]) => ({ id, ...event })),
-  signals: builtinSignals,
-  automations: builtinAutomations,
+  roles: specPlanBuildRoles,
+  artifacts: specPlanBuildArtifacts,
+  states: specPlanBuildStates,
+  steps: specPlanBuildSteps,
+  actions: specPlanBuildActions,
+  events: Object.entries(specPlanBuildEvents).map(([id, event]) => ({ id, ...event })),
+  signals: specPlanBuildSignals,
+  automations: specPlanBuildAutomations,
   actionOrder: [
     {
       when: requiredPlanning,

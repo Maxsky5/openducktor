@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { createAuthorizedRemoteTestClient as createRemoteHostClient } from "../../../host-client/src/remote/test-support/authorization";
 import {
   createFakeHostChannel,
@@ -142,7 +142,7 @@ test("restores task delivery after disconnect during acknowledgement and after i
       repoPath: "/repo",
       taskId: "task",
       taskSnapshot: {
-        workflow: builtinTaskWorkflow.reference,
+        workflow: specPlanBuildWorkflow.reference,
         id: "task",
         title: "After foreground",
         status: "open",

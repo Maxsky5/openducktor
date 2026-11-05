@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { describe, expect, mock, test } from "bun:test";
@@ -274,7 +274,7 @@ describe("session-start notifications", () => {
               { repoPath: "/tmp/repo", repositoryLabel: "OpenDucktor" },
               {
                 ...input,
-                roleLabel: builtinTaskWorkflow.roles.find(({ id }) => id === input.role)!.label,
+                roleLabel: specPlanBuildWorkflow.roles.find(({ id }) => id === input.role)!.label,
               },
             ),
           );

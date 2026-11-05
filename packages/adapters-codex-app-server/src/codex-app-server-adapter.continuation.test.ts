@@ -5,7 +5,7 @@ import {
   type ContinueInterruptedAgentTurnInput,
   workflowAgentSessionScope,
 } from "@openducktor/core";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import {
   codexSessionRuntimeRef,
   codexThreadFixture,
@@ -191,7 +191,7 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
     });
     expect(methodsOf(calls)).toEqual(["model/list", "thread/read", "thread/resume", "turn/start"]);
     expect(calls.find((call) => call.method === "thread/resume")?.params).toMatchObject({
-      config: expectedThreadConfig("/repo", builtinTaskWorkflow.role("build").tools),
+      config: expectedThreadConfig("/repo", specPlanBuildWorkflow.role("build").tools),
       cwd: "/repo",
     });
     const threadRead = calls.find((call) => call.method === "thread/read");

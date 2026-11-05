@@ -4,7 +4,7 @@ import {
 } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import {
-  BUILTIN_BOARD,
+  SPEC_PLAN_BUILD_BOARD,
   mapToKanbanColumns,
   type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
@@ -14,7 +14,7 @@ import { buildBoardColumns, columnChoiceLabel, resolveSelectedColumnId } from ".
 const task = (id: string, status: TaskCard["status"]): TaskCard =>
   createTaskCardFixture({ id, title: id, status });
 
-const columnsOf = (tasks: TaskCard[]) => mapToKanbanColumns(tasks, BUILTIN_BOARD);
+const columnsOf = (tasks: TaskCard[]) => mapToKanbanColumns(tasks, SPEC_PLAN_BUILD_BOARD);
 
 describe("buildBoardColumns", () => {
   test("keeps the desktop columns and titles in order", () => {

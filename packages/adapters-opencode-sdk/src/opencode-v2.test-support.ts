@@ -11,11 +11,11 @@ import { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
 import { projectMessages } from "./opencode-message-projection";
 import type { OpenCodeRuntimeConnection } from "./types";
 import type { WorkflowRolePolicyResolver } from "@openducktor/core";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 /** The role policy of the built-in task workflow. */
 export const testWorkflowRolePolicy: WorkflowRolePolicyResolver = ({ role }) => {
-  const workflowRole = builtinTaskWorkflow.role(role);
+  const workflowRole = specPlanBuildWorkflow.role(role);
   return { tools: workflowRole.tools, readOnly: workflowRole.workspaceAccess === "read" };
 };
 

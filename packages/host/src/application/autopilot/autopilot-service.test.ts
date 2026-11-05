@@ -1,5 +1,5 @@
 import { createTaskSyncService } from "../tasks/sync/task-sync-service";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, describe, expect, test } from "bun:test";
 import { noMergeDetection, syncWorkspace } from "../tasks/sync/task-sync-service.test-support";
@@ -13,7 +13,7 @@ import {
   type NotificationActionOccurrence,
   type WorkflowLaunchResult,
 } from "@openducktor/contracts";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 import { Deferred, Effect, Fiber, Result } from "effect";
 import { withConfigCommit } from "../../adapters/config/config-commit";
 import {
@@ -53,7 +53,7 @@ const configFor = (
   globalConfigSchema.parse({
     version: 4,
     autopilot: {
-      rules: rules.map((rule) => ({ workflowId: "openducktor-research-plan-implement", ...rule })),
+      rules: rules.map((rule) => ({ workflowId: "openducktor-spec-plan-build", ...rule })),
     },
     workspaces: Object.fromEntries(
       ["alpha", "beta"].map((id) => {
@@ -89,7 +89,7 @@ const launchResult = (
   workspaceId: request.workspaceId,
   repoPath: request.repoPath,
   taskId: request.taskId,
-  role: builtinTaskWorkflow.automation(request.policy.actionId).role,
+  role: specPlanBuildWorkflow.automation(request.policy.actionId).role,
   status: "completed",
   ...patch,
 });
@@ -145,10 +145,9 @@ const createAutopilotHarness = async ({
       store(input.repoPath)
         .transitionTask({
           ...input,
-          decide: () =>
-            Result.succeed({ status, workflowId: "openducktor-research-plan-implement" }),
+          decide: () => Result.succeed({ status, workflowId: "openducktor-spec-plan-build" }),
         })
-        .pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task)));
+        .pipe(Effect.map((task) => enrichTask(specPlanBuildWorkflow, task)));
   const decided =
     (eventId: string, prepare: (task: TaskRecord) => TaskRecord = (task) => task) =>
     (input: { workspaceId: string; repoPath: string; taskId: string }) =>
@@ -156,15 +155,15 @@ const createAutopilotHarness = async ({
         .transitionTask({
           ...input,
           decide: (current) => {
-            const decision = builtinTaskWorkflow.decide(eventId, prepare(current));
+            const decision = specPlanBuildWorkflow.decide(eventId, prepare(current));
             return Result.succeed({
               status: decision.kind === "transition" ? decision.to : current.status,
-              workflowId: "openducktor-research-plan-implement",
+              workflowId: "openducktor-spec-plan-build",
               ...(decision.kind === "transition" && { cause: decision.cause }),
             });
           },
         })
-        .pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task)));
+        .pipe(Effect.map((task) => enrichTask(specPlanBuildWorkflow, task)));
   const withApprovedQa = (task: TaskRecord): TaskRecord =>
     buildCompletedStatus === "human_review"
       ? {
@@ -185,7 +184,7 @@ const createAutopilotHarness = async ({
     listTaskIds: (input) =>
       taskIdsGate.pipe(Effect.andThen(store(input.repoPath).listTaskIds(input))),
     workflowArtifactSave: (input) => {
-      const eventId = builtinTaskWorkflow.artifactSubmitEvent(input.code, input.verdict);
+      const eventId = specPlanBuildWorkflow.artifactSubmitEvent(input.code, input.verdict);
       if (eventId === undefined) throw new Error(`No test event for ${input.code}.`);
       return decided(eventId)(input).pipe(
         Effect.as({
@@ -327,7 +326,7 @@ const createAutopilotHarness = async ({
             notifications.push(occurrence);
             return Effect.succeed({
               occurrence,
-              settings: createBuiltinNotificationSettings(),
+              settings: createSpecPlanBuildNotificationSettings(),
               preferenceRevision: 0,
             });
           }),
@@ -359,8 +358,7 @@ const createAutopilotHarness = async ({
           workspaceId: repoPath.split("/").at(-1)!,
           repoPath,
           taskId: task.id,
-          decide: () =>
-            Result.succeed({ status, workflowId: "openducktor-research-plan-implement" }),
+          decide: () => Result.succeed({ status, workflowId: "openducktor-spec-plan-build" }),
         }),
       );
     return task.id;

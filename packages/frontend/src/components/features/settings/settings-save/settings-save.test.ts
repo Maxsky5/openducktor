@@ -12,8 +12,8 @@ import { preparePromptOverridesForSave } from "./prompt-overrides";
 import { prepareRepoConfigForSave } from "./repo-config";
 import { prepareSettingsSnapshotForSave } from "./settings-snapshot";
 import {
-  BUILTIN_PROMPT_OVERRIDE_KEYS,
-  builtinWorkflowPromptKey,
+  SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS,
+  specPlanBuildPromptKey,
 } from "@openducktor/workflows/test-support";
 
 const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): SettingsRepoConfig => ({
@@ -49,12 +49,12 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   },
   worktreeCopyPaths: [" .env ", " "],
   promptOverrides: {
-    [builtinWorkflowPromptKey("messages.spec_start")]: {
+    [specPlanBuildPromptKey("messages.spec_start")]: {
       template: " custom kickoff ",
       baseVersion: 0,
       enabled: true,
     },
-    [builtinWorkflowPromptKey("messages.qa_review")]: {
+    [specPlanBuildPromptKey("messages.qa_review")]: {
       template: "   ",
       baseVersion: 2,
       enabled: true,
@@ -107,12 +107,12 @@ describe("settings save transforms", () => {
 
   test("prepares prompt overrides for save", () => {
     const saveReady = preparePromptOverridesForSave({
-      [builtinWorkflowPromptKey("messages.spec_start")]: {
+      [specPlanBuildPromptKey("messages.spec_start")]: {
         template: "  spec  ",
         baseVersion: 0,
         enabled: undefined,
       },
-      [builtinWorkflowPromptKey("messages.qa_review")]: {
+      [specPlanBuildPromptKey("messages.qa_review")]: {
         template: "    ",
         baseVersion: 2,
         enabled: true,
@@ -120,12 +120,12 @@ describe("settings save transforms", () => {
     });
 
     expect(saveReady).toEqual({
-      [builtinWorkflowPromptKey("messages.spec_start")]: {
+      [specPlanBuildPromptKey("messages.spec_start")]: {
         template: "spec",
         baseVersion: 1,
         enabled: true,
       },
-      [builtinWorkflowPromptKey("messages.qa_review")]: {
+      [specPlanBuildPromptKey("messages.qa_review")]: {
         template: "",
         baseVersion: 2,
         enabled: true,
@@ -135,12 +135,12 @@ describe("settings save transforms", () => {
 
   test("preserves shared prompt override entries when preparing save payloads", () => {
     const saveReady = preparePromptOverridesForSave({
-      [builtinWorkflowPromptKey("workflow.rules")]: {
+      [specPlanBuildPromptKey("workflow.rules")]: {
         template: "  guards override  ",
         baseVersion: 2,
         enabled: true,
       },
-      [builtinWorkflowPromptKey("workflow.tool_rules")]: {
+      [specPlanBuildPromptKey("workflow.tool_rules")]: {
         template: " protocol override ",
         baseVersion: 2,
         enabled: false,
@@ -148,12 +148,12 @@ describe("settings save transforms", () => {
     });
 
     expect(saveReady).toEqual({
-      [builtinWorkflowPromptKey("workflow.rules")]: {
+      [specPlanBuildPromptKey("workflow.rules")]: {
         template: "guards override",
         baseVersion: 2,
         enabled: true,
       },
-      [builtinWorkflowPromptKey("workflow.tool_rules")]: {
+      [specPlanBuildPromptKey("workflow.tool_rules")]: {
         template: "protocol override",
         baseVersion: 2,
         enabled: false,
@@ -163,7 +163,7 @@ describe("settings save transforms", () => {
 
   test("preserves every known prompt override key when preparing save payloads", () => {
     const source: RepoPromptOverrides = Object.fromEntries(
-      BUILTIN_PROMPT_OVERRIDE_KEYS.map((templateId, index) => [
+      SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS.map((templateId, index) => [
         templateId,
         {
           template: ` ${templateId} template `,
@@ -175,9 +175,9 @@ describe("settings save transforms", () => {
 
     const saveReady = preparePromptOverridesForSave(source);
     const saveReadyKeys = Object.keys(saveReady).sort();
-    expect(saveReadyKeys).toEqual(BUILTIN_PROMPT_OVERRIDE_KEYS.toSorted());
+    expect(saveReadyKeys).toEqual(SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS.toSorted());
 
-    for (const [index, templateId] of BUILTIN_PROMPT_OVERRIDE_KEYS.entries()) {
+    for (const [index, templateId] of SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS.entries()) {
       const entry = saveReady[templateId];
       expect(entry).toEqual({
         template: `${templateId} template`,
@@ -204,12 +204,12 @@ describe("settings save transforms", () => {
     expect(saveReady.actions).toEqual(createRepoConfig().actions);
     expect(saveReady.worktreeCopyPaths).toEqual([".env"]);
     expect(saveReady.promptOverrides).toEqual({
-      [builtinWorkflowPromptKey("messages.spec_start")]: {
+      [specPlanBuildPromptKey("messages.spec_start")]: {
         template: "custom kickoff",
         baseVersion: 1,
         enabled: true,
       },
-      [builtinWorkflowPromptKey("messages.qa_review")]: {
+      [specPlanBuildPromptKey("messages.qa_review")]: {
         template: "",
         baseVersion: 2,
         enabled: true,
@@ -379,12 +379,12 @@ describe("settings save transforms", () => {
         actionIds: ["startQa", "startQa"],
       },
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToSpecReady",
         actionIds: ["startPlanner", "startPlanner"],
       },
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToHumanReview",
         actionIds: [],
       },
@@ -394,12 +394,12 @@ describe("settings save transforms", () => {
       rules: [
         { workflowId: "other", eventId: "taskProgressedToSpecReady", actionIds: ["startQa"] },
         {
-          workflowId: "openducktor-research-plan-implement",
+          workflowId: "openducktor-spec-plan-build",
           eventId: "taskProgressedToSpecReady",
           actionIds: ["startPlanner"],
         },
         {
-          workflowId: "openducktor-research-plan-implement",
+          workflowId: "openducktor-spec-plan-build",
           eventId: "taskProgressedToHumanReview",
           actionIds: [],
         },
@@ -432,7 +432,7 @@ describe("settings save transforms", () => {
       ],
       workspaces: { "repo-a": { ...repo, hooks: { postComplete: [" bun test ", ""] } } },
       globalPromptOverrides: {
-        [builtinWorkflowPromptKey("messages.spec_start")]: {
+        [specPlanBuildPromptKey("messages.spec_start")]: {
           template: " global ",
           baseVersion: 2,
           enabled: false,
@@ -450,7 +450,7 @@ describe("settings save transforms", () => {
     ]);
     expect(input.global?.globalPromptOverrides).toEqual({
       create: {
-        [builtinWorkflowPromptKey("messages.spec_start")]: {
+        [specPlanBuildPromptKey("messages.spec_start")]: {
           template: "global",
           baseVersion: 2,
           enabled: false,

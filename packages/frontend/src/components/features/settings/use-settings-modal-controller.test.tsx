@@ -282,7 +282,7 @@ describe("useSettingsModalController", () => {
       alwaysStartQaReviewsFresh,
       rules: [
         {
-          workflowId: "openducktor-research-plan-implement",
+          workflowId: "openducktor-spec-plan-build",
           eventId: "taskProgressedToAiReview" as const,
           actionIds,
         },
@@ -324,7 +324,7 @@ describe("useSettingsModalController", () => {
       alwaysStartQaReviewsFresh: true,
       rules: [
         {
-          workflowId: "openducktor-research-plan-implement",
+          workflowId: "openducktor-spec-plan-build",
           eventId: "taskProgressedToAiReview" as const,
           actionIds: ["startQa" as const],
         },

@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow, roleDefaultPanel } from "@openducktor/workflows";
+import { specPlanBuildWorkflow, roleDefaultPanel } from "@openducktor/workflows";
 
 import { describe, expect, test } from "bun:test";
 import type { BrowserTabSummary, TerminalSummary } from "@openducktor/contracts";
@@ -109,7 +109,7 @@ describe("session panel layout", () => {
           "right",
           context({
             selectionKey: role,
-            defaultRightSelection: roleDefaultPanel(role, builtinTaskWorkflow),
+            defaultRightSelection: roleDefaultPanel(role, specPlanBuildWorkflow),
           }),
         ),
       ).toBe("document");
@@ -120,7 +120,7 @@ describe("session panel layout", () => {
         "right",
         context({
           selectionKey: "build",
-          defaultRightSelection: roleDefaultPanel("build", builtinTaskWorkflow),
+          defaultRightSelection: roleDefaultPanel("build", specPlanBuildWorkflow),
         }),
       ),
     ).toBe("diffs");
@@ -406,7 +406,7 @@ describe("session panel layout", () => {
   test("selects the first tab, not the role default, when the remembered tab closes", () => {
     const builder = context({
       selectionKey: "build",
-      defaultRightSelection: roleDefaultPanel("build", builtinTaskWorkflow),
+      defaultRightSelection: roleDefaultPanel("build", specPlanBuildWorkflow),
     });
     const spec = context({ selectionKey: "spec" });
     let layout = selectPanelTab(reconciled(builder), builder, "right", "files");

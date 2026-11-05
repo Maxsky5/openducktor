@@ -1,4 +1,4 @@
-import { builtinWorkflowPromptKey } from "@openducktor/workflows/test-support";
+import { specPlanBuildPromptKey } from "@openducktor/workflows/test-support";
 import { workflowSettingsData } from "@openducktor/frontend-core/queries/workflow-settings";
 import { builtinCompiledCatalogFixture } from "@openducktor/frontend-core/test-support/workflow-fixtures";
 
@@ -282,28 +282,25 @@ describe("settings-modal-model", () => {
 
   test("clears prompt override by removing only the stored value", () => {
     const overrides = {
-      [builtinWorkflowPromptKey("messages.spec_start")]: {
+      [specPlanBuildPromptKey("messages.spec_start")]: {
         template: "custom",
         baseVersion: 2,
         enabled: false,
       },
-      [builtinWorkflowPromptKey("messages.plan_start")]: {
+      [specPlanBuildPromptKey("messages.plan_start")]: {
         template: "planner custom",
         baseVersion: 3,
         enabled: true,
       },
     } satisfies RepoPromptOverrides;
 
-    const unchanged = clearPromptOverride(
-      overrides,
-      builtinWorkflowPromptKey("messages.qa_review"),
-    );
+    const unchanged = clearPromptOverride(overrides, specPlanBuildPromptKey("messages.qa_review"));
     expect(unchanged).toBe(overrides);
 
-    const cleared = clearPromptOverride(overrides, builtinWorkflowPromptKey("messages.spec_start"));
-    expect(cleared[builtinWorkflowPromptKey("messages.spec_start")]).toBeUndefined();
-    expect(cleared[builtinWorkflowPromptKey("messages.plan_start")]).toEqual(
-      overrides[builtinWorkflowPromptKey("messages.plan_start")],
+    const cleared = clearPromptOverride(overrides, specPlanBuildPromptKey("messages.spec_start"));
+    expect(cleared[specPlanBuildPromptKey("messages.spec_start")]).toBeUndefined();
+    expect(cleared[specPlanBuildPromptKey("messages.plan_start")]).toEqual(
+      overrides[specPlanBuildPromptKey("messages.plan_start")],
     );
   });
 
@@ -327,12 +324,12 @@ describe("settings-modal-model", () => {
 
   test("validates unsupported placeholders in prompt overrides", () => {
     const overrides = {
-      [builtinWorkflowPromptKey("messages.spec_start")]: {
+      [specPlanBuildPromptKey("messages.spec_start")]: {
         template: "Good {{task.id}}",
         baseVersion: 1,
         enabled: true,
       },
-      [builtinWorkflowPromptKey("messages.build_pull_request")]: {
+      [specPlanBuildPromptKey("messages.build_pull_request")]: {
         template:
           "Bad {{task.foo}} and {{unknown.value}} with {{git.targetBranch}} and {{git.pullRequestBaseBranch}}",
         baseVersion: 1,
@@ -341,14 +338,14 @@ describe("settings-modal-model", () => {
     } satisfies RepoPromptOverrides;
 
     expect(buildPromptOverrideValidationErrors(overrides, builtinSettingsTemplates)).toEqual({
-      [builtinWorkflowPromptKey("messages.build_pull_request")]:
+      [specPlanBuildPromptKey("messages.build_pull_request")]:
         "Unsupported placeholders: {{task.foo}}, {{unknown.value}}, {{git.pullRequestBaseBranch}}.",
     });
   });
 
   test("validates required placeholders in human-review kickoff overrides", () => {
     const overrides = {
-      [builtinWorkflowPromptKey("messages.build_requested_changes")]: {
+      [specPlanBuildPromptKey("messages.build_requested_changes")]: {
         template: "Review {{task.id}} before editing.",
         baseVersion: 3,
         enabled: true,
@@ -356,19 +353,19 @@ describe("settings-modal-model", () => {
     } satisfies RepoPromptOverrides;
 
     expect(buildPromptOverrideValidationErrors(overrides, builtinSettingsTemplates)).toEqual({
-      [builtinWorkflowPromptKey("messages.build_requested_changes")]:
+      [specPlanBuildPromptKey("messages.build_requested_changes")]:
         "Missing required placeholder: {{humanFeedback}}.",
     });
   });
 
   test("ignores validation errors in disabled prompt overrides", () => {
     const overrides = {
-      [builtinWorkflowPromptKey("messages.build_pull_request")]: {
+      [specPlanBuildPromptKey("messages.build_pull_request")]: {
         template: "Publish the pull request.",
         baseVersion: 4,
         enabled: false,
       },
-      [builtinWorkflowPromptKey("messages.spec_start")]: {
+      [specPlanBuildPromptKey("messages.spec_start")]: {
         template: "Unsupported {{task.foo}}",
         baseVersion: 1,
         enabled: false,
@@ -382,12 +379,12 @@ describe("settings-modal-model", () => {
     const emptyOverrides: RepoPromptOverrides = {};
     const created = togglePromptOverrideEnabled(
       emptyOverrides,
-      builtinWorkflowPromptKey("messages.spec_start"),
+      specPlanBuildPromptKey("messages.spec_start"),
       true,
       "builtin",
       2,
     );
-    expect(created[builtinWorkflowPromptKey("messages.spec_start")]).toEqual({
+    expect(created[specPlanBuildPromptKey("messages.spec_start")]).toEqual({
       template: "builtin",
       baseVersion: 2,
       enabled: true,
@@ -395,12 +392,12 @@ describe("settings-modal-model", () => {
 
     const disabled = togglePromptOverrideEnabled(
       created,
-      builtinWorkflowPromptKey("messages.spec_start"),
+      specPlanBuildPromptKey("messages.spec_start"),
       false,
       "builtin",
       2,
     );
-    expect(disabled[builtinWorkflowPromptKey("messages.spec_start")]).toEqual({
+    expect(disabled[specPlanBuildPromptKey("messages.spec_start")]).toEqual({
       template: "builtin",
       baseVersion: 2,
       enabled: false,
@@ -411,13 +408,13 @@ describe("settings-modal-model", () => {
     const emptyOverrides: RepoPromptOverrides = {};
     const created = togglePromptOverrideEnabled(
       emptyOverrides,
-      builtinWorkflowPromptKey("workflow.rules"),
+      specPlanBuildPromptKey("workflow.rules"),
       true,
       resolvePromptOverrideFallbackTemplate("global workflow guards", "builtin workflow guards"),
       1,
     );
 
-    expect(created[builtinWorkflowPromptKey("workflow.rules")]).toEqual({
+    expect(created[specPlanBuildPromptKey("workflow.rules")]).toEqual({
       template: "global workflow guards",
       baseVersion: 1,
       enabled: true,
@@ -432,18 +429,18 @@ describe("settings-modal-model", () => {
     const emptyOverrides: RepoPromptOverrides = {};
     const created = updatePromptOverrideTemplate(
       emptyOverrides,
-      builtinWorkflowPromptKey("messages.spec_start"),
+      specPlanBuildPromptKey("messages.spec_start"),
       "custom",
       9,
     );
-    expect(created[builtinWorkflowPromptKey("messages.spec_start")]).toEqual({
+    expect(created[specPlanBuildPromptKey("messages.spec_start")]).toEqual({
       template: "custom",
       baseVersion: 9,
       enabled: false,
     });
 
     const enabledOverrides = {
-      [builtinWorkflowPromptKey("messages.spec_start")]: {
+      [specPlanBuildPromptKey("messages.spec_start")]: {
         template: "old",
         baseVersion: 2,
         enabled: true,
@@ -451,11 +448,11 @@ describe("settings-modal-model", () => {
     } satisfies RepoPromptOverrides;
     const updated = updatePromptOverrideTemplate(
       enabledOverrides,
-      builtinWorkflowPromptKey("messages.spec_start"),
+      specPlanBuildPromptKey("messages.spec_start"),
       "new",
       10,
     );
-    expect(updated[builtinWorkflowPromptKey("messages.spec_start")]).toEqual({
+    expect(updated[specPlanBuildPromptKey("messages.spec_start")]).toEqual({
       template: "new",
       baseVersion: 2,
       enabled: true,

@@ -1,5 +1,5 @@
 import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
-import { builtinTaskWorkflow, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+import { specPlanBuildWorkflow, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type {
   AgentFileSearchResult,
   AgentModelSelection,
@@ -46,15 +46,15 @@ const baseTask: TaskCard = {
 
 /** The label of each built-in role. */
 export const BUILTIN_ROLE_LABEL_BY_ROLE: Record<string, string> = Object.fromEntries(
-  builtinTaskWorkflow.roles.map(({ id, label }) => [id, label]),
+  specPlanBuildWorkflow.roles.map(({ id, label }) => [id, label]),
 );
 
 export const TEST_ROLE_OPTIONS: AgentRoleOption[] = (
   ["spec", "planner", "build", "qa"] as const
 ).map((role) => ({
   role,
-  label: builtinTaskWorkflow.role(role).label,
-  icon: roleIconForHint(builtinTaskWorkflow.role(role).icon),
+  label: specPlanBuildWorkflow.role(role).label,
+  icon: roleIconForHint(specPlanBuildWorkflow.role(role).icon),
 }));
 
 export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard =>

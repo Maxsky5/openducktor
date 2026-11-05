@@ -3,8 +3,8 @@ import {
   type AgentRoleDefinition,
   type AgentToolName,
 } from "@openducktor/contracts";
-import { deepFreeze } from "../deep-freeze";
-import { recordBy } from "../record-by";
+import { deepFreeze } from "../../deep-freeze";
+import { recordBy } from "../../record-by";
 import { BUILTIN_ROLE_IDS, type BuiltinRoleId } from "./ids";
 import { ROLE_SYSTEM_PROMPT_METADATA } from "./prompt-metadata";
 import { ROLE_SYSTEM_PROMPTS } from "./prompt-templates";

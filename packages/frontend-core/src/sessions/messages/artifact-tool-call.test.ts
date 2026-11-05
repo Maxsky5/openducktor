@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { describe, expect, test } from "bun:test";
 import type { McpTaskArtifact } from "@openducktor/contracts";
@@ -31,7 +31,7 @@ describe("readArtifactToolCall", () => {
     expect(
       readArtifactToolCall(
         call({ status: "running", input: { code: "qaReport", verdict: "approved" } }),
-        builtinTaskWorkflow,
+        specPlanBuildWorkflow,
       ),
     ).toEqual({ heading: "review_passed", title: "Approve QA", code: "qaReport", saved: null });
   });
@@ -42,7 +42,7 @@ describe("readArtifactToolCall", () => {
       output: JSON.stringify({ artifact: qaReport }),
     });
 
-    expect(readArtifactToolCall(meta, builtinTaskWorkflow)).toEqual({
+    expect(readArtifactToolCall(meta, specPlanBuildWorkflow)).toEqual({
       heading: "review_failed",
       title: "Reject QA",
       code: "qaReport",

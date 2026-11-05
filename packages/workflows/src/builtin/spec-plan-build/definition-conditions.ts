@@ -1,5 +1,5 @@
 import type { WorkflowCondition, WorkflowEventGuard } from "@openducktor/contracts";
-import type { BuiltinStateId } from "./ids";
+import type { SpecPlanBuildStateId } from "./ids";
 
 const optionalPlanning = {
   any: [
@@ -10,10 +10,10 @@ const optionalPlanning = {
 export const requiredPlanning = { not: optionalPlanning } satisfies WorkflowCondition;
 export const nonClosed = { not: { stateIn: ["closed"] } } satisfies WorkflowCondition;
 export const humanReview = {
-  stateIn: ["ai_review", "human_review"] satisfies BuiltinStateId[],
+  stateIn: ["ai_review", "human_review"] satisfies SpecPlanBuildStateId[],
 } satisfies WorkflowCondition;
 export const activeOrReview = {
-  stateIn: ["in_progress", "blocked", "ai_review", "human_review"] satisfies BuiltinStateId[],
+  stateIn: ["in_progress", "blocked", "ai_review", "human_review"] satisfies SpecPlanBuildStateId[],
 } satisfies WorkflowCondition;
 const readyForDevOrLater = {
   stateIn: [
@@ -22,7 +22,7 @@ const readyForDevOrLater = {
     "blocked",
     "ai_review",
     "human_review",
-  ] satisfies BuiltinStateId[],
+  ] satisfies SpecPlanBuildStateId[],
 } satisfies WorkflowCondition;
 export const planningAvailable = {
   any: [
@@ -35,7 +35,7 @@ export const buildAvailable = {
   all: [nonClosed, { any: [optionalPlanning, readyForDevOrLater] }],
 } satisfies WorkflowCondition;
 export const qaAvailable = {
-  stateIn: ["blocked", "ai_review", "human_review"] satisfies BuiltinStateId[],
+  stateIn: ["blocked", "ai_review", "human_review"] satisfies SpecPlanBuildStateId[],
 } satisfies WorkflowCondition;
 export const specPresent = { artifact: "spec", present: true } satisfies WorkflowCondition;
 export const planPresent = { artifact: "plan", present: true } satisfies WorkflowCondition;

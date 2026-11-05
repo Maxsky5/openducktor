@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 
@@ -229,7 +229,7 @@ describe("TaskViewSync races", () => {
         removedTaskIds: [],
         taskSnapshots: [
           {
-            workflow: builtinTaskWorkflow.reference,
+            workflow: specPlanBuildWorkflow.reference,
             id: queued.id,
             title: queued.title,
             status: queued.status,

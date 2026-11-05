@@ -220,7 +220,7 @@ describe("asset-aware task store lifecycle", () => {
         ...scope,
         taskId: task.id,
         decide: () =>
-          Result.succeed({ status: "closed", workflowId: "openducktor-research-plan-implement" }),
+          Result.succeed({ status: "closed", workflowId: "openducktor-spec-plan-build" }),
       }),
     );
     expect(

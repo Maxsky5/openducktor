@@ -142,7 +142,7 @@ const createHarness = async () => {
 const decide = (status?: string) => (current: { status: string }) =>
   Result.succeed({
     status: status ?? current.status,
-    workflowId: "openducktor-research-plan-implement",
+    workflowId: "openducktor-spec-plan-build",
   });
 
 test("task reads and writes keep colliding workspace identities separate", async () => {
@@ -268,7 +268,7 @@ test("two hosts merge separate fields and decide transitions from the locked cur
           decidedStatus = current.status;
           return Result.succeed({
             status: "ready_for_dev",
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
             cause: { signal: "plan_ready" },
           });
         },

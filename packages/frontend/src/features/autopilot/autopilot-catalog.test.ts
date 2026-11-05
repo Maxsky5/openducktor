@@ -6,27 +6,27 @@ const createAutopilotSettings = (): AutopilotSettings => ({
   alwaysStartQaReviewsFresh: false,
   rules: [
     {
-      workflowId: "openducktor-research-plan-implement",
+      workflowId: "openducktor-spec-plan-build",
       eventId: "taskProgressedToSpecReady",
       actionIds: ["startPlanner", "startBuilder"],
     },
     {
-      workflowId: "openducktor-research-plan-implement",
+      workflowId: "openducktor-spec-plan-build",
       eventId: "taskProgressedToReadyForDev",
       actionIds: [],
     },
     {
-      workflowId: "openducktor-research-plan-implement",
+      workflowId: "openducktor-spec-plan-build",
       eventId: "taskProgressedToAiReview",
       actionIds: [],
     },
     {
-      workflowId: "openducktor-research-plan-implement",
+      workflowId: "openducktor-spec-plan-build",
       eventId: "taskRejectedByQa",
       actionIds: [],
     },
     {
-      workflowId: "openducktor-research-plan-implement",
+      workflowId: "openducktor-spec-plan-build",
       eventId: "taskProgressedToHumanReview",
       actionIds: [],
     },
@@ -45,7 +45,7 @@ describe("autopilot-catalog", () => {
     settings.rules.unshift(foreign);
     const updated = setAutopilotRuleAction(
       settings,
-      "openducktor-research-plan-implement",
+      "openducktor-spec-plan-build",
       "taskProgressedToSpecReady",
       "action:startBuilder",
     );
@@ -53,21 +53,20 @@ describe("autopilot-catalog", () => {
     expect(
       updated.rules.find(
         (rule) =>
-          rule.workflowId === "openducktor-research-plan-implement" &&
-          rule.eventId === foreign.eventId,
+          rule.workflowId === "openducktor-spec-plan-build" && rule.eventId === foreign.eventId,
       )?.actionIds,
     ).toEqual(["startBuilder", "startPlanner"]);
   });
   test("preserves secondary actions when updating the selected action", () => {
     const nextSettings = setAutopilotRuleAction(
       createAutopilotSettings(),
-      "openducktor-research-plan-implement",
+      "openducktor-spec-plan-build",
       "taskProgressedToSpecReady",
       "action:startBuilder",
     );
 
     expect(nextSettings.rules[0]).toEqual({
-      workflowId: "openducktor-research-plan-implement",
+      workflowId: "openducktor-spec-plan-build",
       eventId: "taskProgressedToSpecReady",
       actionIds: ["startBuilder", "startPlanner"],
     });
@@ -85,7 +84,7 @@ describe("autopilot-catalog", () => {
     expect(
       setAutopilotRuleAction(
         settings,
-        "openducktor-research-plan-implement",
+        "openducktor-spec-plan-build",
         "taskProgressedToSpecReady",
         "action:startPlanner",
       ),
@@ -98,20 +97,20 @@ describe("autopilot-catalog", () => {
         alwaysStartQaReviewsFresh: false,
         rules: [
           {
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
             eventId: "taskProgressedToSpecReady",
             actionIds: ["startPlanner"],
           },
         ],
       },
-      "openducktor-research-plan-implement",
+      "openducktor-spec-plan-build",
       "taskProgressedToSpecReady",
       "action:startBuilder",
     );
 
     expect(nextSettings.rules).toEqual([
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToSpecReady",
         actionIds: ["startBuilder", "startPlanner"],
       },

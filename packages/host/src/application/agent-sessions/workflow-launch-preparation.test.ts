@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import type { AgentSessionStartMode, WorkflowLaunchRequest } from "@openducktor/contracts";
 import { createTaskWorkflow } from "@openducktor/workflows";
-import { builtinWorkflowPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
+import { specPlanBuildPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
 import {
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
@@ -61,7 +61,7 @@ test("a saved override with an unsupported placeholder fails before any task mut
   const h = await createLaunchHarness();
   h.setTaskStatus("human_review");
   h.setPromptOverrides({
-    [builtinWorkflowPromptKey("workflow.task_context")]: {
+    [specPlanBuildPromptKey("workflow.task_context")]: {
       template: "Task {{task.id}}, QA required: {{task.qaRequired}}",
       baseVersion: 1,
     },
@@ -262,12 +262,12 @@ test("automatic model and prompt selection uses role and repository overrides on
   const h = await createLaunchHarness();
   h.setModelDefault(undefined);
   h.config.agentDefaults.build = modelFor("codex");
-  h.settings.globalPromptOverrides[builtinWorkflowPromptKey("messages.build_start")] = {
+  h.settings.globalPromptOverrides[specPlanBuildPromptKey("messages.build_start")] = {
     template: "Global kickoff",
     baseVersion: 1,
     enabled: true,
   };
-  h.config.promptOverrides[builtinWorkflowPromptKey("messages.build_start")] = {
+  h.config.promptOverrides[specPlanBuildPromptKey("messages.build_start")] = {
     template: "Repository kickoff {{task.id}}",
     baseVersion: 1,
     enabled: true,

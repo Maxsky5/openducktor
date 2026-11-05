@@ -7,7 +7,7 @@ import {
   repoConfigSchema,
 } from "@openducktor/contracts";
 import {
-  builtinWorkflowPromptKey,
+  specPlanBuildPromptKey,
   createReviewTaskWorkflow,
 } from "@openducktor/workflows/test-support";
 import { createTaskWorkflow, workflowRoleCatalog } from "@openducktor/workflows";
@@ -139,12 +139,12 @@ describe("applyTaskWorkflowSettings", () => {
       applyTaskWorkflowSettings(
         config({
           globalPromptOverrides: {
-            [builtinWorkflowPromptKey("messages.qa_review")]: { template: "x", baseVersion: 1 },
+            [specPlanBuildPromptKey("messages.qa_review")]: { template: "x", baseVersion: 1 },
           },
         }),
         reviewWorkflows,
       ),
-    ).toThrow(`Unknown prompt "${builtinWorkflowPromptKey("messages.qa_review")}"`);
+    ).toThrow(`Unknown prompt "${specPlanBuildPromptKey("messages.qa_review")}"`);
     expect(() =>
       applyTaskWorkflowSettings(
         config({

@@ -1,5 +1,5 @@
 import {
-  BUILTIN_BOARD,
+  SPEC_PLAN_BUILD_BOARD,
   createTaskWorkflow,
   resolveWorkflowBoard,
   taskWorkflowDescriptor,
@@ -1100,12 +1100,12 @@ describe("useKanbanSessionStartFlow", () => {
       }
     });
     const action = workflow.action("human_request_changes");
-    const task = createWorkflowTaskCardFixture(workflow, BUILTIN_BOARD, {
+    const task = createWorkflowTaskCardFixture(workflow, SPEC_PLAN_BUILD_BOARD, {
       id: "TASK-1",
       status: "human_review",
       availableActions: [action.id],
     });
-    const committed = createWorkflowTaskCardFixture(workflow, BUILTIN_BOARD, {
+    const committed = createWorkflowTaskCardFixture(workflow, SPEC_PLAN_BUILD_BOARD, {
       id: task.id,
       status: "in_progress",
     });
@@ -1122,7 +1122,7 @@ describe("useKanbanSessionStartFlow", () => {
       }),
       workspaceWorkflowGet: async () => ({
         hostInstanceId: "committed-host",
-        board: BUILTIN_BOARD,
+        board: SPEC_PLAN_BUILD_BOARD,
         workflows: [task.workflow],
         newTaskWorkflow: task.workflow,
       }),

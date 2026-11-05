@@ -23,8 +23,8 @@ const persistedConfigObjectSchema = z.record(z.string(), z.json());
 const isPersistedConfigObject = (value: JSONType | undefined): value is PersistedConfigObject =>
   persistedConfigObjectSchema.safeParse(value).success;
 
-/** The built-in workflow of legacy settings. Its prompt overrides and Autopilot rules move to it. */
-const LEGACY_BUILTIN_WORKFLOW_ID = "openducktor-research-plan-implement";
+/** The workflow of legacy settings: Spec, Plan, Build. Legacy prompt overrides and Autopilot rules move to it. */
+const LEGACY_SETTINGS_WORKFLOW_ID = "openducktor-spec-plan-build";
 const LEGACY_ROLE_PROMPT_ID = /^system\.role\.(.+)\.base$/;
 
 /** The workflow prompt IDs of the legacy global prompt IDs. */
@@ -55,7 +55,7 @@ const migratePromptOverrideKey = (key: string): string => {
     });
   return promptOverrideKey({
     ownerKind: "workflow",
-    ownerId: LEGACY_BUILTIN_WORKFLOW_ID,
+    ownerId: LEGACY_SETTINGS_WORKFLOW_ID,
     promptId: LEGACY_WORKFLOW_PROMPT_IDS.get(key) ?? key,
   });
 };
@@ -266,7 +266,7 @@ const migratePersistedConfig = (payload: PersistedConfigObject) => {
       rules: migrated.autopilot.rules.map((rule) =>
         isPersistedConfigObject(rule) &&
         (rule.workflowId === undefined || rule.workflowId === "openducktor")
-          ? { ...rule, workflowId: LEGACY_BUILTIN_WORKFLOW_ID }
+          ? { ...rule, workflowId: LEGACY_SETTINGS_WORKFLOW_ID }
           : rule,
       ),
     };

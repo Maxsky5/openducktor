@@ -426,7 +426,7 @@ describe("createTaskService build and review", () => {
           try: async () => {
             calls.push({ type: "getTask", input });
             return task({
-              workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+              workflow: { id: "openducktor-spec-plan-build", revision: 2 },
               id: "task-1",
               title: "Task 1",
               status: "ready_for_dev",
@@ -604,7 +604,7 @@ describe("createTaskService build and review", () => {
           try: async () => {
             calls.push({ type: "getTask", input });
             return task({
-              workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+              workflow: { id: "openducktor-spec-plan-build", revision: 2 },
               id: "task-1",
               title: "Task 1",
               status: "ready_for_dev",

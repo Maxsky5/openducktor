@@ -70,7 +70,7 @@ test("activity still saves after another host closes the running session's task"
         ...database.scope,
         taskId: task.id,
         decide: () =>
-          Result.succeed({ status: "closed", workflowId: "openducktor-research-plan-implement" }),
+          Result.succeed({ status: "closed", workflowId: "openducktor-spec-plan-build" }),
       }),
     );
     const closed = await Effect.runPromise(

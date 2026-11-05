@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import {
   codexSessionRef,
@@ -75,7 +75,7 @@ describe("CodexAppServerAdapter context loading", () => {
     expect(resumeCalls?.[0]?.params).toMatchObject({
       config: {
         "mcp_servers.openducktor.enabled": true,
-        "mcp_servers.openducktor.enabled_tools": [...builtinTaskWorkflow.role("build").tools],
+        "mcp_servers.openducktor.enabled_tools": [...specPlanBuildWorkflow.role("build").tools],
       },
     });
   });

@@ -92,7 +92,7 @@ describe("committed task event publication", () => {
         id: "task-1",
         title: "Title at commit",
         status: "spec_ready",
-        workflow: { id: "openducktor-research-plan-implement", revision: 1 },
+        workflow: { id: "openducktor-spec-plan-build", revision: 1 },
       },
     };
     await Effect.runPromise(
@@ -141,7 +141,7 @@ describe("committed task event publication", () => {
         id: "task-1",
         title: "Task",
         status: "human_review",
-        workflow: { id: "openducktor-research-plan-implement", revision: 1 },
+        workflow: { id: "openducktor-spec-plan-build", revision: 1 },
       },
     };
     await expect(

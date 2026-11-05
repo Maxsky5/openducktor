@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow, BUILTIN_BOARD } from "@openducktor/workflows";
+import { specPlanBuildWorkflow, SPEC_PLAN_BUILD_BOARD } from "@openducktor/workflows";
 import {
   type ChatSettings,
   DEFAULT_AGENT_RUNTIMES,
@@ -44,7 +44,7 @@ import type {
 import type { HostRuntimeStatusMap, ObservedCheck } from "../types/diagnostics";
 import type { HostRuntimeStatusContextValue } from "../types/session-slices";
 import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 export type RuntimeCatalogFixtureSurfaces = {
   models?: AgentModelCatalog;
@@ -113,12 +113,12 @@ type TaskCardFixture = TaskCard & {
 
 const BASE_TASK_CARD_FIXTURE: TaskCardFixture = {
   workflow: {
-    id: builtinTaskWorkflow.definition.id,
-    revision: builtinTaskWorkflow.definition.revision,
+    id: specPlanBuildWorkflow.definition.id,
+    revision: specPlanBuildWorkflow.definition.revision,
   },
   workflowSteps: [],
-  taskWorkflow: builtinTaskWorkflow,
-  sharedState: BUILTIN_BOARD.states[0]!,
+  taskWorkflow: specPlanBuildWorkflow,
+  sharedState: SPEC_PLAN_BUILD_BOARD.states[0]!,
   id: "task-1",
   title: "Task",
   description: "",
@@ -278,10 +278,10 @@ export const createSettingsSnapshotFixture = (
       rules: [],
     },
     notifications: {
-      ...createBuiltinNotificationSettings(),
+      ...createSpecPlanBuildNotificationSettings(),
       ...notifications,
       kinds: {
-        ...createBuiltinNotificationSettings().kinds,
+        ...createSpecPlanBuildNotificationSettings().kinds,
         ...notifications?.kinds,
       },
     },
@@ -383,11 +383,11 @@ export const createTaskCardFixture = (
     },
   } satisfies TaskCardFixture;
 
-  merged.sharedState = BUILTIN_BOARD.states.find(({ id }) => id === merged.status)!;
+  merged.sharedState = SPEC_PLAN_BUILD_BOARD.states.find(({ id }) => id === merged.status)!;
   const flags = new Map(
-    builtinTaskWorkflow.project(merged).workflowSteps.map((step) => [step.id, step]),
+    specPlanBuildWorkflow.project(merged).workflowSteps.map((step) => [step.id, step]),
   );
-  merged.workflowSteps = builtinTaskWorkflow.definition.steps.map((step) => {
+  merged.workflowSteps = specPlanBuildWorkflow.definition.steps.map((step) => {
     const projected = flags.get(step.id)!;
     const role = step.kind === "agent" ? merged.agentWorkflows[step.roleId] : undefined;
     const state = role ?? projected;

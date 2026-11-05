@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
@@ -239,7 +239,7 @@ describe("task feedback target", () => {
         ready([session("b1")]),
         worktree,
         retry,
-        builtinTaskWorkflow.roles.find(({ id }) => id === "build")!,
+        specPlanBuildWorkflow.roles.find(({ id }) => id === "build")!,
       ),
     ).toEqual({
       session: {
@@ -257,7 +257,7 @@ describe("task feedback target", () => {
         ready([]),
         worktree,
         retry,
-        builtinTaskWorkflow.roles.find(({ id }) => id === "build")!,
+        specPlanBuildWorkflow.roles.find(({ id }) => id === "build")!,
       ),
     ).toEqual({
       session: null,
@@ -270,7 +270,7 @@ describe("task feedback target", () => {
         loading(),
         worktree,
         retry,
-        builtinTaskWorkflow.roles.find(({ id }) => id === "build")!,
+        specPlanBuildWorkflow.roles.find(({ id }) => id === "build")!,
       ),
     ).toEqual({
       session: null,
@@ -287,7 +287,7 @@ describe("task feedback target", () => {
         failed("Read failed."),
         worktree,
         retry,
-        builtinTaskWorkflow.roles.find(({ id }) => id === "build")!,
+        specPlanBuildWorkflow.roles.find(({ id }) => id === "build")!,
       ),
     ).toEqual({
       session: null,

@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promptOverrideKey, repoConfigSchema, type GlobalConfig } from "@openducktor/contracts";
 import {
-  BUILTIN_PROMPT_OVERRIDE_KEYS,
+  SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS,
   BUILTIN_ROLE_IDS,
-  builtinWorkflowPromptKey,
+  specPlanBuildPromptKey,
   rolePromptKey,
 } from "@openducktor/workflows/test-support";
 import { eq, sql } from "drizzle-orm";
@@ -104,7 +104,7 @@ describe("shared host settings", () => {
     await withDatabase(async ({ session }) => {
       const config = createDefaultGlobalConfig();
       const prompts = Object.fromEntries(
-        BUILTIN_PROMPT_OVERRIDE_KEYS.map((id) => [
+        SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS.map((id) => [
           id,
           { template: `Prompt ${id}`, baseVersion: 1, enabled: false },
         ]),
@@ -193,7 +193,7 @@ describe("shared host settings", () => {
       const config = createDefaultGlobalConfig();
       const overrides = {
         [rolePromptKey("build")]: { template: "Build", baseVersion: 2, enabled: true },
-        [builtinWorkflowPromptKey("messages.qa_review")]: { template: "QA", baseVersion: 3 },
+        [specPlanBuildPromptKey("messages.qa_review")]: { template: "QA", baseVersion: 3 },
       };
       config.globalPromptOverrides = overrides;
       config.workspaces.one = repoConfigFixture({
@@ -215,7 +215,7 @@ describe("shared host settings", () => {
         rows.map(({ ownerKind, ownerId, promptId }) => [ownerKind, ownerId, promptId]).sort();
       const expectedOwners = [
         ["role", "build", "instructions"],
-        ["workflow", "openducktor-research-plan-implement", "messages.qa_review"],
+        ["workflow", "openducktor-spec-plan-build", "messages.qa_review"],
       ];
       expect(
         owners(
@@ -487,7 +487,7 @@ describe("shared host settings", () => {
       config.agentRuntimes.custom = { enabled: true, executablePath: "/opt/custom" };
       config.autopilot.rules = [
         {
-          workflowId: "openducktor-research-plan-implement",
+          workflowId: "openducktor-spec-plan-build",
           eventId: "build.completed",
           actionIds: ["qa"],
         },

@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { ComposerState } from "@openducktor/frontend-core/tasks/create/task-composer-types";
@@ -31,8 +31,8 @@ const emptyDocument = {
 const controllerMock: ReturnType<
   typeof taskCreateModalControllerModule.useTaskCreateModalController
 > = {
-  taskWorkflow: builtinTaskWorkflow,
-  issueTypeChoices: builtinTaskWorkflow.definition.issueTypes.map(
+  taskWorkflow: specPlanBuildWorkflow,
+  issueTypeChoices: specPlanBuildWorkflow.definition.issueTypes.map(
     ({ id, label, description, icon }) => ({
       value: id,
       label,
@@ -42,7 +42,7 @@ const controllerMock: ReturnType<
     }),
   ),
   workflowRead: {
-    taskWorkflow: builtinTaskWorkflow,
+    taskWorkflow: specPlanBuildWorkflow,
     pending: false,
     error: null,
     retry: async () => {},

@@ -10,7 +10,11 @@ import {
 } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import type { TasksStateContextValue } from "@openducktor/frontend-core/types/state-slices";
-import { BUILTIN_BOARD, type KanbanColumn, type ResolvedTaskCard } from "@openducktor/workflows";
+import {
+  SPEC_PLAN_BUILD_BOARD,
+  type KanbanColumn,
+  type ResolvedTaskCard,
+} from "@openducktor/workflows";
 import type {
   ChecksStateContextValue,
   WorkspacePresenceContextValue,
@@ -25,7 +29,7 @@ export const createKanbanColumnFixture = (
   tasks: ResolvedTaskCard[] = [],
   overrides: Partial<Omit<KanbanColumn, "id" | "tasks">> = {},
 ): KanbanColumn => {
-  const state = BUILTIN_BOARD.states.find((candidate) => candidate.id === id);
+  const state = SPEC_PLAN_BUILD_BOARD.states.find((candidate) => candidate.id === id);
   if (!state) throw new Error(`The built-in board has no state "${id}".`);
   return { ...state, ...overrides, id, tasks };
 };

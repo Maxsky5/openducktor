@@ -387,7 +387,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
         decide: (current) =>
           Result.succeed({
             status: current.status,
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
           }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
@@ -402,7 +402,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
         decide: (current) =>
           Result.succeed({
             status: current.status,
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
           }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
@@ -521,7 +521,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
         ...scope,
         taskId: closedTask.id,
         decide: () =>
-          Result.succeed({ status: "closed", workflowId: "openducktor-research-plan-implement" }),
+          Result.succeed({ status: "closed", workflowId: "openducktor-spec-plan-build" }),
       }),
     );
     await Effect.runPromise(

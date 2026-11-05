@@ -8,7 +8,7 @@ import {
   TEST_CONNECTION_TOKEN,
   savedTestAuthorization,
 } from "../../host-client/src/remote/test-support/authorization";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import assert from "node:assert/strict";
 import {
   HOST_CHANNEL_SUBPROTOCOL,
@@ -305,7 +305,7 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
           repoPath: "/repo",
           taskId: "task",
           taskSnapshot: {
-            workflow: builtinTaskWorkflow.reference,
+            workflow: specPlanBuildWorkflow.reference,
             id: "task",
             title: "After retry",
             status: "open",

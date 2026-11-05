@@ -1,5 +1,5 @@
 import {
-  builtinTaskWorkflow,
+  specPlanBuildWorkflow,
   createTaskWorkflow,
   taskWorkflowDescriptor,
   workflowRoleCatalog,
@@ -605,7 +605,7 @@ test.each([
 ])(
   "renders declared message instructions at the shared launch interface: %j",
   async ({ context, override }) => {
-    const descriptor = taskWorkflowDescriptor(builtinTaskWorkflow);
+    const descriptor = taskWorkflowDescriptor(specPlanBuildWorkflow);
     const step = descriptor.definition.steps.find(
       (step) => step.kind === "agent" && step.roleId === "build",
     );
@@ -642,7 +642,7 @@ test.each([
     const taskWorkflow = createTaskWorkflow(
       descriptor.definition,
       descriptor.templates,
-      workflowRoleCatalog([builtinTaskWorkflow]),
+      workflowRoleCatalog([specPlanBuildWorkflow]),
     );
     const dispatch = mock(
       async (_request: WorkflowLaunchRequest): Promise<WorkflowLaunchResult> => {

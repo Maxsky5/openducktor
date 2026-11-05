@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import { type PolicyBoundSessionRef, workflowAgentSessionScope } from "@openducktor/core";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import {
   codexStartSessionInput,
   createHarness,
@@ -119,8 +119,8 @@ describe("CodexAppServerAdapter managed MCP binding", () => {
       "repo",
       "repo",
     ]);
-    const workflowA = expectedThreadConfig("/repo-a", builtinTaskWorkflow.role("build").tools);
-    const workflowB = expectedThreadConfig("/repo-b", builtinTaskWorkflow.role("build").tools);
+    const workflowA = expectedThreadConfig("/repo-a", specPlanBuildWorkflow.role("build").tools);
+    const workflowB = expectedThreadConfig("/repo-b", specPlanBuildWorkflow.role("build").tools);
     expect(threadConfigs(transport)).toEqual([
       { method: "thread/start", config: workflowA },
       { method: "thread/fork", config: workflowB },

@@ -360,7 +360,7 @@ Saved tool choices apply to fresh and forked sessions through a fixed native exc
 
 ### Workflow prompts
 
-The built-in prompt templates live in [prompt-templates.ts](../packages/workflows/src/builtin/prompt-templates.ts). System prompts define role responsibilities, workflow rules, and completion. Kickoff prompts request the current task's artifact. Keep detailed role and writing instructions in the templates.
+The built-in prompt templates live in [spec-plan-build/prompt-templates.ts](../packages/workflows/src/builtin/spec-plan-build/prompt-templates.ts) and [roles/prompt-templates.ts](../packages/workflows/src/builtin/roles/prompt-templates.ts). System prompts define role responsibilities, workflow rules, and completion. Kickoff prompts request the current task's artifact. Keep detailed role and writing instructions in the templates.
 
 For each changed template, set `builtinVersion` to the target branch's version plus one. Increment it only once per PR, even when later commits revise the prompt.
 

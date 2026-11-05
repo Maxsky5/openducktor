@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { expect, test } from "bun:test";
 import {
   taskEventLeaseSchema,
@@ -49,7 +49,7 @@ const createHarness = () => {
       removedTaskIds: [],
       taskSnapshots: [
         {
-          workflow: builtinTaskWorkflow.reference,
+          workflow: specPlanBuildWorkflow.reference,
           id: "task-1",
           title: `Task ${sequence}`,
           status: "open",

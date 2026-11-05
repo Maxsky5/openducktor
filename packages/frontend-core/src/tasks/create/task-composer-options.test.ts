@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import {
   collectKnownLabels,
@@ -50,13 +50,13 @@ describe("task composer options", () => {
 
   test("offers each issue type of the workflow", () => {
     expect(
-      issueTypeChoices(builtinTaskWorkflow).map(({ value, label }) => ({ value, label })),
+      issueTypeChoices(specPlanBuildWorkflow).map(({ value, label }) => ({ value, label })),
     ).toEqual([
       { value: "feature", label: "Feature" },
       { value: "bug", label: "Bug" },
       { value: "task", label: "Task" },
     ]);
-    expect(defaultIssueType(builtinTaskWorkflow)).toBe("task");
+    expect(defaultIssueType(specPlanBuildWorkflow)).toBe("task");
     expect(issueTypeChoices(undefined)).toEqual([]);
   });
 

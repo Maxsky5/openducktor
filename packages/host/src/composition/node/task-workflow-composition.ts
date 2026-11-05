@@ -1,16 +1,18 @@
 import type { WorkflowRolePolicyResolver } from "@openducktor/core";
-import { builtinTaskWorkflow, BUILTIN_BOARD_LAYOUT } from "@openducktor/workflows";
+import {
+  BUILTIN_TASK_WORKFLOWS,
+  SPEC_PLAN_BUILD_BOARD_LAYOUT,
+  specPlanBuildWorkflow,
+} from "@openducktor/workflows";
 import { createTaskWorkflowResolver } from "../../application/tasks/task-workflows";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 
-const BUILTIN_WORKFLOWS = [builtinTaskWorkflow];
-
-/** Every task follows the built-in task workflow until tasks name their workflow. */
+/** Every task follows the Spec, Plan, Build workflow until tasks name their workflow. */
 export const builtinTaskWorkflowResolver = createTaskWorkflowResolver({
-  forTask: () => builtinTaskWorkflow,
-  forNewTask: () => builtinTaskWorkflow,
-  workflows: BUILTIN_WORKFLOWS,
-  forWorkspace: () => ({ board: BUILTIN_BOARD_LAYOUT, workflows: BUILTIN_WORKFLOWS }),
+  forTask: () => specPlanBuildWorkflow,
+  forNewTask: () => specPlanBuildWorkflow,
+  workflows: BUILTIN_TASK_WORKFLOWS,
+  forWorkspace: () => ({ board: SPEC_PLAN_BUILD_BOARD_LAYOUT, workflows: BUILTIN_TASK_WORKFLOWS }),
 });
 
 /** The tools and workspace access of a role in the task workflow of the session task. */

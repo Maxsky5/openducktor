@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { describe, expect, test } from "bun:test";
 import { issueTypePaint, priorityPaint, pullRequestPaint } from "./task-badge-paint";
@@ -6,13 +6,15 @@ import { issueTypePaint, priorityPaint, pullRequestPaint } from "./task-badge-pa
 describe("task badge paint", () => {
   test("uses the desktop colors and icons for the issue types", () => {
     expect(
-      issueTypePaint(builtinTaskWorkflow.definition.issueTypes.find(({ id }) => id === "feature")!),
+      issueTypePaint(
+        specPlanBuildWorkflow.definition.issueTypes.find(({ id }) => id === "feature")!,
+      ),
     ).toEqual({ label: "Feature", tone: "info", icon: "sparkles" });
     expect(
-      issueTypePaint(builtinTaskWorkflow.definition.issueTypes.find(({ id }) => id === "bug")!),
+      issueTypePaint(specPlanBuildWorkflow.definition.issueTypes.find(({ id }) => id === "bug")!),
     ).toEqual({ label: "Bug", tone: "destructive", icon: "bug" });
     expect(
-      issueTypePaint(builtinTaskWorkflow.definition.issueTypes.find(({ id }) => id === "task")!)
+      issueTypePaint(specPlanBuildWorkflow.definition.issueTypes.find(({ id }) => id === "task")!)
         .tone,
     ).toBe("neutral");
   });

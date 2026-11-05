@@ -7,7 +7,7 @@ const fields = {
   workspaceId: "alpha",
   repoPath: "/repos/alpha",
   task: { id: "task-1", title: "Task" },
-  workflowId: "openducktor-research-plan-implement",
+  workflowId: "openducktor-spec-plan-build",
   eventId: "taskRejectedByQa" as const,
   actionId: "startReviewQaFeedbacks" as const,
   actionLabel: "Start Review QA Feedbacks",

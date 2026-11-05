@@ -1,4 +1,4 @@
-import { builtinWorkflowPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
+import { specPlanBuildPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
@@ -37,7 +37,7 @@ const createSnapshot = (): SettingsSnapshot =>
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {
-          [builtinWorkflowPromptKey("messages.build_start")]: {
+          [specPlanBuildPromptKey("messages.build_start")]: {
             template: "invalid {{unknown.value}}",
             baseVersion: 1,
             enabled: true,
@@ -124,7 +124,7 @@ describe("useSettingsModalPromptValidation", () => {
       autopilot: 0,
     });
     expect(
-      latest.selectedRepoPromptValidationErrors[builtinWorkflowPromptKey("messages.build_start")],
+      latest.selectedRepoPromptValidationErrors[specPlanBuildPromptKey("messages.build_start")],
     ).toBe("Unsupported placeholder: {{unknown.value}}.");
 
     await harness.unmount();
@@ -133,7 +133,7 @@ describe("useSettingsModalPromptValidation", () => {
   test("includes required-placeholder validation errors in the aggregated counts", async () => {
     const snapshot = createSnapshot();
     snapshot.globalPromptOverrides = {
-      [builtinWorkflowPromptKey("messages.build_requested_changes")]: {
+      [specPlanBuildPromptKey("messages.build_requested_changes")]: {
         template: "Review {{task.id}} before editing.",
         baseVersion: 3,
         enabled: true,
@@ -151,7 +151,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.hasPromptValidationErrors).toBe(true);
     expect(
       latest.promptValidationState.globalErrors[
-        builtinWorkflowPromptKey("messages.build_requested_changes")
+        specPlanBuildPromptKey("messages.build_requested_changes")
       ],
     ).toBe("Missing required placeholder: {{humanFeedback}}.");
     expect(latest.promptValidationState.globalErrorCount).toBe(1);

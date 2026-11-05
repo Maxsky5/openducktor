@@ -51,7 +51,7 @@ describe("settings snapshot edits", () => {
       alwaysStartQaReviewsFresh: true,
       rules: [
         {
-          workflowId: "openducktor-research-plan-implement",
+          workflowId: "openducktor-spec-plan-build",
           eventId: "taskRejectedByQa",
           actionIds: ["build"],
         },

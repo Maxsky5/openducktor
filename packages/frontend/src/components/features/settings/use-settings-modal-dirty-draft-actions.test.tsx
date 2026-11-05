@@ -1,4 +1,4 @@
-import { builtinWorkflowPromptKey } from "@openducktor/workflows/test-support";
+import { specPlanBuildPromptKey } from "@openducktor/workflows/test-support";
 import { describe, expect, mock, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useState } from "react";
@@ -128,7 +128,7 @@ describe("useSettingsModalDirtyDraftActions", () => {
     await harness.run((state) => {
       state.updateRepoPromptOverrides((overrides) => ({
         ...overrides,
-        [builtinWorkflowPromptKey("messages.spec_start")]: {
+        [specPlanBuildPromptKey("messages.spec_start")]: {
           template: "custom",
           baseVersion: 1,
           enabled: true,
@@ -139,7 +139,7 @@ describe("useSettingsModalDirtyDraftActions", () => {
 
     expect(
       harness.getLatest().snapshotDraft?.workspaces.repo?.promptOverrides[
-        builtinWorkflowPromptKey("messages.spec_start")
+        specPlanBuildPromptKey("messages.spec_start")
       ]?.template,
     ).toBe("custom");
     expect(harness.getLatest().snapshotDraft?.workspaces.repo?.agentDefaults.build?.profileId).toBe(

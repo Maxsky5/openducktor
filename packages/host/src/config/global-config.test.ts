@@ -1,6 +1,6 @@
 import { createDefaultNotificationSettings } from "@openducktor/contracts";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
-import { builtinWorkflowPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
+import { specPlanBuildPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import type { JSONType } from "zod";
 import {
@@ -12,7 +12,7 @@ import {
   upgradePersistedGlobalConfigV3,
 } from "./global-config";
 
-const BUILTIN_WORKFLOW_ID = builtinTaskWorkflow.definition.id;
+const SPEC_PLAN_BUILD_WORKFLOW_ID = specPlanBuildWorkflow.definition.id;
 
 const rejectionMessage = (run: () => void): string => {
   try {
@@ -174,17 +174,17 @@ describe("global config", () => {
 
     expect(config.globalPromptOverrides).toEqual({
       [rolePromptKey("build")]: override("build"),
-      [builtinWorkflowPromptKey("workflow.rules")]: override("guards"),
-      [builtinWorkflowPromptKey("messages.qa_review")]: override("kickoff"),
+      [specPlanBuildPromptKey("workflow.rules")]: override("guards"),
+      [specPlanBuildPromptKey("messages.qa_review")]: override("kickoff"),
       [rolePromptKey("qa")]: override("current"),
     });
     expect(config.workspaces.repo?.promptOverrides).toEqual({
       [rolePromptKey("planner")]: override("planner"),
-      [builtinWorkflowPromptKey("messages.build_git_conflict")]: override("message"),
+      [specPlanBuildPromptKey("messages.build_git_conflict")]: override("message"),
     });
     expect(config.autopilot.rules.map(({ workflowId, eventId }) => [workflowId, eventId])).toEqual([
-      [BUILTIN_WORKFLOW_ID, "taskProgressedToSpecReady"],
-      [BUILTIN_WORKFLOW_ID, "taskProgressedToReadyForDev"],
+      [SPEC_PLAN_BUILD_WORKFLOW_ID, "taskProgressedToSpecReady"],
+      [SPEC_PLAN_BUILD_WORKFLOW_ID, "taskProgressedToReadyForDev"],
       ["custom", "taskProgressedToAiReview"],
     ]);
   });

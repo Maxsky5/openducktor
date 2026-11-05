@@ -1,6 +1,6 @@
-import { builtinWorkflowPromptKey } from "@openducktor/workflows/test-support";
+import { specPlanBuildPromptKey } from "@openducktor/workflows/test-support";
 import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { createAgentStudioStartupTestHost } from "../agents/agent-studio-startup-test-host";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
@@ -865,7 +865,7 @@ const confirmSessionStartModal = async (
 
 const inactiveBoardFilterModel: KanbanBoardFilterModel = {
   value: EMPTY_KANBAN_BOARD_FILTER,
-  issueTypeOptions: builtinTaskWorkflow.definition.issueTypes.map(({ id, label, icon }) => ({
+  issueTypeOptions: specPlanBuildWorkflow.definition.issueTypes.map(({ id, label, icon }) => ({
     value: id,
     label,
     icon,
@@ -1437,7 +1437,7 @@ describe("KanbanPage session start modal flow", () => {
 
   kanbanTest("malformed kickoff override blocks the modal before startup", async () => {
     currentRepoConfigFixture = createRepoConfigFixture({
-      [builtinWorkflowPromptKey("messages.build_start")]: {
+      [specPlanBuildPromptKey("messages.build_start")]: {
         template: "Kickoff {{unsupported.token}}",
         baseVersion: 1,
       },

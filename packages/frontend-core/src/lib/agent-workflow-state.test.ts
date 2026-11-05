@@ -1,6 +1,6 @@
 import { createTaskCardFixture } from "../test-support/shared-test-fixtures";
 import { describe, expect, test } from "bun:test";
-import { builtinTaskWorkflow, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+import { specPlanBuildWorkflow, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { buildRoleWorkflowState, workflowStepRailState } from "./agent-workflow-state";
 
 const rejectedTask = (status: TaskCard["status"]) => {
@@ -17,7 +17,7 @@ const rejectedTask = (status: TaskCard["status"]) => {
     updatedAt: "2026-02-22T12:00:00.000Z",
     createdAt: "2026-02-22T12:00:00.000Z",
   };
-  const { agentWorkflows, availableActions } = builtinTaskWorkflow.project(record);
+  const { agentWorkflows, availableActions } = specPlanBuildWorkflow.project(record);
   return createTaskCardFixture({ ...record, agentWorkflows, availableActions });
 };
 

@@ -1,8 +1,8 @@
 /**
- * The IDs of the built-in task workflow. The definition uses these types, and a test checks that each
+ * The IDs of the Spec, Plan, Build workflow. The definition uses these types, and a test checks that each
  * list holds the IDs of the definition in definition order.
  */
-export const BUILTIN_STATE_IDS = [
+export const SPEC_PLAN_BUILD_STATE_IDS = [
   "open",
   "spec_ready",
   "ready_for_dev",
@@ -12,12 +12,9 @@ export const BUILTIN_STATE_IDS = [
   "human_review",
   "closed",
 ] as const;
-export type BuiltinStateId = (typeof BUILTIN_STATE_IDS)[number];
+export type SpecPlanBuildStateId = (typeof SPEC_PLAN_BUILD_STATE_IDS)[number];
 
-export const BUILTIN_ROLE_IDS = ["spec", "planner", "build", "qa"] as const;
-export type BuiltinRoleId = (typeof BUILTIN_ROLE_IDS)[number];
-
-const BUILTIN_ACTION_IDS = [
+const SPEC_PLAN_BUILD_ACTION_IDS = [
   "view_details",
   "set_spec",
   "set_plan",
@@ -34,9 +31,9 @@ const BUILTIN_ACTION_IDS = [
   "human_approve",
   "remove_worktree",
 ] as const;
-export type BuiltinActionId = (typeof BUILTIN_ACTION_IDS)[number];
+export type SpecPlanBuildActionId = (typeof SPEC_PLAN_BUILD_ACTION_IDS)[number];
 
-const BUILTIN_LAUNCH_ACTION_IDS = [
+const SPEC_PLAN_BUILD_LAUNCH_ACTION_IDS = [
   "spec_initial",
   "planner_initial",
   "build_implementation_start",
@@ -46,28 +43,28 @@ const BUILTIN_LAUNCH_ACTION_IDS = [
   "build_rebase_conflict_resolution",
   "qa_review",
 ] as const;
-export type BuiltinLaunchActionId = (typeof BUILTIN_LAUNCH_ACTION_IDS)[number];
+export type SpecPlanBuildLaunchActionId = (typeof SPEC_PLAN_BUILD_LAUNCH_ACTION_IDS)[number];
 
-const BUILTIN_SIGNAL_IDS = [
+const SPEC_PLAN_BUILD_SIGNAL_IDS = [
   "taskProgressedToSpecReady",
   "taskProgressedToReadyForDev",
   "taskProgressedToAiReview",
   "taskRejectedByQa",
   "taskProgressedToHumanReview",
 ] as const;
-export type BuiltinSignalId = (typeof BUILTIN_SIGNAL_IDS)[number];
+export type SpecPlanBuildSignalId = (typeof SPEC_PLAN_BUILD_SIGNAL_IDS)[number];
 
-const BUILTIN_AUTOMATION_IDS = [
+const SPEC_PLAN_BUILD_AUTOMATION_IDS = [
   "startPlanner",
   "startBuilder",
   "startQa",
   "startReviewQaFeedbacks",
   "startGeneratePullRequest",
 ] as const;
-export type BuiltinAutomationId = (typeof BUILTIN_AUTOMATION_IDS)[number];
+export type SpecPlanBuildAutomationId = (typeof SPEC_PLAN_BUILD_AUTOMATION_IDS)[number];
 
-/** The prompt IDs of the built-in workflow. Each ID is unique within the workflow. */
-const BUILTIN_WORKFLOW_PROMPT_IDS = [
+/** The prompt IDs of the Spec, Plan, Build workflow. Each ID is unique within the workflow. */
+const SPEC_PLAN_BUILD_PROMPT_IDS = [
   "workflow.rules",
   "workflow.tool_rules",
   "workflow.task_context",
@@ -81,6 +78,6 @@ const BUILTIN_WORKFLOW_PROMPT_IDS = [
   "messages.build_git_conflict",
   "workflow.read_only_rejection",
 ] as const;
-export type BuiltinWorkflowPromptId = (typeof BUILTIN_WORKFLOW_PROMPT_IDS)[number];
+export type SpecPlanBuildPromptId = (typeof SPEC_PLAN_BUILD_PROMPT_IDS)[number];
 
-export type BuiltinNotificationKind = `workflow.${Exclude<BuiltinStateId, "open">}`;
+export type SpecPlanBuildNotificationKind = `workflow.${Exclude<SpecPlanBuildStateId, "open">}`;

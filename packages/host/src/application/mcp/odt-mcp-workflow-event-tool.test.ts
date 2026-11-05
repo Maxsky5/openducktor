@@ -169,7 +169,7 @@ describe("odt_apply_workflow_event", () => {
 
     expect(failure).toMatchObject({
       code: "TASK_POLICY_ERROR",
-      message: `Task workflow "openducktor-research-plan-implement" has no agent event ${id}. Use an event that your role instructions list.`,
+      message: `Task workflow "openducktor-spec-plan-build" has no agent event ${id}. Use an event that your role instructions list.`,
     });
     expect(bridge.transitions).toEqual([]);
   });

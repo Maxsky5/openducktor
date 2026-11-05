@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
 
 import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
@@ -64,7 +64,7 @@ describe("createHostTaskStreamController", () => {
         statusChanges: [],
         taskSnapshots: [
           {
-            workflow: builtinTaskWorkflow.reference,
+            workflow: specPlanBuildWorkflow.reference,
             id: "task-1",
             title: saved.title,
             status: saved.status,

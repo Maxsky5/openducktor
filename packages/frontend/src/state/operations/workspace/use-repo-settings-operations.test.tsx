@@ -45,7 +45,7 @@ import {
 } from "@openducktor/frontend-core/queries/workspace";
 import { customAgentRolesQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
-import { BUILTIN_PROMPT_OVERRIDE_KEYS } from "@openducktor/workflows/test-support";
+import { SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS } from "@openducktor/workflows/test-support";
 
 /**
  * The host of every harness in this file. Its commands fail until a test sets them. Each harness
@@ -1296,7 +1296,7 @@ describe("use-repo-settings-operations", () => {
       applyWorkspaceRecords,
     });
     const globalPromptOverrides = Object.fromEntries(
-      BUILTIN_PROMPT_OVERRIDE_KEYS.map((templateId) => [
+      SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS.map((templateId) => [
         templateId,
         {
           template: `global ${templateId}`,
@@ -1306,7 +1306,7 @@ describe("use-repo-settings-operations", () => {
       ]),
     );
     const repoPromptOverrides = Object.fromEntries(
-      BUILTIN_PROMPT_OVERRIDE_KEYS.map((templateId) => [
+      SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS.map((templateId) => [
         templateId,
         {
           template: `repo ${templateId}`,
@@ -1350,11 +1350,11 @@ describe("use-repo-settings-operations", () => {
         throw new Error("Expected settings snapshot to be forwarded.");
       }
       expect(Object.keys(savedSnapshot.global?.globalPromptOverrides?.create ?? {}).sort()).toEqual(
-        BUILTIN_PROMPT_OVERRIDE_KEYS.toSorted(),
+        SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS.toSorted(),
       );
       expect(
         Object.keys(savedSnapshot.workspaces?.["repo-a"]?.promptOverrides?.create ?? {}).sort(),
-      ).toEqual(BUILTIN_PROMPT_OVERRIDE_KEYS.toSorted());
+      ).toEqual(SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS.toSorted());
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;

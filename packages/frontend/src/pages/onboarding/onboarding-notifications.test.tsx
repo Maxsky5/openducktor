@@ -14,7 +14,7 @@ import {
   enterRuntimeStage,
 } from "./onboarding-page.test-support";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 const { cleanup, renderOnboarding } = createOnboardingTestHarness();
 afterEach(cleanup);
@@ -49,7 +49,7 @@ describe("onboarding notifications", () => {
     expect(screen.getAllByRole("switch", { name: /^Enable / })).toHaveLength(
       AGENT_NOTIFICATION_KIND_VALUES.length +
         TASK_NOTIFICATION_KIND_VALUES.length +
-        Object.keys(builtinTaskWorkflow.notificationDefaults()).length,
+        Object.keys(specPlanBuildWorkflow.notificationDefaults()).length,
     );
     expect(screen.getByRole("slider", { name: "Volume" })).toBeTruthy();
     expect(

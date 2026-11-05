@@ -8,13 +8,13 @@ import {
   buildAgentSystemPrompt,
   buildAgentSystemPromptBundle,
   buildReadOnlyPermissionRejectionMessage,
-  listBuiltinAgentPromptTemplates,
+  listSpecPlanBuildPromptTemplates,
   mergePromptOverrides,
 } from "./agent-prompts";
-import { builtinTaskWorkflow } from "./task-workflow";
-import { builtinWorkflowPromptKey, rolePromptKey } from "../../test-support/builtin";
+import { specPlanBuildWorkflow } from "./workflow";
+import { specPlanBuildPromptKey, rolePromptKey } from "../../../test-support/spec-plan-build";
 
-const findPromptOverrideProblem = builtinTaskWorkflow.prompts.findOverrideProblem;
+const findPromptOverrideProblem = specPlanBuildWorkflow.prompts.findOverrideProblem;
 
 const taskContext = {
   taskId: "task-42",
@@ -237,7 +237,7 @@ describe("buildAgentSystemPrompt", () => {
   test("shared artifact rules stay general while Builder owns execution choices", () => {
     const result = buildAgentSystemPromptBundle({ role: "build", task: taskContext });
     const shared = result.templates.find(
-      (entry) => entry.key === builtinWorkflowPromptKey("workflow.rules"),
+      (entry) => entry.key === specPlanBuildPromptKey("workflow.rules"),
     );
 
     expect(shared?.content).toContain("governing constitution for the current task");
@@ -419,7 +419,7 @@ describe("buildAgentSystemPrompt", () => {
       if (id === "messages.build_requested_changes") {
         custom += " {{humanFeedback}}";
       }
-      const key = id.startsWith("role ") ? rolePromptKey(role) : builtinWorkflowPromptKey(id);
+      const key = id.startsWith("role ") ? rolePromptKey(role) : specPlanBuildPromptKey(id);
       const overrides = { [key]: { template: custom, baseVersion: previous, enabled: true } };
       const result = id.startsWith("messages.")
         ? buildAgentKickoffPromptBundle({
@@ -468,7 +468,7 @@ describe("buildAgentSystemPrompt", () => {
       role: "spec",
       task: taskContext,
       overrides: {
-        [builtinWorkflowPromptKey("workflow.rules")]: {
+        [specPlanBuildPromptKey("workflow.rules")]: {
           template: "",
           baseVersion: 3,
           enabled: true,
@@ -477,7 +477,7 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     const workflowGuardsTemplate = result.templates.find(
-      (entry) => entry.key === builtinWorkflowPromptKey("workflow.rules"),
+      (entry) => entry.key === specPlanBuildPromptKey("workflow.rules"),
     );
     expect(workflowGuardsTemplate?.source).toBe("override");
     expect(workflowGuardsTemplate?.content).toBe("");
@@ -584,7 +584,7 @@ describe("kickoff and permission prompts", () => {
         description: "desc",
       },
       overrides: {
-        [builtinWorkflowPromptKey("messages.plan_start")]: {
+        [specPlanBuildPromptKey("messages.plan_start")]: {
           template: "Planner kickoff {{task.id}} / {{task.description}}",
           baseVersion: 2,
           enabled: true,
@@ -608,7 +608,7 @@ describe("kickoff and permission prompts", () => {
           humanFeedback: "Tighten the validation copy.",
         },
         overrides: {
-          [builtinWorkflowPromptKey("messages.build_requested_changes")]: {
+          [specPlanBuildPromptKey("messages.build_requested_changes")]: {
             template: "Review {{task.id}} before editing.",
             baseVersion: 3,
             enabled: true,
@@ -714,7 +714,7 @@ describe("kickoff and permission prompts", () => {
         taskId: "task-2",
       },
       overrides: {
-        [builtinWorkflowPromptKey("messages.plan_start")]: {
+        [specPlanBuildPromptKey("messages.plan_start")]: {
           template: "",
           baseVersion: 2,
           enabled: true,
@@ -735,7 +735,7 @@ describe("kickoff and permission prompts", () => {
         taskId: "task-2",
       },
       overrides: {
-        [builtinWorkflowPromptKey("messages.plan_start")]: {
+        [specPlanBuildPromptKey("messages.plan_start")]: {
           template: "Disabled custom kickoff",
           baseVersion: 2,
           enabled: false,
@@ -865,7 +865,7 @@ describe("kickoff and permission prompts", () => {
         conflictOutput: "OVERRIDE_OUTPUT_SENTINEL",
       },
       overrides: {
-        [builtinWorkflowPromptKey("messages.build_git_conflict")]: {
+        [specPlanBuildPromptKey("messages.build_git_conflict")]: {
           template:
             "{{git.operationLabel}}\n{{git.currentBranch}}\n{{git.targetBranch}}\n{{git.conflictedFiles}}\n{{git.conflictOutput}}\n{{task.id}}",
           baseVersion: 2,
@@ -886,7 +886,7 @@ describe("kickoff and permission prompts", () => {
     expect(result.warnings).toEqual([
       {
         type: "override_base_version_mismatch",
-        key: builtinWorkflowPromptKey("messages.build_git_conflict"),
+        key: specPlanBuildPromptKey("messages.build_git_conflict"),
         builtinVersion: 5,
         overrideBaseVersion: 2,
       },
@@ -920,7 +920,7 @@ describe("kickoff and permission prompts", () => {
           taskId: "task-2",
         },
         overrides: {
-          [builtinWorkflowPromptKey("messages.plan_start")]: {
+          [specPlanBuildPromptKey("messages.plan_start")]: {
             template: "Planner kickoff {{git.conflictOutput}}",
             baseVersion: 2,
             enabled: true,
@@ -933,16 +933,16 @@ describe("kickoff and permission prompts", () => {
   });
 });
 
-describe("listBuiltinAgentPromptTemplates", () => {
+describe("listSpecPlanBuildPromptTemplates", () => {
   test("returns definitions for role, kickoff, message, and permission prompts", () => {
-    const definitions = listBuiltinAgentPromptTemplates();
+    const definitions = listSpecPlanBuildPromptTemplates();
     const keys = definitions.map((entry) => entry.key);
 
     expect(keys).toContain(rolePromptKey("spec"));
     expect(keys).toContain(rolePromptKey("build"));
-    expect(keys).toContain(builtinWorkflowPromptKey("messages.spec_start"));
-    expect(keys).toContain(builtinWorkflowPromptKey("messages.build_git_conflict"));
-    expect(keys).toContain(builtinWorkflowPromptKey("workflow.read_only_rejection"));
+    expect(keys).toContain(specPlanBuildPromptKey("messages.spec_start"));
+    expect(keys).toContain(specPlanBuildPromptKey("messages.build_git_conflict"));
+    expect(keys).toContain(specPlanBuildPromptKey("workflow.read_only_rejection"));
   });
 });
 
@@ -950,14 +950,14 @@ describe("mergePromptOverrides", () => {
   test("resolves repo overrides over global overrides", () => {
     const merged = mergePromptOverrides({
       globalOverrides: {
-        [builtinWorkflowPromptKey("messages.spec_start")]: {
+        [specPlanBuildPromptKey("messages.spec_start")]: {
           template: "global",
           baseVersion: 1,
           enabled: true,
         },
       },
       repoOverrides: {
-        [builtinWorkflowPromptKey("messages.spec_start")]: {
+        [specPlanBuildPromptKey("messages.spec_start")]: {
           template: "repo",
           baseVersion: 1,
           enabled: true,
@@ -965,20 +965,20 @@ describe("mergePromptOverrides", () => {
       },
     });
 
-    expect(merged[builtinWorkflowPromptKey("messages.spec_start")]?.template).toBe("repo");
+    expect(merged[specPlanBuildPromptKey("messages.spec_start")]?.template).toBe("repo");
   });
 
   test("falls back to global override when repo override is disabled", () => {
     const merged = mergePromptOverrides({
       globalOverrides: {
-        [builtinWorkflowPromptKey("messages.spec_start")]: {
+        [specPlanBuildPromptKey("messages.spec_start")]: {
           template: "global",
           baseVersion: 1,
           enabled: true,
         },
       },
       repoOverrides: {
-        [builtinWorkflowPromptKey("messages.spec_start")]: {
+        [specPlanBuildPromptKey("messages.spec_start")]: {
           template: "repo-disabled",
           baseVersion: 1,
           enabled: false,
@@ -986,7 +986,7 @@ describe("mergePromptOverrides", () => {
       },
     });
 
-    expect(merged[builtinWorkflowPromptKey("messages.spec_start")]?.template).toBe("global");
+    expect(merged[specPlanBuildPromptKey("messages.spec_start")]?.template).toBe("global");
   });
 });
 
@@ -995,14 +995,14 @@ describe("prompts.findOverrideProblem", () => {
     const template = "QA required: {{task.qaRequired}}";
     expect(
       findPromptOverrideProblem({
-        [builtinWorkflowPromptKey("workflow.task_context")]: { template, baseVersion: 1 },
+        [specPlanBuildPromptKey("workflow.task_context")]: { template, baseVersion: 1 },
       }),
     ).toBe(
       'The prompt "workflow.task_context" uses unsupported placeholder "task.qaRequired". Edit or disable this prompt override in Settings.',
     );
     expect(
       findPromptOverrideProblem({
-        [builtinWorkflowPromptKey("workflow.task_context")]: {
+        [specPlanBuildPromptKey("workflow.task_context")]: {
           template,
           baseVersion: 1,
           enabled: false,

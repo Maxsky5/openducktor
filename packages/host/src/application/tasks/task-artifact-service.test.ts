@@ -95,7 +95,7 @@ describe("task artifact service", () => {
             decide: () =>
               Result.succeed({
                 status: "ai_review",
-                workflowId: "openducktor-research-plan-implement",
+                workflowId: "openducktor-spec-plan-build",
               }),
           }),
         );
@@ -136,7 +136,7 @@ describe("task artifact service", () => {
             decide: () =>
               Result.succeed({
                 status: "human_review",
-                workflowId: "openducktor-research-plan-implement",
+                workflowId: "openducktor-spec-plan-build",
               }),
             sourceTool: "workflow_artifact_save",
             updatedBy: "user",
@@ -321,7 +321,7 @@ describe("task artifact service", () => {
           decide: (current) =>
             Result.succeed({
               status: current.status,
-              workflowId: "openducktor-research-plan-implement",
+              workflowId: "openducktor-spec-plan-build",
             }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",

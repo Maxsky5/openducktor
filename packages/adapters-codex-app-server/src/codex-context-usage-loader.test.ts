@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import {
   codexSessionRef,
@@ -275,7 +275,7 @@ describe("CodexContextUsageLoader", () => {
         expect.objectContaining({
           method: "thread/resume",
           params: expect.objectContaining({
-            config: expectedThreadConfig("/repo", builtinTaskWorkflow.role("build").tools),
+            config: expectedThreadConfig("/repo", specPlanBuildWorkflow.role("build").tools),
             threadId: "grandchild-thread",
             cwd: "/repo",
             excludeTurns: false,

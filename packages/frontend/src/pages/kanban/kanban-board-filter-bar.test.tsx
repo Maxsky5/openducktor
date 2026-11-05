@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -47,7 +47,7 @@ const renderBar = ({
       <KanbanBoardFilterBar
         filter={{
           value,
-          issueTypeOptions: builtinTaskWorkflow.definition.issueTypes.map(
+          issueTypeOptions: specPlanBuildWorkflow.definition.issueTypes.map(
             ({ id, label, icon }) => ({ value: id, label, icon }),
           ),
           labelOptions,

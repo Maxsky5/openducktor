@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -12,7 +12,7 @@ describe("IssueTypeGrid", () => {
     const onSelectIssueType = mock(() => {});
     const { unmount } = render(
       <IssueTypeGrid
-        choices={builtinTaskWorkflow.definition.issueTypes.map(
+        choices={specPlanBuildWorkflow.definition.issueTypes.map(
           ({ id, label, description, icon }) => ({
             value: id,
             label,

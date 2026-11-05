@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import type { IssueType } from "@openducktor/contracts";
-import { builtinTaskWorkflow, createTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow, createTaskWorkflow } from "@openducktor/workflows";
 import {
   createReviewTaskWorkflow,
   reviewTaskDefinition,
@@ -395,13 +395,13 @@ describe("task service with a workflow for each task", () => {
     // The issue type stands for the stored workflow of a task.
     const taskWorkflows = createTaskWorkflowResolver({
       forTask: (task: { readonly id: string; readonly issueType?: string }) =>
-        task.issueType === "feature" ? review : builtinTaskWorkflow,
-      forNewTask: () => builtinTaskWorkflow,
-      workflows: [builtinTaskWorkflow, review],
+        task.issueType === "feature" ? review : specPlanBuildWorkflow,
+      forNewTask: () => specPlanBuildWorkflow,
+      workflows: [specPlanBuildWorkflow, review],
       forWorkspace: () => ({
-        workflows: [builtinTaskWorkflow, review],
+        workflows: [specPlanBuildWorkflow, review],
         board: {
-          states: [...builtinTaskWorkflow.definition.states, ...review.definition.states].map(
+          states: [...specPlanBuildWorkflow.definition.states, ...review.definition.states].map(
             ({ id }) => ({ id, taskOrder: "updated" as const }),
           ),
         },

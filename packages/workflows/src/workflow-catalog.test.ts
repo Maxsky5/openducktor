@@ -4,8 +4,8 @@ import {
   workflowDefinitionSchema,
   type WorkflowDefinition,
 } from "@openducktor/contracts";
-import { builtinTaskWorkflow } from "./builtin/task-workflow";
-import { BUILTIN_BOARD_LAYOUT } from "./builtin/board";
+import { specPlanBuildWorkflow } from "./builtin/spec-plan-build/workflow";
+import { SPEC_PLAN_BUILD_BOARD_LAYOUT } from "./builtin/spec-plan-build/board";
 import {
   createReviewTaskWorkflow,
   reviewTaskPromptTemplates,
@@ -33,15 +33,17 @@ const variant = (change: (definition: WorkflowDefinition) => void) => {
 const layout: WorkflowBoardLayout = {
   states: review.definition.states
     .flatMap((state, index) => [
-      ...(BUILTIN_BOARD_LAYOUT.states[index] ? [BUILTIN_BOARD_LAYOUT.states[index]!] : []),
+      ...(SPEC_PLAN_BUILD_BOARD_LAYOUT.states[index]
+        ? [SPEC_PLAN_BUILD_BOARD_LAYOUT.states[index]!]
+        : []),
       { id: state.id, taskOrder: "updated" as const },
     ])
-    .concat(BUILTIN_BOARD_LAYOUT.states.slice(review.definition.states.length)),
+    .concat(SPEC_PLAN_BUILD_BOARD_LAYOUT.states.slice(review.definition.states.length)),
 };
 
 describe("workflow catalog and shared board", () => {
   test("resolves explicit interleaved columns with metadata from the definitions", () => {
-    const board = resolveWorkflowBoard(layout, [builtinTaskWorkflow, review]);
+    const board = resolveWorkflowBoard(layout, [specPlanBuildWorkflow, review]);
     expect(board.states.slice(0, 4).map(({ id }) => id)).toEqual([
       "open",
       "backlog",
@@ -63,8 +65,8 @@ describe("workflow catalog and shared board", () => {
   test("compiles each catalog workflow once and matches exact revisions", () => {
     const catalog = compileWorkflowCatalog({
       hostInstanceId: "host-a",
-      roles: [...workflowRoleCatalog([builtinTaskWorkflow, review])],
-      workflows: [taskWorkflowDescriptor(builtinTaskWorkflow), taskWorkflowDescriptor(review)],
+      roles: [...workflowRoleCatalog([specPlanBuildWorkflow, review])],
+      workflows: [taskWorkflowDescriptor(specPlanBuildWorkflow), taskWorkflowDescriptor(review)],
     });
     const compiled = requireCatalogWorkflow(catalog, { id: "review", revision: 1 });
     expect(compiled.definition.roles.map(({ id }) => id)).toEqual(["writer", "editor"]);
@@ -76,7 +78,7 @@ describe("workflow catalog and shared board", () => {
 
   test("shares state identity across definitions and rejects conflicts or missing states", () => {
     expect(
-      resolveWorkflowBoard(layout, [builtinTaskWorkflow, review, variant(() => {})]).states,
+      resolveWorkflowBoard(layout, [specPlanBuildWorkflow, review, variant(() => {})]).states,
     ).toHaveLength(15);
     const relabelled = variant((definition) => {
       definition.states.find(({ id }) => id === "reviewing")!.label = "Different review";

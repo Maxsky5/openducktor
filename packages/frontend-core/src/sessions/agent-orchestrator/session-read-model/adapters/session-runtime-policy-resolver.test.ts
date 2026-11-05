@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { expect, mock, test } from "bun:test";
 import { createSettingsSnapshotFixture } from "../../../../test-support/shared-test-fixtures";
@@ -46,7 +46,7 @@ test("loads settings inside the runtime-policy adapter for Codex policy", async 
         taskId: "task-1",
         role: "build",
       },
-      workflowRole: builtinTaskWorkflow.roles.find(({ id }) => id === "build")!,
+      workflowRole: specPlanBuildWorkflow.roles.find(({ id }) => id === "build")!,
     }),
   ).toMatchObject({ kind: "codex" });
   expect(loadSettingsSnapshot).toHaveBeenCalledTimes(1);

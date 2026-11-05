@@ -1,11 +1,14 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { builtinTaskWorkflow, BUILTIN_BOARD } from "../src/builtin/task-workflow";
+import {
+  specPlanBuildWorkflow,
+  SPEC_PLAN_BUILD_BOARD,
+} from "../src/builtin/spec-plan-build/workflow";
 import type { ResolvedTaskCard } from "../src/task-workflow-view";
 import { createWorkflowTaskCardFixture } from "./shared-board-workflows";
 
 /** A built-in task card with the workflow projection of its fields. Explicit fields win. */
 export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): ResolvedTaskCard =>
-  createWorkflowTaskCardFixture(builtinTaskWorkflow, BUILTIN_BOARD, {
+  createWorkflowTaskCardFixture(specPlanBuildWorkflow, SPEC_PLAN_BUILD_BOARD, {
     id: "task-1",
     title: "Task 1",
     issueType: "task",

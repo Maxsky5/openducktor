@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
@@ -296,7 +296,7 @@ describe("useSessionStartModalRunner", () => {
     );
     const request = {
       source: "agent_studio",
-      taskWorkflow: builtinTaskWorkflow,
+      taskWorkflow: specPlanBuildWorkflow,
       taskId: "TASK-1",
       role: "build",
       launchActionId: "build_implementation_start",
@@ -353,7 +353,7 @@ describe("useSessionStartModalRunner", () => {
     );
     const request = {
       source: "agent_studio",
-      taskWorkflow: builtinTaskWorkflow,
+      taskWorkflow: specPlanBuildWorkflow,
       taskId: "TASK-1",
       role: "build",
       launchActionId: "build_implementation_start",
@@ -420,7 +420,7 @@ describe("useSessionStartModalRunner failures", () => {
       );
       const request = {
         source: "agent_studio",
-        taskWorkflow: builtinTaskWorkflow,
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-1",
         role: "build",
         launchActionId: "build_implementation_start",
@@ -562,7 +562,7 @@ test.each([
       callerPromise = runner.runSessionStartRequest(
         {
           source: "agent_studio",
-          taskWorkflow: builtinTaskWorkflow,
+          taskWorkflow: specPlanBuildWorkflow,
           taskId: "TASK-1",
           role: "build",
           launchActionId: "build_implementation_start",
@@ -643,7 +643,7 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("accepts a runtime that supports the concrete selected start mode", () => {
     expect(() =>
       assertRuntimeSupportsSelectedStartMode({
-        taskWorkflow: builtinTaskWorkflow,
+        taskWorkflow: specPlanBuildWorkflow,
         launchActionId: "build_pull_request_generation",
         role: "build",
         runtimeDescriptor: FORKLESS_RUNTIME,
@@ -657,7 +657,7 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("fails fast before launch when the selected runtime does not support the selected mode", () => {
     expect(() =>
       assertRuntimeSupportsSelectedStartMode({
-        taskWorkflow: builtinTaskWorkflow,
+        taskWorkflow: specPlanBuildWorkflow,
         launchActionId: "build_pull_request_generation",
         role: "build",
         runtimeDescriptor: FORKLESS_RUNTIME,
@@ -673,7 +673,7 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("requires an available runtime for concrete non-reuse starts", () => {
     expect(() =>
       assertRuntimeSupportsSelectedStartMode({
-        taskWorkflow: builtinTaskWorkflow,
+        taskWorkflow: specPlanBuildWorkflow,
         launchActionId: "build_implementation_start",
         role: "build",
         runtimeDescriptor: null,
@@ -749,7 +749,7 @@ test("ignores replaced requests and confirmation holds a synchronous lease", asy
     },
   );
   const request = {
-    taskWorkflow: builtinTaskWorkflow,
+    taskWorkflow: specPlanBuildWorkflow,
     source: "agent_studio",
     taskId: "TASK-1",
     role: "build",
@@ -849,7 +849,7 @@ test("blocks confirmation while prompt settings load and uses the current branch
     },
   );
   const request = {
-    taskWorkflow: builtinTaskWorkflow,
+    taskWorkflow: specPlanBuildWorkflow,
     source: "agent_studio",
     taskId: "TASK-1",
     role: "build",
@@ -947,7 +947,7 @@ for (const changedScope of ["task", "workspace", "role"] as const) {
     });
     const request = {
       source: "agent_studio",
-      taskWorkflow: builtinTaskWorkflow,
+      taskWorkflow: specPlanBuildWorkflow,
       taskId: "TASK-1",
       role: "build",
       launchActionId: "build_implementation_start",
@@ -1088,7 +1088,7 @@ test.each(["submit", "continue"] as const)(
     );
     const request = {
       source: "task_action",
-      taskWorkflow: builtinTaskWorkflow,
+      taskWorkflow: specPlanBuildWorkflow,
       taskId: "TASK-1",
       role: "build",
       launchActionId: "build_implementation_start",

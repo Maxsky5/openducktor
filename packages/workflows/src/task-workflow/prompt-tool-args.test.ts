@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { agentToolNameValues, ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
-import { builtinTaskWorkflow } from "../builtin/task-workflow";
+import { specPlanBuildWorkflow } from "../builtin/spec-plan-build/workflow";
 import { formatOdtToolArgs as formatArgs } from "./prompt-tool-args";
 
 const formatOdtToolArgs = (toolName: Parameters<typeof formatArgs>[1]) =>
-  formatArgs(builtinTaskWorkflow.definition, toolName);
+  formatArgs(specPlanBuildWorkflow.definition, toolName);
 
 /** Reads the top-level argument names. Nested object members are not arguments. */
 const parseArgNames = (toolArgs: string): string[] => {

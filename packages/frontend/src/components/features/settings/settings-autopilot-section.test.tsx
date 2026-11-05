@@ -130,7 +130,7 @@ describe("settings Autopilot section", () => {
   test("keeps a saved global Pull Request action visible", async () => {
     const autopilot = setAutopilotRuleAction(
       createDefaultAutopilotSettings(),
-      "openducktor-research-plan-implement",
+      "openducktor-spec-plan-build",
       "taskProgressedToHumanReview",
       "action:startGeneratePullRequest",
     );

@@ -388,7 +388,7 @@ describe("task artifact repository", () => {
         decide: (current) =>
           Result.succeed({
             status: current.status,
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
           }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
@@ -425,7 +425,7 @@ describe("task artifact repository", () => {
             decide: (current) =>
               Result.succeed({
                 status: current.status,
-                workflowId: "openducktor-research-plan-implement",
+                workflowId: "openducktor-spec-plan-build",
               }),
             sourceTool: "workflow_artifact_save",
             updatedBy: "user",
@@ -483,7 +483,7 @@ describe("task artifact repository", () => {
         decide: (current) =>
           Result.succeed({
             status: current.status,
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
           }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
@@ -503,7 +503,7 @@ describe("task artifact repository", () => {
         decide: (current) =>
           Result.succeed({
             status: current.status,
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
           }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
@@ -521,7 +521,7 @@ describe("task artifact repository", () => {
         decide: (current) =>
           Result.succeed({
             status: current.status,
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
           }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
@@ -554,7 +554,7 @@ describe("task artifact repository", () => {
         decide: (current) =>
           Result.succeed({
             status: current.status,
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
           }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
@@ -788,7 +788,7 @@ describe("task artifact repository", () => {
         decide: (current) =>
           Result.succeed({
             status: current.status,
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
           }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
@@ -826,7 +826,7 @@ describe("task artifact repository", () => {
       store.transitionTask({
         ...scope,
         decide: () =>
-          Result.succeed({ status: "closed", workflowId: "openducktor-research-plan-implement" }),
+          Result.succeed({ status: "closed", workflowId: "openducktor-spec-plan-build" }),
       }),
     );
     for (const mutate of [
@@ -848,7 +848,7 @@ describe("task artifact repository", () => {
         decide: (current) =>
           Result.succeed({
             status: current.status,
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
           }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
@@ -867,7 +867,7 @@ describe("task artifact repository", () => {
         decide: (current) =>
           Result.succeed({
             status: current.status,
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
           }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
@@ -881,7 +881,7 @@ describe("task artifact repository", () => {
         decide: (current) =>
           Result.succeed({
             status: current.status,
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
           }),
         sourceTool: "workflow_artifact_save",
         updatedBy: "user",
@@ -896,7 +896,7 @@ describe("task artifact repository", () => {
           decide: () =>
             Result.succeed({
               status: "human_review",
-              workflowId: "openducktor-research-plan-implement",
+              workflowId: "openducktor-spec-plan-build",
             }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",

@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import type {
@@ -74,7 +74,7 @@ const createAgentSessionCommandService = ({
     pauseForStop,
     turnPreparation: {
       context: () => Effect.succeed("Current host context"),
-      taskWorkflow: () => Effect.succeed(builtinTaskWorkflow),
+      taskWorkflow: () => Effect.succeed(specPlanBuildWorkflow),
       promptOverrides: () => Effect.succeed({}),
       model: (_target, selection) => Effect.succeed(selection),
     },
@@ -193,7 +193,7 @@ const task = (status: TaskCard["status"]): TaskCard => ({
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
-  workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
   workflowSteps: [],
   availableActions: [],
   labels: [],

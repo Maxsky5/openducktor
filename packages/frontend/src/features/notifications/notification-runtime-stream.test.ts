@@ -11,7 +11,7 @@ import {
   createDeliveryAdapters,
   workflowClosedOccurrence,
 } from "@openducktor/frontend-core/notifications/notification-runtime.test-support";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
 
@@ -361,7 +361,7 @@ test.each(["attachment", "live"] as const)(
 );
 
 const harness = () => {
-  const settings = createBuiltinNotificationSettings();
+  const settings = createSpecPlanBuildNotificationSettings();
   settings.volumePercent = 17;
   settings.osFocus = "always_send";
   settings.soundFocus = "always_play";

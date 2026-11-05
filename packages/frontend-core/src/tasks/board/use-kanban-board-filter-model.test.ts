@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import "../../test-support/dom-environment";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -28,7 +28,7 @@ const renderFilterModel = (workspaceId: string | null, tasks: TaskCard[] = NO_TA
     useKanbanBoardFilterModel(
       workspaceId,
       tasks,
-      builtinTaskWorkflow.definition.issueTypes.map(({ id, label, icon }) => ({
+      specPlanBuildWorkflow.definition.issueTypes.map(({ id, label, icon }) => ({
         value: id,
         label,
         icon,

@@ -15,7 +15,7 @@ const failed = ({
     workspaceId: "ws-1",
     repoPath: "/repo",
     task: { id: taskId, title: "Export" },
-    workflowId: "openducktor-research-plan-implement",
+    workflowId: "openducktor-spec-plan-build",
     eventId: "taskRejectedByQa",
     actionId: "startReviewQaFeedbacks",
     actionLabel: "Start Builder QA feedback",

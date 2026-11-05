@@ -31,11 +31,11 @@ import type {
   WorkspaceSettingsService,
 } from "./workspace-settings-model";
 import {
-  builtinTaskWorkflow,
+  specPlanBuildWorkflow,
   createTaskWorkflow,
   workflowRoleCatalog,
 } from "@openducktor/workflows";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows/test-support";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 const createWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,
@@ -83,33 +83,33 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
     alwaysStartQaReviewsFresh: false,
     rules: [
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToSpecReady",
         actionIds: [],
       },
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToReadyForDev",
         actionIds: [],
       },
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToAiReview",
         actionIds: [],
       },
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskRejectedByQa",
         actionIds: [],
       },
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToHumanReview",
         actionIds: [],
       },
     ],
   },
-  notifications: createBuiltinNotificationSettings(),
+  notifications: createSpecPlanBuildNotificationSettings(),
   remoteAccess: { enabled: false, configuration: null },
   agentRuntimes: {
     opencode: {
@@ -347,7 +347,7 @@ describe("createWorkspaceSettingsService", () => {
         alwaysStartQaReviewsFresh: false,
         rules: [
           {
-            workflowId: "openducktor-research-plan-implement",
+            workflowId: "openducktor-spec-plan-build",
             eventId: "taskProgressedToAiReview",
             actionIds: ["startBuilder"],
           },
@@ -361,13 +361,13 @@ describe("createWorkspaceSettingsService", () => {
     });
     const port = createFakeSettingsConfig({ config: initial });
     const otherWorkflow = createTaskWorkflow(
-      workflowDefinitionSchema.parse({ ...builtinTaskWorkflow.definition, id: "other" }),
-      builtinTaskWorkflow.workflowTemplates,
-      workflowRoleCatalog([builtinTaskWorkflow]),
+      workflowDefinitionSchema.parse({ ...specPlanBuildWorkflow.definition, id: "other" }),
+      specPlanBuildWorkflow.workflowTemplates,
+      workflowRoleCatalog([specPlanBuildWorkflow]),
     );
     const service = createWorkspaceSettingsService(port, {
       ...builtinTaskWorkflows,
-      workflows: [builtinTaskWorkflow, otherWorkflow],
+      workflows: [specPlanBuildWorkflow, otherWorkflow],
     });
     await Effect.runPromise(
       saveWith(
@@ -385,7 +385,7 @@ describe("createWorkspaceSettingsService", () => {
           autopilot: {
             rules: [
               {
-                workflowId: "openducktor-research-plan-implement",
+                workflowId: "openducktor-spec-plan-build",
                 eventId: "taskProgressedToAiReview",
                 actionIds: ["startQa"],
               },
@@ -421,7 +421,7 @@ describe("createWorkspaceSettingsService", () => {
       saved.autopilot.rules.filter((rule) => rule.eventId === "taskProgressedToAiReview"),
     ).toEqual([
       {
-        workflowId: "openducktor-research-plan-implement",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToAiReview",
         actionIds: ["startQa"],
       },
@@ -2039,7 +2039,7 @@ describe("createWorkspaceSettingsService", () => {
 
   test("preserves notifications during unrelated settings writes", async () => {
     const notifications = {
-      ...createBuiltinNotificationSettings(),
+      ...createSpecPlanBuildNotificationSettings(),
       volumePercent: 70,
     };
     const settingsConfig = createFakeSettingsConfig({

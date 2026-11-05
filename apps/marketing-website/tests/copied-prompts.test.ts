@@ -11,14 +11,14 @@ type BuiltinPrompt = {
 
 // The import is dynamic, so the site type check does not check the product source.
 const promptsModule = new URL(
-  "../../../packages/workflows/src/builtin/agent-prompts.ts",
+  "../../../packages/workflows/src/builtin/spec-plan-build/agent-prompts.ts",
   import.meta.url,
 ).href;
 // SAFETY: The product returns records with these prompt fields.
-const { listBuiltinAgentPromptTemplates } = (await import(promptsModule)) as {
-  listBuiltinAgentPromptTemplates: () => BuiltinPrompt[];
+const { listSpecPlanBuildPromptTemplates } = (await import(promptsModule)) as {
+  listSpecPlanBuildPromptTemplates: () => BuiltinPrompt[];
 };
-const prompts = listBuiltinAgentPromptTemplates();
+const prompts = listSpecPlanBuildPromptTemplates();
 
 /** The built-in workflow prompt with its placeholders. */
 function template(id: string): string {

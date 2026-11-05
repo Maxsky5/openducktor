@@ -1,5 +1,5 @@
 import { createTaskSyncService } from "./task-sync-service";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import { describe, expect, mock, test } from "bun:test";
 import { noMergeDetection, syncWorkspace } from "./task-sync-service.test-support";
@@ -51,7 +51,7 @@ describe("committed task cards", () => {
             const artifacts = yield* store.listArtifacts(input);
             yield* store.clearTaskArtifacts(input);
             return {
-              task: enrichTask(builtinTaskWorkflow, yield* store.getTask(input)),
+              task: enrichTask(specPlanBuildWorkflow, yield* store.getTask(input)),
               removedArtifactIds: artifacts.map((artifact) => artifact.artifactId),
             };
           }),

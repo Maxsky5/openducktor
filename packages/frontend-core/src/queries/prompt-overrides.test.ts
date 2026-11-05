@@ -1,5 +1,5 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
-import { builtinWorkflowPromptKey } from "@openducktor/workflows/test-support";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
+import { specPlanBuildPromptKey } from "@openducktor/workflows/test-support";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import type { ClientConnection } from "../connection/client-connection";
@@ -20,7 +20,7 @@ const createRepoConfig = (): RepoConfig => ({
   hooks: { postComplete: [] },
   actions: { items: [], defaultActionId: null },
   promptOverrides: {
-    [builtinWorkflowPromptKey("messages.plan_start")]: {
+    [specPlanBuildPromptKey("messages.plan_start")]: {
       template: "repo planner {{task.id}}",
       baseVersion: 1,
       enabled: true,
@@ -34,7 +34,7 @@ const createRepoConfig = (): RepoConfig => ({
 const createSettingsSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({
     globalPromptOverrides: {
-      [builtinWorkflowPromptKey("messages.spec_start")]: {
+      [specPlanBuildPromptKey("messages.spec_start")]: {
         template: "global kickoff {{task.id}}",
         baseVersion: 1,
         enabled: true,
@@ -95,12 +95,12 @@ describe("loadEffectivePromptOverrides", () => {
     const firstLoad = loadEffectivePromptOverrides(
       "repo",
       connection.queryClient,
-      builtinTaskWorkflow,
+      specPlanBuildWorkflow,
     );
     const secondLoad = loadEffectivePromptOverrides(
       "repo",
       connection.queryClient,
-      builtinTaskWorkflow,
+      specPlanBuildWorkflow,
     );
 
     repoDeferred.resolve(createRepoConfig());
@@ -112,18 +112,18 @@ describe("loadEffectivePromptOverrides", () => {
     expect(workspaceListMock).not.toHaveBeenCalled();
     expect(workspaceGetSettingsSnapshotMock).toHaveBeenCalledTimes(1);
     expect(firstResult).toEqual(secondResult);
-    expect(firstResult[builtinWorkflowPromptKey("messages.spec_start")]?.template).toBe(
+    expect(firstResult[specPlanBuildPromptKey("messages.spec_start")]?.template).toBe(
       "global kickoff {{task.id}}",
     );
-    expect(firstResult[builtinWorkflowPromptKey("messages.plan_start")]?.template).toBe(
+    expect(firstResult[specPlanBuildPromptKey("messages.plan_start")]?.template).toBe(
       "repo planner {{task.id}}",
     );
   });
 
   test("normalizes workspace ids before deduplicating concurrent loads", async () => {
     const [firstResult, secondResult] = await Promise.all([
-      loadEffectivePromptOverrides("repo", connection.queryClient, builtinTaskWorkflow),
-      loadEffectivePromptOverrides(" repo ", connection.queryClient, builtinTaskWorkflow),
+      loadEffectivePromptOverrides("repo", connection.queryClient, specPlanBuildWorkflow),
+      loadEffectivePromptOverrides(" repo ", connection.queryClient, specPlanBuildWorkflow),
     ]);
 
     expect(workspaceGetRepoConfigMock).toHaveBeenCalledTimes(1);

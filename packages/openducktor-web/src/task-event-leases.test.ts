@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { expect, mock, test } from "bun:test";
 import type {
   TaskEventCursor,
@@ -28,7 +28,7 @@ const change = (sequence: number): Extract<TaskEventStreamFrame, { type: "change
     repoPath: "/repo",
     taskId: `task-${sequence}`,
     taskSnapshot: {
-      workflow: builtinTaskWorkflow.reference,
+      workflow: specPlanBuildWorkflow.reference,
       id: `task-${sequence}`,
       title: "Task",
       status: "open",

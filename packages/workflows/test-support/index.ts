@@ -11,11 +11,11 @@ export {
 } from "./shared-board-workflows";
 
 export {
-  BUILTIN_PROMPT_OVERRIDE_KEYS,
   BUILTIN_ROLE_IDS,
-  builtinWorkflowPromptKey,
-  createBuiltinNotificationSettings,
+  createSpecPlanBuildNotificationSettings,
   emptyArtifactSummary,
   rolePromptKey,
-} from "./builtin";
+  SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS,
+  specPlanBuildPromptKey,
+} from "./spec-plan-build";
 export { createTaskCardFixture } from "./task-card-fixture";

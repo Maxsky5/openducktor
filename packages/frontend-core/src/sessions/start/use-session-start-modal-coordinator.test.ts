@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { describe, expect, test } from "bun:test";
 import { orderStartModesForDisplay } from "./session-start-display";
@@ -18,32 +18,34 @@ describe("use-session-start-modal-coordinator", () => {
   });
 
   test("builds role-specific session start titles", () => {
-    expect(buildSessionStartModalTitle("spec", builtinTaskWorkflow)).toBe("Start Spec session");
-    expect(buildSessionStartModalTitle("planner", builtinTaskWorkflow)).toBe(
+    expect(buildSessionStartModalTitle("spec", specPlanBuildWorkflow)).toBe("Start Spec session");
+    expect(buildSessionStartModalTitle("planner", specPlanBuildWorkflow)).toBe(
       "Start Planner session",
     );
-    expect(buildSessionStartModalTitle("build", builtinTaskWorkflow)).toBe("Start Builder session");
-    expect(buildSessionStartModalTitle("qa", builtinTaskWorkflow)).toBe("Start QA session");
+    expect(buildSessionStartModalTitle("build", specPlanBuildWorkflow)).toBe(
+      "Start Builder session",
+    );
+    expect(buildSessionStartModalTitle("qa", specPlanBuildWorkflow)).toBe("Start QA session");
   });
 
   test("builds launch-action and start-mode specific descriptions", () => {
     expect(
       buildSessionStartModalDescription({
-        taskWorkflow: builtinTaskWorkflow,
+        taskWorkflow: specPlanBuildWorkflow,
         launchActionId: "spec_initial",
       }),
     ).toBe("Start a new session.");
 
     expect(
       buildSessionStartModalDescription({
-        taskWorkflow: builtinTaskWorkflow,
+        taskWorkflow: specPlanBuildWorkflow,
         launchActionId: "build_after_human_request_changes",
       }),
     ).toBe("Choose how to start this session.");
 
     expect(
       buildSessionStartModalDescription({
-        taskWorkflow: builtinTaskWorkflow,
+        taskWorkflow: specPlanBuildWorkflow,
         launchActionId: "build_pull_request_generation",
       }),
     ).toBe("Choose how to start this session.");

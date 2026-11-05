@@ -1,7 +1,7 @@
-import type { WorkflowBoardLayout } from "../workflow-catalog";
+import type { WorkflowBoardLayout } from "../../workflow-catalog";
 
 /** Production column order. Workflow inventory and task arrival never define board order. */
-export const BUILTIN_BOARD_LAYOUT: WorkflowBoardLayout = {
+export const SPEC_PLAN_BUILD_BOARD_LAYOUT: WorkflowBoardLayout = {
   states: [
     { id: "open", taskOrder: "priority_then_created" },
     ...(

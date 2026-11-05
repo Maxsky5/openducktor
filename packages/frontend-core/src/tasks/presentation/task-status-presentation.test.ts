@@ -1,10 +1,10 @@
-import { BUILTIN_BOARD } from "@openducktor/workflows";
+import { SPEC_PLAN_BUILD_BOARD } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import { statusLabel, statusTone } from "./task-status-presentation";
 
 describe("task status presentation", () => {
   test("gives each status the label that both clients show", () => {
-    expect(BUILTIN_BOARD.states.map(statusLabel)).toEqual([
+    expect(SPEC_PLAN_BUILD_BOARD.states.map(statusLabel)).toEqual([
       "Backlog",
       "Spec ready",
       "Ready for dev",
@@ -17,7 +17,7 @@ describe("task status presentation", () => {
   });
 
   test("gives each status one tone, with separate tones for the two review statuses", () => {
-    expect(BUILTIN_BOARD.states.map((state) => statusTone(state))).toEqual([
+    expect(SPEC_PLAN_BUILD_BOARD.states.map((state) => statusTone(state))).toEqual([
       "neutral",
       "pending",
       "info",

@@ -258,7 +258,7 @@ describe("runtime schemas", () => {
 
   const stepState = { required: false, canSkip: true, available: false, completed: false };
   const projection = {
-    workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+    workflow: { id: "openducktor-spec-plan-build", revision: 2 },
     workflowSteps: [],
     availableActions: [],
     agentWorkflows: { spec: stepState, planner: stepState, build: stepState, qa: stepState },

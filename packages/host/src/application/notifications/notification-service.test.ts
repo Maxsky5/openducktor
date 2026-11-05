@@ -103,7 +103,7 @@ const transition = (
     {
       previousStatus: "in_progress",
       task: {
-        workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+        workflow: { id: "openducktor-spec-plan-build", revision: 2 },
         id: "task",
         title: "Task",
         status: "blocked",
@@ -267,7 +267,7 @@ test("a task change with an unavailable workflow reports health and keeps notify
     await flush();
     const unknown = transition("unknown-workflow");
     unknown.statusChanges[0]!.task.workflow = {
-      id: "openducktor-research-plan-implement",
+      id: "openducktor-spec-plan-build",
       revision: 999,
     };
     h.service.acceptTask(unknown);
@@ -277,7 +277,7 @@ test("a task change with an unavailable workflow reports health and keeps notify
         (frame) =>
           frame.type === "health" &&
           frame.health.scope === "/alpha" &&
-          frame.health.message?.includes("openducktor-research-plan-implement@999"),
+          frame.health.message?.includes("openducktor-spec-plan-build@999"),
       ),
     ).toBe(true);
     h.service.acceptTask(transition("known-workflow"));
@@ -520,7 +520,7 @@ test("two browsers add no notification baseline reads and share ordered committe
         {
           previousStatus: "blocked",
           task: {
-            workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+            workflow: { id: "openducktor-spec-plan-build", revision: 2 },
             id: "task",
             title: "Task",
             status: "in_progress",
@@ -529,7 +529,7 @@ test("two browsers add no notification baseline reads and share ordered committe
         {
           previousStatus: "in_progress",
           task: {
-            workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+            workflow: { id: "openducktor-spec-plan-build", revision: 2 },
             id: "task",
             title: "Task",
             status: "blocked",
@@ -765,7 +765,7 @@ test.each(["baseline", "committed"] as const)(
           ...transition("task-renamed"),
           taskSnapshots: [
             {
-              workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+              workflow: { id: "openducktor-spec-plan-build", revision: 2 },
               id: task.id,
               title: "Updated task",
               status: task.status,

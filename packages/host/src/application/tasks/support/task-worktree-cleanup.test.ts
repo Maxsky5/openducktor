@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import {
   RUNTIME_DESCRIPTORS_BY_KIND,
@@ -130,7 +130,7 @@ describe("task worktree cleanup", () => {
           resolveRuntimeDescriptorForTaskSession(
             runtimeDefinitionsWithScopes(supportedScopes),
             "opencode",
-            builtinTaskWorkflow.role(role),
+            specPlanBuildWorkflow.role(role),
           ),
         ),
       ).resolves.toMatchObject({ kind: "opencode" });
@@ -382,7 +382,7 @@ describe("task worktree cleanup", () => {
       Effect.scoped(
         cleanupMergedTaskState(
           {
-            workflow: builtinTaskWorkflow,
+            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: {
@@ -440,7 +440,7 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              workflow: builtinTaskWorkflow,
+              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: {
@@ -534,7 +534,7 @@ describe("task worktree cleanup", () => {
       Effect.scoped(
         cleanupMergedTaskState(
           {
-            workflow: builtinTaskWorkflow,
+            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: { [worktreePath]: { name: "odt/task-1", detached: false } },
@@ -601,7 +601,7 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              workflow: builtinTaskWorkflow,
+              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: { [worktreePath]: { name: "odt/task-1", detached: false } },
@@ -637,7 +637,7 @@ describe("task worktree cleanup", () => {
       Effect.scoped(
         cleanupMergedTaskState(
           {
-            workflow: builtinTaskWorkflow,
+            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               canonicalPaths: {
@@ -701,7 +701,7 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              workflow: builtinTaskWorkflow,
+              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 canonicalPaths: {
@@ -769,7 +769,7 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              workflow: builtinTaskWorkflow,
+              workflow: specPlanBuildWorkflow,
               gitPort: extendGitPort(baseGitPort, {
                 removeWorktree(repoPath, targetWorktreePath, force) {
                   return baseGitPort.removeWorktree(repoPath, targetWorktreePath, force).pipe(
@@ -816,7 +816,7 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              workflow: builtinTaskWorkflow,
+              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: {
@@ -874,7 +874,7 @@ describe("task worktree cleanup", () => {
             defaultTargetBranch: { remote: "origin", branch: "main" },
           }),
         },
-        builtinTaskWorkflow,
+        specPlanBuildWorkflow,
         task(),
         "/repo",
         "task-1",
@@ -899,7 +899,7 @@ describe("task worktree cleanup", () => {
               hooks: emptyHooks,
             }),
           },
-          builtinTaskWorkflow,
+          specPlanBuildWorkflow,
           task(),
           "/repo",
           "task-1",
@@ -928,7 +928,7 @@ describe("task worktree cleanup", () => {
               hooks: emptyHooks,
             }),
           },
-          builtinTaskWorkflow,
+          specPlanBuildWorkflow,
           task(),
           "/repo",
           "task-1",
@@ -955,7 +955,7 @@ describe("task worktree cleanup", () => {
               hooks: emptyHooks,
             }),
           },
-          builtinTaskWorkflow,
+          specPlanBuildWorkflow,
           task(),
           "/repo",
           "task-1",

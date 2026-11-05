@@ -87,7 +87,7 @@ const taskStreamEvent = (sequence: number): ExternalTaskSyncEvent => ({
     id: `task-${sequence}`,
     title: "Task",
     status: "open",
-    workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+    workflow: { id: "openducktor-spec-plan-build", revision: 2 },
   },
   emittedAt: "2026-04-10T13:00:00.000Z",
 });

@@ -1,5 +1,5 @@
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
@@ -30,7 +30,7 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
     plan: { present: false },
     qaReport: { present: false },
   },
-  workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
   workflowSteps: [],
   availableActions: [],
   agentWorkflows: {
@@ -54,7 +54,7 @@ const policyError = async (effect: Effect.Effect<unknown, unknown>) => {
 describe("task workflow events", () => {
   test("maps a status denial to a transition error with the allowed statuses", async () => {
     const error = await policyError(
-      requireTaskEvent(builtinTaskWorkflow, "human-request-changes", task({ status: "blocked" })),
+      requireTaskEvent(specPlanBuildWorkflow, "human-request-changes", task({ status: "blocked" })),
     );
     expect(error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
     expect(error.message).toBe(
@@ -63,7 +63,9 @@ describe("task workflow events", () => {
   });
 
   test("maps missing planning to a transition error", async () => {
-    const error = await policyError(requireTaskEvent(builtinTaskWorkflow, "build-resumed", task()));
+    const error = await policyError(
+      requireTaskEvent(specPlanBuildWorkflow, "build-resumed", task()),
+    );
     expect(error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
     expect(error.message).toBe(
       "build-resumed is not allowed for task task-1 (feature) from open. Complete required planning first, then use it from ready_for_dev, in_progress, blocked, ai_review, or human_review.",
@@ -73,7 +75,7 @@ describe("task workflow events", () => {
   test("returns admitted decisions for transitions and repeats", async () => {
     expect(
       await Effect.runPromise(
-        requireTaskEvent(builtinTaskWorkflow, "build-blocked", task({ status: "blocked" })),
+        requireTaskEvent(specPlanBuildWorkflow, "build-blocked", task({ status: "blocked" })),
       ),
     ).toEqual({
       kind: "unchanged",
@@ -81,7 +83,7 @@ describe("task workflow events", () => {
     });
     expect(
       await Effect.runPromise(
-        requireTaskEvent(builtinTaskWorkflow, "build-blocked", task({ status: "in_progress" })),
+        requireTaskEvent(specPlanBuildWorkflow, "build-blocked", task({ status: "in_progress" })),
       ),
     ).toEqual({ kind: "transition", from: "in_progress", to: "blocked", cause: {} });
   });
@@ -90,7 +92,7 @@ describe("task workflow events", () => {
     const current = task({ status: "closed" });
     const error = await Effect.runPromise(
       Effect.flip(
-        requireTaskEventInput("Task reset is", builtinTaskWorkflow, "reset-task", current, {
+        requireTaskEventInput("Task reset is", specPlanBuildWorkflow, "reset-task", current, {
           taskId: current.id,
         }),
       ),
@@ -105,7 +107,7 @@ describe("task workflow events", () => {
     const current = task();
     const error = await Effect.runPromise(
       Effect.flip(
-        requireTaskEventInput("Build resume is", builtinTaskWorkflow, "build-resumed", current, {
+        requireTaskEventInput("Build resume is", specPlanBuildWorkflow, "build-resumed", current, {
           taskId: current.id,
         }),
       ),
@@ -116,13 +118,13 @@ describe("task workflow events", () => {
   });
 
   test("keeps pull request management to its workflow statuses", async () => {
-    const error = await policyError(requirePullRequestManagement(builtinTaskWorkflow, task()));
+    const error = await policyError(requirePullRequestManagement(specPlanBuildWorkflow, task()));
     expect(error.code).toBe("TASK_POLICY_ERROR");
     expect(error.message).toBe(
       "Pull request management is only available from in_progress, ai_review, or human_review.",
     );
     await Effect.runPromise(
-      requirePullRequestManagement(builtinTaskWorkflow, task({ status: "ai_review" })),
+      requirePullRequestManagement(specPlanBuildWorkflow, task({ status: "ai_review" })),
     );
   });
 
@@ -133,7 +135,7 @@ describe("task workflow events", () => {
   });
 
   test("names the worktree roles of the task workflow", () => {
-    expect(startWorktreeSessionHint(builtinTaskWorkflow)).toBe(
+    expect(startWorktreeSessionHint(specPlanBuildWorkflow)).toBe(
       "Start a Builder or QA session first.",
     );
     expect(startWorktreeSessionHint(createReviewTaskWorkflow())).toBe(

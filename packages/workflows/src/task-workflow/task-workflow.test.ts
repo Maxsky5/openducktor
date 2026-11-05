@@ -6,7 +6,7 @@ import {
   reviewTaskPromptTemplates,
   reviewTaskRoles,
 } from "../../test-support/review-task-workflow";
-import { builtinTaskWorkflow } from "../builtin/task-workflow";
+import { specPlanBuildWorkflow } from "../builtin/spec-plan-build/workflow";
 import type { TaskFacts } from "./task-input";
 import { createTaskWorkflow } from "./task-workflow";
 
@@ -48,9 +48,9 @@ describe("createTaskWorkflow", () => {
     expect(review.effectEvent("task.close")).toBe("shelve");
     expect(review.statusEvent("approval")).toBe("move-approval");
     expect(review.statusEvent("published")).toBeUndefined();
-    expect(builtinTaskWorkflow.effectEvent("review.approve")).toBe("human-approve");
-    expect(builtinTaskWorkflow.statusEvent("blocked")).toBe("set-status:blocked");
-    expect(builtinTaskWorkflow.statusEvent("closed")).toBeUndefined();
+    expect(specPlanBuildWorkflow.effectEvent("review.approve")).toBe("human-approve");
+    expect(specPlanBuildWorkflow.statusEvent("blocked")).toBe("set-status:blocked");
+    expect(specPlanBuildWorkflow.statusEvent("closed")).toBeUndefined();
   });
 
   test("decides events with their signal, source role, and guard recovery", () => {
@@ -190,12 +190,12 @@ describe("createTaskWorkflow", () => {
       effect: "build.blocked",
     });
     expect(review.agentEvent("approve-copy")).toBeUndefined();
-    expect(builtinTaskWorkflow.agentEvents("build").map(({ id }) => id)).toEqual([
+    expect(specPlanBuildWorkflow.agentEvents("build").map(({ id }) => id)).toEqual([
       "build-blocked",
       "build-resumed",
       "build-completed",
     ]);
-    expect(builtinTaskWorkflow.agentEvents("qa")).toEqual([]);
+    expect(specPlanBuildWorkflow.agentEvents("qa")).toEqual([]);
 
     const writerPrompt = review.prompts.systemPrompt({
       role: "writer",

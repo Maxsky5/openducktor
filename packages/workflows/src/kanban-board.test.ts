@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mapToKanbanColumns } from "./kanban-board";
 
 import { createTaskCardFixture as makeTask } from "../test-support/task-card-fixture";
-import { BUILTIN_BOARD } from "./builtin/task-workflow";
+import { SPEC_PLAN_BUILD_BOARD } from "./builtin/spec-plan-build/workflow";
 
 describe("mapToKanbanColumns", () => {
   test("maps persisted statuses to board columns", () => {
@@ -12,7 +12,7 @@ describe("mapToKanbanColumns", () => {
       makeTask({ id: "3", title: "C", status: "closed" }),
     ];
 
-    const columns = mapToKanbanColumns(tasks, BUILTIN_BOARD);
+    const columns = mapToKanbanColumns(tasks, SPEC_PLAN_BUILD_BOARD);
     expect(columns.find((entry) => entry.id === "spec_ready")?.tasks).toHaveLength(1);
     expect(columns.find((entry) => entry.id === "blocked")?.tasks).toHaveLength(1);
     expect(columns.find((entry) => entry.id === "closed")?.tasks).toHaveLength(1);
@@ -24,7 +24,7 @@ describe("mapToKanbanColumns", () => {
       makeTask({ id: "h", title: "Human", status: "human_review" }),
     ];
 
-    const columns = mapToKanbanColumns(tasks, BUILTIN_BOARD);
+    const columns = mapToKanbanColumns(tasks, SPEC_PLAN_BUILD_BOARD);
     expect(columns.map((column) => column.id)).toEqual([
       "open",
       "spec_ready",

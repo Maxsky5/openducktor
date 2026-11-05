@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow, type TransitionCause } from "@openducktor/workflows";
+import { specPlanBuildWorkflow, type TransitionCause } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { noMergeDetection, syncWorkspace } from "./sync/task-sync-service.test-support";
@@ -36,7 +36,7 @@ const transition = (
     decide: () =>
       Result.succeed({
         status,
-        workflowId: builtinTaskWorkflow.definition.id,
+        workflowId: specPlanBuildWorkflow.definition.id,
         ...(cause && { cause }),
       }),
   });
@@ -53,7 +53,7 @@ const createServices = (
     listTasks: (input) =>
       store.listTasks(input).pipe(Effect.map((tasks) => enrichTasks(builtinTaskWorkflows, tasks))),
     transitionTask: (input) =>
-      transition(store, input).pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task))),
+      transition(store, input).pipe(Effect.map((task) => enrichTask(specPlanBuildWorkflow, task))),
     ...overrides,
   });
   const sync = createTaskSyncService({
@@ -151,7 +151,7 @@ test.each([
             taskId: task.id,
             status: "human_review",
             cause: { signal: "taskProgressedToHumanReview", sourceRole: "build" },
-          }).pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task))),
+          }).pipe(Effect.map((task) => enrichTask(specPlanBuildWorkflow, task))),
       });
       await Effect.runPromise(
         operation === "qaApproved"
@@ -215,7 +215,7 @@ test.each([false, true])(
               committed.resolve();
               yield* Effect.promise(() => release.promise);
             }
-            return enrichTask(builtinTaskWorkflow, result);
+            return enrichTask(specPlanBuildWorkflow, result);
           }),
       });
       const first = Effect.runPromise(
@@ -336,7 +336,7 @@ test("records QA transitions only after the entire SQLite transaction commits", 
       repoPath,
       taskId: task.id,
       decide: () =>
-        Result.succeed({ status: "human_review", workflowId: builtinTaskWorkflow.definition.id }),
+        Result.succeed({ status: "human_review", workflowId: specPlanBuildWorkflow.definition.id }),
       verdict: "approved" as const,
       markdown: "Approved",
     };
@@ -373,7 +373,7 @@ test("records QA transitions only after the entire SQLite transaction commits", 
       {
         previousStatus: "open",
         task: {
-          workflow: { id: "openducktor-research-plan-implement", revision: 2 },
+          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
           id: task.id,
           title: "Task",
           status: "human_review",
