@@ -6,8 +6,11 @@ import {
 import type { SessionTargetOptions } from "../board/session-target-resolution";
 import type { TaskWorkflowContinuation } from "./task-workflow-continuation";
 
-/** A workflow action that asks for confirmation before its host command. */
-export type TaskActionConfirmation = "reset_implementation" | "reset_task" | "close";
+/**
+ * A workflow action that asks for confirmation before its host command. Close Task and Reset Task
+ * are core task actions, so they open their confirmations without a workflow action.
+ */
+export type TaskActionConfirmation = "reset_implementation";
 
 /** The client operation of a workflow action. Each client runs it with its own controls. */
 export type TaskActionDestination =
@@ -60,10 +63,6 @@ export const resolveTaskActionDestination = (
       return { kind: "request_changes", continuation };
     case "implementation.reset":
       return { kind: "confirm", action: "reset_implementation", continuation };
-    case "task.reset":
-      return { kind: "confirm", action: "reset_task", continuation };
-    case "task.close":
-      return { kind: "confirm", action: "close", continuation };
     default:
       throw new Error(
         `Action "${action}" uses unsupported host effect "${command.effect}". Update the client to use this action.`,

@@ -40,7 +40,7 @@ describe("workflowToolInputSchema", () => {
 
     expect(properties.issueType).toMatchObject({ enum: ["feature", "bug"] });
     expect(properties.status).toMatchObject({
-      enum: ["backlog", "writing", "paused", "reviewing", "approval"],
+      enum: ["open", "writing", "paused", "reviewing", "approval"],
     });
   });
 });

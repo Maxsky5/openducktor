@@ -1,4 +1,9 @@
-import type { IssueType, WorkflowEventEffect } from "@openducktor/contracts";
+import {
+  type IssueType,
+  TASK_CLOSED_STATE,
+  TASK_OPEN_STATE,
+  type WorkflowEventEffect,
+} from "@openducktor/contracts";
 import type {
   TaskEventDecision,
   TaskEventDenial,
@@ -9,6 +14,7 @@ import type {
 import { Effect, Result } from "effect";
 import { TaskPolicyError } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
+import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 
 export type AdmittedTaskEvent = Exclude<TaskEventDecision, { kind: "denied" }>;
 
@@ -22,6 +28,12 @@ export const decideTaskTransition = (workflow: TaskWorkflow, eventId: string, ta
         workflowId: workflow.definition.id,
       });
 };
+
+/** The store decision of a host effect, made again for each locked task row. */
+export const effectTransition =
+  (taskWorkflows: Pick<TaskWorkflowResolver, "forTask">, effect: WorkflowEventEffect) =>
+  (task: TaskFacts) =>
+    decideEffectTransition(taskWorkflows.forTask(task), effect, task);
 
 export const decideEffectTransition = (
   workflow: TaskWorkflow,
@@ -65,6 +77,42 @@ export const requireTaskEvent = (
     : Effect.succeed(decision);
 };
 
+/** An OpenDucktor task action that every workflow has, without a workflow event. */
+export type CoreTaskAction = "close" | "reset";
+
+/**
+ * Decides a core task action. Close Task moves any task to `closed`, and a closed task stays
+ * unchanged. Reset Task moves any task except a closed one to `open`.
+ */
+export const decideCoreTaskAction = (
+  action: CoreTaskAction,
+  task: TaskFacts,
+): Result.Result<AdmittedTaskEvent, HostValidationError<{ taskId: string; status: string }>> => {
+  if (action === "reset" && task.status === TASK_CLOSED_STATE)
+    return Result.fail(
+      new HostValidationError({
+        field: "taskId",
+        message: `Task ${task.id} is closed, so it cannot reset. Reset only a task that is not closed.`,
+        details: { taskId: task.id, status: task.status },
+      }),
+    );
+  const to = action === "close" ? TASK_CLOSED_STATE : TASK_OPEN_STATE;
+  return Result.succeed(
+    task.status === to
+      ? { kind: "unchanged", status: task.status }
+      : { kind: "transition", from: task.status, to, cause: {} },
+  );
+};
+
+/** The store decision of a core task action, made again for each locked task row. */
+export const coreTaskTransition =
+  (taskWorkflows: Pick<TaskWorkflowResolver, "forTask">, action: CoreTaskAction) =>
+  (task: TaskFacts) =>
+    Result.map(decideCoreTaskAction(action, task), (decision) => ({
+      ...decisionTransition(decision),
+      workflowId: taskWorkflows.forTask(task).definition.id,
+    }));
+
 /** Decides the event of a host effect. */
 export const requireEffect = (
   workflow: TaskWorkflow,
@@ -100,10 +148,10 @@ export const requireHumanReviewStatus = (
 ): Effect.Effect<void, TaskPolicyError | HostValidationError> =>
   Effect.gen(function* () {
     const eventId = yield* requireEffectEvent(workflow, "review.approve");
-    if (!workflow.isTerminalState(task.status) && workflow.isEventAvailable(eventId, task)) return;
+    if (task.status !== TASK_CLOSED_STATE && workflow.isEventAvailable(eventId, task)) return;
     const reviewStatuses = workflow
       .eventSourceStates(eventId)
-      .filter((status) => !workflow.isTerminalState(status));
+      .filter((status) => status !== TASK_CLOSED_STATE);
     return yield* new HostValidationError({
       message: `Human approval is only allowed from ${formatStatusList(reviewStatuses)}.`,
     });

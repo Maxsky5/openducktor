@@ -1,4 +1,5 @@
 import {
+  TASK_OPEN_STATE,
   taskCardSchema,
   type TaskCard,
   type WorkflowBoardDefinition,
@@ -20,19 +21,16 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
   const editor = `${prefix}_editor`;
   const draft = `${prefix}_draft`;
   const review = `${prefix}_review`;
-  const queue = `${prefix}_queue`;
   const work = `${prefix}_work`;
   const hold = `${prefix}_hold`;
   const approval = `${prefix}_approval`;
-  const shelved = `${prefix}_shelved`;
-  const open = [queue, work, hold, "shared_review", approval];
+  const active = ["open", work, hold, "shared_review", approval];
   const move = (to: string) => [{ when: true, to }];
   const definition: WorkflowDefinition = {
     schemaVersion: 1,
     id: prefix,
     revision: 1,
     label: `${prefix} publishing`,
-    initialState: queue,
     facts: [],
     issueTypes: [
       { id: "feature", label: "Article", icon: "feature" },
@@ -55,7 +53,7 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
       },
     ],
     states: [
-      { id: queue, label: "Backlog", studioRole: writer },
+      { id: "open", label: "Backlog" },
       { id: work, label: "Writing", studioRole: writer },
       { id: hold, label: "Paused", studioRole: writer },
       {
@@ -76,8 +74,7 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
         },
       },
       { id: approval, label: "Approval" },
-      { id: "shared_done", label: "Published", terminal: true, tone: "success" },
-      { id: shelved, label: "Shelved", terminal: true },
+      { id: "closed", label: "Published", tone: "success" },
     ],
     steps: [
       {
@@ -89,7 +86,7 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
         inputs: [],
         outputs: [draft],
         requiredWhen: true,
-        availableWhen: { stateIn: open },
+        availableWhen: { stateIn: active },
         completedWhen: { artifact: draft, present: true },
         launchActions: [
           {
@@ -139,7 +136,7 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
         outputs: [],
         requiredWhen: true,
         availableWhen: { stateIn: [approval] },
-        completedWhen: { stateIn: ["shared_done"] },
+        completedWhen: { stateIn: ["closed"] },
       },
     ],
     actions: [
@@ -149,7 +146,7 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
         kind: "session",
         stepId: `${prefix}_write`,
         launchActionIds: [`${prefix}_write_start`, `${prefix}_write_revise`],
-        availableWhen: { stateIn: [queue, work, hold] },
+        availableWhen: { stateIn: ["open", work, hold] },
       },
       {
         id: `${prefix}_request_review`,
@@ -173,22 +170,15 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
         eventId: `${prefix}_approve`,
         availableWhen: { stateIn: [approval] },
       },
-      {
-        id: `${prefix}_shelve`,
-        label: `${prefix} Shelve`,
-        kind: "event",
-        eventId: `${prefix}_shelve`,
-        availableWhen: true,
-      },
     ],
     events: [
       {
         id: `${prefix}_start`,
-        from: [queue, work, hold],
+        from: ["open", work, hold],
         guards: [],
         outcomes: move(work),
       },
-      { id: `${prefix}_submit`, from: open, guards: [], outcomes: move("shared_review") },
+      { id: `${prefix}_submit`, from: active, guards: [], outcomes: move("shared_review") },
       { id: `${prefix}_accept`, from: ["shared_review"], guards: [], outcomes: move(approval) },
       { id: `${prefix}_revise`, from: ["shared_review"], guards: [], outcomes: move(work) },
       { id: `${prefix}_hold`, from: ["shared_review", approval], guards: [], outcomes: move(hold) },
@@ -202,14 +192,7 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
             message: "Accept the review first.",
           },
         ],
-        outcomes: move("shared_done"),
-      },
-      {
-        id: `${prefix}_shelve`,
-        from: open,
-        guards: [],
-        outcomes: move(shelved),
-        effect: "task.close",
+        outcomes: move("closed"),
       },
     ],
     signals: [],
@@ -279,14 +262,16 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
   return createTaskWorkflow(definition, [...templates, ...kickoffs], roles);
 };
 
-/** Two injected workflows share Review and Done, with their own roles, artifacts, and actions. */
+/**
+ * Two injected workflows share the core states and Review, with their own roles, artifacts, and
+ * actions.
+ */
 export const createSharedBoardWorkflows = () => {
   const alpha = publishingWorkflow("alpha");
   const beta = publishingWorkflow("beta");
   const workflows = [alpha, beta];
   const order = [
-    "alpha_queue",
-    "beta_queue",
+    "open",
     "beta_work",
     "alpha_hold",
     "shared_review",
@@ -294,9 +279,7 @@ export const createSharedBoardWorkflows = () => {
     "beta_hold",
     "alpha_approval",
     "beta_approval",
-    "shared_done",
-    "alpha_shelved",
-    "beta_shelved",
+    "closed",
   ];
   const layout: WorkflowBoardLayout = {
     states: order.map((id) => ({ id, taskOrder: "updated" })),
@@ -328,7 +311,7 @@ export const createWorkflowTaskCardFixture = (
     description: "",
     priority: 2,
     issueType: workflow.issueTypes[0]!,
-    status: workflow.initialState,
+    status: TASK_OPEN_STATE,
     labels: [],
     removeWorktreeOnClose: null,
     artifactSummary: workflow.emptyArtifactSummary(),

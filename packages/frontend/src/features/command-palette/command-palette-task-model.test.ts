@@ -49,13 +49,7 @@ const ready = (records: AgentSessionRecord[]) =>
 const inProgressTask = (overrides: Partial<TaskCard> = {}): TaskCard =>
   createTaskCardFixture({
     status: "in_progress",
-    availableActions: [
-      "build_start",
-      "open_builder",
-      "reset_implementation",
-      "reset_task",
-      "close_task",
-    ],
+    availableActions: ["build_start", "open_builder", "reset_implementation"],
     ...overrides,
   });
 
@@ -122,9 +116,11 @@ describe("command palette task model", () => {
     expect(failed.open).toBeNull();
     expect(failed.sessionsNote).toBe("Sessions could not load: Host offline");
     expect(failed.actions.map((action) => action.key)).toEqual([
+      "close_task",
       "edit",
       "details",
       "copy-id",
+      "reset_task",
       "delete",
     ]);
   });
@@ -150,14 +146,7 @@ describe("command palette task model", () => {
     const builder = record("build-1", "build", "2026-03-04T00:00:00.000Z");
     const view = buildPaletteTaskView({
       task: inProgressTask({
-        availableActions: [
-          "build_start",
-          "open_builder",
-          "qa_start",
-          "reset_implementation",
-          "reset_task",
-          "close_task",
-        ],
+        availableActions: ["build_start", "open_builder", "qa_start", "reset_implementation"],
       }),
       sessions: ready([builder]),
       live: liveState([]),
@@ -168,17 +157,17 @@ describe("command palette task model", () => {
       "session:build",
       "workflow:build_start",
       "workflow:qa_start",
-      "workflow:close_task",
+      "close_task",
       "edit",
       "details",
       "copy-id",
       "workflow:reset_implementation",
-      "workflow:reset_task",
+      "reset_task",
       "delete",
     ]);
     expect(view.actions.find((action) => action.key === "latest")?.detail).toBe("Builder");
     expect(view.actions.filter((action) => action.destructive).map((action) => action.key)).toEqual(
-      ["workflow:reset_implementation", "workflow:reset_task", "delete"],
+      ["workflow:reset_implementation", "reset_task", "delete"],
     );
   });
 });

@@ -1,3 +1,4 @@
+import { TASK_OPEN_STATE } from "@openducktor/contracts";
 import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
 import type {
   IssueItemsImportInput,
@@ -398,7 +399,7 @@ export const createIssueImportService = ({
                     workspaceId: input.workspaceId,
                     repoPath: input.repoPath,
                     sourceIssue: source,
-                    status: workflow.initialState,
+                    status: TASK_OPEN_STATE,
                     task: {
                       title: source.title,
                       description: source.description,

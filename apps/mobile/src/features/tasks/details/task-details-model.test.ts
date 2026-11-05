@@ -8,13 +8,17 @@ import {
   taskDocumentsSummary,
   taskTargetBranchPresentation,
 } from "./task-details-model";
+import {
+  CLOSE_TASK_ACTION,
+  RESET_TASK_ACTION,
+} from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 
 describe("resolveTaskDetailsActions", () => {
-  test("offers Close Task in task details with the host actions", () => {
+  test("offers the core Reset Task and Close Task after the host workflow actions", () => {
     const actions = resolveTaskDetailsActions({
       task: createTaskCardFixture({
         status: "in_progress",
-        availableActions: ["build_start", "reset_implementation", "reset_task", "close_task"],
+        availableActions: ["build_start", "reset_implementation"],
       }),
       taskSessions: [],
       historicalSessions: [],
@@ -22,18 +26,25 @@ describe("resolveTaskDetailsActions", () => {
       canRemoveWorktree: false,
     });
     expect(actions.primary?.label).toBe("Start Builder");
-    expect(actions.others.map((action) => action.label)).toEqual([
-      "Reset Implementation",
-      "Reset Task",
-      "Close Task",
-    ]);
-    expect(actions.others.find((action) => action.action === "close_task")?.tone).toBe("warning");
+    expect(actions.others.map((action) => action.label)).toEqual(["Reset Implementation"]);
+    expect(actions.core).toEqual([RESET_TASK_ACTION, CLOSE_TASK_ACTION]);
+  });
+
+  test("offers no core action for a closed task", () => {
+    const actions = resolveTaskDetailsActions({
+      task: createTaskCardFixture({ status: "closed", availableActions: [] }),
+      taskSessions: [],
+      historicalSessions: [],
+      activeSessionRole: undefined,
+      canRemoveWorktree: false,
+    });
+    expect(actions.core).toEqual([]);
   });
 
   test("disables Open Builder until the view finds the Builder session", () => {
     const task = createTaskCardFixture({
       status: "in_progress",
-      availableActions: ["open_builder", "reset_task"],
+      availableActions: ["open_builder", "reset_implementation"],
     });
     const builder: AgentSessionRecord = {
       externalSessionId: "build-1",
@@ -56,7 +67,7 @@ describe("resolveTaskDetailsActions", () => {
       );
     };
     expect(all([])).toContainEqual(["open_builder", true]);
-    expect(all([])).toContainEqual(["reset_task", false]);
+    expect(all([])).toContainEqual(["reset_implementation", false]);
     expect(all([builder])).toContainEqual(["open_builder", false]);
   });
 
@@ -91,7 +102,7 @@ describe("taskDetailsMenuItems", () => {
   const actions = resolveTaskDetailsActions({
     task: createTaskCardFixture({
       status: "in_progress",
-      availableActions: ["build_start", "reset_task", "close_task"],
+      availableActions: ["build_start", "reset_implementation"],
     }),
     taskSessions: [],
     historicalSessions: [],
@@ -99,7 +110,7 @@ describe("taskDetailsMenuItems", () => {
     canRemoveWorktree: false,
   });
 
-  test("lists the other workflow actions, Unlink PR, and Delete", () => {
+  test("lists the other workflow actions, the core actions, Unlink PR, and Delete", () => {
     const items = taskDetailsMenuItems({
       actions,
       enabled: true,
@@ -107,12 +118,14 @@ describe("taskDetailsMenuItems", () => {
       unlinking: false,
     });
     expect(items.map((item) => item.title)).toEqual([
+      "Reset Implementation",
       "Reset Task",
       "Close Task",
       "Unlink PR",
       "Delete Task",
     ]);
     expect(items.find((item) => item.title === "Reset Task")?.destructive).toBe(true);
+    expect(items.find((item) => item.title === "Close Task")?.destructive).toBe(false);
     expect(items.find((item) => item.title === "Unlink PR")?.command).toBe(true);
     expect(items.find((item) => item.title === "Close Task")?.command).toBe(true);
     expect(items.at(-1)).toMatchObject({ id: "delete", destructive: true, command: true });
@@ -139,11 +152,16 @@ describe("taskDetailsMenuItems", () => {
     const choices = items.map((item) => taskDetailsMenuChoice(item.id, actions));
     expect(choices.map((choice) => choice?.kind)).toEqual([
       "action",
-      "action",
+      "core",
+      "core",
       "unlink_pull_request",
       "delete",
     ]);
-    expect(choices[0]).toMatchObject({ kind: "action", action: { action: "reset_task" } });
+    expect(choices[0]).toMatchObject({
+      kind: "action",
+      action: { action: "reset_implementation" },
+    });
+    expect(choices[2]).toEqual({ kind: "core", action: CLOSE_TASK_ACTION });
     expect(items.find((item) => item.id === "unlink_pull_request")).toMatchObject({
       title: "Unlinking PR",
       disabled: true,

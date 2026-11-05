@@ -2,7 +2,10 @@ import { type ResolvedTaskCard, workflowRoleIcon } from "@openducktor/workflows"
 import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import { formatElapsedAgo } from "@openducktor/frontend-core/lib/relative-time";
 import type { TaskSessionGroup } from "@/features/tasks/details/task-sessions-model";
-import { taskActionIcon } from "@/features/tasks/presentation/task-action-paint";
+import {
+  coreTaskActionIcon,
+  taskActionIcon,
+} from "@/features/tasks/presentation/task-action-paint";
 import type { ActionMenuItem } from "@/ui/action-menu";
 
 /**
@@ -48,7 +51,11 @@ export const quickActionItems = (
               : option.disabledReason,
           command: true,
         };
-        if (option.kind === "task_action") item.icon = taskActionIcon(option.taskAction, task);
+        if (option.kind === "task_action")
+          item.icon =
+            option.taskAction.kind === "core"
+              ? coreTaskActionIcon(option.taskAction.action)
+              : taskActionIcon(option.taskAction.action, task);
         else if (task.taskWorkflow.launchAction(option.launchActionId).context === "pull_request") {
           item.icon = "git-pull-request";
         } else item.role = workflowRoleIcon(task.taskWorkflow, option.role);

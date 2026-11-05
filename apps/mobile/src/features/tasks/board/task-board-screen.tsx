@@ -1,7 +1,6 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import type { KanbanColumnId } from "@openducktor/workflows";
 import {
-  type TaskWorkflowAction,
   type ResolvedTaskCard as TaskCardData,
   type WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
@@ -39,7 +38,7 @@ import { BoardFilterSheet } from "./board-filter-sheet";
 import { BoardPager } from "./board-pager";
 import { BoardSkeleton } from "./board-skeleton";
 import { BoardWide, BoardWidePlaceholder } from "./board-wide";
-import type { TaskCardModel } from "./task-card-model";
+import type { TaskCardAction, TaskCardModel } from "./task-card-model";
 import { useBoardAvailability } from "./use-board-availability";
 import { type TaskBoardView, taskBoardView } from "./task-board-state";
 import { useTaskBoard } from "./use-task-board";
@@ -174,14 +173,17 @@ function TaskBoardContent({
     },
     [router, withDetails, workspace.workspaceId],
   );
-  const { runAction, openSession } = actions;
+  const { runAction, openSession, confirm } = actions;
   const onAction = useCallback(
     (
       task: TaskCardData,
-      action: TaskWorkflowAction,
+      action: TaskCardAction,
       sessionOptionsByRole: TaskCardModel["sessionOptionsByRole"],
-    ) => runAction(task, action, (role: AgentRole) => sessionOptionsByRole[role]),
-    [runAction],
+    ) =>
+      action.kind === "core"
+        ? confirm(task, action.action.confirmation)
+        : runAction(task, action.action, (role: AgentRole) => sessionOptionsByRole[role]),
+    [confirm, runAction],
   );
   // Refresh Tasks in the menu shows the same list progress as a pull.
   const { pulling, pull: onPull } = usePullRefresh(board.refresh);

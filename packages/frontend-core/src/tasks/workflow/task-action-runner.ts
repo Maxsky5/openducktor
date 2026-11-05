@@ -34,13 +34,6 @@ export type TaskActionRunnerHandlers = {
 /** The surface parts of a workflow action run. Without them, the shared controls run it. */
 export type TaskActionRunOptions = {
   sessionOptionsOf?: SessionOptionsOf | undefined;
-  /** A surface that must keep focus, such as the non-modal details sheet, shows its own confirmations. */
-  confirm?:
-    | ((
-        action: Exclude<TaskActionConfirmation, "reset_implementation">,
-        onCommitted?: OnTaskCommitted,
-      ) => void)
-    | undefined;
   /** The details sheet reads the worktree, so it owns the removal. Other surfaces open the details. */
   onRemoveWorktree?: (() => void) | undefined;
 };
@@ -92,10 +85,6 @@ export const createTaskActionRunner =
       const onCommitted: OnTaskCommitted | undefined = continuation
         ? (committed) => handlers.continueTaskWorkflow(committed, continuation)
         : undefined;
-      if (destination.action !== "reset_implementation" && options?.confirm) {
-        options.confirm(destination.action, onCommitted);
-        return;
-      }
       handlers.onConfirm(task.id, destination.action, onCommitted);
     } catch (cause) {
       handlers.showError("Workflow action failed", errorMessage(cause));

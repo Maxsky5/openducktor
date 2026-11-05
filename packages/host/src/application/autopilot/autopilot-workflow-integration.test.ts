@@ -249,7 +249,7 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
         statusChange.task.status,
       ]),
     ).toEqual([
-      ["apply-task-event", undefined, "backlog", "writing"],
+      ["apply-task-event", undefined, "open", "writing"],
       ["save-workflow-artifact", "draftSubmitted", "writing", "reviewing"],
       ["save-workflow-artifact", "reviewRejected", "reviewing", "writing"],
       ["save-workflow-artifact", "draftSubmitted", "writing", "reviewing"],

@@ -137,14 +137,15 @@ test("mobile lanes use the same explicit shared board for both workflows", () =>
     emptyColumnDisplay: "show",
     doneVisibleDays: 1,
     filterActive: false,
-    creationStateId: "alpha_queue",
+    creationStateId: "open",
   });
   expect(columns.map(({ id }) => id)).toEqual(board.states.map(({ id }) => id));
   expect(columns.find(({ id }) => id === "shared_review")!.tasks.map(({ id }) => id)).toEqual([
     "alpha",
     "beta",
   ]);
-  expect(columns.find(({ id }) => id === "alpha_queue")!.acceptsNewTask).toBe(true);
-  expect(columns.find(({ id }) => id === "beta_queue")!.acceptsNewTask).toBe(false);
+  expect(columns.find(({ id }) => id === "open")!.acceptsNewTask).toBe(true);
+  expect(columns.find(({ id }) => id === "beta_work")!.acceptsNewTask).toBe(false);
+  expect(columns.find(({ id }) => id === "closed")!.closed).toBe(true);
   expect(columns.filter(({ title }) => title === "Writing")).toHaveLength(2);
 });

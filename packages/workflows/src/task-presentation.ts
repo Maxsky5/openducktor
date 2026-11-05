@@ -4,7 +4,7 @@ import type {
   WorkflowActionSurface,
   WorkflowEventEffect,
 } from "@openducktor/contracts";
-import { workflowActionSurfaceSchema } from "@openducktor/contracts";
+import { TASK_CLOSED_STATE, workflowActionSurfaceSchema } from "@openducktor/contracts";
 import { taskWorkflowInput, type ResolvedTaskCard } from "./task-workflow-view";
 import type { TaskWorkflow } from "./task-workflow/task-workflow";
 
@@ -50,7 +50,8 @@ export const isRoleAvailableForTask = (
   task: ResolvedTaskCard | null | undefined,
   role: string,
 ): boolean => roleWorkflowForTask(task, role).available;
-export const taskHasSessionPage = (task: ResolvedTaskCard): boolean => !task.sharedState.terminal;
+export const taskHasSessionPage = (task: ResolvedTaskCard): boolean =>
+  task.status !== TASK_CLOSED_STATE;
 export const taskReviewRejection = (
   task: ResolvedTaskCard | null | undefined,
 ): { label: string; description: string } | null => {
@@ -78,7 +79,6 @@ type ResolveTaskCardActionsOptions = {
   activeSessionRole?: string | undefined;
   historicalSessionRoles?: readonly string[] | undefined;
   surface?: WorkflowActionSurface | undefined;
-  leadingAction?: string | undefined;
 };
 export const resolveTaskCardActions = (
   task: ResolvedTaskCard,
@@ -103,16 +103,12 @@ export const resolveTaskCardActions = (
       )
       .map(({ action }) => action),
   );
-  if (options.leadingAction && task.availableActions.includes(options.leadingAction))
-    enabled.push(options.leadingAction);
   const activeViews = views
     .filter(({ role }) => role === options.activeSessionRole)
     .map(({ action }) => action);
-  const ahead = options.leadingAction
-    ? [options.leadingAction]
-    : options.hasActiveSession
-      ? [...activeViews, ...views.map(({ action }) => action)]
-      : undefined;
+  const ahead = options.hasActiveSession
+    ? [...activeViews, ...views.map(({ action }) => action)]
+    : undefined;
   const ordered = evaluator.orderActions(taskWorkflowInput(task), [...new Set(enabled)], ahead);
   const primaryAction = ordered[0] ?? null;
   return { primaryAction, secondaryActions: ordered.slice(1), allActions: ordered };

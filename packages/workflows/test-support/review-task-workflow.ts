@@ -5,18 +5,17 @@ import type { PromptTemplate } from "../src/task-workflow/task-prompts";
 const drafted = { artifact: "draft", present: true } as const;
 const accepted = { artifact: "review", verdict: "accept" } as const;
 const revised = { artifact: "review", verdict: "revise" } as const;
-const open = ["backlog", "writing", "paused", "reviewing", "approval"];
+const active = ["open", "writing", "paused", "reviewing", "approval"];
 
 /**
- * A second task workflow for tests. Its IDs differ from the built-in IDs, and it has two
- * terminal states, so a test catches code that assumes the built-in workflow.
+ * A second task workflow for tests. Its IDs differ from the built-in IDs, except the core states,
+ * so a test catches code that assumes the built-in workflow.
  */
 export const reviewTaskDefinition = (): WorkflowDefinition => ({
   schemaVersion: 1,
   id: "review",
   revision: 1,
   label: "Review",
-  initialState: "backlog",
   facts: [],
   issueTypes: [
     { id: "feature", label: "Article" },
@@ -40,7 +39,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
     },
   ],
   states: [
-    { id: "backlog", label: "Backlog" },
+    { id: "open", label: "Backlog" },
     { id: "writing", label: "Writing", studioRole: "writer" },
     { id: "paused", label: "Paused" },
     {
@@ -60,9 +59,9 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
     },
     { id: "approval", label: "Approval", mergeDetection: true },
     {
-      id: "published",
-      label: "Published",
-      terminal: true,
+      id: "closed",
+      label: "Done",
+      tone: "success",
       notification: {
         kind: "workflow.published",
         defaultSetting: { enabled: true, target: "in_app", sound: "none" },
@@ -74,7 +73,6 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
         route: "kanban",
       },
     },
-    { id: "shelved", label: "Shelved", terminal: true },
   ],
   steps: [
     {
@@ -86,7 +84,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       inputs: [],
       outputs: ["draft"],
       requiredWhen: true,
-      availableWhen: { stateIn: open },
+      availableWhen: { stateIn: active },
       completedWhen: drafted,
       launchActions: [
         {
@@ -136,7 +134,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       label: "Write",
       stepId: "write",
       launchActionIds: ["write_start", "write_revise"],
-      availableWhen: { stateIn: ["backlog", "writing", "paused"] },
+      availableWhen: { stateIn: ["open", "writing", "paused"] },
     },
     {
       id: "request_review",
@@ -153,8 +151,6 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       eventId: "approve-copy",
       availableWhen: true,
     },
-    { id: "shelve", kind: "event", label: "Shelve", eventId: "shelve", availableWhen: true },
-    { id: "restart", kind: "event", label: "Restart", eventId: "restart", availableWhen: true },
     {
       id: "hold",
       kind: "event",
@@ -172,16 +168,16 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
     },
     {
       id: "start-writing",
-      from: ["backlog", "writing", "paused"],
+      from: ["open", "writing", "paused"],
       guards: [],
       outcomes: [
-        { when: { stateIn: ["backlog"] }, to: "writing" },
+        { when: { stateIn: ["open"] }, to: "writing" },
         { when: true, to: null },
       ],
     },
     {
       id: "submit-draft",
-      from: open,
+      from: active,
       guards: [],
       outcomes: [
         { when: { stateIn: ["writing"] }, to: "reviewing", signal: "draftSubmitted" },
@@ -229,9 +225,9 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
     },
     {
       id: "approve-copy",
-      from: ["approval", "published"],
+      from: ["approval", "closed"],
       guards: [],
-      outcomes: [{ when: true, to: "published" }],
+      outcomes: [{ when: true, to: "closed" }],
       effect: "review.approve",
     },
     {
@@ -240,20 +236,6 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       guards: [],
       outcomes: [{ when: true, to: "writing" }],
       effect: "review.request_changes",
-    },
-    {
-      id: "shelve",
-      from: [...open, "shelved"],
-      guards: [],
-      outcomes: [{ when: true, to: "shelved" }],
-      effect: "task.close",
-    },
-    {
-      id: "restart",
-      from: open,
-      guards: [],
-      outcomes: [{ when: true, to: "backlog" }],
-      effect: "task.reset",
     },
     {
       id: "drop-review",
@@ -271,16 +253,16 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
     },
     {
       id: "pr-merged",
-      from: ["approval", "published"],
+      from: ["approval", "closed"],
       guards: [],
-      outcomes: [{ when: true, to: "published" }],
+      outcomes: [{ when: true, to: "closed" }],
       effect: "pull_request.merged",
     },
     {
       id: "merge-local",
       from: ["approval"],
       guards: [],
-      outcomes: [{ when: true, to: "published" }],
+      outcomes: [{ when: true, to: "closed" }],
       effect: "direct_merge.local",
     },
     {
@@ -292,9 +274,9 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
     },
     {
       id: "merge-done",
-      from: ["approval", "published"],
+      from: ["approval", "closed"],
       guards: [],
-      outcomes: [{ when: true, to: "published" }],
+      outcomes: [{ when: true, to: "closed" }],
       effect: "direct_merge.completed",
     },
   ],
@@ -333,9 +315,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       startMode: "fork",
     },
   ],
-  actionOrder: [
-    { when: true, actions: ["start_write", "request_review", "approve", "shelve", "restart"] },
-  ],
+  actionOrder: [{ when: true, actions: ["start_write", "request_review", "approve"] }],
   actionPriority: [],
   launchOrder: [],
 });

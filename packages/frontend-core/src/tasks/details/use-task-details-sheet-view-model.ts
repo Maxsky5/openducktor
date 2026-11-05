@@ -7,6 +7,7 @@ import { useCallback, useMemo } from "react";
 import { useTaskStopImpact } from "../../queries/use-task-stop-impact";
 import { useTaskWorktreeOwners } from "../../queries/use-task-worktree-owners";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
+import type { CoreTaskAction } from "../workflow/core-task-actions";
 import type { TaskWorkflowActions } from "../workflow/task-workflow-actions-context";
 import { toTaskLabels } from "./task-details-sheet-model";
 import { useTaskCleanupImpact } from "./use-task-cleanup-impact";
@@ -28,6 +29,8 @@ export type TaskDetailsSheetViewModel = {
   removeWorktreeConfirm: UseTaskRemoveWorktreeConfirmDialogResult;
   taskLabels: string[];
   runWorkflowAction: (action: TaskWorkflowAction) => void;
+  /** Opens the confirmation of a core task action inside the sheet. */
+  runCoreTaskAction: (action: CoreTaskAction) => void;
 };
 
 export type UseTaskDetailsSheetViewModelOptions = {
@@ -102,23 +105,20 @@ export function useTaskDetailsSheetViewModel({
         throw new Error("Task details need the task workflow actions to run a workflow action.");
       runAction(task, action, {
         sessionOptionsOf: resolveSessionOptionsByRole,
-        // The sheet is not modal, so its confirmations stay inside it to keep focus.
-        confirm: (confirmation, onCommitted) =>
-          confirmation === "close" ? openCloseDialog(onCommitted) : openResetDialog(onCommitted),
         onRemoveWorktree: openRemoveWorktreeDialog,
       });
       // The session opens in place of the current view, so the sheet must not stay over it.
       if (task.taskWorkflow.viewActionRole(action)) onOpenChange(false);
     },
-    [
-      runAction,
-      task,
-      resolveSessionOptionsByRole,
-      openCloseDialog,
-      openResetDialog,
-      openRemoveWorktreeDialog,
-      onOpenChange,
-    ],
+    [runAction, task, resolveSessionOptionsByRole, openRemoveWorktreeDialog, onOpenChange],
+  );
+  // The sheet is not modal, so its confirmations stay inside it to keep focus.
+  const runCoreTaskAction = useCallback(
+    (action: CoreTaskAction): void => {
+      if (action.confirmation === "close") openCloseDialog();
+      else openResetDialog();
+    },
+    [openCloseDialog, openResetDialog],
   );
 
   return {
@@ -129,5 +129,6 @@ export function useTaskDetailsSheetViewModel({
     removeWorktreeConfirm,
     taskLabels,
     runWorkflowAction,
+    runCoreTaskAction,
   };
 }

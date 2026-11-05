@@ -6,7 +6,6 @@ import type {
   KanbanTaskSession,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import {
-  type TaskWorkflowAction,
   type ResolvedTaskCard as TaskCardData,
   type WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
@@ -39,13 +38,13 @@ import {
   LiveSessionChip,
 } from "./task-card-actions";
 import { LaneShownContext } from "./lane-shown-context";
-import { buildTaskCardModel, type TaskCardModel } from "./task-card-model";
+import { buildTaskCardModel, type TaskCardAction, type TaskCardModel } from "./task-card-model";
 
 export type TaskCardHandlers = {
   onOpenDetails: (task: TaskCardData) => void;
   onAction: (
     task: TaskCardData,
-    action: TaskWorkflowAction,
+    action: TaskCardAction,
     sessionOptionsByRole: TaskCardModel["sessionOptionsByRole"],
   ) => void;
   onOpenSession: (task: TaskCardData, role: AgentRole, options: SessionTargetOptions) => void;
@@ -163,7 +162,7 @@ export const TaskCard = memo(function TaskCard({
         return;
       }
       const item = model.menu.find((entry) => entry.id === id);
-      if (item) onAction(task, item.id, model.sessionOptionsByRole);
+      if (item) onAction(task, { kind: "workflow", action: item.id }, model.sessionOptionsByRole);
     },
     [copyTaskId, model, onAction, onOpenSession, task],
   );

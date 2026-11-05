@@ -399,7 +399,7 @@ test.each(["opencode", "codex", "claude"] as const)(
 test("a custom workflow launch starts its step role with the prompts of that workflow", async () => {
   const h = await createLaunchHarness("codex", {
     taskWorkflows: reviewTaskWorkflows,
-    task: { issueType: "feature", status: "backlog" },
+    task: { issueType: "feature", status: "open" },
   });
   const result = await Effect.runPromise(
     h.service.launch({

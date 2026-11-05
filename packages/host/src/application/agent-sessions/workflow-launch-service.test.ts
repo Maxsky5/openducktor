@@ -225,7 +225,7 @@ test.each(["write_start", "unknown_action"])(
   async (actionId) => {
     const h = await createLaunchHarness("codex", {
       taskWorkflows: reviewTaskWorkflows,
-      task: { issueType: "feature", status: "backlog" },
+      task: { issueType: "feature", status: "open" },
     });
     const request: WorkflowLaunchRequest = {
       ...requestFor("codex"),

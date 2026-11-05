@@ -114,14 +114,24 @@ export const workflowStateNotificationSchema = z.strictObject({
 });
 export type WorkflowStateNotification = z.infer<typeof workflowStateNotificationSchema>;
 
-/** No event can leave a terminal state. Events may list it as a source to admit repeats. */
+/** The core state of every workflow where a new or reset task starts. */
+export const TASK_OPEN_STATE = "open";
+/**
+ * The core terminal state of every workflow. Close Task moves a task to it. No event can leave it.
+ * Events may list it as a source to admit repeats.
+ */
+export const TASK_CLOSED_STATE = "closed";
+
+/**
+ * A workflow state. Every workflow declares the core states `open` and `closed` with its other
+ * states, so it gives their labels, tone, and notification.
+ */
 export const workflowStateDefinitionSchema = z.strictObject({
   id: workflowIdSchema,
   label: z.string(),
   title: z.string().optional(),
   /** A compact label for narrow lists. The default is the label. */
   shortLabel: z.string().optional(),
-  terminal: z.boolean().optional(),
   /** The column and badge tone. The default is neutral. */
   tone: workflowToneSchema.optional(),
   notification: workflowStateNotificationSchema.optional(),
@@ -129,7 +139,10 @@ export const workflowStateDefinitionSchema = z.strictObject({
   studioRole: workflowIdSchema.optional(),
   /** The roles whose latest session Agent Studio opens first. The default is the Studio role. */
   historyRoles: z.array(workflowIdSchema).optional(),
-  /** Open the latest session of any role when no history role has one. The default is terminal. */
+  /**
+   * Open the latest session of any role when no history role has one. The default is true only
+   * in `closed`.
+   */
   historyLatest: z.boolean().optional(),
   /** Merge detection checks the task branch of a task in this state. The default is false. */
   mergeDetection: z.boolean().optional(),
@@ -291,8 +304,6 @@ export const workflowEventEffectValues = [
   "build.completed",
   "review.approve",
   "review.request_changes",
-  "task.close",
-  "task.reset",
   "implementation.reset",
   "pull_request.manage",
   "pull_request.merged",
@@ -399,8 +410,8 @@ export const workflowDefinitionSchema = z.strictObject({
   defaultIssueType: issueTypeSchema.optional(),
   roles: z.array(workflowRoleDefinitionSchema),
   artifacts: z.array(workflowArtifactDefinitionSchema),
+  /** The states, with the core states `open` and `closed`. A task starts in `open`. */
   states: z.array(workflowStateDefinitionSchema),
-  initialState: workflowIdSchema,
   steps: z.array(workflowStepDefinitionSchema),
   actions: z.array(workflowActionDefinitionSchema),
   events: z.array(workflowEventDefinitionSchema),

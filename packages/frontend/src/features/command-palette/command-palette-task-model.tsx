@@ -21,7 +21,11 @@ import {
   compareActiveSessionForPrimary,
   type SessionTargetOptions,
 } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
-import { taskActionIcon } from "@/components/features/kanban/task-action-ui";
+import { coreTaskActionIcon, taskActionIcon } from "@/components/features/kanban/task-action-ui";
+import {
+  type CoreTaskAction,
+  coreTaskActions,
+} from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import type { WorkspaceSessionLiveState } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import { roleIconForHint } from "@/lib/agent-role-presentation";
 import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
@@ -38,6 +42,7 @@ export type TaskSessionTarget = { role: AgentRole; identity: AgentSessionIdentit
 export type PaletteTaskCommand =
   | { kind: "open_session"; session: TaskSessionTarget }
   | { kind: "workflow"; action: TaskWorkflowAction }
+  | { kind: "core"; action: CoreTaskAction }
   | { kind: "edit" }
   | { kind: "details" }
   | { kind: "copy_id" }
@@ -228,8 +233,21 @@ const workflowAction = (
   command: { kind: "workflow", action },
 });
 
+/** Close Task and Reset Task, which OpenDucktor gives every task that is not closed. */
+const coreActions = (task: TaskCard): PaletteTaskAction[] =>
+  coreTaskActions(task).map((action) => ({
+    key: action.id,
+    label: action.label,
+    keywords: ["workflow", "task"],
+    icon: coreTaskActionIcon(action),
+    destructive: action.emphasis === "destructive",
+    disabled: false,
+    command: { kind: "core", action },
+  }));
+
 /** Actions that need no session data. */
 const taskActions = (task: TaskCard): PaletteTaskAction[] => [
+  ...coreActions(task),
   {
     key: "edit",
     label: "Edit task",

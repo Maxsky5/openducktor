@@ -1,3 +1,4 @@
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { useTaskWorkflowContinuation } from "./task-workflow-continuation";
 import { useCallback, useRef, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -55,9 +56,7 @@ export function useWorkflowEventActions(
         const event = previous.taskWorkflow.definition.events.find(({ id }) => id === eventId);
         if (!event || event.effect)
           throw new Error(`Event "${eventId}" requires its host effect command.`);
-        const finishes = event.outcomes.some(
-          ({ to }) => to !== null && previous.taskWorkflow.isTerminalState(to),
-        );
+        const finishes = event.outcomes.some(({ to }) => to === TASK_CLOSED_STATE);
         const mutation = runTaskStateMutation({
           canFinish: finishes,
           cleanup: createProductionTaskChatDraftCleanup(host.client, feedback),
@@ -68,7 +67,7 @@ export function useWorkflowEventActions(
           workspaceId: scope.workspaceId,
           taskIds: [taskId],
           mutation: () => host.client.taskApplyEvent(scope, taskId, eventId),
-          shouldCleanup: (task) => previous.taskWorkflow.isTerminalState(task.status),
+          shouldCleanup: (task) => task.status === TASK_CLOSED_STATE,
         });
         const committed = await mutation;
         await continueTaskWorkflow(committed, { workflow: previous.workflow, launchActionIds });

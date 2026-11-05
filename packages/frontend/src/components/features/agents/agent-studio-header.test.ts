@@ -13,6 +13,7 @@ import { WorkflowRail, WorkflowRailPreview } from "./agent-studio-header-workflo
 import type { AgentWorkflowStep } from "./agent-studio-header.types";
 import type { WorkflowRailStep } from "@/types/agent-workflow";
 import { deriveSessionHistorySelectionFocusBehavior } from "./agent-studio-header-session-history-model";
+import { CLOSE_TASK_ACTION } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
@@ -622,7 +623,7 @@ describe("AgentStudioHeader", () => {
     const approveTask = {
       kind: "task_action" as const,
       id: "task:human_approve",
-      taskAction: "human_approve" as const,
+      taskAction: { kind: "workflow" as const, action: "human_approve" },
       placement: "trailing" as const,
       label: "Approve Task",
       description: "Open the approval flow to merge, open a pull request, or close the task.",
@@ -660,7 +661,10 @@ describe("AgentStudioHeader", () => {
     });
 
     expect(onQuickAction).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "task_action", taskAction: "human_approve" }),
+      expect.objectContaining({
+        kind: "task_action",
+        taskAction: { kind: "workflow", action: "human_approve" },
+      }),
     );
   });
 
@@ -679,7 +683,7 @@ describe("AgentStudioHeader", () => {
     const closeTask = {
       kind: "task_action" as const,
       id: "task:close_task",
-      taskAction: "close_task" as const,
+      taskAction: { kind: "core" as const, action: CLOSE_TASK_ACTION },
       placement: "leading" as const,
       label: "Close Task",
       description: "The task branch is merged into origin/main.",

@@ -21,11 +21,13 @@ const qaRejected = { qaReport: { present: true, verdict: "rejected" } };
 
 describe("definition display fields", () => {
   test("action surfaces keep task-level actions out of the Kanban card", () => {
-    const task = createTaskCardFixture({ status: "in_progress" });
+    const task = createTaskCardFixture({ status: "closed" });
     expect(resolveTaskCardActions(task, { surface: "kanban" }).allActions).not.toContain(
-      "close_task",
+      "remove_worktree",
     );
-    expect(resolveTaskCardActions(task, { surface: "details" }).allActions).toContain("close_task");
+    expect(resolveTaskCardActions(task, { surface: "details" }).allActions).toContain(
+      "remove_worktree",
+    );
   });
 
   test("the Studio label replaces only the base action label", () => {

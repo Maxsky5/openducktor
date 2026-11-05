@@ -1,3 +1,4 @@
+import { CLOSE_TASK_ACTION } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { createTaskWorkflowActionsFixture } from "@/test-utils/shared-test-fixtures";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
@@ -418,14 +419,10 @@ describe("TaskDetailsSheet", () => {
     }
   });
 
-  test("routes close_task to the confirmation dialog before invoking close", async () => {
+  test("routes the core Close Task to the confirmation dialog before invoking close", async () => {
     const { useTaskDetailsSheetViewModel } =
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
-    const task = createTaskCardFixture({
-      id: "TASK-1",
-      title: "Task 1",
-      availableActions: ["close_task"],
-    });
+    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1", availableActions: [] });
     const onCloseTask = mock(async (taskId: string, _options: { removeWorktree: boolean }) =>
       createWireTaskCardFixture({ id: taskId, status: "closed" }),
     );
@@ -446,7 +443,7 @@ describe("TaskDetailsSheet", () => {
 
     try {
       await harness.mount();
-      await harness.run((viewModel) => viewModel.runWorkflowAction("close_task"));
+      await harness.run((viewModel) => viewModel.runCoreTaskAction(CLOSE_TASK_ACTION));
 
       expect(harness.getLatest().closeConfirm.dialog.open).toBe(true);
       expect(onCloseTask).not.toHaveBeenCalled();
@@ -649,11 +646,7 @@ describe("TaskDetailsSheet", () => {
     const { TaskDetailsSheet } = await import("./task-details-sheet");
     const { TaskWorkflowActionsContext } =
       await import("@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context");
-    const task = createTaskCardFixture({
-      id: "TASK-1",
-      title: "Task 1",
-      availableActions: ["close_task"],
-    });
+    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1", availableActions: [] });
     const onOpenChange = mock((_open: boolean) => {});
 
     const { unmount } = render(
@@ -670,6 +663,7 @@ describe("TaskDetailsSheet", () => {
 
     try {
       await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      fireEvent.click(screen.getByRole("button", { name: /More/ }));
       const closeTask = screen.getByRole("button", { name: "Close Task" });
       closeTask.focus();
       fireEvent.click(closeTask);

@@ -22,7 +22,7 @@ import {
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
 import { acquireRemovableWorktrees } from "../support/task-worktree-owner-guard";
-import { requireEffectInput, decideEffectTransition } from "../support/task-workflow-events";
+import { coreTaskTransition, decideCoreTaskAction } from "../support/task-workflow-events";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
 
@@ -55,12 +55,8 @@ export const createTaskFullResetUseCase = ({
       const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
       const workflowRoles = workflowRoleIds(workflow);
-      // A reset from the initial state keeps the status and still clears the task.
-      yield* requireEffectInput("Task reset is", workflow, "task.reset", current, {
-        repoPath,
-        taskId,
-        status: current.status,
-      });
+      // A reset of an open task keeps the status and still clears the task.
+      yield* Effect.fromResult(decideCoreTaskAction("reset", current));
       const currentSessions = yield* loadTaskSessions(taskStore, input);
       const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
@@ -161,7 +157,7 @@ export const createTaskFullResetUseCase = ({
         );
         const updated = yield* taskStore.transitionTask({
           ...taskRef,
-          decide: (task) => decideEffectTransition(taskWorkflows.forTask(task), "task.reset", task),
+          decide: coreTaskTransition(taskWorkflows, "reset"),
         });
         const task = enrichTask(workflow, updated);
         return { task, removedArtifactIds: artifactIds };

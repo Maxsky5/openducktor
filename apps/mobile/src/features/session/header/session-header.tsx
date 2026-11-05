@@ -217,9 +217,13 @@ const useTaskSessionMenus = ({
     (id: string) => {
       const option = quickActions.find((entry) => entry.id === id);
       if (!option || option.disabled || !taskId || !task) return;
-      // Approve Task and Close Task open the approval, which selects Close Task for a merged branch.
+      // Approve Task opens the approval. Close Task for a merged branch opens its confirmation.
       if (option.kind === "task_action") {
-        taskActions.runAction(task, option.taskAction, (role) => {
+        if (option.taskAction.kind === "core") {
+          taskActions.confirm(task, option.taskAction.action.confirmation);
+          return;
+        }
+        taskActions.runAction(task, option.taskAction.action, (role) => {
           const row = groups.find((group) => group.role === role)?.rows[0];
           return row ? { session: row.identity } : undefined;
         });

@@ -30,15 +30,15 @@ const variant = (change: (definition: WorkflowDefinition) => void) => {
   change(definition);
   return createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
 };
+// Both workflows share the core states, so each review-only state follows one built-in state.
+const reviewOnlyStates = review.definition.states.filter(
+  ({ id }) => !SPEC_PLAN_BUILD_BOARD_LAYOUT.states.some((state) => state.id === id),
+);
 const layout: WorkflowBoardLayout = {
-  states: review.definition.states
-    .flatMap((state, index) => [
-      ...(SPEC_PLAN_BUILD_BOARD_LAYOUT.states[index]
-        ? [SPEC_PLAN_BUILD_BOARD_LAYOUT.states[index]!]
-        : []),
-      { id: state.id, taskOrder: "updated" as const },
-    ])
-    .concat(SPEC_PLAN_BUILD_BOARD_LAYOUT.states.slice(review.definition.states.length)),
+  states: SPEC_PLAN_BUILD_BOARD_LAYOUT.states.flatMap((state, index) => {
+    const reviewState = reviewOnlyStates[index];
+    return reviewState ? [state, { id: reviewState.id, taskOrder: "updated" as const }] : [state];
+  }),
 };
 
 describe("workflow catalog and shared board", () => {
@@ -46,17 +46,16 @@ describe("workflow catalog and shared board", () => {
     const board = resolveWorkflowBoard(layout, [specPlanBuildWorkflow, review]);
     expect(board.states.slice(0, 4).map(({ id }) => id)).toEqual([
       "open",
-      "backlog",
-      "spec_ready",
       "writing",
+      "spec_ready",
+      "paused",
     ]);
-    expect(board.states).toHaveLength(15);
+    expect(board.states).toHaveLength(12);
     expect(board.states.find(({ id }) => id === "spec_ready")).toEqual({
       id: "spec_ready",
       label: "Spec ready",
       title: "Spec Ready",
       shortLabel: "Spec",
-      terminal: false,
       tone: "pending",
       taskOrder: "updated",
     });
@@ -79,7 +78,7 @@ describe("workflow catalog and shared board", () => {
   test("shares state identity across definitions and rejects conflicts or missing states", () => {
     expect(
       resolveWorkflowBoard(layout, [specPlanBuildWorkflow, review, variant(() => {})]).states,
-    ).toHaveLength(15);
+    ).toHaveLength(12);
     const relabelled = variant((definition) => {
       definition.states.find(({ id }) => id === "reviewing")!.label = "Different review";
     });
@@ -88,10 +87,10 @@ describe("workflow catalog and shared board", () => {
       definition.states.find(({ id }) => id === "reviewing")!.tone = "warning";
     });
     expect(() => validateWorkflowInventory([review, retoned])).toThrow("reviewing");
-    const open = variant((definition) => {
-      definition.states.find(({ id }) => id === "published")!.terminal = false;
+    const relabelledCore = variant((definition) => {
+      definition.states.find(({ id }) => id === "closed")!.label = "Published";
     });
-    expect(() => validateWorkflowInventory([review, open])).toThrow("published");
+    expect(() => validateWorkflowInventory([review, relabelledCore])).toThrow("closed");
     expect(() =>
       resolveWorkflowBoard({ states: layout.states.filter(({ id }) => id !== "reviewing") }, [
         review,
@@ -101,7 +100,7 @@ describe("workflow catalog and shared board", () => {
       resolveWorkflowBoard({ states: [...layout.states, layout.states[0]!] }, [review]),
     ).toThrow('repeats state "open"');
     expect(() => resolveWorkflowBoard(layout, [review])).toThrow(
-      'Board state "open" belongs to no workspace workflow',
+      'Board state "spec_ready" belongs to no workspace workflow',
     );
   });
 

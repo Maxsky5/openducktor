@@ -37,7 +37,7 @@ When task Markdown contains `odt-asset:<assetId>` images needed for the work, co
 
 Then call `odt_read_task_artifacts` with a nonempty array of distinct `codes` from `task.artifacts`. For example, `{ "taskId": "repo-123", "codes": ["spec"] }` returns the full spec. The built-in workflow declares the codes `spec`, `plan`, and `qaReport`; free artifacts have their own stable codes. Each read returns the complete content or fails. Internal artifact IDs remain within the UI and store.
 
-Human actions are `human_request_changes(taskId, note)` and `human_approve(taskId)`. `human_approve` opens the approval modal. Native task actions are `reset_implementation(taskId)`, `reset_task(taskId)`, `close_task(taskId, removeWorktree)`, and `remove_worktree(taskId)`.
+Human actions are `human_request_changes(taskId, note)` and `human_approve(taskId)`. `human_approve` opens the approval modal. The core task actions of every workflow are `reset_task(taskId)` and `close_task(taskId, removeWorktree)`. No workflow event controls them. Other native task actions are `reset_implementation(taskId)` and `remove_worktree(taskId)`.
 
 Free-artifact creation, rename, replacement, and deletion require a non-closed task. They preserve task status, QA verdict, and workflow readiness. The setter routes workflow codes through the existing workflow actions and enforces managed role access. Delete rejects workflow codes. Manual Specification and Implementation Plan saves keep status unchanged, including on closed tasks.
 
@@ -58,7 +58,7 @@ A trigger such as `build-completed` is an event that `odt_apply_workflow_event` 
 | `build-blocked` | `in_progress`, `ai_review`, `human_review` | `note` is not empty. | `blocked` |
 | `build-blocked` | `blocked` | `note` is not empty. Idempotent. No write runs. | Unchanged. |
 | `reset_implementation` | `in_progress`, `blocked`, `ai_review`, `human_review` | No live build or QA activity. Branch cleanup is safe. | `ready_for_dev`, `spec_ready`, or `open` from retained artifacts. |
-| `reset_task` | Any non-closed status. | No live role activity. Branch cleanup is safe. | `open` |
+| Core `reset_task` | Any status except `closed`. | No live role activity. Branch cleanup is safe. | `open`. An `open` task stays `open` and is cleared. |
 | `build-completed` | `in_progress`, `blocked` | The latest QA result is not `approved`. | `ai_review` |
 | `build-completed` | `in_progress`, `blocked` | The latest QA result is `approved`. | `human_review` |
 | `build-completed` | `ai_review`, `human_review` | Idempotent. No hook or patch runs. | Unchanged. |
@@ -68,7 +68,7 @@ A trigger such as `build-completed` is an event that `odt_apply_workflow_event` 
 | `human_request_changes` | `ai_review`, `human_review` | `note` is optional. | `in_progress` |
 | `human_request_changes` | `in_progress` | Idempotent. No write runs. The action is not offered. | Unchanged. |
 | `human_approve` | `ai_review`, `human_review` | Opens the approval modal. | Unchanged. |
-| `close_task` | Any non-closed status. | No live role activity. Cleanup succeeds. | `closed` |
+| Core `close_task` | Any status. | No live role activity. Cleanup succeeds. | `closed`. A `closed` task stays unchanged and no cleanup runs. |
 | `remove_worktree` | `closed` | No live role activity. Cleanup succeeds. | Unchanged. |
 | Local direct merge | `ai_review`, `human_review` | Merge and cleanup succeed. | `closed` |
 | Direct merge with a publish target | `ai_review`, `human_review` | Merge succeeds. Publication remains pending. | `human_review` |

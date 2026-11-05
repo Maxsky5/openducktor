@@ -1,3 +1,4 @@
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import type { WorkflowIcon } from "@openducktor/contracts";
 import { taskIssueType, workflowRoleIcon } from "@openducktor/workflows";
 import { taskReviewRejection } from "@openducktor/workflows";
@@ -25,7 +26,12 @@ import {
 } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { toDisplayTaskLabels } from "@openducktor/frontend-core/tasks/presentation/task-labels";
 import type { IconName } from "@/ui/icon-names";
-import { taskActionIcon, taskActionRoleIcon } from "../presentation/task-action-paint";
+import type { CoreTaskAction } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
+import {
+  coreTaskActionIcon,
+  taskActionIcon,
+  taskActionRoleIcon,
+} from "../presentation/task-action-paint";
 
 /** The most labels that a card shows before it counts the rest. */
 const CARD_VISIBLE_LABEL_COUNT = 2;
@@ -37,8 +43,13 @@ const CARD_VISIBLE_LABEL_COUNT = 2;
  */
 type TaskCardPrimaryAppearance = "filled" | "outline" | "destructive" | "running" | "waiting";
 
+/** A workflow action of the task, or a core task action such as Close Task for a merged branch. */
+export type TaskCardAction =
+  | { kind: "workflow"; action: TaskWorkflowAction }
+  | { kind: "core"; action: CoreTaskAction };
+
 export type TaskCardPrimary = {
-  action: TaskWorkflowAction;
+  action: TaskCardAction;
   label: string;
   icon: IconName;
   appearance: TaskCardPrimaryAppearance;
@@ -137,7 +148,7 @@ export const buildTaskCardModel = ({
     autoCloseFailure,
   });
   const disabled = new Set(footer.disabledActions);
-  const closed = task.sharedState.terminal;
+  const closed = task.status === TASK_CLOSED_STATE;
   const activeSession = hasActiveSession ? footer.primaryActiveSession : null;
   const waitingInput = footer.primarySessionIsWaitingInput;
   const session = activeSession
@@ -160,13 +171,24 @@ export const buildTaskCardModel = ({
         }
       : null;
   const primaryAction = closed ? null : footer.actions.primaryAction;
+  const coreAction = footer.leadingCoreAction;
   let primary: TaskCardPrimary | null = null;
-  if (primaryAction) {
+  if (coreAction) {
+    primary = {
+      action: { kind: "core", action: coreAction },
+      label: coreAction.label,
+      icon: coreTaskActionIcon(coreAction),
+      appearance: PRIMARY_APPEARANCES[coreAction.emphasis],
+      command: true,
+      disabled: false,
+      activeSession: null,
+    };
+  } else if (primaryAction) {
     let appearance: TaskCardPrimaryAppearance =
       PRIMARY_APPEARANCES[taskActionTone(primaryAction, task)];
     if (session) appearance = session.waitingInput ? "waiting" : "running";
     primary = {
-      action: primaryAction,
+      action: { kind: "workflow", action: primaryAction },
       label: taskActionLabel(primaryAction, task),
       icon: taskActionIcon(primaryAction, task),
       appearance,

@@ -1,6 +1,6 @@
 import { requireWorkspaceRef } from "../operations/task-operations-model";
 import { resolveTaskCards } from "../../queries/workflows";
-import { taskStatusSchema } from "@openducktor/contracts";
+import { TASK_CLOSED_STATE, taskStatusSchema } from "@openducktor/contracts";
 import type { TaskApprovalContext, TaskCard } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import type { GitConflict } from "../../git/contracts";
@@ -87,7 +87,7 @@ export async function submitDirectMergeApproval({
       return { ...result, resolved: resolved! };
     },
     shouldCleanup: (result) =>
-      result.outcome !== "conflicts" && result.resolved.sharedState.terminal,
+      result.outcome !== "conflicts" && result.resolved.status === TASK_CLOSED_STATE,
   });
 
   if (directMergeResult.outcome === "conflicts") {
@@ -98,7 +98,7 @@ export async function submitDirectMergeApproval({
   }
 
   // The task stream updates every task view with the committed change.
-  if (directMergeResult.resolved.sharedState.terminal) {
+  if (directMergeResult.resolved.status === TASK_CLOSED_STATE) {
     return {
       outcome: "task_closed",
       successDescription: canonicalTargetBranch(approvalContext.targetBranch),

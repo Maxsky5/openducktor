@@ -14,7 +14,7 @@ const review = createReviewTaskWorkflow();
 
 const reviewTask = (overrides: Partial<TaskFacts> = {}): TaskFacts => ({
   id: "task-1",
-  status: "backlog",
+  status: "open",
   issueType: "feature",
   artifactSummary: review.emptyArtifactSummary(),
   ...overrides,
@@ -29,10 +29,6 @@ const withChange = (change: (definition: WorkflowDefinition) => void) => {
 describe("createTaskWorkflow", () => {
   test("reads states, roles, artifacts, and issue types from the definition", () => {
     expect(review.issueTypes).toEqual(["feature", "bug"]);
-    expect(review.initialState).toBe("backlog");
-    expect(review.terminalStates).toEqual(["published", "shelved"]);
-    expect(review.isTerminalState("shelved")).toBe(true);
-    expect(review.isTerminalState("approval")).toBe(false);
     expect(review.detectsMerge("approval")).toBe(true);
     expect(review.detectsMerge("reviewing")).toBe(false);
     expect(review.worktreeRoles).toEqual(["writer"]);
@@ -45,7 +41,7 @@ describe("createTaskWorkflow", () => {
 
   test("finds host effects through the definition", () => {
     expect(review.effectEvent("build.completed")).toBe("finish-writing");
-    expect(review.effectEvent("task.close")).toBe("shelve");
+    expect(review.effectEvent("pull_request.merged")).toBe("pr-merged");
     expect(specPlanBuildWorkflow.effectEvent("review.approve")).toBe("human-approve");
   });
 
@@ -67,10 +63,10 @@ describe("createTaskWorkflow", () => {
       allowedStatuses: [],
       guardMessage: "Save the draft first",
     });
-    expect(review.decide("restart", reviewTask({ status: "published" }))).toEqual({
+    expect(review.decide("submit-draft", reviewTask({ status: "closed" }))).toEqual({
       kind: "denied",
-      status: "published",
-      allowedStatuses: ["backlog", "writing", "paused", "reviewing", "approval"],
+      status: "closed",
+      allowedStatuses: ["open", "writing", "paused", "reviewing", "approval"],
     });
     expect(review.decide("start-writing", reviewTask({ status: "writing" }))).toEqual({
       kind: "unchanged",
@@ -104,7 +100,7 @@ describe("createTaskWorkflow", () => {
       available: true,
       completed: false,
     });
-    expect(projection.availableActions).toEqual(["request_review", "shelve", "restart"]);
+    expect(projection.availableActions).toEqual(["request_review"]);
   });
 
   test("resolves launch actions, automations, and continuations with their roles", () => {
@@ -126,7 +122,7 @@ describe("createTaskWorkflow", () => {
       preferredRole: "editor",
       navigation: { type: "agent_studio_task", preferredRole: "editor" },
     });
-    expect(review.stateNotification("published", "writer")).toEqual({
+    expect(review.stateNotification("closed", "writer")).toEqual({
       kind: "workflow.published",
       status: "Task moved to Published.",
       title: "Published",
@@ -134,7 +130,7 @@ describe("createTaskWorkflow", () => {
       preferredRole: "writer",
       navigation: { type: "kanban_task" },
     });
-    expect(review.stateNotification("backlog")).toBeUndefined();
+    expect(review.stateNotification("open")).toBeUndefined();
     expect(review.notificationDefaults()).toEqual({
       "workflow.reviewing": { enabled: true, target: "both", sound: "inherit" },
       "workflow.published": { enabled: true, target: "in_app", sound: "none" },
@@ -267,10 +263,10 @@ describe("createTaskWorkflow", () => {
     ).toThrow("gives a role two agent steps");
     expect(
       withChange((definition) => {
-        const event = definition.events.find(({ id }) => id === "restart");
-        if (event) event.effect = "task.close";
+        const event = definition.events.find(({ id }) => id === "hold");
+        if (event) event.effect = "pull_request.merged";
       }),
-    ).toThrow('The effect "task.close" is at');
+    ).toThrow('The effect "pull_request.merged" is at');
     expect(() =>
       createTaskWorkflow(
         reviewTaskDefinition(),

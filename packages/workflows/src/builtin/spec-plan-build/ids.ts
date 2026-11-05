@@ -25,8 +25,6 @@ const SPEC_PLAN_BUILD_ACTION_IDS = [
   "open_builder",
   "open_qa",
   "reset_implementation",
-  "reset_task",
-  "close_task",
   "human_request_changes",
   "human_approve",
   "remove_worktree",

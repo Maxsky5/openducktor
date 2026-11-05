@@ -283,11 +283,8 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
               : undefined,
           ),
         onHumanRequestChanges,
-        onConfirm: (taskId, action, onCommitted) => {
-          if (action === "reset_implementation")
-            openResetImplementation(taskId, { closeDetailsAfterReset: true, onCommitted });
-          else openConfirmation(taskId, action, onCommitted);
-        },
+        onConfirm: (taskId, _action, onCommitted) =>
+          openResetImplementation(taskId, { closeDetailsAfterReset: true, onCommitted }),
         continueTaskWorkflow,
         showError: showWorkflowActionError,
       }),
@@ -299,7 +296,6 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       openTaskApproval,
       onHumanRequestChanges,
       openResetImplementation,
-      openConfirmation,
       continueTaskWorkflow,
     ],
   );

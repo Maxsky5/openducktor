@@ -95,6 +95,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "workflowAgentEventEffectValues",
   "workflowAgentEventSchema",
   "workflowDefinitionSchema",
+  "TASK_OPEN_STATE",
+  "TASK_CLOSED_STATE",
   "REMOTE_PROTOCOL_VERSION",
   "REMOTE_SOCKET_AUTHORIZATION_PREFIX",
   "REMOTE_HTTP_WARNING",

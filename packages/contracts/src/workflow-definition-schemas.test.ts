@@ -52,9 +52,8 @@ const createDefinition = (): WorkflowDefinition => ({
         role: "reviewer",
       },
     },
-    { id: "released", label: "Released", terminal: true },
+    { id: "released", label: "Released" },
   ],
-  initialState: "draft",
   steps: [
     {
       id: "review-notes",
@@ -287,7 +286,7 @@ describe("workflow definition schemas", () => {
     for (const identifier of ["", " ", "\t\n"]) {
       for (const invalidDefinition of [
         { ...definition, id: identifier },
-        { ...definition, initialState: identifier },
+        { ...definition, states: [{ id: identifier, label: "Blank" }] },
         { ...definition, facts: [{ id: identifier, type: "boolean" }] },
         {
           ...definition,
@@ -307,6 +306,19 @@ describe("workflow definition schemas", () => {
     expect(workflowDefinitionSchema.parse({ ...definition, id: " release-review " }).id).toBe(
       " release-review ",
     );
+  });
+
+  test("rejects an initial state field and a terminal flag, because the core states own them", () => {
+    const definition = createDefinition();
+    expect(
+      workflowDefinitionSchema.safeParse({ ...definition, initialState: "draft" }).success,
+    ).toBe(false);
+    expect(
+      workflowDefinitionSchema.safeParse({
+        ...definition,
+        states: [{ id: "released", label: "Released", terminal: true }],
+      }).success,
+    ).toBe(false);
   });
 
   test("requires the schema version and a positive definition revision", () => {

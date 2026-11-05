@@ -68,7 +68,7 @@ OPENDUCKTOR_CHANNEL=dev OPENDUCKTOR_DEV_INSTANCE=<instance-id> bunx @openducktor
 1. Read the default workspace from `--workspace-id` or `ODT_WORKSPACE_ID`.
 2. Use an explicit host URL and token when present. Otherwise, read the selected discovery file.
 3. Check the host bridge.
-4. Call authenticated `odt_mcp_ready`. The reply gives the bridge version, the tool names, and the states that are not terminal in the host workflows.
+4. Call authenticated `odt_mcp_ready`. The reply gives the bridge version, the tool names, and the states other than `closed` in the host workflows.
 5. When a default workspace exists, call `odt_get_workspaces` at the same time and require both calls to succeed.
 6. Check that every required ODT tool is present.
 7. Start MCP stdio only after all checks pass.
@@ -122,7 +122,7 @@ The tool list keeps tool descriptions short, because runtimes send the whole lis
 - `annotations.readOnlyHint: true` marks the tools that change nothing. A client can run them without an approval.
 - A server that forbids `workspaceId` input hides `workspaceId` in the tool schemas. It sends no server instructions, because Codex repeats them in front of each tool description. Other servers send one sentence about `workspaceId`.
 - The listed input and output schemas omit the `$schema` URL, UUID patterns, and size limits. The server still checks each input with the full schema.
-- `issueType` lists the fixed issue types. The `status` filter of `odt_search_tasks` lists the states that are not terminal in the host workflows, from the `odt_mcp_ready` reply. The host checks each value against the workflow of the task.
+- `issueType` lists the fixed issue types. The `status` filter of `odt_search_tasks` lists the states other than `closed` in the host workflows, from the `odt_mcp_ready` reply. The host checks each value against the workflow of the task.
 
 ## Browser tools
 

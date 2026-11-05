@@ -17,7 +17,6 @@ const sharedBoardStateSchema = z.strictObject({
   label: z.string(),
   title: z.string(),
   shortLabel: z.string(),
-  terminal: z.boolean(),
   tone: workflowToneSchema,
   taskOrder: boardTaskOrderSchema,
 });

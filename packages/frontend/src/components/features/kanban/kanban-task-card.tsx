@@ -658,8 +658,9 @@ function TaskActions({
     mergedTarget,
     autoCloseFailure,
   });
-  const { primaryActiveSession, primarySessionIsWaitingInput } = footer;
-  if (footer.actions.allActions.length === 0 && footer.shortcuts.length === 0) return null;
+  const { primaryActiveSession, primarySessionIsWaitingInput, leadingCoreAction } = footer;
+  if (footer.actions.allActions.length === 0 && footer.shortcuts.length === 0 && !leadingCoreAction)
+    return null;
 
   const runAction = (action: TaskWorkflowAction): void =>
     workflowActions.runAction(task, action, {
@@ -709,13 +710,22 @@ function TaskActions({
         disabledActions={footer.disabledActions}
         hideWhenEmpty
         onAction={runAction}
+        leadingCoreAction={
+          leadingCoreAction
+            ? {
+                action: leadingCoreAction,
+                onSelect: () =>
+                  workflowActions.onConfirmTaskAction(task.id, leadingCoreAction.confirmation),
+              }
+            : undefined
+        }
         size="sm"
         expandPrimary
         compactMenuTrigger
         className={taskActionsGroupClassName(compact)}
         primaryClassName={taskActionsPrimaryClassName({
           compact,
-          hasActiveSession,
+          hasActiveSession: hasActiveSession && !leadingCoreAction,
           isWaitingInput: primarySessionIsWaitingInput,
         })}
         primaryContent={

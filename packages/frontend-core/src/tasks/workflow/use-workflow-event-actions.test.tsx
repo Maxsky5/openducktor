@@ -205,7 +205,7 @@ test.each([{ outcome: "terminal" }, { outcome: "nonterminal" }, { outcome: "deni
     const after = toWireTaskCard(
       createWorkflowTaskCardFixture(alpha, board, {
         ...toWireTaskCard(before),
-        status: outcome === "nonterminal" ? "alpha_hold" : "shared_done",
+        status: outcome === "nonterminal" ? "alpha_hold" : "closed",
       }),
     );
     const session = {

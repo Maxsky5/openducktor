@@ -3,8 +3,13 @@ import {
   type WorkflowRoleId as AgentRole,
   type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
+import {
+  type CoreTaskAction,
+  coreTaskActions,
+} from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import { PencilLine, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
+import { coreTaskActionMenuItem } from "@/components/features/kanban/task-action-ui";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { Button } from "@/components/ui/button";
 
@@ -17,6 +22,8 @@ export type TaskDetailsSheetFooterProps = {
   activeSessionRole?: AgentRole;
   historicalSessionRoles?: readonly AgentRole[];
   onWorkflowAction?: (action: TaskWorkflowAction) => void;
+  /** Shows Close Task and Reset Task, which OpenDucktor gives every task. */
+  onCoreTaskAction?: (action: CoreTaskAction) => void;
   onDeleteSelect?: () => void;
 };
 
@@ -27,7 +34,7 @@ const deleteMenuActions = (onDeleteSelect: (() => void) | undefined) =>
           id: "delete-task",
           label: "Delete task",
           icon: <Trash2 className="size-3.5" />,
-          destructive: true,
+          variant: "destructiveGhost" as const,
           onSelect: onDeleteSelect,
         },
       ]
@@ -44,9 +51,17 @@ export function TaskDetailsSheetFooter({
   activeSessionRole,
   historicalSessionRoles,
   onWorkflowAction,
+  onCoreTaskAction,
   onDeleteSelect,
 }: TaskDetailsSheetFooterProps): ReactElement {
-  const extraMenuActions = deleteMenuActions(onDeleteSelect);
+  const extraMenuActions = [
+    ...(onCoreTaskAction
+      ? coreTaskActions(task).map((action) =>
+          coreTaskActionMenuItem(action, () => onCoreTaskAction(action)),
+        )
+      : []),
+    ...deleteMenuActions(onDeleteSelect),
+  ];
 
   return (
     <div className="mt-0 flex flex-none flex-wrap items-center justify-between gap-2 border-t border-border bg-card px-5 py-3">

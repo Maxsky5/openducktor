@@ -2559,14 +2559,7 @@ describe("createElectronHostCommandRouter", () => {
     ).toMatchObject({
       id: "task-1",
       title: "Updated task",
-      availableActions: [
-        "view_details",
-        "set_spec",
-        "set_plan",
-        "build_start",
-        "reset_task",
-        "close_task",
-      ],
+      availableActions: ["view_details", "set_spec", "set_plan", "build_start"],
     });
   });
 });

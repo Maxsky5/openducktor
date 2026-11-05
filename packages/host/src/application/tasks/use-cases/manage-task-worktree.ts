@@ -1,3 +1,4 @@
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { Effect } from "effect";
 import { hasCheckableTaskBranch } from "../../../domain/task";
@@ -120,7 +121,7 @@ export const createTaskWorktreeUseCases = ({
     return Effect.gen(function* () {
       const task = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(task);
-      if (!workflow.isTerminalState(task.status)) {
+      if (task.status !== TASK_CLOSED_STATE) {
         return yield* new HostValidationError({
           field: "taskId",
           message: `Task ${taskId} is not closed. Close the task to remove its worktree.`,

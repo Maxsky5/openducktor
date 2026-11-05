@@ -140,6 +140,9 @@ export function useTaskDetailsActions({
         case "action":
           runDetailsAction(choice.action.action);
           return;
+        case "core":
+          confirm(task, choice.action.confirmation);
+          return;
       }
     },
     [actions, confirm, runDetailsAction, task, unlinkPullRequest],

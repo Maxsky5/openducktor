@@ -4,6 +4,7 @@ import {
   type ResolvedTaskCard,
   workflowRoleIcon,
 } from "@openducktor/workflows";
+import type { CoreTaskAction } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import type { IconName } from "@/ui/icon";
 
 /**
@@ -27,6 +28,8 @@ export const taskActionIcon = (action: string, task: ResolvedTaskCard): IconName
   const hint = task.taskWorkflow.action(action).icon;
   return hint ? TASK_ACTION_ICONS[hint] : "arrow-right";
 };
+export const coreTaskActionIcon = (action: CoreTaskAction): IconName =>
+  TASK_ACTION_ICONS[action.icon];
 
 /** The icon of each workflow action, on its button and in the actions menu, after the desktop. */
 const TASK_ACTION_ICONS = {

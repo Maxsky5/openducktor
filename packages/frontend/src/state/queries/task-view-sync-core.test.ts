@@ -260,7 +260,7 @@ describe("TaskViewSync", () => {
 
   test("applies changed cards, deletion, and the closed-task window without deleting hidden task IDs", async () => {
     const { queryClient, sync } = createSync(createPorts());
-    const updated = createTaskCardFixture({ id: "updated", availableActions: ["close_task"] });
+    const updated = createTaskCardFixture({ id: "updated", availableActions: ["build_start"] });
     const expired = createTaskCardFixture({
       id: "expired",
       status: "closed",

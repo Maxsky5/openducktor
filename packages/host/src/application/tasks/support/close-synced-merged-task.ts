@@ -8,7 +8,7 @@ import type { TaskServiceError } from "../task-service";
 import type { TaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
 import type { requireMergedTaskCleanupDependencies } from "./required-task-dependencies";
 import { completeTaskClosure } from "./task-closure";
-import { requireEffect } from "./task-workflow-events";
+import { effectTransition, requireEffect } from "./task-workflow-events";
 import { cleanupMergedTaskState } from "./task-worktree-cleanup";
 
 /**
@@ -53,8 +53,7 @@ export const closeSyncedMergedTask = (
       gitPort: services.gitPort,
       operation: "sync merged pull request",
       repoPath,
-      taskWorkflows,
-      effect: "pull_request.merged",
+      decide: effectTransition(taskWorkflows, "pull_request.merged"),
       taskId,
       taskSessionLifecycleCoordinator,
       taskStore,

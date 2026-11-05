@@ -5,8 +5,9 @@ This document defines persisted task status, UI labels, issue type rules, and ta
 ## Source of truth
 
 - The persisted `status` is the task lifecycle state.
+- Every workflow has the core states `open` and `closed`. A task starts in `open`. `closed` is the only terminal state.
 - The backend validates each transition.
-- The frontend renders the actions in `TaskCard.availableActions`. It does not infer actions from status.
+- The frontend renders the workflow actions in `TaskCard.availableActions`. It does not infer workflow actions from status. It adds the core Close Task and Reset Task for every task that is not `closed`.
 - User fields and task artifacts have separate owners.
 
 ## Statuses
@@ -22,7 +23,7 @@ This document defines persisted task status, UI labels, issue type rules, and ta
 | `human_review` | Human Review | This still counts as work in progress for orchestration. |
 | `closed` | Done | The task is closed. |
 
-`close_task` is an administrative override. It does not prove that code was merged, QA passed, or all workflow steps finished.
+The core Close Task is an administrative override. It does not prove that code was merged, QA passed, or all workflow steps finished.
 
 The sidebar excludes sessions for `closed` tasks. If the visible task closes, the Sessions page returns to Kanban. Closing a task keeps its saved session history.
 

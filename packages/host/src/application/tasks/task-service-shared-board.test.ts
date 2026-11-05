@@ -93,8 +93,7 @@ test("one workspace keeps mixed-workflow projections and mutations separate in s
       createWorkflowReads(resolver, "mixed-host").workspace({ workspaceId, repoPath }),
     );
     expect(context.board.states.map(({ id }) => id)).toEqual([
-      "alpha_queue",
-      "beta_queue",
+      "open",
       "beta_work",
       "alpha_hold",
       "shared_review",
@@ -102,9 +101,7 @@ test("one workspace keeps mixed-workflow projections and mutations separate in s
       "beta_hold",
       "alpha_approval",
       "beta_approval",
-      "shared_done",
-      "alpha_shelved",
-      "beta_shelved",
+      "closed",
     ]);
     await expect(
       Effect.runPromise(
@@ -127,7 +124,7 @@ test("one workspace keeps mixed-workflow projections and mutations separate in s
           eventId: `${task.workflow.id}_approve`,
         }),
       );
-      expect(result.status).toBe("shared_done");
+      expect(result.status).toBe("closed");
       expect(result.workflow).toEqual(task.workflow);
       const stored = await Effect.runPromise(
         harness.store.getTask({ workspaceId, repoPath, taskId: task.id }),

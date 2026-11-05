@@ -1,3 +1,4 @@
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { compareBoardTasks } from "@openducktor/workflows";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
@@ -35,7 +36,7 @@ export const createBoardChanges = (): TaskQueryChanges<TaskCard[]> => {
         cards.set(card.id, card);
       }
       for (const [id, card] of cards) {
-        if (card.sharedState.terminal && Date.parse(card.updatedAt) < change.cutoff) {
+        if (card.status === TASK_CLOSED_STATE && Date.parse(card.updatedAt) < change.cutoff) {
           cards.delete(id);
           removed.add(id);
         }
@@ -45,7 +46,7 @@ export const createBoardChanges = (): TaskQueryChanges<TaskCard[]> => {
     apply(baseline) {
       const expired = new Set<string>();
       for (const card of baseline) {
-        if (!card.sharedState.terminal) continue;
+        if (card.status !== TASK_CLOSED_STATE) continue;
         if (Date.parse(card.updatedAt) < (baselineCutoffs.get(card.id) ?? cutoff)) {
           expired.add(card.id);
         }

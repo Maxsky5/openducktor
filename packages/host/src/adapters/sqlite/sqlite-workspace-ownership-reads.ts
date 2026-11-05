@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
-import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import type {
   TaskOwnershipReader,
@@ -21,9 +21,6 @@ import { type HostDatabaseSession, taskSessions, tasks } from "./sqlite-host-dat
 import { workspaceSessions } from "./sqlite-workspace-session-schema";
 
 // Each read takes the workspaces that its caller admitted and reads all of them in one query.
-
-const notTerminal = (status: AnySQLiteColumn, terminalStates: readonly string[]) =>
-  terminalStates.length === 0 ? undefined : notInArray(status, sqliteValues(terminalStates));
 
 /** Reads the saved chats of the workspaces, archived chats included. */
 export const readWorktreeOwnershipChats = (
@@ -58,11 +55,11 @@ export const readWorktreeOwnershipChats = (
     );
   });
 
-/** Reads tasks with the trimmed working directories of their sessions, without terminal tasks. */
+/** Reads tasks with the trimmed working directories of their sessions. */
 const readTaskWorktreeDirectories = (
   session: HostDatabaseSession,
   workspaceIds: readonly string[],
-  terminalStates: readonly string[],
+  includeClosedTasks: boolean,
 ) =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
@@ -82,7 +79,7 @@ const readTaskWorktreeDirectories = (
           .where(
             and(
               inArray(tasks.workspaceId, sqliteValues(workspaceIds)),
-              notTerminal(tasks.status, terminalStates),
+              includeClosedTasks ? undefined : ne(tasks.status, TASK_CLOSED_STATE),
             ),
           )
           .orderBy(
@@ -112,11 +109,10 @@ const readTaskWorktreeDirectories = (
     return [...byTask.values()];
   });
 
-/** Reads the native conversations of active chats and of tasks that are not terminal. */
+/** Reads the native conversations of active chats and of tasks that are not closed. */
 export const readLiveSessionRoots = (
   session: HostDatabaseSession,
   workspaceIds: readonly string[],
-  terminalStates: readonly string[],
 ) =>
   Effect.gen(function* () {
     const chats = yield* session.execute(
@@ -159,7 +155,7 @@ export const readLiveSessionRoots = (
           .where(
             and(
               inArray(taskSessions.workspaceId, sqliteValues(workspaceIds)),
-              notTerminal(tasks.status, terminalStates),
+              ne(tasks.status, TASK_CLOSED_STATE),
             ),
           )
           .orderBy(
@@ -194,15 +190,11 @@ export const createSqliteTaskOwnershipReader = (
   const read = (
     workspaces: readonly WorkspaceSessionStoreScope[],
     access: "administrative" | "ownership",
-    includeTerminalTasks: boolean,
+    includeClosedTasks: boolean,
     operation: string,
   ) =>
     readWorkspaceSet(readWorkspaces, workspaces, access, operation, (context) =>
-      readTaskWorktreeDirectories(
-        context.session,
-        context.workspaceIds,
-        includeTerminalTasks ? [] : context.terminalStates,
-      ),
+      readTaskWorktreeDirectories(context.session, context.workspaceIds, includeClosedTasks),
     );
   return {
     listTaskDirectoriesForWorktreeOwnership: ({ workspaces }) =>

@@ -53,16 +53,18 @@ export function useAgentStudioShellTaskActions({
     cancelLinkMergedPullRequest();
   }, [cancelLinkMergedPullRequest]);
 
-  const { onOpenTaskDetails, runAction } = useRequiredTaskWorkflowActions();
+  const { onOpenTaskDetails, runAction, onConfirmTaskAction } = useRequiredTaskWorkflowActions();
   const selectedTaskId = selectedTask?.id ?? null;
   const openTaskDetails = useCallback((): void => {
     if (selectedTaskId) onOpenTaskDetails(selectedTaskId);
   }, [onOpenTaskDetails, selectedTaskId]);
   const runTaskQuickAction = useCallback(
     (action: AgentStudioTaskQuickAction): void => {
-      if (selectedTask) runAction(selectedTask, action);
+      if (!selectedTask) return;
+      if (action.kind === "core") onConfirmTaskAction(selectedTask.id, action.action.confirmation);
+      else runAction(selectedTask, action.action);
     },
-    [runAction, selectedTask],
+    [onConfirmTaskAction, runAction, selectedTask],
   );
 
   const mergedPullRequestModal = useAgentStudioPullRequestModalModel({

@@ -425,7 +425,7 @@ describe("KanbanTaskCard merged task branch", () => {
       id: "TASK-1",
       title: "Implement payment flow",
       status: "human_review",
-      availableActions: ["human_approve", "close_task"],
+      availableActions: ["human_approve"],
     });
 
     const html = renderCardMarkup(
@@ -449,7 +449,7 @@ describe("KanbanTaskCard merged task branch", () => {
     const task = createTaskCardFixture({
       id: "TASK-1",
       status: "human_review",
-      availableActions: ["human_approve", "close_task"],
+      availableActions: ["human_approve"],
     });
 
     const html = renderCardMarkup(
@@ -473,7 +473,7 @@ describe("KanbanTaskCard merged task branch", () => {
     const task = createTaskCardFixture({
       id: "TASK-1",
       status: "human_review",
-      availableActions: ["human_approve", "close_task"],
+      availableActions: ["human_approve"],
     });
 
     const html = renderCardMarkup(

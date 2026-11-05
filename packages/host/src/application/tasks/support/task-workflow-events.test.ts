@@ -2,10 +2,13 @@ import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { TaskPolicyError } from "../../../domain/task";
+import { singleTaskWorkflow } from "../../../test-support/task-workflows";
 import { HostValidationError } from "../../../effect/host-errors";
 import {
+  coreTaskTransition,
+  decideCoreTaskAction,
   formatStatusList,
   requirePullRequestManagement,
   requireTaskEvent,
@@ -89,14 +92,18 @@ describe("task workflow events", () => {
     const current = task({ status: "closed" });
     const error = await Effect.runPromise(
       Effect.flip(
-        requireTaskEventInput("Task reset is", specPlanBuildWorkflow, "reset-task", current, {
-          taskId: current.id,
-        }),
+        requireTaskEventInput(
+          "Implementation reset is",
+          specPlanBuildWorkflow,
+          "reset-implementation",
+          current,
+          { taskId: current.id },
+        ),
       ),
     );
     expect(error).toBeInstanceOf(HostValidationError);
     expect(error.message).toBe(
-      "Task reset is only allowed from open, spec_ready, ready_for_dev, in_progress, blocked, ai_review, or human_review (current: closed).",
+      "Implementation reset is only allowed from in_progress, blocked, ai_review, or human_review (current: closed).",
     );
   });
 
@@ -138,5 +145,53 @@ describe("task workflow events", () => {
     expect(startWorktreeSessionHint(createReviewTaskWorkflow())).toBe(
       "Start a Writer session first.",
     );
+  });
+});
+
+describe("core task actions", () => {
+  const review = createReviewTaskWorkflow();
+  const reviewTask = (status: string) =>
+    task({ status, workflow: review.reference, artifactSummary: review.emptyArtifactSummary() });
+
+  test.each(["open", "writing", "reviewing", "approval"])(
+    "closes a task in %s without a workflow event",
+    (status) => {
+      expect(Result.getOrThrow(decideCoreTaskAction("close", reviewTask(status)))).toEqual({
+        kind: "transition",
+        from: status,
+        to: "closed",
+        cause: {},
+      });
+    },
+  );
+
+  test("keeps a closed task closed", () => {
+    expect(Result.getOrThrow(decideCoreTaskAction("close", reviewTask("closed")))).toEqual({
+      kind: "unchanged",
+      status: "closed",
+    });
+  });
+
+  test.each(["writing", "paused", "approval"])("resets a task in %s to open", (status) => {
+    expect(
+      Result.getOrThrow(
+        coreTaskTransition(singleTaskWorkflow(review), "reset")(reviewTask(status)),
+      ),
+    ).toEqual({ status: "open", cause: {}, workflowId: "review" });
+  });
+
+  test("keeps an open task open on reset and rejects a reset of a closed task", () => {
+    expect(Result.getOrThrow(decideCoreTaskAction("reset", reviewTask("open")))).toEqual({
+      kind: "unchanged",
+      status: "open",
+    });
+    const denied = decideCoreTaskAction("reset", reviewTask("closed"));
+    expect(Result.isFailure(denied)).toBe(true);
+    if (Result.isFailure(denied)) {
+      expect(denied.failure).toBeInstanceOf(HostValidationError);
+      expect(denied.failure.message).toBe(
+        "Task task-1 is closed, so it cannot reset. Reset only a task that is not closed.",
+      );
+    }
   });
 });

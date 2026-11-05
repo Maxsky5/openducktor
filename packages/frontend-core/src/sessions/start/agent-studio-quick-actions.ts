@@ -16,6 +16,11 @@ import { buildReusableSessionOptions } from "./session-start-reuse-options";
 import { type SessionStartExistingSessionOption } from "./session-start-types";
 import { type SessionStartPostAction } from "./session-start-workflow";
 import { pullRequestHealthError } from "../../review/git-provider-health";
+import {
+  canRunCoreTaskActions,
+  CLOSE_TASK_ACTION,
+  type CoreTaskAction,
+} from "../../tasks/workflow/core-task-actions";
 import type { AgentSessionSummary } from "../agent-sessions-store";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 
@@ -43,7 +48,10 @@ export type AgentStudioSessionQuickActionOption = {
   surface?: "studio" | "git_conflict";
 };
 
-export type AgentStudioTaskQuickAction = string;
+/** A workflow action of the task, or a core task action such as Close Task for a merged branch. */
+export type AgentStudioTaskQuickAction =
+  | { kind: "workflow"; action: string }
+  | { kind: "core"; action: CoreTaskAction };
 
 /** A quick action that opens a task workflow, such as the approval modal. */
 export type AgentStudioTaskQuickActionOption = {
@@ -167,34 +175,43 @@ export const buildAgentStudioQuickActions = (
   const leading: AgentStudioTaskQuickActionOption[] = [];
   const following: AgentStudioTaskQuickActionOption[] = [];
   const trailing: AgentStudioTaskQuickActionOption[] = [];
+  // A merged task branch proposes the core Close Task before every other action.
+  if (params.mergedTarget && canRunCoreTaskActions(task))
+    leading.push({
+      kind: "task_action",
+      id: `task:${CLOSE_TASK_ACTION.id}`,
+      taskAction: { kind: "core", action: CLOSE_TASK_ACTION },
+      placement: "leading",
+      label: CLOSE_TASK_ACTION.label,
+      description: `The task branch is merged into ${params.mergedTarget}.`,
+      mergedTarget: params.mergedTarget,
+      disabled: false,
+    });
   for (const { id, action, effect, follows } of taskEntries) {
-    const merged = effect === "task.close" && !!params.mergedTarget;
-    if (!actionShowsOn(action, "studio") && !merged) continue;
+    if (!actionShowsOn(action, "studio")) continue;
     const approvalLeads =
       effect === "review.approve" &&
       hasNoEnabledGitProvider(params.gitProviderContext, params.gitProviderReadError);
-    const placement =
-      merged || approvalLeads || effect === "review.request_changes" ? "leading" : "trailing";
+    const placement = approvalLeads || effect === "review.request_changes" ? "leading" : "trailing";
     const option: AgentStudioTaskQuickActionOption = {
       kind: "task_action",
       id: `task:${id}`,
-      taskAction: id,
+      taskAction: { kind: "workflow", action: id },
       placement,
       label: taskActionLabel(id, task, { surface: "studio" }),
-      description: merged ? `The task branch is merged into ${params.mergedTarget}.` : action.label,
+      description: action.label,
       disabled: follows && params.createSessionDisabled,
     };
-    if (merged) option.mergedTarget = params.mergedTarget!;
     if (follows) following.push(option);
     else if (placement === "leading") leading.push(option);
     else trailing.push(option);
   }
   const launchOrder = taskLaunchOrder(task);
   const rank = (option: AgentStudioQuickActionOption) => {
-    const id =
-      option.kind === "session_start"
-        ? option.launchActionId
-        : evaluator.actionLaunchAction(input, option.taskAction);
+    let id = "";
+    if (option.kind === "session_start") id = option.launchActionId;
+    else if (option.taskAction.kind === "workflow")
+      id = evaluator.actionLaunchAction(input, option.taskAction.action);
     const index = launchOrder.indexOf(id);
     return index < 0 ? launchOrder.length : index;
   };

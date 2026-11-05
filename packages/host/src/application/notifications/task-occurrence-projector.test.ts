@@ -191,14 +191,14 @@ test("projects the state notifications of a custom workflow", () => {
     },
   ]);
   expect(
-    projector.projectChange(
-      event("publish", "published", "approval", { id: "review", revision: 1 }),
-    ).occurrences,
+    projector.projectChange(event("publish", "closed", "approval", { id: "review", revision: 1 }))
+      .occurrences,
   ).toMatchObject([
     { kind: "workflow.published", navigationTarget: { type: "kanban_task", taskId: "task-1" } },
   ]);
   expect(
-    projector.projectChange(event("shelve", "shelved", "backlog", { id: "review", revision: 1 }))
-      .occurrences,
+    projector.projectChange(
+      event("start-writing", "writing", "open", { id: "review", revision: 1 }),
+    ).occurrences,
   ).toEqual([]);
 });

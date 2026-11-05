@@ -1,3 +1,4 @@
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import type { WorkflowIcon } from "@openducktor/contracts";
 import {
   roleWorkflowForTask,
@@ -102,4 +103,6 @@ export const buildWorkflowRail = <Session>(
   });
 
 const stateLabel = (task: ResolvedTaskCard, state: WorkflowStepPresentation): string =>
-  task.sharedState.terminal && state.tone === "blocked" ? "Skipped" : STATE_LABELS[state.tone];
+  task.status === TASK_CLOSED_STATE && state.tone === "blocked"
+    ? "Skipped"
+    : STATE_LABELS[state.tone];

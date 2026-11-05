@@ -59,7 +59,6 @@ const sharedMetadata = (state: TaskWorkflow["definition"]["states"][number]) => 
   label: state.label,
   title: state.title ?? state.label,
   shortLabel: state.shortLabel ?? state.label,
-  terminal: state.terminal === true,
   tone: state.tone ?? "neutral",
 });
 
@@ -111,7 +110,7 @@ export const validateWorkflowInventory = (workflows: readonly TaskWorkflow[]): v
   );
   const checkState = sameValueCheck<SharedStateMetadata, string>(
     (id, prior, current) =>
-      `Shared state "${id}" conflicts between workflows "${prior}" and "${current}". Use the same label, title, short label, terminal meaning, and tone.`,
+      `Shared state "${id}" conflicts between workflows "${prior}" and "${current}". Use the same label, title, short label, and tone.`,
   );
   const checkNotification = sameValueCheck<
     NonNullable<TaskWorkflow["definition"]["states"][number]["notification"]>["defaultSetting"],

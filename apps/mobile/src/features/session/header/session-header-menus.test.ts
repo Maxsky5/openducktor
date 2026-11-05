@@ -5,6 +5,7 @@ import type {
   AgentStudioQuickActionOption,
   AgentStudioSessionQuickActionOption,
 } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
+import { CLOSE_TASK_ACTION } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import { groupTaskSessions } from "@/features/tasks/details/task-sessions-model";
 import { quickActionItems, sessionHistoryItems } from "./session-header-menus";
 
@@ -103,7 +104,7 @@ describe("quickActionItems", () => {
         {
           kind: "task_action",
           id: "task:human_approve",
-          taskAction: "human_approve",
+          taskAction: { kind: "workflow", action: "human_approve" },
           placement: "trailing",
           label: "Approve Task",
           description: "",
@@ -119,6 +120,34 @@ describe("quickActionItems", () => {
         icon: "circle-check-big",
         disabled: false,
         detail: undefined,
+        command: true,
+      },
+    ]);
+  });
+
+  test("shows the core Close Task of a merged branch with its target", () => {
+    const items = quickActionItems(
+      [
+        {
+          kind: "task_action",
+          id: "task:close_task",
+          taskAction: { kind: "core", action: CLOSE_TASK_ACTION },
+          placement: "leading",
+          label: "Close Task",
+          description: "The task branch is merged into origin/main.",
+          mergedTarget: "origin/main",
+          disabled: false,
+        },
+      ],
+      createTaskCardFixture({ status: "human_review" }),
+    );
+    expect(items).toEqual([
+      {
+        id: "task:close_task",
+        title: "Close Task",
+        icon: "circle-check-big",
+        disabled: false,
+        detail: "Merged into origin/main",
         command: true,
       },
     ]);

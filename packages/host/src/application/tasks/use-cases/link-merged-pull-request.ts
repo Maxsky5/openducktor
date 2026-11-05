@@ -13,6 +13,7 @@ import { runTaskRuntimeCleanup } from "../support/task-cleanup-support";
 import { completeTaskClosure } from "../support/task-closure";
 import { ensureNoDirectMergeEffect } from "../support/direct-merge-block";
 import {
+  effectTransition,
   requireEffectEvent,
   requirePullRequestManagement,
   taskEventPolicyError,
@@ -181,8 +182,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
             gitPort: dependencies.gitPort,
             operation: "link merged pull request",
             repoPath,
-            taskWorkflows,
-            effect: "pull_request.merged",
+            decide: effectTransition(taskWorkflows, "pull_request.merged"),
             taskId,
             taskSessionLifecycleCoordinator,
             taskStore,

@@ -95,7 +95,7 @@ for (const input of [
   },
   {
     workflow: createReviewTaskWorkflow(),
-    status: "backlog",
+    status: "open",
     issueType: "feature" as const,
     code: "draft",
     secondCode: "review",

@@ -1,7 +1,7 @@
-import { gitTargetBranchSchema } from "@openducktor/contracts";
+import { gitTargetBranchSchema, TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { validateWithSchema } from "./sqlite-task-store-validation";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
-import { and, asc, desc, eq, notInArray, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, type SQL, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
 import type { TaskReference } from "../../ports/task-repository-ports";
@@ -107,7 +107,6 @@ export const mergeCandidates = (
   session: HostDatabaseSession,
   workspaceId: string,
   taskWorkflows: Pick<TaskWorkflowResolver, "forTask">,
-  terminalStates: readonly string[],
 ) =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
@@ -120,9 +119,7 @@ export const mergeCandidates = (
             targetRemote: tasks.targetRemote,
           })
           .from(tasks)
-          .where(
-            and(eq(tasks.workspaceId, workspaceId), notInArray(tasks.status, [...terminalStates])),
-          )
+          .where(and(eq(tasks.workspaceId, workspaceId), ne(tasks.status, TASK_CLOSED_STATE)))
           .orderBy(...taskLaneOrderBy),
       "sqliteTaskStore.mergeCandidates.selectTasks",
     );

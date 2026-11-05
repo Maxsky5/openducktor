@@ -105,7 +105,7 @@ describe("task service with a custom task workflow", () => {
   test("creates a task in the initial state with the roles and artifacts of its workflow", async () => {
     const card = await createArticle();
 
-    expect(card.status).toBe("backlog");
+    expect(card.status).toBe("open");
     expect(card.issueType).toBe("feature");
     expect(Object.keys(card.agentWorkflows)).toEqual(["writer", "editor"]);
     expect(Object.keys(card.artifactSummary)).toEqual(["draft", "review"]);
@@ -265,7 +265,7 @@ describe("task service with a custom task workflow", () => {
     );
 
     expect(String(result)).toContain(message);
-    expect(await status(id)).toBe("backlog");
+    expect(await status(id)).toBe("open");
   });
 
   test("pauses, resumes, and completes a build with the effect events of the workflow", async () => {
@@ -307,28 +307,30 @@ describe("task service with a custom task workflow", () => {
     expect(await status(id)).toBe("writing");
   });
 
-  test("closes a task into its terminal close state and resets it to the initial state", async () => {
-    const first = await createArticle();
-    const second = await createArticle();
+  test("closes and resets a task of a workflow that declares no close or reset", async () => {
+    const { actions, events } = reviewTaskDefinition();
+    expect([...actions, ...events].map(({ id }) => id).join(" ")).not.toMatch(/close|reset/);
+    const close = (taskId: string) =>
+      Effect.runPromise(service().closeTask({ ...harness.scope, taskId, removeWorktree: true }));
+    const fresh = await createArticle();
+    expect((await close(fresh.id)).status).toBe("closed");
+    expect((await close(fresh.id)).status).toBe("closed");
 
-    const closed = await Effect.runPromise(
-      service().closeTask({
-        ...harness.scope,
-        taskId: first.id,
-        removeWorktree: true,
-      }),
-    );
-    expect(closed.status).toBe("shelved");
-
-    const input = {
-      ...harness.scope,
-      taskId: second.id,
-    };
+    const reviewed = await createArticle();
+    const input = { ...harness.scope, taskId: reviewed.id };
     await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
-    await save(second.id, "draft", "writer");
+    await save(reviewed.id, "draft", "writer");
+    expect(await status(reviewed.id)).toBe("reviewing");
     const reset = await Effect.runPromise(service().resetTask(input));
-    expect(reset.status).toBe("backlog");
+    expect(reset.status).toBe("open");
     expect(reset.artifactSummary.draft).toEqual({ present: false });
+    expect((await Effect.runPromise(service().resetTask(input))).status).toBe("open");
+
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
+    expect((await close(reviewed.id)).status).toBe("closed");
+    const denied = await Effect.runPromiseExit(service().resetTask(input));
+    expect(String(denied)).toContain("is closed, so it cannot reset");
+    expect(await status(reviewed.id)).toBe("closed");
   });
 
   test("commits the start event of a role step and rejects other events", async () => {
@@ -339,7 +341,7 @@ describe("task service with a custom task workflow", () => {
       service().applyStartEvent({ ...input, eventId: "hold" }),
     );
     expect(String(rejected)).toContain("starts no step");
-    expect(await status(id)).toBe("backlog");
+    expect(await status(id)).toBe("open");
 
     const started = await Effect.runPromise(
       service().applyStartEvent({ ...input, eventId: "start-writing" }),
@@ -360,9 +362,13 @@ describe("task service with a workflow for each task", () => {
       forWorkspace: () => ({
         workflows: [specPlanBuildWorkflow, review],
         board: {
-          states: [...specPlanBuildWorkflow.definition.states, ...review.definition.states].map(
-            ({ id }) => ({ id, taskOrder: "updated" as const }),
-          ),
+          states: [
+            ...new Set(
+              [...specPlanBuildWorkflow.definition.states, ...review.definition.states].map(
+                ({ id }) => id,
+              ),
+            ),
+          ].map((id) => ({ id, taskOrder: "updated" as const })),
         },
       }),
     });
@@ -377,7 +383,7 @@ describe("task service with a workflow for each task", () => {
           status,
         }),
       );
-    const article = await insert("feature", "backlog");
+    const article = await insert("feature", "open");
     const builtinTask = await insert("task", "open");
 
     const cards = await Effect.runPromise(
@@ -410,7 +416,7 @@ describe("task service with a workflow for each task", () => {
 
     await Effect.runPromise(tasks.closeTask({ ...input(article.id), removeWorktree: true }));
     await Effect.runPromise(tasks.closeTask({ ...input(builtinTask.id), removeWorktree: true }));
-    expect((await Effect.runPromise(tasks.findTask(input(article.id))))?.status).toBe("shelved");
+    expect((await Effect.runPromise(tasks.findTask(input(article.id))))?.status).toBe("closed");
     expect((await Effect.runPromise(tasks.findTask(input(builtinTask.id))))?.status).toBe("closed");
     const visible = await Effect.runPromise(
       harness.store.listTasks({ ...harness.scope, doneVisibleDays: 0 }),

@@ -56,8 +56,7 @@ describe("host workflow reads in the connection task cache", () => {
       const context = await h.queryClient.ensureQueryData(workspaceWorkflowQueryOptions(scope));
       const columns = mapToKanbanColumns(tasks, context.context.board);
       expect(columns.map(({ id }) => id)).toEqual([
-        "alpha_queue",
-        "beta_queue",
+        "open",
         "beta_work",
         "alpha_hold",
         "shared_review",
@@ -65,15 +64,13 @@ describe("host workflow reads in the connection task cache", () => {
         "beta_hold",
         "alpha_approval",
         "beta_approval",
-        "shared_done",
-        "alpha_shelved",
-        "beta_shelved",
+        "closed",
       ]);
       expect(columns.find(({ id }) => id === "shared_review")!.tasks.map(({ id }) => id)).toEqual([
         "alpha-1",
         "beta-1",
       ]);
-      expect(columns.filter(({ tasks }) => tasks.length === 0)).toHaveLength(11);
+      expect(columns.filter(({ tasks }) => tasks.length === 0)).toHaveLength(8);
       expect(tasks[0]!.availableActions).toContain("alpha_hold");
       expect(tasks[1]!.availableActions).not.toContain("beta_hold");
       expect(Object.keys(tasks[0]!.agentWorkflows)).toEqual(["alpha_writer", "alpha_editor"]);
@@ -159,9 +156,8 @@ describe("host workflow reads in the connection task cache", () => {
         if (failure === "missing state")
           h.context.board.states = h.board.states.filter(({ id }) => id !== "shared_review");
         if (failure === "conflict")
-          h.catalog.workflows[1]!.definition.states.find(
-            ({ id }) => id === "shared_review",
-          )!.terminal = true;
+          h.catalog.workflows[1]!.definition.states.find(({ id }) => id === "shared_review")!.tone =
+            "warning";
         await expect(h.queryClient.fetchQuery(repoTaskDataQueryOptions(scope))).rejects.toThrow(
           failure === "revision"
             ? "outside this workspace"

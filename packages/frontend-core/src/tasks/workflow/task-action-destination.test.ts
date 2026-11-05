@@ -20,8 +20,6 @@ const BUILTIN_ACTIONS = [
   "human_approve",
   "human_request_changes",
   "reset_implementation",
-  "reset_task",
-  "close_task",
 ];
 
 describe("resolveTaskActionDestination", () => {
@@ -129,11 +127,11 @@ describe("resolveTaskActionDestination", () => {
     expect(taskActionSendsCommand(task, "open_builder")).toBe(false);
   });
 
-  test("asks for confirmation before a close and rejects an unavailable action", () => {
-    const task = createTaskCardFixture({ id: "T-1", availableActions: ["close_task"] });
-    expect(resolveTaskActionDestination(task, "close_task")).toEqual({
+  test("asks for confirmation before an implementation reset and rejects an unavailable action", () => {
+    const task = createTaskCardFixture({ id: "T-1", availableActions: ["reset_implementation"] });
+    expect(resolveTaskActionDestination(task, "reset_implementation")).toEqual({
       kind: "confirm",
-      action: "close",
+      action: "reset_implementation",
       continuation: undefined,
     });
     expect(() => resolveTaskActionDestination(task, "set_spec")).toThrow("unavailable");
@@ -273,32 +271,6 @@ describe("resolveTaskActionDestination of built-in actions", () => {
       kind: "confirm",
       action: "reset_implementation",
     });
-    expect(
-      resolveTaskActionDestination(
-        createTaskCardFixture({
-          id: "T-1",
-          availableActions: BUILTIN_ACTIONS,
-        }),
-        "reset_task",
-        sessions,
-      ),
-    ).toEqual({
-      kind: "confirm",
-      action: "reset_task",
-    });
-    expect(
-      resolveTaskActionDestination(
-        createTaskCardFixture({
-          id: "T-1",
-          availableActions: BUILTIN_ACTIONS,
-        }),
-        "close_task",
-        sessions,
-      ),
-    ).toEqual({
-      kind: "confirm",
-      action: "close",
-    });
   });
 });
 
@@ -312,8 +284,6 @@ describe("taskActionSendsCommand", () => {
       "human_approve",
       "human_request_changes",
       "reset_implementation",
-      "reset_task",
-      "close_task",
     ] as const) {
       expect(taskActionSendsCommand(createTaskCardFixture(), action)).toBe(true);
     }
@@ -330,10 +300,6 @@ test("dispatch keeps the actions of each workflow in a shared lane", () => {
     kind: "event",
     eventId: "alpha_hold",
     launchActionIds: [],
-  });
-  expect(resolveTaskActionDestination(task, "alpha_shelve", () => undefined)).toEqual({
-    kind: "confirm",
-    action: "close",
   });
   const other = createWorkflowTaskCardFixture(beta, board, { status: "shared_review" });
   expect(() => resolveTaskActionDestination(other, "alpha_hold", () => undefined)).toThrow(

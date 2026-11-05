@@ -1,3 +1,4 @@
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import type { TaskWorkflow, TaskWorkflowLaunchAction } from "./task-workflow/task-workflow";
 import { taskWorkflowInput, type ResolvedTaskCard } from "./task-workflow-view";
 
@@ -95,7 +96,7 @@ export const taskSessionHistory = (task: ResolvedTaskCard) => {
   const defaultRole = resolveAgentStudioDefaultRoleForTask(task);
   return {
     roles: state.historyRoles ?? (defaultRole ? [defaultRole] : []),
-    latest: state.historyLatest ?? state.terminal === true,
+    latest: state.historyLatest ?? task.status === TASK_CLOSED_STATE,
   };
 };
 /** The document that the role side panel shows first. */

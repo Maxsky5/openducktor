@@ -121,6 +121,7 @@ export function TaskDetailsSheetContent(
     onEdit: onEdit && ((editTaskId) => claimDialog(() => onEdit(editTaskId))),
     onDelete,
     runWorkflowAction: (action) => claimDialog(() => viewModel.runWorkflowAction(action)),
+    runCoreTaskAction: workflowActions ? viewModel.runCoreTaskAction : undefined,
     openDeleteDialog: viewModel.deleteConfirm.openDialog,
   });
 
@@ -293,6 +294,7 @@ function getTaskDetailsFooterProps({
   onEdit,
   onDelete,
   runWorkflowAction,
+  runCoreTaskAction,
   openDeleteDialog,
 }: {
   task: NonNullable<TaskDetailsSheetProps["task"]>;
@@ -304,6 +306,7 @@ function getTaskDetailsFooterProps({
   onEdit: TaskDetailsSheetProps["onEdit"];
   onDelete: TaskWorkflowActions["onDelete"] | undefined;
   runWorkflowAction: TaskDetailsViewModel["runWorkflowAction"];
+  runCoreTaskAction: TaskDetailsViewModel["runCoreTaskAction"] | undefined;
   openDeleteDialog: TaskDetailsViewModel["deleteConfirm"]["openDialog"];
 }): TaskDetailsSheetFooterProps {
   const footerProps: TaskDetailsSheetFooterProps = {
@@ -321,6 +324,9 @@ function getTaskDetailsFooterProps({
   }
   if (onEdit) {
     footerProps.onEdit = onEdit;
+  }
+  if (runCoreTaskAction) {
+    footerProps.onCoreTaskAction = runCoreTaskAction;
   }
   if (onDelete) {
     footerProps.onDeleteSelect = openDeleteDialog;

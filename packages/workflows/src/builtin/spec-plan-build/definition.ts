@@ -216,18 +216,6 @@ const specPlanBuildEvents = {
     outcomes: moveTo("closed"),
     effect: "pull_request.merged",
   },
-  "close-task": {
-    from: [...nonClosedStates, "closed"],
-    guards: [],
-    outcomes: moveTo("closed"),
-    effect: "task.close",
-  },
-  "reset-task": {
-    from: nonClosedStates,
-    guards: [],
-    outcomes: moveTo("open"),
-    effect: "task.reset",
-  },
   "reset-implementation": {
     from: activeOrReview.stateIn,
     guards: [],
@@ -426,7 +414,6 @@ const specPlanBuildStates = [
     id: "closed",
     label: "Done",
     title: "Done",
-    terminal: true,
     notification: notification("closed", {
       label: "Task Closed",
       description: "A Task moves to Closed.",
@@ -686,16 +673,6 @@ const specPlanBuildActions = [
     emphasis: "destructive",
   },
   {
-    id: "reset_task",
-    kind: "event",
-    label: "Reset Task",
-    eventId: "reset-task",
-    availableWhen: true,
-    icon: "reset",
-    emphasis: "destructive",
-    surfaces: ["details", "palette"],
-  },
-  {
     id: "open_qa",
     kind: "view",
     label: "Open QA",
@@ -720,16 +697,6 @@ const specPlanBuildActions = [
     availableWhen: humanReview,
     icon: "complete",
     emphasis: "prominent",
-  },
-  {
-    id: "close_task",
-    kind: "event",
-    label: "Close Task",
-    eventId: "close-task",
-    availableWhen: nonClosed,
-    icon: "complete",
-    emphasis: "warning",
-    surfaces: ["details", "palette"],
   },
   {
     id: "remove_worktree",
@@ -849,8 +816,6 @@ const secondaryActions: SpecPlanBuildActionId[] = [
   "human_approve",
   "human_request_changes",
   "reset_implementation",
-  "reset_task",
-  "close_task",
   "remove_worktree",
 ];
 
@@ -860,7 +825,6 @@ export const SPEC_PLAN_BUILD_DEFINITION = {
   id: "openducktor-spec-plan-build",
   revision: 2,
   label: "Spec, Plan, Build",
-  initialState: "open",
   facts: [],
   issueTypes: specPlanBuildIssueTypes,
   defaultIssueType: "task",

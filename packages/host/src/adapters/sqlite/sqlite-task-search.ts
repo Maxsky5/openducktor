@@ -1,9 +1,9 @@
-import { and, eq, notInArray, sql } from "drizzle-orm";
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import type { TaskSearchInput } from "../../ports/task-repository-ports";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { listTasksInDatabase } from "./sqlite-task-card-read-model";
-import { hostTerminalStates } from "./sqlite-task-repository-context";
 import { tasks, type HostDatabaseSession } from "./sqlite-host-database-schema";
 
 export const searchTasksInDatabase = (
@@ -14,10 +14,6 @@ export const searchTasksInDatabase = (
 ) =>
   Effect.gen(function* () {
     const tags = input.tags?.map(searchKey) ?? [];
-    // A state can be terminal in one workflow and active in another.
-    const terminalStates = hostTerminalStates(taskWorkflows).filter((state) =>
-      taskWorkflows.workflows.every((workflow) => workflow.isTerminalState(state)),
-    );
     const rows = yield* session.execute(
       (db) =>
         db
@@ -40,7 +36,7 @@ export const searchTasksInDatabase = (
           .where(
             and(
               eq(tasks.workspaceId, workspaceId),
-              notInArray(tasks.status, terminalStates),
+              ne(tasks.status, TASK_CLOSED_STATE),
               input.priority === undefined ? undefined : eq(tasks.priority, input.priority),
               input.issueType === undefined ? undefined : eq(tasks.issueType, input.issueType),
               input.status === undefined ? undefined : eq(tasks.status, input.status),
@@ -51,7 +47,6 @@ export const searchTasksInDatabase = (
     const title = input.title === undefined ? undefined : searchKey(input.title);
     const matches = rows
       .filter((task) => {
-        if (taskWorkflows.forTask(task).isTerminalState(task.status)) return false;
         if (title !== undefined && !searchKey(task.title).includes(title)) return false;
         if (tags.length === 0) return true;
         const labels = new Set(task.labels!.map(searchKey));

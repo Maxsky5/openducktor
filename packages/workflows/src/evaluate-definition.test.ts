@@ -10,13 +10,6 @@ describe("workflow definition validation", () => {
     path: string;
   }> = [
     {
-      name: "initial state",
-      change: (definition) => {
-        definition.initialState = "missing";
-      },
-      path: "initialState",
-    },
-    {
       name: "agent role",
       change: (definition) => {
         definition.roles = [];
@@ -269,6 +262,17 @@ describe("workflow definition validation", () => {
       );
     },
   );
+
+  test.each(["open", "closed"])("rejects a workflow without the core state %s", (core) => {
+    const definition = publicationDefinition();
+    definition.states = definition.states.filter(({ id }) => id !== core);
+    expect(() => createWorkflow(definition)).toThrow(
+      expect.objectContaining({
+        code: "invalid_definition",
+        message: expect.stringContaining(`Missing core state "${core}" in states.`),
+      }),
+    );
+  });
 
   test.each([
     "facts",

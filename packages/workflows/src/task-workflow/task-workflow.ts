@@ -111,15 +111,11 @@ export type TaskWorkflow = {
   /** The prompt templates of the workflow, without the system prompts of its roles. */
   readonly workflowTemplates: readonly PromptTemplate[];
   readonly issueTypes: readonly IssueType[];
-  readonly initialState: string;
-  /** The task states that end the task. */
-  readonly terminalStates: readonly string[];
   /** The review artifacts. An implementation reset drops them. */
   readonly reviewArtifactCodes: readonly string[];
   /** Roles whose sessions run in the task worktree. */
   readonly worktreeRoles: readonly string[];
   usesWorktree(roleId: string): boolean;
-  isTerminalState(status: string): boolean;
   /** Whether merge detection checks the task branch of a task in this state. */
   detectsMerge(status: string): boolean;
   state(status: string): TaskWorkflowState;
@@ -279,8 +275,6 @@ export const createTaskWorkflow = (
       return [entry.id, { ...entry, role: launch.role, startMode }] as const;
     }),
   );
-  const terminalStates = definition.states.filter(({ terminal }) => terminal).map(({ id }) => id);
-  const terminalStateSet = new Set(terminalStates);
   const mergeDetectionStates = new Set(
     definition.states.filter(({ mergeDetection }) => mergeDetection).map(({ id }) => id),
   );
@@ -385,13 +379,10 @@ export const createTaskWorkflow = (
     roles,
     workflowTemplates,
     issueTypes,
-    initialState: definition.initialState,
-    terminalStates,
     reviewArtifactCodes: definition.artifacts
       .filter(({ kind }) => kind === "review")
       .map(({ id }) => id),
     worktreeRoles: [...worktreeRoleSet],
-    isTerminalState: (status) => terminalStateSet.has(status),
     detectsMerge: (status) => mergeDetectionStates.has(status),
     usesWorktree: (roleId) => worktreeRoleSet.has(roleId),
     state,

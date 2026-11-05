@@ -4,6 +4,7 @@ import {
   ODT_MCP_BRIDGE_VERSION,
   ODT_MCP_TOOL_NAMES,
   ODT_TOOL_SCHEMAS,
+  TASK_CLOSED_STATE,
   type OdtBrowserToolName,
   type OdtBrowserToolResult,
   type OdtHostBridgeReady,
@@ -87,11 +88,11 @@ export const createOdtMcpBridgeService = (
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
 
-/** The states that are not terminal in the host workflows, unique, in first-use order. */
+/** The states other than `closed` in the host workflows, unique, in first-use order. */
 const hostActiveStatuses = (taskWorkflows: TaskWorkflowResolver): string[] => [
   ...new Set(
     taskWorkflows.workflows.flatMap(({ definition }) =>
-      definition.states.filter(({ terminal }) => !terminal).map(({ id }) => id),
+      definition.states.flatMap(({ id }) => (id === TASK_CLOSED_STATE ? [] : [id])),
     ),
   ),
 ];

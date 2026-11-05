@@ -157,8 +157,7 @@ export const createSqliteWorkspaceSessionStore = ({
         workspaces,
         "open",
         "workspaceSessionStore.liveRoots",
-        ({ session, workspaceIds, terminalStates }) =>
-          readLiveSessionRoots(session, workspaceIds, terminalStates),
+        ({ session, workspaceIds }) => readLiveSessionRoots(session, workspaceIds),
       ),
     listRuntimeOwners: ({ ownershipScope, filter, ...scope }) =>
       readWorkspaceSet(

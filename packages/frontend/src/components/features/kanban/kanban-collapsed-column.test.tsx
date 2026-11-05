@@ -13,7 +13,6 @@ describe("KanbanCollapsedColumn", () => {
             label: "Backlog",
             title: "Backlog",
             shortLabel: "Backlog",
-            terminal: false,
             tone: "neutral",
             taskOrder: "priority_then_created",
             tasks: [],

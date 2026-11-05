@@ -1,3 +1,4 @@
+import { TASK_OPEN_STATE } from "@openducktor/contracts";
 import { Effect, Result } from "effect";
 import {
   HostValidationError,
@@ -51,7 +52,7 @@ export const createTaskCrudUseCases = ({
         workspaceId: input.workspaceId,
         repoPath,
         task,
-        status: workflow.initialState,
+        status: TASK_OPEN_STATE,
       };
       if (descriptionAssets) {
         createInput.descriptionAssets = descriptionAssets;

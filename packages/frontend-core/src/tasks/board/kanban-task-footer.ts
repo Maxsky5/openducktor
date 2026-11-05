@@ -10,6 +10,11 @@ import {
   agentSessionIdentityKey,
   matchesAgentSessionIdentity,
 } from "../../lib/agent-session-identity";
+import {
+  canRunCoreTaskActions,
+  CLOSE_TASK_ACTION,
+  type CoreTaskAction,
+} from "../workflow/core-task-actions";
 import type { KanbanTaskActivityState, KanbanTaskSession } from "./kanban-task-activity";
 import {
   resolveHistoricalSessionRoles,
@@ -39,15 +44,24 @@ export const getTaskFooter = ({
   autoCloseFailure,
   surface = "kanban",
 }: FooterInputs): Footer => {
-  // A merged task proposes Close Task. Session shortcuts must not change which action leads.
-  const proposesClose = mergedTarget !== undefined || autoCloseFailure !== undefined;
-  const workflowActions = resolveTaskCardActions(task, {
+  // A merged task proposes the core Close Task, so every workflow action follows it.
+  const leadingCoreAction =
+    (mergedTarget !== undefined || autoCloseFailure !== undefined) && canRunCoreTaskActions(task)
+      ? CLOSE_TASK_ACTION
+      : null;
+  const resolved = resolveTaskCardActions(task, {
     surface,
     hasActiveSession,
     historicalSessionRoles: resolveHistoricalSessionRoles(historicalSessions),
     activeSessionRole: activeSessionRole || undefined,
-    leadingAction: proposesClose ? task.taskWorkflow.effectActions("task.close")[0] : undefined,
   });
+  const workflowActions = leadingCoreAction
+    ? {
+        primaryAction: null,
+        secondaryActions: resolved.allActions,
+        allActions: resolved.allActions,
+      }
+    : resolved;
   const sessions = task.taskWorkflow.sessionViews.map((view) => ({
     ...view,
     options: resolveSessionTargetOptions(historicalSessions, taskSessions, view.role),
@@ -100,6 +114,7 @@ export const getTaskFooter = ({
     sessions,
     shortcuts,
     actions: { ...workflowActions, secondaryActions },
+    leadingCoreAction,
     disabledActions,
     primaryActiveSession,
     primarySessionIsWaitingInput,
@@ -137,6 +152,7 @@ export const getCardLayout = (inputs: FooterInputs): CardLayout => {
       session.role,
       session.startedAt,
     ]),
+    footer.leadingCoreAction?.id,
     footer.actions.primaryAction,
     footer.actions.secondaryActions,
     footer.disabledActions,
@@ -156,6 +172,8 @@ type Footer = {
   sessions: RoleSession[];
   shortcuts: (RoleSession & { options: SessionTargetOptions })[];
   actions: ReturnType<typeof resolveTaskCardActions>;
+  /** The core action that leads before every workflow action, such as Close Task when merged. */
+  leadingCoreAction: CoreTaskAction | null;
   disabledActions: TaskWorkflowAction[];
   primaryActiveSession: KanbanTaskSession | null;
   primarySessionIsWaitingInput: boolean;

@@ -836,7 +836,7 @@ describe("task artifact repository", () => {
       store.deleteArtifact({ ...scope, artifactId: free.artifactId }),
     ])
       await expect(Effect.runPromise<unknown, unknown>(mutate)).rejects.toThrow(
-        "Tasks in a terminal state are read-only",
+        "Closed tasks are read-only",
       );
     expect(await Effect.runPromise(store.listArtifacts(scope))).toHaveLength(2);
     expect(

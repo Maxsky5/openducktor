@@ -5,8 +5,8 @@ import type { WorkspaceIntent } from "./use-workspace-intent-runner";
 
 /**
  * The intent that runs a task command in the workspace of its task, through the handler of that
- * command. The details and the confirmations of Reset Task and Delete task open over the current
- * page.
+ * command. The details and the confirmations of Close Task, Reset Task, and Delete task open over
+ * the current page.
  */
 export const taskCommandIntent = (
   { workspace, task }: PaletteTask,
@@ -35,6 +35,9 @@ export const taskCommandIntent = (
           workflow.runAction(task, command.action, {
             sessionOptionsOf: (role) => taskView.sessionOptionsByRole[role],
           });
+          return;
+        case "core":
+          workflow.onConfirmTaskAction(taskId, command.action.confirmation);
           return;
         case "edit":
           workflow.onEdit(taskId);

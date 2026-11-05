@@ -16,22 +16,26 @@ const createHandlers = (): TaskActionRunnerHandlers => ({
 });
 
 describe("createTaskActionRunner", () => {
-  test("continues a confirmed close into its declared launch", async () => {
+  test("continues a confirmed implementation reset into its declared launch", async () => {
     const taskWorkflow = editBuiltinTaskWorkflow(({ definition }) => {
-      const close = definition.actions.find(({ id }) => id === "close_task")!;
-      if (close.kind !== "event") throw new Error("Expected the close event action.");
-      close.launchActionIds = ["build_implementation_start"];
+      const reset = definition.actions.find(({ id }) => id === "reset_implementation")!;
+      if (reset.kind !== "event") throw new Error("Expected the reset event action.");
+      reset.launchActionIds = ["build_implementation_start"];
     });
     const task = {
-      ...createTaskCardFixture({ id: "T-1", availableActions: ["close_task"] }),
+      ...createTaskCardFixture({
+        id: "T-1",
+        status: "in_progress",
+        availableActions: ["reset_implementation"],
+      }),
       taskWorkflow,
     };
     const onConfirm = mock<TaskActionRunnerHandlers["onConfirm"]>(() => {});
     const handlers = { ...createHandlers(), onConfirm };
-    createTaskActionRunner(handlers)(task, "close_task");
+    createTaskActionRunner(handlers)(task, "reset_implementation");
 
     const [taskId, action, onCommitted] = onConfirm.mock.calls[0]!;
-    expect([taskId, action]).toEqual(["T-1", "close"]);
+    expect([taskId, action]).toEqual(["T-1", "reset_implementation"]);
     await onCommitted?.(toWireTaskCard(task));
     expect(handlers.continueTaskWorkflow).toHaveBeenCalledWith(toWireTaskCard(task), {
       workflow: task.workflow,
@@ -39,20 +43,17 @@ describe("createTaskActionRunner", () => {
     });
   });
 
-  test("lets a surface own its confirmations and its worktree removal", () => {
+  test("lets a surface own its worktree removal", () => {
     const task = createTaskCardFixture({
       id: "T-1",
       status: "closed",
-      availableActions: ["close_task", "remove_worktree"],
+      availableActions: ["remove_worktree"],
     });
     const handlers = createHandlers();
-    const confirm = mock(() => {});
     const onRemoveWorktree = mock(() => {});
     const run = createTaskActionRunner(handlers);
 
-    run(task, "close_task", { confirm, onRemoveWorktree });
-    run(task, "remove_worktree", { confirm, onRemoveWorktree });
-    expect(confirm).toHaveBeenCalledWith("close", undefined);
+    run(task, "remove_worktree", { onRemoveWorktree });
     expect(onRemoveWorktree).toHaveBeenCalledTimes(1);
     expect(handlers.onConfirm).not.toHaveBeenCalled();
 

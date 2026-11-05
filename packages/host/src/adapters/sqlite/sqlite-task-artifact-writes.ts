@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import {
   freeArtifactCodeSchema,
   TASK_ARTIFACT_MAX_FILE_BYTES,
+  TASK_CLOSED_STATE,
   type TaskArtifact,
 } from "@openducktor/contracts";
 import { and, eq } from "drizzle-orm";
@@ -220,10 +221,9 @@ const requireMutableTask = (
   Effect.gen(function* () {
     const task = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
     const workflow = taskWorkflows.forTask(task);
-    if (workflow.isTerminalState(task.status)) {
+    if (task.status === TASK_CLOSED_STATE) {
       return yield* new HostValidationError({
-        message:
-          "Tasks in a terminal state are read-only. Reopen the task before changing a free artifact.",
+        message: "Closed tasks are read-only. Reopen the task before changing a free artifact.",
         field: "taskId",
       });
     }

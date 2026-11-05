@@ -1,6 +1,7 @@
 import { optionalWorkspaceWorkflowQueryOptions } from "../../queries/workflows";
 import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import {
+  TASK_OPEN_STATE,
   type AgentSessionRecord,
   DEFAULT_KANBAN_SETTINGS,
   type WorkflowIcon,
@@ -92,7 +93,7 @@ export function useKanbanBoardData({
     workflowQuery,
     workflowError,
     boardDefinition: workflowError ? undefined : workspace?.context.board,
-    creationStateId: workflowError ? null : (workspace?.newTaskWorkflow.initialState ?? null),
+    creationStateId: workflowError || !workspace ? null : TASK_OPEN_STATE,
     settingsQuery,
     emptyColumnDisplay:
       settingsQuery.data?.kanban.emptyColumnDisplay ?? DEFAULT_KANBAN_SETTINGS.emptyColumnDisplay,

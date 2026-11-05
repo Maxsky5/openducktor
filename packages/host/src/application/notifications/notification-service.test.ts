@@ -579,7 +579,7 @@ test("delivers the state notifications of a custom workflow with its default set
             workflow: { id: "review", revision: 1 },
             id: "task",
             title: "Task",
-            status: "published",
+            status: "closed",
           },
         },
       ];

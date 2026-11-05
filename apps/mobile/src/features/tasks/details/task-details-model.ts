@@ -29,8 +29,16 @@ import {
   resolveTaskActionDestination,
   taskActionSendsCommand,
 } from "@openducktor/frontend-core/tasks/workflow/task-action-destination";
+import {
+  type CoreTaskAction,
+  coreTaskActions,
+} from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import type { ActionMenuItem } from "@/ui/action-menu";
-import { taskActionIcon, taskActionRoleIcon } from "../presentation/task-action-paint";
+import {
+  coreTaskActionIcon,
+  taskActionIcon,
+  taskActionRoleIcon,
+} from "../presentation/task-action-paint";
 
 /**
  * The target branch that the task record names, or null when it names none. The repository
@@ -77,12 +85,14 @@ export type TaskDetailsAction = {
 export type TaskDetailsActions = {
   primary: TaskDetailsAction | null;
   others: TaskDetailsAction[];
+  /** Close Task and Reset Task, which OpenDucktor gives every task that is not closed. */
+  core: readonly CoreTaskAction[];
   sessionOptionsOf: (role: AgentRole) => SessionTargetOptions | undefined;
 };
 
 /**
- * The workflow actions of task details, with the desktop rules: the host `availableActions`
- * decide which actions exist, and Close Task shows only here.
+ * The actions of task details, with the desktop rules: the host `availableActions` decide which
+ * workflow actions exist, and the core actions follow them.
  */
 export const resolveTaskDetailsActions = ({
   task,
@@ -120,6 +130,7 @@ export const resolveTaskDetailsActions = ({
   return {
     primary: resolved.primaryAction ? describe(resolved.primaryAction) : null,
     others: resolved.secondaryActions.map(describe),
+    core: coreTaskActions(task),
     sessionOptionsOf,
   };
 };
@@ -128,14 +139,16 @@ export const resolveTaskDetailsActions = ({
 export type TaskDetailsMenuChoice =
   | { kind: "delete" }
   | { kind: "unlink_pull_request" }
-  | { kind: "action"; action: TaskDetailsAction };
+  | { kind: "action"; action: TaskDetailsAction }
+  | { kind: "core"; action: CoreTaskAction };
 
 const ACTION_PREFIX = "action:";
+const CORE_PREFIX = "core:";
 
 /**
- * The task actions menu: the workflow actions after the prominent one, Unlink PR, and Delete. Edit
- * is a button of the view. Every item waits while the task belongs to another workspace than the
- * selected one.
+ * The task actions menu: the workflow actions after the prominent one, the core actions, Unlink
+ * PR, and Delete. Edit is a button of the view. Every item waits while the task belongs to another
+ * workspace than the selected one.
  */
 export const taskDetailsMenuItems = ({
   actions,
@@ -158,6 +171,17 @@ export const taskDetailsMenuItems = ({
       destructive: action.destructive,
       disabled: !enabled || action.disabled,
       command: action.command,
+    });
+  }
+  for (const action of actions.core) {
+    items.push({
+      id: `${CORE_PREFIX}${action.id}`,
+      title: action.label,
+      icon: coreTaskActionIcon(action),
+      destructive: action.emphasis === "destructive",
+      disabled: !enabled,
+      // The confirmation runs a host command.
+      command: true,
     });
   }
   if (showUnlink) {
@@ -190,6 +214,8 @@ export const taskDetailsMenuChoice = (
 ): TaskDetailsMenuChoice | null => {
   if (id === "delete") return { kind: "delete" };
   if (id === "unlink_pull_request") return { kind: "unlink_pull_request" };
+  const core = actions.core.find((entry) => `${CORE_PREFIX}${entry.id}` === id);
+  if (core) return { kind: "core", action: core };
   const action = actions.others.find((entry) => `${ACTION_PREFIX}${entry.action}` === id);
   return action ? { kind: "action", action } : null;
 };

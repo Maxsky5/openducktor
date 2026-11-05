@@ -1,10 +1,14 @@
 # Task workflow actions
 
-The backend returns allowed task actions in `TaskCard.availableActions`. The frontend renders that list. It does not infer actions from status.
+The backend returns allowed workflow actions in `TaskCard.availableActions`. The frontend renders that list. It does not infer workflow actions from status.
+
+OpenDucktor also gives every task the core task actions Close Task and Reset Task. No workflow declares them, so they are not in `availableActions`. Each client shows them for every task that is not `closed`, from `coreTaskActions(task)` in `packages/frontend-core`.
 
 Read [the status model](task-workflow-status-model.md) for status and issue type rules. Read [the transition matrix](task-workflow-transition-matrix.md) for all transition guards.
 
 ## Action IDs
+
+The built-in workflow declares these workflow actions:
 
 - `view_details`
 - `set_spec`
@@ -12,10 +16,8 @@ Read [the status model](task-workflow-status-model.md) for status and issue type
 - `build_start`
 - `open_builder`
 - `reset_implementation`
-- `reset_task`
 - `qa_start`
 - `open_qa`
-- `close_task`
 - `remove_worktree`
 - `human_request_changes`
 - `human_approve`
@@ -34,7 +36,7 @@ Read [the status model](task-workflow-status-model.md) for status and issue type
 
 ## Event actions
 
-An event action sends one workflow event. When the event names a host effect, the client calls the command of that effect, such as `task_close` for `task.close`. When the event has no effect, the client calls `task_apply_event` with the event ID. The host rejects `task_apply_event` for an event that has an effect, that no event action sends, or whose action is not available for the task. All event actions of the built-in workflow have an effect.
+An event action sends one workflow event. When the event names a host effect, the client calls the command of that effect, such as `task_reset_implementation` for `implementation.reset`. When the event has no effect, the client calls `task_apply_event` with the event ID. The host rejects `task_apply_event` for an event that has an effect, that no event action sends, or whose action is not available for the task. All event actions of the built-in workflow have an effect.
 
 `human_approve` opens the approval modal and sends no event. The host uses its `review.approve` event only to allow the approval reads.
 
@@ -97,7 +99,7 @@ Before the reset:
 
 ## Reset task
 
-`reset_task` moves any non-closed task to `open`. It keeps the task ID and user fields.
+Reset Task is a core task action. It moves any task that is not `closed` to `open`, with no workflow event. A reset of an `open` task keeps the status and still clears the task. The host rejects a reset of a `closed` task. It keeps the task ID and user fields.
 
 It clears all workflow and free artifacts, linked role sessions, pull request data, direct merge data, and in-memory runs. It stops task terminals, then removes task worktrees and related local branches.
 
@@ -105,13 +107,13 @@ Reject the action while a live role still owns task state. Reject it when branch
 
 ## Close task
 
-`close_task` moves any non-closed task to `closed`. It is an administrative override.
+Close Task is a core task action. It moves any task that is not `closed` to `closed`, with no workflow event. A close of a `closed` task changes nothing. It is an administrative override.
 
 The action keeps the task record, user fields, all artifacts, session history, pull request data, and direct merge data. It stops task terminals and running sessions. It removes the task worktrees only when `removeWorktree` is `true`. If cleanup is unsafe or incomplete, the action fails and the task keeps its status.
 
 Reject it while a live role owns mutable task state.
 
-The task detail sheet shows `close_task` for every non-closed task. A Kanban card and the session page header show it as their main action, with a "Merged" marker, only for a merged task branch. Do not show it in a bulk action or the command palette.
+The task detail sheet, the command palette, and the mobile task details show Close Task and Reset Task for every task that is not `closed`. A Kanban card does not show them. A Kanban card and the session page header show Close Task as their main action, with a "Merged" marker, only for a merged task branch. Do not show them in a bulk action.
 
 ## Worktree cleanup on close
 

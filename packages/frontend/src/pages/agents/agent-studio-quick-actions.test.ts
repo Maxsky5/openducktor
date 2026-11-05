@@ -84,8 +84,13 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
     expect(
-      options.find((option) => option.kind === "task_action" && option.taskAction === "alpha_hold"),
-    ).toMatchObject({ kind: "task_action", taskAction: "alpha_hold" });
+      options.find(
+        (option) => option.kind === "task_action" && option.taskAction.action === "alpha_hold",
+      ),
+    ).toMatchObject({
+      kind: "task_action",
+      taskAction: { kind: "workflow", action: "alpha_hold" },
+    });
   });
 
   test("allows a fresh PR launch without a prior role session", () => {
@@ -228,7 +233,10 @@ describe("agent-studio-quick-actions", () => {
         createSessionDisabled: false,
       }),
     ).toContainEqual(
-      expect.objectContaining({ kind: "task_action", taskAction: "human_request_changes" }),
+      expect.objectContaining({
+        kind: "task_action",
+        taskAction: { kind: "workflow", action: "human_request_changes" },
+      }),
     );
     expect(
       options.some((option) => option.launchActionId === "build_pull_request_generation"),
@@ -326,7 +334,8 @@ describe("agent-studio-quick-actions", () => {
         createSessionDisabled: false,
         gitProviderContext: createGitProviderContextFixture(),
       }).filter(
-        (option) => option.kind === "task_action" && option.taskAction === "human_request_changes",
+        (option) =>
+          option.kind === "task_action" && option.taskAction.action === "human_request_changes",
       ),
     ).toHaveLength(1);
 
@@ -364,7 +373,7 @@ describe("agent-studio-quick-actions", () => {
       ),
     ).toMatchObject({
       kind: "task_action",
-      taskAction: "human_request_changes",
+      taskAction: { kind: "workflow", action: "human_request_changes" },
       label: "Request Changes",
     });
     expect(humanReviewWithPullRequestOptions.map((option) => option.launchActionId)).toEqual([
@@ -461,7 +470,7 @@ describe("agent-studio-quick-actions", () => {
           mergedTarget: "origin/main",
           selectedTask: buildTask({
             ...buildReviewArgs().selectedTask!,
-            availableActions: ["human_approve", "human_request_changes", "close_task"],
+            availableActions: ["human_approve", "human_request_changes"],
           }),
         }),
       );
@@ -576,7 +585,10 @@ describe("agent-studio-quick-actions", () => {
         createSessionDisabled: false,
       }),
     ).toContainEqual(
-      expect.objectContaining({ kind: "task_action", taskAction: "human_request_changes" }),
+      expect.objectContaining({
+        kind: "task_action",
+        taskAction: { kind: "workflow", action: "human_request_changes" },
+      }),
     );
 
     const qaRejectedTask = buildTask({
@@ -819,7 +831,7 @@ describe("agent-studio-quick-actions", () => {
       ),
     ).toMatchObject({
       kind: "task_action",
-      taskAction: "human_request_changes",
+      taskAction: { kind: "workflow", action: "human_request_changes" },
       label: "Request Changes",
       disabled: false,
     });

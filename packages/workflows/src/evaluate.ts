@@ -1,4 +1,6 @@
 import {
+  TASK_CLOSED_STATE,
+  TASK_OPEN_STATE,
   workflowAgentEventEffectValues,
   workflowConditionSchema,
   workflowDefinitionSchema,
@@ -120,9 +122,6 @@ export const createWorkflow = <const Definition extends WorkflowDefinition>(
   const constantConditions = new Map<boolean, WorkflowPredicate>();
   const identity = { workflowId: definition.id, definitionRevision: definition.revision };
   const states = new Set(definition.states.map((state) => state.id));
-  const terminalStates = new Set(
-    definition.states.filter((state) => state.terminal).map((state) => state.id),
-  );
   const facts = new Map(
     declaredFacts(definition).map((fact) => [fact.id, { fact, accepts: valueTest(fact) }] as const),
   );
@@ -245,7 +244,7 @@ export const createWorkflow = <const Definition extends WorkflowDefinition>(
         const to = outcome.to ?? input.state;
         if (to === input.state)
           return { ...identity, kind: "unchanged", eventId, state: input.state };
-        if (terminalStates.has(input.state)) {
+        if (input.state === TASK_CLOSED_STATE) {
           return {
             ...identity,
             kind: "denied",
@@ -671,7 +670,9 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
       checkIds(step.launchActions, `steps[${index}].launchActions`, launchActions);
   });
 
-  checkReference(definition.initialState, states, "states", "initialState");
+  for (const core of [TASK_OPEN_STATE, TASK_CLOSED_STATE])
+    if (!states.has(core))
+      invalid(`Missing core state "${core}" in states. Declare it with its label and tone.`);
   definition.roles.forEach((role, index) =>
     role.writes.forEach((id, writeIndex) =>
       checkReference(id, artifacts, "artifacts", `roles[${index}].writes[${writeIndex}]`),

@@ -2,9 +2,10 @@ import { sqliteValues } from "./sqlite-parameters";
 import {
   gitTargetBranchSchema,
   type TaskArtifactSummary,
+  TASK_CLOSED_STATE,
   taskRecordDataSchema,
 } from "@openducktor/contracts";
-import { type SQL, eq, inArray, gte, or, notInArray } from "drizzle-orm";
+import { type SQL, eq, inArray, gte, or, ne } from "drizzle-orm";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
@@ -13,7 +14,6 @@ import type { TaskRecord, TaskStoreListTasksInput } from "../../ports/task-repos
 import { validateWithSchema } from "./sqlite-task-store-validation";
 import { artifactSummariesByTaskId } from "./sqlite-task-workflow-artifact-queries";
 import { taskCardRows, type TaskCardRow } from "./sqlite-task-queries";
-import { hostTerminalStates } from "./sqlite-task-repository-context";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type HostDatabaseSession, tasks } from "./sqlite-host-database-schema";
 import { pullRequestFromRow } from "./sqlite-task-delivery-rows";
@@ -67,7 +67,7 @@ export const listTasksInDatabase = (
     let where: SQL | undefined;
     if (input.doneVisibleDays !== undefined) {
       const cutoff = new Date(now().getTime() - input.doneVisibleDays * 24 * 60 * 60 * 1000);
-      const open = notInArray(tasks.status, hostTerminalStates(taskWorkflows));
+      const open = ne(tasks.status, TASK_CLOSED_STATE);
       where = input.doneVisibleDays > 0 ? or(open, gte(tasks.updatedAt, cutoff)) : open;
     }
     return yield* rowsToTaskRecords(

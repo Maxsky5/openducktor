@@ -22,7 +22,7 @@ import {
 import { collectTaskCleanupTargets } from "../support/task-close-cleanup";
 import { noRemovedWorktrees } from "../support/task-worktree-owner-guard";
 import { completeTaskClosure } from "../support/task-closure";
-import { requireEffect } from "../support/task-workflow-events";
+import { coreTaskTransition, decideCoreTaskAction } from "../support/task-workflow-events";
 import { enrichTask } from "../support/task-workflow-helpers";
 import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
 
@@ -45,7 +45,7 @@ export const createTaskCloseUseCase = ({
       const { repoPath, taskId, removeWorktree } = input;
       const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
-      const decision = yield* requireEffect(workflow, "task.close", current);
+      const decision = yield* Effect.fromResult(decideCoreTaskAction("close", current));
       if (decision.kind === "unchanged") {
         return enrichTask(workflow, current);
       }
@@ -153,8 +153,7 @@ export const createTaskCloseUseCase = ({
           taskId,
           taskSessionLifecycleCoordinator,
           taskStore,
-          taskWorkflows,
-          effect: "task.close",
+          decide: coreTaskTransition(taskWorkflows, "close"),
         });
         return enrichTask(workflow, updated);
       }).pipe(

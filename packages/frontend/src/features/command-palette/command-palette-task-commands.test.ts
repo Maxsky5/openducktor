@@ -5,6 +5,10 @@ import {
   createTaskWorkflowActionsFixture,
   createWorkspaceRecordFixture,
 } from "@/test-utils/shared-test-fixtures";
+import {
+  CLOSE_TASK_ACTION,
+  RESET_TASK_ACTION,
+} from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import { taskCommandIntent } from "./command-palette-task-commands";
 import type { PaletteTaskCommand, PaletteTaskView } from "./command-palette-task-model";
 import type { PaletteTask } from "./command-palette-types";
@@ -16,7 +20,7 @@ const task: PaletteTask = {
   task: createTaskCardFixture({
     id: "odt-1",
     status: "ready_for_dev",
-    availableActions: ["build_start", "reset_task", "close_task"],
+    availableActions: ["build_start"],
   }),
 };
 const builderIdentity = {
@@ -112,11 +116,11 @@ describe("taskCommandIntent", () => {
 
   test("opens the confirmations of Reset Task and Close Task instead of running them", () => {
     for (const [action, confirmation] of [
-      ["reset_task", "reset_task"],
-      ["close_task", "close"],
+      [RESET_TASK_ACTION, "reset_task"],
+      [CLOSE_TASK_ACTION, "close"],
     ] as const) {
       const { onConfirmTaskAction, onResetTask, onCloseTask } = runCommand({
-        kind: "workflow",
+        kind: "core",
         action,
       });
       expect(onConfirmTaskAction).toHaveBeenCalledWith("odt-1", confirmation);

@@ -1,5 +1,5 @@
 import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
-import type { KanbanEmptyColumnDisplay } from "@openducktor/contracts";
+import { TASK_CLOSED_STATE, type KanbanEmptyColumnDisplay } from "@openducktor/contracts";
 import type { KanbanColumn, KanbanColumnId } from "@openducktor/workflows";
 
 /**
@@ -11,7 +11,8 @@ export type BoardColumn = {
   id: KanbanColumnId;
   title: string;
   shortLabel: string;
-  terminal: boolean;
+  /** The column of the core `closed` state, which keeps Done tasks for the host setting. */
+  closed: boolean;
   acceptsNewTask?: boolean;
   tone: KanbanColumn["tone"];
   tasks: TaskCard[];
@@ -48,7 +49,7 @@ const emptyMessage = (
   }: Pick<BuildBoardColumnsInput, "doneVisibleDays" | "filterActive">,
 ): string | null => {
   if (filterActive) return "No task in this lane matches the search and filters.";
-  if (column.terminal) return doneEmptyMessage(doneVisibleDays);
+  if (column.id === TASK_CLOSED_STATE) return doneEmptyMessage(doneVisibleDays);
   return null;
 };
 
@@ -66,7 +67,7 @@ export const buildBoardColumns = (input: BuildBoardColumnsInput): BoardColumn[] 
         id: column.id,
         title: column.title,
         shortLabel: column.shortLabel ?? column.title,
-        terminal: column.terminal === true,
+        closed: column.id === TASK_CLOSED_STATE,
         acceptsNewTask: column.id === input.creationStateId,
         tone: column.tone,
         tasks: column.tasks,

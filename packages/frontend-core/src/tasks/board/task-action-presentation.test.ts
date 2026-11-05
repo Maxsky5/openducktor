@@ -13,13 +13,9 @@ describe("taskActionTone", () => {
     expect(taskActionTone("human_approve", createTaskCardFixture())).toBe("prominent");
     expect(taskActionTone("human_request_changes", createTaskCardFixture())).toBe("neutral");
     expect(taskActionTone("reset_implementation", createTaskCardFixture())).toBe("destructive");
-    expect(taskActionTone("reset_task", createTaskCardFixture())).toBe("destructive");
-    expect(taskActionTone("close_task", createTaskCardFixture())).toBe("warning");
 
     expect(taskActionIsDestructive("human_request_changes", createTaskCardFixture())).toBe(false);
     expect(taskActionIsDestructive("reset_implementation", createTaskCardFixture())).toBe(true);
-    expect(taskActionIsDestructive("reset_task", createTaskCardFixture())).toBe(true);
-    expect(taskActionIsDestructive("close_task", createTaskCardFixture())).toBe(false);
   });
 });
 

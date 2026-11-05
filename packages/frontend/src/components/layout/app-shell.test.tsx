@@ -1464,7 +1464,7 @@ describe("AppShell command palette", () => {
     status: "in_progress",
     issueType: "feature",
     labels: ["ux"],
-    availableActions: ["build_start", "open_builder", "reset_task", "close_task"],
+    availableActions: ["build_start", "open_builder"],
   });
   const fairnestTask = createTaskCardFixture({
     id: "fair-1",
