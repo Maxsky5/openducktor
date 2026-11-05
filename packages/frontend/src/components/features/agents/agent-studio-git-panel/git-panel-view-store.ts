@@ -17,7 +17,7 @@ export type GitPanelContextView = {
 };
 
 const EMPTY_VIEW: GitPanelContextView = {
-  selectedTab: "uncommitted",
+  selectedTab: "target",
   commitMessage: "",
   collapsedGroups: [],
 };
