@@ -188,15 +188,15 @@ export const createClaudeHistoryInputProjector = (options: {
     if (promptId && compactPromptIds.has(promptId) && !command) {
       return handledWithoutMessage;
     }
-    const queued = command
-      ? queuedCommand(command)
-      : pendingQueuedPrompt?.text === rawText
-        ? pendingQueuedPrompt
-        : null;
+    let queued: PendingQueuedPrompt | null = null;
+    if (command) {
+      queued = queuedCommand(command);
+    } else if (pendingQueuedPrompt?.text === rawText) {
+      queued = pendingQueuedPrompt;
+    }
     const text = queued?.text ?? command ?? rawText;
-    const queuedPromptTimestamp = queued?.timestamp;
     if (text.trim().toLowerCase() === "/compact") {
-      const commandTimestamp = queuedPromptTimestamp ?? timestamp;
+      const commandTimestamp = queued?.timestamp ?? timestamp;
       pendingQueuedPrompt = null;
       return {
         handled: true,
@@ -211,7 +211,7 @@ export const createClaudeHistoryInputProjector = (options: {
       fallbackMessageId: entry.uuid,
       message: command ? { content: text } : entryMessage,
       text,
-      timestamp: queuedPromptTimestamp ?? timestamp,
+      timestamp: queued?.timestamp ?? timestamp,
     });
     pendingQueuedPrompt = null;
     return message ? { handled: true, message } : handledWithoutMessage;
