@@ -105,7 +105,9 @@ export const createRemoteWorkInterface = (
   const origins = new Set([
     endpoint.origin,
     "https://app.openducktor.dev",
+    // Packaged desktop windows send `null` on HTTP requests and `file://` on WebSocket handshakes.
     "null",
+    "file://",
     ...(options.frontendOrigins ?? []),
   ]);
   const connections = new Map<string, Connection>();

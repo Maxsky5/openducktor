@@ -621,6 +621,8 @@ test("automatic setup advertises the bound port and serves work without a manual
       "http://localhost:57983",
       "http://127.0.0.1:59466",
       "null",
+      // A packaged desktop window opens its sockets with this origin.
+      "file://",
     ]) {
       const preflight = await fetch(`${endpoint}/connections`, {
         method: "OPTIONS",

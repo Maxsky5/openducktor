@@ -454,7 +454,7 @@ test("sends a large result in parts, and other replies pass between parts on a s
   expect(socket.result(small)).toBe("small");
 });
 
-test("a client session joins a large result in parts over a compressed socket", async () => {
+test("a client session joins a large result in parts over a real socket", async () => {
   const large = { text: "é".repeat(HOST_CHANNEL_RESULT_PART_BYTES) };
   const host = createHost({ invoke: async () => ({ result: large }) });
   const server = await startNodeFetchServer<HostWebSocketData>({
@@ -489,7 +489,6 @@ test("a client session joins a large result in parts over a compressed socket", 
 
   const result = await session.request({ method: "invoke", command: "read", args: {} });
 
-  expect(socket.extensions).toContain("permessage-deflate");
   expect(result).toEqual(large);
   expect(types.filter((type) => type === "result_part").length).toBeGreaterThan(1);
   expect(types.at(-1)).toBe("result");

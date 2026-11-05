@@ -160,7 +160,7 @@ test("answers events.open on an authorized socket and closes it on stop", async 
   const socket = new WebSocket(
     server.endpoint.url,
     [HOST_CHANNEL_SUBPROTOCOL, authorization(server.endpoint.token)],
-    { origin: RENDERER_ORIGIN },
+    { headers: { origin: RENDERER_ORIGIN } },
   );
   const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
   const result = new Promise<unknown>((resolve) =>
@@ -199,7 +199,7 @@ test("accepts the file origin of a packaged window and refuses the null fetch or
   const socket = new WebSocket(
     server.endpoint.url,
     [HOST_CHANNEL_SUBPROTOCOL, authorization(server.endpoint.token)],
-    { origin: "file://" },
+    { headers: { origin: "file://" } },
   );
   await new Promise<void>((resolve, reject) => {
     socket.once("open", () => resolve());
