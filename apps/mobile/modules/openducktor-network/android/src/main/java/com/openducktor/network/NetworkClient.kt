@@ -35,14 +35,14 @@ private class NetworkRequest(val call: Call) {
   var reading = false
   var finished = false
   var failure: CodedException? = null
-  /** True for a JSON body, which JavaScript reads whole. Event streams get each part at once. */
+  /** True for a JSON body, which JavaScript reads whole. A file read gets each part at once. */
   var whole = false
 }
 
 /**
  * Owns one OkHttp client and the state of each request.
  * [control] is a single-thread scope that orders start, read, and cancel calls, and owns all request state.
- * Blocking network calls run on a separate pool, so an idle stream never blocks another request.
+ * Blocking network calls run on a separate pool, so a slow download never blocks another request.
  * Each request reads its body ahead of JavaScript, as on iOS, so one `read` call gets every buffered byte.
  */
 internal class NetworkClient {
@@ -62,8 +62,9 @@ internal class NetworkClient {
     .connectionPool(ConnectionPool(5, 4, TimeUnit.SECONDS))
     .cookieJar(CookieJar.NO_COOKIES)
     .connectTimeout(10, TimeUnit.SECONDS)
-    // Event streams stay open for hours, so reads have no timeout.
-    .readTimeout(0, TimeUnit.MILLISECONDS)
+    // Live host traffic uses the host channel WebSocket, so a response that sends nothing for this
+    // time has stalled. A large file on a slow link still sends bytes, so it keeps reading.
+    .readTimeout(30, TimeUnit.SECONDS)
     .build()
 
   /** Runs on [control]. */

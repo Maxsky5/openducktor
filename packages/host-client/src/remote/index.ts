@@ -719,22 +719,19 @@ export const createRemoteHostClient = (
       // Local cleanup does not depend on the host reply.
     }
   };
-  let disconnects = 0;
   const disconnect = () => {
     selected = false;
-    disconnects += 1;
     return stop();
   };
   return {
     client,
     readState: () => state,
     connect,
-    retry: async () => {
-      // The client stays selected, so reads that wait for a reconnect keep waiting.
-      const disconnectsAtRetry = disconnects;
-      await stop();
-      // A disconnect during the release wait, such as a host switch, keeps the connection closed.
-      if (disconnects !== disconnectsAtRetry) return;
+    retry: () => {
+      // The client stays selected, so reads that wait for a reconnect keep waiting. The old
+      // admission ends in the background: after a network change, its release can wait for the
+      // setup deadline, and the new attempt does not need it.
+      void stop();
       return connect();
     },
     disconnect,

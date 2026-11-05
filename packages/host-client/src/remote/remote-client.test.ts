@@ -1225,7 +1225,7 @@ test("each channel message restarts the silence check", async () => {
   }
 });
 
-test("retry does not reconnect after a disconnect during its release wait", async () => {
+test("retry connects again without waiting for the release of the old admission", async () => {
   const f = fixture();
   const released = latch<void>();
   const request = f.transport.request;
@@ -1244,15 +1244,16 @@ test("retry does not reconnect after a disconnect during its release wait", asyn
   );
   try {
     await remote.connect();
-    const retrying = remote.retry();
-    const disconnecting = remote.disconnect();
-    released.resolve();
-    await Promise.all([retrying, disconnecting]);
+    await remote.retry();
 
-    expect(remote.readState().status).toBe("idle");
+    expect(remote.readState().status).toBe("connected");
     expect(
       f.requests.filter((entry) => entry === "POST http://host.example/connections"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
+    const disconnecting = remote.disconnect();
+    expect(remote.readState().status).toBe("idle");
+    released.resolve();
+    await disconnecting;
   } finally {
     released.resolve();
     await remote.disconnect();

@@ -118,13 +118,13 @@ const setup = () => {
 };
 
 const startedRequest = async (
-  head: NativeHttpHead = { status: 200, headers: { "content-type": "text/event-stream" } },
+  head: NativeHttpHead = { status: 200, headers: { "content-type": "application/octet-stream" } },
 ) => {
   const context = setup();
   const controller = new AbortController();
   const pending = context.transport.request(
     "GET",
-    "https://host.test/events",
+    "https://host.test/task-assets/asset",
     {},
     controller.signal,
   );
@@ -254,7 +254,12 @@ describe("createNativeRemoteTransport request", () => {
     const { network, transport } = setup();
     const controller = new AbortController();
     const reason = new Error("stopped");
-    const pending = transport.request("GET", "https://host.test/events", {}, controller.signal);
+    const pending = transport.request(
+      "GET",
+      "https://host.test/task-assets/asset",
+      {},
+      controller.signal,
+    );
 
     controller.abort(reason);
     network.starts[0]?.reject(nativeError("ERR_ODT_CANCELED", "cancelled"));

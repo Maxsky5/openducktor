@@ -81,14 +81,13 @@ type BackgroundPeriod = {
  * Keeps the remote connection active while the app is in the foreground with a network link, and
  * for `backgroundGraceMs` after the app goes to the background. An old stream can stay silent
  * after a network change. host-client finds a silent stream only after three missed heartbeats,
- * and not at all for a host without the heartbeat capability. So a changed link starts a new
- * attempt at once. For the same reason, a connection that stayed open restarts on return when the
+ * so a changed link starts a new attempt at once. For the same reason, a connection that stayed open restarts on return when the
  * link dropped or changed type in the background, or the app was away longer than the grace period,
  * as after an iOS suspension. The restart runs the recovery barrier before commands open again.
  * A connection that is not connected on return also restarts at once, and it is `resuming` until
- * the restart connects, fails for good, or still fails after `RESUME_GRACE_MS`. After a shorter absence of at least `STREAM_CHECK_PAUSE_MS`, the
- * stream must deliver its heartbeat. A stream that stays silent, or a host without heartbeats,
- * restarts the same way.
+ * the restart connects, fails for good, or still fails after `RESUME_GRACE_MS`. After a shorter
+ * absence of at least `STREAM_CHECK_PAUSE_MS`, the stream must deliver its heartbeat. A stream that
+ * stays silent restarts the same way.
  */
 export const startLifecycleController = (
   activitySource: AppActivitySource,

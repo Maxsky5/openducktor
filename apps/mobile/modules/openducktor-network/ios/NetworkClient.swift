@@ -194,11 +194,13 @@ final class NetworkClient: NSObject, URLSessionDataDelegate, @unchecked Sendable
     configuration.urlCache = nil
     configuration.urlCredentialStorage = nil
     configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-    // The request interval limits idle time between packets. Event streams can stay idle for a long time.
-    configuration.timeoutIntervalForRequest = 24 * 60 * 60
+    // The request interval limits idle time between packets. Live host traffic uses the host channel
+    // WebSocket, so an HTTP response that sends nothing for this time has stalled.
+    configuration.timeoutIntervalForRequest = 30
+    // A large file can take a long time on a slow link, so only the idle limit applies.
     configuration.timeoutIntervalForResource = 365 * 24 * 60 * 60
-    // Event streams hold connections for hours. The iOS default of 4 connections per host
-    // would queue host commands behind open streams.
+    // A screen can read many task images at once. The iOS default of 4 connections per host would
+    // queue them.
     configuration.httpMaximumConnectionsPerHost = 64
     let delegateQueue = OperationQueue()
     delegateQueue.maxConcurrentOperationCount = 1
