@@ -494,6 +494,9 @@ test.each(["repository settings", "comparison"] as const)(
       </ClientConnectionProvider>,
     );
     try {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+        button: 0,
+      });
       await waitFor(() => expect(statusTargets).toContain("HEAD"));
       expect(statusTargets.every((target) => target === "HEAD")).toBe(true);
       expect(
@@ -569,6 +572,9 @@ test.each(["recovers", "fails"] as const)(
       </ClientConnectionProvider>,
     );
     try {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+        button: 0,
+      });
       await waitFor(() => expect(statusTargets).toContain("HEAD"));
       expect(screen.getByText("Could not read repository settings")).toBeTruthy();
       const refreshButton = screen.getByTestId("agent-studio-git-refresh-button");
@@ -634,6 +640,9 @@ test("rechecks a root chat target when its branch changes", async () => {
   );
   const view = render(panel("first"));
   try {
+    fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+      button: 0,
+    });
     await waitFor(() => expect(statusTargets).toContain("@{upstream}"));
     hasUpstream = false;
     act(() => view.rerender(panel("second")));
@@ -1423,6 +1432,9 @@ test("manual refresh fetches a missing comparison target before checking it agai
     </ClientConnectionProvider>,
   );
   try {
+    fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+      button: 0,
+    });
     await screen.findByText("No tracked upstream.");
     const refreshButton = screen.getByTestId("agent-studio-git-refresh-button");
     await waitFor(() => expect(refreshButton.hasAttribute("disabled")).toBe(false));
@@ -1466,6 +1478,9 @@ test("a missing target fetch failure tells the user what failed", async () => {
     </ClientConnectionProvider>,
   );
   try {
+    fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+      button: 0,
+    });
     await screen.findByText("No tracked upstream.");
     await waitFor(() => expect(statusTargets).toContain("HEAD"));
     const localReads = statusTargets.length;
@@ -1579,6 +1594,9 @@ test("refresh recovers local Git and file reads when the comparison target disap
     </ClientConnectionProvider>,
   );
   try {
+    fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+      button: 0,
+    });
     await waitFor(() => expect(statusTargets).toContain(targetReference));
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Files" }), { button: 0 });
     await waitFor(() => expect(fileTreeTargets).toContain(targetReference));
@@ -1696,6 +1714,9 @@ test.each(
     const pushButton = () => screen.getByTestId("agent-studio-git-push-button");
     const discardButton = () => screen.getByTestId("agent-studio-git-discard-file-button");
     try {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+        button: 0,
+      });
       await waitFor(() => expect(pushButton().hasAttribute("disabled")).toBe(false));
       if (kind === "commit") {
         fireEvent.change(screen.getByTestId("agent-studio-git-commit-message-input"), {
@@ -1864,6 +1885,9 @@ test("invalidates a completed hidden commit without reading Git until tools reop
   );
   const view = render(panel(true));
   try {
+    fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+      button: 0,
+    });
     await waitFor(() =>
       expect(
         screen.getByTestId("agent-studio-git-commit-message-input").hasAttribute("disabled"),
@@ -1942,6 +1966,9 @@ test("a confirmed commit keeps its result when the panel update reads fail", asy
     </ClientConnectionProvider>,
   );
   try {
+    fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+      button: 0,
+    });
     const input = screen.getByTestId("agent-studio-git-commit-message-input");
     await waitFor(() => expect(input.hasAttribute("disabled")).toBe(false));
     fireEvent.change(input, { target: { value: "fix: keep the commit" } });
@@ -2084,6 +2111,9 @@ test("a failed fetch refreshes both diff tabs and reports the fetch error", asyn
     </ClientConnectionProvider>,
   );
   try {
+    fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+      button: 0,
+    });
     await screen.findByText("uncommitted-1.txt");
     await waitForTargetScope();
     await act(async () => {

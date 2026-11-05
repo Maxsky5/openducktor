@@ -175,6 +175,20 @@ const findButtonByText = (root: DomTestNode, text: string): DomTestNode => {
 describe("AgentStudioGitPanel", () => {
   setupAgentStudioGitPanelTests();
 
+  test("opens a new Git context on Branch changes", () => {
+    // baseModel seeds a tab choice for its context. Use a fresh context to test the default.
+    const model = { ...baseModel(), worktreePath: "/tmp/default-tab-worktree" };
+    render(createElement(AgentStudioGitPanel, { model }));
+
+    expect(screen.getByRole("tab", { name: /Branch changes/ }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    expect(
+      screen.getByRole("tab", { name: /Uncommitted changes/ }).getAttribute("aria-selected"),
+    ).toBe("false");
+    expect(screen.queryByTestId("agent-studio-git-commit-message-input")).toBeNull();
+  });
+
   test("keeps refresh failures in the affected view", async () => {
     const error = "Could not read the selected file.";
     const refresh = mock(async () => {
@@ -2142,6 +2156,13 @@ describe("AgentStudioGitPanel", () => {
       ensureRenderer(renderer).rerender(
         renderAgentStudioGitPanelElement({ ...model, worktreePath: "/tmp/other-worktree" }),
       );
+      await flush();
+    });
+    expect(screen.queryByTestId("agent-studio-git-commit-message-input")).toBeNull();
+    await act(async () => {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+        button: 0,
+      });
       await flush();
     });
     expect(screen.getByTestId("agent-studio-git-commit-message-input")).toHaveProperty("value", "");
