@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { taskWorkflowContextQueryOptions } from "@openducktor/frontend-core/queries/task-workflow-context";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import { useSelectedSessionContextLoad } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/use-selected-session-context-load";
 import { useSelectedSessionHistoryLoad } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/use-selected-session-history-load";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { resolveAgentStudioNavigationState } from "./agent-studio-navigation-state";
+import { AGENT_STUDIO_QUERY_KEYS } from "./query-sync/agent-studio-navigation";
 import { type AgentStudioRouteSessionResolution } from "./agents-page-selection";
 import {
   type AgentStudioSelectedSessionView,
@@ -84,8 +85,11 @@ export function useAgentStudioSelectionController({
     [selectedTaskIsListed, retainedTask.data, tasks],
   );
 
-  const navigationState = useMemo(
-    () =>
+  // A route session that the view found and then lost was deleted, for example by a reset. It
+  // is not a wrong link, so the view drops it from the route instead of reporting it missing.
+  const [lastFoundRouteSession, setLastFoundRouteSession] = useState<string | null>(null);
+  const navigationState = useMemo(() => {
+    const resolve = (routeSessionExternalId: string | null) =>
       resolveAgentStudioNavigationState({
         isWorkspaceRestorePending,
         isLoadingTasks,
@@ -93,24 +97,38 @@ export function useAgentStudioSelectionController({
         tasks: navigationTasks,
         sessions,
         taskIdParam,
-        sessionExternalIdParam,
+        sessionExternalIdParam: routeSessionExternalId,
         hasExplicitRoleParam,
         roleFromQuery,
         selectionState,
-      }),
-    [
-      hasExplicitRoleParam,
-      isLoadingTasks,
-      isWorkspaceRestorePending,
-      roleFromQuery,
-      selectionState,
-      sessionExternalIdParam,
-      sessionReadModelLoadState,
-      sessions,
-      taskIdParam,
-      navigationTasks,
-    ],
-  );
+      });
+    const state = resolve(sessionExternalIdParam);
+    const resolution = state.routeSessionResolution;
+    if (resolution.kind !== "missing" || resolution.sessionExternalId !== lastFoundRouteSession)
+      return state;
+    return {
+      ...resolve(null),
+      queryUpdate: { [AGENT_STUDIO_QUERY_KEYS.session]: undefined, keepSessionless: true },
+    };
+  }, [
+    hasExplicitRoleParam,
+    isLoadingTasks,
+    isWorkspaceRestorePending,
+    lastFoundRouteSession,
+    roleFromQuery,
+    selectionState,
+    sessionExternalIdParam,
+    sessionReadModelLoadState,
+    sessions,
+    taskIdParam,
+    navigationTasks,
+  ]);
+  const foundRouteSession =
+    navigationState.routeSessionResolution.kind === "found"
+      ? navigationState.routeSessionResolution.session.externalSessionId
+      : null;
+  if (foundRouteSession !== null && foundRouteSession !== lastFoundRouteSession)
+    setLastFoundRouteSession(foundRouteSession);
 
   const selectedSessionView = useAgentStudioSelectedSessionView({
     workspaceId: activeWorkspaceId,
