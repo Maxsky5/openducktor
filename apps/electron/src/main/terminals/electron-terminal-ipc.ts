@@ -7,7 +7,6 @@ import {
 import {
   createTerminalClientSession,
   type TerminalClientSession,
-  type TerminalService,
   type TerminalServiceError,
 } from "@openducktor/host";
 import { Effect, Exit } from "effect";
@@ -17,7 +16,10 @@ import {
   ElectronValidationError,
   jsonIssues,
 } from "../../effect/electron-errors";
-import { createRendererClientCleanup } from "../electron-renderer-client-cleanup";
+import {
+  createRendererClientCleanup,
+  type ElectronRendererLifecycle,
+} from "../electron-renderer-client-cleanup";
 import {
   ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
   ELECTRON_TERMINAL_EVENT_CHANNEL,
@@ -25,7 +27,6 @@ import {
   type ElectronTerminalEventEnvelope,
 } from "../../shared/electron-bridge-contract";
 import { z } from "zod";
-import type { IpcMain } from "electron";
 
 const MAX_CLIENT_ID_LENGTH = 128;
 
@@ -48,7 +49,19 @@ type ElectronTerminalSenderState = {
   clients: Map<string, TerminalClientSession>;
 };
 
-export type ElectronTerminalIpcHandler = Parameters<IpcMain["handle"]>[1];
+/** The terminal service operations that a renderer client session uses. */
+export type ElectronTerminalService = Parameters<
+  typeof createTerminalClientSession
+>[0]["terminalService"];
+
+/** The IPC event fields that the terminal handlers read. */
+type ElectronTerminalIpcEvent = { sender: ElectronTerminalSender & ElectronRendererLifecycle };
+
+export type ElectronTerminalIpcHandler = (
+  event: ElectronTerminalIpcEvent,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This IPC boundary parses each renderer request before use.
+  request: unknown,
+) => Promise<void>;
 
 type ElectronTerminalIpcMain = {
   handle(
@@ -60,7 +73,7 @@ type ElectronTerminalIpcMain = {
 type RegisterElectronTerminalIpcInput = {
   ipcMain: ElectronTerminalIpcMain;
   reportLifecycleFailure(senderId: number, cause: unknown): void;
-  terminalService: TerminalService;
+  terminalService: ElectronTerminalService;
 };
 
 const readElectronTerminalSendRequest = (
@@ -89,7 +102,7 @@ const readClientId = (
       );
 };
 
-export const createElectronTerminalIpcController = (terminalService: TerminalService) => {
+export const createElectronTerminalIpcController = (terminalService: ElectronTerminalService) => {
   const sendersById = new Map<number, ElectronTerminalSenderState>();
   const getClient = (sender: ElectronTerminalSender, clientId: string): TerminalClientSession => {
     const state = sendersById.get(sender.id) ?? {

@@ -9,6 +9,12 @@ import {
   resolveElectronLocalAttachmentPreview,
 } from "./electron-local-attachment-preview";
 
+type PreviewProtocolHandler = (request: Request) => Response | Promise<Response>;
+/** The handler that the preview protocol registration received. */
+type RegisteredPreviewHandler = { handler: PreviewProtocolHandler | null };
+/** A host reply of the wrong shape, as an untyped IPC boundary can deliver it. */
+const invalidHostReply: string = JSON.parse("null");
+
 const captureThrown = (action: () => void): Error => {
   try {
     action();
@@ -193,7 +199,7 @@ describe("electron local attachment previews", () => {
   });
 
   test("resolves the protocol request through the host before serving the file", async () => {
-    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+    const registered: RegisteredPreviewHandler = { handler: null };
     const resolvedPaths: string[] = [];
     const servedUrls: string[] = [];
     const resolvedPath =
@@ -206,7 +212,7 @@ describe("electron local attachment previews", () => {
         protocol: {
           handle(scheme, handler) {
             expect(scheme).toBe(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL);
-            protocolHandler = handler;
+            registered.handler = handler;
           },
         },
       },
@@ -222,6 +228,7 @@ describe("electron local attachment previews", () => {
       },
     });
 
+    const protocolHandler = registered.handler;
     if (!protocolHandler) {
       throw new Error("Preview protocol handler was not registered.");
     }
@@ -242,13 +249,13 @@ describe("electron local attachment previews", () => {
   });
 
   test("returns structured error responses for invalid preview requests", async () => {
-    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+    const registered: RegisteredPreviewHandler = { handler: null };
 
     registerElectronLocalAttachmentPreviewProtocol({
       session: {
         protocol: {
           handle(_scheme, handler) {
-            protocolHandler = handler;
+            registered.handler = handler;
           },
         },
       },
@@ -262,6 +269,7 @@ describe("electron local attachment previews", () => {
       },
     });
 
+    const protocolHandler = registered.handler;
     if (!protocolHandler) {
       throw new Error("Preview protocol handler was not registered.");
     }
@@ -273,13 +281,13 @@ describe("electron local attachment previews", () => {
   });
 
   test("returns structured error responses for rejected host resolution", async () => {
-    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+    const registered: RegisteredPreviewHandler = { handler: null };
 
     registerElectronLocalAttachmentPreviewProtocol({
       session: {
         protocol: {
           handle(_scheme, handler) {
-            protocolHandler = handler;
+            registered.handler = handler;
           },
         },
       },
@@ -297,6 +305,7 @@ describe("electron local attachment previews", () => {
       },
     });
 
+    const protocolHandler = registered.handler;
     if (!protocolHandler) {
       throw new Error("Preview protocol handler was not registered.");
     }
@@ -312,13 +321,13 @@ describe("electron local attachment previews", () => {
   });
 
   test("returns structured error responses for host resolver operation failures", async () => {
-    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+    const registered: RegisteredPreviewHandler = { handler: null };
 
     registerElectronLocalAttachmentPreviewProtocol({
       session: {
         protocol: {
           handle(_scheme, handler) {
-            protocolHandler = handler;
+            registered.handler = handler;
           },
         },
       },
@@ -335,6 +344,7 @@ describe("electron local attachment previews", () => {
       },
     });
 
+    const protocolHandler = registered.handler;
     if (!protocolHandler) {
       throw new Error("Preview protocol handler was not registered.");
     }
@@ -350,13 +360,13 @@ describe("electron local attachment previews", () => {
   });
 
   test("returns structured error responses for invalid host resolver return shapes", async () => {
-    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+    const registered: RegisteredPreviewHandler = { handler: null };
 
     registerElectronLocalAttachmentPreviewProtocol({
       session: {
         protocol: {
           handle(_scheme, handler) {
-            protocolHandler = handler;
+            registered.handler = handler;
           },
         },
       },
@@ -366,10 +376,11 @@ describe("electron local attachment previews", () => {
         },
       },
       async resolveLocalAttachmentPath() {
-        return null;
+        return invalidHostReply;
       },
     });
 
+    const protocolHandler = registered.handler;
     if (!protocolHandler) {
       throw new Error("Preview protocol handler was not registered.");
     }
@@ -385,13 +396,13 @@ describe("electron local attachment previews", () => {
   });
 
   test("returns structured error responses for preview file serving failures", async () => {
-    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+    const registered: RegisteredPreviewHandler = { handler: null };
 
     registerElectronLocalAttachmentPreviewProtocol({
       session: {
         protocol: {
           handle(_scheme, handler) {
-            protocolHandler = handler;
+            registered.handler = handler;
           },
         },
       },
@@ -405,6 +416,7 @@ describe("electron local attachment previews", () => {
       },
     });
 
+    const protocolHandler = registered.handler;
     if (!protocolHandler) {
       throw new Error("Preview protocol handler was not registered.");
     }

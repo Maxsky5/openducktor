@@ -630,6 +630,26 @@ describe("createLocalHostChannel", () => {
     expect(channel.readConnectionWarning()).toBeNull();
   });
 
+  test("loses the channel when the host never answers a task subscription", async () => {
+    const test = setup({
+      answer: (request) => (request.method === "task_events.subscribe" ? "none" : undefined),
+    });
+    listen(test.channel);
+    await test.channel.ready;
+    const subscription = test.channel
+      .subscribeTaskEvents({ cursor: null }, () => {}, undefined)
+      .catch((cause: unknown) => cause);
+    await waitFor(
+      () => methods(test.host().requests).includes("task_events.subscribe"),
+      "the subscription request",
+    );
+    test.timers.runSetupDeadline();
+
+    expect(String(await subscription)).toContain("did not answer a task stream request");
+    expect(test.channel.readConnectionWarning()).toContain("did not answer a task stream request");
+    await waitFor(() => test.timers.pendingReconnects() > 0, "the reconnect timer");
+  });
+
   test("closes the channel when its last listener leaves", async () => {
     const test = setup();
     const { remove } = listen(test.channel);

@@ -15,7 +15,27 @@ import {
   type GitHubReleaseSource,
 } from "./github-release-source";
 
-type NativeUpdaterLoader = () => Promise<AppUpdater>;
+/** The parts of the electron-updater `AppUpdater` that this adapter uses. */
+type NativeUpdater = Pick<
+  AppUpdater,
+  "allowPrerelease" | "autoDownload" | "autoInstallOnAppQuit" | "channel" | "logger"
+> & {
+  checkForUpdates(): Promise<{
+    isUpdateAvailable: boolean;
+    updateInfo: { version: string };
+  } | null>;
+  downloadUpdate(): Promise<string[]>;
+  quitAndInstall(isSilent: boolean, isForceRunAfter: boolean): void;
+  on(event: "error", listener: (cause: Error) => void): void;
+  on(event: "download-progress", listener: (progress: Pick<ProgressInfo, "percent">) => void): void;
+  removeListener(event: "error", listener: (cause: Error) => void): void;
+  removeListener(
+    event: "download-progress",
+    listener: (progress: Pick<ProgressInfo, "percent">) => void,
+  ): void;
+};
+
+type NativeUpdaterLoader = () => Promise<NativeUpdater>;
 
 type ElectronUpdaterAdapterOptions = {
   currentVersion: string;
@@ -41,7 +61,7 @@ const loadNativeUpdater: NativeUpdaterLoader = async () => {
 };
 
 const configureNativeUpdater = (
-  updater: AppUpdater,
+  updater: NativeUpdater,
   options: ElectronUpdaterConfigureOptions,
   logger: Logger,
 ): void => {
@@ -59,9 +79,9 @@ export const createElectronUpdaterAdapter = ({
   releaseSource,
 }: ElectronUpdaterAdapterOptions): ElectronAppUpdaterAdapter => {
   let configuration: ElectronUpdaterConfigureOptions | undefined;
-  let loadedUpdater: AppUpdater | undefined;
+  let loadedUpdater: NativeUpdater | undefined;
   let resolvedRelease: GitHubRelease | undefined;
-  let updaterPromise: Promise<AppUpdater> | undefined;
+  let updaterPromise: Promise<NativeUpdater> | undefined;
   let disposed = false;
   const nativeLogOwner = createElectronDetachedTaskOwner((cause) =>
     requireConfiguration().onLogFailure(cause),
@@ -104,7 +124,7 @@ export const createElectronUpdaterAdapter = ({
     emit("error", cause);
   };
 
-  const handleNativeProgress = (progress: ProgressInfo): void => {
+  const handleNativeProgress = (progress: Pick<ProgressInfo, "percent">): void => {
     if (!Number.isFinite(progress.percent)) {
       emit(
         "error",
@@ -120,12 +140,12 @@ export const createElectronUpdaterAdapter = ({
     emit("download-progress", { percent: progress.percent });
   };
 
-  const attachNativeListeners = (updater: AppUpdater): void => {
+  const attachNativeListeners = (updater: NativeUpdater): void => {
     updater.on("error", handleNativeError);
     updater.on("download-progress", handleNativeProgress);
   };
 
-  const detachNativeListeners = (updater: AppUpdater): void => {
+  const detachNativeListeners = (updater: NativeUpdater): void => {
     updater.removeListener("error", handleNativeError);
     updater.removeListener("download-progress", handleNativeProgress);
   };
@@ -141,7 +161,7 @@ export const createElectronUpdaterAdapter = ({
     });
   };
 
-  const getUpdater = (): Promise<AppUpdater> => {
+  const getUpdater = (): Promise<NativeUpdater> => {
     requireActive("electron.updater.initialize");
     requireConfiguration();
     updaterPromise ??= loadUpdater().then((updater) => {

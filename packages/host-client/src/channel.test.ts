@@ -34,7 +34,9 @@ const setup = (handlers: Partial<HostChannelHandlers> = {}) => {
   });
   const receive = (header: HostChannelMessage, body?: string) =>
     session.receive(encodeHostChannelFrame(header, body));
-  return { session, sent, handlerErrors, receive };
+  /** The sent requests, without cancels. */
+  const requests = () => sent.flatMap((message) => (message.type === "request" ? [message] : []));
+  return { session, sent, requests, handlerErrors, receive };
 };
 
 const settled = async <T>(promise: Promise<T>) => {
@@ -47,10 +49,10 @@ const settled = async <T>(promise: Promise<T>) => {
 
 describe("createHostChannelSession", () => {
   test("sends a request with a new ID and resolves with the result body", async () => {
-    const { session, sent, receive } = setup();
+    const { session, requests, receive } = setup();
     const first = session.request({ method: "invoke", command: "git_check", args: {} });
     const second = session.request({ method: "remote_access.observe" });
-    expect(sent.map(({ id, method }) => ({ id, method }))).toEqual([
+    expect(requests().map(({ id, method }) => ({ id, method }))).toEqual([
       { id: 0, method: "invoke" },
       { id: 1, method: "remote_access.observe" },
     ]);
@@ -152,7 +154,7 @@ describe("createHostChannelSession", () => {
   });
 
   test("an attached lease receives frames, and a release stops local delivery at once", async () => {
-    const { session, sent, receive } = setup();
+    const { session, requests, receive } = setup();
     const frames: TaskEventStreamFrame[] = [];
     const attached = session.attachTaskEvents(subscriptionId, (frame) => frames.push(frame));
     receive({ type: "result", id: 0 });
@@ -163,7 +165,10 @@ describe("createHostChannelSession", () => {
     receive({ type: "result", id: 1 });
     await released;
     expect(frames).toEqual([snapshot]);
-    expect(sent.map(({ method }) => method)).toEqual(["task_events.attach", "task_events.release"]);
+    expect(requests().map(({ method }) => method)).toEqual([
+      "task_events.attach",
+      "task_events.release",
+    ]);
   });
 
   test("a host event decodes its body only when a reader asks for it", () => {

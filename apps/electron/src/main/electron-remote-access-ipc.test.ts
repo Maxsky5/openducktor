@@ -1,18 +1,10 @@
 import { expect, test } from "bun:test";
-import { EventEmitter } from "node:events";
-import type { IpcMain, IpcMainInvokeEvent } from "electron";
 import { Effect, Stream } from "effect";
-import { RemoteAccessError, type RemoteAccessController } from "@openducktor/remote-host";
-import { ELECTRON_REMOTE_ACCESS_CHANNEL } from "../shared/electron-bridge-contract";
-import { registerElectronRemoteAccessIpc } from "./electron-remote-access-ipc";
+import { RemoteAccessError, type RemoteAccessOperator } from "@openducktor/remote-host";
+import { createRemoteAccessIpcHandler } from "./electron-remote-access-ipc";
 
 test("Electron operator IPC keeps the next action when network reads or client revocation fail", async () => {
-  const handlers = new Map<string, Parameters<IpcMain["handle"]>[1]>();
-  const ipc = {
-    handle: (channel: string, handler: Parameters<IpcMain["handle"]>[1]) =>
-      handlers.set(channel, handler),
-  };
-  const controller: RemoteAccessController = {
+  const controller: RemoteAccessOperator = {
     readState: () =>
       Effect.succeed({
         status: "disabled",
@@ -63,18 +55,11 @@ test("Electron operator IPC keeps the next action when network reads or client r
         clients: [],
         connectedClients: 0,
       }),
-    close: () => Effect.void,
-    handleSharedRequest: () => null,
+    restore: () => Effect.void,
   };
-  // SAFETY: Registration uses only handle; the fake records Electron's invoke handlers.
-  registerElectronRemoteAccessIpc(ipc as IpcMain, controller, () => false);
-  const sender: EventEmitter = new EventEmitter();
-  // SAFETY: The handler reads no field of the invoke event or its sender.
-  const event = { sender: sender as Electron.WebContents } as IpcMainInvokeEvent;
+  const handle = createRemoteAccessIpcHandler(controller, () => false);
   {
-    const handle = handlers.get(ELECTRON_REMOTE_ACCESS_CHANNEL);
-    if (!handle) throw new Error("Remote access IPC was not registered.");
-    expect(await handle(event, { action: "networks" })).toEqual([
+    expect(await handle({ action: "networks" })).toEqual([
       { name: "wifi", address: "192.168.1.9" },
     ]);
     controller.readNetworks = () =>
@@ -89,7 +74,7 @@ test("Electron operator IPC keeps the next action when network reads or client r
       );
     let failure: unknown;
     try {
-      await handle(event, { action: "networks" });
+      await handle({ action: "networks" });
     } catch (cause) {
       failure = cause;
     }
@@ -106,7 +91,7 @@ test("Electron operator IPC keeps the next action when network reads or client r
           },
         }),
       );
-    const revokeFailure = await handle(event, {
+    const revokeFailure = await handle({
       action: "revoke",
       clientId: "10000000-0000-4000-8000-000000000001",
     }).catch((cause: unknown) => cause);

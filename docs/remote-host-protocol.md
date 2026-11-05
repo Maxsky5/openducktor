@@ -333,7 +333,7 @@ Selected terminal owners join synchronization through `subscribeRecovery` before
 They wait for the attachment snapshot and consumption through its output boundary, or an explicit lost-terminal result.
 Later output does not extend that boundary, and terminal restoration fails after a 10-second deadline or a protocol failure.
 
-Discovery, negotiation, resource responses, and channel or terminal setup have bounded deadlines.
+Discovery, negotiation, resource responses, channel or terminal setup, and task stream requests have bounded deadlines. A host that keeps its channel open but answers no task subscription, acknowledgement, or release within 10 seconds loses the connection, so recovery does not wait forever.
 Host commands use the connection's cancellation signal and the caller's optional signal, and have no fixed client deadline.
 The host sends the command result when work completes.
 The client reports state and event listener errors without stopping connection or event delivery.

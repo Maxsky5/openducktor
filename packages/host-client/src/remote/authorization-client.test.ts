@@ -39,7 +39,7 @@ const fixture = () => {
     method: string;
     path: string;
     headers: Readonly<Record<string, string>>;
-    body: { pairingCode?: string };
+    body: { pairingCode?: string | undefined };
   }[] = [];
   const host: RemoteHostDescriptor = {
     shell: "web",
@@ -67,7 +67,7 @@ const fixture = () => {
   const transport: RemoteTransport = {
     async request(method, url, headers, signal, body) {
       const path = new URL(url).pathname;
-      const input: { pairingCode?: string } =
+      const input: { pairingCode?: string | undefined } =
         path === "/connections" && body
           ? remoteConnectionRequestSchema.parse(JSON.parse(body))
           : {};

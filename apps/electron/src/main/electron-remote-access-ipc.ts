@@ -1,5 +1,7 @@
 import type { IpcMain } from "electron";
 import {
+  type RemoteAccessNetwork,
+  type RemoteAccessState,
   remoteAccessEnableInputSchema,
   remotePairingStartInputSchema,
   remoteFailureText,
@@ -29,13 +31,13 @@ const remoteAccessRequestSchema = z.discriminatedUnion("action", [
 /** The request that the preload bridge sends. The handler parses it before use. */
 type RemoteAccessIpcRequest = z.input<typeof remoteAccessRequestSchema>;
 
-export const registerElectronRemoteAccessIpc = (
-  ipcMain: Pick<IpcMain, "handle">,
-  controller: RemoteAccessOperator,
-  isShutdown: () => boolean,
-) => {
-  // The host channel carries the live state, so this handler serves the operations only.
-  ipcMain.handle(ELECTRON_REMOTE_ACCESS_CHANNEL, async (_event, raw: RemoteAccessIpcRequest) => {
+/** The reply of a remote access operation. */
+type RemoteAccessIpcReply = RemoteAccessState | RemoteAccessNetwork[];
+
+/** Runs one remote access operation of the local operator. */
+export const createRemoteAccessIpcHandler =
+  (controller: RemoteAccessOperator, isShutdown: () => boolean) =>
+  async (raw: RemoteAccessIpcRequest): Promise<RemoteAccessIpcReply> => {
     if (isShutdown())
       throw new Error("The host is shutting down. Reopen Electron to use remote access.");
     const request = remoteAccessRequestSchema.parse(raw);
@@ -50,5 +52,16 @@ export const registerElectronRemoteAccessIpc = (
       );
     if (request.action === "disable") return Effect.runPromise(controller.disable());
     return Effect.runPromise(controller.readState());
-  });
+  };
+
+/** The host channel carries the live state, so this handler serves the operations only. */
+export const registerElectronRemoteAccessIpc = (
+  ipcMain: Pick<IpcMain, "handle">,
+  controller: RemoteAccessOperator,
+  isShutdown: () => boolean,
+): void => {
+  const handle = createRemoteAccessIpcHandler(controller, isShutdown);
+  ipcMain.handle(ELECTRON_REMOTE_ACCESS_CHANNEL, (_event, raw: RemoteAccessIpcRequest) =>
+    handle(raw),
+  );
 };

@@ -1,3 +1,4 @@
+import { describe, expect, test } from "bun:test";
 const workspace = { workspaceId: "workspace-1", repoPath: "/repo" };
 import {
   workspaceProviderSetupSetSchema,
@@ -7,17 +8,26 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoStoreHealth,
 } from "@openducktor/contracts";
-import type {} from "./bun-test";
 import type { HostClient as HostClientType } from "./index";
 import { createHostClient } from "./index";
 import type { InvokeFn } from "./invoke-utils";
+import type { JSONType } from "zod";
 
 type InvokeCall = {
   command: HostCommandName;
-  args?: Exclude<HostCommandArgs, undefined>;
+  args: HostCommandArgs;
 };
 
-type HostClientResult = Awaited<ReturnType<HostClientType[keyof HostClientType]>>;
+/** The parsed result of a host client method. */
+type ClientResult<Method extends keyof HostClientType> = Awaited<
+  ReturnType<HostClientType[Method]>
+>;
+
+/**
+ * A host reply before the client parses it: a valid result of any client method, or other JSON,
+ * because tests also send malformed replies.
+ */
+type HostWirePayload = ClientResult<keyof HostClientType> | JSONType | undefined;
 
 const makeTaskCardPayload = () => ({
   id: "task-1",
@@ -79,7 +89,7 @@ const createClient = (
   resolver: (
     command: HostCommandName,
     args?: Exclude<HostCommandArgs, undefined>,
-  ) => HostClientResult | PromiseLike<HostClientResult>,
+  ) => HostWirePayload | PromiseLike<HostWirePayload>,
 ) => {
   const calls: InvokeCall[] = [];
   const invoke: InvokeFn = async (command, args, resultSchema) => {
@@ -234,7 +244,7 @@ describe("HostClient", () => {
   });
 
   test("reads held Autopilot outcomes and claims one first-message recovery", async () => {
-    const outcome = {
+    const outcome: ClientResult<"autopilotStateRead">["outcomes"][number] = {
       outcomeId: "outcome-1",
       workflowId: "openducktor",
       workspaceId: "alpha",
@@ -429,7 +439,7 @@ describe("HostClient", () => {
       pendingQuestions: [],
       contextUsage: null,
     };
-    const snapshot = {
+    const snapshot: ClientResult<"agentSessionLiveAttach"> = {
       type: "snapshot",
       messageQueues: [],
       repoPath: "/repo",
@@ -751,7 +761,12 @@ describe("HostClient", () => {
 
     await client.taskCreate(
       workspace,
-      { title: "Task", issueType: "task", description: `![x](odt-asset:${assetId})` },
+      {
+        title: "Task",
+        issueType: "task",
+        priority: 2,
+        description: `![x](odt-asset:${assetId})`,
+      },
       { stagedAssetIds: [assetId] },
     );
     await client.taskUpdate(
@@ -1369,6 +1384,7 @@ describe("HostClient", () => {
   });
 
   test("merge status commands parse the workspace snapshot", async () => {
+    // The reply of a host that predates close failures.
     const snapshot = {
       workspaceId: "workspace-1",
       repoPath: "/repo",
@@ -1377,7 +1393,11 @@ describe("HostClient", () => {
           taskId: "task-1",
           branch: "odt/task-1",
           targetBranch: { remote: "origin", branch: "main" },
-          result: { kind: "merged", checkedAt: "2026-10-01T00:00:00.000Z", branchOid: "tip" },
+          result: {
+            kind: "merged" as const,
+            checkedAt: "2026-10-01T00:00:00.000Z",
+            branchOid: "tip",
+          },
         },
       ],
     };
@@ -1389,7 +1409,7 @@ describe("HostClient", () => {
     });
 
     // A host older than the close failures omits them, so the client reads an empty list.
-    const parsed = { ...snapshot, autoCloseFailures: [] };
+    const parsed: ClientResult<"taskMergeStatusGet"> = { ...snapshot, autoCloseFailures: [] };
     expect(await client.taskMergeStatusGet(workspace)).toEqual(parsed);
     expect(await client.taskMergeStatusCheck(workspace)).toEqual(parsed);
     expect(calls.map((call) => call.command)).toEqual([
@@ -1569,47 +1589,47 @@ describe("HostClient", () => {
       "git_push_branch",
       "git_get_worktree_status",
     ]);
-    expect(calls[2].args).toEqual({
+    expect(calls[2]?.args).toEqual({
       repoPath: "/repo",
       branch: "feature/task-1",
       create: true,
     });
-    expect(calls[3].args).toEqual({
+    expect(calls[3]?.args).toEqual({
       repoPath: "/repo",
       worktreePath: "/tmp/wt/task-1",
       branch: "feature/task-1",
       createBranch: true,
     });
-    expect(calls[4].args).toEqual({
+    expect(calls[4]?.args).toEqual({
       repoPath: "/repo",
       worktreePath: "/tmp/wt/task-1",
       force: true,
     });
-    expect(calls[5].args).toEqual({
+    expect(calls[5]?.args).toEqual({
       repoPath: "/repo",
       message: "Build all changes",
       workingDir: null,
     });
-    expect(calls[6].args).toEqual({
+    expect(calls[6]?.args).toEqual({
       repoPath: "/repo",
       targetBranch: "origin/main",
       workingDir: "/tmp/wt/task-1",
     });
-    expect(calls[7].args).toEqual({
+    expect(calls[7]?.args).toEqual({
       repoPath: "/repo",
       workingDir: "/tmp/wt/task-1",
     });
-    expect(calls[8].args).toEqual({
+    expect(calls[8]?.args).toEqual({
       repoPath: "/repo",
       targetBranch: "origin/main",
       workingDir: "/tmp/wt/task-1",
       force: true,
     });
-    expect(calls[9].args).toEqual({
+    expect(calls[9]?.args).toEqual({
       repoPath: "/repo",
       workingDir: "/tmp/wt/task-1",
     });
-    expect(calls[10].args).toEqual({
+    expect(calls[10]?.args).toEqual({
       repoPath: "/repo",
       branch: "feature/task-1",
       remote: "origin",
@@ -1617,7 +1637,7 @@ describe("HostClient", () => {
       forceWithLease: true,
       workingDir: "/tmp/wt/task-1",
     });
-    expect(calls[11].args).toEqual({
+    expect(calls[11]?.args).toEqual({
       repoPath: "/repo",
       targetBranch: "origin/main",
       diffScope: "target",
@@ -1809,8 +1829,8 @@ describe("HostClient", () => {
     await client.humanRequestChanges(workspace, "task-1", "Please rework API");
 
     expect(calls.map((entry) => entry.command)).toEqual(["build_blocked", "human_request_changes"]);
-    expect(calls[0].args?.reason).toBe("Needs clarification");
-    expect(calls[1].args?.note).toBe("Please rework API");
+    expect(calls[0]?.args?.reason).toBe("Needs clarification");
+    expect(calls[1]?.args?.note).toBe("Please rework API");
   });
 
   test("tasksList rejects malformed host payloads", async () => {
@@ -2017,7 +2037,7 @@ describe("HostClient", () => {
       "agent_sessions_list",
       "agent_session_delete",
     ]);
-    expect(calls[0].args).toEqual({
+    expect(calls[0]?.args).toEqual({
       workspaceId: "workspace-1",
       repoPath: "/repo",
       taskId: "task-1",
@@ -2190,7 +2210,11 @@ describe("HostClient", () => {
   });
 
   test("repo pull request sync sends the captured identity and preserves typed skips", async () => {
-    const skipped = { ok: false, reason: "workspace_closed", message: "Reopen the workspace." };
+    const skipped: ClientResult<"repoPullRequestSync"> = {
+      ok: false,
+      reason: "workspace_closed",
+      message: "Reopen the workspace.",
+    };
     const { client, calls } = createClient(() => skipped);
     const capturedWorkspace = { ...workspace, workspaceName: "Captured" };
     expect(await client.repoPullRequestSync(capturedWorkspace)).toEqual(skipped);

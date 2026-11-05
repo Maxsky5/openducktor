@@ -16,7 +16,7 @@ const context = {
   assetId: "550e8400-e29b-41d4-a716-446655440000",
 };
 
-const register = (readService: TaskAssetReadService) => {
+const register = (readService: Pick<TaskAssetReadService, "read">) => {
   let handler: ((request: Request) => Response | Promise<Response>) | undefined;
   registerElectronTaskAssetProtocol({
     readService,

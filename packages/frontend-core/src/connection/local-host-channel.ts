@@ -4,6 +4,7 @@ import {
   HOST_CHANNEL_SUBPROTOCOL,
   REMOTE_SOCKET_AUTHORIZATION_PREFIX,
   hostEventsOpenedSchema,
+  type HostEventsOpened,
   parseHostEventEnvelope,
   type HostChannelRequest,
   type HostEventChannel,
@@ -23,6 +24,7 @@ import {
 import { createNotificationFrameRelay } from "../recovery/notification-frame-relay";
 import {
   createHostChannelSession,
+  type HostChannelHandlers,
   type HostChannelSession,
 } from "@openducktor/host-client/channel";
 import type { RemoteSocketConnection } from "@openducktor/host-client/remote";
@@ -114,6 +116,8 @@ type TaskRecord = {
 };
 
 type Open = { session: HostChannelSession; socket: RemoteSocketConnection; abort: AbortController };
+/** One connection attempt. `open` is set once the attempt finished its setup. */
+type Attempt = { abort: AbortController; open: Open | null };
 
 const RECONNECT_BASE_MS = 500;
 const RECONNECT_MAX_MS = 5_000;
@@ -290,130 +294,175 @@ export const createLocalHostChannel = ({
     );
   };
 
+  const sessionHandlers: HostChannelHandlers = {
+    hostEvent: deliverHostEvent,
+    notification: (frame) => {
+      notificationCursor = frame.cursor;
+      notifications.accept(frame);
+    },
+    remoteAccessState: (state) => {
+      for (const observer of remoteAccessObservers) observer(state);
+    },
+  };
+
+  /** Ends an attempt: a lost open channel reconnects, and a failed setup ends its attempt. */
+  const failAttempt = (attempt: Attempt, cause: unknown) => {
+    if (attempt.open) lose(attempt.open, cause);
+    else attempt.abort.abort(cause);
+  };
+
+  /** Creates the protocol session of an attempt and opens its socket. */
+  const openSession = async (
+    attempt: Attempt,
+    { url, token }: LocalHostChannelEndpoint,
+  ): Promise<{ session: HostChannelSession; socket: RemoteSocketConnection }> => {
+    const { signal } = attempt.abort;
+    let socket: RemoteSocketConnection | null = null;
+    let cancelSilence: (() => void) | null = null;
+    const watchSilence = () => {
+      cancelSilence?.();
+      cancelSilence = schedule(
+        () => failAttempt(attempt, new Error("The host channel went silent.")),
+        HOST_CHANNEL_SILENCE_LIMIT_MS,
+      );
+    };
+    const session = createHostChannelSession({
+      send: (frame) => {
+        if (!socket) throw new Error("The host channel is not open.");
+        void socket.send(frame).catch((cause: unknown) => failAttempt(attempt, cause));
+      },
+      handlers: sessionHandlers,
+      onHandlerError: (cause) => console.error("Host channel delivery failed.", cause),
+    });
+    signal.addEventListener(
+      "abort",
+      () => {
+        cancelSilence?.();
+        session.close(signal.reason);
+      },
+      { once: true },
+    );
+    socket = await openSocket(
+      url,
+      token === null
+        ? [HOST_CHANNEL_SUBPROTOCOL]
+        : [HOST_CHANNEL_SUBPROTOCOL, `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${token}`],
+      signal,
+      (frame) => {
+        watchSilence();
+        try {
+          session.receive(frame);
+        } catch (cause) {
+          failAttempt(attempt, cause);
+        }
+      },
+      () =>
+        failAttempt(
+          attempt,
+          new Error(
+            attempt.open ? "The host channel closed." : "The host channel closed during setup.",
+          ),
+        ),
+    );
+    watchSilence();
+    return { session, socket };
+  };
+
+  /** Replays the missed host events, then restores the task leases and observers. */
+  const resume = async (
+    session: HostChannelSession,
+    signal: AbortSignal,
+  ): Promise<HostEventsOpened> => {
+    const opened = hostEventsOpenedSchema.parse(
+      await waitWithAbort(
+        session.request({ method: "events.open", cursor, notificationCursor }),
+        signal,
+      ),
+    );
+    cursor = { hostEpoch: opened.hostEpoch, hostEventId: opened.hostEventId };
+    await waitWithAbort(restoreDelivery(session), signal);
+    return opened;
+  };
+
+  /** Clears the failure state and tells control listeners what the reconnect missed. */
+  const announceOpen = (opened: HostEventsOpened) => {
+    attempts = 0;
+    const recovers = connectionWarning !== null;
+    connectionWarning = null;
+    hasReportedFailure = false;
+    const resumed = hasOpened;
+    if (!hasOpened) {
+      hasOpened = true;
+      resolveReady();
+      if (!recovers) return;
+    }
+    const gaps = new Set(opened.gaps);
+    for (const registration of controlListeners())
+      dispatch(
+        [registration.listener],
+        connectionReconnectedEvent(
+          // A first connection has no cursor, so it cannot prove that nothing was missed.
+          !resumed || opened.hostChanged || gaps.has(registration.eventName),
+          { hostChanged: opened.hostChanged, missedEventNames: opened.gaps },
+        ),
+      );
+  };
+
   const connect = (): Promise<Open> => {
     if (open) return Promise.resolve(open);
     if (opening) return opening;
     cancelRetry?.();
     cancelRetry = null;
-    const abort = new AbortController();
-    openingAbort = abort;
+    const attempt: Attempt = { abort: new AbortController(), open: null };
+    const { signal } = attempt.abort;
+    openingAbort = attempt.abort;
     // The deadline covers the session preparation, the handshake, and the replay.
     const cancelSetupTimer = schedule(
-      () => abort.abort(new Error("The host channel did not finish setup.")),
+      () => attempt.abort.abort(new Error("The host channel did not finish setup.")),
       SETUP_TIMEOUT_MS,
     );
-    const attempt = (async (): Promise<Open> => {
-      const { url, token } = await waitWithAbort(prepare(abort.signal), abort.signal);
-      let current: Open | null = null;
-      let silenceTimer: (() => void) | null = null;
-      const watchSilence = () => {
-        silenceTimer?.();
-        silenceTimer = schedule(() => {
-          if (current) lose(current, new Error("The host channel went silent."));
-        }, HOST_CHANNEL_SILENCE_LIMIT_MS);
-      };
-      abort.signal.addEventListener("abort", () => silenceTimer?.(), { once: true });
-      let socket: RemoteSocketConnection | null = null;
-      const session = createHostChannelSession({
-        send: (frame) => {
-          if (!socket) throw new Error("The host channel is not open.");
-          void socket.send(frame).catch((cause: unknown) => {
-            if (current) lose(current, cause);
-          });
-        },
-        handlers: {
-          hostEvent: deliverHostEvent,
-          notification: (frame) => {
-            notificationCursor = frame.cursor;
-            notifications.accept(frame);
-          },
-          remoteAccessState: (state) => {
-            for (const observer of remoteAccessObservers) observer(state);
-          },
-        },
-        onHandlerError: (cause) => console.error("Host channel delivery failed.", cause),
-      });
-      abort.signal.addEventListener("abort", () => session.close(abort.signal.reason), {
-        once: true,
-      });
+    const opened = (async (): Promise<Open> => {
       try {
-        socket = await openSocket(
-          url,
-          token === null
-            ? [HOST_CHANNEL_SUBPROTOCOL]
-            : [HOST_CHANNEL_SUBPROTOCOL, `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${token}`],
-          abort.signal,
-          (frame) => {
-            if (!current && !socket) return;
-            watchSilence();
-            try {
-              session.receive(frame);
-            } catch (cause) {
-              if (current) lose(current, cause);
-              else abort.abort(cause);
-            }
-          },
-          () => {
-            if (current) lose(current, new Error("The host channel closed."));
-            else abort.abort(new Error("The host channel closed during setup."));
-          },
-        );
-        watchSilence();
-        const opened = hostEventsOpenedSchema.parse(
-          await waitWithAbort(
-            session.request({ method: "events.open", cursor, notificationCursor }),
-            abort.signal,
-          ),
-        );
-        cursor = { hostEpoch: opened.hostEpoch, hostEventId: opened.hostEventId };
-        await waitWithAbort(restoreDelivery(session), abort.signal);
-        abort.signal.throwIfAborted();
-        current = { session, socket, abort };
-        open = current;
+        const endpoint = await waitWithAbort(prepare(signal), signal);
+        const { session, socket } = await openSession(attempt, endpoint);
+        const replay = await resume(session, signal);
+        signal.throwIfAborted();
+        attempt.open = { session, socket, abort: attempt.abort };
+        open = attempt.open;
         // A loss of this channel must schedule a reconnect, so the attempt ends here.
         opening = null;
-        attempts = 0;
-        const recovers = connectionWarning !== null;
-        connectionWarning = null;
-        hasReportedFailure = false;
-        const resumed = hasOpened;
-        if (!hasOpened) {
-          hasOpened = true;
-          resolveReady();
-          if (!recovers) return current;
-        }
-        const gaps = new Set(opened.gaps);
-        for (const registration of controlListeners())
-          dispatch(
-            [registration.listener],
-            connectionReconnectedEvent(
-              // A first connection has no cursor, so it cannot prove that nothing was missed.
-              !resumed || opened.hostChanged || gaps.has(registration.eventName),
-              { hostChanged: opened.hostChanged, missedEventNames: opened.gaps },
-            ),
-          );
-        return current;
+        announceOpen(replay);
+        return attempt.open;
       } catch (cause) {
-        abort.abort(cause);
+        attempt.abort.abort(cause);
         throw cause;
       }
     })();
-    opening = attempt;
-    void attempt.finally(cancelSetupTimer).catch(() => {});
-    attempt.then(
-      () => {
-        if (opening === attempt) opening = null;
-        if (openingAbort === abort) openingAbort = null;
-      },
-      (cause: unknown) => {
-        if (opening === attempt) opening = null;
-        if (openingAbort === abort) openingAbort = null;
-        if (disposed) return;
-        reportFailure(cause);
-        scheduleReconnect();
-      },
+    opening = opened;
+    const settle = () => {
+      cancelSetupTimer();
+      if (opening === opened) opening = null;
+      if (openingAbort === attempt.abort) openingAbort = null;
+    };
+    opened.then(settle, (cause: unknown) => {
+      settle();
+      if (disposed) return;
+      reportFailure(cause);
+      scheduleReconnect();
+    });
+    return opened;
+  };
+
+  /**
+   * Bounds a task stream request by the setup deadline. A host that keeps the channel open but does
+   * not answer would otherwise hold its caller, so a missed deadline loses the channel.
+   */
+  const withinSetup = <T>(current: Open, operation: Promise<T>): Promise<T> => {
+    const cancel = schedule(
+      () => lose(current, new Error("The host did not answer a task stream request.")),
+      SETUP_TIMEOUT_MS,
     );
-    return attempt;
+    return operation.finally(cancel);
   };
 
   /**
@@ -459,21 +508,27 @@ export const createLocalHostChannel = ({
     request: (request, signal) =>
       withOpen(({ session }) => session.request(request, signal), signal),
     subscribeTaskEvents: (input, onFrame, onTerminalFailure) =>
-      withOpen(async ({ session }) => {
+      withOpen(async (opened) => {
         const record: TaskRecord = { onFrame, onTerminalFailure };
-        const lease = await session.subscribeTaskEvents(input, (frame) => record.onFrame(frame));
+        const lease = await withinSetup(
+          opened,
+          opened.session.subscribeTaskEvents(input, (frame) => record.onFrame(frame)),
+        );
         const { subscriptionId } = lease;
         tasks.set(subscriptionId, record);
         let released: Promise<void> | null = null;
         return {
           subscriptionId,
           acknowledge: async (acknowledged) => {
-            await withOpen(({ session: current }) =>
-              current.request({
-                method: "task_events.ack",
-                subscriptionId,
-                cursor: acknowledged,
-              }),
+            await withOpen((current) =>
+              withinSetup(
+                current,
+                current.session.request({
+                  method: "task_events.ack",
+                  subscriptionId,
+                  cursor: acknowledged,
+                }),
+              ),
             );
           },
           unsubscribe: () => {
@@ -482,7 +537,8 @@ export const createLocalHostChannel = ({
               const current = open;
               try {
                 // A lease without a channel expires on the host.
-                if (current) await current.session.releaseTaskEvents(subscriptionId);
+                if (current)
+                  await withinSetup(current, current.session.releaseTaskEvents(subscriptionId));
               } finally {
                 releaseIfUnused();
               }

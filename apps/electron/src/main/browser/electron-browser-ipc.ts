@@ -5,7 +5,6 @@ import {
 } from "@openducktor/contracts";
 import type { BrowserClientSession, BrowserEngineError, BrowserService } from "@openducktor/host";
 import { Effect } from "effect";
-import type { IpcMain } from "electron";
 import type { z } from "zod";
 import { runElectronEffect } from "../../effect/electron-boundary";
 import { ElectronValidationError, jsonIssues } from "../../effect/electron-errors";
@@ -162,7 +161,12 @@ export const createElectronBrowserIpcController = (input: ElectronBrowserIpcCont
 
 export type ElectronBrowserIpcController = ReturnType<typeof createElectronBrowserIpcController>;
 
-export type ElectronBrowserIpcHandler = Parameters<IpcMain["handle"]>[1];
+/** A browser IPC handler. It reads only the sender of the Electron invoke event. */
+export type ElectronBrowserIpcHandler = (
+  event: { sender: ElectronBrowserLifecycleSender },
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This IPC boundary parses each renderer request before use.
+  request: unknown,
+) => Promise<void | string[]>;
 
 type ElectronBrowserIpcMain = {
   handle(channel: string, listener: ElectronBrowserIpcHandler): void;

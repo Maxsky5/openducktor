@@ -70,7 +70,11 @@ const startServer = async (
 
 /** The bytes of one received socket message. */
 const frameBytes = (data: WebSocket.RawData): Uint8Array =>
-  Array.isArray(data) ? Buffer.concat(data) : new Uint8Array(Buffer.from(data));
+  Array.isArray(data)
+    ? Buffer.concat(data)
+    : data instanceof ArrayBuffer
+      ? new Uint8Array(data)
+      : data;
 
 const authorization = (token: string) => `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${token}`;
 

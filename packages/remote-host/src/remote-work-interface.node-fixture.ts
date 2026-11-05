@@ -1,4 +1,4 @@
-import { admittedWorkOptions, memoryApprovalStore } from "./remote-approval.test-support";
+import { admittedWorkOptions } from "./remote-approval.test-support";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Effect } from "effect";
@@ -16,6 +16,7 @@ import {
   type HostChannelRequest,
 } from "@openducktor/contracts";
 import { createEffectHostCommandRouter } from "../../host/src/interface/router/host-command-router";
+import type { TaskAssetReadService } from "../../host/src/application/task-assets/task-asset-read-service";
 import { createTaskEventStream } from "../../host/src/events/task-event-stream";
 import { createNotificationStream } from "../../host/src/application/notifications/notification-stream";
 import { BufferedHostEventBus } from "./host-event-bus";
@@ -66,7 +67,8 @@ const openChannel = async (base: string, connectionId: string, connectionToken: 
     socket,
     request(request: HostChannelRequest) {
       const id = nextId++;
-      socket.send(encodeHostChannelFrame({ type: "request", id, ...request }));
+      // The frame is a view of an `ArrayBufferLike`; the socket takes a plain `ArrayBuffer` view.
+      socket.send(encodeHostChannelFrame({ type: "request", id, ...request }).slice());
       return until(() =>
         messages.find(
           ({ header }) => (header.type === "result" || header.type === "error") && header.id === id,
@@ -150,7 +152,10 @@ for (const shell of ["electron", "web"] as const) {
         },
         taskEventStream: createTaskEventStream({ reporter: { report: () => {} } }),
         notificationStream: notifications,
-        taskAssetReadService: { read: () => Effect.succeed(null) },
+        taskAssetReadService: {
+          read: () => Effect.succeed(null),
+          readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),
+        } satisfies TaskAssetReadService,
         eventBus: new BufferedHostEventBus({ report: () => {} }),
         get terminalService(): RemoteHostServices["terminalService"] {
           throw new Error("Channel work must not use the terminal service.");
@@ -161,7 +166,6 @@ for (const shell of ["electron", "web"] as const) {
         appVersion: "host-test",
         hostId: "20000000-0000-4000-8000-000000000001",
         ...admittedWorkOptions(),
-        approvalStore: Effect.succeed(memoryApprovalStore()),
         listenHost: "127.0.0.1",
         publicEndpoint: "https://machine.test/api/remote",
         logger: { error: () => Effect.void, info: () => Effect.void, success: () => Effect.void },
@@ -266,7 +270,10 @@ test("closing a channel or a terminal on Node clears the client presence", async
       },
       taskEventStream: createTaskEventStream({ reporter: { report: () => {} } }),
       notificationStream: notifications,
-      taskAssetReadService: { read: () => Effect.succeed(null) },
+      taskAssetReadService: {
+        read: () => Effect.succeed(null),
+        readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),
+      } satisfies TaskAssetReadService,
       eventBus: new BufferedHostEventBus({ report: () => {} }),
       // SAFETY: opening and closing a terminal socket attaches no terminal, so no member is used.
       terminalService: {} as RemoteHostServices["terminalService"],
@@ -276,7 +283,6 @@ test("closing a channel or a terminal on Node clears the client presence", async
       appVersion: "host-test",
       hostId: "20000000-0000-4000-8000-000000000001",
       ...admittedWorkOptions(),
-      approvalStore: Effect.succeed(memoryApprovalStore()),
       listenHost: "127.0.0.1",
       publicEndpoint: "http://127.0.0.1:1",
       logger: { error: () => Effect.void, info: () => Effect.void, success: () => Effect.void },

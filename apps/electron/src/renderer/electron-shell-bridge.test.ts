@@ -6,8 +6,13 @@ import {
 } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
+  AgentSessionLiveEnvelope,
   AgentSessionLiveSnapshotEnvelope,
+  AppUpdateCommandResult,
+  AppUpdateState,
   ExternalTaskSyncEvent,
+  ThemePreference,
+  WorkspaceRef,
   HostEventEnvelope,
   RemoteAccessState,
   TaskEventCursor,
@@ -25,6 +30,7 @@ import {
   type FakeHostChannelOptions,
 } from "@openducktor/host-client/remote/test-support/host-channel";
 import { createTaskStreamController } from "@openducktor/frontend-core/tasks/task-stream-controller";
+import type { TaskSnapshotResult } from "@openducktor/frontend-core/queries/task-view-sync";
 import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 import {
@@ -113,97 +119,105 @@ const disabledRemoteAccess: RemoteAccessState = {
   pairing: null,
 };
 
+const downloadedUpdate: AppUpdateCommandResult = {
+  accepted: true,
+  state: {
+    status: "downloaded",
+    currentVersion: "0.4.2",
+    availableVersion: "0.4.3",
+    progressPercent: 100,
+  },
+};
+
 const createElectronApi = () => {
   const unsubscribe = mock(() => {});
   const unsubscribeAppUpdates = mock(() => {});
   let appUpdateListener:
     | Parameters<OpenDucktorElectronApi["appUpdates"]["subscribe"]>[0]
     | undefined;
-  return {
-    electronApi: {
-      platform: "darwin",
-      hostChannelEndpoint: mock(async () => ({ url: CHANNEL_URL, token: CHANNEL_TOKEN })),
-      remoteAccess: {
-        readState: mock(async () => disabledRemoteAccess),
-        readNetworks: mock(async () => []),
-        enable: mock(async () => disabledRemoteAccess),
-        disable: mock(async () => disabledRemoteAccess),
-        revokeClient: mock(async () => disabledRemoteAccess),
-        startPairing: mock(async () => disabledRemoteAccess),
-        stopPairing: mock(async () => disabledRemoteAccess),
-      },
-      appUpdates: {
-        getState: mock(async () => ({ status: "idle", currentVersion: "0.4.2" })),
-        check: mock(async () => ({
+  const electronApi = {
+    getArtifactPreviewEnvironment: mock(async () => ({
+      bootstrapUrl: "odt-artifact-preview://bootstrap",
+      scriptedHtml: { supported: true as const },
+    })),
+    platform: "darwin" as const,
+    selectHost: mock(async () => {}),
+    setNativeTheme: mock(async (_theme: ThemePreference) => {}),
+    hostChannelEndpoint: mock(async () => ({ url: CHANNEL_URL, token: CHANNEL_TOKEN })),
+    remoteAccess: {
+      readState: mock(async () => disabledRemoteAccess),
+      readNetworks: mock(async () => []),
+      enable: mock(async () => disabledRemoteAccess),
+      disable: mock(async () => disabledRemoteAccess),
+      revokeClient: mock(async () => disabledRemoteAccess),
+      startPairing: mock(async () => disabledRemoteAccess),
+      stopPairing: mock(async () => disabledRemoteAccess),
+    },
+    appUpdates: {
+      getState: mock(async (): Promise<AppUpdateState> => ({
+        status: "idle",
+        currentVersion: "0.4.2",
+      })),
+      check: mock(
+        async (_input: { initiator: "menu" | "settings" }): Promise<AppUpdateCommandResult> => ({
           accepted: true,
           state: {
             status: "upToDate",
             currentVersion: "0.4.2",
             checkedAt: "2026-07-08T22:00:00.000Z",
           },
-        })),
-        download: mock(async () => ({
-          accepted: true,
-          state: {
-            status: "downloaded",
-            currentVersion: "0.4.2",
-            availableVersion: "0.4.3",
-            progressPercent: 100,
-          },
-        })),
-        install: mock(async () => ({
-          accepted: true,
-          state: {
-            status: "downloaded",
-            currentVersion: "0.4.2",
-            availableVersion: "0.4.3",
-            progressPercent: 100,
-          },
-        })),
-        subscribe: mock((listener) => {
-          appUpdateListener = listener;
-          return unsubscribeAppUpdates;
         }),
-      },
-      notifications: {
-        getCapability: mock(async () => ({
-          platform: "electron" as const,
-          supported: true,
-          permission: "granted" as const,
-          canGuaranteeSilent: true,
-          canOpenSystemSettings: true,
-        })),
-        requestPermission: mock(async () => ({
-          platform: "electron" as const,
-          supported: true,
-          permission: "granted" as const,
-          canGuaranteeSilent: true,
-          canOpenSystemSettings: true,
-        })),
-        openSystemSettings: mock(async () => {}),
-        isAppFocused: mock(async () => false),
-        show: mock(async () => ({ status: "shown" as const })),
-        subscribeClicks: mock(() => unsubscribe),
-      },
-      openExternalUrl: mock(async () => {}),
-      resolveLocalAttachmentPreviewSrc: mock(async () => "file:///tmp/brief.md"),
-      editorClipboard: {
-        readText: mock((type?: string) => (type ? `typed:${type}` : "plain")),
-      },
-      terminals: {
-        disconnect: mock(async () => {}),
-        send: mock(async () => {}),
-        subscribe: mock(() => unsubscribe),
-      },
-      browser: {
-        connect: mock(async () => {}),
-        disconnect: mock(async () => {}),
-        send: mock(async () => {}),
-        subscribe: mock(() => unsubscribe),
-        bindGuest: mock(async () => {}),
-        pickFiles: mock(async () => ["/tmp/photo.png"]),
-      },
+      ),
+      download: mock(async (): Promise<AppUpdateCommandResult> => downloadedUpdate),
+      install: mock(async (): Promise<AppUpdateCommandResult> => downloadedUpdate),
+      subscribe: mock((listener: (state: AppUpdateState) => void) => {
+        appUpdateListener = listener;
+        return unsubscribeAppUpdates;
+      }),
     },
+    notifications: {
+      getCapability: mock(async () => ({
+        platform: "electron" as const,
+        supported: true,
+        permission: "granted" as const,
+        canGuaranteeSilent: true,
+        canOpenSystemSettings: true,
+      })),
+      requestPermission: mock(async () => ({
+        platform: "electron" as const,
+        supported: true,
+        permission: "granted" as const,
+        canGuaranteeSilent: true,
+        canOpenSystemSettings: true,
+      })),
+      openSystemSettings: mock(async () => {}),
+      isAppFocused: mock(async () => false),
+      show: mock(async () => ({ status: "shown" as const })),
+      subscribeClicks: mock(() => unsubscribe),
+    },
+    openExternalUrl: mock(async () => {}),
+    resolveLocalAttachmentPreviewSrc: mock(async () => "file:///tmp/brief.md"),
+    editorClipboard: {
+      readText: mock(async (type?: string) => (type ? `typed:${type}` : "plain")),
+    },
+    terminals: {
+      disconnect: mock(async (_clientId: string) => {}),
+      send: mock(async (_clientId: string, _frame: Uint8Array) => {}),
+      subscribe: mock((_clientId: string, _listener: (frame: Uint8Array) => void) => unsubscribe),
+    },
+    browser: {
+      connect: mock(async (_clientId: string) => {}),
+      disconnect: mock(async (_clientId: string) => {}),
+      send: mock(async (_clientId: string, _frame: Uint8Array) => {}),
+      subscribe: mock((_clientId: string, _listener: (frame: Uint8Array) => void) => unsubscribe),
+      bindGuest: mock(async (_tabId: string, _webContentsId: number) => {}),
+      pickFiles: mock(async (_input: { multiple: boolean; accept: readonly string[] }) => [
+        "/tmp/photo.png",
+      ]),
+    },
+  } satisfies OpenDucktorElectronApi;
+  return {
+    electronApi,
     emitAppUpdate(state: Parameters<NonNullable<typeof appUpdateListener>>[0]) {
       if (!appUpdateListener) {
         throw new Error("Expected an app-update subscription before emitting state.");
@@ -323,10 +337,13 @@ describe("electron shell bridge", () => {
     const report = spyOn(console, "error").mockImplementation(() => {});
     try {
       const stop = await createElectronShellBridge().subscribeRuntimeChanges(listener);
-      const payload = { type: "runtime_impact_changed", runtimeKinds: ["codex"] } as const;
-      host.emit({ channel: "openducktor://runtime-changed", payload });
+      const event = {
+        channel: "openducktor://runtime-changed",
+        payload: { type: "runtime_impact_changed", runtimeKinds: ["codex"] },
+      } satisfies HostEventEnvelope;
+      host.emit(event);
       await settle(() => report.mock.calls.length > 0, "the listener report");
-      expect(listener).toHaveBeenCalledWith(payload);
+      expect(listener).toHaveBeenCalledWith(event.payload);
       expect(report).toHaveBeenCalledWith("Host event listener failed.", failure);
       stop();
     } finally {
@@ -402,16 +419,22 @@ describe("electron shell bridge", () => {
         await finishFirstChange.promise;
       }
     });
-    const snapshotTaskIds = new Map([["/repo", ["task-1"]]]);
-    const reconcileStreamSnapshot = mock(async () => ({
-      taskIdsByRepo: snapshotTaskIds,
-      failures: new Map(),
-    }));
+    const workspace: WorkspaceRef = { workspaceId: "repo", repoPath: "/repo" };
+    const snapshotTaskIds = new Map<WorkspaceRef, string[]>([[workspace, ["task-1"]]]);
+    const reconcileStreamSnapshot = mock(
+      async (_openRepoPaths: readonly WorkspaceRef[]): Promise<TaskSnapshotResult> => ({
+        taskIdsByRepo: snapshotTaskIds,
+        failures: new Map(),
+      }),
+    );
     const admitAgentSessionExternalEvent = mock(async (event: ExternalTaskSyncEvent) => ({
-      repoPath: event.repoPath,
+      repoPath: { workspaceId: event.workspaceId, repoPath: event.repoPath },
       changedTaskIds: [],
     }));
-    const reconcileAgentSessionStreamSnapshot = mock(async () => new Map<string, unknown>());
+    const reconcileAgentSessionStreamSnapshot = mock(
+      async (_taskIdsByRepo: ReadonlyMap<WorkspaceRef, string[]>, _isCurrentOwner: () => boolean) =>
+        new Map<WorkspaceRef, unknown>(),
+    );
     const controller = createTaskStreamController({
       transport: {
         subscribeTaskStream: async (input, onFrame) => {
@@ -427,6 +450,8 @@ describe("electron shell bridge", () => {
         },
       },
       taskViewSync: {
+        refreshAfterTaskRetentionChange: async () => {},
+        releaseWorkspace: async () => {},
         loadWorkspace: async () => {},
         refreshManually: async () => {},
         refreshDocumentsForTasks: async () => {},
@@ -440,8 +465,9 @@ describe("electron shell bridge", () => {
         },
         cancelReads: () => {},
         reconcileStreamSnapshot: reconcileAgentSessionStreamSnapshot,
+        releaseWorkspace: async () => {},
       },
-      getOpenRepoPaths: () => ["/repo"],
+      getOpenRepoPaths: () => [workspace],
       onDegraded: (error) => failures.push(error),
       onWorkspaceFailures: (workspaceFailures) => failures.push(...workspaceFailures.values()),
     });
@@ -463,7 +489,7 @@ describe("electron shell bridge", () => {
 
     expect(reconcileExternalEvent).toHaveBeenCalledTimes(1);
     expect(admitAgentSessionExternalEvent).toHaveBeenCalledWith(taskStreamEvent(1));
-    expect(reconcileStreamSnapshot).toHaveBeenCalledWith(["/repo"]);
+    expect(reconcileStreamSnapshot).toHaveBeenCalledWith([workspace]);
     expect(reconcileAgentSessionStreamSnapshot).toHaveBeenCalledWith(
       snapshotTaskIds,
       expect.any(Function),
@@ -489,7 +515,7 @@ describe("electron shell bridge", () => {
     const { electronApi } = createElectronApi();
     setElectronApi(electronApi);
     const bridge = createElectronShellBridge();
-    const listener = mock(() => {});
+    const listener = mock((_envelope: AgentSessionLiveEnvelope) => {});
 
     const observing = bridge.observeAgentSessionLive({ repoPath: "/repo" }, listener);
     await attachRequested.promise;
@@ -578,7 +604,7 @@ describe("electron shell bridge", () => {
       throw new Error("Expected the webview browser bridge.");
     }
     const onFrame = mock(() => {});
-    const onStateChange = mock(() => {});
+    const onStateChange = mock((_state: "connected" | "disconnected") => {});
     const listener = mock(() => {});
 
     const stopTabEvents = await bridge.subscribeBrowserTabEvents(listener);

@@ -1,14 +1,23 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
+import type { Event as ElectronEvent, NotificationCloseEventParams } from "electron";
 import { ELECTRON_NOTIFICATION_CLICKED_CHANNEL } from "../shared/electron-bridge-contract";
 import { createElectronNotificationService } from "./electron-notification-service";
 
-type Listener = (...args: unknown[]) => void;
+/** An Electron event with the fields that the service reads. */
+const electronEvent = <Params extends object>(params: Params): ElectronEvent<Params> => ({
+  preventDefault: () => {},
+  defaultPrevented: false,
+  ...params,
+});
 
 class FakeNativeNotification {
   static supported = true;
   static instances: FakeNativeNotification[] = [];
-  readonly listeners = new Map<string, Listener>();
   readonly close = mock(() => {});
+  private readonly shown = new Set<() => void>();
+  private readonly clicked = new Set<() => void>();
+  private readonly closed = new Set<(event: ElectronEvent<NotificationCloseEventParams>) => void>();
+  private readonly failed = new Set<(event: ElectronEvent, error: string) => void>();
 
   static isSupported(): boolean {
     return this.supported;
@@ -18,15 +27,41 @@ class FakeNativeNotification {
     FakeNativeNotification.instances.push(this);
   }
 
-  on(event: string, listener: Listener): this {
-    this.listeners.set(event, listener);
-    return this;
+  on(event: "show" | "click", listener: () => void): void;
+  on(event: "close", listener: (event: ElectronEvent<NotificationCloseEventParams>) => void): void;
+  on(event: "failed", listener: (event: ElectronEvent, error: string) => void): void;
+  on(
+    event: "show" | "click" | "close" | "failed",
+    listener:
+      | (() => void)
+      | ((event: ElectronEvent<NotificationCloseEventParams>) => void)
+      | ((event: ElectronEvent, error: string) => void),
+  ): void {
+    if (event === "show" || event === "click") {
+      // SAFETY: the overloads accept only a listener without parameters for these events.
+      const handler = listener as () => void;
+      (event === "show" ? this.shown : this.clicked).add(handler);
+    } else if (event === "close") {
+      // SAFETY: the overloads accept only a close-event listener for "close".
+      this.closed.add(listener as (event: ElectronEvent<NotificationCloseEventParams>) => void);
+    } else {
+      // SAFETY: the overloads accept only a failure listener for "failed".
+      this.failed.add(listener as (event: ElectronEvent, error: string) => void);
+    }
   }
 
   show(): void {}
 
-  emit(event: string, ...args: unknown[]): void {
-    this.listeners.get(event)?.(...args);
+  emit(event: "show" | "click"): void {
+    for (const listener of event === "show" ? this.shown : this.clicked) listener();
+  }
+
+  emitClose(params: NotificationCloseEventParams = {}): void {
+    for (const listener of this.closed) listener(electronEvent(params));
+  }
+
+  emitFailed(error: string): void {
+    for (const listener of this.failed) listener(electronEvent({}), error);
   }
 }
 
@@ -42,7 +77,7 @@ test("retains Windows Action Center notifications after popup timeout", async ()
   const delivered = service.show(request);
   const native = FakeNativeNotification.instances[0]!;
   native.emit("show");
-  native.emit("close", { reason: "timedOut" });
+  native.emitClose({ reason: "timedOut" });
   expect(await delivered).toEqual({ status: "shown" });
   service.dispose();
   expect(native.close).toHaveBeenCalledTimes(1);
@@ -193,7 +228,7 @@ describe("Electron notification service", () => {
       getWindows: () => [],
     });
     const delivery = service.show(request);
-    FakeNativeNotification.instances[0]?.emit("failed", {}, "native failure");
+    FakeNativeNotification.instances[0]?.emitFailed("native failure");
     await expect(delivery).resolves.toEqual({ status: "failed", message: "native failure" });
     expect(service.getCapability()).toMatchObject({ failureMessage: "native failure" });
   });
@@ -231,7 +266,7 @@ describe("Electron notification service", () => {
       await delivery;
       if (changed) service.dispose();
       else url = "file:///app/index.html#/sessions";
-      native?.emit("close", { reason: "timedOut" });
+      native?.emitClose({ reason: "timedOut" });
       native?.emit("click");
 
       if (changed) {
@@ -266,14 +301,17 @@ describe("Electron notification service", () => {
 test("settles missing native confirmation and clears the failure after recovery", async () => {
   FakeNativeNotification.supported = true;
   FakeNativeNotification.instances = [];
-  let expire = () => {
+  let expire: () => void = () => {
     throw new Error("Expected a confirmation deadline");
   };
   const originalSetTimeout = globalThis.setTimeout;
-  const timer = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
-    if (delay === 10_000) expire = () => callback(...args);
-    return originalSetTimeout(callback, delay, ...args);
-  });
+  const timer = spyOn(globalThis, "setTimeout").mockImplementation(
+    // SAFETY: the replacement keeps the call shape and the return value of the real setTimeout.
+    ((callback: () => void, delay?: number) => {
+      if (delay === 10_000) expire = callback;
+      return originalSetTimeout(callback, delay);
+    }) as typeof setTimeout,
+  );
   const service = createElectronNotificationService({
     Notification: FakeNativeNotification,
     getPermission: () => "granted",
@@ -307,7 +345,7 @@ test.each(["close", "dispose"])("settles an unconfirmed notification on %s", asy
     getWindows: () => [],
   });
   const pending = service.show(request);
-  if (ending === "close") FakeNativeNotification.instances[0]?.emit("close");
+  if (ending === "close") FakeNativeNotification.instances[0]?.emitClose();
   else service.dispose();
   await expect(pending).resolves.toMatchObject({ status: "failed" });
   service.dispose();

@@ -8,31 +8,32 @@ type CorsFilter = Parameters<
   Parameters<typeof configureElectronLoopbackCorsPolicy>[0]["webRequest"]["onHeadersReceived"]
 >[0];
 
+type CorsListener = Parameters<
+  Parameters<typeof configureElectronLoopbackCorsPolicy>[0]["webRequest"]["onHeadersReceived"]
+>[1];
+
+/** The filter and listener that the CORS policy registered. */
+type RegisteredCorsPolicy = { filter: CorsFilter | null; listener: CorsListener | null };
+
 describe("configureElectronLoopbackCorsPolicy", () => {
   test("authorizes packaged file-origin renderer requests to loopback runtime responses", () => {
-    let registeredFilter: CorsFilter | null = null;
-    let listener:
-      | Parameters<
-          Parameters<
-            typeof configureElectronLoopbackCorsPolicy
-          >[0]["webRequest"]["onHeadersReceived"]
-        >[1]
-      | null = null;
+    const registered: RegisteredCorsPolicy = { filter: null, listener: null };
 
     configureElectronLoopbackCorsPolicy({
       webRequest: {
         onHeadersReceived(filter, registeredListener) {
-          registeredFilter = filter;
-          listener = registeredListener;
+          registered.filter = filter;
+          registered.listener = registeredListener;
         },
       },
     });
 
-    expect(registeredFilter).toEqual({ urls: ["http://127.0.0.1:*/*"] });
-    expect(listener).not.toBeNull();
+    expect(registered.filter).toEqual({ urls: ["http://127.0.0.1:*/*"] });
+    const listener = registered.listener;
+    if (!listener) throw new Error("Expected a CORS listener.");
 
     const responseHeaders: Array<Record<string, string[] | string>> = [];
-    listener?.({ responseHeaders: { "content-type": ["application/json"] } }, (response) => {
+    listener({ responseHeaders: { "content-type": ["application/json"] } }, (response) => {
       responseHeaders.push(response.responseHeaders);
     });
 

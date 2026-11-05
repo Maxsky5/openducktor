@@ -20,10 +20,12 @@ import {
   TERMINAL_PROTOCOL_SUBPROTOCOL,
   type HostChannelError,
   type HostCommandInputRecord,
+  type HostErrorResponse,
   type HostEventEnvelope,
   type NotificationStreamFrame,
   type RemoteHostDescriptor,
   type RemoteClientHello,
+  type StartupOperationSnapshot,
   type TaskEventStreamFrame,
 } from "@openducktor/contracts";
 import {
@@ -141,6 +143,26 @@ const fixture = (
     connections: () => requests.filter((request) => request.endsWith("/connections")).length,
   };
 };
+
+type Timer = ReturnType<typeof setTimeout>;
+type TimerCallback = (...args: unknown[]) => void;
+
+/** Replaces `setTimeout` for one test. The replacement keeps the call shape of the real one. */
+const spyOnSetTimeout = (
+  implementation: (callback: TimerCallback, delay?: number, ...args: unknown[]) => Timer,
+) =>
+  spyOn(globalThis, "setTimeout").mockImplementation(
+    // SAFETY: the replacement has the call signature of `setTimeout`. Only Node's `__promisify__`
+    // member, which no test calls, is missing.
+    implementation as typeof setTimeout,
+  );
+
+/** Replaces `clearTimeout` for one test. Every timer of these tests comes from `setTimeout`. */
+const spyOnClearTimeout = (implementation: (timer: Timer | undefined) => void) =>
+  spyOn(globalThis, "clearTimeout").mockImplementation(
+    // SAFETY: tests clear only the timers that `setTimeout` returned, never a string or a number.
+    implementation as typeof clearTimeout,
+  );
 
 const helloWith = (...optionalCapabilities: string[]): RemoteClientHello => ({
   ...hello,
@@ -294,12 +316,12 @@ test("a file transfer can outlast its completed setup deadline", async () => {
   const nativeSetTimeout = globalThis.setTimeout;
   const nativeClearTimeout = globalThis.clearTimeout;
   const deadlines = new Map<ReturnType<typeof setTimeout>, () => void>();
-  const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+  const timers = spyOnSetTimeout((callback, delay, ...args) => {
     const timer = nativeSetTimeout(callback, delay, ...args);
     if (delay === 10_000) deadlines.set(timer, () => callback(...args));
     return timer;
   });
-  const clears = spyOn(globalThis, "clearTimeout").mockImplementation((timer) => {
+  const clears = spyOnClearTimeout((timer) => {
     if (timer !== undefined) deadlines.delete(timer);
     nativeClearTimeout(timer);
   });
@@ -360,17 +382,15 @@ test.each(["idle", "synchronizing", "disconnected"])(
     const retry = latch<() => void>();
     const recovered = latch<void>();
     const original = globalThis.setTimeout;
-    const timers = spyOn(globalThis, "setTimeout").mockImplementation(
-      (callback, delay, ...args) => {
-        const timer = original(callback, delay, ...args);
-        if (delay === 500)
-          retry.resolve(() => {
-            clearTimeout(timer);
-            callback(...args);
-          });
-        return timer;
-      },
-    );
+    const timers = spyOnSetTimeout((callback, delay, ...args) => {
+      const timer = original(callback, delay, ...args);
+      if (delay === 500)
+        retry.resolve(() => {
+          clearTimeout(timer);
+          callback(...args);
+        });
+      return timer;
+    });
     const report = spyOn(console, "error").mockImplementation(() => {});
     const failure = new Error("The connection view failed.");
     let listening = true;
@@ -418,7 +438,7 @@ test("a slow command keeps its result after the setup deadlines pass", async () 
   const finish = latch<void>();
   const deadlines: Array<() => void> = [];
   const original = globalThis.setTimeout;
-  const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+  const timers = spyOnSetTimeout((callback, delay, ...args) => {
     const timer = original(callback, delay, ...args);
     if (delay === 10_000)
       deadlines.push(() => {
@@ -992,15 +1012,13 @@ test.each([200, 503])(
   async (status) => {
     const scheduled: Array<() => void> = [];
     const original = globalThis.setTimeout;
-    const timers = spyOn(globalThis, "setTimeout").mockImplementation(
-      (callback, delay, ...args) => {
-        if (delay === 10_000)
-          scheduled.push(() => {
-            callback(...args);
-          });
-        return original(callback, delay, ...args);
-      },
-    );
+    const timers = spyOnSetTimeout((callback, delay, ...args) => {
+      if (delay === 10_000)
+        scheduled.push(() => {
+          callback(...args);
+        });
+      return original(callback, delay, ...args);
+    });
     const signalSeen = latch<AbortSignal>();
     const transport: RemoteTransport = {
       request: async (_method, _url, _headers, signal) => {
@@ -1051,7 +1069,7 @@ test("a channel that does not finish setup fails within the setup deadline", asy
   });
   const scheduled: Array<() => void> = [];
   const original = globalThis.setTimeout;
-  const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+  const timers = spyOnSetTimeout((callback, delay, ...args) => {
     if (delay === 10_000) scheduled.push(() => callback(...args));
     return original(callback, delay, ...args);
   });
@@ -1154,7 +1172,7 @@ test("a silent channel ends the connection", async () => {
   const f = fixture();
   const silenceChecks: Array<() => void> = [];
   const originalTimer = globalThis.setTimeout;
-  const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+  const timers = spyOnSetTimeout((callback, delay, ...args) => {
     if (delay === HOST_CHANNEL_SILENCE_LIMIT_MS) silenceChecks.push(() => callback(...args));
     return originalTimer(callback, delay, ...args);
   });
@@ -1185,7 +1203,7 @@ test("each channel message restarts the silence check", async () => {
   const f = fixture();
   let checks = 0;
   const originalTimer = globalThis.setTimeout;
-  const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+  const timers = spyOnSetTimeout((callback, delay, ...args) => {
     if (delay === HOST_CHANNEL_SILENCE_LIMIT_MS) checks += 1;
     return originalTimer(callback, delay, ...args);
   });
@@ -1497,7 +1515,7 @@ test("a mutation with a reply over the size limit has an unknown outcome", async
 
 test("a startup failure keeps progress and its existing typed validation detail", async () => {
   const f = fixture();
-  const startupProgress = {
+  const startupProgress: StartupOperationSnapshot = {
     context: { startupAttemptId: "attempt", operationId: "create" },
     hostInstanceId: "instance-1",
     revision: 2,
@@ -1514,23 +1532,18 @@ test("a startup failure keeps progress and its existing typed validation detail"
         details: ["Branch already exists."],
       },
     ],
-  } as const;
+  };
+  // The response type also allows extra JSON fields, so its typed failure joins after creation.
+  const response: HostErrorResponse = { error: "Choose another branch." };
+  response.failure = {
+    kind: "workspace_session_validation",
+    field: "worktree.branchName",
+    startupProgress,
+  };
   let sends = 0;
   f.setInvoke(() => {
     sends += 1;
-    return {
-      error: {
-        kind: "host",
-        response: {
-          error: "Choose another branch.",
-          failure: {
-            kind: "workspace_session_validation",
-            field: "worktree.branchName",
-            startupProgress,
-          },
-        },
-      },
-    };
+    return { error: { kind: "host", response } };
   });
   const remote = createRemoteHostClient(
     "https://host.example/remote",
@@ -1669,7 +1682,7 @@ test("a stream check needs a channel message after a pause", async () => {
   const f = fixture();
   const windows: Array<{ delay: number; fire: () => void }> = [];
   const originalTimer = globalThis.setTimeout;
-  const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+  const timers = spyOnSetTimeout((callback, delay, ...args) => {
     if (delay !== undefined && delay >= 2_000 && delay <= 17_000)
       windows.push({ delay, fire: () => callback(...args) });
     return originalTimer(callback, delay, ...args);
@@ -1754,6 +1767,42 @@ test("runs a command that starts while the channel opens on that channel", async
     expect(f.connections()).toBe(1);
   } finally {
     handshake.resolve();
+    await remote.disconnect();
+  }
+});
+
+test("a task subscription that the host never answers loses the connection at the setup deadline", async () => {
+  const f = fixture([], {
+    answer: (request) => (request.method === "task_events.subscribe" ? "none" : undefined),
+  });
+  const nativeSetTimeout = globalThis.setTimeout;
+  const nativeClearTimeout = globalThis.clearTimeout;
+  const deadlines = new Map<ReturnType<typeof setTimeout>, () => void>();
+  const timers = spyOnSetTimeout((callback, delay, ...args) => {
+    const timer = nativeSetTimeout(callback, delay, ...args);
+    if (delay === 10_000) deadlines.set(timer, () => callback(...args));
+    return timer;
+  });
+  const clears = spyOnClearTimeout((timer) => {
+    if (timer !== undefined) deadlines.delete(timer);
+    nativeClearTimeout(timer);
+  });
+  const remote = createRemoteHostClient("https://host.example", hello, f.transport, async () => {});
+  try {
+    await remote.connect();
+    const subscription = remote
+      .subscribeTaskStream({ cursor: null }, () => {})
+      .catch((cause: unknown) => cause);
+    await until(() => f.channel.requests.some((r) => r.method === "task_events.subscribe"));
+    for (const expire of deadlines.values()) expire();
+
+    expect(await subscription).toMatchObject({
+      failure: { message: "The host did not answer a task stream request." },
+    });
+    expect(remote.readState().status).toBe("disconnected");
+  } finally {
+    timers.mockRestore();
+    clears.mockRestore();
     await remote.disconnect();
   }
 });

@@ -10,8 +10,21 @@ import { runElectronEffect } from "../../effect/electron-boundary";
 import {
   createElectronTerminalIpcController,
   type ElectronTerminalIpcHandler,
+  type ElectronTerminalService,
   registerElectronTerminalIpc,
 } from "./electron-terminal-ipc";
+
+/** A terminal service whose unused operations fail the test. */
+const terminalServiceFake = (
+  operations: Pick<ElectronTerminalService, "attach" | "detach"> & Partial<ElectronTerminalService>,
+): ElectronTerminalService => ({
+  acknowledge: () => Effect.die(new Error("Unexpected terminal acknowledgement.")),
+  resize: () => Effect.die(new Error("Unexpected terminal resize.")),
+  write: () => Effect.die(new Error("Unexpected terminal write.")),
+  observeActivity: () => Effect.die(new Error("Unexpected terminal activity observer.")),
+  observeList: () => Effect.die(new Error("Unexpected terminal list observer.")),
+  ...operations,
+});
 
 const makeAttachFrame = (): Uint8Array =>
   encodeTerminalProtocolFrame({
@@ -27,12 +40,16 @@ const makeAttachFrame = (): Uint8Array =>
 describe("Electron terminal IPC", () => {
   test("decodes frames and scopes attachments to the sender", async () => {
     const calls: string[] = [];
-    const terminalService: TerminalService = {
+    const terminalService = terminalServiceFake({
       attach: (input: { attachmentId: string; terminalId: string }) =>
-        Effect.sync(() => calls.push(`attach:${input.attachmentId}`)),
+        Effect.sync(() => {
+          calls.push(`attach:${input.attachmentId}`);
+        }),
       detach: (_terminalId: string, attachmentId: string) =>
-        Effect.sync(() => calls.push(`detach:${attachmentId}`)),
-    };
+        Effect.sync(() => {
+          calls.push(`detach:${attachmentId}`);
+        }),
+    });
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     const frame = makeAttachFrame();
@@ -53,10 +70,10 @@ describe("Electron terminal IPC", () => {
         },
       },
       reportLifecycleFailure: () => undefined,
-      terminalService: {
+      terminalService: terminalServiceFake({
         attach: () => Effect.void,
         detach: () => Effect.void,
-      },
+      }),
     });
     if (sendHandler === undefined) throw new Error("Expected terminal send handler registration.");
 
@@ -82,12 +99,16 @@ describe("Electron terminal IPC", () => {
 
   test("disconnects one logical renderer client without waiting for WebContents teardown", async () => {
     const calls: string[] = [];
-    const terminalService: TerminalService = {
+    const terminalService = terminalServiceFake({
       attach: (input: Parameters<TerminalService["attach"]>[0]) =>
-        Effect.sync(() => calls.push(`attach:${input.attachmentId}`)),
+        Effect.sync(() => {
+          calls.push(`attach:${input.attachmentId}`);
+        }),
       detach: (_terminalId: string, attachmentId: string) =>
-        Effect.sync(() => calls.push(`detach:${attachmentId}`)),
-    };
+        Effect.sync(() => {
+          calls.push(`detach:${attachmentId}`);
+        }),
+    });
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     const frame = makeAttachFrame();
@@ -104,7 +125,7 @@ describe("Electron terminal IPC", () => {
   test("tries every renderer client and retries failed cleanup on later teardown", async () => {
     const attempts: string[] = [];
     let failCleanup = true;
-    const terminalService: TerminalService = {
+    const terminalService = terminalServiceFake({
       attach: () => Effect.void,
       detach: (terminalId, attachmentId) =>
         Effect.suspend(() => {
@@ -121,7 +142,7 @@ describe("Electron terminal IPC", () => {
           }
           return Effect.void;
         }),
-    };
+    });
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     const frame = makeAttachFrame();
@@ -186,7 +207,7 @@ describe("Electron terminal IPC", () => {
         reported.push(cause);
         markReported();
       },
-      terminalService: {
+      terminalService: terminalServiceFake({
         attach: () => Effect.void,
         detach: (terminalId, attachmentId) =>
           Effect.suspend(() => {
@@ -204,7 +225,7 @@ describe("Electron terminal IPC", () => {
             markRetried();
             return Effect.void;
           }),
-      },
+      }),
     });
     if (!sendHandler) throw new Error("Expected terminal send handler registration.");
     await sendHandler(
@@ -257,7 +278,7 @@ describe("Electron terminal IPC", () => {
         },
       },
       reportLifecycleFailure: (senderId, cause) => reportFailure({ senderId, cause }),
-      terminalService: {
+      terminalService: terminalServiceFake({
         attach: (input) =>
           Effect.sync(() => {
             sink = input.sink;
@@ -276,7 +297,7 @@ describe("Electron terminal IPC", () => {
                 )
               : Effect.void;
           }),
-      },
+      }),
     });
     if (!sendHandler || !disconnectHandler) {
       throw new Error("Expected terminal send and disconnect handler registration.");
@@ -330,26 +351,28 @@ describe("Electron terminal IPC", () => {
       releaseDetach = resolve;
     });
     let failFirst = true;
-    const controller = createElectronTerminalIpcController({
-      attach: () => Effect.void,
-      detach: (terminalId, attachmentId) =>
-        Effect.gen(function* () {
-          attempts.push(attachmentId);
-          if (attachmentId.includes(":client-a:") && failFirst) {
-            failFirst = false;
-            startDetach();
-            yield* Effect.promise(() => blockedDetach);
-            return yield* Effect.fail(
-              new TerminalServiceError({
-                code: "close_failed",
-                operation: "detach",
-                message: "Injected concurrent detach failure",
-                terminalId,
-              }),
-            );
-          }
-        }),
-    });
+    const controller = createElectronTerminalIpcController(
+      terminalServiceFake({
+        attach: () => Effect.void,
+        detach: (terminalId, attachmentId) =>
+          Effect.gen(function* () {
+            attempts.push(attachmentId);
+            if (attachmentId.includes(":client-a:") && failFirst) {
+              failFirst = false;
+              startDetach();
+              yield* Effect.promise(() => blockedDetach);
+              return yield* Effect.fail(
+                new TerminalServiceError({
+                  code: "close_failed",
+                  operation: "detach",
+                  message: "Injected concurrent detach failure",
+                  terminalId,
+                }),
+              );
+            }
+          }),
+      }),
+    );
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     const frame = makeAttachFrame();
     await Effect.runPromise(controller.handleFrame(sender, "client-a", frame));
@@ -385,15 +408,20 @@ describe("Electron terminal IPC", () => {
       const blockedDetach = new Promise<void>((resolve) => {
         releaseDetach = resolve;
       });
-      const controller = createElectronTerminalIpcController({
-        attach: ({ attachmentId }) => Effect.sync(() => attachments.add(attachmentId)),
-        detach: (_terminalId, attachmentId) =>
-          Effect.gen(function* () {
-            startDetach();
-            yield* Effect.promise(() => blockedDetach);
-            attachments.delete(attachmentId);
-          }),
-      });
+      const controller = createElectronTerminalIpcController(
+        terminalServiceFake({
+          attach: ({ attachmentId }) =>
+            Effect.sync(() => {
+              attachments.add(attachmentId);
+            }),
+          detach: (_terminalId, attachmentId) =>
+            Effect.gen(function* () {
+              startDetach();
+              yield* Effect.promise(() => blockedDetach);
+              attachments.delete(attachmentId);
+            }),
+        }),
+      );
       const sender = {
         id: 7,
         isDestroyed: () => false,
@@ -431,7 +459,7 @@ describe("Electron terminal IPC", () => {
 
   test("reports repeated stale attaches without retaining sender attachments", async () => {
     const detached: string[] = [];
-    const terminalService: TerminalService = {
+    const terminalService = terminalServiceFake({
       attach: ({ terminalId }: Parameters<TerminalService["attach"]>[0]) =>
         Effect.fail(
           new TerminalServiceError({
@@ -441,8 +469,11 @@ describe("Electron terminal IPC", () => {
             terminalId,
           }),
         ),
-      detach: (terminalId: string) => Effect.sync(() => detached.push(terminalId)),
-    };
+      detach: (terminalId: string) =>
+        Effect.sync(() => {
+          detached.push(terminalId);
+        }),
+    });
     const controller = createElectronTerminalIpcController(terminalService);
     const sent: Uint8Array[] = [];
     const sender = {
@@ -493,7 +524,7 @@ describe("Electron terminal IPC", () => {
     });
     const attachments = new Set<string>();
     const operations: string[] = [];
-    const terminalService: TerminalService = {
+    const terminalService = terminalServiceFake({
       attach: (input: Parameters<TerminalService["attach"]>[0]) =>
         Effect.sync(() => {
           operations.push("attach");
@@ -518,7 +549,7 @@ describe("Electron terminal IPC", () => {
                 terminalId,
               }),
             ),
-    };
+    });
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     const frame = (

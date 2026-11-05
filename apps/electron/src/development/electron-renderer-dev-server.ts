@@ -24,7 +24,10 @@ type ElectronDevRendererServerHandle = {
   /** Closes Vite. */
   close(): Promise<void>;
   /** The HTTP server that serves the Vite middlewares. The dev script owns it, not Vite. */
-  httpServer: Pick<Server, "closeAllConnections" | "close">;
+  httpServer: {
+    closeAllConnections(): void;
+    close(callback: (error?: Error) => void): void;
+  };
 };
 
 export type ElectronRendererDevServer = {

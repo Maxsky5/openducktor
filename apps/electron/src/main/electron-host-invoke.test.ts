@@ -5,6 +5,7 @@ import { AgentSessionMessageAcceptedError } from "../../../../packages/host/src/
 import { createElectronHostInvoke, runElectronHostChannelInvoke } from "./electron-host-invoke";
 import {
   HostOperationError,
+  OpenDucktorLogPersistenceError,
   RuntimeQueryError,
   hostInvokeFailureFromError,
 } from "@openducktor/host";
@@ -256,9 +257,7 @@ describe("runElectronHostChannelInvoke", () => {
 test.each(["set_theme", "workspace_get_settings_snapshot"] as const)(
   "%s updates the native theme after success",
   async (command) => {
-    const nativeTheme = { themeSource: "light" } satisfies Parameters<
-      typeof createElectronHostInvoke
-    >[2];
+    const nativeTheme: Parameters<typeof createElectronHostInvoke>[2] = { themeSource: "light" };
     const snapshot = settingsSnapshotSchema.parse({
       theme: "dark",
       agentRuntimes: DEFAULT_AGENT_RUNTIMES,
@@ -305,7 +304,12 @@ test.each([false, true])(
       retryAllowed: false,
       message: "Refresh before continuing.",
     });
-    const persistenceFailure = new Error("Log write failed.");
+    const persistenceFailure = new OpenDucktorLogPersistenceError({
+      message: "Log write failed.",
+      operation: "append",
+      path: "/tmp/openducktor.log",
+      cause: null,
+    });
     const bindings = createElectronMainRuntimeBindings({
       error: () => (loggingFails ? Effect.fail(persistenceFailure) : Effect.void),
       info: () => Effect.void,

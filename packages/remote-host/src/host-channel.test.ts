@@ -1,4 +1,4 @@
-import { afterEach, expect, spyOn, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import {
   HOST_CHANNEL_HEARTBEAT_INTERVAL_MS,
   hostEventEnvelopeSchema,
@@ -19,6 +19,7 @@ import {
   liveSessionStreamEventName,
 } from "@openducktor/host-client";
 import { createTaskEventLeaseManager } from "./task-event-leases";
+import { holdIntervals } from "./timers.test-support";
 
 const runEvent = (index: number): HostEventEnvelope => ({
   channel: "openducktor://run-event",
@@ -307,14 +308,14 @@ test("sends a command result as the reply body", async () => {
   const socket = createHost({
     invoke: async (command, args) => {
       calls.push([command, args]);
-      return { result: { platform: "linux" } };
+      return { result: "linux" };
     },
   }).connect();
   const id = socket.request({ method: "invoke", command: "system_get_platform", args: { a: 1 } });
   await waitFor(() => socket.reply(id) !== undefined, "command reply");
 
   expect(calls).toEqual([["system_get_platform", { a: 1 }]]);
-  expect(socket.result(id)).toEqual({ platform: "linux" });
+  expect(socket.result(id)).toBe("linux");
 });
 
 /** A host whose commands run until their signal aborts, and record that abort. */
@@ -606,30 +607,16 @@ test.each(["not json", '{"type":"request","id":0,"method":"unknown"}', '{"type":
 );
 
 test("sends a heartbeat at its interval and stops it when the socket closes", () => {
-  const beats: Array<() => void> = [];
-  const timers: Array<ReturnType<typeof setInterval>> = [];
-  const originalInterval = globalThis.setInterval;
-  const intervals = spyOn(globalThis, "setInterval").mockImplementation(
-    (callback, delay, ...args) => {
-      const timer = originalInterval(callback, delay, ...args);
-      if (delay === HOST_CHANNEL_HEARTBEAT_INTERVAL_MS) {
-        beats.push(() => callback(...args));
-        timers.push(timer);
-      }
-      return timer;
-    },
-  );
-  const clears = spyOn(globalThis, "clearInterval");
+  const heartbeats = holdIntervals(HOST_CHANNEL_HEARTBEAT_INTERVAL_MS);
   try {
     const socket = createHost().connect();
-    expect(beats).toHaveLength(1);
-    beats[0]!();
+    expect(heartbeats.held.size).toBe(1);
+    for (const beat of heartbeats.held.values()) beat();
     expect(socket.ofType("heartbeat")).toHaveLength(1);
     socket.disconnect();
-    expect(clears).toHaveBeenCalledWith(timers[0]);
+    expect(heartbeats.held.size).toBe(0);
   } finally {
-    intervals.mockRestore();
-    clears.mockRestore();
+    heartbeats.restore();
   }
 });
 

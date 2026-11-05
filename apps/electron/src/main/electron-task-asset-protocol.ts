@@ -21,7 +21,7 @@ const errorResponse = (status: 404 | 500): Response =>
   });
 
 export const registerElectronTaskAssetProtocol = (input: {
-  readService: TaskAssetReadService;
+  readService: Pick<TaskAssetReadService, "read">;
   session: ElectronTaskAssetSession;
 }): void => {
   input.session.protocol.handle(ELECTRON_TASK_ASSET_PROTOCOL, async (request) => {

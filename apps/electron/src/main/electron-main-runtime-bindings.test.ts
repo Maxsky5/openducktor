@@ -2,10 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { CodexSessionHistoryError } from "@openducktor/host";
+import { CodexSessionHistoryError, OpenDucktorLogPersistenceError } from "@openducktor/host";
 import { Effect } from "effect";
 import { createElectronMainLogger, type ElectronMainLogger } from "./electron-main-logger";
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
+
+const logPersistenceError = (message: string) =>
+  new OpenDucktorLogPersistenceError({
+    message,
+    operation: "append",
+    path: "/tmp/openducktor.log",
+    cause: null,
+  });
 
 describe("createElectronMainRuntimeBindings", () => {
   test("shares one logger with lifecycle and update consumers", async () => {
@@ -98,7 +106,7 @@ describe("createElectronMainRuntimeBindings", () => {
   test("preserves host command and persistence failures together", async () => {
     const command = "runtime.session.context-usage";
     const commandFailure = new Error("Codex session was released");
-    const persistenceFailure = new Error("openducktor.logs.append failed");
+    const persistenceFailure = logPersistenceError("openducktor.logs.append failed");
     const logger: ElectronMainLogger = {
       error: () => Effect.fail(persistenceFailure),
       info: () => Effect.void,
@@ -139,7 +147,7 @@ describe("createElectronMainRuntimeBindings", () => {
             await errorLogGate;
             errorPersisted = true;
           },
-          catch: (cause) => cause,
+          catch: (cause) => logPersistenceError(String(cause)),
         }),
       info: () => Effect.void,
       warn: () => Effect.void,

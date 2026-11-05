@@ -1,6 +1,10 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
-import { createFilesystemRemoteApprovalStore } from "@openducktor/host";
+import {
+  createFilesystemRemoteApprovalStore,
+  type TaskAssetReadResult,
+  type TaskAssetReadService,
+} from "@openducktor/host";
 import { admittedWorkOptions, memoryApprovalStore } from "./remote-approval.test-support";
 import { afterAll, expect, spyOn, test } from "bun:test";
 import { Effect, Fiber, Stream } from "effect";
@@ -37,6 +41,7 @@ import { hostWebSocketHandler } from "./host-websocket-handler";
 import { openRemoteChannelClient } from "./host-channel.test-support";
 import { createRemoteAccessController } from "./remote-access-controller";
 import { createHostCommandLifetime } from "./host-command-lifetime";
+import { holdIntervals, holdTimeouts } from "./timers.test-support";
 
 afterAll(removeFakeShell);
 const hello: RemoteConnectionRequest = {
@@ -76,7 +81,10 @@ const fixture = async (barrier?: MutationBarrier) => {
     terminalService: terminal.service,
     taskEventStream: createTaskEventStream({ reporter: { report: () => {} } }),
     notificationStream: notifications,
-    taskAssetReadService: { read: () => Effect.succeed(null) },
+    taskAssetReadService: {
+      read: () => Effect.succeed(null),
+      readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),
+    } satisfies TaskAssetReadService,
     eventBus,
   };
   const options = {
@@ -789,18 +797,8 @@ test("one connection holds at most 32 task leases across its channels", async ()
 });
 
 test("an open channel holds its admission, and closing the last channel arms its expiry", async () => {
-  const originalSet = globalThis.setTimeout;
-  const originalClear = globalThis.clearTimeout;
-  const idle = new Map<ReturnType<typeof setTimeout>, () => void>();
-  const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
-    const timer = originalSet(callback, delay, ...args);
-    if (delay === 60_000) idle.set(timer, () => callback(...args));
-    return timer;
-  });
-  const clears = spyOn(globalThis, "clearTimeout").mockImplementation((timer) => {
-    if (timer !== undefined) idle.delete(timer);
-    originalClear(timer);
-  });
+  const expiries = holdTimeouts(60_000);
+  const idle = expiries.held;
   const f = await fixture();
   try {
     const id = (await f.negotiate()).result.connectionId;
@@ -825,8 +823,7 @@ test("an open channel holds its admission, and closing the last channel arms its
     ).toBe(409);
   } finally {
     await f.close();
-    timers.mockRestore();
-    clears.mockRestore();
+    expiries.restore();
   }
 });
 
@@ -866,23 +863,16 @@ test("ending the listener leaves accepted channel work under the host command li
 
 test("keeps an idle channel busy with heartbeat messages", async () => {
   const f = await fixture();
-  const beats: Array<() => void> = [];
-  const originalInterval = globalThis.setInterval;
-  const intervals = spyOn(globalThis, "setInterval").mockImplementation(
-    (callback, delay, ...args) => {
-      if (delay === HOST_CHANNEL_HEARTBEAT_INTERVAL_MS) beats.push(() => callback(...args));
-      return originalInterval(callback, delay, ...args);
-    },
-  );
+  const heartbeats = holdIntervals(HOST_CHANNEL_HEARTBEAT_INTERVAL_MS);
   try {
     const channel = await f.channel((await f.negotiate()).result.connectionId);
     await channel.request({ method: "events.open", cursor: null, notificationCursor: null });
     // With no host event, only the heartbeat keeps messages on the channel.
-    beats.at(-1)!();
+    for (const beat of heartbeats.held.values()) beat();
     expect((await channel.next("heartbeat")).header).toEqual({ type: "heartbeat" });
     await channel.close();
   } finally {
-    intervals.mockRestore();
+    heartbeats.restore();
     await f.close();
   }
 });
@@ -1028,14 +1018,21 @@ test.each(["pending", "transferring"])(
       {
         ...f.services,
         taskAssetReadService: {
+          ...f.services.taskAssetReadService,
           read: () =>
             Effect.promise(async () => {
               started.resolve();
               if (phase === "pending") await gate.promise;
               return {
                 bytes: new Uint8Array(8 * 1024 * 1024),
-                headers: { "content-type": "application/octet-stream" },
-              };
+                mediaType: "image/png",
+                headers: {
+                  "Cache-Control": "no-store, private",
+                  "Content-Disposition": "inline",
+                  "Content-Type": "image/png",
+                  "X-Content-Type-Options": "nosniff",
+                },
+              } satisfies TaskAssetReadResult;
             }),
         },
       },

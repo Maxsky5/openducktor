@@ -331,6 +331,25 @@ export const createRemoteHostClient = (
     publish(canRetry(error) ? "disconnected" : "failed", error.failure);
     if (canRetry(error)) schedule();
   };
+  /**
+   * Bounds a task stream request by the setup deadline. A host that keeps its channel open but does
+   * not answer would otherwise hold the recovery barrier, so a missed deadline loses the connection.
+   */
+  const withinSetup = <T>(current: number, operation: Promise<T>): Promise<T> => {
+    const timer = setTimeout(
+      () =>
+        lost(
+          current,
+          remoteError(
+            "transport_failure",
+            "The host did not answer a task stream request.",
+            "Reconnect to the selected host.",
+          ),
+        ),
+      SETUP_TIMEOUT_MS,
+    );
+    return operation.finally(() => clearTimeout(timer));
+  };
   /** The WebSocket URL of a host route. */
   const socketUrl = (path: string): string => {
     const url = new URL(`${base}${path}`);
@@ -810,17 +829,18 @@ export const createRemoteHostClient = (
       const ready = deferred<void>();
       let boundary: TaskEventCursor | null = null;
       // Create the lease even if the view closes, so cleanup can release it.
-      const { subscriptionId } = await session
-        .subscribeTaskEvents(input, (frame) => {
+      const { subscriptionId } = await withinSetup(
+        current,
+        session.subscribeTaskEvents(input, (frame) => {
           if (generation !== current || combined.aborted) return;
           if (frame.type === "snapshot_required") boundary = frame.cursor;
           onFrame(frame);
-        })
-        .then((lease) => {
-          // A snapshot frame can arrive before this continuation. It moves the boundary on.
-          boundary ??= lease.replayBoundary;
-          return lease;
-        }, throwChannelRequestError);
+        }),
+      ).then((lease) => {
+        // A snapshot frame can arrive before this continuation. It moves the boundary on.
+        boundary ??= lease.replayBoundary;
+        return lease;
+      }, throwChannelRequestError);
       const reachedBoundary = (cursor: TaskEventCursor | null) =>
         cursor !== null &&
         boundary !== null &&
@@ -834,7 +854,7 @@ export const createRemoteHostClient = (
         combined.removeEventListener("abort", fail);
         if (generation !== current || hostSignal.aborted) return;
         try {
-          await session.releaseTaskEvents(subscriptionId);
+          await withinSetup(current, session.releaseTaskEvents(subscriptionId));
         } catch (cause) {
           throwChannelRequestError(cause);
         }
@@ -853,7 +873,10 @@ export const createRemoteHostClient = (
               "Restore the task subscription on the current connection.",
             );
           try {
-            await session.request({ method: "task_events.ack", subscriptionId, cursor }, combined);
+            await withinSetup(
+              current,
+              session.request({ method: "task_events.ack", subscriptionId, cursor }, combined),
+            );
           } catch (cause) {
             throwChannelRequestError(cause);
           }
