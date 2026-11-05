@@ -13,6 +13,11 @@ import {
 } from "@openducktor/contracts";
 
 export {
+  BROWSER_EVENT_STREAM_NAME,
+  STARTUP_EVENT_STREAM_NAME,
+  hostEventStreamEventName,
+} from "./host-event-stream-name";
+export {
   createAgentSessionLiveAttachment,
   envelopeRepoPath as agentSessionLiveEnvelopeRepoPath,
   liveSessionStreamEventName,

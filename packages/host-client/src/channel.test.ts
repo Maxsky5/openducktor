@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   encodeHostChannelFrame,
-  hostChannelRequestSchema,
+  hostChannelClientMessageSchema,
   type HostChannelMessage,
-  type HostChannelRequestMessage,
+  type HostChannelClientMessage,
   type NotificationStreamFrame,
   type TaskEventStreamFrame,
 } from "@openducktor/contracts";
@@ -24,11 +24,11 @@ const snapshot: TaskEventStreamFrame = {
 };
 
 const setup = (handlers: Partial<HostChannelHandlers> = {}) => {
-  const sent: HostChannelRequestMessage[] = [];
+  const sent: HostChannelClientMessage[] = [];
   const handlerErrors: unknown[] = [];
   const session = createHostChannelSession({
     send: (frame) =>
-      sent.push(hostChannelRequestSchema.parse(JSON.parse(new TextDecoder().decode(frame)))),
+      sent.push(hostChannelClientMessageSchema.parse(JSON.parse(new TextDecoder().decode(frame)))),
     handlers: { hostEvent: () => {}, notification: () => {}, ...handlers },
     onHandlerError: (cause) => handlerErrors.push(cause),
   });
@@ -79,8 +79,8 @@ describe("createHostChannelSession", () => {
     expect(result.cause).toMatchObject({ error, message: expect.stringContaining(message) });
   });
 
-  test("an abort rejects at once and drops the later reply", async () => {
-    const { session, receive } = setup();
+  test("an abort rejects at once, tells the host, and drops the later reply", async () => {
+    const { session, receive, sent } = setup();
     const caller = new AbortController();
     const request = session.request(
       { method: "invoke", command: "git_check", args: {} },
@@ -89,6 +89,7 @@ describe("createHostChannelSession", () => {
     const reason = new Error("Timed out.");
     caller.abort(reason);
     expect((await settled(request)).cause).toBe(reason);
+    expect(sent.at(-1)).toEqual({ type: "cancel", id: 0 });
     expect(() => receive({ type: "result", id: 0 }, "true")).not.toThrow();
   });
 

@@ -1,7 +1,6 @@
 import {
   hostInvokeFailureFromError,
   HostOperationError,
-  type HostCommandName,
   type HostCommandResult,
   type EffectNodeHostCommandRouter,
 } from "@openducktor/host";
@@ -10,13 +9,14 @@ import {
   settingsSnapshotSchema,
   themePreferenceSchema,
   type HostCommandArgs,
+  type HostErrorResponse,
   type ThemePreference,
 } from "@openducktor/contracts";
 import { errorMessage } from "../effect/electron-errors";
 import type { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 
 import { runElectronEffect } from "../effect/electron-boundary";
-import type { ElectronHostInvokeResult } from "../shared/electron-bridge-contract";
+import type { HostChannelReply } from "@openducktor/remote-host/host-channel";
 
 type InvokeFailure =
   ReturnType<EffectNodeHostCommandRouter["invoke"]> extends Effect.Effect<
@@ -52,7 +52,8 @@ export const createElectronHostInvoke =
         ),
       );
       return Effect.tryPromise({
-        try: () => bindings.runHostCommand(command, operation),
+        // An interrupted read aborts the signal, so the command stops and runs its cleanup.
+        try: (signal) => bindings.runHostCommand(command, operation, signal),
         catch: (cause) => {
           if (hostFailure !== undefined && cause === hostFailure) return hostFailure;
           return new HostOperationError({
@@ -65,25 +66,17 @@ export const createElectronHostInvoke =
       });
     });
 
-export const runElectronHostInvoke = async <Command extends HostCommandName, E extends Error>(
-  effect: Effect.Effect<HostCommandResult<Command>, E>,
-  execute: (
-    effect: Effect.Effect<HostCommandResult<Command>, E>,
-  ) => Promise<HostCommandResult<Command>> = runElectronEffect,
-): Promise<ElectronHostInvokeResult<Command>> => {
+/** Runs a command of a desktop window and returns its result or its host error payload. */
+export const runElectronHostChannelInvoke = async <E extends Error>(
+  effect: Effect.Effect<HostCommandResult, E>,
+  signal?: AbortSignal,
+): Promise<HostChannelReply> => {
   try {
-    return { ok: true, value: await execute(effect) };
+    return { result: await runElectronEffect(effect, signal) };
   } catch (cause) {
+    const response: HostErrorResponse = { message: errorMessage(cause) };
     const failure = hostInvokeFailureFromError(cause);
-    const error: Extract<ElectronHostInvokeResult<Command>, { ok: false }>["error"] = {
-      message: errorMessage(cause),
-    };
-    if (failure) {
-      error.failure = failure;
-    }
-    return {
-      ok: false,
-      error,
-    };
+    if (failure) response.failure = failure;
+    return { error: { kind: "host", response } };
   }
 };

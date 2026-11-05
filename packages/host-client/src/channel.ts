@@ -150,6 +150,12 @@ export const createHostChannelSession = ({
       const abort = () => {
         if (!pending.delete(id)) return;
         reject(signal?.reason);
+        // The host interrupts a running read and sends no answer.
+        try {
+          send(encodeHostChannelFrame({ type: "cancel", id }));
+        } catch {
+          // A closed socket already ended the request on the host.
+        }
       };
       const settle = () => signal?.removeEventListener("abort", abort);
       const entry: Pending = {

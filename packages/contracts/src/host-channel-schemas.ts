@@ -86,8 +86,25 @@ export const hostChannelRequestSchema = z.discriminatedUnion("method", [
     method: z.literal("remote_access.unobserve"),
   }),
 ]);
-/** A message from a client to the host. */
+/** A client request message. */
 export type HostChannelRequestMessage = z.infer<typeof hostChannelRequestSchema>;
+
+/**
+ * The client no longer waits for request `id`. The host interrupts a running host read command and
+ * sends no answer. A command that can change host state keeps running.
+ */
+export const hostChannelCancelSchema = z.strictObject({
+  type: z.literal("cancel"),
+  id: requestIdSchema,
+});
+export type HostChannelCancelMessage = z.infer<typeof hostChannelCancelSchema>;
+
+/** A message from a client to the host. */
+export const hostChannelClientMessageSchema = z.union([
+  hostChannelRequestSchema,
+  hostChannelCancelSchema,
+]);
+export type HostChannelClientMessage = z.infer<typeof hostChannelClientMessageSchema>;
 type DistributiveOmit<Value, Key extends PropertyKey> = Value extends unknown
   ? Omit<Value, Key>
   : never;
@@ -152,7 +169,7 @@ const LINE_FEED = 0x0a;
 
 /** Encodes one frame. A body must be JSON text. */
 export const encodeHostChannelFrame = (
-  header: HostChannelMessage | HostChannelRequestMessage,
+  header: HostChannelMessage | HostChannelClientMessage,
   body?: string,
 ): Uint8Array => {
   const text = JSON.stringify(header);

@@ -117,7 +117,7 @@ Without `--base-path`, the browser reaches the host on the backend port, so the 
 
 - `packages/frontend` owns the React app, `bootstrapOpenDucktorShell`, and `ShellBridge` types.
 - `packages/frontend-core` owns the shared client behavior and the `ClientConnection` that the bootstrap creates for the selected host.
-- `apps/electron` implements the bridge with preload IPC and delegates host work to `@openducktor/host`.
+- `apps/electron` implements the bridge with the host channel of its main process and preload IPC for shell functions, and delegates host work to `@openducktor/host`.
 - `packages/openducktor-web` implements the bridge with one host channel WebSocket per browser tab, and HTTP for files and operator actions.
 - `packages/openducktor-web/src/typescript-host-backend.ts` owns its host and private browser backend.
 - `packages/remote-host` attaches the shared network work interface to either shell.

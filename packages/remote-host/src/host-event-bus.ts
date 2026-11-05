@@ -4,7 +4,7 @@ import {
   parseHostEventChannel,
 } from "@openducktor/contracts";
 import type { HostEventBusPort, HostEventListener, HostEventUnsubscribe } from "@openducktor/host";
-import { hostEventStreamEventName } from "./host-event-stream-name";
+import { hostEventStreamEventName } from "@openducktor/host-client";
 import { WebResourceError } from "./effect/web-errors";
 
 export type BufferedHostEvent = {

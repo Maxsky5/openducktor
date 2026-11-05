@@ -24,7 +24,7 @@ See [the web runner guide](web-runner.md#deploy-your-own-copy) for the static cl
 
 Remote access is an extra entry point to the running Electron or web host.
 Both shells use `@openducktor/remote-host` and the same command router, event journal, host channel, task and notification streams, terminal service, and resource readers as their local frontend.
-Electron keeps its existing renderer and preload IPC.
+Each Electron window opens the host channel of its own host on a loopback listener. Preload IPC keeps only shell functions, such as terminals, browser tabs, updates, and notifications.
 Closing the Electron window still stops its host and all remote connections.
 
 Remote access is disabled by default. No pairing code exists until the local operator selects Add device. Add device opens a pairing window with one six-digit code that approves one new client. The window closes when a client pairs, after five minutes, after five wrong codes, when the operator selects Stop pairing, or when Remote control stops. The operator state reports why the last window closed in `pairingEnd`: `paired`, `expired`, `refused` after five wrong codes, or `stopped`. While the operator keeps the pairing view open, an expired code gets a new one at once, and the old code stays dimmed until the new one arrives. A pairing shows Device paired, and five wrong codes show why pairing stopped. A closed window refuses every code, so code guessing never outlasts one operator request. The view asks for the next code with `startPairing({ renew: true })`. A renewal of an open or expired window keeps the count of wrong codes, so a view that stays open gives no fresh guesses. Add device sends no `renew` and starts a new count. Approval needs no separate host click. The pairing view shows two numbered steps: the host address with Copy, then the code. The QR code tab shows the same address and code for the mobile app, and the QR code is created only when the operator opens that tab. Copy address copies no secret. Pairing QR codes contain the address and current code, never a saved credential.
@@ -43,7 +43,8 @@ The shell owns the host, and the network adapter owns its listener and connectio
 
 ```mermaid
 flowchart TD
-    E["Electron IPC frontend"] --> H["Existing host services"]
+    E["Electron window"] --> D["Desktop channel listener"]
+    D --> H["Existing host services"]
     L["Private browser frontend"] --> H
     R["Remote native or browser client"] --> N["Shared network adapter"]
     N --> H
@@ -246,11 +247,11 @@ Report only the evidence the platform supplies.
 
 ## Host channel
 
-Each client opens one host channel WebSocket. Remote clients open `R/channel` after admission. The local web runner opens `/channel` with its session cookie. Browsers allow only six HTTP/1.1 connections per site, and WebSockets do not count against that limit. So one client never blocks the requests of another client of the same host. `packages/contracts/src/host-channel-schemas.ts` defines every message.
+Each client opens one host channel WebSocket. Remote clients open `R/channel` after admission. The local web runner opens `/channel` with its session cookie. An Electron window opens the `/channel` route of a loopback listener in the Electron main process. That listener serves no other route, checks the renderer origin and the `Host` header, and needs a per-launch token in the `openducktor-authorization.<token>` subprotocol tag. Only OpenDucktor windows get the token, over preload IPC. Browsers allow only six HTTP/1.1 connections per site, and WebSockets do not count against that limit. So one client never blocks the requests of another client of the same host. `packages/contracts/src/host-channel-schemas.ts` defines every message.
 
 The channel uses binary frames of UTF-8 text. Each frame starts with one JSON header. An optional JSON body follows the first line feed. A client reads a body only when it needs it.
 
-The client sends requests. Each request has a numeric `id`, and the host answers it with a `result` frame, whose body is the result, or an `error` frame.
+The client sends requests and cancels. Each request has a numeric `id`, and the host answers it with a `result` frame, whose body is the result, or an `error` frame.
 
 | Request method | Use |
 |---|---|
@@ -277,7 +278,7 @@ A network path, such as a NAT, a proxy, or the Android emulator, can drop an idl
 
 The host compresses frames of 1 KiB or more when the client negotiated `permessage-deflate`. Task frames wait while the socket buffers 1 MiB or more and resume when it drains. A client that lets 64 MiB of events queue up cannot keep up, so the host closes its channel with code 1013, and the client reconnects and replays.
 
-A client can stop waiting for a request with an `AbortSignal`, for example at a diagnostics deadline. The client drops the request at once and holds no connection for it. The host does not bind accepted work to the socket, so it can still run the command.
+A client can stop waiting for a request with an `AbortSignal`, for example at a diagnostics deadline. The client drops the request at once, holds no connection for it, and sends `{ "type": "cancel", "id": ... }`. The host interrupts a running command of `HOST_READ_COMMAND_NAMES`, which runs its cleanup, and sends no answer. A closed socket also interrupts its running reads. A command that can change host state keeps running after a cancel or a socket loss, because an interrupted change can leave partial state. The diagnostics checks `path_check`, `git_check`, and `task_store_check` refresh or prepare host state, so they also keep running.
 
 ## Reply size and compact history
 
@@ -300,7 +301,7 @@ The remote client asks for compact history only from a host with `history.tool_d
 
 Remote browser task assets and staged previews use the current client's admission header. The browser bridge returns Blob data with the host's media type. TanStack Query shares each resource read while views use it, and removes inactive resource data with `gcTime: 0`. Each view creates its own Blob URL and revokes it when its source changes or the view closes. Closing the last view also cancels an unfinished resource read. These reads keep the existing asset and staged-file limits and access checks.
 
-Resource query keys include the connection generation. A new admission starts new resource reads. A resource failure stays visible in its view and does not fail the current-work recovery barrier. Electron and the private browser keep their existing resource URLs and IPC or local HTTP delivery.
+Resource query keys include the connection generation. A new admission starts new resource reads. A resource failure stays visible in its view and does not fail the current-work recovery barrier. Electron and the private browser keep their existing resource URLs and protocol or local HTTP delivery.
 
 A client app uses `createRemoteHostConnection` from `@openducktor/frontend-core/recovery/remote-host-connection`.
 Supply the endpoint, the client app version, a `RemoteTransport`, and the query client of the same `ClientConnection`.

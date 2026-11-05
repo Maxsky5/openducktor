@@ -9,16 +9,23 @@ import type {
 } from "@openducktor/contracts";
 import {
   createFakeHostChannel,
+  FakeClientSocket,
   type FakeHostChannel,
   type FakeHostChannelOptions,
 } from "@openducktor/host-client/remote/test-support/host-channel";
 import {
   createLocalHostChannel,
   type LocalHostChannel,
+  type LocalHostChannelDependencies,
   type LocalHostChannelEvent,
 } from "./local-host-channel";
+import { openWebSocket } from "@openducktor/host-client/remote/socket";
 
 const SILENCE_DELAY_MS = 45_000;
+const SETUP_DELAY_MS = 10_000;
+/** Timers that the test runs on their own: the silence and setup deadlines. */
+const isDeadline = (entry: Scheduled) =>
+  entry.delayMs === SILENCE_DELAY_MS || entry.delayMs === SETUP_DELAY_MS;
 
 type Scheduled = { callback: () => void; delayMs: number; cancelled: boolean };
 
@@ -33,13 +40,20 @@ const createManualSchedule = () => {
         entry.cancelled = true;
       };
     },
-    /** Runs the pending reconnect timers. Silence timers stay pending. */
+    /** Runs the pending reconnect timers. Deadline timers stay pending. */
     runReconnects: () => {
       for (const entry of scheduled.splice(0)) {
         if (entry.cancelled) continue;
-        if (entry.delayMs === SILENCE_DELAY_MS) scheduled.push(entry);
+        if (isDeadline(entry)) scheduled.push(entry);
         else entry.callback();
       }
+    },
+    runSetupDeadline: () => {
+      for (const entry of scheduled)
+        if (!entry.cancelled && entry.delayMs === SETUP_DELAY_MS) {
+          entry.cancelled = true;
+          entry.callback();
+        }
     },
     runSilence: () => {
       for (const entry of scheduled)
@@ -49,9 +63,15 @@ const createManualSchedule = () => {
         }
     },
     pendingReconnects: () =>
-      scheduled.filter((entry) => !entry.cancelled && entry.delayMs !== SILENCE_DELAY_MS).length,
+      scheduled.filter((entry) => !entry.cancelled && !isDeadline(entry)).length,
   };
 };
+
+/** Opens a client socket of `create` the way a shell opens its platform socket. */
+const socketOf =
+  (create: (protocols: string[]) => FakeClientSocket): LocalHostChannelDependencies["openSocket"] =>
+  (_url, protocols, signal, onFrame, onClose) =>
+    openWebSocket(create, protocols, signal, onFrame, onClose);
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 const waitFor = async (condition: () => boolean, label: string): Promise<void> => {
@@ -120,9 +140,9 @@ const setup = (
   const channel = createLocalHostChannel({
     prepare: async () => {
       if (prepareFailure) throw prepareFailure;
-      return "ws://127.0.0.1:1/channel";
+      return { url: "ws://127.0.0.1:1/channel", token: null };
     },
-    createSocket: (_url, protocols) => host.createSocket(protocols),
+    openSocket: socketOf((protocols) => host.createSocket(protocols)),
     notificationCursor,
     onDispose: () => {
       disposals += 1;
@@ -492,6 +512,88 @@ describe("createLocalHostChannel", () => {
     const reason = new Error("diagnostics timeout");
     abort.abort(reason);
     await expect(pending).rejects.toBe(reason);
+  });
+
+  test("stops waiting for a channel that never opens when the caller aborts", async () => {
+    const timers = createManualSchedule();
+    const sockets: FakeClientSocket[] = [];
+    let disposals = 0;
+    const channel = createLocalHostChannel({
+      prepare: async () => ({ url: "ws://127.0.0.1:1/channel", token: null }),
+      // The upgrade never completes.
+      openSocket: socketOf(() => {
+        const socket = new FakeClientSocket(
+          () => {},
+          () => {
+            socket.readyState = 3;
+          },
+        );
+        sockets.push(socket);
+        return socket;
+      }),
+      notificationCursor: null,
+      onDispose: () => {
+        disposals += 1;
+      },
+      schedule: timers.schedule,
+    });
+    const abort = new AbortController();
+    const pending = channel.request(
+      { method: "invoke", command: "path_check", args: {} },
+      abort.signal,
+    );
+    await waitFor(() => sockets.length === 1, "the socket");
+    const reason = new Error("diagnostics timeout");
+    abort.abort(reason);
+    await expect(pending).rejects.toBe(reason);
+    // Nothing else uses the channel, so the request no longer holds the attempt open.
+    expect(disposals).toBe(1);
+    expect(sockets[0]?.readyState).toBe(3);
+  });
+
+  test("fails a stalled handshake at the setup deadline and reconnects", async () => {
+    const timers = createManualSchedule();
+    const sockets: FakeClientSocket[] = [];
+    const host = createFakeHostChannel();
+    let stall = true;
+    const channel = createLocalHostChannel({
+      prepare: async () => ({ url: "ws://127.0.0.1:1/channel", token: null }),
+      openSocket: socketOf((protocols) => {
+        if (!stall) return host.createSocket(protocols);
+        const socket = new FakeClientSocket(
+          () => {},
+          () => {
+            socket.readyState = 3;
+          },
+        );
+        sockets.push(socket);
+        return socket;
+      }),
+      notificationCursor: null,
+      onDispose: () => {},
+      schedule: timers.schedule,
+    });
+    const events: LocalHostChannelEvent[] = [];
+    releases.push(
+      channel.addListener({
+        channel: "openducktor://workspace-provider-setup-updated",
+        eventName: "message",
+        listener: (event) => {
+          events.push(event);
+        },
+        receivesControlEvents: true,
+      }),
+    );
+    await waitFor(() => sockets.length === 1, "the stalled socket");
+    timers.runSetupDeadline();
+    await waitFor(() => timers.pendingReconnects() > 0, "the reconnect timer");
+    expect(sockets[0]?.readyState).toBe(3);
+    expect(channel.readConnectionWarning()).toContain("did not finish setup");
+    expect(controlKinds(events)).toEqual(["stream-warning"]);
+    stall = false;
+    timers.runReconnects();
+    await channel.ready;
+    expect(channel.readConnectionWarning()).toBeNull();
   });
 
   test("closes the channel when its last listener leaves", async () => {

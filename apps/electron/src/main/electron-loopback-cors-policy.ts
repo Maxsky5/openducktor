@@ -26,6 +26,11 @@ export const ELECTRON_PACKAGED_RENDERER_ORIGIN = "null";
 export const resolveElectronLoopbackCorsOrigin = (rendererDevUrl: string | undefined): string =>
   rendererDevUrl ? new URL(rendererDevUrl).origin : ELECTRON_PACKAGED_RENDERER_ORIGIN;
 
+/** The origins that a desktop window sends on its host channel socket. */
+export const resolveElectronRendererSocketOrigins = (
+  rendererDevUrl: string | undefined,
+): ReadonlySet<string> => new Set([resolveElectronLoopbackCorsOrigin(rendererDevUrl)]);
+
 export const configureElectronLoopbackCorsPolicy = (
   session: ElectronSession,
   rendererOrigin: string = ELECTRON_PACKAGED_RENDERER_ORIGIN,

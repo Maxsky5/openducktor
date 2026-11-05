@@ -351,7 +351,8 @@ const runHostCommand = (
   hostCommandRouter: EffectHostCommandRouter,
   command: string,
   args: HostCommandInputRecord,
-) => Effect.runPromise(Effect.result(hostCommandRouter.invoke(command, args)));
+  signal: AbortSignal | undefined,
+) => Effect.runPromise(Effect.result(hostCommandRouter.invoke(command, args)), { signal });
 
 /** Runs a command of the local frontend and returns its result or its host error payload. */
 export const invokeLocalHostCommand = async (
@@ -359,12 +360,14 @@ export const invokeLocalHostCommand = async (
   command: string,
   args: HostCommandInputRecord,
   shutdownStarted: () => boolean,
+  /** Interrupts the command. The channel aborts it only for a cancelled host read. */
+  signal?: AbortSignal,
 ): Promise<HostChannelReply> => {
   if (shutdownStarted())
     return { error: { kind: "host", response: hostErrorPayload(SHUTDOWN_MESSAGE) } };
   let result: Awaited<ReturnType<typeof runHostCommand>>;
   try {
-    result = await runHostCommand(hostCommandRouter, command, args);
+    result = await runHostCommand(hostCommandRouter, command, args, signal);
   } catch (cause) {
     // A defect fails only this command, not the channel of the tab.
     return { error: { kind: "host", response: hostErrorPayload(errorMessage(cause)) } };
@@ -892,8 +895,8 @@ export const startTypescriptHostBackendEffect = ({
         notifications: hostCommandRouter.notificationStream,
         leases: taskEventLeaseManager,
         ownedLeases: localTaskLeases,
-        invoke: (command, args) =>
-          invokeLocalHostCommand(hostCommandRouter, command, args, () => shutdownStarted),
+        invoke: (command, args, signal) =>
+          invokeLocalHostCommand(hostCommandRouter, command, args, () => shutdownStarted, signal),
         remoteAccessStates: remoteAccessOperator.states,
         refusal: () =>
           shutdownStarted

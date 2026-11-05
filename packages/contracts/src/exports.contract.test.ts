@@ -116,6 +116,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "HOST_CHANNEL_MAX_CLIENT_MESSAGE_BYTES",
   "hostEventCursorSchema",
   "hostChannelRequestSchema",
+  "hostChannelCancelSchema",
+  "hostChannelClientMessageSchema",
   "hostEventsOpenedSchema",
   "taskEventLeaseSchema",
   "hostChannelErrorSchema",

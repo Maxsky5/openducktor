@@ -55,7 +55,7 @@ Rules:
 - A live event can add a descendant only when its parent already exists in the collection.
 - On reload, the host reads exact root references from durable task and workspace session records. Runtime adapters read only those roots and their verified descendants.
 - Runtime state cannot prove task ownership. Only an explicit workflow start or durable task record can attach a session to a task.
-- The browser uses one host channel WebSocket for all host events. Electron uses its generic host-event IPC message.
+- The browser and Electron use one host channel WebSocket for all host events.
 - Each snapshot carries the host `sequence` of the last state change that it covers. Drop older `snapshot`, `session_upsert`, and `session_removed` envelopes. Deliver an older `task_session_records_updated` without its `liveSession`. Deliver transcript and other changes in stream order.
 - A reconnect with complete replay keeps the collection and the loaded transcripts. A replay gap for the repository or a new host starts a new attachment.
 - A later connection snapshot can follow missed `task_session_records_updated` envelopes. It makes the cached task session lists of its repository read again.

@@ -1,4 +1,4 @@
-import { liveSessionStreamEventName } from "@openducktor/remote-host/host-event-stream-name";
+import { liveSessionStreamEventName } from "@openducktor/host-client";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   AgentSessionLiveEnvelope,

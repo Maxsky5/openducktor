@@ -1,9 +1,11 @@
 import {
   type HostCommandInputRecord,
   encodeHostChannelFrame,
-  hostChannelRequestSchema,
+  hostChannelClientMessageSchema,
+  isHostReadCommand,
   HOST_CHANNEL_HEARTBEAT_INTERVAL_MS,
   type HostChannelError,
+  type HostChannelClientMessage,
   type HostChannelMessage,
   type HostChannelRequestMessage,
   type HostEventsOpened,
@@ -37,8 +39,15 @@ export type HostChannelOptions = {
   ownedLeases: Set<string>;
   /** The most task leases that `ownedLeases` can hold. */
   maxLeases?: number;
-  /** Runs a command under the policy of this listener. */
-  invoke(command: string, args: HostCommandInputRecord): Promise<HostChannelReply>;
+  /**
+   * Runs a command under the policy of this listener. `signal` aborts when the client cancels a
+   * host read or the socket closes during one. It never aborts for a command that can change state.
+   */
+  invoke(
+    command: string,
+    args: HostCommandInputRecord,
+    signal: AbortSignal,
+  ): Promise<HostChannelReply>;
   /** The live remote access state, for the local operator only. */
   remoteAccessStates?: Stream.Stream<RemoteAccessState>;
   /** A larger command reply fails with `reply_too_large`. */
@@ -61,6 +70,8 @@ export type HostChannelSocketData = {
   leases: Map<string, number>;
   stops: Set<() => void>;
   remoteAccess: (() => void) | null;
+  /** The running host reads that a cancel or a socket close interrupts. */
+  reads: Map<number, AbortController>;
 };
 
 export type HostChannelSocket = NodeServerSocket<HostChannelSocketData>;
@@ -75,6 +86,7 @@ export const createHostChannelSocketData = (
   leases: new Map(),
   stops: new Set(),
   remoteAccess: null,
+  reads: new Map(),
 });
 
 /** Each host event has one frame for all channels. */
@@ -307,13 +319,28 @@ const observeRemoteAccess = (socket: HostChannelSocket, id: number): void => {
   );
 };
 
+/** A command that only reads host state can stop at once. Other accepted work keeps running. */
+const NEVER_CANCELLED = new AbortController().signal;
+
 const runInvoke = async (
   socket: HostChannelSocket,
   request: Extract<HostChannelRequestMessage, { method: "invoke" }>,
 ): Promise<void> => {
-  const reply = await socket.data.options.invoke(request.command, request.args);
-  if ("error" in reply) sendError(socket, request.id, reply.error);
-  else sendResult(socket, request.id, reply.result);
+  const cancel = isHostReadCommand(request.command) ? new AbortController() : null;
+  if (cancel) socket.data.reads.set(request.id, cancel);
+  try {
+    const reply = await socket.data.options.invoke(
+      request.command,
+      request.args,
+      cancel?.signal ?? NEVER_CANCELLED,
+    );
+    // The client stopped waiting, so a cancelled read sends no answer.
+    if (cancel?.signal.aborted) return;
+    if ("error" in reply) sendError(socket, request.id, reply.error);
+    else sendResult(socket, request.id, reply.result);
+  } finally {
+    if (cancel) socket.data.reads.delete(request.id);
+  }
 };
 
 const handleRequest = (socket: HostChannelSocket, request: HostChannelRequestMessage): void => {
@@ -372,9 +399,9 @@ const handleRequest = (socket: HostChannelSocket, request: HostChannelRequestMes
   }
 };
 
-const parseRequest = (raw: string | Buffer): HostChannelRequestMessage | null => {
+const parseMessage = (raw: string | Buffer): HostChannelClientMessage | null => {
   try {
-    const parsed = hostChannelRequestSchema.safeParse(
+    const parsed = hostChannelClientMessageSchema.safeParse(
       JSON.parse(Buffer.isBuffer(raw) ? raw.toString("utf8") : raw),
     );
     return parsed.success ? parsed.data : null;
@@ -400,12 +427,16 @@ export const hostChannelWebSocketHandler = {
   },
   message(socket: HostChannelSocket, raw: string | Buffer): void {
     if (socket.data.closed) return;
-    const request = parseRequest(raw);
-    if (!request) {
+    const message = parseMessage(raw);
+    if (!message) {
       closeChannel(socket, 1002, "Invalid host channel message.");
       return;
     }
-    handleRequest(socket, request);
+    if (message.type === "cancel") {
+      socket.data.reads.get(message.id)?.abort(new Error("The client cancelled the request."));
+      return;
+    }
+    handleRequest(socket, message);
   },
   drain(socket: HostChannelSocket): void {
     const { leases } = socket.data.options;
@@ -416,6 +447,10 @@ export const hostChannelWebSocketHandler = {
   },
   close(socket: HostChannelSocket): void {
     socket.data.closed = true;
+    // No client waits for these reads any more.
+    for (const read of socket.data.reads.values())
+      read.abort(new Error("The host channel closed."));
+    socket.data.reads.clear();
     // Each stop deletes itself, which a Set iteration allows.
     for (const stop of socket.data.stops) stop();
     socket.data.remoteAccess = null;

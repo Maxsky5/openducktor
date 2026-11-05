@@ -995,6 +995,34 @@ describe("TypeScript web host backend", () => {
     });
   });
 
+  test("interrupts the command and runs its cleanup when the signal aborts", async () => {
+    let cleanedUp = false;
+    const started = createDeferred<void>();
+    const hostCommandRouter = createTestHostCommandRouter(() =>
+      Effect.sync(() => started.resolve()).pipe(
+        Effect.andThen(Effect.never),
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            cleanedUp = true;
+          }),
+        ),
+      ),
+    );
+    const cancel = new AbortController();
+    const reply = invokeLocalHostCommand(
+      hostCommandRouter,
+      "workspace_get_git_provider_context",
+      {},
+      () => false,
+      cancel.signal,
+    );
+    await started.promise;
+    cancel.abort(new Error("The client cancelled the request."));
+    await reply;
+
+    expect(cleanedUp).toBe(true);
+  });
+
   test("fails only the command when it dies with a defect", async () => {
     const hostCommandRouter = createTestHostCommandRouter(() => Effect.die(new Error("boom")));
 

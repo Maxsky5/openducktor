@@ -2,6 +2,7 @@ import {
   failedRemoteAccessState,
   HOST_CHANNEL_SILENCE_LIMIT_MS,
   HOST_CHANNEL_SUBPROTOCOL,
+  REMOTE_SOCKET_AUTHORIZATION_PREFIX,
   hostEventsOpenedSchema,
   parseHostEventEnvelope,
   type HostChannelRequest,
@@ -18,15 +19,14 @@ import {
   connectionReconnectedEvent,
   connectionStreamWarningEvent,
   type ConnectionControlEvent,
-} from "@openducktor/frontend-core/recovery/connection-control-events";
-import { createNotificationFrameRelay } from "@openducktor/frontend-core/recovery/notification-frame-relay";
+} from "../recovery/connection-control-events";
+import { createNotificationFrameRelay } from "../recovery/notification-frame-relay";
 import {
   createHostChannelSession,
   type HostChannelSession,
 } from "@openducktor/host-client/channel";
-import { openWebSocket, type RemoteSocket } from "@openducktor/host-client/remote/socket";
 import type { RemoteSocketConnection } from "@openducktor/host-client/remote";
-import { hostEventStreamEventName } from "@openducktor/remote-host/host-event-stream-name";
+import { hostEventStreamEventName } from "@openducktor/host-client";
 import type { JSONType } from "zod";
 
 export type LocalHostChannelEvent = HostEventEnvelope | ConnectionControlEvent;
@@ -78,10 +78,26 @@ export type LocalHostChannel = {
   observeRemoteAccess(listener: (state: RemoteAccessState) => void): () => void;
 };
 
+/**
+ * The WebSocket URL of the shell's own host channel. A `token` travels as the authorization
+ * subprotocol tag, for a shell whose sockets cannot carry a session cookie.
+ */
+export type LocalHostChannelEndpoint = { url: string; token: string | null };
+
 export type LocalHostChannelDependencies = {
   /** Prepares the app session cookie and returns the channel WebSocket URL. */
-  prepare(): Promise<string>;
-  createSocket(url: string, protocols: string[]): RemoteSocket;
+  prepare(): Promise<LocalHostChannelEndpoint>;
+  /**
+   * Opens a binary WebSocket that must select the first protocol, as `openWebSocket` of
+   * `@openducktor/host-client/remote/socket` does with the platform socket.
+   */
+  openSocket(
+    url: string,
+    protocols: string[],
+    signal: AbortSignal,
+    onFrame: (frame: Uint8Array) => void,
+    onClose: () => void,
+  ): Promise<RemoteSocketConnection>;
   notificationCursor: NotificationCursor | null;
   /** Runs when the channel closes because nothing uses it. */
   onDispose(): void;
@@ -113,7 +129,7 @@ const errorMessage = (cause: unknown): string =>
  */
 export const createLocalHostChannel = ({
   prepare,
-  createSocket,
+  openSocket,
   notificationCursor: initialNotificationCursor,
   onDispose,
   schedule = defaultSchedule,
@@ -277,9 +293,13 @@ export const createLocalHostChannel = ({
     cancelRetry = null;
     const abort = new AbortController();
     openingAbort = abort;
+    // The deadline covers the session preparation, the handshake, and the replay.
+    const cancelSetupTimer = schedule(
+      () => abort.abort(new Error("The host channel did not finish setup.")),
+      SETUP_TIMEOUT_MS,
+    );
     const attempt = (async (): Promise<Open> => {
-      const url = await prepare();
-      abort.signal.throwIfAborted();
+      const { url, token } = await waitWithAbort(prepare(), abort.signal);
       let current: Open | null = null;
       let silenceTimer: (() => void) | null = null;
       const watchSilence = () => {
@@ -312,11 +332,12 @@ export const createLocalHostChannel = ({
       abort.signal.addEventListener("abort", () => session.close(abort.signal.reason), {
         once: true,
       });
-      const setup = AbortSignal.any([abort.signal, AbortSignal.timeout(SETUP_TIMEOUT_MS)]);
       try {
-        socket = await openWebSocket(
-          (protocols) => createSocket(url, protocols),
-          [HOST_CHANNEL_SUBPROTOCOL],
+        socket = await openSocket(
+          url,
+          token === null
+            ? [HOST_CHANNEL_SUBPROTOCOL]
+            : [HOST_CHANNEL_SUBPROTOCOL, `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${token}`],
           abort.signal,
           (frame) => {
             if (!current && !socket) return;
@@ -337,11 +358,11 @@ export const createLocalHostChannel = ({
         const opened = hostEventsOpenedSchema.parse(
           await waitWithAbort(
             session.request({ method: "events.open", cursor, notificationCursor }),
-            setup,
+            abort.signal,
           ),
         );
         cursor = { hostEpoch: opened.hostEpoch, hostEventId: opened.hostEventId };
-        await waitWithAbort(restoreDelivery(session), setup);
+        await waitWithAbort(restoreDelivery(session), abort.signal);
         abort.signal.throwIfAborted();
         current = { session, socket, abort };
         open = current;
@@ -374,6 +395,7 @@ export const createLocalHostChannel = ({
       }
     })();
     opening = attempt;
+    void attempt.finally(cancelSetupTimer).catch(() => {});
     attempt.then(
       () => {
         if (opening === attempt) opening = null;
@@ -390,12 +412,20 @@ export const createLocalHostChannel = ({
     return attempt;
   };
 
-  /** Runs `work` on an open channel. The channel stays while the work runs. */
-  const withOpen = async <T>(work: (current: Open) => Promise<T>): Promise<T> => {
+  /**
+   * Runs `work` on an open channel. The channel stays while the work runs. An abort of `signal`
+   * stops the wait for the channel at once; the attempt goes on for its other users.
+   */
+  const withOpen = async <T>(
+    work: (current: Open) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> => {
     if (disposed) throw new Error("The host channel closed.");
+    signal?.throwIfAborted();
     pendingRequests += 1;
     try {
-      return await work(await connect());
+      const opened = connect();
+      return await work(await (signal ? waitWithAbort(opened, signal) : opened));
     } finally {
       pendingRequests -= 1;
       releaseIfUnused();
@@ -422,7 +452,8 @@ export const createLocalHostChannel = ({
         releaseIfUnused();
       };
     },
-    request: (request, signal) => withOpen(({ session }) => session.request(request, signal)),
+    request: (request, signal) =>
+      withOpen(({ session }) => session.request(request, signal), signal),
     subscribeTaskEvents: (input, onFrame, onTerminalFailure) =>
       withOpen(async ({ session }) => {
         const record: TaskRecord = { onFrame, onTerminalFailure };

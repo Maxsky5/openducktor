@@ -1,6 +1,6 @@
 import {
   encodeHostChannelFrame,
-  hostChannelRequestSchema,
+  hostChannelClientMessageSchema,
   type HostChannelError,
   type HostCommandInputRecord,
   type HostChannelMessage,
@@ -100,6 +100,8 @@ export const createFakeHostChannel = (options: FakeHostChannelOptions = {}) => {
   const events: FakeHostEvent[] = [];
   const sockets: FakeHostChannelSocket[] = [];
   const requests: HostChannelRequestMessage[] = [];
+  /** The request IDs that clients cancelled, in order. */
+  const cancels: number[] = [];
   const leases = new Map<string, FakeHostChannelSocket>();
   let nextEventId = 0;
 
@@ -198,7 +200,14 @@ export const createFakeHostChannel = (options: FakeHostChannelOptions = {}) => {
       }
     };
     const client = new FakeClientSocket((data) => {
-      const request = hostChannelRequestSchema.parse(JSON.parse(new TextDecoder().decode(data)));
+      const message = hostChannelClientMessageSchema.parse(
+        JSON.parse(new TextDecoder().decode(data)),
+      );
+      if (message.type === "cancel") {
+        cancels.push(message.id);
+        return;
+      }
+      const request = message;
       socketRequests.push(request);
       requests.push(request);
       later(() => {
@@ -228,6 +237,7 @@ export const createFakeHostChannel = (options: FakeHostChannelOptions = {}) => {
     sockets,
     /** Every request of every socket, in order. */
     requests,
+    cancels,
     /** Retains a host event and sends it to every socket with open events. */
     emit(envelope: HostEventEnvelope, name = "message"): FakeHostEvent {
       nextEventId += 1;

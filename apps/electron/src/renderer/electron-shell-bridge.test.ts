@@ -1,15 +1,29 @@
-import { DEFAULT_AGENT_RUNTIMES, settingsSnapshotSchema } from "@openducktor/contracts";
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  HOST_CHANNEL_SUBPROTOCOL,
+  REMOTE_SOCKET_AUTHORIZATION_PREFIX,
+  settingsSnapshotSchema,
+} from "@openducktor/contracts";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   AgentSessionLiveSnapshotEnvelope,
   ExternalTaskSyncEvent,
+  HostEventEnvelope,
+  RemoteAccessState,
   TaskEventCursor,
+  TaskEventStreamFrame,
 } from "@openducktor/contracts";
 import {
   createHostClient,
   HostInvokeError,
   HostTerminalClientError,
+  liveSessionStreamEventName,
 } from "@openducktor/host-client";
+import {
+  createFakeHostChannel,
+  type FakeHostChannel,
+  type FakeHostChannelOptions,
+} from "@openducktor/host-client/remote/test-support/host-channel";
 import { createTaskStreamController } from "@openducktor/frontend-core/tasks/task-stream-controller";
 import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
@@ -21,6 +35,35 @@ import {
 } from "./electron-shell-bridge";
 
 const originalWindow = globalThis.window;
+const originalWebSocket = globalThis.WebSocket;
+const CHANNEL_TOKEN = "t".repeat(43);
+const CHANNEL_URL = "ws://127.0.0.1:1/channel";
+
+/** The fake desktop host of the current test, and the sockets that the renderer opened. */
+let host: FakeHostChannel = createFakeHostChannel();
+const openedSockets: Array<{ url: string; protocols: string[] }> = [];
+
+/** Serves the renderer's host channel from `host`, as the Electron main channel server does. */
+const useHost = (options: FakeHostChannelOptions = {}): FakeHostChannel => {
+  host = createFakeHostChannel(options);
+  return host;
+};
+
+const liveSnapshot: AgentSessionLiveSnapshotEnvelope = {
+  type: "snapshot",
+  messageQueues: [],
+  repoPath: "/repo",
+  sessions: [],
+  sequence: 0,
+};
+
+const settle = async (condition: () => boolean, label: string): Promise<void> => {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (condition()) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error(`Timed out waiting for ${label}.`);
+};
 
 const taskStreamEpoch = "11111111-1111-4111-8111-111111111111";
 const taskStreamCursor = (sequence: number): TaskEventCursor => ({
@@ -62,24 +105,33 @@ const setElectronApi = (electronApi: OpenDucktorElectronApi | undefined): void =
   });
 };
 
+const disabledRemoteAccess: RemoteAccessState = {
+  status: "disabled",
+  configuration: null,
+  connectedClients: null,
+  clients: null,
+  pairing: null,
+};
+
 const createElectronApi = () => {
   const unsubscribe = mock(() => {});
   const unsubscribeAppUpdates = mock(() => {});
-  const unsubscribeTaskStream = mock(() => {});
   let appUpdateListener:
     | Parameters<OpenDucktorElectronApi["appUpdates"]["subscribe"]>[0]
     | undefined;
   return {
     electronApi: {
       platform: "darwin",
-      invoke: mock(async (command: string) => ({
-        ok: true as const,
-        value:
-          command === "agent_session_live_attach"
-            ? { type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [], sequence: 0 }
-            : undefined,
-      })),
-      subscribe: mock(() => unsubscribe),
+      hostChannelEndpoint: mock(async () => ({ url: CHANNEL_URL, token: CHANNEL_TOKEN })),
+      remoteAccess: {
+        readState: mock(async () => disabledRemoteAccess),
+        readNetworks: mock(async () => []),
+        enable: mock(async () => disabledRemoteAccess),
+        disable: mock(async () => disabledRemoteAccess),
+        revokeClient: mock(async () => disabledRemoteAccess),
+        startPairing: mock(async () => disabledRemoteAccess),
+        stopPairing: mock(async () => disabledRemoteAccess),
+      },
       appUpdates: {
         getState: mock(async () => ({ status: "idle", currentVersion: "0.4.2" })),
         check: mock(async () => ({
@@ -138,13 +190,6 @@ const createElectronApi = () => {
       editorClipboard: {
         readText: mock((type?: string) => (type ? `typed:${type}` : "plain")),
       },
-      taskStream: {
-        subscribe: mock(async () => ({
-          acknowledge: mock(async () => {}),
-          subscriptionId: "22222222-2222-4222-8222-222222222222",
-          unsubscribe: unsubscribeTaskStream,
-        })),
-      },
       terminals: {
         disconnect: mock(async () => {}),
         send: mock(async () => {}),
@@ -167,21 +212,33 @@ const createElectronApi = () => {
     },
     unsubscribeAppUpdates,
     unsubscribe,
-    unsubscribeTaskStream,
-  } satisfies {
-    electronApi: OpenDucktorElectronApi;
-    emitAppUpdate(state: Parameters<OpenDucktorElectronApi["appUpdates"]["subscribe"]>[0]): void;
-    unsubscribeAppUpdates: ReturnType<typeof mock>;
-    unsubscribe: ReturnType<typeof mock>;
-    unsubscribeTaskStream: ReturnType<typeof mock>;
   };
 };
 
 describe("electron shell bridge", () => {
+  beforeEach(() => {
+    useHost({
+      invoke: (command) => ({
+        result: command === "agent_session_live_attach" ? liveSnapshot : null,
+      }),
+    });
+    openedSockets.length = 0;
+    // The renderer opens its channel with the platform WebSocket.
+    function FakeWebSocket(url: string, protocols: string[]) {
+      openedSockets.push({ url, protocols });
+      return host.createSocket(protocols);
+    }
+    Object.defineProperty(globalThis, "WebSocket", { configurable: true, value: FakeWebSocket });
+  });
+
   afterEach(() => {
     Object.defineProperty(globalThis, "window", {
       configurable: true,
       value: originalWindow,
+    });
+    Object.defineProperty(globalThis, "WebSocket", {
+      configurable: true,
+      value: originalWebSocket,
     });
   });
 
@@ -204,26 +261,23 @@ describe("electron shell bridge", () => {
     expect(error.message).toContain("OpenDucktor Electron preload bridge is unavailable.");
   });
 
-  test("uses the preload bridge for event subscriptions and shell capabilities", async () => {
-    const { electronApi, unsubscribe: unsubscribeSpy } = createElectronApi();
+  test("serves host traffic over the channel with the per-launch token", async () => {
+    const { electronApi } = createElectronApi();
     setElectronApi(electronApi);
-
     const bridge = createElectronShellBridge();
-    const listener = mock(() => {});
-    const onTerminalFailure = mock((cause: unknown) => {
-      void cause;
-    });
-    const unsubscribeRunEvents = await bridge.subscribeRunEvents(listener);
-    const unsubscribeRuntimeChanges = await bridge.subscribeRuntimeChanges(listener);
-    const stopObservingLiveSessions = await bridge.observeAgentSessionLive(
-      { repoPath: "/repo" },
-      listener,
-    );
-    const taskStreamSubscription = await bridge.subscribeTaskStream(
-      { cursor: null },
-      listener,
-      onTerminalFailure,
-    );
+    const runEvents = mock(() => {});
+    const runtimeChanges = mock(() => {});
+    const live = mock(() => {});
+
+    const stopRunEvents = await bridge.subscribeRunEvents(runEvents);
+    const stopRuntimeChanges = await bridge.subscribeRuntimeChanges(runtimeChanges);
+    const stopLive = await bridge.observeAgentSessionLive({ repoPath: "/repo" }, live);
+    const runtimeEvent: HostEventEnvelope = {
+      channel: "openducktor://runtime-changed",
+      payload: { type: "runtime_impact_changed", runtimeKinds: ["codex"] },
+    };
+    host.emit(runtimeEvent);
+    await settle(() => runtimeChanges.mock.calls.length > 0, "the runtime change");
 
     expect(bridge.capabilities).toEqual({
       canOpenExternalUrls: true,
@@ -233,74 +287,101 @@ describe("electron shell bridge", () => {
     expect(
       await bridge.editorClipboard?.readText("application/vnd.pierre.diffs-selections+json"),
     ).toBe("typed:application/vnd.pierre.diffs-selections+json");
-    expect(electronApi.subscribe).toHaveBeenCalledWith(
-      "openducktor://run-event",
-      expect.any(Function),
+    // One socket carries every subscription, and it offers the token that main gave this window.
+    expect(openedSockets).toEqual([
+      {
+        url: CHANNEL_URL,
+        protocols: [
+          HOST_CHANNEL_SUBPROTOCOL,
+          `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${CHANNEL_TOKEN}`,
+        ],
+      },
+    ]);
+    expect(runtimeChanges).toHaveBeenCalledWith(runtimeEvent.payload);
+    expect(runEvents).not.toHaveBeenCalled();
+    expect(host.requests).toContainEqual(
+      expect.objectContaining({
+        method: "invoke",
+        command: "agent_session_live_attach",
+        args: { repoPath: "/repo" },
+      }),
     );
-    expect(electronApi.subscribe).toHaveBeenCalledWith(
-      "openducktor://runtime-changed",
-      expect.any(Function),
-    );
-    expect(electronApi.taskStream.subscribe).toHaveBeenCalledWith(
-      { cursor: null },
-      listener,
-      onTerminalFailure,
-    );
-    expect(electronApi.subscribe).toHaveBeenCalledWith(
-      "openducktor://agent-session-live-event",
-      expect.any(Function),
-      "/repo",
-    );
-    expect(electronApi.invoke).toHaveBeenCalledWith("agent_session_live_attach", {
-      repoPath: "/repo",
-    });
+    expect(live).toHaveBeenCalledWith({ ...liveSnapshot, isConnectionSnapshot: true });
 
-    unsubscribeRunEvents();
-    unsubscribeRuntimeChanges();
-    stopObservingLiveSessions();
-    taskStreamSubscription.unsubscribe();
-    expect(unsubscribeSpy).toHaveBeenCalledTimes(3);
+    stopRunEvents();
+    stopRuntimeChanges();
+    stopLive();
+    // Nothing uses the channel any more, so it closes.
+    await settle(() => host.sockets.every((socket) => socket.closed), "the channel close");
   });
 
-  test("reports rejected runtime event listeners without changing preload IPC", async () => {
+  test("reports rejected host event listeners without stopping delivery", async () => {
     const { electronApi } = createElectronApi();
-    const payload = { type: "runtime_impact_changed", runtimeKinds: ["codex"] } as const;
-    let dispatch!: () => void;
-    electronApi.subscribe = mock((...subscription) => {
-      if (subscription[0] === "openducktor://runtime-changed") {
-        dispatch = () => subscription[1]({ ...payload, runtimeKinds: ["codex"] });
-      }
-      return () => {};
-    });
     setElectronApi(electronApi);
     const failure = new Error("Runtime event failed.");
     const listener = mock(() => Promise.reject(failure));
     const report = spyOn(console, "error").mockImplementation(() => {});
     try {
       const stop = await createElectronShellBridge().subscribeRuntimeChanges(listener);
-      dispatch();
-      await flushTaskStream();
+      const payload = { type: "runtime_impact_changed", runtimeKinds: ["codex"] } as const;
+      host.emit({ channel: "openducktor://runtime-changed", payload });
+      await settle(() => report.mock.calls.length > 0, "the listener report");
       expect(listener).toHaveBeenCalledWith(payload);
-      expect(report).toHaveBeenCalledWith("Host event listener failed", failure);
+      expect(report).toHaveBeenCalledWith("Host event listener failed.", failure);
       stop();
     } finally {
       report.mockRestore();
     }
   });
 
-  test("forwards task stream frames", async () => {
+  test("delivers and acknowledges task stream frames over the channel", async () => {
+    const boundary = taskStreamCursor(3);
+    const snapshot: TaskEventStreamFrame = {
+      type: "snapshot_required",
+      cursor: boundary,
+      reason: "buffer_gap",
+    };
+    useHost({ taskBoundary: boundary, initialTaskFrames: () => [snapshot] });
+    const { electronApi } = createElectronApi();
+    setElectronApi(electronApi);
+    const frames: unknown[] = [];
+
+    const subscription = await createElectronShellBridge().subscribeTaskStream(
+      { cursor: null },
+      (frame) => frames.push(frame),
+    );
+    await settle(() => frames.length === 1, "the task frame");
+    await subscription.acknowledge(boundary);
+    await subscription.unsubscribe();
+
+    expect(frames).toEqual([snapshot]);
+    expect(host.requests.map((request) => request.method)).toEqual([
+      "events.open",
+      "task_events.subscribe",
+      "task_events.ack",
+      "task_events.release",
+    ]);
+  });
+
+  test("delivers remote control state from the channel and operations through the preload", async () => {
     const { electronApi } = createElectronApi();
     setElectronApi(electronApi);
     const bridge = createElectronShellBridge();
-    const listener = mock(() => {});
+    const states: RemoteAccessState[] = [];
+    if (!bridge.remoteAccess) throw new Error("Expected the local remote access bridge.");
 
-    await bridge.subscribeTaskStream({ cursor: null }, listener);
-
-    expect(electronApi.taskStream.subscribe).toHaveBeenCalledWith(
-      { cursor: null },
-      listener,
-      undefined,
+    const stop = await bridge.remoteAccess.subscribeState((state) => states.push(state));
+    await settle(
+      () => host.requests.some((request) => request.method === "remote_access.observe"),
+      "the remote access observation",
     );
+    host.remoteAccessState(disabledRemoteAccess);
+    await settle(() => states.length === 1, "the remote access state");
+    await bridge.remoteAccess.disable();
+    stop();
+
+    expect(states).toEqual([disabledRemoteAccess]);
+    expect(electronApi.remoteAccess.disable).toHaveBeenCalledTimes(1);
   });
 
   test("supersedes an in-flight change with the host overflow snapshot without acknowledging the obsolete cursor", async () => {
@@ -394,31 +475,30 @@ describe("electron shell bridge", () => {
   });
 
   test("delivers changes received during live-session attachment after its snapshot", async () => {
-    const { electronApi } = createElectronApi();
     let resolveAttach: (snapshot: AgentSessionLiveSnapshotEnvelope) => void = () => {};
-    electronApi.invoke = mock(
-      () =>
-        new Promise((resolve) => {
-          resolveAttach = (value) => resolve({ ok: true as const, value });
-        }),
-    );
+    const attachRequested = deferred<void>();
+    useHost({
+      invoke: (command) =>
+        command === "agent_session_live_attach"
+          ? new Promise((resolve) => {
+              resolveAttach = (value) => resolve({ result: value });
+              attachRequested.resolve();
+            })
+          : { result: null },
+    });
+    const { electronApi } = createElectronApi();
     setElectronApi(electronApi);
     const bridge = createElectronShellBridge();
     const listener = mock(() => {});
 
     const observing = bridge.observeAgentSessionLive({ repoPath: "/repo" }, listener);
-    const subscription = electronApi.subscribe.mock.calls.find(
-      ([channel]) => channel === "openducktor://agent-session-live-event",
-    )?.[1];
-    if (!subscription) {
-      throw new Error("Expected live-session subscription.");
-    }
+    await attachRequested.promise;
     const sessionRef = {
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo/worktree",
       externalSessionId: "child-thread",
-    };
+    } as const;
     const transcriptEvent = {
       type: "transcript_event",
       event: {
@@ -429,29 +509,29 @@ describe("electron shell bridge", () => {
         timestamp: "2026-07-17T08:00:00.000Z",
         sessionRef,
       },
-    };
-    const coveredRemoval = { type: "session_removed", ref: sessionRef, sequence: 4 };
+    } as const;
+    const coveredRemoval = { type: "session_removed", ref: sessionRef, sequence: 4 } as const;
     const newerRemoval = { ...coveredRemoval, sequence: 6 };
-    const snapshot: AgentSessionLiveSnapshotEnvelope = {
-      type: "snapshot",
-      messageQueues: [],
-      repoPath: "/repo",
-      sessions: [],
-      sequence: 5,
-    };
+    const snapshot: AgentSessionLiveSnapshotEnvelope = { ...liveSnapshot, sequence: 5 };
+    const eventName = liveSessionStreamEventName("/repo");
 
-    subscription(coveredRemoval);
-    subscription(transcriptEvent);
-    subscription(newerRemoval);
+    for (const payload of [coveredRemoval, transcriptEvent, newerRemoval])
+      host.emit({ channel: "openducktor://agent-session-live-event", payload }, eventName);
+    await settle(
+      () => host.sockets[0]?.requests.length === 2,
+      "the events open and attach requests",
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(listener).not.toHaveBeenCalled();
     resolveAttach(snapshot);
-    await observing;
+    const stop = await observing;
 
     expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
       { ...snapshot, isConnectionSnapshot: true },
       transcriptEvent,
       newerRemoval,
     ]);
+    stop();
   });
 
   test("uses the preload bridge for app update state and actions", async () => {
@@ -501,7 +581,7 @@ describe("electron shell bridge", () => {
     const onStateChange = mock(() => {});
     const listener = mock(() => {});
 
-    await bridge.subscribeBrowserTabEvents(listener);
+    const stopTabEvents = await bridge.subscribeBrowserTabEvents(listener);
     const connection = await bridge.browser.connect(onFrame, onStateChange, () => {});
     const clientId = electronApi.browser.connect.mock.calls[0]?.[0];
     await connection.send(new Uint8Array([1]));
@@ -510,7 +590,8 @@ describe("electron shell bridge", () => {
     const paths = await bridge.browser.pickFiles({ multiple: true, accept: [".png"] });
 
     expect(bridge.browser.partition("my-repo")).toBe("persist:openducktor-browser-my-repo");
-    expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://browser-event", listener);
+    expect(host.requests.map((request) => request.method)).toEqual(["events.open"]);
+    stopTabEvents();
     expect(electronApi.browser.subscribe).toHaveBeenCalledWith(clientId, onFrame);
     expect(electronApi.browser.send).toHaveBeenCalledWith(clientId, new Uint8Array([1]));
     expect(electronApi.browser.disconnect).toHaveBeenCalledWith(clientId);
@@ -540,20 +621,24 @@ describe("electron shell bridge", () => {
   });
 
   test("reconstructs structured host failures in the renderer realm", async () => {
-    const { electronApi } = createElectronApi();
-    electronApi.invoke = mock(async () => ({
-      ok: false,
-      error: {
-        message: "Terminal creation is unavailable.",
-        failure: {
-          kind: "terminal",
-          terminalFailure: {
-            code: "unsupported_runtime",
-            message: "Interactive terminals are unavailable in this runtime.",
+    useHost({
+      invoke: () => ({
+        error: {
+          kind: "host",
+          response: {
+            message: "Terminal creation is unavailable.",
+            failure: {
+              kind: "terminal",
+              terminalFailure: {
+                code: "unsupported_runtime",
+                message: "Interactive terminals are unavailable in this runtime.",
+              },
+            },
           },
         },
-      },
-    }));
+      }),
+    });
+    const { electronApi } = createElectronApi();
     setElectronApi(electronApi);
 
     const bridge = createElectronShellBridge();
@@ -572,22 +657,26 @@ describe("electron shell bridge", () => {
   });
 
   test("preserves workspace write failures in the renderer realm", async () => {
-    const { electronApi } = createElectronApi();
-    electronApi.invoke = mock(async () => ({
-      ok: false,
-      error: {
-        message: "The file changed after it was loaded.",
-        failure: {
-          kind: "workspace_text_file_write",
-          workspaceTextFileWriteFailure: {
-            code: "stale_revision",
+    useHost({
+      invoke: () => ({
+        error: {
+          kind: "host",
+          response: {
             message: "The file changed after it was loaded.",
-            rootPath: "/repo",
-            relativePath: "src/file.ts",
+            failure: {
+              kind: "workspace_text_file_write",
+              workspaceTextFileWriteFailure: {
+                code: "stale_revision",
+                message: "The file changed after it was loaded.",
+                rootPath: "/repo",
+                relativePath: "src/file.ts",
+              },
+            },
           },
         },
-      },
-    }));
+      }),
+    });
+    const { electronApi } = createElectronApi();
     setElectronApi(electronApi);
 
     let error: unknown;

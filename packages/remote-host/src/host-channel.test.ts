@@ -17,7 +17,7 @@ import {
   BROWSER_EVENT_STREAM_NAME,
   STARTUP_EVENT_STREAM_NAME,
   liveSessionStreamEventName,
-} from "./host-event-stream-name";
+} from "@openducktor/host-client";
 import { createTaskEventLeaseManager } from "./task-event-leases";
 
 const runEvent = (index: number): HostEventEnvelope => ({
@@ -315,6 +315,76 @@ test("sends a command result as the reply body", async () => {
 
   expect(calls).toEqual([["system_get_platform", { a: 1 }]]);
   expect(socket.result(id)).toEqual({ platform: "linux" });
+});
+
+/** A host whose commands run until their signal aborts, and record that abort. */
+const createBlockingHost = () => {
+  const aborted: string[] = [];
+  const settled: string[] = [];
+  const host = createHost({
+    invoke: (command, _args, signal) =>
+      new Promise((resolve) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            aborted.push(command);
+            resolve({ result: null });
+          },
+          { once: true },
+        );
+        setTimeout(() => {
+          settled.push(command);
+          resolve({ result: "done" });
+        }, 20);
+      }),
+  });
+  return { host, aborted, settled };
+};
+
+test("interrupts a cancelled host read and sends no answer", async () => {
+  const { host, aborted } = createBlockingHost();
+  const socket = host.connect();
+  const id = socket.request({
+    method: "invoke",
+    command: "workspace_get_git_provider_context",
+    args: {},
+  });
+  socket.raw(JSON.stringify({ type: "cancel", id }));
+  await waitFor(() => aborted.length === 1, "the interrupted read");
+  await Bun.sleep(30);
+
+  expect(aborted).toEqual(["workspace_get_git_provider_context"]);
+  expect(socket.reply(id)).toBeUndefined();
+});
+
+test("keeps running a cancelled command that can change host state", async () => {
+  const { host, aborted, settled } = createBlockingHost();
+  const socket = host.connect();
+  const id = socket.request({
+    method: "invoke",
+    command: "workspace_update_sidebar_session_grouping",
+    args: { grouping: "none" },
+  });
+  socket.raw(JSON.stringify({ type: "cancel", id }));
+  await waitFor(() => socket.reply(id) !== undefined, "the command result");
+
+  expect(aborted).toEqual([]);
+  expect(settled).toEqual(["workspace_update_sidebar_session_grouping"]);
+});
+
+test("interrupts running host reads when the socket closes", async () => {
+  const { host, aborted } = createBlockingHost();
+  const socket = host.connect();
+  socket.request({ method: "invoke", command: "workspace_get_git_provider_context", args: {} });
+  socket.request({
+    method: "invoke",
+    command: "workspace_update_sidebar_session_grouping",
+    args: { grouping: "none" },
+  });
+  socket.disconnect();
+  await waitFor(() => aborted.length === 1, "the interrupted read");
+
+  expect(aborted).toEqual(["workspace_get_git_provider_context"]);
 });
 
 test("sends a host error and refuses a reply over the size limit", async () => {

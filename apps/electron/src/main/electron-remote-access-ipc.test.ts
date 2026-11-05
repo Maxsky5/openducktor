@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import type { IpcMain, IpcMainInvokeEvent } from "electron";
-import { Effect, Fiber, Stream } from "effect";
+import { Effect, Stream } from "effect";
 import { RemoteAccessError, type RemoteAccessController } from "@openducktor/remote-host";
 import { ELECTRON_REMOTE_ACCESS_CHANNEL } from "../shared/electron-bridge-contract";
 import { registerElectronRemoteAccessIpc } from "./electron-remote-access-ipc";
@@ -67,12 +67,11 @@ test("Electron operator IPC keeps the next action when network reads or client r
     handleSharedRequest: () => null,
   };
   // SAFETY: Registration uses only handle; the fake records Electron's invoke handlers.
-  const fiber = registerElectronRemoteAccessIpc(ipc as IpcMain, controller, () => false);
-  const sender = Object.assign(new EventEmitter(), { isDestroyed: () => false, send() {} });
-  const senderEvents: EventEmitter = sender;
-  // SAFETY: This handler uses only sender.once, sender.isDestroyed, and sender.send.
-  const event = { sender: senderEvents as Electron.WebContents } as IpcMainInvokeEvent;
-  try {
+  registerElectronRemoteAccessIpc(ipc as IpcMain, controller, () => false);
+  const sender: EventEmitter = new EventEmitter();
+  // SAFETY: The handler reads no field of the invoke event or its sender.
+  const event = { sender: sender as Electron.WebContents } as IpcMainInvokeEvent;
+  {
     const handle = handlers.get(ELECTRON_REMOTE_ACCESS_CHANNEL);
     if (!handle) throw new Error("Remote access IPC was not registered.");
     expect(await handle(event, { action: "networks" })).toEqual([
@@ -114,7 +113,5 @@ test("Electron operator IPC keeps the next action when network reads or client r
     expect(revokeFailure).toMatchObject({
       message: "Could not remove saved access. Check the host directory permissions, then retry.",
     });
-  } finally {
-    await Effect.runPromise(Fiber.interrupt(fiber));
   }
 });

@@ -271,6 +271,7 @@ export const createRemoteWorkInterface = (
     connection: Connection,
     command: string,
     args: HostCommandInputRecord,
+    signal: AbortSignal,
   ): Promise<HostChannelReply> => {
     const refused = (code: RemoteFailure["code"], message: string, nextAction: string) => ({
       error: { kind: "refused" as const, failure: failure(code, message, nextAction) },
@@ -297,9 +298,9 @@ export const createRemoteWorkInterface = (
       // Remote clients cannot launch host apps.
       return { result: [] };
     }
-    // Do not bind accepted work to the socket or listener signal.
+    // Only a cancelled host read stops. Other accepted work outlives the socket and listener.
     try {
-      return { result: await Effect.runPromise(services.invoke(command, args)) };
+      return { result: await Effect.runPromise(services.invoke(command, args), { signal }) };
     } catch (cause) {
       return { error: { kind: "host", response: hostErrorPayload(cause) } };
     }
@@ -464,7 +465,7 @@ export const createRemoteWorkInterface = (
                   leases,
                   ownedLeases: connection.leases,
                   maxLeases: MAX_LEASES_PER_CONNECTION,
-                  invoke: (command, args) => invoke(connection, command, args),
+                  invoke: (command, args, signal) => invoke(connection, command, args, signal),
                   maxReplyBytes: REMOTE_MAX_REPLY_BYTES,
                   refusal: () =>
                     closed || connection.abort.signal.aborted

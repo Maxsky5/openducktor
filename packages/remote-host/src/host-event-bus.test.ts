@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { HostEventEnvelope } from "@openducktor/contracts";
 import { BufferedHostEventStream } from "./host-event-bus";
-import { liveSessionStreamEventName } from "./host-event-stream-name";
+import { liveSessionStreamEventName } from "@openducktor/host-client";
 
 const liveEvent = (repoPath: string, index: number): HostEventEnvelope => ({
   channel: "openducktor://agent-session-live-event",
