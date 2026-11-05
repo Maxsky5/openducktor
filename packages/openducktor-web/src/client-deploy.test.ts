@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
   ARTIFACT_PREVIEW_BOOTSTRAP_PATH,
@@ -54,16 +53,12 @@ describe("client/_headers", () => {
     expect(headers.get("Content-Security-Policy")).not.toContain("unsafe-eval");
   });
 
-  test("allows only the inline event handlers of index.html", () => {
+  test("blocks inline event handlers and external font sources", () => {
     const html = read("index.html");
-    const handlers = [...html.matchAll(/\son[a-z]+="([^"]*)"/g)].map(
-      ([, source]) =>
-        `'sha256-${createHash("sha256")
-          .update(source ?? "")
-          .digest("base64")}'`,
-    );
-    expect(handlers.length).toBeGreaterThan(0);
-    expect(policy.get("script-src-attr")).toEqual(["'unsafe-hashes'", ...handlers]);
+    expect(html).not.toMatch(/\son[a-z]+\s*=/i);
+    expect(policy.get("script-src-attr")).toEqual(["'none'"]);
+    expect(policy.get("style-src")).toEqual(["'self'", "'unsafe-inline'"]);
+    expect(policy.get("font-src")).toEqual(["'self'", "data:"]);
     // `script-src 'self'` blocks inline script elements.
     expect(html).not.toMatch(/<script(?![^>]*\ssrc=)[^>]*>/);
   });

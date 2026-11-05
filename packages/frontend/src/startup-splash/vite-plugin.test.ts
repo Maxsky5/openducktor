@@ -1,10 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { build, resolveConfig } from "vite";
 import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "./theme";
 import { createOpenDucktorStartupSplashPlugin } from "./vite-plugin";
+
+const electronConfig = await resolveConfig({ configFile: false, base: "./" }, "build");
 
 describe("startup splash Vite plugin", () => {
   test("injects the shared startup surface before the application shell", () => {
     const plugin = createOpenDucktorStartupSplashPlugin();
+    plugin.configResolved(electronConfig);
     const result = plugin.transformIndexHtml();
     const fontPreload = result.tags.find((tag) => tag.attrs?.rel === "preload");
     const styles = result.tags.find((tag) => tag.tag === "style");
@@ -19,7 +27,7 @@ describe("startup splash Vite plugin", () => {
     expect(styles?.children).not.toContain("gradient");
     expect(styles?.children).toContain('font-family: "Space Grotesk"');
     expect(styles?.children).toContain("--odt-startup-title: #475569");
-    expect(fontPreload?.attrs?.href).toBe("./fonts/space-grotesk-latin-600.woff2");
+    expect(fontPreload?.attrs?.href).toBe("./fonts/space-grotesk-latin-wght-normal.woff2");
     expect(fontPreload?.attrs?.type).toBe("font/woff2");
     expect(splash?.injectTo).toBe("body-prepend");
     expect(splash?.attrs?.role).toBe("status");
@@ -35,4 +43,78 @@ describe("startup splash Vite plugin", () => {
     expect(splash?.children).not.toContain("odt-startup__launch-panel");
     expect(splash?.children).toContain("./favicon.svg");
   });
+  test("packages every declared local face and its notices", () => {
+    const plugin = createOpenDucktorStartupSplashPlugin();
+    plugin.configResolved(electronConfig);
+    const assets = new Map<string, Buffer>();
+    plugin.generateBundle.call({
+      emitFile(asset) {
+        assets.set(asset.fileName, asset.source);
+        return asset.fileName;
+      },
+    });
+    const styles =
+      plugin.transformIndexHtml().tags.find((tag) => tag.tag === "style")?.children ?? "";
+    const urls = [...styles.matchAll(/url\(["']?(\.\/fonts\/[^)"']+)/g)].map(
+      (match) => match[1]?.slice(2) ?? "",
+    );
+    expect(urls.length).toBeGreaterThan(0);
+    for (const url of urls) {
+      expect(assets.get(url)?.subarray(0, 4).toString()).toBe("wOF2");
+    }
+    expect(new Set(urls).size).toBe(urls.length);
+    expect([...assets.keys()].filter((name) => name.endsWith(".woff2")).sort()).toEqual(
+      [...urls].sort(),
+    );
+    expect(assets.get("fonts/space-grotesk-OFL.txt")?.toString()).toContain(
+      "SIL OPEN FONT LICENSE",
+    );
+    expect(assets.get("fonts/ibm-plex-mono-OFL.txt")?.toString()).toContain(
+      "SIL OPEN FONT LICENSE",
+    );
+  });
+  // This test runs real Vite builds for both shell bases.
+  test("built font URLs resolve on web routes and beside Electron HTML", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "odt-font-build-"));
+    try {
+      writeFileSync(
+        join(directory, "index.html"),
+        "<!doctype html><html><head></head><body></body></html>",
+      );
+      for (const base of ["/", "./"]) {
+        const outDir = join(directory, base === "/" ? "web" : "electron");
+        await build({
+          configFile: false,
+          root: directory,
+          base,
+          logLevel: "silent",
+          plugins: [createOpenDucktorStartupSplashPlugin()],
+          build: { outDir },
+        });
+        const html = readFileSync(join(outDir, "index.html"), "utf8");
+        const urls = [...html.matchAll(/url\(["']?([^)"']+\.woff2)/g)].map(
+          (match) => match[1] ?? "",
+        );
+        const preload = html.match(/rel="preload" href="([^"]+)"/)?.[1] ?? "";
+        expect(urls).toHaveLength(8);
+        expect(urls).toContain(preload);
+        const documents =
+          base === "/"
+            ? ["http://localhost/sessions/", "http://localhost/kanban/"]
+            : [pathToFileURL(join(outDir, "index.html")).href];
+        for (const document of documents) {
+          for (const url of urls) {
+            const resolved = new URL(url, document);
+            const assetPath =
+              resolved.protocol === "file:"
+                ? fileURLToPath(resolved)
+                : join(outDir, resolved.pathname);
+            expect(readFileSync(assetPath).subarray(0, 4).toString()).toBe("wOF2");
+          }
+        }
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 10_000);
 });
