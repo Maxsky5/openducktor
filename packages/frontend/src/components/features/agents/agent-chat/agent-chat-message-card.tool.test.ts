@@ -761,18 +761,23 @@ describe("AgentChatMessageCard tool presentation", () => {
             tool: "openducktor_odt_apply_workflow_event",
             toolType: "workflow",
             status: "pending",
-            input: { taskId: "fairnest-98a" },
+            input: {
+              taskId: "fairnest-98a",
+              eventId: "build-blocked",
+              note: "The API key is missing.",
+            },
             output: "",
           },
         },
       }),
     );
 
+    expect(html).toContain("build-blocked · The API key is missing.");
     expect(html).toContain('aria-label="Running tool"');
     expect(html).toContain("border-info-border");
     expect(html).not.toContain("border-pending-border");
     expect(html).toContain("RUNNING");
-    expect(html).toContain("apply_workflow_event");
+    expect(html).toContain("Workflow Event");
   });
 
   test("shows progress while the model prepares workflow tool arguments", () => {

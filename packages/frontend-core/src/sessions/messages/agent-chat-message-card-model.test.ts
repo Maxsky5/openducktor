@@ -430,6 +430,34 @@ describe("agent-chat-message-card-model", () => {
       ).toBe("task-1 · login-preview");
     });
 
+    test.each([
+      "odt_apply_workflow_event",
+      "openducktor_odt_apply_workflow_event",
+      "mcp__openducktor__odt_apply_workflow_event",
+    ])("shows the workflow event and its note for %s", (tool) => {
+      const summary = (input: Record<string, string>) =>
+        buildToolSummary(createToolMeta({ tool, toolType: "workflow", input }), "");
+      expect(summary({ taskId: "task-1", eventId: "build-completed" })).toBe("build-completed");
+      expect(
+        summary({ taskId: "task-1", eventId: "build-blocked", note: "The API key is missing." }),
+      ).toBe("build-blocked · The API key is missing.");
+    });
+
+    test("shows the error of a rejected workflow event", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "odt_apply_workflow_event",
+            toolType: "workflow",
+            status: "error",
+            error: "build-blocked requires a note. Say why you send the event.",
+            input: { taskId: "task-1", eventId: "build-blocked" },
+          }),
+          "",
+        ),
+      ).toBe("build-blocked requires a note. Say why you send the event.");
+    });
+
     const partialArtifactReadCases: Array<{
       input?: NonNullable<ToolMeta["input"]>;
       expected: string;

@@ -117,7 +117,7 @@ describe("resolveAgentChatRuntimePresentation", () => {
     });
     expect(presentation.presentToolCall("odt_apply_workflow_event")).toEqual({
       kind: "workflow",
-      displayName: "apply_workflow_event",
+      displayName: "Workflow Event",
     });
   });
 

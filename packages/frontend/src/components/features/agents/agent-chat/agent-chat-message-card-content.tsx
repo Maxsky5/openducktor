@@ -479,6 +479,7 @@ const ToolMessageBody = ({
         timeLabel={timeLabel}
         sessionWorkingDirectory={sessionWorkingDirectory}
         displayName={toolCallPresentation.displayName}
+        summary={buildToolSummary(meta, message.content)}
       />
     );
   }

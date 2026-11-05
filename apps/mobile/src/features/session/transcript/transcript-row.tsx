@@ -1,4 +1,5 @@
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
+import { buildToolSummary } from "@openducktor/frontend-core/sessions/messages/tool-summary";
 import { formatTurnDurationLabel } from "@openducktor/frontend-core/sessions/transcript/format-agent-duration";
 import { getSubagentMessageSessionKey } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
@@ -133,6 +134,7 @@ function MessageRow({
           messageTimestamp={message.timestamp}
           timeLabel={timeLabel}
           displayName={row.displayName}
+          summary={buildToolSummary(row.meta, message.content)}
           document={null}
           rowKey={rowKey}
         />

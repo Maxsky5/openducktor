@@ -107,11 +107,14 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
   document,
   action,
   rowKey,
+  summary,
 }: {
   meta: ToolMeta;
   messageTimestamp: string;
   timeLabel: string;
   displayName: string;
+  /** The short line under the header, as on desktop, such as the event and note of an event. */
+  summary?: string | undefined;
   /** The tool type icon when undefined. */
   icon?: IconName | undefined;
   /** The task document that the call saves, or null. */
@@ -179,6 +182,9 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
         ) : null}
         {action}
       </View>
+      {summary ? (
+        <Text style={[styles.summary, { color: withAlpha(text, 0.75) }]}>{summary}</Text>
+      ) : null}
       <WorkflowToolDetails
         meta={meta}
         rowKey={rowKey}
@@ -366,5 +372,7 @@ const styles = StyleSheet.create((theme) => ({
     minHeight: 24,
   },
   name: { ...sansWeight("semibold"), fontSize: 12, lineHeight: 16, flexShrink: 1 },
+  // The desktop summary: `text-[11px] text-current/75` under the header.
+  summary: { fontSize: 11, lineHeight: 15 },
   details: { gap: theme.space.sm },
 }));

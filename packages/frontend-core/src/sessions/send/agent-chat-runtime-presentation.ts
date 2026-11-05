@@ -90,6 +90,9 @@ const buildRuntimePresentation = ({
       if (odtTool === "odt_read_task_artifacts") {
         return { kind: "regular", displayName: "read_task_artifacts" };
       }
+      if (odtTool === "odt_apply_workflow_event") {
+        return { kind: "workflow", displayName: "Workflow Event" };
+      }
       // Browser tools act on web pages, so they show as browser actions, not workflow steps.
       const browserAction = odtTool === null ? null : readBrowserToolAction(odtTool);
       if (browserAction !== null) {

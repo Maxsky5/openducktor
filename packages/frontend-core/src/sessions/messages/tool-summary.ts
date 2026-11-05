@@ -216,6 +216,17 @@ export const buildToolSummary = (
       : readInputString(meta.input, ["code"]);
     return requestedCodes ? `${taskId} · ${requestedCodes}` : taskId;
   }
+  if (odtTool === "odt_apply_workflow_event") {
+    if (meta.status === "error") {
+      if (hasNonEmptyText(meta.error)) return compactText(meta.error, 220);
+      return hasNonEmptyText(meta.output) ? compactText(meta.output, 220) : "";
+    }
+    // The event and the note tell what the agent reported, so they lead the summary.
+    const eventId = readInputString(meta.input, ["eventId"]);
+    const note = readInputString(meta.input, ["note"]);
+    if (!eventId) return "";
+    return note ? `${eventId} · ${compactText(note, 160)}` : eventId;
+  }
   if (lifecyclePhase === "preparing") return "";
   const fileEditData =
     toolType === "file_edit" ? extractAllFileEditData(meta, workingDirectory) : [];
