@@ -355,6 +355,7 @@ const builtinStates = [
     id: "spec_ready",
     label: "Spec ready",
     title: "Spec Ready",
+    shortLabel: "Spec",
     notification: notification("spec_ready", {
       label: "Spec Ready",
       description: "A Task moves to Spec Ready.",
@@ -372,6 +373,7 @@ const builtinStates = [
     id: "ready_for_dev",
     label: "Ready for dev",
     title: "Ready for Dev",
+    shortLabel: "Ready",
     notification: notification("ready_for_dev", {
       label: "Ready for Dev",
       description: "A Task moves to Ready for Dev.",
@@ -389,6 +391,7 @@ const builtinStates = [
     id: "in_progress",
     label: "In progress",
     title: "In Progress",
+    shortLabel: "Progress",
     notification: notification("in_progress", {
       label: "In Progress",
       description: "A Task moves to In Progress.",
@@ -428,6 +431,7 @@ const builtinStates = [
     id: "ai_review",
     label: "AI review",
     title: "AI Review",
+    shortLabel: "AI QA",
     notification: notification("ai_review", {
       label: "AI Review",
       description: "A Task moves to AI Review.",
@@ -446,6 +450,7 @@ const builtinStates = [
     id: "human_review",
     label: "Human review",
     title: "Human Review",
+    shortLabel: "Review",
     notification: notification("human_review", {
       label: "Human Review",
       description: "A Task moves to Human Review.",
