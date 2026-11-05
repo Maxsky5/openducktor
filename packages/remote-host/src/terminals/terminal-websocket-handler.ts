@@ -80,9 +80,11 @@ export const createSocketData = (
   return data;
 };
 
+/**
+ * The terminal half of `hostWebSocketHandler`. That listener takes larger channel frames, so this
+ * handler rejects a terminal frame above `MAX_CLIENT_FRAME_BYTES` itself.
+ */
 export const terminalWebSocketHandler = {
-  perMessageDeflate: false,
-  maxPayloadLength: MAX_CLIENT_FRAME_BYTES,
   message: runClientMessage,
   drain(socket: TerminalServerSocket) {
     const data = socket.data;
