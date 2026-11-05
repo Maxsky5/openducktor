@@ -61,9 +61,11 @@ export function TaskDetailsSheetFrame({
           event.preventDefault();
           contentRef.current?.focus({ preventScroll: true });
         }}
+        // Workflow dialogs mount outside the sheet. Focus in a dialog that the sheet does not own
+        // closes the sheet. Focus that a closing dialog returns to the page behind the sheet does
+        // not; a click outside still closes it.
         onFocusOutside={(event) => {
-          // The workflow dialogs mount outside the sheet. Focus in another dialog closes it.
-          if (ownsWorkflowDialog) event.preventDefault();
+          if (ownsWorkflowDialog || !isInDialog(event.target)) event.preventDefault();
         }}
       >
         <TaskDetailsSheetClaimDialogContext.Provider value={claimDialog}>
@@ -73,3 +75,6 @@ export function TaskDetailsSheetFrame({
     </Sheet>
   );
 }
+
+const isInDialog = (target: EventTarget | null): boolean =>
+  target instanceof Element && target.closest('[role="dialog"], [role="alertdialog"]') !== null;
