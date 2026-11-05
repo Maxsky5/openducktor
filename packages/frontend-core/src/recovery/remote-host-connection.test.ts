@@ -1,19 +1,12 @@
-import {
-  savedTestAuthorizationStore,
-  TEST_HOST_ID,
-  TEST_CONNECTION_TOKEN,
-} from "../../../host-client/src/remote/test-support/authorization";
+import { savedTestAuthorizationStore } from "../../../host-client/src/remote/test-support/authorization";
+import { createFakeHostChannel } from "../../../host-client/src/remote/test-support/host-channel";
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import {
-  REMOTE_BASELINE_CAPABILITIES,
-  REMOTE_PROTOCOL_VERSION,
-  type AgentSessionLiveEnvelope,
-  type BrowserEventCursor,
-} from "@openducktor/contracts";
+import { REMOTE_MAX_REPLY_BYTES, type AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { liveSessionStreamEventName } from "@openducktor/host-client";
-import type { RemoteHttpResponse, RemoteTransport } from "@openducktor/host-client/remote";
+import type { RemoteTransport } from "@openducktor/host-client/remote";
 import { QueryObserver } from "@tanstack/react-query";
 import { createClientQueryClient } from "../connection/client-query-client";
+import { createChannelTestTransport } from "../test-support/remote-channel-transport";
 import { waitForExpectation } from "../test-support/wait-for-expectation";
 import { createRemoteHostConnection } from "./remote-host-connection";
 
@@ -27,7 +20,7 @@ const discoveryTransport = (failure: Error | null): RemoteTransport => ({
       }
       signal.addEventListener("abort", () => reject(signal.reason), { once: true });
     }),
-  openTerminal: () => Promise.reject(new Error("No terminal in this test.")),
+  openSocket: () => Promise.reject(new Error("No socket in this test.")),
 });
 
 const connect = (failure: Error | null) =>
@@ -67,40 +60,14 @@ describe("createRemoteHostConnection", () => {
   });
 });
 
-const encoder = new TextEncoder();
-const json = <Value>(value: Value): RemoteHttpResponse => ({
-  status: 200,
-  headers: {},
-  body: (async function* () {
-    yield encoder.encode(JSON.stringify(value));
-  })(),
-});
-const frame = <Data>(event: string, data: Data, id?: BrowserEventCursor) =>
-  `${id === undefined ? "" : `id: ${JSON.stringify(id)}\n`}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-const attached = frame("notification-frame", {
-  type: "attached",
-  cursor: { epoch: crypto.randomUUID(), sequence: 0 },
-  reason: "new",
-  health: [],
-});
-const descriptor = {
-  shell: "web",
-  appVersion: "host",
-  hostInstanceId: "instance-1",
-  hostId: TEST_HOST_ID,
-  accessPolicy: "pairing",
-  protocols: [
-    { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
-  ],
-};
-const admission = () =>
-  json({
-    status: "accepted",
-    connectionToken: TEST_CONNECTION_TOKEN,
-    host: descriptor,
-    connectionId: crypto.randomUUID(),
-    protocolVersion: REMOTE_PROTOCOL_VERSION,
-    missingOptionalCapabilities: [],
+const connectTo = (transport: RemoteTransport) =>
+  createRemoteHostConnection({
+    authorizationStore: savedTestAuthorizationStore(),
+    clientKind: "mobile",
+    endpoint: "https://host.test/remote",
+    version: "mobile-release",
+    transport,
+    queryClient: createClientQueryClient(),
   });
 
 describe("live sessions across a reconnect", () => {
@@ -121,75 +88,59 @@ describe("live sessions across a reconnect", () => {
       },
     },
   });
-  const liveFrame = (envelope: AgentSessionLiveEnvelope, hostEventId: number) =>
-    frame(
-      liveSessionStreamEventName("/repo"),
-      { channel: "openducktor://agent-session-live-event", payload: envelope },
-      { hostEpoch: "epoch-1", hostEventId, notificationCursor: null },
-    );
-  /** A host whose event stream drops once. The second stream replays `replayed` with `gaps`. */
+  const liveEnvelope = (envelope: AgentSessionLiveEnvelope) =>
+    ({ channel: "openducktor://agent-session-live-event", payload: envelope }) as const;
+  /** A host whose channel drops once. The second channel replays its missed events with `gaps`. */
   const scriptedHost = (gaps: string[]) => {
-    const streams: { push: (text: string) => void; drop: () => void }[] = [];
     let attaches = 0;
-    const transport: RemoteTransport = {
-      async request(_method, url, _headers, signal) {
-        if (url === "https://host.test/remote") return json(descriptor);
-        if (url.endsWith("/connections")) return admission();
-        if (url.endsWith("/events")) {
-          const first = streams.length === 0;
-          const queue: string[] = [
-            first
-              ? frame("replay-complete", { hostChanged: false, gaps: [] }) + attached
-              : liveFrame(transcriptEvent("missed", 3), 2) +
-                frame("replay-complete", { hostChanged: false, gaps }) +
-                attached,
-          ];
-          let wake = () => {};
-          let dropped = false;
-          streams.push({
-            push: (text) => {
-              queue.push(text);
-              wake();
-            },
-            drop: () => {
-              dropped = true;
-              wake();
-            },
-          });
-          return {
-            status: 200,
-            headers: {},
-            body: (async function* () {
-              while (true) {
-                const next = queue.shift();
-                if (next !== undefined) {
-                  yield encoder.encode(next);
-                  continue;
-                }
-                if (dropped) throw new Error("The host event stream dropped.");
-                await new Promise<void>((resolve, reject) => {
-                  wake = resolve;
-                  signal.addEventListener("abort", () => reject(signal.reason), { once: true });
-                });
-              }
-            })(),
-          };
-        }
-        if (url.endsWith("/invoke/agent_session_live_attach")) {
-          attaches += 1;
-          return json({
+    const channel = createFakeHostChannel({
+      invoke: (command) => {
+        if (command !== "agent_session_live_attach") return { result: null };
+        attaches += 1;
+        return {
+          result: {
             type: "snapshot",
             repoPath: "/repo",
             sessions: [],
             messageQueues: [],
             sequence: attaches,
-          });
-        }
-        return json(null);
+          },
+        };
       },
-      openTerminal: () => Promise.reject(new Error("No terminal in this test.")),
-    };
-    return { transport, streams, attaches: () => attaches };
+      answer: (request, socket) => {
+        if (request.method !== "events.open" || request.cursor === null) return undefined;
+        // The reconnect replays the missed event and reports `gaps`.
+        socket.send(
+          {
+            type: "host_event",
+            id: request.cursor.hostEventId + 1,
+            name: liveSessionStreamEventName("/repo"),
+          },
+          JSON.stringify(liveEnvelope(transcriptEvent("missed", 3))),
+        );
+        socket.send(
+          { type: "result", id: request.id },
+          JSON.stringify({
+            hostEpoch: request.cursor.hostEpoch,
+            hostEventId: request.cursor.hostEventId + 1,
+            hostChanged: false,
+            gaps,
+          }),
+        );
+        socket.send({
+          type: "notification",
+          frame: {
+            type: "attached",
+            cursor: { epoch: crypto.randomUUID(), sequence: 0 },
+            reason: "new",
+            health: [],
+          },
+        });
+        return "none";
+      },
+    });
+    const { transport } = createChannelTestTransport({ channel });
+    return { transport, channel, attaches: () => attaches };
   };
 
   test.each([
@@ -206,14 +157,7 @@ describe("live sessions across a reconnect", () => {
     ],
   ] as const)("%s", async (_name, gaps, attaches) => {
     const host = scriptedHost([...gaps]);
-    const connection = createRemoteHostConnection({
-      authorizationStore: savedTestAuthorizationStore(),
-      clientKind: "mobile",
-      endpoint: "https://host.test/remote",
-      version: "mobile-release",
-      transport: host.transport,
-      queryClient: createClientQueryClient(),
-    });
+    const connection = connectTo(host.transport);
     const received: AgentSessionLiveEnvelope[] = [];
     const controls: unknown[] = [];
     try {
@@ -224,15 +168,21 @@ describe("live sessions across a reconnect", () => {
       const stop = await connection.observeAgentSessionLive({ repoPath: "/repo" }, (envelope) =>
         received.push(envelope),
       );
-      host.streams[0]?.push(liveFrame(transcriptEvent("before", 2), 1));
+      host.channel.emit(
+        liveEnvelope(transcriptEvent("before", 2)),
+        liveSessionStreamEventName("/repo"),
+      );
       await waitForExpectation(() => expect(received).toHaveLength(2));
-      host.streams[0]?.drop();
+      host.channel.closeAll();
       // The client reconnects after its first backoff of 500 ms.
       await waitForExpectation(() => {
-        expect(host.streams).toHaveLength(2);
+        expect(host.channel.sockets).toHaveLength(2);
         expect(connection.remote.readState().status).toBe("connected");
       }, 3_000);
-      host.streams[1]?.push(liveFrame(transcriptEvent("after", 4), 3));
+      host.channel.emit(
+        liveEnvelope(transcriptEvent("after", 4)),
+        liveSessionStreamEventName("/repo"),
+      );
       await waitForExpectation(() => expect(received.at(-1)).toEqual(transcriptEvent("after", 4)));
 
       expect(controls).toContainEqual({
@@ -290,51 +240,24 @@ describe("live sessions across a reconnect", () => {
 
 describe("an oversized reply during recovery", () => {
   test("fails only its read, and the connection recovers", async () => {
-    const chunk = new Uint8Array(1024 * 1024);
-    let admissions = 0;
     let reads = 0;
-    const transport: RemoteTransport = {
-      async request(_method, url, _headers, signal) {
-        if (url === "https://host.test/remote") return json(descriptor);
-        if (url.endsWith("/connections")) {
-          admissions += 1;
-          return admission();
-        }
-        if (url.endsWith("/events"))
-          return {
-            status: 200,
-            headers: {},
-            body: (async function* () {
-              yield encoder.encode(
-                frame("replay-complete", { hostChanged: false, gaps: [] }) + attached,
-              );
-              await new Promise<never>((_resolve, reject) => {
-                signal.addEventListener("abort", () => reject(signal.reason), { once: true });
-              });
-            })(),
-          };
-        if (url.endsWith("/invoke/custom_agent_role_list")) {
+    const host = createChannelTestTransport({
+      channel: createFakeHostChannel({
+        invoke: (command) => {
+          if (command !== "custom_agent_role_list") return { result: null };
           reads += 1;
-          if (reads === 1) return json([]);
-          return {
-            status: 200,
-            headers: {},
-            body: (async function* () {
-              for (let index = 0; index < 40; index += 1) yield chunk;
-            })(),
-          };
-        }
-        return json(null);
-      },
-      openTerminal: () => Promise.reject(new Error("No terminal in this test.")),
-    };
+          if (reads === 1) return { result: [] };
+          return { error: { kind: "reply_too_large", limitBytes: REMOTE_MAX_REPLY_BYTES } };
+        },
+      }),
+    });
     const queryClient = createClientQueryClient();
     const connection = createRemoteHostConnection({
       authorizationStore: savedTestAuthorizationStore(),
       clientKind: "mobile",
       endpoint: "https://host.test/remote",
       version: "mobile-release",
-      transport,
+      transport: host.transport,
       queryClient,
     });
     const stop = new QueryObserver(queryClient, {
@@ -356,7 +279,7 @@ describe("an oversized reply during recovery", () => {
         status: "error",
         error: { failure: { code: "consumer_overflow" } },
       });
-      expect({ admissions, reads }).toEqual({ admissions: 2, reads: 2 });
+      expect({ admissions: host.admissions(), reads }).toEqual({ admissions: 2, reads: 2 });
     } finally {
       stop();
       await connection.remote.disconnect();

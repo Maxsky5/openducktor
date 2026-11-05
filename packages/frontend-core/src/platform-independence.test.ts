@@ -1,17 +1,8 @@
 import { workspaceRefFixture } from "./test-support/workspace-ref-fixture";
-import {
-  savedTestAuthorizationStore,
-  TEST_HOST_ID,
-  TEST_CONNECTION_TOKEN,
-} from "../../host-client/src/remote/test-support/authorization";
+import { savedTestAuthorizationStore } from "../../host-client/src/remote/test-support/authorization";
+import { createFakeHostChannel } from "../../host-client/src/remote/test-support/host-channel";
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import {
-  REMOTE_BASELINE_CAPABILITIES,
-  REMOTE_PROTOCOL_VERSION,
-  type RemoteHostDescriptor,
-} from "@openducktor/contracts";
 import { createHostClient } from "@openducktor/host-client";
-import type { RemoteHttpResponse, RemoteTransport } from "@openducktor/host-client/remote";
 import { QueryObserver } from "@tanstack/react-query";
 import { connectionHost, createClientConnection } from "./connection/client-connection";
 import { createClientQueryClient } from "./connection/client-query-client";
@@ -22,6 +13,10 @@ import { repoTaskDataQueryOptions, taskQueryKeys } from "./queries/tasks";
 import type { ConnectionControlEvent } from "./recovery/connection-control-events";
 import { createRemoteHostConnection } from "./recovery/remote-host-connection";
 import { createFeedbackFake } from "./test-support/feedback-fake";
+import {
+  createChannelTestTransport,
+  testRemoteDescriptor,
+} from "./test-support/remote-channel-transport";
 import { createTaskCardFixture } from "./test-support/shared-test-fixtures";
 import {
   createTestClientConnection,
@@ -275,74 +270,42 @@ describe("frontend core without a DOM", () => {
 });
 
 const createRemoteFixture = () => {
-  const encoder = new TextEncoder();
-  const descriptor: RemoteHostDescriptor = {
-    shell: "web",
-    appVersion: "host-release",
-    hostInstanceId: "host-instance-1",
-    hostId: TEST_HOST_ID,
-    accessPolicy: "pairing",
-    protocols: [
-      { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
-    ],
-  };
-  const json = <T>(value: T, status = 200): RemoteHttpResponse => ({
-    status,
-    headers: {},
-    body: (async function* () {
-      if (status !== 204) yield encoder.encode(JSON.stringify(value));
-    })(),
-  });
-  const frame = <T>(event: string, data: T) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  const live = (signal: AbortSignal, prefix: string): RemoteHttpResponse => ({
-    status: 200,
-    headers: {},
-    body: (async function* () {
-      yield encoder.encode(prefix);
-      await new Promise<never>((_resolve, reject) => {
-        const abort = () => reject(signal.reason);
-        signal.addEventListener("abort", abort, { once: true });
-        if (signal.aborted) abort();
-      });
-    })(),
-  });
-  const notificationEpoch = crypto.randomUUID();
   let gaps: string[] = [];
   let taskReads = 0;
-  const transport: RemoteTransport = {
-    async request(method, url, _headers, signal) {
-      if (url.endsWith("/connections"))
-        return json({
-          status: "accepted",
-          connectionToken: TEST_CONNECTION_TOKEN,
-          host: descriptor,
-          connectionId: crypto.randomUUID(),
-          protocolVersion: REMOTE_PROTOCOL_VERSION,
-          missingOptionalCapabilities: [],
-        });
-      if (url.endsWith("/events"))
-        return live(
-          signal,
-          frame("replay-complete", { hostChanged: false, gaps }) +
-            frame("notification-frame", {
-              type: "attached",
-              cursor: { epoch: notificationEpoch, sequence: 1 },
-              reason: "new",
-              health: [],
-            }),
-        );
-      if (url.endsWith("/invoke/tasks_list")) {
-        taskReads += 1;
-        return json([]);
-      }
-      if (method === "DELETE") return json(null, 204);
-      if (method === "GET") return json(descriptor);
-      throw new Error(`Unexpected request: ${method} ${url}`);
+  const channel = createFakeHostChannel({
+    invoke: (command) => {
+      if (command !== "tasks_list") throw new Error(`Unexpected command: ${command}`);
+      taskReads += 1;
+      return { result: [] };
     },
-    openTerminal: async () => {
-      throw new Error("This fixture opens no terminal.");
+    answer: (request, socket) => {
+      if (request.method !== "events.open" || gaps.length === 0) return undefined;
+      socket.send(
+        { type: "result", id: request.id },
+        JSON.stringify({
+          hostEpoch: request.cursor?.hostEpoch ?? "fake-host-epoch",
+          hostEventId: request.cursor?.hostEventId ?? 0,
+          hostChanged: false,
+          gaps,
+        }),
+      );
+      socket.send({
+        type: "notification",
+        frame: {
+          type: "attached",
+          cursor: { epoch: crypto.randomUUID(), sequence: 1 },
+          reason: "new",
+          health: [],
+        },
+      });
+      return "none";
     },
-  };
+  });
+  const { transport } = createChannelTestTransport({
+    channel,
+    descriptor: () =>
+      testRemoteDescriptor({ appVersion: "host-release", hostInstanceId: "host-instance-1" }),
+  });
   return {
     transport,
     taskReads: () => taskReads,

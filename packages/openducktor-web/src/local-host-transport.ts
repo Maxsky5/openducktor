@@ -1,33 +1,25 @@
-import { createNotificationFrameRelay } from "@openducktor/frontend-core/recovery/notification-frame-relay";
 import {
-  notificationStreamFrameSchema,
   notificationStreamSubscribeSchema,
-  type NotificationCursor,
   type AgentSessionLiveAttachInput,
   type AgentSessionLiveEnvelope,
-  browserReplayCompleteSchema,
   type HostErrorResponse,
   type HostEventChannel,
-  type HostEventEnvelope,
   type HostEventPayload,
-  parseHostEventEnvelope,
+  type NotificationCursor,
+  type RemoteAccessState,
   type TaskEventCursor,
 } from "@openducktor/contracts";
 import type { HostCommandArgs, HostCommandName } from "@openducktor/host";
 import type { AzureDevOpsConnectionUpdateListener, RunEventListener } from "@openducktor/frontend";
 import { CONNECTION_RECONNECTED_EVENT_KIND } from "@openducktor/frontend-core/recovery/connection-control-events";
-import {
-  connectionReconnectedEvent,
-  connectionStreamWarningEvent,
-} from "@openducktor/frontend-core/recovery/connection-control-events";
-import {
-  type BrowserTabEventListener,
-  logListenerFailure,
-  type RuntimeChangeListener,
-  type TaskMergeStatusUpdateListener,
-  type StartupProgressListener,
-  type TaskStreamFrame,
-  type TaskStreamSubscription,
+import { connectionStreamWarningEvent } from "@openducktor/frontend-core/recovery/connection-control-events";
+import type {
+  BrowserTabEventListener,
+  RuntimeChangeListener,
+  TaskMergeStatusUpdateListener,
+  StartupProgressListener,
+  TaskStreamFrame,
+  TaskStreamSubscription,
 } from "@openducktor/frontend-core/connection/host-connection";
 import {
   createAgentSessionLiveAttachment,
@@ -36,8 +28,9 @@ import {
   HostInvokeError,
   type InvokeFn,
 } from "@openducktor/host-client";
+import { HostChannelRequestError } from "@openducktor/host-client/channel";
 import { Effect } from "effect";
-import { z } from "zod";
+import type { JSONType } from "zod";
 import { getBrowserAuthTokenEffect, getBrowserBackendUrlEffect } from "./browser-config";
 import {
   causeToWebBoundaryError,
@@ -48,27 +41,19 @@ import {
   type WebError,
   WebHostRequestError,
 } from "@openducktor/remote-host/effect/web-errors";
-import {
-  readLocalHostErrorPayloadEffect,
-  readLocalHostInvokeErrorPayloadEffect,
-} from "./local-host-errors";
+import { readLocalHostErrorPayloadEffect } from "./local-host-errors";
 import {
   BROWSER_EVENT_STREAM_NAME,
   STARTUP_EVENT_STREAM_NAME,
-  hostEventStreamEventName,
   liveSessionStreamEventName,
 } from "@openducktor/remote-host/host-event-stream-name";
-import { subscribeLocalTaskEventStreamEffect } from "./local-task-event-transport";
-
-type BrowserSseControlEvent = ReturnType<typeof connectionReconnectedEvent>;
-type BrowserSseEvent = HostEventEnvelope | BrowserSseControlEvent;
-type BrowserSseListener = (event: BrowserSseEvent) => void | Promise<void>;
-type BrowserSseListenerRegistration = {
-  channel: HostEventChannel;
-  eventName: string;
-  listener: BrowserSseListener;
-  receivesControlEvents: boolean;
-};
+import {
+  createLocalHostChannel,
+  type LocalHostChannel,
+  type LocalHostChannelEvent,
+  type LocalHostChannelListener,
+} from "./local-host-channel";
+import type { ConnectionControlEvent } from "@openducktor/frontend-core/recovery/connection-control-events";
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
@@ -76,29 +61,12 @@ const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connec
 const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
 const TASK_MERGE_STATUS_EVENT_CHANNEL = "openducktor://task-merge-status-updated";
 const BROWSER_EVENT_CHANNEL = "openducktor://browser-event";
-const HOST_EVENT_STREAM_PATH = "events";
+const HOST_CHANNEL_PATH = "channel";
 export const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SESSION_PATH = "session";
-const INITIAL_SSE_READY_TIMEOUT_MS = 10_000;
-const eventSourceDataSchema = z.object({ data: z.string() });
-type BrowserSseChannel = {
-  eventSource: EventSource;
-  listeners: Map<number, BrowserSseListenerRegistration>;
-  /** Resolves when the first connection finishes its replay. */
-  ready: Promise<void>;
-  /** The warning of the current connection failure, or null while the stream is connected. */
-  readConnectionWarning: () => string | null;
-  handleMessage: EventListener;
-  handleReplayComplete: EventListener;
-  handleError: EventListener;
-  handleNotification: EventListener;
-  notifications: ReturnType<typeof createNotificationFrameRelay>;
-};
+const INITIAL_CHANNEL_READY_TIMEOUT_MS = 10_000;
+const DEFAULT_EVENT_NAME = "message";
 
-type BrowserSseSubscription = {
-  ready: Promise<void>;
-  unsubscribe: () => void;
-};
 type LocalHostRequestErrorInput = {
   message: string;
   status: number;
@@ -106,11 +74,10 @@ type LocalHostRequestErrorInput = {
   failureKind?: string;
 };
 
-const isBrowserSseControlEvent = (event: BrowserSseEvent): event is BrowserSseControlEvent =>
+const isControlEvent = (event: LocalHostChannelEvent): event is ConnectionControlEvent =>
   "__openducktorConnectionControl" in event;
 
-let sseChannel: BrowserSseChannel | null = null;
-let nextSseListenerId = 0;
+let channel: LocalHostChannel | null = null;
 let sessionPromise: Promise<void> | null = null;
 
 const createLocalHostRequestError = (
@@ -133,17 +100,6 @@ const localHostRequestErrorEffect = (
 ): Effect.Effect<never, WebDependencyError | WebHostRequestError> =>
   Effect.gen(function* () {
     const { message, payload } = yield* readLocalHostErrorPayloadEffect(response);
-    return yield* createLocalHostRequestError(response, message, payload);
-  });
-
-const localHostInvokeErrorEffect = (
-  response: Response,
-): Effect.Effect<never, WebDependencyError | WebHostRequestError | HostInvokeError> =>
-  Effect.gen(function* () {
-    const { message, payload } = yield* readLocalHostInvokeErrorPayloadEffect(response);
-    if (payload?.failure) {
-      return yield* Effect.fail(new HostInvokeError(message, payload.failure));
-    }
     return yield* createLocalHostRequestError(response, message, payload);
   });
 
@@ -201,501 +157,238 @@ export const ensureLocalHostSessionDedupedEffect = (): Effect.Effect<void, WebEr
           }),
   });
 
-const invokeLocalHostEffect = <Command extends HostCommandName>(
-  command: Command,
-  args: Exclude<HostCommandArgs, undefined> | undefined,
-): Effect.Effect<unknown, WebError | HostInvokeError> =>
-  Effect.gen(function* () {
-    const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
-    const appToken = yield* getBrowserAuthTokenEffect();
-    yield* ensureLocalHostSessionDedupedEffect();
-    const response = yield* Effect.tryPromise({
-      try: () =>
-        fetch(`${baseUrl}/invoke/${command}`, {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "content-type": "application/json",
-            [APP_TOKEN_HEADER]: appToken,
-          },
-          body: JSON.stringify(args ?? {}),
-        }),
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "local-web-host",
-          operation: "invoke",
-          message: errorMessage(cause),
-          cause,
-          details: { command },
-        }),
-    });
-
-    if (!response.ok) {
-      return yield* localHostInvokeErrorEffect(response);
-    }
-
-    return yield* Effect.tryPromise({
-      try: async () => {
-        const payload: unknown = await response.json();
-        return payload;
-      },
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "local-web-host",
-          operation: "read-invoke-response",
-          message: errorMessage(cause),
-          cause,
-          details: { command },
-        }),
-    });
-  });
-
-const createHttpInvoke = (): InvokeFn => async (command, args, resultSchema) => {
-  const payload = await runWebBoundary(invokeLocalHostEffect(command, args));
-  return resultSchema.parse(payload);
+const channelSocketUrl = (backendUrl: string): string => {
+  const url = new URL(`${backendUrl.replace(/\/$/, "")}/${HOST_CHANNEL_PATH}`);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.href;
 };
 
-export const createLocalHostClient = (): HostClient => createHostClient(createHttpInvoke());
-
-const parseHostEvent = (raw: string): HostEventEnvelope => parseHostEventEnvelope(JSON.parse(raw));
-
-const readEventSourceData = (event: Event, eventName: string): string => {
-  const parsed = eventSourceDataSchema.safeParse(event);
-  if (!parsed.success) {
-    throw new Error(`EventSource ${eventName} events must contain string data.`, {
-      cause: parsed.error,
-    });
-  }
-  return parsed.data.data;
-};
-
-const dispatchBrowserSseListeners = <Payload>(
-  listeners: Iterable<(payload: Payload) => void | Promise<void>>,
-  payload: Payload,
-): void => {
-  let didListenerThrow = false;
-  let firstListenerError: unknown;
-
-  for (const currentListener of listeners) {
-    try {
-      logListenerFailure(currentListener(payload));
-    } catch (error) {
-      if (!didListenerThrow) {
-        firstListenerError = error;
-      }
-      didListenerThrow = true;
-    }
-  }
-
-  if (didListenerThrow) {
-    throw firstListenerError;
-  }
-};
-
-const closeSseChannelIfUnused = (channel: BrowserSseChannel): void => {
-  if (channel.listeners.size > 0 || channel.notifications.hasListeners()) {
-    return;
-  }
-  channel.eventSource.removeEventListener("message", channel.handleMessage);
-  channel.eventSource.removeEventListener("replay-complete", channel.handleReplayComplete);
-  channel.eventSource.removeEventListener("error", channel.handleError);
-  channel.eventSource.removeEventListener("notification-frame", channel.handleNotification);
-  channel.eventSource.close();
-  if (sseChannel === channel) {
-    sseChannel = null;
-  }
-};
-
-const getSseChannelEffect = (
+/** The host channel of this tab. It closes when nothing uses it, and the next use opens a new one. */
+const localHostChannel = (
   notificationCursor: NotificationCursor | null = null,
-): Effect.Effect<BrowserSseChannel, WebError> =>
-  Effect.gen(function* () {
-    const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
-    let channel = sseChannel;
-
-    if (!channel) {
-      const url = new URL(`${baseUrl}/${HOST_EVENT_STREAM_PATH}`);
-      if (notificationCursor)
-        url.searchParams.set("notificationCursor", JSON.stringify(notificationCursor));
-      const eventSource = yield* Effect.try({
-        try: () =>
-          new EventSource(url.href, {
-            withCredentials: true,
-          }),
-        catch: (cause) =>
-          new WebDependencyError({
-            dependency: "event-source",
-            operation: "subscribe",
-            message: errorMessage(cause),
-            cause,
-            details: { path: HOST_EVENT_STREAM_PATH },
-          }),
-      });
-      const listeners = new Map<number, BrowserSseListenerRegistration>();
-      const notifications = createNotificationFrameRelay();
-      const handleNotification: EventListener = (event) => {
-        try {
-          notifications.accept(
-            notificationStreamFrameSchema.parse(
-              JSON.parse(readEventSourceData(event, "notification-frame")),
-            ),
-          );
-        } catch (cause) {
-          notifications.fail(cause);
-        }
-      };
-      let hasOpened = false;
-      let hasReportedConnectionError = false;
-      let connectionWarning: string | null = null;
-      let resolveReady: () => void = () => {};
-      const ready = new Promise<void>((resolve) => {
-        resolveReady = resolve;
-      });
-      const snapshotControlListeners = (): BrowserSseListener[] =>
-        [...listeners.values()]
-          .filter((registration) => registration.receivesControlEvents)
-          .map((registration) => registration.listener);
-      const handleMessage: EventListener = (event) => {
-        const hostEvent = parseHostEvent(readEventSourceData(event, event.type));
-        const expectedName = hostEventStreamEventName(hostEvent);
-        if (event.type !== expectedName) {
-          throw new Error("OpenDucktor host event arrived on the wrong stream event name.");
-        }
-        dispatchBrowserSseListeners(
-          [...listeners.values()]
-            .filter(
-              (registration) =>
-                registration.channel === hostEvent.channel && registration.eventName === event.type,
-            )
-            .map((registration) => registration.listener),
-          hostEvent,
-        );
-      };
-      // The host ends the replay of each connection with the event names it could not replay.
-      const handleReplayComplete: EventListener = (event) => {
-        const replay = browserReplayCompleteSchema.parse(
-          JSON.parse(readEventSourceData(event, "replay-complete")),
-        );
-        // A connection after a reported failure is a recovery, also when it is the first one.
-        const recovers = connectionWarning !== null;
-        connectionWarning = null;
-        hasReportedConnectionError = false;
-        const resumed = hasOpened;
-        if (!hasOpened) {
-          hasOpened = true;
-          resolveReady();
-          if (!recovers) return;
-        }
-        const gaps = new Set(replay.gaps);
-        dispatchBrowserSseListeners(
-          [...listeners.values()]
-            .filter((registration) => registration.receivesControlEvents)
-            .map(
-              (registration) => () =>
-                registration.listener(
-                  connectionReconnectedEvent(
-                    // A first connection has no cursor, so it cannot prove that nothing was missed.
-                    !resumed || replay.hostChanged || gaps.has(registration.eventName),
-                    { hostChanged: replay.hostChanged, missedEventNames: replay.gaps },
-                  ),
-                ),
-            ),
-          undefined,
-        );
-      };
-      const handleError: EventListener = () => {
-        if (!hasReportedConnectionError)
-          notifications.fail(
-            new Error(
-              "Notification connection failed. The stream will reconnect when the host is available.",
-            ),
-          );
-        if (hasReportedConnectionError) {
-          return;
-        }
-        if (hasOpened) {
-          connectionWarning = `EventSource ${HOST_EVENT_STREAM_PATH} reported an error after opening.`;
-          const warningPayload = connectionStreamWarningEvent(connectionWarning);
-          try {
-            dispatchBrowserSseListeners(snapshotControlListeners(), warningPayload);
-          } finally {
-            hasReportedConnectionError = true;
-          }
-          return;
-        }
-        connectionWarning = `EventSource ${HOST_EVENT_STREAM_PATH} reported an error before opening.`;
-        dispatchBrowserSseListeners(
-          snapshotControlListeners(),
-          connectionStreamWarningEvent(connectionWarning),
-        );
-        hasReportedConnectionError = true;
-      };
-      eventSource.addEventListener("notification-frame", handleNotification);
-      eventSource.addEventListener("message", handleMessage);
-      eventSource.addEventListener("replay-complete", handleReplayComplete);
-      eventSource.addEventListener("error", handleError);
-      channel = {
-        eventSource,
-        listeners,
-        ready,
-        readConnectionWarning: () => connectionWarning,
-        handleMessage,
-        handleReplayComplete,
-        handleError,
-        handleNotification,
-        notifications,
-      };
-      sseChannel = channel;
-    }
-
-    return channel;
+): LocalHostChannel => {
+  if (channel) return channel;
+  const created = createLocalHostChannel({
+    prepare: async () => {
+      await ensureLocalHostSession();
+      return channelSocketUrl(await runWebBoundary(getBrowserBackendUrlEffect()));
+    },
+    createSocket: (url, protocols) => new WebSocket(url, protocols),
+    notificationCursor,
+    onDispose: () => {
+      if (channel === created) channel = null;
+    },
   });
+  channel = created;
+  return created;
+};
 
-const subscribeSseChannelEffect = (
-  eventChannel: HostEventChannel,
-  listener: BrowserSseListener,
-  receivesControlEvents = false,
-  eventName = "message",
-): Effect.Effect<BrowserSseSubscription, WebError> =>
-  Effect.gen(function* () {
-    const channel = yield* getSseChannelEffect();
-    const listenerId = nextSseListenerId;
-    nextSseListenerId += 1;
-    const registration: BrowserSseListenerRegistration = {
-      channel: eventChannel,
-      eventName,
-      listener,
-      receivesControlEvents,
-    };
-    if (
-      eventName !== "message" &&
-      ![...channel.listeners.values()].some((entry) => entry.eventName === eventName)
-    ) {
-      channel.eventSource.addEventListener(eventName, channel.handleMessage);
+/** The web error of a failed channel request. */
+const localChannelError = (
+  cause: unknown,
+  operation: string,
+): WebError | HostInvokeError | WebHostRequestError => {
+  if (cause instanceof HostChannelRequestError) {
+    const { error } = cause;
+    if (error.kind === "host") {
+      if (error.response.failure) return new HostInvokeError(cause.message, error.response.failure);
+      const input: LocalHostRequestErrorInput = {
+        message: cause.message,
+        status: 500,
+        cause: error.response,
+      };
+      if (error.response.failureKind) input.failureKind = error.response.failureKind;
+      return new WebHostRequestError(input);
     }
-    channel.listeners.set(listenerId, registration);
-    const activeChannel = channel;
-    const subscriptionReady = activeChannel.ready.then(() => {
-      // The first open does not prove the stream is connected now. A control subscriber that
-      // joins during a connection failure gets that failure before its subscription is ready.
-      const connectionWarning = activeChannel.readConnectionWarning();
-      if (
-        receivesControlEvents &&
-        connectionWarning !== null &&
-        activeChannel.listeners.get(listenerId) === registration
-      ) {
-        dispatchBrowserSseListeners(
-          [registration.listener],
-          connectionStreamWarningEvent(connectionWarning),
-        );
-      }
+    return new WebHostRequestError({
+      message: cause.message,
+      status: error.kind === "refused" ? 503 : 500,
     });
-    void subscriptionReady.catch(() => {});
-
-    return {
-      ready: subscriptionReady,
-      unsubscribe: () => {
-        const currentChannel = sseChannel;
-        if (!currentChannel) {
-          return;
-        }
-        currentChannel.listeners.delete(listenerId);
-        if (
-          eventName !== "message" &&
-          ![...currentChannel.listeners.values()].some((entry) => entry.eventName === eventName)
-        ) {
-          currentChannel.eventSource.removeEventListener(eventName, currentChannel.handleMessage);
-        }
-        closeSseChannelIfUnused(currentChannel);
-      },
-    };
+  }
+  if (isWebError(cause) || cause instanceof HostInvokeError) return cause;
+  return new WebDependencyError({
+    dependency: "local-web-host",
+    operation,
+    message: errorMessage(cause),
+    cause,
   });
-
-export const subscribeLocalHostRunEvents = async (
-  listener: RunEventListener,
-): Promise<() => void> => {
-  return runWebBoundary(
-    Effect.gen(function* () {
-      yield* ensureLocalHostSessionDedupedEffect();
-      // Control events report reconnects, so a listener can read the state that it missed.
-      return (yield* subscribeSseChannelEffect(
-        RUN_EVENT_CHANNEL,
-        (event) => {
-          if (isBrowserSseControlEvent(event)) {
-            return listener(event);
-          } else if (event.channel === RUN_EVENT_CHANNEL) {
-            return listener(event.payload);
-          }
-        },
-        true,
-      )).unsubscribe;
-    }),
-  );
 };
 
-export const subscribeLocalHostAzureDevOpsConnectionUpdates = async (
-  listener: AzureDevOpsConnectionUpdateListener,
-): Promise<() => void> => {
-  return runWebBoundary(
-    subscribeReadyLocalHostEventsEffect(AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL, (event) => {
-      if (
-        !isBrowserSseControlEvent(event) &&
-        event.channel === AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL
-      ) {
-        listener(event.payload);
-      }
-    }),
-  );
-};
-export const subscribeLocalHostWorkspaceProviderSetupUpdates = async (
-  listener: (payload: HostEventPayload<"openducktor://workspace-provider-setup-updated">) => void,
-): Promise<() => void> => {
-  return runWebBoundary(
-    subscribeReadyLocalHostEventsEffect(
-      "openducktor://workspace-provider-setup-updated",
-      (event) => {
-        if (
-          !isBrowserSseControlEvent(event) &&
-          event.channel === "openducktor://workspace-provider-setup-updated"
-        )
-          listener(event.payload);
-      },
-    ),
-  );
+const invokeLocalHost = async (
+  command: HostCommandName,
+  args: HostCommandArgs,
+  signal: AbortSignal | undefined,
+): Promise<JSONType> => {
+  try {
+    return await localHostChannel().request(
+      { method: "invoke", command, args: args ?? {} },
+      signal,
+    );
+  } catch (cause) {
+    // The caller stopped waiting. The host may still run the command.
+    if (signal?.aborted && cause === signal.reason) throw cause;
+    throw localChannelError(cause, "invoke");
+  }
 };
 
+const createChannelInvoke = (): InvokeFn => async (command, args, resultSchema, options) =>
+  resultSchema.parse(await invokeLocalHost(command, args, options?.signal));
+
+export const createLocalHostClient = (): HostClient => createHostClient(createChannelInvoke());
+
+/** Adds a listener and waits until the channel finished its first replay. */
 const subscribeReadyLocalHostEventsEffect = (
-  channel: HostEventChannel,
-  listener: BrowserSseListener,
-  eventName = "message",
+  eventChannel: HostEventChannel,
+  listener: LocalHostChannelListener,
+  eventName = DEFAULT_EVENT_NAME,
 ): Effect.Effect<() => void, WebError> =>
   Effect.gen(function* () {
     yield* ensureLocalHostSessionDedupedEffect();
-    const subscription = yield* subscribeSseChannelEffect(channel, listener, true, eventName);
+    const current = localHostChannel();
+    const registration = {
+      channel: eventChannel,
+      eventName,
+      listener,
+      receivesControlEvents: true,
+    };
+    let active = true;
+    const remove = current.addListener(registration);
+    const unsubscribe = () => {
+      active = false;
+      remove();
+    };
     const readyExit = yield* Effect.exit(
       Effect.tryPromise({
-        try: () => {
+        try: async () => {
           let timeoutId: ReturnType<typeof setTimeout> | null = null;
           const timeout = new Promise<never>((_, reject) => {
             timeoutId = setTimeout(
               () =>
                 reject(
                   new WebDependencyError({
-                    dependency: "event-source",
+                    dependency: "host-channel",
                     operation: "await-ready",
-                    message: `Timed out waiting for EventSource ${HOST_EVENT_STREAM_PATH} subscription to open.`,
+                    message: "Timed out waiting for the host channel to open.",
                     details: {
-                      path: HOST_EVENT_STREAM_PATH,
-                      timeoutMs: INITIAL_SSE_READY_TIMEOUT_MS,
+                      path: HOST_CHANNEL_PATH,
+                      timeoutMs: INITIAL_CHANNEL_READY_TIMEOUT_MS,
                     },
                   }),
                 ),
-              INITIAL_SSE_READY_TIMEOUT_MS,
+              INITIAL_CHANNEL_READY_TIMEOUT_MS,
             );
           });
-          return Promise.race([subscription.ready, timeout]).finally(() => {
-            if (timeoutId) {
-              clearTimeout(timeoutId);
-            }
-          });
-        },
-        catch: (cause) => {
-          if (isWebError(cause)) {
-            return cause;
+          try {
+            await Promise.race([current.ready, timeout]);
+          } finally {
+            if (timeoutId) clearTimeout(timeoutId);
           }
-          return new WebDependencyError({
-            dependency: "event-source",
-            operation: "await-ready",
-            message: errorMessage(cause),
-            cause,
-            details: { path: HOST_EVENT_STREAM_PATH },
-          });
+          // The first open does not prove the channel is connected now. A control subscriber that
+          // joins during a connection failure gets that failure before its subscription is ready.
+          const warning = current.readConnectionWarning();
+          if (active && warning !== null) {
+            await listener(connectionStreamWarningEvent(warning));
+          }
         },
+        catch: (cause) =>
+          isWebError(cause)
+            ? cause
+            : new WebDependencyError({
+                dependency: "host-channel",
+                operation: "await-ready",
+                message: errorMessage(cause),
+                cause,
+                details: { path: HOST_CHANNEL_PATH },
+              }),
       }),
     );
     if (readyExit._tag === "Failure") {
-      subscription.unsubscribe();
+      unsubscribe();
       return yield* causeToWebBoundaryError(readyExit.cause);
     }
-    return subscription.unsubscribe;
+    return unsubscribe;
   });
 
-export const subscribeLocalHostWorkspaceSessionUpdates = async (
-  listener: import("@openducktor/frontend-core/connection/host-connection").WorkspaceSessionUpdateListener,
-): Promise<() => void> => {
-  return runWebBoundary(
-    subscribeReadyLocalHostEventsEffect("openducktor://workspace-session-updated", (event) => {
-      if (isBrowserSseControlEvent(event)) {
-        return listener(event);
-      } else if (event.channel === "openducktor://workspace-session-updated") {
-        return listener(event.payload);
-      }
-    }),
-  );
-};
+const subscribeReadyLocalHostEvents = (
+  eventChannel: HostEventChannel,
+  listener: LocalHostChannelListener,
+  eventName = DEFAULT_EVENT_NAME,
+): Promise<() => void> =>
+  runWebBoundary(subscribeReadyLocalHostEventsEffect(eventChannel, listener, eventName));
 
-export const subscribeLocalHostStartupProgress = async (
+export const subscribeLocalHostRunEvents = (listener: RunEventListener): Promise<() => void> =>
+  // Control events report reconnects, so a listener can read the state that it missed.
+  subscribeReadyLocalHostEvents(RUN_EVENT_CHANNEL, (event) => {
+    if (isControlEvent(event)) return listener(event);
+    if (event.channel === RUN_EVENT_CHANNEL) return listener(event.payload);
+  });
+
+export const subscribeLocalHostAzureDevOpsConnectionUpdates = (
+  listener: AzureDevOpsConnectionUpdateListener,
+): Promise<() => void> =>
+  subscribeReadyLocalHostEvents(AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL, (event) => {
+    if (!isControlEvent(event) && event.channel === AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL)
+      listener(event.payload);
+  });
+
+export const subscribeLocalHostWorkspaceProviderSetupUpdates = (
+  listener: (payload: HostEventPayload<"openducktor://workspace-provider-setup-updated">) => void,
+): Promise<() => void> =>
+  subscribeReadyLocalHostEvents("openducktor://workspace-provider-setup-updated", (event) => {
+    if (
+      !isControlEvent(event) &&
+      event.channel === "openducktor://workspace-provider-setup-updated"
+    )
+      listener(event.payload);
+  });
+
+export const subscribeLocalHostWorkspaceSessionUpdates = (
+  listener: import("@openducktor/frontend-core/connection/host-connection").WorkspaceSessionUpdateListener,
+): Promise<() => void> =>
+  subscribeReadyLocalHostEvents("openducktor://workspace-session-updated", (event) => {
+    if (isControlEvent(event)) return listener(event);
+    if (event.channel === "openducktor://workspace-session-updated") return listener(event.payload);
+  });
+
+export const subscribeLocalHostStartupProgress = (
   listener: StartupProgressListener,
 ): Promise<() => void> =>
-  runWebBoundary(
-    subscribeReadyLocalHostEventsEffect(
-      "openducktor://session-startup-progress",
-      (event) => {
-        if (
-          isBrowserSseControlEvent(event) ||
-          event.channel === "openducktor://session-startup-progress"
-        )
-          return listener(event);
-      },
-      STARTUP_EVENT_STREAM_NAME,
-    ),
+  subscribeReadyLocalHostEvents(
+    "openducktor://session-startup-progress",
+    (event) => {
+      if (isControlEvent(event) || event.channel === "openducktor://session-startup-progress")
+        return listener(event);
+    },
+    STARTUP_EVENT_STREAM_NAME,
   );
 
-export const subscribeLocalHostRuntimeChanges = async (
+export const subscribeLocalHostRuntimeChanges = (
   listener: RuntimeChangeListener,
-): Promise<() => void> => {
-  return runWebBoundary(
-    subscribeReadyLocalHostEventsEffect(RUNTIME_CHANGED_EVENT_CHANNEL, (event) => {
-      if (isBrowserSseControlEvent(event)) {
-        return listener(event);
-      } else if (event.channel === RUNTIME_CHANGED_EVENT_CHANNEL) {
-        return listener(event.payload);
-      }
-    }),
-  );
-};
+): Promise<() => void> =>
+  subscribeReadyLocalHostEvents(RUNTIME_CHANGED_EVENT_CHANNEL, (event) => {
+    if (isControlEvent(event)) return listener(event);
+    if (event.channel === RUNTIME_CHANGED_EVENT_CHANNEL) return listener(event.payload);
+  });
 
-export const subscribeLocalHostTaskMergeStatusUpdates = async (
+export const subscribeLocalHostTaskMergeStatusUpdates = (
   listener: TaskMergeStatusUpdateListener,
-): Promise<() => void> => {
-  return runWebBoundary(
-    subscribeReadyLocalHostEventsEffect(TASK_MERGE_STATUS_EVENT_CHANNEL, (event) => {
-      if (isBrowserSseControlEvent(event)) {
-        return listener(event);
-      } else if (event.channel === TASK_MERGE_STATUS_EVENT_CHANNEL) {
-        return listener(event.payload);
-      }
-    }),
-  );
-};
+): Promise<() => void> =>
+  subscribeReadyLocalHostEvents(TASK_MERGE_STATUS_EVENT_CHANNEL, (event) => {
+    if (isControlEvent(event)) return listener(event);
+    if (event.channel === TASK_MERGE_STATUS_EVENT_CHANNEL) return listener(event.payload);
+  });
 
-export const subscribeLocalHostBrowserTabEvents = async (
+export const subscribeLocalHostBrowserTabEvents = (
   listener: BrowserTabEventListener,
-): Promise<() => void> => {
-  return runWebBoundary(
-    subscribeReadyLocalHostEventsEffect(
-      BROWSER_EVENT_CHANNEL,
-      (event) => {
-        if (isBrowserSseControlEvent(event)) {
-          return listener(event);
-        } else if (event.channel === BROWSER_EVENT_CHANNEL) {
-          return listener(event.payload);
-        }
-      },
-      BROWSER_EVENT_STREAM_NAME,
-    ),
+): Promise<() => void> =>
+  subscribeReadyLocalHostEvents(
+    BROWSER_EVENT_CHANNEL,
+    (event) => {
+      if (isControlEvent(event)) return listener(event);
+      if (event.channel === BROWSER_EVENT_CHANNEL) return listener(event.payload);
+    },
+    BROWSER_EVENT_STREAM_NAME,
   );
-};
 
 export const observeLocalHostAgentSessions = async (
   input: AgentSessionLiveAttachInput,
@@ -734,7 +427,7 @@ export const observeLocalHostAgentSessions = async (
       const unsubscribe = yield* subscribeReadyLocalHostEventsEffect(
         AGENT_SESSION_LIVE_EVENT_CHANNEL,
         (event) => {
-          if (isBrowserSseControlEvent(event)) {
+          if (isControlEvent(event)) {
             if (event.kind === CONNECTION_RECONNECTED_EVENT_KIND && event.missedEvents) {
               reattach();
             }
@@ -777,13 +470,35 @@ export const subscribeLocalHostTaskStream = async (
   input: { cursor: TaskEventCursor | null },
   onFrame: (frame: TaskStreamFrame) => void,
   onTerminalFailure?: (cause: unknown) => void,
-): Promise<TaskStreamSubscription> =>
-  runWebBoundary(
-    subscribeLocalTaskEventStreamEffect(input, onFrame, onTerminalFailure, {
-      ensureSession: ensureLocalHostSessionDedupedEffect,
-      localHostRequestErrorEffect,
-    }),
-  );
+): Promise<TaskStreamSubscription> => {
+  await ensureLocalHostSession();
+  const current = localHostChannel();
+  let subscription: Awaited<ReturnType<LocalHostChannel["subscribeTaskEvents"]>>;
+  try {
+    subscription = await current.subscribeTaskEvents(input, onFrame, onTerminalFailure);
+  } catch (cause) {
+    throw localChannelError(cause, "task-event-stream.subscribe");
+  }
+  return {
+    subscriptionId: subscription.subscriptionId,
+    acknowledge: async (cursor) => {
+      try {
+        await subscription.acknowledge(cursor);
+      } catch (cause) {
+        throw localChannelError(cause, "task-event-stream.acknowledge");
+      }
+    },
+    unsubscribe: () => subscription.unsubscribe(),
+  };
+};
+
+/** Delivers the live remote access state of the local operator. */
+export const observeLocalHostRemoteAccess = async (
+  listener: (state: RemoteAccessState) => void,
+): Promise<() => void> => {
+  await ensureLocalHostSession();
+  return localHostChannel().observeRemoteAccess(listener);
+};
 
 export const buildLocalAttachmentPreviewUrl = (browserBackendUrl: string, path: string): string => {
   const baseUrl = browserBackendUrl.replace(/\/$/, "");
@@ -808,11 +523,7 @@ export const subscribeLocalHostNotificationStream: import("@openducktor/frontend
       Effect.gen(function* () {
         const parsed = notificationStreamSubscribeSchema.parse(input);
         yield* ensureLocalHostSessionDedupedEffect();
-        const channel = yield* getSseChannelEffect(parsed.cursor);
-        const stop = channel.notifications.subscribe(parsed, onFrame, onFailure);
-        return () => {
-          stop();
-          closeSseChannelIfUnused(channel);
-        };
+        const current = localHostChannel(parsed.cursor);
+        return current.subscribeNotifications(parsed, onFrame, onFailure);
       }),
     );

@@ -23,10 +23,12 @@ export const repositoryGitProviderContextQueryOptions = (
 ) =>
   queryOptions<RepositoryGitProviderContext, Error, RepositoryGitProviderContext, QueryKey>({
     queryKey: repositoryGitProviderContextQueryKeys.repo(scope),
-    queryFn: ({ client }): Promise<RepositoryGitProviderContext> =>
+    queryFn: ({ client, signal }): Promise<RepositoryGitProviderContext> =>
       withDiagnosticsQueryTimeout(
-        connectionHost(client).workspaceGetGitProviderContext(scope),
+        (timeoutSignal) =>
+          connectionHost(client).workspaceGetGitProviderContext(scope, { signal: timeoutSignal }),
         scheduler,
+        signal,
       ),
     staleTime: REPOSITORY_GIT_PROVIDER_CONTEXT_STALE_TIME_MS,
   });

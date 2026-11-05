@@ -1,6 +1,4 @@
-import type { JSONType } from "zod";
 import {
-  failedRemoteAccessState,
   remoteAccessStateSchema,
   remoteAccessNetworksSchema,
   type RemoteAccessBridge,
@@ -8,7 +6,7 @@ import {
   type RemotePairingStartInput,
 } from "@openducktor/contracts";
 import { getBrowserBackendUrl, getBrowserAuthToken } from "./browser-config";
-import { ensureLocalHostSession } from "./local-host-transport";
+import { ensureLocalHostSession, observeLocalHostRemoteAccess } from "./local-host-transport";
 export const createBrowserRemoteAccessBridge = (): RemoteAccessBridge => {
   const request = async (
     path: string,
@@ -54,43 +52,6 @@ export const createBrowserRemoteAccessBridge = (): RemoteAccessBridge => {
       ),
     stopPairing: async () =>
       remoteAccessStateSchema.parse(await request("/remote-access/pairing/stop", {})),
-    subscribeState: async (listener) => {
-      await ensureLocalHostSession();
-      const events = new EventSource(`${getBrowserBackendUrl()}/remote-access/events`, {
-        withCredentials: true,
-      });
-      events.onmessage = (event) => {
-        let value: JSONType;
-        try {
-          value = JSON.parse(event.data);
-        } catch {
-          value = null;
-        }
-        const state = remoteAccessStateSchema.safeParse(value);
-        if (state.success) {
-          listener(state.data);
-          return;
-        }
-        events.close();
-        listener(
-          failedRemoteAccessState({
-            code: "invalid_protocol",
-            message: "Remote control status could not be read.",
-            nextAction: "Restart the local host and reload this window.",
-          }),
-        );
-      };
-      events.onerror = () => {
-        events.close();
-        listener(
-          failedRemoteAccessState({
-            code: "transport_failure",
-            message: "Remote operator status stream was lost.",
-            nextAction: "Reload the local operator URL.",
-          }),
-        );
-      };
-      return () => events.close();
-    },
+    subscribeState: (listener) => observeLocalHostRemoteAccess(listener),
   };
 };

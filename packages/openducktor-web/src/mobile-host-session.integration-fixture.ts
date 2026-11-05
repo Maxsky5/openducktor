@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import type { RemoteHttpResponse, RemoteTransport } from "@openducktor/host-client/remote";
 import { remoteError } from "@openducktor/host-client/remote";
+import { openRemoteSocket } from "@openducktor/host-client/remote/socket";
+import { HOST_CHANNEL_SUBPROTOCOL } from "@openducktor/contracts";
 import { createHostSessionOwner } from "../../../apps/mobile/src/host-session/host-session-owner";
 import {
   createMemoryDeviceStore,
@@ -61,11 +63,20 @@ const createLoopbackTransport = (port: number): RemoteTransport => {
       };
       return result;
     },
-    openTerminal: async () => {
-      throw remoteError(
-        "function_unavailable",
-        "This fixture does not open terminals.",
-        "Use the terminal tests.",
+    openSocket: async (url, protocol, headers, signal, onFrame, onClose) => {
+      if (protocol !== HOST_CHANNEL_SUBPROTOCOL)
+        throw remoteError(
+          "function_unavailable",
+          "This fixture does not open terminals.",
+          "Use the terminal tests.",
+        );
+      return openRemoteSocket(
+        (protocols) => new WebSocket(toLoopback(url), protocols),
+        protocol,
+        headers,
+        signal,
+        onFrame,
+        onClose,
       );
     },
   };

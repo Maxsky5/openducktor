@@ -7,8 +7,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./remote": "./src/remote/index.ts",
-    "./remote/terminal-socket": "./src/remote/terminal-socket.ts",
-    "./remote/test-support": "./src/remote/test-support/authorization.ts"
+    "./remote/socket": "./src/remote/socket.ts",
+    "./channel": "./src/channel.ts",
+    "./remote/test-support": "./src/remote/test-support/authorization.ts",
+    "./remote/test-support/host-channel": "./src/remote/test-support/host-channel.ts"
   },
   "scripts": {
     "build": "bunx tsc -p tsconfig.json",

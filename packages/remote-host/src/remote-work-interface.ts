@@ -1,20 +1,20 @@
 import { WebHostRequestError } from "./effect/web-errors";
-import { z } from "zod";
 import {
   HOST_COMMAND_NAMES,
+  type HostCommandInputRecord,
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
-  REMOTE_STREAM_HEARTBEAT_CAPABILITY,
   REMOTE_CONNECTION_HEADER,
+  REMOTE_MAX_REPLY_BYTES,
   REMOTE_PROTOCOL_VERSION,
-  REMOTE_TERMINAL_CONNECTION_PREFIX,
-  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
+  REMOTE_SOCKET_CONNECTION_PREFIX,
+  REMOTE_SOCKET_AUTHORIZATION_PREFIX,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
+  HOST_CHANNEL_SUBPROTOCOL,
   remoteConnectionRequestSchema,
   remoteClientHelloSchema,
   systemListOpenInToolsRequestSchema,
-  taskEventCursorSchema,
-  taskEventStreamSubscribeSchema,
+  type HostErrorResponse,
   type RemoteFailure,
   type RemoteHostDescriptor,
   type RemoteNegotiationResult,
@@ -31,17 +31,14 @@ import {
 import { Effect } from "effect";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { RemoteAdmissionPort } from "./remote-admission";
-import { createCombinedHostSseResponse } from "./combined-host-event-http-server";
 import { localAttachmentPreviewResponse } from "./local-attachment-preview";
 import { routeTaskAssetHttpRequest } from "./task-asset-http-server";
 import { createTaskEventLeaseManager } from "./task-event-leases";
-import { createTaskEventSseResponse, writeTaskFrameSseEvent } from "./task-event-sse";
 import { type BufferedHostEventBus } from "./host-event-bus";
+import { createHostChannelSocketData, type HostChannelReply } from "./host-channel";
+import type { HostWebSocketData } from "./host-websocket-handler";
 import { type NodeFetchServer } from "./node-fetch-server";
-import {
-  createSocketData,
-  type TerminalWebSocketData,
-} from "./terminals/terminal-websocket-handler";
+import { createSocketData } from "./terminals/terminal-websocket-handler";
 import type { WebLogger } from "./logger";
 import { isRequestHostAllowed, allowedHostnamesFor, isLoopbackHost } from "./http-origin";
 
@@ -65,12 +62,16 @@ type Connection = {
 };
 const MAX_CONNECTIONS = 128;
 const MAX_LEASES_PER_CONNECTION = 32;
-/** The baseline capabilities, the stream heartbeat, and compact session history. */
+/** The baseline capabilities and compact session history. */
 const HOST_CAPABILITIES: readonly string[] = [
   ...REMOTE_BASELINE_CAPABILITIES,
-  REMOTE_STREAM_HEARTBEAT_CAPABILITY,
   REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
 ];
+/** The upgrade routes and the subprotocol that each one selects. */
+const SOCKET_PROTOCOLS: ReadonlyMap<string, string> = new Map([
+  ["/terminal", TERMINAL_PROTOCOL_SUBPROTOCOL],
+  ["/channel", HOST_CHANNEL_SUBPROTOCOL],
+]);
 const WORK_COMMANDS = new Set<string>(HOST_COMMAND_NAMES);
 const SHELL_COMMANDS = new Set(["open_external_url", "system_open_directory_in_tool"]);
 /** Network resources observe the supplied host. They never create or dispose it. */
@@ -114,7 +115,6 @@ export const createRemoteWorkInterface = (
   const connections = new Map<string, Connection>();
   const leases = createTaskEventLeaseManager({
     taskEventStream: services.taskEventStream,
-    encodeFrame: writeTaskFrameSseEvent,
     reportDeliveryFailure: ({ cause }) => options.reportFailure(cause),
   });
   let closed = false;
@@ -266,9 +266,47 @@ export const createRemoteWorkInterface = (
         };
       }),
     );
+  /** Runs a command of a remote client. Shell functions stay with the local shell. */
+  const invoke = async (
+    connection: Connection,
+    command: string,
+    args: HostCommandInputRecord,
+  ): Promise<HostChannelReply> => {
+    const refused = (code: RemoteFailure["code"], message: string, nextAction: string) => ({
+      error: { kind: "refused" as const, failure: failure(code, message, nextAction) },
+    });
+    if (SHELL_COMMANDS.has(command) || !WORK_COMMANDS.has(command))
+      return refused(
+        "function_unavailable",
+        `Shell function ${command} is unavailable remotely.`,
+        "Use the local shell for this action.",
+      );
+    if (closed || connection.abort.signal.aborted)
+      return refused(
+        "remote_disabled",
+        "Remote admission ended before this command was accepted.",
+        "Reconnect to an enabled host and retry this refused command.",
+      );
+    if (command === "system_list_open_in_tools") {
+      if (!systemListOpenInToolsRequestSchema.safeParse(args).success)
+        return refused(
+          "invalid_protocol",
+          "The open-in tools request is invalid.",
+          "Update the client to the host's protocol.",
+        );
+      // Remote clients cannot launch host apps.
+      return { result: [] };
+    }
+    // Do not bind accepted work to the socket or listener signal.
+    try {
+      return { result: await Effect.runPromise(services.invoke(command, args)) };
+    } catch (cause) {
+      return { error: { kind: "host", response: hostErrorPayload(cause) } };
+    }
+  };
   const handle = async (
     request: Request,
-    server: NodeFetchServer<TerminalWebSocketData>,
+    server: NodeFetchServer<HostWebSocketData>,
   ): Promise<Response | undefined> => {
     if (!isRequestHostAllowed(request, allowedHosts))
       return new Response("Request host is not allowed.", { status: 403 });
@@ -287,7 +325,7 @@ export const createRemoteWorkInterface = (
         status: 204,
         headers: {
           ...cors,
-          "access-control-allow-headers": `content-type, authorization, last-event-id, ${REMOTE_CONNECTION_HEADER}`,
+          "access-control-allow-headers": `content-type, authorization, ${REMOTE_CONNECTION_HEADER}`,
           "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
           // Custom headers make each command preflight. Browsers reuse a preflight for 10 minutes.
           "access-control-max-age": "600",
@@ -338,16 +376,17 @@ export const createRemoteWorkInterface = (
         if (result.status === "rejected") return remoteFailureResponse(result.failure, cors);
         return remoteJson(result, 201, cors);
       }
+      const socketProtocol = request.method === "GET" ? SOCKET_PROTOCOLS.get(route) : undefined;
       const protocols =
-        route === "/terminal"
-          ? (request.headers.get("sec-websocket-protocol") ?? "").split(",").map((v) => v.trim())
-          : [];
-      const terminalTag = protocols
-        .find((v) => v.startsWith(REMOTE_TERMINAL_CONNECTION_PREFIX))
-        ?.slice(REMOTE_TERMINAL_CONNECTION_PREFIX.length);
+        socketProtocol === undefined
+          ? []
+          : (request.headers.get("sec-websocket-protocol") ?? "").split(",").map((v) => v.trim());
+      const connectionTag = protocols
+        .find((v) => v.startsWith(REMOTE_SOCKET_CONNECTION_PREFIX))
+        ?.slice(REMOTE_SOCKET_CONNECTION_PREFIX.length);
       const authorizationTag = protocols
-        .find((v) => v.startsWith(REMOTE_TERMINAL_AUTHORIZATION_PREFIX))
-        ?.slice(REMOTE_TERMINAL_AUTHORIZATION_PREFIX.length);
+        .find((v) => v.startsWith(REMOTE_SOCKET_AUTHORIZATION_PREFIX))
+        ?.slice(REMOTE_SOCKET_AUTHORIZATION_PREFIX.length);
       const authorizationHeader = request.headers.get("authorization");
       const token =
         authorizationHeader === null
@@ -355,15 +394,15 @@ export const createRemoteWorkInterface = (
           : readBearerToken(authorizationHeader, remoteConnectionTokenSchema);
       const headerId = request.headers.get(REMOTE_CONNECTION_HEADER);
       // Browser WebSockets cannot set request headers, so they send the ID as a subprotocol.
-      const id = headerId === null ? terminalTag : headerId;
+      const id = headerId === null ? connectionTag : headerId;
       if (
-        (terminalTag && headerId !== null && terminalTag !== headerId) ||
+        (connectionTag && headerId !== null && connectionTag !== headerId) ||
         (authorizationTag && authorizationHeader !== null && token !== authorizationTag)
       )
         return remoteFailureResponse(
           failure(
             "invalid_protocol",
-            "Terminal connection contexts do not agree.",
+            "Socket connection contexts do not agree.",
             "Use the current negotiated connection.",
           ),
           cors,
@@ -400,109 +439,59 @@ export const createRemoteWorkInterface = (
       const signal = AbortSignal.any([request.signal, connection.abort.signal]);
       // Node transfers the routed body here. Only the scoped request can read it after this point.
       const scoped = new Request(routed, { signal });
-      if (route === "/events" && request.method === "GET") {
-        ownStream(id, connection, signal);
-        return await Effect.runPromise(
-          createCombinedHostSseResponse(
-            scoped,
-            services.eventBus.stream(),
-            services.notificationStream,
-            cors,
-            options.reportFailure,
-            () => closed,
-          ),
-        );
-      }
-      if (route === "/task-events/subscriptions" && request.method === "POST") {
-        const input = taskEventStreamSubscribeSchema.parse(await jsonBody(scoped));
-        for (const leaseId of connection.leases)
-          if (!leases.get(leaseId)) connection.leases.delete(leaseId);
-        if (connection.leases.size >= MAX_LEASES_PER_CONNECTION)
-          return remoteFailureResponse(
-            failure(
-              "consumer_overflow",
-              "Task subscription limit reached.",
-              "Close unused subscriptions before retrying.",
-            ),
-            cors,
-          );
-        if (closed || connection.abort.signal.aborted)
-          return remoteFailureResponse(
-            failure(
-              "remote_disabled",
-              "Remote admission ended before subscription creation.",
-              "Reconnect to an enabled host.",
-            ),
-            cors,
-          );
-        const leaseId = crypto.randomUUID();
-        const lease = leases.create(input, leaseId);
-        connection.leases.add(leaseId);
-        return remoteJson(
-          { subscriptionId: leaseId, replayBoundary: lease.hostSubscription.replayBoundary },
-          201,
-          cors,
-        );
-      }
-      const task = /^\/task-events\/subscriptions\/([^/]+)(?:\/(stream|ack))?$/.exec(route);
-      if (task) {
-        const leaseId = task[1]!;
-        const lease = connection.leases.has(leaseId) ? leases.get(leaseId) : undefined;
-        if (!lease)
-          return remoteFailureResponse(
-            failure(
-              "connection_expired",
-              "Task subscription is expired or belongs to another connection.",
-              "Create a task subscription on this connection.",
-            ),
-            cors,
-          );
-        if (task[2] === "stream" && request.method === "GET") {
-          ownStream(id, connection, signal);
-          return createTaskEventSseResponse(leases, leaseId, cors, signal);
-        }
-        if (task[2] === "ack" && request.method === "POST") {
-          const body = await jsonBody(scoped);
-          leases.acknowledge(lease, taskEventCursorSchema.parse(body.cursor));
-          return new Response(null, { status: 204, headers: cors });
-        }
-        if (!task[2] && request.method === "DELETE") {
-          leases.delete(lease);
-          connection.leases.delete(leaseId);
-          return new Response(null, { status: 204, headers: cors });
-        }
-      }
-      if (route === "/terminal" && request.method === "GET") {
+      if (socketProtocol !== undefined) {
         if (
           protocols.length !== 3 ||
-          protocols[0] !== TERMINAL_PROTOCOL_SUBPROTOCOL ||
-          protocols[1] !== `${REMOTE_TERMINAL_CONNECTION_PREFIX}${id}` ||
-          protocols[2] !== `${REMOTE_TERMINAL_AUTHORIZATION_PREFIX}${token}`
+          protocols[0] !== socketProtocol ||
+          protocols[1] !== `${REMOTE_SOCKET_CONNECTION_PREFIX}${id}` ||
+          protocols[2] !== `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${token}`
         )
           return remoteFailureResponse(
             failure(
               "invalid_protocol",
-              "Terminal protocol and negotiated connection tag must agree.",
-              "Update the client and host, then offer terminal.v3 and the current connection ID.",
+              "Socket protocol and negotiated connection tag must agree.",
+              `Update the client and host, then offer ${socketProtocol} and the current connection ID.`,
             ),
             cors,
           );
         ownStream(id, connection, signal);
         const upgraded = server.upgrade({
-          data: createSocketData({
-            connectionId: crypto.randomUUID(),
-            terminalService: services.terminalService,
-            logger: options.logger,
-            onBackgroundFailure: options.reportFailure,
-            remoteSignal: connection.abort.signal,
-          }),
+          data:
+            route === "/channel"
+              ? createHostChannelSocketData({
+                  hostEvents: services.eventBus.stream(),
+                  notifications: services.notificationStream,
+                  leases,
+                  ownedLeases: connection.leases,
+                  maxLeases: MAX_LEASES_PER_CONNECTION,
+                  invoke: (command, args) => invoke(connection, command, args),
+                  maxReplyBytes: REMOTE_MAX_REPLY_BYTES,
+                  refusal: () =>
+                    closed || connection.abort.signal.aborted
+                      ? failure(
+                          "remote_disabled",
+                          "Remote admission ended before this request was accepted.",
+                          "Reconnect to an enabled host and retry this refused request.",
+                        )
+                      : null,
+                  isShuttingDown: () => closed,
+                  signal: connection.abort.signal,
+                  reportFailure: options.reportFailure,
+                })
+              : createSocketData({
+                  connectionId: crypto.randomUUID(),
+                  terminalService: services.terminalService,
+                  logger: options.logger,
+                  onBackgroundFailure: options.reportFailure,
+                  remoteSignal: connection.abort.signal,
+                }),
         });
         return upgraded
           ? undefined
           : remoteFailureResponse(
               failure(
                 "transport_failure",
-                "Terminal upgrade failed.",
+                "WebSocket upgrade failed.",
                 "Check the proxy WebSocket forwarding.",
               ),
               cors,
@@ -539,40 +528,6 @@ export const createRemoteWorkInterface = (
         }),
       );
       if (resource) return resource;
-      const invoke = /^\/invoke\/([^/]+)$/.exec(route);
-      if (invoke && request.method === "POST") {
-        const command = decodeURIComponent(invoke[1]!);
-        if (SHELL_COMMANDS.has(command) || !WORK_COMMANDS.has(command))
-          return remoteFailureResponse(
-            failure(
-              "function_unavailable",
-              `Shell function ${command} is unavailable remotely.`,
-              "Use the local shell for this action.",
-            ),
-            cors,
-          );
-        const args = z.record(z.string(), z.json()).parse(await jsonBody(scoped));
-        if (closed || connection.abort.signal.aborted)
-          return remoteFailureResponse(
-            failure(
-              "remote_disabled",
-              "Remote admission ended before this command was accepted.",
-              "Reconnect to an enabled host and retry this refused command.",
-            ),
-            cors,
-          );
-        if (command === "system_list_open_in_tools") {
-          systemListOpenInToolsRequestSchema.parse(args);
-          // Remote clients cannot launch host apps.
-          return remoteJson([], 200, cors);
-        }
-        // Do not bind accepted work to the request or listener signal.
-        try {
-          return remoteJson(await Effect.runPromise(services.invoke(command, args)), 200, cors);
-        } catch (cause) {
-          return hostFailureResponse(cause, cors);
-        }
-      }
       return remoteFailureResponse(
         failure(
           "function_unavailable",
@@ -637,16 +592,18 @@ const failure = (
   nextAction: string,
 ): RemoteFailure => ({ code, message, nextAction });
 
+const hostErrorPayload = (cause: unknown): HostErrorResponse => {
+  const payload: HostErrorResponse = {
+    error: "host_command_failed",
+    message: cause instanceof Error ? cause.message : String(cause),
+  };
+  const hostFailure = hostInvokeFailureFromError(cause);
+  if (hostFailure) payload.failure = hostFailure;
+  return payload;
+};
+
 const hostFailureResponse = (cause: unknown, headers: HeadersInit): Response =>
-  remoteJson(
-    {
-      error: "host_command_failed",
-      message: cause instanceof Error ? cause.message : String(cause),
-      failure: hostInvokeFailureFromError(cause) ?? undefined,
-    },
-    500,
-    headers,
-  );
+  remoteJson(hostErrorPayload(cause), 500, headers);
 
 // Local browser clients use OS-assigned ports; packaged Electron sends an opaque origin.
 function isLocalClientOrigin(origin: string): boolean {

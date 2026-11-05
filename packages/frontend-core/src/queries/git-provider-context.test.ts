@@ -43,10 +43,14 @@ describe("repository Git provider context query", () => {
       "repository-git-provider-context",
       scope,
     ]);
-    expect(workspaceGetGitProviderContext).toHaveBeenCalledWith(scope);
+    expect(workspaceGetGitProviderContext).toHaveBeenCalledWith(scope, {
+      signal: expect.any(AbortSignal),
+    });
     const otherWorkspace = { ...scope, workspaceId: "workspace-2" };
     await queryClient.fetchQuery(repositoryGitProviderContextQueryOptions(otherWorkspace));
-    expect(workspaceGetGitProviderContext).toHaveBeenLastCalledWith(otherWorkspace);
+    expect(workspaceGetGitProviderContext).toHaveBeenLastCalledWith(otherWorkspace, {
+      signal: expect.any(AbortSignal),
+    });
     expect(workspaceGetGitProviderContext).toHaveBeenCalledTimes(2);
     queryClient.clear();
   });
@@ -63,23 +67,32 @@ describe("repository Git provider context query", () => {
     queryClient.clear();
   });
 
-  test("fails when the context read exceeds the diagnostics time limit", async () => {
+  test("cancels the context read when it exceeds the diagnostics time limit", async () => {
     const hostRead = Promise.withResolvers<RepositoryGitProviderContext>();
     let runTimeout: (() => void) | undefined;
+    let readSignal: AbortSignal | undefined;
     const scheduler = (task: () => void) => {
       runTimeout = task;
       return () => {};
     };
     const { queryClient } = createTestClientConnection({
-      client: { workspaceGetGitProviderContext: () => hostRead.promise },
+      client: {
+        workspaceGetGitProviderContext: (_scope, options) => {
+          readSignal = options?.signal;
+          return hostRead.promise;
+        },
+      },
     });
-    const query = queryClient.fetchQuery(
-      repositoryGitProviderContextQueryOptions(scope, scheduler),
-    );
+    const query = queryClient
+      .fetchQuery(repositoryGitProviderContextQueryOptions(scope, scheduler))
+      .catch((cause: unknown) => cause);
 
     runTimeout?.();
 
-    await expect(query).rejects.toThrow("Timed out after 15000ms");
+    const failure = await query;
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).toHaveProperty("message", "Timed out after 15000ms");
+    expect(readSignal?.aborted).toBe(true);
     queryClient.clear();
   });
 });

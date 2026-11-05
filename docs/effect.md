@@ -33,7 +33,7 @@ Use Effect for:
 
 - Host commands and use cases.
 - MCP bridge discovery and calls.
-- Web startup, readiness, HTTP, and SSE.
+- Web startup, readiness, HTTP, and the host channel WebSocket.
 - Runtime process lifecycle.
 - File, Git, SQLite, and CLI adapters.
 - Bounded loops, schedules, retries, polling, and shutdown.

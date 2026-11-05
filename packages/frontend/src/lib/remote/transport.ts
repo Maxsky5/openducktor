@@ -3,7 +3,7 @@ import {
   remoteError,
   type RemoteTransport,
 } from "@openducktor/host-client/remote";
-import { openRemoteTerminalSocket } from "@openducktor/host-client/remote/terminal-socket";
+import { openRemoteSocket } from "@openducktor/host-client/remote/socket";
 
 export const createBrowserRemoteTransport = (): RemoteTransport => {
   // Once the host answered, a local network block does not apply to it, so later failures keep
@@ -56,9 +56,10 @@ export const createBrowserRemoteTransport = (): RemoteTransport => {
         })(),
       };
     },
-    openTerminal: (url, headers, signal, onFrame, onClose) =>
-      openRemoteTerminalSocket(
+    openSocket: (url, protocol, headers, signal, onFrame, onClose) =>
+      openRemoteSocket(
         (protocols) => new WebSocket(url, protocols),
+        protocol,
         headers,
         signal,
         onFrame,

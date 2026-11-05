@@ -141,7 +141,7 @@ test.each([false, true])(
   },
 );
 
-test.each(["/session", "/health", "/invoke", "/task-events/subscriptions", "/task-assets/w/t"])(
+test.each(["/session", "/health", "/channel", "/terminal", "/task-assets/w/t"])(
   "rejects conflicting base path %s before discovery or binds",
   async (basePath) => {
     const discover = spyOn(discovery, "resolveWebProvidedToolPathsEffect");

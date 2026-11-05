@@ -1,134 +1,23 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import packageJson from "../package.json";
-import { configureBrowserRuntimeConfig } from "./browser-config";
 import { createBrowserShellBridge } from "./browser-shell-bridge";
 import { validateExternalBrowserUrl } from "./browser-url-validation";
-import { createFetchFixture } from "./test-support";
-
-class TaskEventSource {
-  static instance: TaskEventSource | null = null;
-  private readonly listeners = new Map<string, EventListener>();
-
-  constructor(_url: string, _options?: EventSourceInit) {
-    TaskEventSource.instance = this;
-  }
-
-  addEventListener(type: string, listener: EventListener): void {
-    this.listeners.set(type, listener);
-  }
-
-  removeEventListener(type: string): void {
-    this.listeners.delete(type);
-  }
-
-  close(): void {}
-
-  emit(type: string, data: string): void {
-    this.listeners.get(type)?.(new MessageEvent(type, { data }));
-  }
-
-  hasListener(type: string): boolean {
-    return this.listeners.has(type);
-  }
-}
-
-const originalEventSource = globalThis.EventSource;
-const originalFetch = globalThis.fetch;
-
-const waitForTaskEventSource = async (): Promise<TaskEventSource> => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (TaskEventSource.instance) {
-      return TaskEventSource.instance;
-    }
-    await Promise.resolve();
-  }
-
-  throw new Error("Expected EventSource subscription.");
-};
-
-const waitForTaskEventSourceListener = async (
-  eventSource: TaskEventSource,
-  type: string,
-): Promise<void> => {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (eventSource.hasListener(type)) {
-      return;
-    }
-    await Promise.resolve();
-  }
-
-  throw new Error(`Expected task EventSource listener for ${type}.`);
-};
 
 describe("browser shell bridge", () => {
   let previousAppVersion: string | undefined;
 
   beforeEach(() => {
-    TaskEventSource.instance = null;
     previousAppVersion = process.env.VITE_ODT_APP_VERSION;
     process.env.VITE_ODT_APP_VERSION = packageJson.version;
   });
 
   afterEach(() => {
-    globalThis.EventSource = originalEventSource;
-    globalThis.fetch = originalFetch;
-    configureBrowserRuntimeConfig({});
     if (previousAppVersion === undefined) {
       delete process.env.VITE_ODT_APP_VERSION;
       return;
     }
 
     process.env.VITE_ODT_APP_VERSION = previousAppVersion;
-  });
-
-  test("forwards task stream frames", async () => {
-    configureBrowserRuntimeConfig({ backendUrl: "http://127.0.0.1:14327", appToken: "app-token" });
-    // @ts-expect-error test EventSource shim
-    globalThis.EventSource = TaskEventSource;
-    const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";
-    const fetchMock = mock(async (url: string | URL | Request, _init?: RequestInit) => {
-      if (url.toString().endsWith("/subscriptions")) {
-        return new Response(JSON.stringify({ streamToken: "stream-token", subscriptionId }), {
-          status: 201,
-        });
-      }
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    });
-    globalThis.fetch = createFetchFixture(fetchMock);
-    const bridge = createBrowserShellBridge();
-    const listener = mock(() => {});
-    const subscriptionPromise = bridge.subscribeTaskStream({ cursor: null }, listener);
-    const eventSource = await waitForTaskEventSource();
-    await waitForTaskEventSourceListener(eventSource, "open");
-    eventSource.emit("open", "");
-    const frame = {
-      type: "snapshot_required",
-      cursor: { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 },
-      reason: "buffer_gap",
-    };
-    eventSource.emit("task-frame", JSON.stringify(frame));
-    const subscription = await subscriptionPromise;
-
-    expect(listener).toHaveBeenCalledWith(frame);
-    await subscription.acknowledge(frame.cursor);
-    await subscription.unsubscribe();
-
-    const calls = fetchMock.mock.calls;
-    expect(calls.map(([url]) => url.toString())).toContain(
-      `http://127.0.0.1:14327/task-events/subscriptions/${subscriptionId}/ack`,
-    );
-    expect(calls.map(([url]) => url.toString())).toContain(
-      `http://127.0.0.1:14327/task-events/subscriptions/${subscriptionId}`,
-    );
-    const acknowledgeCall = calls.find(([url]) => url.toString().endsWith("/ack"));
-    expect(acknowledgeCall?.[1]).toMatchObject({
-      body: JSON.stringify({ cursor: frame.cursor }),
-      headers: {
-        "content-type": "application/json",
-        "x-openducktor-task-stream-token": "stream-token",
-      },
-      method: "POST",
-    });
   });
 
   test("reports the web runner version and external update policy", async () => {

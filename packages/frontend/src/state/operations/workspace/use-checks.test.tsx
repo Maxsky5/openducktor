@@ -203,7 +203,7 @@ describe("use-checks", () => {
       });
 
       expect(refreshHostRuntimeStatusMock).toHaveBeenCalledTimes(1);
-      expect(pathCheckMock.mock.calls).toEqual([[false], [true]]);
+      expect(pathCheckMock.mock.calls.map(([force]) => force)).toEqual([false, true]);
       expect(gitCheckMock).toHaveBeenCalledTimes(1);
       expect(taskStoreCheckMock).not.toHaveBeenCalled();
       expect(harness.getLatest().checksRepoPath).toBeNull();
@@ -230,7 +230,7 @@ describe("use-checks", () => {
         await refresh;
       });
 
-      expect(pathCheckMock.mock.calls).toEqual([[false], [true]]);
+      expect(pathCheckMock.mock.calls.map(([force]) => force)).toEqual([false, true]);
       expect(harness.getLatest().pathCheck.data?.ok).toBe(true);
       expect(harness.getLatest().pathCheck.data?.error).toBeNull();
     } finally {

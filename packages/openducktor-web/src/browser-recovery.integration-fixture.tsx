@@ -6,6 +6,7 @@ import {
 import assert from "node:assert/strict";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import {
+  HOST_CHANNEL_SUBPROTOCOL,
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_PROTOCOL_VERSION,
   TERMINAL_PROTOCOL_VERSION,
@@ -17,6 +18,11 @@ import {
   type RemoteNegotiationResult,
 } from "@openducktor/contracts";
 import type { RemoteTransport, RemoteHttpResponse } from "@openducktor/host-client/remote";
+import { openRemoteSocket } from "@openducktor/host-client/remote/socket";
+import {
+  createFakeHostChannel,
+  type FakeHostChannelReply,
+} from "@openducktor/host-client/remote/test-support/host-channel";
 
 // The portable transport runs on Bun, so its abort signals use Bun's native pair.
 const nativeAbortController = AbortController;
@@ -93,13 +99,7 @@ const host: RemoteHostDescriptor = {
   ],
 };
 const json = (
-  value:
-    | RemoteHostDescriptor
-    | RemoteNegotiationResult
-    | HostRuntimeSnapshot
-    | AutopilotState
-    | { error: string; message: string }
-    | null,
+  value: RemoteHostDescriptor | RemoteNegotiationResult | null,
   status = 200,
 ): RemoteHttpResponse => ({
   status,
@@ -110,11 +110,16 @@ const json = (
 });
 const readReply = async (
   read: Promise<HostRuntimeSnapshot | AutopilotState>,
-): Promise<RemoteHttpResponse> => {
+): Promise<FakeHostChannelReply> => {
   try {
-    return json(await read);
+    return { result: await read };
   } catch {
-    return json({ error: "host_command_failed", message: "Required recovery read failed." }, 500);
+    return {
+      error: {
+        kind: "host",
+        response: { error: "host_command_failed", message: "Required recovery read failed." },
+      },
+    };
   }
 };
 function RuntimeState() {
@@ -149,49 +154,70 @@ try {
     const socketStarted = Promise.withResolvers<void>();
     const socketGate = Promise.withResolvers<void>();
     const attached = Promise.withResolvers<void>();
+    const channel = createFakeHostChannel({
+      invoke: (command) => {
+        if (command === "runtime_status") {
+          runtimeReads += 1;
+          if (!recovering) return { result: snapshot };
+          runtimeStarted.resolve();
+          return readReply(runtimeGate.promise);
+        }
+        if (command === "autopilot_state_read") {
+          autopilotReads += 1;
+          if (!recovering) return { result: { outcomes: [], failure: null } };
+          autopilotStarted.resolve();
+          return readReply(autopilotGate.promise);
+        }
+        throw new Error(`Unexpected command: ${command}`);
+      },
+      answer: (request, socket) => {
+        if (request.method !== "events.open" || !recovering) return undefined;
+        // The recovery replay misses host events.
+        socket.send({
+          type: "notification",
+          frame: {
+            type: "attached",
+            cursor: { epoch: crypto.randomUUID(), sequence: 0 },
+            reason: "new",
+            health: [],
+          },
+        });
+        return {
+          result: {
+            hostEpoch: "fake-host-epoch",
+            hostEventId: 0,
+            hostChanged: false,
+            gaps: ["message"],
+          },
+        };
+      },
+    });
     const transport: RemoteTransport = {
-      async request(method, url, _headers, signal) {
+      async request(method, url, headers) {
         if (method === "DELETE") return json(null, 204);
         if (url.endsWith("/connections"))
           return json({
             status: "accepted",
             connectionToken: TEST_CONNECTION_TOKEN,
-            authorization: _headers.authorization ? undefined : savedTestAuthorization(),
+            authorization: headers.authorization ? undefined : savedTestAuthorization(),
             host,
             connectionId: crypto.randomUUID(),
             protocolVersion: REMOTE_PROTOCOL_VERSION,
             missingOptionalCapabilities: [],
           });
-        if (url.endsWith("/events"))
-          return {
-            status: 200,
-            headers: {},
-            body: (async function* () {
-              yield new TextEncoder().encode(
-                `event: replay-complete\ndata: ${JSON.stringify({ hostChanged: false, gaps: recovering ? ["message"] : [] })}\n\nevent: notification-frame\ndata: ${JSON.stringify({ type: "attached", cursor: { epoch: crypto.randomUUID(), sequence: 0 }, reason: "new", health: [] })}\n\n`,
-              );
-              await new Promise<void>((resolve) => {
-                signal.addEventListener("abort", () => resolve(), { once: true });
-                if (signal.aborted) resolve();
-              });
-            })(),
-          };
-        if (url.endsWith("/invoke/runtime_status")) {
-          runtimeReads += 1;
-          if (!recovering) return json(snapshot);
-          runtimeStarted.resolve();
-          return readReply(runtimeGate.promise);
-        }
-        if (url.endsWith("/invoke/autopilot_state_read")) {
-          autopilotReads += 1;
-          if (!recovering) return json({ outcomes: [], failure: null });
-          autopilotStarted.resolve();
-          return readReply(autopilotGate.promise);
-        }
         if (url.endsWith("/remote")) return json(host);
         throw new Error(`Unexpected request: ${method} ${url}`);
       },
-      async openTerminal(_url, _headers, _signal, onFrame) {
+      async openSocket(_url, protocol, headers, signal, onFrame, onClose) {
+        if (protocol === HOST_CHANNEL_SUBPROTOCOL)
+          return openRemoteSocket(
+            channel.createSocket,
+            protocol,
+            headers,
+            signal,
+            onFrame,
+            onClose,
+          );
         sockets += 1;
         receive = onFrame;
         if (sockets === 2) {

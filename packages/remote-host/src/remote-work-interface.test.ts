@@ -10,12 +10,12 @@ import os from "node:os";
 import {
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_CONNECTION_HEADER,
-  REMOTE_STREAM_HEARTBEAT_CAPABILITY,
-  REMOTE_STREAM_HEARTBEAT_INTERVAL_MS,
+  HOST_CHANNEL_HEARTBEAT_INTERVAL_MS,
+  HOST_CHANNEL_SUBPROTOCOL,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
   TERMINAL_PROTOCOL_VERSION,
-  REMOTE_TERMINAL_CONNECTION_PREFIX,
-  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
+  REMOTE_SOCKET_CONNECTION_PREFIX,
+  REMOTE_SOCKET_AUTHORIZATION_PREFIX,
   encodeTerminalProtocolFrame,
   decodeTerminalProtocolFrame,
   decodeTerminalListSummary,
@@ -33,7 +33,8 @@ import {
 import { BufferedHostEventBus } from "./host-event-bus";
 import { createRemoteWorkInterface } from "./remote-work-interface";
 import { startNodeFetchServer } from "./node-fetch-server";
-import { terminalWebSocketHandler } from "./terminals/terminal-websocket-handler";
+import { hostWebSocketHandler } from "./host-websocket-handler";
+import { openRemoteChannelClient } from "./host-channel.test-support";
 import { createRemoteAccessController } from "./remote-access-controller";
 import { createHostCommandLifetime } from "./host-command-lifetime";
 
@@ -94,7 +95,7 @@ const fixture = async (barrier?: MutationBarrier) => {
     hostname: "127.0.0.1",
     port: 0,
     fetch: work.handle,
-    websocket: terminalWebSocketHandler,
+    websocket: hostWebSocketHandler,
     onError: () => {},
   });
   const base = `http://127.0.0.1:${server.port}/api/remote`;
@@ -117,6 +118,13 @@ const fixture = async (barrier?: MutationBarrier) => {
     if (result.status === "accepted") remember(result);
     return { response, result };
   };
+  /** Opens a host channel on an admitted connection. */
+  const channel = (id: string, extra: Record<string, string> = {}, at = base) =>
+    openRemoteChannelClient(
+      at,
+      { connectionId: id, connectionToken: tokens.get(id) ?? "invalid" },
+      extra,
+    );
   let stopped = false;
   const stopNetwork = async () => {
     if (stopped) return;
@@ -138,6 +146,7 @@ const fixture = async (barrier?: MutationBarrier) => {
     notifications,
     mutations,
     negotiate,
+    channel,
     close: async () => {
       await stopNetwork();
       await Effect.runPromise(commands.drain());
@@ -220,22 +229,37 @@ test("negotiates across app releases and refuses bypass, origins, missing capabi
         })
       ).status,
     ).toBe(403);
-    const work = await fetch(`${f.base}/invoke/set_theme`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...f.headers(id) },
-      body: '{"theme":"dark"}',
-    });
-    expect(work.status).toBe(200);
-    expect(f.mutations).toEqual(["dark"]);
-    expect(
-      (
-        await fetch(`${f.base}/invoke/open_external_url`, {
-          method: "POST",
-          headers: { "content-type": "application/json", ...f.headers(id) },
-          body: "{}",
-        })
-      ).status,
-    ).toBe(409);
+    // Commands, events, and task streams use the channel. Their HTTP routes are gone.
+    for (const [method, route] of [
+      ["POST", "/invoke/set_theme"],
+      ["GET", "/events"],
+      ["POST", "/task-events/subscriptions"],
+    ] as const) {
+      const init: RequestInit = {
+        method,
+        headers: { "content-type": "application/json", ...f.headers(id) },
+      };
+      if (method === "POST") init.body = "{}";
+      const removed = await fetch(`${f.base}${route}`, init);
+      expect(removed.status).toBe(409);
+      expect(await removed.json()).toMatchObject({ failure: { code: "function_unavailable" } });
+    }
+    const channel = await f.channel(id);
+    try {
+      const work = await channel.request({
+        method: "invoke",
+        command: "set_theme",
+        args: { theme: "dark" },
+      });
+      expect(work.header.type).toBe("result");
+      expect(f.mutations).toEqual(["dark"]);
+      expect(
+        (await channel.request({ method: "invoke", command: "open_external_url", args: {} }))
+          .header,
+      ).toMatchObject({ error: { kind: "refused", failure: { code: "function_unavailable" } } });
+    } finally {
+      await channel.close();
+    }
     expect(
       (
         await fetch(`${f.base}/shutdown`, {
@@ -257,30 +281,38 @@ test("remote Open In discovery stays empty while local discovery lists host tool
       { toolId: "zed" },
     ]);
     const id = (await f.negotiate()).result.connectionId;
-    const headers = { "content-type": "application/json", ...f.headers(id) };
-    for (const forceRefresh of [false, true]) {
-      const response = await fetch(`${f.base}/invoke/system_list_open_in_tools`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ forceRefresh }),
-      });
-      expect(response.status).toBe(200);
-      expect(await response.json()).toEqual([]);
+    const channel = await f.channel(id);
+    try {
+      for (const forceRefresh of [false, true]) {
+        const reply = await channel.request({
+          method: "invoke",
+          command: "system_list_open_in_tools",
+          args: { forceRefresh },
+        });
+        expect(reply.header.type).toBe("result");
+        expect(JSON.parse(reply.body ?? "")).toEqual([]);
+      }
+      expect(
+        (
+          await channel.request({
+            method: "invoke",
+            command: "system_list_open_in_tools",
+            args: { forceRefresh: "invalid" },
+          })
+        ).header,
+      ).toMatchObject({ error: { kind: "refused", failure: { code: "invalid_protocol" } } });
+      expect(
+        (
+          await channel.request({
+            method: "invoke",
+            command: "system_open_directory_in_tool",
+            args: { directoryPath: "/repo", toolId: "zed" },
+          })
+        ).header,
+      ).toMatchObject({ error: { kind: "refused", failure: { code: "function_unavailable" } } });
+    } finally {
+      await channel.close();
     }
-    const invalid = await fetch(`${f.base}/invoke/system_list_open_in_tools`, {
-      method: "POST",
-      headers,
-      body: '{"forceRefresh":"invalid"}',
-    });
-    expect(invalid.status).toBe(400);
-    expect(await invalid.json()).toMatchObject({ failure: { code: "invalid_protocol" } });
-    const launch = await fetch(`${f.base}/invoke/system_open_directory_in_tool`, {
-      method: "POST",
-      headers,
-      body: '{"directoryPath":"/repo","toolId":"zed"}',
-    });
-    expect(launch.status).toBe(409);
-    expect(await launch.json()).toMatchObject({ failure: { code: "function_unavailable" } });
     expect(invoke).toHaveBeenCalledTimes(1);
   } finally {
     invoke.mockRestore();
@@ -291,29 +323,40 @@ test("remote Open In discovery stays empty while local discovery lists host tool
 test("task leases belong to their negotiated connection and carry the captured replay boundary", async () => {
   const f = await fixture();
   try {
-    const first = (await f.negotiate()).result.connectionId;
-    const second = (await f.negotiate()).result.connectionId;
-    const response = await fetch(`${f.base}/task-events/subscriptions`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...f.headers(first) },
-      body: '{"cursor":null}',
-    });
-    const lease = await response.json();
-    expect(lease.replayBoundary.sequence).toBe(0);
-    for (const [suffix, method] of [
-      ["/stream", "GET"],
-      ["/ack", "POST"],
-      ["", "DELETE"],
-    ] as const) {
-      const init: RequestInit = {
-        method,
-        headers: { "content-type": "application/json", ...f.headers(second) },
-      };
-      if (method === "POST") init.body = JSON.stringify({ cursor: lease.replayBoundary });
+    const first = await f.channel((await f.negotiate()).result.connectionId);
+    const second = await f.channel((await f.negotiate()).result.connectionId);
+    try {
+      const subscribed = await first.request({
+        method: "task_events.subscribe",
+        input: { cursor: null },
+      });
+      const lease = JSON.parse(subscribed.body ?? "");
+      expect(lease.replayBoundary.sequence).toBe(0);
+      for (const request of [
+        { method: "task_events.attach", subscriptionId: lease.subscriptionId },
+        {
+          method: "task_events.ack",
+          subscriptionId: lease.subscriptionId,
+          cursor: lease.replayBoundary,
+        },
+      ] as const)
+        expect((await second.request(request)).header).toMatchObject({
+          error: { kind: "refused", failure: { code: "connection_expired" } },
+        });
+      // A release from another connection leaves the lease to its owner.
+      await second.request({ method: "task_events.release", subscriptionId: lease.subscriptionId });
       expect(
-        (await fetch(`${f.base}/task-events/subscriptions/${lease.subscriptionId}${suffix}`, init))
-          .status,
-      ).toBe(409);
+        (
+          await first.request({
+            method: "task_events.ack",
+            subscriptionId: lease.subscriptionId,
+            cursor: lease.replayBoundary,
+          })
+        ).header.type,
+      ).toBe("result");
+    } finally {
+      await first.close();
+      await second.close();
     }
     expect(
       (
@@ -357,8 +400,8 @@ test("two remote terminal lists receive idle creation and close without output a
       const admission = await f.negotiate();
       const socket = new WebSocket(f.base.replace("http:", "ws:") + "/terminal", [
         TERMINAL_PROTOCOL_SUBPROTOCOL,
-        `${REMOTE_TERMINAL_CONNECTION_PREFIX}${admission.result.connectionId}`,
-        `${REMOTE_TERMINAL_AUTHORIZATION_PREFIX}${admission.result.connectionToken}`,
+        `${REMOTE_SOCKET_CONNECTION_PREFIX}${admission.result.connectionId}`,
+        `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${admission.result.connectionToken}`,
       ]);
       sockets.push(socket);
       await new Promise<void>((resolve, reject) => {
@@ -438,7 +481,7 @@ test("remote terminal attachment uses the local PTY and closes only its client w
       const response = await fetch(`${f.base}/terminal`, {
         headers: {
           ...f.headers(header),
-          "sec-websocket-protocol": `${TERMINAL_PROTOCOL_SUBPROTOCOL}, ${REMOTE_TERMINAL_CONNECTION_PREFIX}${id}`,
+          "sec-websocket-protocol": `${TERMINAL_PROTOCOL_SUBPROTOCOL}, ${REMOTE_SOCKET_CONNECTION_PREFIX}${id}`,
         },
       });
       expect(response.status).toBe(400);
@@ -448,8 +491,8 @@ test("remote terminal attachment uses the local PTY and closes only its client w
       f.base.replace("http:", "ws:") + "/terminal",
       [
         TERMINAL_PROTOCOL_SUBPROTOCOL,
-        `${REMOTE_TERMINAL_CONNECTION_PREFIX}${id}`,
-        `${REMOTE_TERMINAL_AUTHORIZATION_PREFIX}${f.headers(id).authorization.slice(7)}`,
+        `${REMOTE_SOCKET_CONNECTION_PREFIX}${id}`,
+        `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${f.headers(id).authorization.slice(7)}`,
       ],
       { headers: { cookie: sharedCookie } },
     );
@@ -594,17 +637,17 @@ test("automatic setup advertises the bound port and serves work without a manual
       expect(admission.headers.get("access-control-allow-origin")).toBe(origin);
       const { connectionId, connectionToken } = await admission.json();
       f.remember({ connectionId, connectionToken });
-      const work = await fetch(`${endpoint}/invoke/system_get_platform`, {
-        method: "POST",
-        headers: {
-          origin,
-          "content-type": "application/json",
-          ...f.headers(connectionId),
-        },
-        body: "{}",
-      });
-      expect(work.status).toBe(200);
-      expect(await work.json()).toBe("linux");
+      const channel = await f.channel(connectionId, { origin }, endpoint.replace(/\/$/, ""));
+      try {
+        const work = await channel.request({
+          method: "invoke",
+          command: "system_get_platform",
+          args: {},
+        });
+        expect(JSON.parse(work.body ?? "")).toBe("linux");
+      } finally {
+        await channel.close();
+      }
     }
     for (const origin of ["https://unrelated.test", "http://localhost.evil.test:57983"]) {
       const denied = await fetch(`${endpoint}/connections`, {
@@ -629,13 +672,14 @@ test("automatic setup advertises the bound port and serves work without a manual
     expect(admitted.status).toBe(201);
     const { connectionId, connectionToken } = await admitted.json();
     f.remember({ connectionId, connectionToken });
-    const response = await fetch(`${endpoint}/invoke/system_get_platform`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...f.headers(connectionId) },
-      body: "{}",
+    const channel = await f.channel(connectionId, {}, endpoint.replace(/\/$/, ""));
+    const response = await channel.request({
+      method: "invoke",
+      command: "system_get_platform",
+      args: {},
     });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toBe("linux");
+    expect(JSON.parse(response.body ?? "")).toBe("linux");
+    await channel.close();
     await Effect.runPromise(controller.disable());
     expect((await Effect.runPromise(controller.readState())).status).toBe("disabled");
     const replacement = await startNodeFetchServer({
@@ -717,45 +761,34 @@ test("network choices exclude loopback and scoped link-local addresses and keep 
   }
 });
 
-test("concurrent subscription bodies cannot exceed one connection's 32 lease limit", async () => {
+test("one connection holds at most 32 task leases across its channels", async () => {
   const f = await fixture();
+  const id = (await f.negotiate()).result.connectionId;
+  const first = await f.channel(id);
+  const second = await f.channel(id);
   try {
-    const id = (await f.negotiate()).result.connectionId;
-    const bodies: ReadableStreamDefaultController<Uint8Array>[] = [];
-    const pending = Array.from({ length: 64 }, () =>
-      f.work.handle(
-        new Request(`${f.base}/task-events/subscriptions`, {
-          method: "POST",
-          headers: {
-            host: new URL(f.base).host,
-            "content-type": "application/json",
-            ...f.headers(id),
-          },
-          body: new ReadableStream<Uint8Array>({
-            start: (controller) => {
-              bodies.push(controller);
-            },
-          }),
-          duplex: "half",
+    const replies = await Promise.all(
+      Array.from({ length: 33 }, (_, index) =>
+        (index % 2 === 0 ? first : second).request({
+          method: "task_events.subscribe",
+          input: { cursor: null },
         }),
-        f.server,
       ),
     );
-    for (const body of bodies) {
-      body.enqueue(new TextEncoder().encode('{"cursor":null}'));
-      body.close();
-    }
-    const responses = await Promise.all(pending);
-    expect(responses.filter((response) => response?.status === 201)).toHaveLength(32);
-    const refused = responses.filter((response) => response?.status === 409);
-    expect(refused).toHaveLength(32);
-    expect(await refused[0]!.json()).toMatchObject({ failure: { code: "consumer_overflow" } });
+    expect(replies.filter(({ header }) => header.type === "result")).toHaveLength(32);
+    const refused = replies.filter(({ header }) => header.type === "error");
+    expect(refused).toHaveLength(1);
+    expect(refused[0]?.header).toMatchObject({
+      error: { kind: "refused", failure: { code: "consumer_overflow" } },
+    });
   } finally {
+    await first.close();
+    await second.close();
     await f.close();
   }
 });
 
-test("normal task stream replacement and deletion release idle admission ownership", async () => {
+test("an open channel holds its admission, and closing the last channel arms its expiry", async () => {
   const originalSet = globalThis.setTimeout;
   const originalClear = globalThis.clearTimeout;
   const idle = new Map<ReturnType<typeof setTimeout>, () => void>();
@@ -771,30 +804,22 @@ test("normal task stream replacement and deletion release idle admission ownersh
   const f = await fixture();
   try {
     const id = (await f.negotiate()).result.connectionId;
-    const headers = { ...f.headers(id) };
-    const response = await fetch(`${f.base}/task-events/subscriptions`, {
-      method: "POST",
-      headers: { ...headers, "content-type": "application/json" },
-      body: '{"cursor":null}',
-    });
-    const lease = await response.json();
-    const url = `${f.base}/task-events/subscriptions/${lease.subscriptionId}`;
-    const first = await fetch(`${url}/stream`, { headers });
-    const firstEnded = first.text();
-    const second = await fetch(`${url}/stream`, { headers });
-    await firstEnded;
-    expect(idle.size).toBe(0);
-    const secondEnded = second.text();
-    await fetch(url, { method: "DELETE", headers });
-    await secondEnded;
-    expect(idle.size).toBe(1);
+    const first = await f.channel(id);
+    const second = await f.channel(id);
+    // Task leases have their own expiry. Only the admission timer counts here.
+    const admissionTimers = () => idle.size;
+    expect(admissionTimers()).toBe(0);
+    await first.close();
+    expect(admissionTimers()).toBe(0);
+    await second.close();
+    const deadline = Date.now() + 500;
+    while (admissionTimers() !== 1 && Date.now() < deadline) await Bun.sleep(1);
+    expect(admissionTimers()).toBe(1);
     for (const expire of idle.values()) expire();
     expect(
       (
-        await fetch(`${f.base}/invoke/system_get_platform`, {
-          method: "POST",
-          headers: { ...headers, "content-type": "application/json" },
-          body: "{}",
+        await fetch(`${f.base}/task-assets/workspace/task/spec/asset`, {
+          headers: { ...f.headers(id) },
         })
       ).status,
     ).toBe(409);
@@ -805,7 +830,7 @@ test("normal task stream replacement and deletion release idle admission ownersh
   }
 });
 
-test("ending the listener leaves accepted HTTP work under the host command lifetime", async () => {
+test("ending the listener leaves accepted channel work under the host command lifetime", async () => {
   let begin!: () => void;
   let release!: () => void;
   const started = new Promise<void>((resolve) => {
@@ -816,12 +841,10 @@ test("ending the listener leaves accepted HTTP work under the host command lifet
   });
   const f = await fixture({ started: begin, gate });
   try {
-    const id = (await f.negotiate()).result.connectionId;
-    const response = fetch(`${f.base}/invoke/set_theme`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...f.headers(id) },
-      body: '{"theme":"dark"}',
-    }).catch(() => null);
+    const channel = await f.channel((await f.negotiate()).result.connectionId);
+    const response = channel
+      .request({ method: "invoke", command: "set_theme", args: { theme: "dark" } })
+      .catch(() => null);
     await started;
     await f.stopNetwork();
     let drained = false;
@@ -841,39 +864,70 @@ test("ending the listener leaves accepted HTTP work under the host command lifet
   }
 });
 
-test("keeps an idle event stream busy with heartbeat comments", async () => {
+test("keeps an idle channel busy with heartbeat messages", async () => {
   const f = await fixture();
   const beats: Array<() => void> = [];
   const originalInterval = globalThis.setInterval;
   const intervals = spyOn(globalThis, "setInterval").mockImplementation(
     (callback, delay, ...args) => {
-      if (delay === REMOTE_STREAM_HEARTBEAT_INTERVAL_MS) beats.push(() => callback(...args));
+      if (delay === HOST_CHANNEL_HEARTBEAT_INTERVAL_MS) beats.push(() => callback(...args));
       return originalInterval(callback, delay, ...args);
     },
   );
-  const abort = new AbortController();
   try {
-    const { result } = await f.negotiate();
-    const admission = remoteNegotiationResultSchema.parse(result);
-    if (admission.status !== "accepted") throw new Error(admission.failure.message);
-    expect(admission.host.protocols[0]?.capabilities).toContain(REMOTE_STREAM_HEARTBEAT_CAPABILITY);
-    const response = await fetch(`${f.base}/events`, {
-      headers: { ...f.headers(admission.connectionId) },
-      signal: abort.signal,
-    });
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let text = "";
-    while (!text.includes("replay-complete"))
-      text += decoder.decode((await reader.read()).value, { stream: true });
-    // With no host event, only the heartbeat keeps bytes on the stream.
+    const channel = await f.channel((await f.negotiate()).result.connectionId);
+    await channel.request({ method: "events.open", cursor: null, notificationCursor: null });
+    // With no host event, only the heartbeat keeps messages on the channel.
     beats.at(-1)!();
-    while (!text.includes(": heartbeat\n\n"))
-      text += decoder.decode((await reader.read()).value, { stream: true });
-    expect(text).toContain(": heartbeat\n\n");
+    expect((await channel.next("heartbeat")).header).toEqual({ type: "heartbeat" });
+    await channel.close();
   } finally {
     intervals.mockRestore();
-    abort.abort();
+    await f.close();
+  }
+});
+
+test("refuses a channel upgrade whose tags do not match the connection", async () => {
+  const f = await fixture();
+  try {
+    const id = (await f.negotiate()).result.connectionId;
+    const other = (await f.negotiate()).result.connectionId;
+    const token = f.headers(id).authorization.slice(7);
+    for (const protocols of [
+      [
+        TERMINAL_PROTOCOL_SUBPROTOCOL,
+        `${REMOTE_SOCKET_CONNECTION_PREFIX}${id}`,
+        `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${token}`,
+      ],
+      [HOST_CHANNEL_SUBPROTOCOL, `${REMOTE_SOCKET_CONNECTION_PREFIX}${id}`],
+      [
+        HOST_CHANNEL_SUBPROTOCOL,
+        `${REMOTE_SOCKET_CONNECTION_PREFIX}${other}`,
+        `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${token}`,
+      ],
+    ]) {
+      const response = await fetch(`${f.base}/channel`, {
+        headers: { "sec-websocket-protocol": protocols.join(", ") },
+      });
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      expect(response.status).toBeLessThan(500);
+    }
+    const channel = await f.channel(id);
+    expect(channel.socket.protocol).toBe(HOST_CHANNEL_SUBPROTOCOL);
+    await channel.close();
+  } finally {
+    await f.close();
+  }
+});
+
+test("a released admission refuses the work of its open channel", async () => {
+  const f = await fixture();
+  try {
+    const id = (await f.negotiate()).result.connectionId;
+    const channel = await f.channel(id);
+    await fetch(`${f.base}/connections/current`, { method: "DELETE", headers: f.headers(id) });
+    expect(await channel.closed).toMatchObject({ code: 1001 });
+  } finally {
     await f.close();
   }
 });
@@ -881,8 +935,7 @@ test("keeps an idle event stream busy with heartbeat comments", async () => {
 test("sharing status counts each live client once and clears clients on disablement", async () => {
   const f = await fixture();
   const controller = createRemoteAccessController(f.services, f.options);
-  const requests: AbortController[] = [];
-  const streams: Response[] = [];
+  const channels: Array<Awaited<ReturnType<typeof f.channel>>> = [];
   const observed: Array<number | null> = [];
   const observer = Effect.runFork(
     Stream.runForEach(controller.states, (state) =>
@@ -927,15 +980,9 @@ test("sharing status counts each live client once and clears clients on disablem
       return admission.connectionId;
     };
     const openStream = async (id: string) => {
-      const abort = new AbortController();
-      requests.push(abort);
-      const response = await fetch(`${base}/events`, {
-        headers: { ...f.headers(id) },
-        signal: abort.signal,
-      });
-      streams.push(response);
-      expect(response.status).toBe(200);
-      return abort;
+      const channel = await f.channel(id, {}, base);
+      channels.push(channel);
+      return { abort: () => void channel.close() };
     };
     const first = await connect();
     expect(await count()).toBe(0);
@@ -963,8 +1010,7 @@ test("sharing status counts each live client once and clears clients on disablem
       [null, 0, 1, 2, 1, 2, 1, 0],
     );
   } finally {
-    for (const request of requests) request.abort();
-    for (const response of streams) await response.body?.cancel().catch(() => {});
+    for (const channel of channels) await channel.close();
     await Effect.runPromise(Fiber.interrupt(observer));
     await Effect.runPromise(controller.close());
     await f.close();
@@ -1126,8 +1172,7 @@ test.each(["electron", "web"] as const)(
         body: remoteNegotiationResultSchema.parse(await response.json()),
       };
     };
-    const signals: AbortController[] = [];
-    const readers: ReadableStreamDefaultReader<Uint8Array>[] = [];
+    const channels: Array<Awaited<ReturnType<typeof f.channel>>> = [];
     try {
       expect((await Effect.runPromise(controller.enable(input))).pairing).toBeNull();
       expect((await submit({ ...hello, pairingCode: "123456" })).body).toMatchObject({
@@ -1158,25 +1203,13 @@ test.each(["electron", "web"] as const)(
       const b = f.headers(f.remember(saved.body).connectionId);
       expect(
         (
-          await fetch(`${f.base}/invoke/system_get_platform`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              [REMOTE_CONNECTION_HEADER]: paired.body.connectionId,
-            },
-            body: "{}",
+          await fetch(`${f.base}/task-assets/workspace/task/spec/asset`, {
+            headers: { [REMOTE_CONNECTION_HEADER]: paired.body.connectionId },
           })
         ).status,
       ).toBe(401);
-      for (const headers of [a, b]) {
-        const abort = new AbortController();
-        signals.push(abort);
-        const stream = await fetch(`${f.base}/events`, { headers, signal: abort.signal });
-        expect(stream.status).toBe(200);
-        const reader = stream.body!.getReader();
-        readers.push(reader);
-        await reader.read();
-      }
+      for (const admission of [paired.body, saved.body])
+        channels.push(await f.channel(admission.connectionId));
       const state = await Effect.runPromise(controller.readState());
       expect(state.connectedClients).toBe(1);
       expect(state.clients).toHaveLength(1);
@@ -1186,24 +1219,11 @@ test.each(["electron", "web"] as const)(
       const kicked = await Effect.runPromise(controller.revokeClient(grant.clientId));
       expect(kicked.connectedClients).toBe(0);
       expect(kicked.clients).toEqual([]);
-      await Promise.all(
-        readers.map(async (reader) => {
-          try {
-            while (!(await reader.read()).done) {}
-          } catch {
-            /* Kick closed the delivery socket. */
-          }
-        }),
-      );
+      // Revocation closes the channels of the client.
+      for (const channel of channels) expect(await channel.closed).toMatchObject({ code: 1001 });
       for (const headers of [a, b])
         expect(
-          (
-            await fetch(`${f.base}/invoke/system_get_platform`, {
-              method: "POST",
-              headers: { ...headers, "content-type": "application/json" },
-              body: "{}",
-            })
-          ).status,
+          (await fetch(`${f.base}/task-assets/workspace/task/spec/asset`, { headers })).status,
         ).toBe(409);
       expect((await submit(hello, grant.token)).body).toMatchObject({
         failure: { code: "authorization_rejected" },
@@ -1226,7 +1246,7 @@ test.each(["electron", "web"] as const)(
       await Effect.runPromise(controller.revokeClient(remaining.body.authorization.clientId));
       expect(await Effect.runPromise(f.services.invoke("system_get_platform", {}))).toBe("linux");
     } finally {
-      for (const signal of signals) signal.abort();
+      for (const channel of channels) channel.socket.terminate();
       await Effect.runPromise(controller.close());
       await f.close();
       await rm(root, { recursive: true, force: true });

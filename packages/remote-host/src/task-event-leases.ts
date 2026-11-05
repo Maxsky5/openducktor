@@ -18,14 +18,23 @@ export type TaskEventLease = {
   nextGeneration: number;
 };
 
+/** The client socket that receives the frames of one lease. */
+export type TaskEventFrameSink = {
+  /** The frames that the sink can take now, or null after it closed. */
+  desiredSize(): number | null;
+  write(frame: TaskEventStreamFrame): void;
+  /** The lease ended or moved to another sink. */
+  close(): void;
+};
+
 export type TaskEventLeaseConnection = {
-  readonly controller: ReadableStreamDefaultController<Uint8Array>;
+  readonly sink: TaskEventFrameSink;
   readonly generation: number;
 };
 
 export type TaskEventLeaseManager = {
   acknowledge(lease: TaskEventLease, cursor: TaskEventCursor): void;
-  attach(lease: TaskEventLease, controller: ReadableStreamDefaultController<Uint8Array>): number;
+  attach(lease: TaskEventLease, sink: TaskEventFrameSink): number;
   create(input: TaskEventStreamSubscribe, subscriptionId: string): TaskEventLease;
   delete(lease: TaskEventLease): void;
   detach(lease: TaskEventLease, generation: number): void;
@@ -36,7 +45,6 @@ export type TaskEventLeaseManager = {
 
 export type CreateTaskEventLeaseManagerOptions = {
   clearExpiryTimer?(timer: ReturnType<typeof setTimeout>): void;
-  encodeFrame(frame: TaskEventStreamFrame): Uint8Array;
   leaseExpiryMs?: number;
   reportDeliveryFailure(failure: { cause: unknown; subscriptionId: string }): void;
   scheduleExpiry?(callback: () => void, delayMs: number): ReturnType<typeof setTimeout>;
@@ -45,7 +53,6 @@ export type CreateTaskEventLeaseManagerOptions = {
 
 export const createTaskEventLeaseManager = ({
   clearExpiryTimer = clearTimeout,
-  encodeFrame,
   leaseExpiryMs = LEASE_EXPIRY_MS,
   reportDeliveryFailure,
   scheduleExpiry = setTimeout,
@@ -76,7 +83,7 @@ export const createTaskEventLeaseManager = ({
     lease.connection = null;
     if (connection) {
       try {
-        connection.controller.close();
+        connection.sink.close();
       } catch (cause) {
         report(lease, cause);
       }
@@ -100,14 +107,10 @@ export const createTaskEventLeaseManager = ({
 
   const write = (lease: TaskEventLease, frame: TaskEventStreamFrame): boolean => {
     const connection = lease.connection;
-    if (
-      !connection ||
-      connection.controller.desiredSize === null ||
-      connection.controller.desiredSize <= 0
-    )
-      return false;
+    const desiredSize = connection?.sink.desiredSize() ?? null;
+    if (!connection || desiredSize === null || desiredSize <= 0) return false;
     try {
-      connection.controller.enqueue(encodeFrame(frame));
+      connection.sink.write(frame);
       return true;
     } catch (cause) {
       detach(lease, connection.generation);
@@ -140,14 +143,14 @@ export const createTaskEventLeaseManager = ({
         subscriptionId: lease.hostSubscription.subscriptionId,
       });
     },
-    attach(lease, controller) {
+    attach(lease, sink) {
       clearExpiry(lease);
       const previous = lease.connection;
       const generation = ++lease.nextGeneration;
-      lease.connection = { controller, generation };
+      lease.connection = { sink, generation };
       if (previous) {
         try {
-          previous.controller.close();
+          previous.sink.close();
         } catch (cause) {
           report(lease, cause);
         }

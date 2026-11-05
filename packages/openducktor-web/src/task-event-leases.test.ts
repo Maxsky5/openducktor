@@ -5,7 +5,10 @@ import type {
   TaskEventStreamSubscribe,
 } from "@openducktor/contracts";
 import { createTaskEventStream } from "../../host/src/events/task-event-stream";
-import { createTaskEventLeaseManager } from "@openducktor/remote-host/task-event-leases";
+import {
+  createTaskEventLeaseManager,
+  type TaskEventFrameSink,
+} from "@openducktor/remote-host/task-event-leases";
 
 type Sink = (frame: TaskEventStreamFrame) => void | boolean;
 
@@ -59,18 +62,17 @@ const createFakeStream = () => {
   };
 };
 
-const createController = () => {
-  const enqueued: Uint8Array[] = [];
+const createSink = () => {
+  const written: TaskEventStreamFrame[] = [];
   return {
-    controller: {
+    sink: {
       close: mock(() => {}),
-      desiredSize: 1,
-      enqueue: mock((value: Uint8Array) => {
-        enqueued.push(value);
+      desiredSize: () => 1,
+      write: mock((frame: TaskEventStreamFrame) => {
+        written.push(frame);
       }),
-      error: mock(() => {}),
-    } satisfies ReadableStreamDefaultController<Uint8Array>,
-    enqueued,
+    } satisfies TaskEventFrameSink,
+    written,
   };
 };
 
@@ -84,7 +86,6 @@ test("expires a created lease that never attaches and unsubscribes exactly once"
   const fake = createFakeStream();
   const expiryCallbacks: Array<() => void> = [];
   const manager = createTaskEventLeaseManager({
-    encodeFrame: () => new Uint8Array(),
     reportDeliveryFailure: () => {},
     scheduleExpiry: (callback) => {
       expiryCallbacks.push(callback);
@@ -104,19 +105,18 @@ test("expires a created lease that never attaches and unsubscribes exactly once"
   expect(fake.unsubscribeCalls).toBe(1);
 });
 
-test("cancels the creation expiry timer when an SSE connection attaches", () => {
+test("cancels the creation expiry timer when a sink attaches", () => {
   const fake = createFakeStream();
   const clearExpiryTimer = mock(() => {});
   const manager = createTaskEventLeaseManager({
     clearExpiryTimer,
-    encodeFrame: () => new Uint8Array(),
     reportDeliveryFailure: () => {},
     scheduleExpiry: createInactiveTimer,
     taskEventStream: fake.stream,
   });
   const lease = manager.create({ cursor: null }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
 
-  manager.attach(lease, createController().controller);
+  manager.attach(lease, createSink().sink);
 
   expect(clearExpiryTimer).toHaveBeenCalledTimes(1);
   expect(lease.expiryTimer).toBeNull();
@@ -128,7 +128,6 @@ test("clears the creation timer and unsubscribes once on explicit delete or shut
   const clearExpiryTimer = mock(() => {});
   const manager = createTaskEventLeaseManager({
     clearExpiryTimer,
-    encodeFrame: () => new Uint8Array(),
     reportDeliveryFailure: () => {},
     scheduleExpiry: createInactiveTimer,
     taskEventStream: fake.stream,
@@ -152,54 +151,46 @@ test("replays only unacknowledged frames and preserves late-cancel connection ge
     reporter: { report: () => {} },
   });
   const manager = createTaskEventLeaseManager({
-    encodeFrame: (frame) => new TextEncoder().encode(JSON.stringify(frame)),
     reportDeliveryFailure: () => {},
     taskEventStream: stream,
   });
   const lease = manager.create({ cursor: cursor(0) }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
-  const first = createController();
-  const firstGeneration = manager.attach(lease, first.controller);
+  const first = createSink();
+  const firstGeneration = manager.attach(lease, first.sink);
   stream.publish(change(1).event);
   await Promise.resolve();
   expect(() => manager.acknowledge(lease, cursor(2))).toThrow();
   manager.acknowledge(lease, cursor(1));
   stream.publish(change(2).event);
   await Promise.resolve();
-  const second = createController();
-  const secondGeneration = manager.attach(lease, second.controller);
+  const second = createSink();
+  const secondGeneration = manager.attach(lease, second.sink);
   manager.detach(lease, firstGeneration);
   await Promise.resolve();
 
-  expect(first.enqueued.map((value) => JSON.parse(new TextDecoder().decode(value)))).toEqual([
-    change(1),
-    change(2),
-  ]);
-  expect(second.enqueued.map((value) => JSON.parse(new TextDecoder().decode(value)))).toEqual([
-    change(2),
-  ]);
+  expect(first.written).toEqual([change(1), change(2)]);
+  expect(second.written).toEqual([change(2)]);
   expect(lease.connection?.generation).toBe(secondGeneration);
   manager.dispose();
 });
 
-test("isolates enqueue failures and deletes host subscriptions on explicit disposal", () => {
+test("isolates sink write failures and deletes host subscriptions on explicit disposal", () => {
   const fake = createFakeStream();
   const reported: unknown[] = [];
   const manager = createTaskEventLeaseManager({
-    encodeFrame: () => new Uint8Array(),
     reportDeliveryFailure: ({ cause }) => reported.push(cause),
     taskEventStream: fake.stream,
   });
   const lease = manager.create({ cursor: cursor(0) }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
   const failure = new Error("closed response");
-  const brokenController = {
+  const brokenSink = {
     close: mock(() => {}),
-    desiredSize: 1,
-    enqueue: mock(() => {
+    desiredSize: () => 1,
+    write: mock(() => {
       throw failure;
     }),
-    error: mock(() => {}),
-  } satisfies ReadableStreamDefaultController<Uint8Array>;
-  manager.attach(lease, brokenController);
+  } satisfies TaskEventFrameSink;
+  manager.attach(lease, brokenSink);
   fake.emit(change(1));
 
   expect(reported).toEqual([failure]);
@@ -215,7 +206,6 @@ test("cancels reconnect expiry and expires a detached lease exactly once", () =>
   const clearExpiryTimer = mock(() => {});
   const manager = createTaskEventLeaseManager({
     clearExpiryTimer,
-    encodeFrame: () => new Uint8Array(),
     reportDeliveryFailure: () => {},
     scheduleExpiry: (callback) => {
       expiryCallbacks.push(callback);
@@ -224,11 +214,11 @@ test("cancels reconnect expiry and expires a detached lease exactly once", () =>
     taskEventStream: fake.stream,
   });
   const lease = manager.create({ cursor: null }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
-  const first = createController();
-  const firstGeneration = manager.attach(lease, first.controller);
+  const first = createSink();
+  const firstGeneration = manager.attach(lease, first.sink);
   manager.detach(lease, firstGeneration);
-  const second = createController();
-  const secondGeneration = manager.attach(lease, second.controller);
+  const second = createSink();
+  const secondGeneration = manager.attach(lease, second.sink);
   manager.detach(lease, secondGeneration);
 
   expect(clearExpiryTimer).toHaveBeenCalledTimes(2);

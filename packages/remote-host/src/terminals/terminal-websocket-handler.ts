@@ -33,6 +33,7 @@ export type TerminalWebSocketService = Pick<
 >;
 
 export type TerminalWebSocketData = {
+  kind: "terminal";
   connectionId: string;
   remoteSignal?: AbortSignal;
   stopRemote?: () => void;
@@ -60,6 +61,7 @@ export const createSocketData = (
   >,
 ): TerminalWebSocketData => {
   const data: TerminalWebSocketData = {
+    kind: "terminal",
     connectionId: input.connectionId,
     terminalService: input.terminalService,
     clientSession: null,

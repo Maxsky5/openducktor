@@ -1,11 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   REMOTE_CONNECTION_HEADER,
-  REMOTE_TERMINAL_CONNECTION_PREFIX,
-  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
+  REMOTE_SOCKET_CONNECTION_PREFIX,
+  REMOTE_SOCKET_AUTHORIZATION_PREFIX,
+  HOST_CHANNEL_SUBPROTOCOL,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
 } from "@openducktor/contracts";
-import { openRemoteTerminalSocket } from "./terminal-socket";
+import { openRemoteSocket, openWebSocket } from "./socket";
 
 class FakeSocket {
   binaryType: "blob" | "arraybuffer" = "blob";
@@ -21,7 +22,7 @@ class FakeSocket {
   constructor(readonly protocols: string[]) {}
 
   send(data: Parameters<WebSocket["send"]>[0]): void {
-    if (!(data instanceof Uint8Array)) throw new Error("The terminal sends only binary frames.");
+    if (!(data instanceof Uint8Array)) throw new Error("The socket sends only binary frames.");
     this.sent.push(data);
   }
 
@@ -61,16 +62,17 @@ const setup = () => {
   return { sockets, create };
 };
 
-describe("openRemoteTerminalSocket", () => {
+describe("openRemoteSocket", () => {
   const headers = {
     [REMOTE_CONNECTION_HEADER]: "connection-1",
     authorization: `Bearer ${"c".repeat(43)}`,
   };
 
-  test("offers the terminal and connection subprotocols and reads binary frames", async () => {
+  test("offers the requested protocol and the connection subprotocols", async () => {
     const { sockets, create } = setup();
-    const pending = openRemoteTerminalSocket(
+    const pending = openRemoteSocket(
       create,
+      TERMINAL_PROTOCOL_SUBPROTOCOL,
       headers,
       new AbortController().signal,
       () => {},
@@ -80,8 +82,8 @@ describe("openRemoteTerminalSocket", () => {
 
     expect(socket?.protocols).toEqual([
       TERMINAL_PROTOCOL_SUBPROTOCOL,
-      `${REMOTE_TERMINAL_CONNECTION_PREFIX}connection-1`,
-      `${REMOTE_TERMINAL_AUTHORIZATION_PREFIX}${"c".repeat(43)}`,
+      `${REMOTE_SOCKET_CONNECTION_PREFIX}connection-1`,
+      `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${"c".repeat(43)}`,
     ]);
     expect(socket?.binaryType).toBe("arraybuffer");
 
@@ -96,8 +98,9 @@ describe("openRemoteTerminalSocket", () => {
 
     expect(
       await rejection(
-        openRemoteTerminalSocket(
+        openRemoteSocket(
           create,
+          TERMINAL_PROTOCOL_SUBPROTOCOL,
           {},
           new AbortController().signal,
           () => {},
@@ -110,8 +113,9 @@ describe("openRemoteTerminalSocket", () => {
 
   test("rejects and closes when the host selects another protocol", async () => {
     const { sockets, create } = setup();
-    const pending = openRemoteTerminalSocket(
+    const pending = openRemoteSocket(
       create,
+      TERMINAL_PROTOCOL_SUBPROTOCOL,
       headers,
       new AbortController().signal,
       () => {},
@@ -125,8 +129,9 @@ describe("openRemoteTerminalSocket", () => {
 
   test("rejects when the socket closes during setup", async () => {
     const { sockets, create } = setup();
-    const pending = openRemoteTerminalSocket(
+    const pending = openRemoteSocket(
       create,
+      TERMINAL_PROTOCOL_SUBPROTOCOL,
       headers,
       new AbortController().signal,
       () => {},
@@ -135,14 +140,15 @@ describe("openRemoteTerminalSocket", () => {
     sockets[0]?.closeFromHost();
 
     expect(await rejection(pending)).toMatchObject({
-      failure: { code: "transport_failure", message: "Terminal closed during setup." },
+      failure: { code: "transport_failure", message: "The host socket closed during setup." },
     });
   });
 
   test("rejects when the socket fails during setup", async () => {
     const { sockets, create } = setup();
-    const pending = openRemoteTerminalSocket(
+    const pending = openRemoteSocket(
       create,
+      TERMINAL_PROTOCOL_SUBPROTOCOL,
       headers,
       new AbortController().signal,
       () => {},
@@ -152,7 +158,7 @@ describe("openRemoteTerminalSocket", () => {
     sockets[0]?.closeFromHost();
 
     expect(await rejection(pending)).toMatchObject({
-      failure: { code: "transport_failure", message: "Terminal connection failed." },
+      failure: { code: "transport_failure", message: "The host socket failed." },
     });
   });
 
@@ -160,8 +166,9 @@ describe("openRemoteTerminalSocket", () => {
     const { sockets, create } = setup();
     const controller = new AbortController();
     const reason = new Error("stopped");
-    const pending = openRemoteTerminalSocket(
+    const pending = openRemoteSocket(
       create,
+      TERMINAL_PROTOCOL_SUBPROTOCOL,
       headers,
       controller.signal,
       () => {},
@@ -176,8 +183,9 @@ describe("openRemoteTerminalSocket", () => {
   test("delivers binary frames as bytes and ignores text frames", async () => {
     const { sockets, create } = setup();
     const frames: Uint8Array[] = [];
-    const pending = openRemoteTerminalSocket(
+    const pending = openRemoteSocket(
       create,
+      TERMINAL_PROTOCOL_SUBPROTOCOL,
       headers,
       new AbortController().signal,
       (frame) => frames.push(frame),
@@ -194,8 +202,9 @@ describe("openRemoteTerminalSocket", () => {
   test("reports a host close after open and rejects input after the close", async () => {
     const { sockets, create } = setup();
     const onClose = mock(() => {});
-    const pending = openRemoteTerminalSocket(
+    const pending = openRemoteSocket(
       create,
+      TERMINAL_PROTOCOL_SUBPROTOCOL,
       headers,
       new AbortController().signal,
       () => {},
@@ -208,7 +217,7 @@ describe("openRemoteTerminalSocket", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledWith();
     expect(await rejection(connection.send(new Uint8Array([1])))).toMatchObject({
-      message: "Terminal is disconnected.",
+      message: "The socket is disconnected.",
     });
     expect(sockets[0]?.sent).toEqual([]);
   });
@@ -217,7 +226,14 @@ describe("openRemoteTerminalSocket", () => {
     const { sockets, create } = setup();
     const controller = new AbortController();
     const onClose = mock(() => {});
-    const pending = openRemoteTerminalSocket(create, headers, controller.signal, () => {}, onClose);
+    const pending = openRemoteSocket(
+      create,
+      TERMINAL_PROTOCOL_SUBPROTOCOL,
+      headers,
+      controller.signal,
+      () => {},
+      onClose,
+    );
     sockets[0]?.open(TERMINAL_PROTOCOL_SUBPROTOCOL);
     const connection = await pending;
     controller.abort(new Error("stopped"));
@@ -225,5 +241,41 @@ describe("openRemoteTerminalSocket", () => {
 
     expect(onClose).not.toHaveBeenCalled();
     expect(await rejection(connection.send(new Uint8Array([1])))).toBeInstanceOf(Error);
+  });
+});
+
+describe("openWebSocket", () => {
+  test("offers only the given protocols and resolves when the host selects the first", async () => {
+    const { sockets, create } = setup();
+    const pending = openWebSocket(
+      create,
+      [HOST_CHANNEL_SUBPROTOCOL],
+      new AbortController().signal,
+      () => {},
+      () => {},
+    );
+    expect(sockets[0]?.protocols).toEqual([HOST_CHANNEL_SUBPROTOCOL]);
+    sockets[0]?.open(HOST_CHANNEL_SUBPROTOCOL);
+    const connection = await pending;
+    await connection.send(new Uint8Array([7]));
+    expect(sockets[0]?.sent).toEqual([new Uint8Array([7])]);
+  });
+
+  test("names the missing protocol when the host selects another one", async () => {
+    const { sockets, create } = setup();
+    const pending = openWebSocket(
+      create,
+      [HOST_CHANNEL_SUBPROTOCOL],
+      new AbortController().signal,
+      () => {},
+      () => {},
+    );
+    sockets[0]?.open("");
+    expect(await rejection(pending)).toMatchObject({
+      failure: {
+        code: "invalid_protocol",
+        message: `The host did not select ${HOST_CHANNEL_SUBPROTOCOL}.`,
+      },
+    });
   });
 });

@@ -55,7 +55,7 @@ Rules:
 - A live event can add a descendant only when its parent already exists in the collection.
 - On reload, the host reads exact root references from durable task and workspace session records. Runtime adapters read only those roots and their verified descendants.
 - Runtime state cannot prove task ownership. Only an explicit workflow start or durable task record can attach a session to a task.
-- The browser uses one tagged SSE channel for all host events. Electron uses its generic host-event IPC message.
+- The browser uses one host channel WebSocket for all host events. Electron uses its generic host-event IPC message.
 - Each snapshot carries the host `sequence` of the last state change that it covers. Drop older `snapshot`, `session_upsert`, and `session_removed` envelopes. Deliver an older `task_session_records_updated` without its `liveSession`. Deliver transcript and other changes in stream order.
 - A reconnect with complete replay keeps the collection and the loaded transcripts. A replay gap for the repository or a new host starts a new attachment.
 - A later connection snapshot can follow missed `task_session_records_updated` envelopes. It makes the cached task session lists of its repository read again.
@@ -569,7 +569,7 @@ Startup is complete when task records and the first host snapshot have produced 
 | Pending input survives startup and child projection | Live projection and runtime adapter tests |
 | History stays selected-session only | `history/use-selected-session-history-load.test.tsx`, `history/session-history-loader.test.ts` |
 | Context loads apart from history | `history/use-selected-session-context-load.test.tsx`, adapter context tests |
-| Browser reconnect uses one SSE channel | `local-host-transport.test.ts` |
+| Browser reconnect uses one host channel | `local-host-channel.test.ts` |
 | Selected transcript display state | `transcript/session-transcript-state.test.ts`, `agent-chat-thread-state.test.ts`, selected view tests |
 | Host prepares current turn context | `session-turn-preparation.test.ts`, `session-operation-owner.test.ts` |
 | Runtime status follows events by revision | `packages/frontend-core/src/runtime/host-runtime-status-owner.test.ts` |

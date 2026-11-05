@@ -103,7 +103,7 @@ The network browser config uses `https://machine.ts.net/api` as the work endpoin
 - Caddy can retain it with an exact-and-child path matcher: `@remote path /api /api/*`, then `handle @remote { reverse_proxy 127.0.0.1:14327 }`.
 - nginx can strip it with both `location = /api { proxy_pass http://127.0.0.1:14327/; }` and `location /api/ { proxy_pass http://127.0.0.1:14327/; }`.
 
-The first `--base-path` segment must not match a backend route namespace: `health`, `session`, `shutdown`, `events`, `local-attachment-preview`, `invoke`, `task-events`, `task-assets`, `terminal`, or `browser`. This restriction also applies to nested paths, such as `/invoke/custom`. Use `/api`, `/api/v1`, or another nonconflicting path so that unprefixed routes remain reachable.
+The first `--base-path` segment must not match a backend route namespace: `health`, `session`, `shutdown`, `channel`, `local-attachment-preview`, `task-assets`, `terminal`, or `browser`. This restriction also applies to nested paths, such as `/channel/custom`. Use `/api`, `/api/v1`, or another nonconflicting path so that unprefixed routes remain reachable.
 
 The example mounts the host at port 443, which differs from the frontend port 1420. The launcher logs an info message about this port mismatch. It is expected behind a proxy.
 
@@ -118,16 +118,22 @@ Without `--base-path`, the browser reaches the host on the backend port, so the 
 - `packages/frontend` owns the React app, `bootstrapOpenDucktorShell`, and `ShellBridge` types.
 - `packages/frontend-core` owns the shared client behavior and the `ClientConnection` that the bootstrap creates for the selected host.
 - `apps/electron` implements the bridge with preload IPC and delegates host work to `@openducktor/host`.
-- `packages/openducktor-web` implements the bridge with HTTP calls and SSE subscriptions.
+- `packages/openducktor-web` implements the bridge with one host channel WebSocket per browser tab, and HTTP for files and operator actions.
 - `packages/openducktor-web/src/typescript-host-backend.ts` owns its host and private browser backend.
 - `packages/remote-host` attaches the shared network work interface to either shell.
 - `packages/openducktor-web/src/browser-tabs` holds the browser tab routes, the preview proxy, and the browser part of the web shell bridge.
 
 Shared frontend code cannot import shell internals. `getShellBridge()` returns `ShellPlatform`, which has no host members, so production frontend code reaches the host only through its client connection. `bun run lint` checks the import boundaries with oxlint: `no-restricted-imports` for shell imports in the shared frontend, and `architecture/allowed-imports` for the frontend core.
 
-The `/events` endpoint authenticates the host session and streams the shared event bus for all repositories. Repository names select browser listeners; they do not restrict access. The transport does not support sessions authorized for only one repository.
+### Host channel
 
-The `/events` endpoint keeps one SSE connection and one replay cursor for non-task host events. Run, runtime, and Workspace Session events use the `message` event name. Browser tab events use the `browser` event name, so many tab updates cannot evict other events. Live-session events use `agent-session-live:` followed by the JSON-encoded repository path. The browser registers a named listener for each observed repository and validates each delivered envelope. Events for unobserved repositories still cross the connection and advance its cursor, but do not trigger JSON parsing or transcript validation in JavaScript. The cursor contains the host epoch, so a cursor from an earlier host process cannot replay. The host keeps a bounded replay buffer for each SSE event name, so a busy repository cannot evict the events of another one. A total byte limit for all buffers evicts the oldest events first. Each connection ends its replay with a `replay-complete` event that names the event names with evicted events and reports a host change. A complete replay keeps the live-session collections and the Workspace Session lists. Listeners of an affected event name read their state again. Restart the host and reload the browser together when this event framing changes.
+Each browser tab opens one WebSocket to `/channel`. It carries host commands, host events, notifications, task event streams, and the remote access state of the local operator. Browsers allow only six HTTP/1.1 connections per site, and long-lived streams used to fill them when two or more tabs were open. WebSockets do not count against that limit, so any number of tabs keeps working. [The remote host protocol](remote-host-protocol.md#host-channel) defines the messages, which the remote clients also use.
+
+The channel authenticates the host session and streams the shared event bus for all repositories. Repository names select browser listeners; they do not restrict access. The transport does not support sessions authorized for only one repository.
+
+The channel keeps one replay cursor for non-task host events. Run, runtime, and Workspace Session events use the `message` event name. Browser tab events use the `browser` event name, so many tab updates cannot evict other events. Live-session events use `agent-session-live:` followed by the JSON-encoded repository path. The header of each event frame names its event, and the envelope follows as the frame body. The browser parses and validates a body only when a listener observes that event name. Events for unobserved repositories still cross the connection and advance its cursor. The cursor contains the host epoch, so a cursor from an earlier host process cannot replay. The host keeps a bounded replay buffer for each event name, so a busy repository cannot evict the events of another one. A total byte limit for all buffers evicts the oldest events first. The answer to `events.open` ends the replay. It names the event names with evicted events and reports a host change. A complete replay keeps the live-session collections and the Workspace Session lists. Listeners of an affected event name read their state again. Restart the host and reload the browser together when this event framing changes.
+
+The tab opens the channel when the first listener, subscription, or command needs it, and closes it when nothing uses it. After a loss, the tab reconnects with a backoff from 0.5 to 5 seconds. It sends its cursors again, attaches its task leases again, and the host replays the unacknowledged task frames. A lease that the host no longer has fails its task stream, and the stream subscribes again from its acknowledged cursor. A command that waits for a closed channel starts one connection attempt at once and fails with the error of that attempt. A command whose channel closes fails; the tab does not send it again.
 
 ## Browser tabs
 
@@ -153,11 +159,11 @@ The private local browser backend retains two tokens for each run. These tokens 
 - The control token authorizes launcher calls such as `/shutdown`. The launcher sends it in `x-openducktor-control-token`.
 - The app token starts a browser session. The browser sends it once to `/session` in `x-openducktor-app-token`.
 
-The host then sets the HttpOnly `openducktor_web_session` cookie for SSE and attachment previews. Invoke requests keep the app-token header and credentials. Tokens do not appear in URLs.
+The host then sets the HttpOnly `openducktor_web_session` cookie for the host channel, terminals, and attachment previews. Browser WebSockets cannot send headers, so the channel uses the cookie. Tokens do not appear in URLs.
 
 The session cookie is `HttpOnly; SameSite=Strict`. The host adds the `Secure` flag when the frontend origin uses `https`, so TLS deployments get a secure cookie without extra configuration. Plain HTTP browser use is limited to loopback origins.
 
-The host CORS allowlist includes the configured frontend origin, its hostname without a trailing dot, and loopback origins at the frontend listening port. Browser requests from other origins get a `403`. CORS permission does not make cross-site session cookies work. With a remote or HTTPS `--external-url`, open that URL, not a direct HTTP frontend URL. The launcher displays only the configured external URL in these modes, including HTTPS loopback origins. Use the configured hostname consistently; accepting both dotted and undotted origins does not make their cookies interchangeable. The terminal WebSocket checks the origin, the session cookie, and the WebSocket subprotocol. The `/shutdown` route requires the launcher control token, which the browser never receives.
+The host CORS allowlist includes the configured frontend origin, its hostname without a trailing dot, and loopback origins at the frontend listening port. Browser requests from other origins get a `403`. CORS permission does not make cross-site session cookies work. With a remote or HTTPS `--external-url`, open that URL, not a direct HTTP frontend URL. The launcher displays only the configured external URL in these modes, including HTTPS loopback origins. Use the configured hostname consistently; accepting both dotted and undotted origins does not make their cookies interchangeable. The host channel and terminal WebSockets check the origin, the session cookie, and the WebSocket subprotocol. The `/shutdown` route requires the launcher control token, which the browser never receives.
 
 The launcher serves the browser config through `/openducktor-config.json` without authentication. Local mode includes its automatic app token. Network mode includes only the negotiated work endpoint. Restrict access as described in [Serve the runner on another machine](#serve-the-runner-on-another-machine).
 

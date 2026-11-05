@@ -47,6 +47,7 @@ const makeSocket = (
   const closed: Array<[number, string]> = [];
   const socket = {
     data: {
+      kind: "terminal",
       connectionId: "connection-1",
       terminalService,
       clientSession: null,
@@ -70,6 +71,7 @@ const makeSocket = (
       return sendStatus?.(frame) ?? frame.byteLength;
     },
     close: (code: number, reason: string) => closed.push([code, reason]),
+    bufferedAmount: () => 0,
   };
   return { socket, sent, closed, data: socket.data };
 };

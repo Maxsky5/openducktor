@@ -12,7 +12,13 @@ const MIN_GZIP_BYTES = 1024;
 export type NodeServerSocket<Data> = {
   data: Data;
   close(code: number, reason: string): void;
-  send(frame: Uint8Array): number;
+  /**
+   * Queues one binary frame. Returns the frame size, -1 when the socket buffers data, or 0 when the
+   * socket cannot send. `compress` applies per-message deflate when the client negotiated it.
+   */
+  send(frame: Uint8Array, compress?: boolean): number;
+  /** The bytes that the socket queued and did not send yet. */
+  bufferedAmount(): number;
 };
 
 export type NodeWebSocketHandler<Data> = {
@@ -153,10 +159,11 @@ export const startNodeFetchServer = async <Data>({
           const wrapped: NodeServerSocket<Data> = {
             data: options.data,
             close: (code, reason) => nativeSocket.close(code, reason),
-            send: (frame) => {
+            bufferedAmount: () => nativeSocket.bufferedAmount,
+            send: (frame, compress = false) => {
               if (nativeSocket.readyState !== WebSocket.OPEN) return 0;
               try {
-                nativeSocket.send(frame, { binary: true, compress: false }, (cause) => {
+                nativeSocket.send(frame, { binary: true, compress }, (cause) => {
                   if (cause) {
                     onError(cause);
                     nativeSocket.terminate();

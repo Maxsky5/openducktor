@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-// Both shells use Node Request semantics, which differ from Bun's body transfer behavior.
-test("remote POST routes retain their bodies on Node", async () => {
+// Both shells use Node Request and WebSocket semantics, which differ from Bun.
+test("remote routes and host channels work on Node", async () => {
   // Like the shells, the bundle loads playwright-core from the dependencies of the host.
   const cache = fileURLToPath(new URL("../../host/node_modules/.cache", import.meta.url));
   await mkdir(cache, { recursive: true });

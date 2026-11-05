@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   REMOTE_CONNECTION_HEADER,
-  REMOTE_TERMINAL_CONNECTION_PREFIX,
-  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
+  REMOTE_SOCKET_CONNECTION_PREFIX,
+  REMOTE_SOCKET_AUTHORIZATION_PREFIX,
+  HOST_CHANNEL_SUBPROTOCOL,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
 } from "@openducktor/contracts";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
@@ -368,33 +369,40 @@ describe("createNativeRemoteTransport request", () => {
   });
 });
 
-describe("createNativeRemoteTransport openTerminal", () => {
-  test("opens the React Native socket with the subprotocols and the connection header", async () => {
-    const { sockets, transport } = setup();
-    const headers = {
-      [REMOTE_CONNECTION_HEADER]: "connection-1",
-      authorization: `Bearer ${"c".repeat(43)}`,
-    };
-    const pending = transport.openTerminal(
-      "wss://host.test/terminal",
-      headers,
-      new AbortController().signal,
-      () => {},
-      () => {},
-    );
-    const socket = sockets[0];
+describe("createNativeRemoteTransport openSocket", () => {
+  test.each([
+    ["terminal", TERMINAL_PROTOCOL_SUBPROTOCOL],
+    ["channel", HOST_CHANNEL_SUBPROTOCOL],
+  ])(
+    "opens the %s socket with the subprotocols and the connection header",
+    async (path, protocol) => {
+      const { sockets, transport } = setup();
+      const headers = {
+        [REMOTE_CONNECTION_HEADER]: "connection-1",
+        authorization: `Bearer ${"c".repeat(43)}`,
+      };
+      const pending = transport.openSocket(
+        `wss://host.test/${path}`,
+        protocol,
+        headers,
+        new AbortController().signal,
+        () => {},
+        () => {},
+      );
+      const socket = sockets[0];
 
-    expect(socket?.url).toBe("wss://host.test/terminal");
-    expect(socket?.protocols).toEqual([
-      TERMINAL_PROTOCOL_SUBPROTOCOL,
-      `${REMOTE_TERMINAL_CONNECTION_PREFIX}connection-1`,
-      `${REMOTE_TERMINAL_AUTHORIZATION_PREFIX}${"c".repeat(43)}`,
-    ]);
-    expect(socket?.options).toEqual({ headers });
+      expect(socket?.url).toBe(`wss://host.test/${path}`);
+      expect(socket?.protocols).toEqual([
+        protocol,
+        `${REMOTE_SOCKET_CONNECTION_PREFIX}connection-1`,
+        `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${"c".repeat(43)}`,
+      ]);
+      expect(socket?.options).toEqual({ headers });
 
-    socket?.open(TERMINAL_PROTOCOL_SUBPROTOCOL);
-    const connection = await pending;
-    await connection.send(new Uint8Array([1, 2, 3]));
-    expect(socket?.sent).toEqual([new Uint8Array([1, 2, 3])]);
-  });
+      socket?.open(protocol);
+      const connection = await pending;
+      await connection.send(new Uint8Array([1, 2, 3]));
+      expect(socket?.sent).toEqual([new Uint8Array([1, 2, 3])]);
+    },
+  );
 });
