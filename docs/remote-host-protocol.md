@@ -170,7 +170,7 @@ An additive optional capability keeps the current protocol version.
 
 Discovery returns `shell`, `appVersion`, `hostInstanceId`, `hostId`, `accessPolicy: "pairing"`, and supported protocol versions with capability names.
 `hostInstanceId` identifies the live host run; it is not a durable trust identity.
-`hostId` identifies the host approval scope across restarts. It grants no access. Legacy descriptors can be read only to report which peer needs an update. A remote connection requires protocol 5, pairing support, and a stable scoped host ID before the client sends proof.
+`hostId` identifies the host approval scope across restarts. It grants no access. Legacy descriptors can be read only to report which peer needs an update. A remote connection requires protocol 7, pairing support, and a stable scoped host ID before the client sends proof.
 Negotiation sends this client hello:
 
 ```json

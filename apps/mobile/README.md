@@ -149,7 +149,7 @@ Follow these rules, or sheets and screens open and close late. React Native show
 
 The `ios` and `android` commands build the isolated pages first, so a new clone needs no other step.
 
-The app needs a protocol 6 host with Remote control turned on. Scan its pairing QR code to connect directly, or enter its address and six-digit code. Typing the sixth digit connects. Tap a digit to replace it; a corrected full code waits for Connect. A failure shows its reason and next action in a callout below the code. Saved access needs no new code after restart or suspension. Wrong, expired, used, or revoked access keeps the address and asks for a current code. Codes and credentials do not encrypt HTTP traffic. Use HTTPS or a protected network. On the host, open Host connection or Settings, Remote control, turn it on, and select Add device. Then copy the address or open the QR code tab.
+The app needs a protocol 7 host with Remote control turned on. Scan its pairing QR code to connect directly, or enter its address and six-digit code. Typing the sixth digit connects. Tap a digit to replace it; a corrected full code waits for Connect. A failure shows its reason and next action in a callout below the code. Saved access needs no new code after restart or suspension. Wrong, expired, used, or revoked access keeps the address and asks for a current code. Codes and credentials do not encrypt HTTP traffic. Use HTTPS or a protected network. On the host, open Host connection or Settings, Remote control, turn it on, and select Add device. Then copy the address or open the QR code tab.
 
 ### Android setup
 
