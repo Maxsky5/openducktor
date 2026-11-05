@@ -19,7 +19,7 @@ describe("startup splash Vite plugin", () => {
     expect(styles?.children).not.toContain("gradient");
     expect(styles?.children).toContain('font-family: "Space Grotesk"');
     expect(styles?.children).toContain("--odt-startup-title: #475569");
-    expect(fontPreload?.attrs?.href).toBe("./fonts/space-grotesk-latin-600.woff2");
+    expect(fontPreload?.attrs?.href).toBe("./fonts/space-grotesk-latin-wght-normal.woff2");
     expect(fontPreload?.attrs?.type).toBe("font/woff2");
     expect(splash?.injectTo).toBe("body-prepend");
     expect(splash?.attrs?.role).toBe("status");
@@ -34,5 +34,34 @@ describe("startup splash Vite plugin", () => {
     expect(splash?.children).toContain("odt-startup__particle--spark");
     expect(splash?.children).not.toContain("odt-startup__launch-panel");
     expect(splash?.children).toContain("./favicon.svg");
+  });
+  test("packages every declared local face and its notices", () => {
+    const plugin = createOpenDucktorStartupSplashPlugin();
+    const assets = new Map<string, Buffer>();
+    plugin.generateBundle.call({
+      emitFile(asset) {
+        assets.set(asset.fileName, asset.source);
+        return asset.fileName;
+      },
+    });
+    const styles =
+      plugin.transformIndexHtml().tags.find((tag) => tag.tag === "style")?.children ?? "";
+    const urls = [...styles.matchAll(/url\(["']?(\.\/fonts\/[^)"']+)/g)].map(
+      (match) => match[1]?.slice(2) ?? "",
+    );
+    expect(urls.length).toBeGreaterThan(0);
+    for (const url of urls) {
+      expect(assets.get(url)?.subarray(0, 4).toString()).toBe("wOF2");
+    }
+    expect(new Set(urls).size).toBe(urls.length);
+    expect([...assets.keys()].filter((name) => name.endsWith(".woff2")).sort()).toEqual(
+      [...urls].sort(),
+    );
+    expect(assets.get("fonts/space-grotesk-OFL.txt")?.toString()).toContain(
+      "SIL OPEN FONT LICENSE",
+    );
+    expect(assets.get("fonts/ibm-plex-mono-OFL.txt")?.toString()).toContain(
+      "SIL OPEN FONT LICENSE",
+    );
   });
 });

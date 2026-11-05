@@ -1,16 +1,13 @@
 import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "@openducktor/frontend/startup-splash/theme";
+import { readFileSync, readdirSync } from "node:fs";
 
-const STARTUP_FONT_PATH = "./fonts/space-grotesk-latin-600.woff2";
+const FONT_DIRECTORY = new URL("../fonts/", import.meta.url);
+const FONT_ASSETS = readdirSync(FONT_DIRECTORY).filter((name) => name !== "faces.css");
+const FONT_STYLES = readFileSync(new URL("faces.css", FONT_DIRECTORY), "utf8");
+const STARTUP_FONT_PATH = "./fonts/space-grotesk-latin-wght-normal.woff2";
 
 const STARTUP_SPLASH_STYLES = `
-@font-face {
-  font-family: "Space Grotesk";
-  font-style: normal;
-  font-weight: 600;
-  font-display: block;
-  src: url("${STARTUP_FONT_PATH}") format("woff2");
-}
-
+${FONT_STYLES}
 :root {
   --odt-startup-background: ${OPEN_DUCKTOR_STARTUP_BACKGROUND};
   --odt-startup-primary: #5100ff;
@@ -428,6 +425,29 @@ type StartupSplashHtmlTag = {
 export const createOpenDucktorStartupSplashPlugin = () => ({
   name: "openducktor-startup-splash",
   enforce: "pre" as const,
+  generateBundle(this: {
+    emitFile: (asset: { type: "asset"; fileName: string; source: Buffer }) => string;
+  }) {
+    for (const name of FONT_ASSETS) {
+      this.emitFile({
+        type: "asset",
+        fileName: `fonts/${name}`,
+        source: readFileSync(new URL(name, FONT_DIRECTORY)),
+      });
+    }
+  },
+  configureServer(server: import("vite").ViteDevServer) {
+    server.middlewares.use((request, response, next) => {
+      const name = request.url?.split("?")[0]?.replace(/^\/fonts\//, "");
+      if (!request.url?.startsWith("/fonts/") || !name || !FONT_ASSETS.includes(name))
+        return next();
+      response.setHeader(
+        "Content-Type",
+        name.endsWith(".woff2") ? "font/woff2" : "text/plain; charset=utf-8",
+      );
+      response.end(readFileSync(new URL(name, FONT_DIRECTORY)));
+    });
+  },
   transformIndexHtml: () =>
     ({
       tags: [
