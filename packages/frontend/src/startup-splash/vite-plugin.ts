@@ -4,10 +4,9 @@ import { readFileSync, readdirSync } from "node:fs";
 const FONT_DIRECTORY = new URL("../fonts/", import.meta.url);
 const FONT_ASSETS = readdirSync(FONT_DIRECTORY).filter((name) => name !== "faces.css");
 const FONT_STYLES = readFileSync(new URL("faces.css", FONT_DIRECTORY), "utf8");
-const STARTUP_FONT_PATH = "./fonts/space-grotesk-latin-wght-normal.woff2";
+const STARTUP_FONT_PATH = "fonts/space-grotesk-latin-wght-normal.woff2";
 
 const STARTUP_SPLASH_STYLES = `
-${FONT_STYLES}
 :root {
   --odt-startup-background: ${OPEN_DUCKTOR_STARTUP_BACKGROUND};
   --odt-startup-primary: #5100ff;
@@ -422,63 +421,69 @@ type StartupSplashHtmlTag = {
   injectTo: "head-prepend" | "body-prepend";
 };
 
-export const createOpenDucktorStartupSplashPlugin = () => ({
-  name: "openducktor-startup-splash",
-  enforce: "pre" as const,
-  generateBundle(this: {
-    emitFile: (asset: { type: "asset"; fileName: string; source: Buffer }) => string;
-  }) {
-    for (const name of FONT_ASSETS) {
-      this.emitFile({
-        type: "asset",
-        fileName: `fonts/${name}`,
-        source: readFileSync(new URL(name, FONT_DIRECTORY)),
+export const createOpenDucktorStartupSplashPlugin = () => {
+  let base: string;
+  return {
+    configResolved(config: import("vite").ResolvedConfig) {
+      base = config.base;
+    },
+    name: "openducktor-startup-splash",
+    enforce: "pre" as const,
+    generateBundle(this: {
+      emitFile: (asset: { type: "asset"; fileName: string; source: Buffer }) => string;
+    }) {
+      for (const name of FONT_ASSETS) {
+        this.emitFile({
+          type: "asset",
+          fileName: `fonts/${name}`,
+          source: readFileSync(new URL(name, FONT_DIRECTORY)),
+        });
+      }
+    },
+    configureServer(server: import("vite").ViteDevServer) {
+      server.middlewares.use((request, response, next) => {
+        const name = request.url?.split("?")[0]?.replace(/^\/fonts\//, "");
+        if (!request.url?.startsWith("/fonts/") || !name || !FONT_ASSETS.includes(name))
+          return next();
+        response.setHeader(
+          "Content-Type",
+          name.endsWith(".woff2") ? "font/woff2" : "text/plain; charset=utf-8",
+        );
+        response.end(readFileSync(new URL(name, FONT_DIRECTORY)));
       });
-    }
-  },
-  configureServer(server: import("vite").ViteDevServer) {
-    server.middlewares.use((request, response, next) => {
-      const name = request.url?.split("?")[0]?.replace(/^\/fonts\//, "");
-      if (!request.url?.startsWith("/fonts/") || !name || !FONT_ASSETS.includes(name))
-        return next();
-      response.setHeader(
-        "Content-Type",
-        name.endsWith(".woff2") ? "font/woff2" : "text/plain; charset=utf-8",
-      );
-      response.end(readFileSync(new URL(name, FONT_DIRECTORY)));
-    });
-  },
-  transformIndexHtml: () =>
-    ({
-      tags: [
-        {
-          tag: "link",
-          attrs: {
-            rel: "preload",
-            href: STARTUP_FONT_PATH,
-            as: "font",
-            type: "font/woff2",
-            crossorigin: "anonymous",
+    },
+    transformIndexHtml: () =>
+      ({
+        tags: [
+          {
+            tag: "link",
+            attrs: {
+              rel: "preload",
+              href: `${base}${STARTUP_FONT_PATH}`,
+              as: "font",
+              type: "font/woff2",
+              crossorigin: "anonymous",
+            },
+            injectTo: "head-prepend",
           },
-          injectTo: "head-prepend",
-        },
-        {
-          tag: "style",
-          attrs: { id: "openducktor-startup-styles" },
-          children: STARTUP_SPLASH_STYLES,
-          injectTo: "head-prepend",
-        },
-        {
-          tag: "div",
-          attrs: {
-            id: "openducktor-startup",
-            class: "odt-startup",
-            role: "status",
-            "aria-label": "OpenDucktor is starting",
+          {
+            tag: "style",
+            attrs: { id: "openducktor-startup-styles" },
+            children: `${FONT_STYLES.replaceAll("./fonts/", `${base}fonts/`)}\n${STARTUP_SPLASH_STYLES}`,
+            injectTo: "head-prepend",
           },
-          children: STARTUP_SPLASH_MARKUP,
-          injectTo: "body-prepend",
-        },
-      ],
-    }) satisfies { tags: StartupSplashHtmlTag[] },
-});
+          {
+            tag: "div",
+            attrs: {
+              id: "openducktor-startup",
+              class: "odt-startup",
+              role: "status",
+              "aria-label": "OpenDucktor is starting",
+            },
+            children: STARTUP_SPLASH_MARKUP,
+            injectTo: "body-prepend",
+          },
+        ],
+      }) satisfies { tags: StartupSplashHtmlTag[] },
+  };
+};

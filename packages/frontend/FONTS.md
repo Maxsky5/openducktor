@@ -2,7 +2,7 @@
 
 ## Source and ownership
 
-`src/fonts` owns the font bytes and `faces.css` owns their face definitions. The startup splash Vite plugin embeds those definitions before bootstrap, serves the files in development, and emits the same files into both shell builds. Relative `./fonts/` URLs work with Electron `file:` documents and HTTP documents. Do not add a second face declaration in application CSS or shell HTML.
+`src/fonts` owns the font bytes and `faces.css` owns their face definitions. The startup splash Vite plugin embeds those definitions before bootstrap, serves the files in development, and emits the same files into both shell builds. The plugin uses the resolved Vite base for face URLs and the preload. Electron uses `./fonts/` beside its `file:` document. The web shell uses `/fonts/` so direct routes such as `/sessions/` and `/kanban/` load fonts from the application root. Do not add a second face declaration in application CSS or shell HTML.
 
 The files are unchanged WOFF2 assets from `@fontsource-variable/space-grotesk@5.3.0` and `@fontsource/ibm-plex-mono@5.3.0`. The source packages are available at [Fontsource Space Grotesk](https://fontsource.org/fonts/space-grotesk) and [Fontsource IBM Plex Mono](https://fontsource.org/fonts/ibm-plex-mono). Their copied SIL Open Font License notices are `space-grotesk-OFL.txt` and `ibm-plex-mono-OFL.txt`. Both notices ship beside the fonts. No font package is needed at runtime or build time.
 
@@ -24,7 +24,7 @@ Space Grotesk uses `font-display: block` for the shared faces and an early Latin
 
 ## Validation
 
-Both development Vite configurations served all eight WOFF2 files. The web shell loaded the Latin face once during startup. Fresh Chromium contexts loaded all required weights and language subsets with external requests blocked. The standalone HTTP build requested each of the eight payloads once. A real Electron BrowserWindow loaded all eight faces from the renderer build through `file:` URLs. The shell builds contain identical font bytes and both notices.
+Both development Vite configurations served all eight WOFF2 files. The web shell loaded the Latin face once during startup. Fresh Chromium contexts loaded all required weights and language subsets with external requests blocked. The standalone HTTP build requested each of the eight payloads once. A real Electron BrowserWindow loaded all eight faces from the renderer build through `file:` URLs. The shell builds contain identical font bytes and both notices. A Vite build regression test checks font URL resolution from `/sessions/`, `/kanban/`, and an Electron `file:` document. Fresh Chromium contexts also loaded all eight faces from each trailing-slash web route through the production static asset resolver, with one local request per font file and external requests blocked.
 
 Light and dark specimens covered body text, headings at all four Space Grotesk weights, `pre` and `code`, Latin-ext text `Łódź Œuvre`, Vietnamese `Tiếng Việt`, Cyrillic `Привет мир`, and Cyrillic-ext `Ѣ Ѫ`. Space Grotesk has no Cyrillic subset, so its existing fallback stack supplies Cyrillic text. IBM Plex Mono supplies the code samples. The Markdown syntax block keeps the same IBM Plex Mono stack. No typography component or theme token changed.
 
