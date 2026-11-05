@@ -23,7 +23,6 @@ import {
 } from "@openducktor/host";
 import { Stream, Effect } from "effect";
 import { WorkspaceTextFileWriteError } from "../../host/src/application/filesystem/workspace-text-file-service";
-import { HostOperationError } from "../../host/src/effect/host-errors";
 import type { HostCommandHandlerError } from "../../host/src/interface/router/host-command-router";
 import type { WebLogger } from "./logger";
 import {
@@ -286,10 +285,8 @@ const createTestChannel = (
       reportDeliveryFailure: () => {},
     }),
     ownedLeases: new Set(),
-    invoke: (command, args) =>
-      invokeLocalHostCommand(hostCommandRouter, command, args, () => false),
+    invoke: (command, args) => invokeLocalHostCommand(hostCommandRouter, command, args),
     refusal: () => null,
-    isShuttingDown: () => false,
     reportFailure: () => {},
   });
 };
@@ -298,8 +295,7 @@ const invokeTestCommand = (
   hostCommandRouter: EffectHostCommandRouter,
   command: string,
   args: HostCommandInputRecord = {},
-): Promise<HostChannelReply> =>
-  invokeLocalHostCommand(hostCommandRouter, command, args, () => false);
+): Promise<HostChannelReply> => invokeLocalHostCommand(hostCommandRouter, command, args);
 
 describe("TypeScript web host backend", () => {
   const TERMINAL_UPGRADE_FRONTEND_ORIGIN = "http://127.0.0.1:1420";
@@ -964,29 +960,6 @@ describe("TypeScript web host backend", () => {
     }
   });
 
-  test("keeps the failure kind of a host command error", async () => {
-    const hostCommandRouter = createTestHostCommandRouter((command) =>
-      Effect.fail(
-        new HostOperationError({
-          message: `Failed to invoke ${command}.`,
-          operation: "test.invoke",
-          details: { command, failureKind: "timeout" },
-        }),
-      ),
-    );
-
-    expect(await invokeTestCommand(hostCommandRouter, "runtime_status")).toEqual({
-      error: {
-        kind: "host",
-        response: {
-          error: "Failed to invoke runtime_status.",
-          failureKind: "timeout",
-          message: "Failed to invoke runtime_status.",
-        },
-      },
-    });
-  });
-
   test("returns successful host command results without changing their shape", async () => {
     const hostCommandRouter = createTestHostCommandRouter(() => Effect.succeed("linux"));
 
@@ -1013,7 +986,6 @@ describe("TypeScript web host backend", () => {
       hostCommandRouter,
       "workspace_get_git_provider_context",
       {},
-      () => false,
       cancel.signal,
     );
     await started.promise;
@@ -1027,7 +999,7 @@ describe("TypeScript web host backend", () => {
     const hostCommandRouter = createTestHostCommandRouter(() => Effect.die(new Error("boom")));
 
     expect(await invokeTestCommand(hostCommandRouter, "system_get_platform")).toEqual({
-      error: { kind: "host", response: { error: "boom", message: "boom" } },
+      error: { kind: "host", response: { message: "boom" } },
     });
   });
 
@@ -1052,7 +1024,6 @@ describe("TypeScript web host backend", () => {
       error: {
         kind: "host",
         response: {
-          error: "Interactive terminals are unavailable in this runtime.",
           message: "Interactive terminals are unavailable in this runtime.",
           failure: {
             kind: "terminal",
@@ -1093,7 +1064,6 @@ describe("TypeScript web host backend", () => {
       error: {
         kind: "host",
         response: {
-          error: "The file changed after it was loaded.",
           message: "The file changed after it was loaded.",
           failure: {
             kind: "workspace_text_file_write",
@@ -1143,7 +1113,6 @@ describe("TypeScript web host backend", () => {
       error: {
         kind: "host",
         response: {
-          error: failure.detail,
           message: failure.detail,
           failure: { kind: "runtime_query", runtimeQueryFailure: failure },
         },
@@ -1451,50 +1420,6 @@ describe("TypeScript web host backend", () => {
     expect(response.status).toBe(202);
     expect(shutdownStarted).toBe(true);
     expect(stopCalls).toBe(0);
-  });
-
-  test("refuses commands after the shutdown gate while host teardown remains pending", async () => {
-    const disposeStarted = createDeferred();
-    const disposeReleased = createDeferred();
-    let invokeCalls = 0;
-    const teardown = stopHostBackend({
-      disposeHost: () =>
-        Effect.promise(async () => {
-          disposeStarted.resolve();
-          await disposeReleased.promise;
-        }),
-      logger: testLogger,
-      resolveExited: () => {},
-      stopServer: () => {},
-    });
-
-    await disposeStarted.promise;
-    try {
-      const hostCommandRouter = createTestHostCommandRouter(() => {
-        invokeCalls += 1;
-        return Effect.succeed(null);
-      });
-      const reply = await invokeLocalHostCommand(
-        hostCommandRouter,
-        "runtime_status",
-        {},
-        () => true,
-      );
-
-      expect(reply).toEqual({
-        error: {
-          kind: "host",
-          response: {
-            error: "Browser backend is shutting down and is no longer accepting new work.",
-            message: "Browser backend is shutting down and is no longer accepting new work.",
-          },
-        },
-      });
-      expect(invokeCalls).toBe(0);
-    } finally {
-      disposeReleased.resolve();
-      await teardown;
-    }
   });
 
   test("keeps the backend server alive until host disposal finishes", async () => {

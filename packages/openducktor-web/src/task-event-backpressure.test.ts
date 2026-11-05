@@ -36,7 +36,6 @@ const createHarness = () => {
     ownedLeases: new Set(),
     invoke: async () => ({ result: null }),
     refusal: () => null,
-    isShuttingDown: () => false,
     reportFailure: (cause) => failures.push(cause),
   };
   const publish = (sequence: number, descriptionBytes: number) => {

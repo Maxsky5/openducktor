@@ -1,4 +1,5 @@
 import {
+  encodeHostChannelFrame,
   type HostEventChannel,
   type HostEventEnvelope,
   parseHostEventChannel,
@@ -7,11 +8,11 @@ import type { HostEventBusPort, HostEventListener, HostEventUnsubscribe } from "
 import { hostEventStreamEventName } from "@openducktor/host-client";
 import { WebResourceError } from "./effect/web-errors";
 
+/** A host event, retained as the host channel frame that every channel sends. */
 export type BufferedHostEvent = {
   id: number;
-  payload: string;
+  frame: Uint8Array;
   eventName: string;
-  bytes: number;
 };
 export type BufferedHostEventReplay = {
   events: BufferedHostEvent[];
@@ -55,12 +56,14 @@ export class BufferedHostEventStream {
 
   emit(envelope: HostEventEnvelope, reportDeliveryFailure: (cause: unknown) => void): void {
     this.nextId += 1;
-    const payload = JSON.stringify(envelope);
-    const event = {
+    const eventName = hostEventStreamEventName(envelope);
+    const event: BufferedHostEvent = {
       id: this.nextId,
-      payload,
-      eventName: hostEventStreamEventName(envelope),
-      bytes: Buffer.byteLength(payload),
+      frame: encodeHostChannelFrame(
+        { type: "host_event", id: this.nextId, name: eventName },
+        JSON.stringify(envelope),
+      ),
+      eventName,
     };
     this.retain(event);
     // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
@@ -101,8 +104,8 @@ export class BufferedHostEventStream {
       this.buffers.set(event.eventName, buffer);
     }
     buffer.events.push(event);
-    buffer.bytes += event.bytes;
-    this.totalBytes += event.bytes;
+    buffer.bytes += event.frame.byteLength;
+    this.totalBytes += event.frame.byteLength;
     while (buffer.events.length > this.limits.events || buffer.bytes > this.limits.bytes) {
       this.evictFirst(buffer);
     }
@@ -123,8 +126,8 @@ export class BufferedHostEventStream {
   private evictFirst(buffer: ReplayBuffer): void {
     const evicted = buffer.events.shift();
     if (!evicted) return;
-    buffer.bytes -= evicted.bytes;
-    this.totalBytes -= evicted.bytes;
+    buffer.bytes -= evicted.frame.byteLength;
+    this.totalBytes -= evicted.frame.byteLength;
     buffer.evictedThroughId = evicted.id;
   }
 }

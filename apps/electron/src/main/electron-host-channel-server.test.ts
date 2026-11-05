@@ -48,7 +48,6 @@ const startServer = async (
         ownedLeases: new Set(),
         invoke: async () => ({ result: null }),
         refusal: () => null,
-        isShuttingDown: () => false,
         reportFailure: () => {},
       }),
   });

@@ -1,4 +1,8 @@
-import { HOST_CHANNEL_MAX_CLIENT_MESSAGE_BYTES } from "@openducktor/contracts";
+import {
+  HOST_CHANNEL_MAX_CLIENT_MESSAGE_BYTES,
+  HOST_CHANNEL_SUBPROTOCOL,
+  TERMINAL_PROTOCOL_SUBPROTOCOL,
+} from "@openducktor/contracts";
 import {
   hostChannelWebSocketHandler,
   type HostChannelSocket,
@@ -14,6 +18,12 @@ import {
 /** The data of a host WebSocket: a terminal connection or a host channel. */
 export type HostWebSocketData = TerminalWebSocketData | HostChannelSocketData;
 export type HostWebSocketServerSocket = NodeServerSocket<HostWebSocketData>;
+
+/** The socket routes of a host listener and the subprotocol that each one selects. */
+export const HOST_SOCKET_PROTOCOLS: ReadonlyMap<string, string> = new Map([
+  ["/terminal", TERMINAL_PROTOCOL_SUBPROTOCOL],
+  ["/channel", HOST_CHANNEL_SUBPROTOCOL],
+]);
 
 const isChannel = (socket: HostWebSocketServerSocket): socket is HostChannelSocket =>
   socket.data.kind === "channel";

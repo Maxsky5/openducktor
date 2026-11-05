@@ -8,14 +8,19 @@ import {
   type HostChannelClientMessage,
   type HostChannelMessage,
   type HostChannelRequestMessage,
+  type HostErrorResponse,
   type HostEventsOpened,
   type RemoteAccessState,
   type RemoteFailure,
   type TaskEventLease as TaskEventLeaseResult,
 } from "@openducktor/contracts";
-import type { EffectNodeHostCommandRouter, HostCommandResult } from "@openducktor/host";
+import {
+  hostInvokeFailureFromError,
+  type EffectNodeHostCommandRouter,
+  type HostCommandResult,
+} from "@openducktor/host";
 import { Effect, Fiber, Stream } from "effect";
-import type { BufferedHostEvent, BufferedHostEventStream } from "./host-event-bus";
+import type { BufferedHostEventStream } from "./host-event-bus";
 import type { NodeServerSocket } from "./node-fetch-server";
 import type { TaskEventFrameSink, TaskEventLeaseManager } from "./task-event-leases";
 
@@ -52,10 +57,11 @@ export type HostChannelOptions = {
   remoteAccessStates?: Stream.Stream<RemoteAccessState>;
   /** A larger command reply fails with `reply_too_large`. */
   maxReplyBytes?: number;
-  /** Why the host takes no new work now, or null. */
+  /**
+   * Why the host takes no new work now, or null. A refusing host also ends notifications on
+   * purpose, so their end is no failure then.
+   */
   refusal(): RemoteFailure | null;
-  /** True while the host shuts down, so a closed notification stream is no failure. */
-  isShuttingDown(): boolean;
   /** Aborts when the admission of this client ends. */
   signal?: AbortSignal;
   reportFailure(cause: unknown): void;
@@ -89,25 +95,28 @@ export const createHostChannelSocketData = (
   reads: new Map(),
 });
 
-/** Each host event has one frame for all channels. */
-const hostEventFrames = new WeakMap<BufferedHostEvent, Uint8Array>();
-const hostEventFrame = (event: BufferedHostEvent): Uint8Array => {
-  let frame = hostEventFrames.get(event);
-  if (!frame) {
-    frame = encodeHostChannelFrame(
-      { type: "host_event", id: event.id, name: event.eventName },
-      event.payload,
-    );
-    hostEventFrames.set(event, frame);
-  }
-  return frame;
-};
-
-const failure = (
+export const remoteFailure = (
   code: RemoteFailure["code"],
   message: string,
   nextAction: string,
 ): RemoteFailure => ({ code, message, nextAction });
+
+/** The error payload of a host command that ran and failed. */
+export const hostErrorResponse = (cause: unknown): HostErrorResponse => {
+  const response: HostErrorResponse = {
+    message: cause instanceof Error ? cause.message : String(cause),
+  };
+  const failure = hostInvokeFailureFromError(cause);
+  if (failure) response.failure = failure;
+  return response;
+};
+
+/** The reply of a command that ran and failed. */
+export const hostCommandFailure = (cause: unknown): HostChannelReply => ({
+  error: { kind: "host", response: hostErrorResponse(cause) },
+});
+
+const HEARTBEAT_FRAME = encodeHostChannelFrame({ type: "heartbeat" });
 
 const closeChannel = (socket: HostChannelSocket, code: number, reason: string): void => {
   if (socket.data.closed) return;
@@ -142,16 +151,18 @@ const refuse = (
   code: RemoteFailure["code"],
   message: string,
   nextAction: string,
-): void => sendError(socket, id, { kind: "refused", failure: failure(code, message, nextAction) });
+): void =>
+  sendError(socket, id, { kind: "refused", failure: remoteFailure(code, message, nextAction) });
 
 const sendResult = (socket: HostChannelSocket, id: number, result: HostChannelResult): void => {
-  const body = JSON.stringify(result ?? null);
+  const frame = encodeHostChannelFrame({ type: "result", id }, JSON.stringify(result ?? null));
   const limit = socket.data.options.maxReplyBytes;
-  if (limit !== undefined && Buffer.byteLength(body) > limit) {
+  // The header adds a few bytes to the reply, which the limit does not need to tell apart.
+  if (limit !== undefined && frame.byteLength > limit) {
     sendError(socket, id, { kind: "reply_too_large", limitBytes: limit });
     return;
   }
-  send(socket, { type: "result", id }, body);
+  sendFrame(socket, frame);
 };
 
 /** Starts a fiber that the socket stops when it closes. */
@@ -179,7 +190,7 @@ const openEvents = (
   socket: HostChannelSocket,
   request: Extract<HostChannelRequestMessage, { method: "events.open" }>,
 ): void => {
-  const { hostEvents, notifications, isShuttingDown, reportFailure } = socket.data.options;
+  const { hostEvents, notifications, refusal, reportFailure } = socket.data.options;
   if (socket.data.eventsOpened) {
     refuse(
       socket,
@@ -198,7 +209,7 @@ const openEvents = (
     previous && !hostChanged
       ? hostEvents.replayAfter(previous.hostEventId)
       : { events: [], gaps: [] };
-  for (const event of replay.events) sendFrame(socket, hostEventFrame(event));
+  for (const event of replay.events) sendFrame(socket, event.frame);
   const opened: HostEventsOpened = {
     hostEpoch: hostEvents.hostEpoch,
     hostEventId: hostEvents.currentEventId(),
@@ -207,7 +218,7 @@ const openEvents = (
   };
   sendResult(socket, request.id, opened);
   // Replay, result, and subscription run in one turn, so no event falls between them.
-  const stopHost = hostEvents.subscribe((event) => sendEvent(socket, hostEventFrame(event)));
+  const stopHost = hostEvents.subscribe((event) => sendEvent(socket, event.frame));
   const unsubscribeHost = () => {
     socket.data.stops.delete(unsubscribeHost);
     stopHost();
@@ -220,7 +231,7 @@ const openEvents = (
     (cause) => {
       if (socket.data.closed) return;
       // Host shutdown ends notifications before the listener closes.
-      if (!isShuttingDown()) reportFailure(cause);
+      if (refusal() === null) reportFailure(cause);
       closeChannel(socket, 1011, "Notification delivery stopped.");
     },
   );
@@ -326,6 +337,11 @@ const runInvoke = async (
   socket: HostChannelSocket,
   request: Extract<HostChannelRequestMessage, { method: "invoke" }>,
 ): Promise<void> => {
+  const refused = socket.data.options.refusal();
+  if (refused) {
+    sendError(socket, request.id, { kind: "refused", failure: refused });
+    return;
+  }
   const cancel = isHostReadCommand(request.command) ? new AbortController() : null;
   if (cancel) socket.data.reads.set(request.id, cancel);
   try {
@@ -413,7 +429,7 @@ const parseMessage = (raw: string | Buffer): HostChannelClientMessage | null => 
 export const hostChannelWebSocketHandler = {
   open(socket: HostChannelSocket): void {
     const heartbeat = setInterval(
-      () => send(socket, { type: "heartbeat" }),
+      () => sendFrame(socket, HEARTBEAT_FRAME),
       HOST_CHANNEL_HEARTBEAT_INTERVAL_MS,
     );
     heartbeat.unref?.();

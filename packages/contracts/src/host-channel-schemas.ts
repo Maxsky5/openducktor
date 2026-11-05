@@ -97,7 +97,6 @@ export const hostChannelCancelSchema = z.strictObject({
   type: z.literal("cancel"),
   id: requestIdSchema,
 });
-export type HostChannelCancelMessage = z.infer<typeof hostChannelCancelSchema>;
 
 /** A message from a client to the host. */
 export const hostChannelClientMessageSchema = z.union([
@@ -166,6 +165,9 @@ export const hostChannelMessageSchema = z.discriminatedUnion("type", [
 export type HostChannelMessage = z.infer<typeof hostChannelMessageSchema>;
 
 const LINE_FEED = 0x0a;
+const encoder = new TextEncoder();
+// A decode call without `stream` keeps no state, so one decoder serves every frame.
+const decoder = new TextDecoder("utf-8", { fatal: true });
 
 /** Encodes one frame. A body must be JSON text. */
 export const encodeHostChannelFrame = (
@@ -173,10 +175,10 @@ export const encodeHostChannelFrame = (
   body?: string,
 ): Uint8Array => {
   const text = JSON.stringify(header);
-  return new TextEncoder().encode(body === undefined ? text : `${text}\n${body}`);
+  return encoder.encode(body === undefined ? text : `${text}\n${body}`);
 };
 
-export type HostChannelFrame = {
+type HostChannelFrame = {
   /** The header JSON text. */
   header: string;
   /** The body bytes, or null for a frame without a body. */
@@ -185,7 +187,6 @@ export type HostChannelFrame = {
 
 /** Splits one frame. The body stays encoded, so a reader decodes only the bodies that it uses. */
 export const splitHostChannelFrame = (bytes: Uint8Array): HostChannelFrame => {
-  const decoder = new TextDecoder("utf-8", { fatal: true });
   const end = bytes.indexOf(LINE_FEED);
   if (end < 0) return { header: decoder.decode(bytes), body: null };
   return { header: decoder.decode(bytes.subarray(0, end)), body: bytes.subarray(end + 1) };

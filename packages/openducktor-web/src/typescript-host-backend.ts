@@ -10,14 +10,11 @@ import { handleRemoteAccessHttp } from "./remote-access-http";
 import webPackage from "../package.json";
 import { localAttachmentPreviewResponse } from "@openducktor/remote-host/local-attachment-preview";
 import {
-  failureKindSchema,
-  HOST_CHANNEL_SUBPROTOCOL,
   type HostCommandInputRecord,
   type HostErrorResponse,
   type HostInvokeFailure,
   hostErrorResponseSchema,
   hostInvokeFailureSchema,
-  TERMINAL_PROTOCOL_SUBPROTOCOL,
 } from "@openducktor/contracts";
 import {
   createFilesystemRemoteApprovalStore,
@@ -28,7 +25,6 @@ import {
   type EffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
   type HostRuntimeDistribution,
-  hostInvokeFailureFromError,
   type McpBridgeDiscoveryMode,
   type OpenDucktorConfigDirScope,
   resolveDevelopmentInstanceIdFromEnvironment,
@@ -44,7 +40,6 @@ import {
   errorMessage,
   runWebBoundary,
   toWebOperationError,
-  type WebHostCommandErrorDetails,
   WebHostRequestError,
   WebOperationError,
 } from "@openducktor/remote-host/effect/web-errors";
@@ -64,10 +59,12 @@ import { routeTaskAssetHttpRequest } from "@openducktor/remote-host/task-asset-h
 import { createTaskEventLeaseManager } from "@openducktor/remote-host/task-event-leases";
 import {
   createHostChannelSocketData,
+  hostCommandFailure,
   type HostChannelReply,
   type HostChannelSocketData,
 } from "@openducktor/remote-host/host-channel";
 import {
+  HOST_SOCKET_PROTOCOLS,
   hostWebSocketHandler,
   type HostWebSocketData,
 } from "@openducktor/remote-host/host-websocket-handler";
@@ -133,11 +130,6 @@ const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
 const HOST_IDLE_TIMEOUT_SECONDS = 0;
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const SHUTDOWN_MESSAGE = "Browser backend is shutting down and is no longer accepting new work.";
-/** The local socket routes and the subprotocol that each one selects. */
-const LOCAL_SOCKET_PROTOCOLS: ReadonlyMap<string, string> = new Map([
-  ["/terminal", TERMINAL_PROTOCOL_SUBPROTOCOL],
-  ["/channel", HOST_CHANNEL_SUBPROTOCOL],
-]);
 
 export const resolveAppSessionCookieName = (
   mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode,
@@ -175,7 +167,7 @@ const tryUpgradeHostWebSocket = ({
   server: TypescriptHostBackendServer;
   shutdownStarted: boolean;
 }): SocketUpgradeResult => {
-  const protocol = LOCAL_SOCKET_PROTOCOLS.get(path);
+  const protocol = HOST_SOCKET_PROTOCOLS.get(path);
   if (protocol === undefined) return { handled: false };
   const reject = (message: string, status: number): SocketUpgradeResult => ({
     handled: true,
@@ -284,106 +276,26 @@ const preflightResponse = (request: Request, allowedOrigins: Set<string>): Respo
   });
 };
 
-const hostFailureDetailsSchema = z.object({
-  failureKind: failureKindSchema.optional(),
-});
-const hostFailureCauseSchema = z.object({
-  cause: z.unknown().optional(),
-  details: hostFailureDetailsSchema.optional(),
-  failureKind: failureKindSchema.optional(),
-});
 const webHostRequestDetailsSchema = z.object({
   hostInvokeFailure: hostInvokeFailureSchema.optional(),
 });
 
-const readCauseStructuredDetails = (cause: unknown) => {
-  const parsed = hostFailureCauseSchema.safeParse(cause);
-  return parsed.success ? parsed.data.details : undefined;
-};
-
-const extractHostCommandFailureKind = (cause: unknown): string | undefined => {
-  const visitedCauses = new Set<unknown>();
-  let currentCause = cause;
-
-  while (true) {
-    const parsed = hostFailureCauseSchema.safeParse(currentCause);
-    if (!parsed.success) return undefined;
-
-    const direct = parsed.data.failureKind;
-    if (direct) return direct;
-
-    const detailsFailureKind = parsed.data.details?.failureKind;
-    if (detailsFailureKind) return detailsFailureKind;
-
-    const nextCause = parsed.data.cause;
-    if (visitedCauses.has(nextCause)) return undefined;
-    visitedCauses.add(nextCause);
-    currentCause = nextCause;
-  }
-};
-
-const hostCommandFailureToWebError = (command: string, cause: unknown): WebHostRequestError => {
-  const failureKind = extractHostCommandFailureKind(cause);
-  const details = readCauseStructuredDetails(cause);
-  const hostInvokeFailure = hostInvokeFailureFromError(cause);
-  const errorDetails: WebHostCommandErrorDetails = { command };
-  if (details) {
-    if (details.failureKind === undefined) {
-      errorDetails.hostDetails = {};
-    } else {
-      errorDetails.hostDetails = { failureKind: details.failureKind };
-    }
-  }
-  if (hostInvokeFailure) {
-    errorDetails.hostInvokeFailure = hostInvokeFailure;
-  }
-  const input = {
-    message: errorMessage(cause),
-    status: 500,
-    cause,
-    details: errorDetails,
-  };
-  if (failureKind) return new WebHostRequestError({ ...input, failureKind });
-  return new WebHostRequestError(input);
-};
-
-const runHostCommand = (
-  hostCommandRouter: EffectHostCommandRouter,
-  command: string,
-  args: HostCommandInputRecord,
-  signal: AbortSignal | undefined,
-) => Effect.runPromise(Effect.result(hostCommandRouter.invoke(command, args)), { signal });
-
-/** Runs a command of the local frontend and returns its result or its host error payload. */
+/**
+ * Runs a command of the local frontend and returns its result or its host error payload. A defect
+ * fails only this command, not the channel of the tab.
+ */
 export const invokeLocalHostCommand = async (
   hostCommandRouter: EffectHostCommandRouter,
   command: string,
   args: HostCommandInputRecord,
-  shutdownStarted: () => boolean,
   /** Interrupts the command. The channel aborts it only for a cancelled host read. */
   signal?: AbortSignal,
 ): Promise<HostChannelReply> => {
-  if (shutdownStarted())
-    return { error: { kind: "host", response: hostErrorPayload(SHUTDOWN_MESSAGE) } };
-  let result: Awaited<ReturnType<typeof runHostCommand>>;
   try {
-    result = await runHostCommand(hostCommandRouter, command, args, signal);
+    return { result: await Effect.runPromise(hostCommandRouter.invoke(command, args), { signal }) };
   } catch (cause) {
-    // A defect fails only this command, not the channel of the tab.
-    return { error: { kind: "host", response: hostErrorPayload(errorMessage(cause)) } };
+    return hostCommandFailure(cause);
   }
-  if (result._tag === "Success") return { result: result.success };
-  const error =
-    result.failure instanceof WebHostRequestError
-      ? result.failure
-      : hostCommandFailureToWebError(command, result.failure);
-  const { hostInvokeFailure } = webHostRequestDetailsSchema.parse(error.details ?? {});
-  return {
-    error: {
-      kind: "host",
-      response: hostErrorPayload(error.message, error.failureKind, hostInvokeFailure),
-    },
-  };
 };
 
 const validateExpectedToken = (
@@ -896,7 +808,7 @@ export const startTypescriptHostBackendEffect = ({
         leases: taskEventLeaseManager,
         ownedLeases: localTaskLeases,
         invoke: (command, args, signal) =>
-          invokeLocalHostCommand(hostCommandRouter, command, args, () => shutdownStarted, signal),
+          invokeLocalHostCommand(hostCommandRouter, command, args, signal),
         remoteAccessStates: remoteAccessOperator.states,
         refusal: () =>
           shutdownStarted
@@ -906,7 +818,6 @@ export const startTypescriptHostBackendEffect = ({
                 nextAction: "Reopen OpenDucktor.",
               }
             : null,
-        isShuttingDown: () => shutdownStarted,
         reportFailure: (cause) =>
           scheduleNonFatalWebEventFailure(logger, "Host channel delivery failed.", cause),
       });

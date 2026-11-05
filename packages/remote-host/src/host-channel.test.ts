@@ -84,7 +84,6 @@ const createHost = (overrides: Partial<HostChannelOptions> = {}) => {
     ownedLeases: new Set(),
     invoke: async () => ({ result: null }),
     refusal: () => null,
-    isShuttingDown: () => false,
     reportFailure: (cause) => failures.push(cause),
     ...overrides,
   };
@@ -277,7 +276,12 @@ test.each([
   { label: "unexpected loss", shutdown: false },
 ])("closes the channel when notifications end by $label", async ({ shutdown }) => {
   let shuttingDown = false;
-  const host = createHost({ isShuttingDown: () => shuttingDown });
+  const host = createHost({
+    refusal: () =>
+      shuttingDown
+        ? { code: "unavailable", message: "Shutting down.", nextAction: "Reopen OpenDucktor." }
+        : null,
+  });
   const socket = host.connect();
   socket.request({ method: "events.open", cursor: null, notificationCursor: null });
   await waitFor(() => socket.ofType("notification").length > 0, "attachment");
@@ -386,6 +390,31 @@ test("interrupts running host reads when the socket closes", async () => {
   await waitFor(() => aborted.length === 1, "the interrupted read");
 
   expect(aborted).toEqual(["workspace_get_git_provider_context"]);
+});
+
+test("refuses a command while the host refuses work, without running it", async () => {
+  let calls = 0;
+  const refused = {
+    code: "unavailable" as const,
+    message: "The host is shutting down.",
+    nextAction: "Reopen OpenDucktor.",
+  };
+  const socket = createHost({
+    invoke: async () => {
+      calls += 1;
+      return { result: null };
+    },
+    refusal: () => refused,
+  }).connect();
+  const id = socket.request({ method: "invoke", command: "system_get_platform", args: {} });
+  await waitFor(() => socket.reply(id) !== undefined, "command refusal");
+
+  expect(socket.reply(id)?.header).toEqual({
+    type: "error",
+    id,
+    error: { kind: "refused", failure: refused },
+  });
+  expect(calls).toBe(0);
 });
 
 test("sends a host error and refuses a reply over the size limit", async () => {

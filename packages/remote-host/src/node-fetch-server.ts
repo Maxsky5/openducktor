@@ -33,7 +33,6 @@ export type NodeWebSocketHandler<Data> = {
 export type NodeFetchServer<Data> = {
   readonly port: number;
   stop(force: boolean): Promise<void>;
-  timeout(request: Request, seconds: number): void;
   /** Ends this HTTP response on abort without stopping the listener or host work. */
   bindResponseLifetime(signal: AbortSignal): void;
   upgrade(options: { data: Data }): boolean;
@@ -103,7 +102,6 @@ export const startNodeFetchServer = async <Data>({
       return (server.address() as AddressInfo).port;
     },
     stop,
-    timeout: (_request, seconds) => outgoing?.setTimeout(seconds * 1000),
     bindResponseLifetime: (signal) => {
       if (!outgoing) return;
       const close = () => outgoing.destroy();
@@ -156,6 +154,7 @@ export const startNodeFetchServer = async <Data>({
         webSocketServer.handleUpgrade(incoming, socket, head, (nativeSocket) => {
           upgraded = true;
           sockets.add(nativeSocket);
+          let backpressured = false;
           const wrapped: NodeServerSocket<Data> = {
             data: options.data,
             close: (code, reason) => nativeSocket.close(code, reason),
@@ -169,16 +168,22 @@ export const startNodeFetchServer = async <Data>({
                     nativeSocket.terminate();
                     return;
                   }
+                  // Only a socket that reported a buffer waits for its drain.
+                  if (!backpressured) return;
                   queueMicrotask(() => {
                     if (
+                      backpressured &&
                       nativeSocket.readyState === WebSocket.OPEN &&
                       nativeSocket.bufferedAmount === 0
                     ) {
+                      backpressured = false;
                       websocket.drain(wrapped);
                     }
                   });
                 });
-                return nativeSocket.bufferedAmount > 0 ? -1 : frame.byteLength;
+                if (nativeSocket.bufferedAmount === 0) return frame.byteLength;
+                backpressured = true;
+                return -1;
               } catch (cause) {
                 onError(cause);
                 return 0;
@@ -372,6 +377,7 @@ const canCompress = (response: Response): boolean => {
   const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
   return (
     contentType !== undefined &&
+    // Gzip buffers its output, which would hold back the events of a stream.
     contentType !== "text/event-stream" &&
     (contentType.startsWith("text/") ||
       /^(?:application\/(?:json|javascript|[^/]+\+json)|image\/svg\+xml)$/.test(contentType)) &&

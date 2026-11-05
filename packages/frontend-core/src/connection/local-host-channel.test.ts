@@ -177,7 +177,6 @@ const listen = (
     listener: (event) => {
       events.push(event);
     },
-    receivesControlEvents: true,
   });
   releases.push(remove);
   return { events, remove };
@@ -581,7 +580,6 @@ describe("createLocalHostChannel", () => {
         listener: (event) => {
           events.push(event);
         },
-        receivesControlEvents: true,
       }),
     );
     await waitFor(() => sockets.length === 1, "the stalled socket");
@@ -617,7 +615,6 @@ describe("createLocalHostChannel", () => {
         channel: "openducktor://workspace-provider-setup-updated",
         eventName: "message",
         listener: () => {},
-        receivesControlEvents: true,
       }),
     );
     await waitFor(() => prepareSignals.length === 1, "the session preparation");

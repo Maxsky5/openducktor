@@ -1,6 +1,7 @@
 import { workspaceScopeValue } from "./workspace-scope";
 import type { GitCheck, PathCheck, TaskStoreCheck, WorkspaceRef } from "@openducktor/contracts";
 import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
+import { waitWithAbort } from "@openducktor/host-client/remote";
 import { errorMessage } from "../lib/errors";
 import { scheduleTask, type ScheduleTask } from "../lib/scheduling";
 import type { DiagnosticsFailureKind } from "../types/diagnostics";
@@ -191,13 +192,9 @@ export const withDiagnosticsQueryTimeout = async <T>(
     timeout.abort(new DiagnosticsQueryTimeoutError(timeoutMs));
   }, timeoutMs);
   const signal = AbortSignal.any([querySignal, timeout.signal]);
-  const { promise: aborted, reject } = Promise.withResolvers<never>();
-  const abort = () => reject(signal.reason);
-  signal.addEventListener("abort", abort, { once: true });
   try {
-    return await Promise.race([run(signal), aborted]);
+    return await waitWithAbort(run(signal), signal);
   } finally {
-    signal.removeEventListener("abort", abort);
     cancelTimeout();
   }
 };

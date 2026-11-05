@@ -8,21 +8,19 @@ import {
   type HostWebSocketData,
 } from "@openducktor/remote-host/host-websocket-handler";
 import { startNodeFetchServer } from "@openducktor/remote-host/node-fetch-server";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { offeredSubprotocols, tokensMatch } from "@openducktor/remote-host/socket-offer";
+import { randomBytes } from "node:crypto";
+import type { ElectronHostChannelEndpoint } from "../shared/electron-bridge-contract";
 
 const LOOPBACK_HOST = "127.0.0.1";
 
-/** The address and per-launch token of the desktop host channel. */
-export type ElectronHostChannelEndpoint = { url: string; token: string };
+/** Loopback frames gain nothing from compression, so the desktop channel sends them as they are. */
+const desktopWebSocketHandler = { ...hostWebSocketHandler, perMessageDeflate: false };
 
 export type ElectronHostChannelServer = {
   readonly endpoint: ElectronHostChannelEndpoint;
   stop(): Promise<void>;
 };
-
-const tokensMatch = (received: string, expected: string): boolean =>
-  received.length === expected.length &&
-  timingSafeEqual(Buffer.from(received), Buffer.from(expected));
 
 /**
  * Serves the host channel of the desktop windows on a loopback port. A socket must come from a
@@ -39,14 +37,11 @@ export const startElectronHostChannelServer = async ({
   onError(cause: unknown): void;
 }): Promise<ElectronHostChannelServer> => {
   const token = randomBytes(32).toString("base64url");
-  const expectedProtocols = [
-    HOST_CHANNEL_SUBPROTOCOL,
-    `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${token}`,
-  ];
+  const authorization = `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${token}`;
   const server = await startNodeFetchServer<HostWebSocketData>({
     hostname: LOOPBACK_HOST,
     port: 0,
-    websocket: hostWebSocketHandler,
+    websocket: desktopWebSocketHandler,
     onError,
     fetch(request, requestServer) {
       const url = new URL(request.url);
@@ -57,13 +52,11 @@ export const startElectronHostChannelServer = async ({
         return new Response("Request host is not allowed.", { status: 403 });
       if (!rendererOrigins.has(request.headers.get("origin") ?? ""))
         return new Response("Socket origin is not allowed.", { status: 403 });
-      const offered = (request.headers.get("sec-websocket-protocol") ?? "")
-        .split(",")
-        .map((protocol) => protocol.trim());
+      const offered = offeredSubprotocols(request);
       if (
-        offered.length !== expectedProtocols.length ||
-        offered[0] !== expectedProtocols[0] ||
-        !tokensMatch(offered[1] ?? "", expectedProtocols[1] ?? "")
+        offered.length !== 2 ||
+        offered[0] !== HOST_CHANNEL_SUBPROTOCOL ||
+        !tokensMatch(offered[1], authorization)
       )
         return new Response("Socket authorization is missing or invalid.", { status: 401 });
       return requestServer.upgrade({ data: createChannel() })

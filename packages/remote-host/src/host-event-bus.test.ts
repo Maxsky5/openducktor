@@ -8,8 +8,21 @@ const liveEvent = (repoPath: string, index: number): HostEventEnvelope => ({
   payload: { type: "fault", repoPath, operation: "test", message: `fault ${index}` },
 });
 
+/** The retained size of one test event: its host channel frame. */
+const frameBytes = (envelope: HostEventEnvelope): number => {
+  const probe = new BufferedHostEventStream();
+  probe.emit(envelope, () => {});
+  const [event] = probe.replayAfter(0).events;
+  if (!event) throw new Error("The probe retained no event.");
+  return event.frame.byteLength;
+};
+
 test("a byte limit evicts large events and reports their gap", () => {
-  const host = new BufferedHostEventStream({ events: 100, bytes: 300, totalBytes: 1024 * 1024 });
+  const host = new BufferedHostEventStream({
+    events: 100,
+    bytes: frameBytes(liveEvent("/repo", 0)) * 2,
+    totalBytes: 1024 * 1024,
+  });
   for (let index = 0; index < 4; index++) host.emit(liveEvent("/repo", index), () => {});
 
   const replay = host.replayAfter(0);
@@ -19,7 +32,7 @@ test("a byte limit evicts large events and reports their gap", () => {
 });
 
 test("a total byte limit evicts the oldest events of any event name", () => {
-  const eventBytes = Buffer.byteLength(JSON.stringify(liveEvent("/a", 0)));
+  const eventBytes = frameBytes(liveEvent("/a", 0));
   const host = new BufferedHostEventStream({
     events: 100,
     bytes: 1024 * 1024,

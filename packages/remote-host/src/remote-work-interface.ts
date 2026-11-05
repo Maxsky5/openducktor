@@ -9,12 +9,9 @@ import {
   REMOTE_PROTOCOL_VERSION,
   REMOTE_SOCKET_CONNECTION_PREFIX,
   REMOTE_SOCKET_AUTHORIZATION_PREFIX,
-  TERMINAL_PROTOCOL_SUBPROTOCOL,
-  HOST_CHANNEL_SUBPROTOCOL,
   remoteConnectionRequestSchema,
   remoteClientHelloSchema,
   systemListOpenInToolsRequestSchema,
-  type HostErrorResponse,
   type RemoteFailure,
   type RemoteHostDescriptor,
   type RemoteNegotiationResult,
@@ -23,20 +20,23 @@ import {
   readBearerToken,
   remoteConnectionTokenSchema,
 } from "@openducktor/contracts";
-import {
-  createLocalAttachmentAdapter,
-  hostInvokeFailureFromError,
-  type EffectNodeHostCommandRouter,
-} from "@openducktor/host";
+import { createLocalAttachmentAdapter, type EffectNodeHostCommandRouter } from "@openducktor/host";
 import { Effect } from "effect";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { RemoteAdmissionPort } from "./remote-admission";
 import { localAttachmentPreviewResponse } from "./local-attachment-preview";
 import { routeTaskAssetHttpRequest } from "./task-asset-http-server";
 import { createTaskEventLeaseManager } from "./task-event-leases";
 import { type BufferedHostEventBus } from "./host-event-bus";
-import { createHostChannelSocketData, type HostChannelReply } from "./host-channel";
-import type { HostWebSocketData } from "./host-websocket-handler";
+import {
+  createHostChannelSocketData,
+  hostCommandFailure,
+  hostErrorResponse,
+  remoteFailure,
+  type HostChannelReply,
+} from "./host-channel";
+import { HOST_SOCKET_PROTOCOLS, type HostWebSocketData } from "./host-websocket-handler";
+import { offeredSubprotocols, tokensMatch } from "./socket-offer";
 import { type NodeFetchServer } from "./node-fetch-server";
 import { createSocketData } from "./terminals/terminal-websocket-handler";
 import type { WebLogger } from "./logger";
@@ -67,11 +67,7 @@ const HOST_CAPABILITIES: readonly string[] = [
   ...REMOTE_BASELINE_CAPABILITIES,
   REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
 ];
-/** The upgrade routes and the subprotocol that each one selects. */
-const SOCKET_PROTOCOLS: ReadonlyMap<string, string> = new Map([
-  ["/terminal", TERMINAL_PROTOCOL_SUBPROTOCOL],
-  ["/channel", HOST_CHANNEL_SUBPROTOCOL],
-]);
+
 const WORK_COMMANDS = new Set<string>(HOST_COMMAND_NAMES);
 const SHELL_COMMANDS = new Set(["open_external_url", "system_open_directory_in_tool"]);
 /** Network resources observe the supplied host. They never create or dispose it. */
@@ -177,7 +173,7 @@ export const createRemoteWorkInterface = (
         if (closed)
           return {
             status: "rejected",
-            failure: failure(
+            failure: remoteFailure(
               "remote_disabled",
               "Remote access is disabled.",
               "Ask the host operator to enable remote access.",
@@ -194,7 +190,7 @@ export const createRemoteWorkInterface = (
           return {
             status: "rejected",
             failure: {
-              ...failure(
+              ...remoteFailure(
                 "protocol_mismatch",
                 `Client ${hello.appVersion} protocols ${hello.supportedProtocolVersions.join(", ")} do not match ${descriptor.shell} ${descriptor.appVersion} protocol ${REMOTE_PROTOCOL_VERSION}.`,
                 `Update ${updateSide} to a release that supports a shared remote protocol.`,
@@ -212,7 +208,7 @@ export const createRemoteWorkInterface = (
           return {
             status: "rejected",
             failure: {
-              ...failure(
+              ...remoteFailure(
                 "capability_missing",
                 `Required capabilities are unavailable: ${missing.join(", ")}.`,
                 legacyTerminal
@@ -232,7 +228,7 @@ export const createRemoteWorkInterface = (
         if (connections.size >= MAX_CONNECTIONS)
           return {
             status: "rejected",
-            failure: failure(
+            failure: remoteFailure(
               "unavailable",
               "The host connection limit is reached.",
               "Close unused connections and retry.",
@@ -274,19 +270,13 @@ export const createRemoteWorkInterface = (
     signal: AbortSignal,
   ): Promise<HostChannelReply> => {
     const refused = (code: RemoteFailure["code"], message: string, nextAction: string) => ({
-      error: { kind: "refused" as const, failure: failure(code, message, nextAction) },
+      error: { kind: "refused" as const, failure: remoteFailure(code, message, nextAction) },
     });
     if (SHELL_COMMANDS.has(command) || !WORK_COMMANDS.has(command))
       return refused(
         "function_unavailable",
         `Shell function ${command} is unavailable remotely.`,
         "Use the local shell for this action.",
-      );
-    if (closed || connection.abort.signal.aborted)
-      return refused(
-        "remote_disabled",
-        "Remote admission ended before this command was accepted.",
-        "Reconnect to an enabled host and retry this refused command.",
       );
     if (command === "system_list_open_in_tools") {
       if (!systemListOpenInToolsRequestSchema.safeParse(args).success)
@@ -302,7 +292,7 @@ export const createRemoteWorkInterface = (
     try {
       return { result: await Effect.runPromise(services.invoke(command, args), { signal }) };
     } catch (cause) {
-      return { error: { kind: "host", response: hostErrorPayload(cause) } };
+      return hostCommandFailure(cause);
     }
   };
   const handle = async (
@@ -334,7 +324,7 @@ export const createRemoteWorkInterface = (
       });
     if (closed)
       return remoteFailureResponse(
-        failure(
+        remoteFailure(
           "remote_disabled",
           "Remote access is disabled.",
           "Ask the host operator to enable remote access.",
@@ -377,11 +367,9 @@ export const createRemoteWorkInterface = (
         if (result.status === "rejected") return remoteFailureResponse(result.failure, cors);
         return remoteJson(result, 201, cors);
       }
-      const socketProtocol = request.method === "GET" ? SOCKET_PROTOCOLS.get(route) : undefined;
-      const protocols =
-        socketProtocol === undefined
-          ? []
-          : (request.headers.get("sec-websocket-protocol") ?? "").split(",").map((v) => v.trim());
+      const socketProtocol =
+        request.method === "GET" ? HOST_SOCKET_PROTOCOLS.get(route) : undefined;
+      const protocols = socketProtocol === undefined ? [] : offeredSubprotocols(request);
       const connectionTag = protocols
         .find((v) => v.startsWith(REMOTE_SOCKET_CONNECTION_PREFIX))
         ?.slice(REMOTE_SOCKET_CONNECTION_PREFIX.length);
@@ -401,7 +389,7 @@ export const createRemoteWorkInterface = (
         (authorizationTag && authorizationHeader !== null && token !== authorizationTag)
       )
         return remoteFailureResponse(
-          failure(
+          remoteFailure(
             "invalid_protocol",
             "Socket connection contexts do not agree.",
             "Use the current negotiated connection.",
@@ -411,20 +399,16 @@ export const createRemoteWorkInterface = (
       const connection = id ? connections.get(id) : undefined;
       if (!id || !connection)
         return remoteFailureResponse(
-          failure(
+          remoteFailure(
             "connection_expired",
             "Remote compatibility negotiation is required or has expired.",
             "Connect again with supported protocol versions and capabilities.",
           ),
           cors,
         );
-      if (
-        !token ||
-        token.length !== connection.token.length ||
-        !timingSafeEqual(Buffer.from(token), Buffer.from(connection.token))
-      )
+      if (!tokensMatch(token, connection.token))
         return remoteFailureResponse(
-          failure(
+          remoteFailure(
             "authorization_rejected",
             "The remote access credential is missing or invalid.",
             "Enter the current host pairing code.",
@@ -448,7 +432,7 @@ export const createRemoteWorkInterface = (
           protocols[2] !== `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${token}`
         )
           return remoteFailureResponse(
-            failure(
+            remoteFailure(
               "invalid_protocol",
               "Socket protocol and negotiated connection tag must agree.",
               `Update the client and host, then offer ${socketProtocol} and the current connection ID.`,
@@ -469,13 +453,12 @@ export const createRemoteWorkInterface = (
                   maxReplyBytes: REMOTE_MAX_REPLY_BYTES,
                   refusal: () =>
                     closed || connection.abort.signal.aborted
-                      ? failure(
+                      ? remoteFailure(
                           "remote_disabled",
                           "Remote admission ended before this request was accepted.",
                           "Reconnect to an enabled host and retry this refused request.",
                         )
                       : null,
-                  isShuttingDown: () => closed,
                   signal: connection.abort.signal,
                   reportFailure: options.reportFailure,
                 })
@@ -490,7 +473,7 @@ export const createRemoteWorkInterface = (
         return upgraded
           ? undefined
           : remoteFailureResponse(
-              failure(
+              remoteFailure(
                 "transport_failure",
                 "WebSocket upgrade failed.",
                 "Check the proxy WebSocket forwarding.",
@@ -530,7 +513,7 @@ export const createRemoteWorkInterface = (
       );
       if (resource) return resource;
       return remoteFailureResponse(
-        failure(
+        remoteFailure(
           "function_unavailable",
           "Remote function is unavailable.",
           "Use a supported work route.",
@@ -541,7 +524,7 @@ export const createRemoteWorkInterface = (
       if (cause instanceof WebHostRequestError)
         return remoteJson({ error: "resource_failed", message: cause.message }, cause.status, cors);
       return remoteFailureResponse(
-        failure(
+        remoteFailure(
           "invalid_protocol",
           "The remote request is invalid.",
           "Correct the request or reconnect with the supported protocol.",
@@ -587,24 +570,9 @@ export const remoteFailureResponse = (
   else if (failure.code === "remote_disabled" || failure.code === "unavailable") status = 503;
   return remoteJson({ status: "rejected", failure }, status, headers);
 };
-const failure = (
-  code: RemoteFailure["code"],
-  message: string,
-  nextAction: string,
-): RemoteFailure => ({ code, message, nextAction });
-
-const hostErrorPayload = (cause: unknown): HostErrorResponse => {
-  const payload: HostErrorResponse = {
-    error: "host_command_failed",
-    message: cause instanceof Error ? cause.message : String(cause),
-  };
-  const hostFailure = hostInvokeFailureFromError(cause);
-  if (hostFailure) payload.failure = hostFailure;
-  return payload;
-};
 
 const hostFailureResponse = (cause: unknown, headers: HeadersInit): Response =>
-  remoteJson(hostErrorPayload(cause), 500, headers);
+  remoteJson(hostErrorResponse(cause), 500, headers);
 
 // Local browser clients use OS-assigned ports; packaged Electron sends an opaque origin.
 function isLocalClientOrigin(origin: string): boolean {

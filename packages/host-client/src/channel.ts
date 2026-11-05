@@ -1,4 +1,5 @@
 import {
+  HOST_CHANNEL_SILENCE_LIMIT_MS,
   encodeHostChannelFrame,
   hostChannelMessageSchema,
   remoteFailureText,
@@ -13,6 +14,11 @@ import {
   type TaskEventStreamSubscribe,
 } from "@openducktor/contracts";
 import type { JSONType } from "zod";
+import { HostInvokeError } from "./invoke-utils";
+import type { RemoteSocketConnection } from "./remote/transport";
+
+/** A host that does not answer a task stream request within this time lost its channel. */
+export const HOST_CHANNEL_REQUEST_TIMEOUT_MS = 10_000;
 
 /** The host answered a request without a result. */
 export class HostChannelRequestError extends Error {
@@ -29,6 +35,20 @@ export class HostChannelProtocolError extends Error {
     this.name = "HostChannelProtocolError";
   }
 }
+
+/**
+ * The `HostInvokeError` of a failed request. A host failure keeps its structured failure, and other
+ * causes stay as they are.
+ */
+export const hostChannelInvokeError = (cause: unknown): Error => {
+  if (cause instanceof HostChannelRequestError)
+    return new HostInvokeError(
+      cause.message,
+      cause.error.kind === "host" ? (cause.error.response.failure ?? null) : null,
+      cause,
+    );
+  return cause instanceof Error ? cause : new Error(String(cause));
+};
 
 const hostChannelErrorMessage = (error: HostChannelError): string => {
   switch (error.kind) {
@@ -97,9 +117,12 @@ type Pending = {
   onResult?(value: JSONType): void;
 };
 
+// A decode call without `stream` keeps no state, so one decoder serves every body.
+const bodyDecoder = new TextDecoder("utf-8", { fatal: true });
+
 const decodeBody = (body: Uint8Array): string => {
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(body);
+    return bodyDecoder.decode(body);
   } catch (cause) {
     throw new HostChannelProtocolError("The host channel sent invalid UTF-8.", { cause });
   }
@@ -280,6 +303,108 @@ export const createHostChannelSession = ({
       const entries = [...pending.values()];
       pending.clear();
       for (const entry of entries) entry.reject(cause);
+    },
+  };
+};
+
+/** Why an open host channel can no longer serve its client. */
+export type HostChannelLoss =
+  | { reason: "closed"; cause: unknown }
+  | { reason: "silent" }
+  | { reason: "unreadable"; cause: unknown }
+  | { reason: "unanswered" }
+  | { reason: "send_failed"; cause: unknown };
+
+export type OpenHostChannelOptions = {
+  /** Opens the socket. It must close when `signal` aborts. */
+  open(
+    onFrame: (frame: Uint8Array) => void,
+    onClose: (cause?: unknown) => void,
+  ): Promise<RemoteSocketConnection>;
+  /** The lifetime of this channel. Its abort closes the session. */
+  signal: AbortSignal;
+  handlers: HostChannelHandlers;
+  onHandlerError(cause: unknown): void;
+  /** Runs once a received frame arrives, before the session reads it. */
+  onFrame?(): void;
+  /** Runs for each loss. The owner ends the channel and decides how to reconnect. */
+  onLost(loss: HostChannelLoss): void;
+  schedule?(callback: () => void, delayMs: number): () => void;
+};
+
+export type OpenedHostChannel = {
+  session: HostChannelSession;
+  socket: RemoteSocketConnection;
+  /**
+   * Bounds a request by `HOST_CHANNEL_REQUEST_TIMEOUT_MS`. A host that keeps the socket open but
+   * does not answer would otherwise hold its caller, so a missed deadline loses the channel.
+   */
+  withinDeadline<T>(operation: Promise<T>): Promise<T>;
+};
+
+const scheduleTimeout = (callback: () => void, delayMs: number): (() => void) => {
+  const timer = setTimeout(callback, delayMs);
+  return () => clearTimeout(timer);
+};
+
+/**
+ * Opens a socket and the protocol session on it. It watches for silence, because a network path can
+ * drop an idle socket without closing it and the host sends heartbeats. It reports each loss of the
+ * channel to `onLost`.
+ */
+export const openHostChannel = async ({
+  open,
+  signal,
+  handlers,
+  onHandlerError,
+  onFrame,
+  onLost,
+  schedule = scheduleTimeout,
+}: OpenHostChannelOptions): Promise<OpenedHostChannel> => {
+  let socket: RemoteSocketConnection | null = null;
+  let cancelSilence: (() => void) | null = null;
+  const watchSilence = () => {
+    cancelSilence?.();
+    cancelSilence = schedule(() => onLost({ reason: "silent" }), HOST_CHANNEL_SILENCE_LIMIT_MS);
+  };
+  const session = createHostChannelSession({
+    send: (frame) => {
+      if (!socket) throw new Error("The host channel is not open.");
+      void socket.send(frame).catch((cause: unknown) => onLost({ reason: "send_failed", cause }));
+    },
+    handlers,
+    onHandlerError,
+  });
+  signal.addEventListener(
+    "abort",
+    () => {
+      cancelSilence?.();
+      session.close(signal.reason);
+    },
+    { once: true },
+  );
+  socket = await open(
+    (frame) => {
+      onFrame?.();
+      watchSilence();
+      try {
+        session.receive(frame);
+      } catch (cause) {
+        onLost({ reason: "unreadable", cause });
+      }
+    },
+    (cause) => onLost({ reason: "closed", cause }),
+  );
+  watchSilence();
+  return {
+    session,
+    socket,
+    withinDeadline: (operation) => {
+      const cancel = schedule(
+        () => onLost({ reason: "unanswered" }),
+        HOST_CHANNEL_REQUEST_TIMEOUT_MS,
+      );
+      return operation.finally(cancel);
     },
   };
 };

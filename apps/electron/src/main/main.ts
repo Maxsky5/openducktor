@@ -810,14 +810,10 @@ const startHostChannelServer = (
         notifications: hostCommandRouter.notificationStream,
         leases,
         ownedLeases,
-        invoke: async (command, args, signal) => {
-          if (shutdownController.isHostShutdownStarted())
-            return { error: { kind: "refused", failure: shutdownFailure } };
-          return runElectronHostChannelInvoke(hostCommandRouter.invoke(command, args), signal);
-        },
+        invoke: (command, args, signal) =>
+          runElectronHostChannelInvoke(hostCommandRouter.invoke(command, args), signal),
         remoteAccessStates: operator.states,
         refusal: () => (shutdownController.isHostShutdownStarted() ? shutdownFailure : null),
-        isShuttingDown: shutdownController.isHostShutdownStarted,
         reportFailure: (cause) =>
           reportElectronNonFatalFailure("Desktop host channel delivery failed.", cause),
       }),

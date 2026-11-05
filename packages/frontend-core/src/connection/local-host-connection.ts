@@ -8,12 +8,12 @@ import {
   BROWSER_EVENT_STREAM_NAME,
   createAgentSessionLiveAttachment,
   createHostClient,
-  HostInvokeError,
   liveSessionStreamEventName,
   STARTUP_EVENT_STREAM_NAME,
   type HostClient,
 } from "@openducktor/host-client";
-import { HostChannelRequestError } from "@openducktor/host-client/channel";
+import { hostChannelInvokeError } from "@openducktor/host-client/channel";
+import { errorMessage } from "../lib/errors";
 import {
   CONNECTION_RECONNECTED_EVENT_KIND,
   connectionStreamWarningEvent,
@@ -60,32 +60,10 @@ export type LocalHostConnection = Pick<
 export type LocalHostConnectionOptions = Pick<
   LocalHostChannelDependencies,
   "prepare" | "openSocket" | "schedule"
-> & {
-  /**
-   * The shell error of a failed request. The default turns a host failure into a
-   * `HostInvokeError` and keeps other errors.
-   */
-  mapError?(cause: unknown, operation: string): Error;
-};
-
-/** The default shell error of a failed channel request. */
-export const hostChannelInvokeError = (cause: unknown): Error => {
-  if (cause instanceof HostChannelRequestError) {
-    const { error } = cause;
-    return new HostInvokeError(
-      cause.message,
-      error.kind === "host" ? (error.response.failure ?? null) : null,
-      cause,
-    );
-  }
-  return cause instanceof Error ? cause : new Error(String(cause));
-};
+>;
 
 const isControlEvent = (event: LocalHostChannelEvent): event is ConnectionControlEvent =>
   "__openducktorConnectionControl" in event;
-
-const errorMessage = (cause: unknown): string =>
-  cause instanceof Error ? cause.message : String(cause);
 
 /**
  * Serves the commands and event streams of the shell's own host over one host channel. The
@@ -95,7 +73,6 @@ export const createLocalHostConnection = ({
   prepare,
   openSocket,
   schedule,
-  mapError = hostChannelInvokeError,
 }: LocalHostConnectionOptions): LocalHostConnection => {
   let channel: LocalHostChannel | null = null;
   const current = (notificationCursor: NotificationCursor | null = null): LocalHostChannel => {
@@ -123,7 +100,7 @@ export const createLocalHostConnection = ({
     } catch (cause) {
       // The caller stopped waiting. The host interrupts a read and keeps other work.
       if (signal?.aborted && cause === signal.reason) throw cause;
-      throw mapError(cause, "invoke");
+      throw hostChannelInvokeError(cause);
     }
   });
 
@@ -139,7 +116,6 @@ export const createLocalHostConnection = ({
       channel: eventChannel,
       eventName,
       listener,
-      receivesControlEvents: true,
     });
     const unsubscribe = () => {
       active = false;
@@ -150,8 +126,15 @@ export const createLocalHostConnection = ({
       await Promise.race([
         opened.ready,
         new Promise<never>((_resolve, reject) => {
+          // The warning names the cause of the failed attempts, such as a refused session.
           timer = setTimeout(
-            () => reject(new Error("Timed out waiting for the host channel to open.")),
+            () =>
+              reject(
+                new Error(
+                  opened.readConnectionWarning() ??
+                    "Timed out waiting for the host channel to open.",
+                ),
+              ),
             INITIAL_CHANNEL_READY_TIMEOUT_MS,
           );
         }),
@@ -162,7 +145,7 @@ export const createLocalHostConnection = ({
       if (active && warning !== null) await listener(connectionStreamWarningEvent(warning));
     } catch (cause) {
       unsubscribe();
-      throw mapError(cause, "await-ready");
+      throw cause;
     } finally {
       clearTimeout(timer);
     }
@@ -263,7 +246,7 @@ export const createLocalHostConnection = ({
         await attach(++attachGeneration);
       } catch (cause) {
         unsubscribe();
-        throw mapError(cause, "agent-session-live.attach");
+        throw hostChannelInvokeError(cause);
       }
       return () => {
         closed = true;
@@ -275,7 +258,7 @@ export const createLocalHostConnection = ({
       try {
         subscription = await current().subscribeTaskEvents(input, onFrame, onTerminalFailure);
       } catch (cause) {
-        throw mapError(cause, "task-event-stream.subscribe");
+        throw hostChannelInvokeError(cause);
       }
       return {
         subscriptionId: subscription.subscriptionId,
@@ -283,7 +266,7 @@ export const createLocalHostConnection = ({
           try {
             await subscription.acknowledge(cursor);
           } catch (cause) {
-            throw mapError(cause, "task-event-stream.acknowledge");
+            throw hostChannelInvokeError(cause);
           }
         },
         unsubscribe: () => subscription.unsubscribe(),

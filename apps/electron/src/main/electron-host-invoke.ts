@@ -9,14 +9,13 @@ import {
   settingsSnapshotSchema,
   themePreferenceSchema,
   type HostCommandArgs,
-  type HostErrorResponse,
   type ThemePreference,
 } from "@openducktor/contracts";
 import { errorMessage } from "../effect/electron-errors";
 import type { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 
 import { runElectronEffect } from "../effect/electron-boundary";
-import type { HostChannelReply } from "@openducktor/remote-host/host-channel";
+import { hostCommandFailure, type HostChannelReply } from "@openducktor/remote-host/host-channel";
 
 type InvokeFailure =
   ReturnType<EffectNodeHostCommandRouter["invoke"]> extends Effect.Effect<
@@ -74,9 +73,6 @@ export const runElectronHostChannelInvoke = async <E extends Error>(
   try {
     return { result: await runElectronEffect(effect, signal) };
   } catch (cause) {
-    const response: HostErrorResponse = { message: errorMessage(cause) };
-    const failure = hostInvokeFailureFromError(cause);
-    if (failure) response.failure = failure;
-    return { error: { kind: "host", response } };
+    return hostCommandFailure(cause);
   }
 };

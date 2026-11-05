@@ -1,7 +1,6 @@
 import type { HostErrorResponse } from "@openducktor/contracts";
 import { createLocalHostConnection } from "@openducktor/frontend-core/connection/local-host-connection";
-import { HostInvokeError, type HostClient } from "@openducktor/host-client";
-import { HostChannelRequestError } from "@openducktor/host-client/channel";
+import type { HostClient } from "@openducktor/host-client";
 import { openWebSocket } from "@openducktor/host-client/remote/socket";
 import { Effect } from "effect";
 import { getBrowserAuthTokenEffect, getBrowserBackendUrlEffect } from "./browser-config";
@@ -51,7 +50,7 @@ const localHostRequestErrorEffect = (
   });
 
 /** Sets the app session cookie. `signal` aborts the request and releases its connection. */
-export const ensureLocalHostSessionEffect = (signal?: AbortSignal): Effect.Effect<void, WebError> =>
+const ensureLocalHostSessionEffect = (signal?: AbortSignal): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
     const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
     const appToken = yield* getBrowserAuthTokenEffect();
@@ -170,41 +169,14 @@ export const ensureLocalHostSessionDedupedEffect = (): Effect.Effect<void, WebEr
           }),
   });
 
-const channelSocketUrl = (backendUrl: string): string => {
-  const url = new URL(`${backendUrl.replace(/\/$/, "")}/${HOST_CHANNEL_PATH}`);
+/** The WebSocket URL of a backend socket route, such as `channel` or `terminal`. */
+export const hostSocketUrl = (backendUrl: string, route: string): string => {
+  const url = new URL(backendUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.pathname = `${url.pathname.replace(/\/$/, "")}/${route}`;
+  url.search = "";
+  url.hash = "";
   return url.href;
-};
-
-/** The web error of a failed channel request. */
-const localChannelError = (
-  cause: unknown,
-  operation: string,
-): WebError | HostInvokeError | WebHostRequestError => {
-  if (cause instanceof HostChannelRequestError) {
-    const { error } = cause;
-    if (error.kind === "host") {
-      if (error.response.failure) return new HostInvokeError(cause.message, error.response.failure);
-      const input: LocalHostRequestErrorInput = {
-        message: cause.message,
-        status: 500,
-        cause: error.response,
-      };
-      if (error.response.failureKind) input.failureKind = error.response.failureKind;
-      return new WebHostRequestError(input);
-    }
-    return new WebHostRequestError({
-      message: cause.message,
-      status: error.kind === "refused" ? 503 : 500,
-    });
-  }
-  if (isWebError(cause) || cause instanceof HostInvokeError) return cause;
-  return new WebDependencyError({
-    dependency: "local-web-host",
-    operation,
-    message: errorMessage(cause),
-    cause,
-  });
 };
 
 /** The host channel of this tab. The session cookie authorizes its socket. */
@@ -213,13 +185,12 @@ const connection = createLocalHostConnection({
   prepare: async (signal) => {
     await ensureLocalHostSession(signal);
     return {
-      url: channelSocketUrl(await runWebBoundary(getBrowserBackendUrlEffect())),
+      url: hostSocketUrl(await runWebBoundary(getBrowserBackendUrlEffect()), HOST_CHANNEL_PATH),
       token: null,
     };
   },
   openSocket: (url, protocols, signal, onFrame, onClose) =>
     openWebSocket((offered) => new WebSocket(url, offered), protocols, signal, onFrame, onClose),
-  mapError: localChannelError,
 });
 
 export const createLocalHostClient = (): HostClient => connection.client;

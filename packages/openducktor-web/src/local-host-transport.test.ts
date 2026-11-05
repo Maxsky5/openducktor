@@ -195,22 +195,6 @@ describe("createLocalHostClient", () => {
     });
   });
 
-  test("keeps the failure kind of a host error", async () => {
-    setupHost({
-      invoke: () =>
-        hostError({ error: "OpenCode runtime is still starting", failureKind: "timeout" }),
-    });
-    const { createLocalHostClient } = await loadLocalHostTransport();
-
-    const failure = createLocalHostClient().runtimeStatus();
-    await expect(failure).rejects.toThrow("OpenCode runtime is still starting");
-    await expect(failure).rejects.toMatchObject({
-      _tag: "WebHostRequestError",
-      status: 500,
-      failureKind: "timeout",
-    });
-  });
-
   test("keeps structured terminal failures", async () => {
     setupHost({
       invoke: () =>
@@ -273,7 +257,7 @@ describe("createLocalHostClient", () => {
     ).rejects.toMatchObject({ name: "HostInvokeError", failure });
   });
 
-  test("reports a host refusal as an unavailable web host request", async () => {
+  test("reports a host refusal with its next action", async () => {
     setupHost({
       invoke: () => ({
         error: {
@@ -289,13 +273,12 @@ describe("createLocalHostClient", () => {
     const { createLocalHostClient } = await loadLocalHostTransport();
 
     await expect(createLocalHostClient().gitCheck()).rejects.toMatchObject({
-      _tag: "WebHostRequestError",
-      status: 503,
+      name: "HostInvokeError",
       message: "The host is shutting down. Reopen OpenDucktor.",
     });
   });
 
-  test("reports an unreadable host error as a dependency error", async () => {
+  test("reports an unreadable host error as a protocol error", async () => {
     setupHost({
       invoke: () =>
         hostError({
@@ -308,7 +291,7 @@ describe("createLocalHostClient", () => {
 
     await expect(
       createLocalHostClient().terminalCreate({ workingDir: "/repo", context: {} }),
-    ).rejects.toMatchObject({ _tag: "WebDependencyError", operation: "invoke" });
+    ).rejects.toMatchObject({ name: "HostChannelProtocolError" });
   });
 
   test("rejects an aborted command with the abort reason at once", async () => {
@@ -537,7 +520,7 @@ describe("local host task and status streams", () => {
     ]);
   });
 
-  test("reports a refused task subscription as a web host request error", async () => {
+  test("reports a refused task subscription with its next action", async () => {
     setupHost({
       answer: (request) =>
         request.method === "task_events.subscribe"
@@ -556,8 +539,8 @@ describe("local host task and status streams", () => {
     const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
 
     await expect(subscribeLocalHostTaskStream({ cursor: null }, () => {})).rejects.toMatchObject({
-      _tag: "WebHostRequestError",
-      status: 503,
+      name: "HostInvokeError",
+      message: "The host is shutting down. Reopen OpenDucktor.",
     });
   });
 
