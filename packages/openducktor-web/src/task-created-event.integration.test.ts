@@ -69,7 +69,6 @@ test.each(["returned", "interrupted"] as const)(
       });
       const committed = Deferred.makeUnsafe<TaskCard>();
       const service = createEventPublishingTaskService({
-        taskWorkflows: builtinTaskWorkflows,
         taskService:
           outcome === "interrupted"
             ? {

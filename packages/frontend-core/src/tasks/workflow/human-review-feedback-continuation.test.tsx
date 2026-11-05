@@ -11,13 +11,10 @@ import { createHumanReviewFeedbackState } from "./human-review-feedback-state";
 import type { HumanReviewFeedbackStartRequest } from "./human-review-feedback-flow";
 import { submitHumanReviewFeedback } from "./human-review-feedback-flow";
 
-/** Alpha with a Request Changes effect whose following launch depends on the destination state. */
+/** Alpha whose revise event has a following launch that depends on the destination state. */
 const createReviewTask = () => {
   const { alpha: original, board } = createSharedBoardWorkflows();
   const definition = workflowDefinitionSchema.parse(original.definition);
-  definition.events = definition.events.map((event) =>
-    event.id === "alpha_revise" ? { ...event, effect: "review.request_changes" } : event,
-  );
   for (const step of definition.steps) {
     if (step.kind !== "agent") continue;
     for (const launch of step.launchActions)
@@ -31,12 +28,13 @@ const createReviewTask = () => {
   return createWorkflowTaskCardFixture(alpha, board, { status: "shared_review" });
 };
 
-describe("Request Changes with a following launch", () => {
+describe("A feedback event with a following launch", () => {
   test("starts the launch that the committed state selects and lets the host commit the change", async () => {
     const task = createReviewTask();
     const state = {
       ...createHumanReviewFeedbackState([task], task.id, {
-        kind: "request_changes",
+        kind: "event",
+        eventId: "alpha_revise",
         continuation: {
           workflow: task.workflow,
           launchActionIds: ["alpha_write_start", "alpha_write_revise"],
@@ -53,7 +51,7 @@ describe("Request Changes with a following launch", () => {
       submitHumanReviewFeedback({
         feedback: createFeedbackFake(),
         state,
-        requestChangesTask: requestChanges,
+        applyFeedbackEvent: requestChanges,
         builderSessions: [],
         startRequestChangesSession: start,
       }),
@@ -62,16 +60,19 @@ describe("Request Changes with a following launch", () => {
       expect.objectContaining({
         launchActionId: "alpha_write_revise",
         humanFeedback: "Revise the draft.",
-        beforeStartAction: { action: "human_request_changes", note: "Revise the draft." },
+        beforeStartAction: { eventId: "alpha_revise" },
       }),
     );
     expect(requestChanges).not.toHaveBeenCalled();
   });
 
-  test("requests changes directly when no launch follows", async () => {
+  test("applies the event directly when no launch follows", async () => {
     const task = createReviewTask();
     const state = {
-      ...createHumanReviewFeedbackState([task], task.id, { kind: "request_changes" }),
+      ...createHumanReviewFeedbackState([task], task.id, {
+        kind: "event",
+        eventId: "alpha_revise",
+      }),
       message: "Revise the draft.",
     };
     expect(state.launch).toBeNull();
@@ -81,13 +82,13 @@ describe("Request Changes with a following launch", () => {
       submitHumanReviewFeedback({
         feedback: createFeedbackFake(),
         state,
-        requestChangesTask: requestChanges,
+        applyFeedbackEvent: requestChanges,
         builderSessions: [],
         startRequestChangesSession: async () => {
-          throw new Error("Request Changes without a launch starts no session.");
+          throw new Error("An event without a launch starts no session.");
         },
       }),
     ).resolves.toEqual({ outcome: "updated" });
-    expect(requestChanges).toHaveBeenCalledWith(task.id, "Revise the draft.");
+    expect(requestChanges).toHaveBeenCalledWith(task.id, "alpha_revise");
   });
 });

@@ -24,30 +24,28 @@ export const createHumanReviewFeedbackState = (
     };
   };
   if (request.kind === "launch") {
-    // A launch that an available Request Changes action starts next also commits Request
-    // Changes, so the task leaves review as it does from the Request Changes action.
-    const requestChangesLaunches = new Set(
-      task.availableActions.flatMap((id) => {
-        if (task.taskWorkflow.actionEffect(id) !== "review.request_changes") return [];
-        const action = task.taskWorkflow.action(id);
-        return action.kind === "event" ? (action.launchActionIds ?? []) : [];
-      }),
-    );
-    const requestChanges = requestChangesLaunches.has(request.launchActionId);
+    // A launch that an available event action starts next also commits the event of that action,
+    // so the task moves as it does from the action.
+    let eventId: string | null = null;
+    for (const id of task.availableActions) {
+      const action = task.taskWorkflow.action(id);
+      if (action.kind === "event" && action.launchActionIds?.includes(request.launchActionId)) {
+        eventId = action.eventId;
+        break;
+      }
+    }
     return {
-      confirmLabel: requestChanges
-        ? HUMAN_REVIEW_FEEDBACK_COPY.confirmLabel
-        : task.taskWorkflow.launchAction(request.launchActionId).label,
+      confirmLabel:
+        eventId !== null
+          ? HUMAN_REVIEW_FEEDBACK_COPY.confirmLabel
+          : task.taskWorkflow.launchAction(request.launchActionId).label,
       launch: toLaunch(request.launchActionId),
-      requestChanges,
+      eventId,
       taskId,
       message: "",
     };
   }
-  const { continuation } = request;
-  const eventId = task.taskWorkflow.effectEvent("review.request_changes");
-  if (!eventId)
-    throw new Error(`Task "${taskId}" declares no Request Changes effect. Reload the task.`);
+  const { continuation, eventId } = request;
   if (
     continuation &&
     (continuation.workflow.id !== task.workflow.id ||
@@ -55,15 +53,15 @@ export const createHumanReviewFeedbackState = (
   )
     throw new Error("The task workflow changed. Reload the task before requesting changes.");
   const candidates = continuation?.launchActionIds ?? [];
-  // The launch is selected in the state that Request Changes gives, so the host can commit the
-  // change only after the session start succeeds.
+  // The launch is selected in the state that the event gives, so the host can commit the event
+  // only after the session start succeeds.
   const following = candidates.length
     ? task.taskWorkflow.launchAfterEvent(eventId, task, candidates)
     : null;
   return {
     confirmLabel: HUMAN_REVIEW_FEEDBACK_COPY.confirmLabel,
     launch: following ? toLaunch(following) : null,
-    requestChanges: true,
+    eventId,
     taskId,
     message: "",
   };

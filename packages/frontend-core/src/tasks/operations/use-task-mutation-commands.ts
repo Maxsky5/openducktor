@@ -51,17 +51,11 @@ export type TaskMutationCommands = {
   closeTask: (taskId: string, options: CloseTaskOptions) => Promise<TaskCard>;
   /** Removes the worktree and local branches of a closed task. */
   removeTaskWorktree: (taskId: string) => Promise<void>;
-  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };
 
 export type TaskMutationCommandHostPort = Pick<
   HostClient,
-  | "taskCreate"
-  | "taskUpdate"
-  | "taskDelete"
-  | "taskClose"
-  | "taskWorktreeRemove"
-  | "humanRequestChanges"
+  "taskCreate" | "taskUpdate" | "taskDelete" | "taskClose" | "taskWorktreeRemove"
 >;
 
 type CreateTaskMutationCommandsArgs = {
@@ -200,17 +194,6 @@ export const createTaskMutationCommands = ({
     });
   };
 
-  const humanRequestChangesTask = async (taskId: string, note?: string): Promise<void> => {
-    await runTaskMutation({
-      run: async (repoPath) => {
-        await hostPort.humanRequestChanges(scopeFor(repoPath), taskId, note);
-      },
-      successTitle: "Changes requested",
-      successDescription: taskId,
-      failureTitle: "Failed to request changes",
-    });
-  };
-
   return {
     createTask,
     updateTask,
@@ -218,7 +201,6 @@ export const createTaskMutationCommands = ({
     deleteTask,
     closeTask,
     removeTaskWorktree,
-    humanRequestChangesTask,
   };
 };
 

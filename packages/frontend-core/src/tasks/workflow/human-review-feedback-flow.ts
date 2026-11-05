@@ -26,7 +26,7 @@ export type HumanReviewFeedbackStartRequest = {
   initialSourceSession?: AgentSessionIdentity;
   postStartAction: "kickoff" | "send_message";
   humanFeedback: string;
-  /** The host commits Request Changes after it checks the launch, and before the session starts. */
+  /** The host commits the event after it checks the launch, and before the session starts. */
   beforeStartAction?: SessionStartBeforeAction;
 };
 
@@ -37,7 +37,8 @@ export type SubmitHumanReviewFeedbackResult =
 type SubmitHumanReviewFeedbackInput = {
   feedback: ClientFeedback;
   state: HumanReviewFeedbackState;
-  requestChangesTask: (taskId: string, note: string) => Promise<TaskCard>;
+  /** Commits the event without a launch. */
+  applyFeedbackEvent: (taskId: string, eventId: string) => Promise<TaskCard>;
   builderSessions: AgentSessionSummary[];
   startRequestChangesSession: (
     request: HumanReviewFeedbackStartRequest,
@@ -65,8 +66,8 @@ const buildRequestChangesSessionRequest = (
     postStartAction: launch.postStartAction,
     humanFeedback: feedback,
   };
-  if (state.requestChanges) {
-    request.beforeStartAction = { action: "human_request_changes", note: feedback };
+  if (state.eventId !== null) {
+    request.beforeStartAction = { eventId: state.eventId };
   }
   if (existingSessionOptions.length === 0) {
     request.initialStartMode = "fresh";
@@ -80,7 +81,7 @@ const buildRequestChangesSessionRequest = (
 export const submitHumanReviewFeedback = async ({
   feedback,
   state,
-  requestChangesTask,
+  applyFeedbackEvent,
   builderSessions,
   startRequestChangesSession,
 }: SubmitHumanReviewFeedbackInput): Promise<SubmitHumanReviewFeedbackResult> => {
@@ -91,7 +92,8 @@ export const submitHumanReviewFeedback = async ({
   }
 
   if (!state.launch) {
-    await requestChangesTask(state.taskId, trimmedMessage);
+    if (state.eventId === null) throw new Error("The feedback form has no event and no launch.");
+    await applyFeedbackEvent(state.taskId, state.eventId);
     return { outcome: "updated" };
   }
   const startResult = await startRequestChangesSession(
@@ -104,13 +106,13 @@ export const submitHumanReviewFeedback = async ({
   return { outcome: "started" };
 };
 
-/** Use the existing review command. The task stream updates every task view after the commit. */
-export const requestHumanReviewChanges = async (
+/** Applies the event alone. The task stream updates every task view after the commit. */
+export const applyHumanFeedbackEvent = async (
   queryClient: QueryClient,
   scope: WorkspaceRef | null,
   taskId: string,
-  note: string,
+  eventId: string,
 ): Promise<TaskCard> => {
   if (!scope) throw new Error("Select the task workspace before requesting changes.");
-  return connectionHost(queryClient).humanRequestChanges(scope, taskId, note);
+  return connectionHost(queryClient).taskApplyEvent(scope, taskId, eventId);
 };

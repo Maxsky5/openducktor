@@ -1317,10 +1317,17 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { beforeWorktreeRemoval: [] },
           }),
-        }).resetImplementation({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+        }).applyTaskEvent({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          eventId: "reset-implementation",
+        }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "ready_for_dev" });
+    // The event command reads the task, then the worktree reset reads it again under its lock.
     expect(calls).toMatchObject([
+      { type: "list", input: { repoPath: "/repo" } },
       { type: "list", input: { repoPath: "/repo" } },
       { type: "listBranches", workingDir: "/repo" },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
@@ -1700,7 +1707,12 @@ describe("createTaskService task mutations and reset", () => {
 
     const result = await Effect.runPromise(
       service
-        .resetImplementation({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" })
+        .applyTaskEvent({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          eventId: "reset-implementation",
+        })
         .pipe(Effect.flip),
     );
 
@@ -1708,7 +1720,7 @@ describe("createTaskService task mutations and reset", () => {
       throw new Error("Expected a TaskMutationProgressFailure");
     }
     expect(sessionsCleared).toBe(true);
-    expect(result.operation).toBe("reset-implementation");
+    expect(result.operation).toBe("apply-task-event");
     expect(result.artifactChanges).toEqual([]);
     expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
     expect(result.failure.message).toContain("clear QA reports failed");
@@ -1755,7 +1767,12 @@ describe("createTaskService task mutations and reset", () => {
 
     await expect(
       Effect.runPromise(
-        service.resetImplementation({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+        service.applyTaskEvent({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          eventId: "reset-implementation",
+        }),
       ),
     ).rejects.toThrow("is on branch feature/other, which is not a task branch");
     expect(calls).toMatchObject([
@@ -2012,10 +2029,15 @@ describe("createTaskService task mutations and reset", () => {
             repoPath: "/repo",
             hooks: { beforeWorktreeRemoval: [] },
           }),
-        }).resetImplementation({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+        }).applyTaskEvent({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          eventId: "reset-implementation",
+        }),
       ),
     ).rejects.toThrow(
-      "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
+      "worktree.reset requires runtime session activity checks for task sessions that may use the canonical worktree.",
     );
   });
   test("updates a task and enriches the result", async () => {

@@ -118,6 +118,7 @@ export const createLaunchHarness = async (
   const sends: AgentSessionControlSendInput[] = [];
   const sendOptions: Array<AgentSessionSendOptions | undefined> = [];
   const publications: string[] = [];
+  const appliedEvents: string[] = [];
   const removedWorktrees: string[] = [];
   const deletedBranches: string[] = [];
   const envelopes: unknown[] = [];
@@ -323,7 +324,6 @@ export const createLaunchHarness = async (
         : Effect.fail(new HostValidationError({ message: "Task not found" })),
   });
   const tasks = createEventPublishingTaskService({
-    taskWorkflows,
     taskService: createTaskServiceWithMutationProgressTestDouble({
       agentSessionsList: () => Effect.succeed([...records]),
       agentSessionUpsert: (input) =>
@@ -355,10 +355,12 @@ export const createLaunchHarness = async (
           if (decision.kind === "transition") task = { ...task, status: decision.to };
           return task;
         }),
-      humanRequestChanges: () =>
+      applyTaskEvent: (input) =>
         Effect.sync(() => {
-          task = { ...task, status: "in_progress" };
-          return task;
+          appliedEvents.push(input.eventId);
+          const decision = workflow.decide(input.eventId, task);
+          if (decision.kind === "transition") task = { ...task, status: decision.to };
+          return { task, artifactChanges: [] };
         }),
       updateTask: (input) =>
         Effect.sync(() => {
@@ -714,6 +716,7 @@ export const createLaunchHarness = async (
     sends,
     sendOptions,
     publications,
+    appliedEvents,
     removedWorktrees,
     deletedBranches,
     envelopes,

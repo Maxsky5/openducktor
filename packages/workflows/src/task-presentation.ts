@@ -2,7 +2,7 @@ import type {
   AgentWorkflowState,
   WorkflowActionEmphasis,
   WorkflowActionSurface,
-  WorkflowEventEffect,
+  HostEffectId,
 } from "@openducktor/contracts";
 import { TASK_CLOSED_STATE, workflowActionSurfaceSchema } from "@openducktor/contracts";
 import { taskWorkflowInput, type ResolvedTaskCard } from "./task-workflow-view";
@@ -137,8 +137,11 @@ export type TaskActionCommand =
   | {
       kind: "event";
       eventId: string;
-      effect: WorkflowEventEffect | undefined;
+      /** The host effects that the host runs before it commits the event. */
+      effects: readonly HostEffectId[];
       launchActionIds: readonly string[];
+      /** A following launch collects the feedback of a person, so the client asks for it first. */
+      collectsFeedback: boolean;
     };
 
 export const resolveWorkflowAction = (
@@ -165,10 +168,14 @@ export const resolveWorkflowAction = (
       launchActionId: task.taskWorkflow.evaluator.actionLaunchAction(taskWorkflowInput(task), id),
     };
   if (action.kind === "approval") return { kind: "approval" };
+  const launchActionIds = action.launchActionIds ?? [];
   return {
     kind: "event",
     eventId: action.eventId,
-    effect: task.taskWorkflow.actionEffect(action.id),
-    launchActionIds: action.launchActionIds ?? [],
+    effects: task.taskWorkflow.eventEffects(action.eventId),
+    launchActionIds,
+    collectsFeedback: launchActionIds.some(
+      (launchId) => task.taskWorkflow.launchAction(launchId).context === "human_feedback",
+    ),
   };
 };

@@ -50,7 +50,7 @@ export const createTaskWorkflowActionsFixture = (
         onOpenTaskDetails: actions.onOpenTaskDetails,
         onOpenSession: actions.onOpenSession,
         onHumanApprove: () => {},
-        onHumanRequestChanges: () => {},
+        onHumanFeedback: () => {},
         onConfirm: (taskId, confirmation) => {
           if (confirmation !== "reset_implementation")
             actions.onConfirmTaskAction(taskId, confirmation);
@@ -124,7 +124,6 @@ export const createTasksStateFixture = (
   removeTaskWorktree: async () => undefined,
   resetTaskImplementation: async (taskId) => createWireTaskCardFixture({ id: taskId }),
   resetTask: async (taskId) => createWireTaskCardFixture({ id: taskId }),
-  humanRequestChangesTask: async () => undefined,
   ...overrides,
 });
 

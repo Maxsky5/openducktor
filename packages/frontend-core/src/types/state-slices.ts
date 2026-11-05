@@ -27,9 +27,8 @@ export type TasksStateContextValue = TaskPullRequestOperations & {
   closeTask: (taskId: string, options: CloseTaskOptions) => Promise<WireTaskCard>;
   /** Removes the worktree and local branches of a closed task. */
   removeTaskWorktree: (taskId: string) => Promise<void>;
-  resetTaskImplementation: (taskId: string) => Promise<WireTaskCard>;
+  resetTaskImplementation: (taskId: string, eventId: string) => Promise<WireTaskCard>;
   resetTask: (taskId: string) => Promise<WireTaskCard>;
-  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };
 
 /** Reads and saves the workflow documents of the active workspace by artifact code. */

@@ -174,7 +174,23 @@ describe("odt_apply_workflow_event", () => {
     expect(bridge.transitions).toEqual([]);
   });
 
-  test("an event without a host effect moves the task through its workflow", async () => {
+  test("a Writer session sends the agent events of a custom workflow", async () => {
+    const bridge = setup("writing", {
+      owner: owner("writer"),
+      issueType: "feature",
+      taskWorkflows: singleTaskWorkflow(
+        createTaskWorkflow(reviewTaskDefinition(), reviewTaskPromptTemplates, reviewTaskRoles),
+      ),
+    });
+
+    const paused = await bridge.send({ eventId: "pause-writing", note: "Waiting", caller });
+    const resumed = await bridge.send({ eventId: "resume-writing", caller });
+
+    expect(Exit.isSuccess(paused) && Exit.isSuccess(resumed)).toBe(true);
+    expect(bridge.transitions).toMatchObject([{ status: "paused" }, { status: "writing" }]);
+  });
+
+  test("a plain event that agents may send moves the task through its workflow", async () => {
     const definition = reviewTaskDefinition();
     const accept = definition.events.find(({ id }) => id === "accept-review");
     if (accept) {

@@ -73,7 +73,6 @@ const createTasksState = (
   removeTaskWorktree: async () => {},
   resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
   resetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
-  humanRequestChangesTask: async () => {},
 });
 
 const readFileBase64 = async (_file: TestImage): Promise<string> => "AQID";

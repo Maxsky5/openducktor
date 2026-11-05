@@ -49,7 +49,7 @@ const createState = (
     launchActionId: "build_after_human_request_changes",
     postStartAction: "kickoff",
   },
-  requestChanges: false,
+  eventId: null,
   confirmLabel: "Request Changes",
   taskId: "TASK-1",
   message: "Apply the requested changes.",
@@ -177,7 +177,7 @@ describe("human-review-feedback-flow", () => {
           }),
         );
         await submitHumanReviewFeedback({
-          requestChangesTask: unexpectedRequestChanges,
+          applyFeedbackEvent: unexpectedRequestChanges,
           feedback: createFeedbackFake(),
           state,
           builderSessions: [],
@@ -216,7 +216,7 @@ describe("human-review-feedback-flow", () => {
     const startRequestChangesSession = mock(async () => STARTED_SESSION);
 
     const result = await submitHumanReviewFeedback({
-      requestChangesTask: unexpectedRequestChanges,
+      applyFeedbackEvent: unexpectedRequestChanges,
       feedback,
       state: createState({ message: "   " }),
       builderSessions: [createBuilderSession({ externalSessionId: "builder-session-1" })],
@@ -243,7 +243,7 @@ describe("human-review-feedback-flow", () => {
     const builderSessions = [latestBuilderSession, previousBuilderSession];
 
     const result = await submitHumanReviewFeedback({
-      requestChangesTask: unexpectedRequestChanges,
+      applyFeedbackEvent: unexpectedRequestChanges,
       feedback: createFeedbackFake(),
       state: createState({ message: "  Use the standard request-changes workflow.  " }),
       builderSessions,
@@ -293,7 +293,7 @@ describe("human-review-feedback-flow", () => {
     const startRequestChangesSession = mock(async () => STARTED_SESSION);
 
     await submitHumanReviewFeedback({
-      requestChangesTask: unexpectedRequestChanges,
+      applyFeedbackEvent: unexpectedRequestChanges,
       feedback: createFeedbackFake(),
       state: createState({ message: "Start this in a new builder session." }),
       builderSessions: [],
@@ -312,7 +312,7 @@ describe("human-review-feedback-flow", () => {
     const startRequestChangesSession = mock(async () => undefined);
 
     const result = await submitHumanReviewFeedback({
-      requestChangesTask: unexpectedRequestChanges,
+      applyFeedbackEvent: unexpectedRequestChanges,
       feedback: createFeedbackFake(),
       state: createState({ message: "Keep editing if I cancel the second step." }),
       builderSessions: [createBuilderSession({ externalSessionId: "builder-session-1" })],
@@ -327,7 +327,7 @@ describe("human-review-feedback-flow", () => {
     const startRequestChangesSession = mock(async () => STARTED_SESSION);
 
     await submitHumanReviewFeedback({
-      requestChangesTask: unexpectedRequestChanges,
+      applyFeedbackEvent: unexpectedRequestChanges,
       feedback: createFeedbackFake(),
       state: createState({
         message: "Address the requested changes in the shared flow.",

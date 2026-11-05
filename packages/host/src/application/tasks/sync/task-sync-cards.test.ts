@@ -75,7 +75,6 @@ describe("committed task cards", () => {
         onBackgroundFailure: () => Effect.void,
       });
       const service = createEventPublishingTaskService({
-        taskWorkflows: builtinTaskWorkflows,
         taskService: base,
         taskSyncService: sync,
       });
@@ -213,7 +212,6 @@ describe("committed task cards", () => {
         onBackgroundFailure: () => Effect.void,
       });
       const service = createEventPublishingTaskService({
-        taskWorkflows: builtinTaskWorkflows,
         taskService: { ...base, listTasks: readCards },
         taskSyncService: sync,
       });

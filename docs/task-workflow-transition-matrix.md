@@ -37,7 +37,7 @@ When task Markdown contains `odt-asset:<assetId>` images needed for the work, co
 
 Then call `odt_read_task_artifacts` with a nonempty array of distinct `codes` from `task.artifacts`. For example, `{ "taskId": "repo-123", "codes": ["spec"] }` returns the full spec. The built-in workflow declares the codes `spec`, `plan`, and `qaReport`; free artifacts have their own stable codes. Each read returns the complete content or fails. Internal artifact IDs remain within the UI and store.
 
-Human actions are `human_request_changes(taskId, note)` and `human_approve(taskId)`. `human_approve` is the `approval` action of the workflow, and it opens the approval modal. The core task actions of every workflow are `reset_task(taskId)` and `close_task(taskId, removeWorktree)`. No workflow event controls them. The approval outcomes and pull request management are also core rules. Other native task actions are `reset_implementation(taskId)` and `remove_worktree(taskId)`.
+Human actions are `human_request_changes(taskId, feedback)` and `human_approve(taskId)`. `human_approve` is the `approval` action of the workflow, and it opens the approval modal. The core task actions of every workflow are `reset_task(taskId)` and `close_task(taskId, removeWorktree)`. No workflow event controls them. The approval outcomes and pull request management are also core rules. `reset_implementation(taskId)` is an event action whose event has the `worktree.reset` host effect. `remove_worktree(taskId)` is a native task action.
 
 Free-artifact creation, rename, replacement, and deletion require a non-closed task. They preserve task status, QA verdict, and workflow readiness. The setter routes workflow codes through the existing workflow actions and enforces managed role access. Delete rejects workflow codes. Manual Specification and Implementation Plan saves keep status unchanged, including on closed tasks.
 
@@ -65,8 +65,8 @@ A trigger such as `build-completed` is an event that `odt_apply_workflow_event` 
 | `odt_set_pull_request` | Any status except `closed`. | A pull request number is present and the repository has a configured provider. | Unchanged. |
 | `odt_set_task_artifact`, code `qaReport`, verdict `rejected` | `blocked`, `ai_review`, `human_review` | Report Markdown is present. | `in_progress` |
 | `odt_set_task_artifact`, code `qaReport`, verdict `approved` | `blocked`, `ai_review`, `human_review` | Report Markdown is present. | `human_review` |
-| `human_request_changes` | `ai_review`, `human_review` | `note` is optional. | `in_progress` |
-| `human_request_changes` | `in_progress` | Idempotent. No write runs. The action is not offered. | Unchanged. |
+| `human_request_changes` | `ai_review`, `human_review` | The feedback goes to the Builder launch. | `in_progress` |
+| `human_request_changes` | `in_progress` | The action is not available, so the host rejects the event. | Unchanged. |
 | `human_approve` | `ai_review`, `human_review` | Opens the approval modal. | Unchanged. |
 | Core `close_task` | Any status. | No live role activity. Cleanup succeeds. | `closed`. A `closed` task stays unchanged and no cleanup runs. |
 | `remove_worktree` | `closed` | No live role activity. Cleanup succeeds. | Unchanged. |

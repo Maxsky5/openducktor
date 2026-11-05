@@ -66,9 +66,10 @@ export type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null
 
 export type SessionStartPostAction = "none" | "kickoff" | "send_message";
 
+/** A workflow event that the host commits before the session starts. */
 export type SessionStartBeforeAction = {
-  action: "human_request_changes";
-  note: string;
+  eventId: string;
+  note?: string;
 };
 
 export type SessionStartFlowRequest = Omit<NewSessionStartRequest, "selectedModel"> & {

@@ -180,8 +180,8 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       postStartAction: "kickoff";
       message?: string;
       beforeStartAction?: {
-        action: "human_request_changes";
-        note: string;
+        eventId: string;
+        note?: string;
       };
     }> = [];
     const startSessionRequest = mock(async (request) => {

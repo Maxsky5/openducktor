@@ -1,6 +1,7 @@
 import {
   resolveWorkflowAction,
   type ResolvedTaskCard,
+  type TaskWorkflow,
   type TaskWorkflowAction,
 } from "@openducktor/workflows";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
@@ -21,10 +22,11 @@ export type TaskActionDestination =
   | { kind: "open_session"; role: string; options: SessionTargetOptions }
   | { kind: "no_session"; role: string }
   | { kind: "approve" }
-  | { kind: "request_changes"; continuation?: TaskWorkflowContinuation | undefined }
+  | { kind: "feedback"; eventId: string; continuation?: TaskWorkflowContinuation | undefined }
   | {
       kind: "confirm";
       action: TaskActionConfirmation;
+      eventId: string;
       continuation?: TaskWorkflowContinuation | undefined;
     };
 
@@ -32,8 +34,9 @@ export type TaskActionDestination =
 export type SessionOptionsOf = (role: string) => SessionTargetOptions | undefined;
 
 /**
- * The client operation of a declared workflow action. An unavailable action and a host effect
- * without a client operation fail with the fix.
+ * The client operation of a declared workflow action. An event with the `worktree.reset` effect
+ * asks for confirmation first. An event whose following launch collects human feedback opens the
+ * feedback form. An unavailable action fails with the fix.
  */
 export const resolveTaskActionDestination = (
   task: ResolvedTaskCard,
@@ -55,18 +58,49 @@ export const resolveTaskActionDestination = (
   const continuation: TaskWorkflowContinuation | undefined = command.launchActionIds.length
     ? { workflow: task.workflow, launchActionIds: command.launchActionIds }
     : undefined;
-  switch (command.effect) {
-    case undefined:
-      return { kind: "event", eventId: command.eventId, launchActionIds: command.launchActionIds };
-    case "review.request_changes":
-      return { kind: "request_changes", continuation };
-    case "implementation.reset":
-      return { kind: "confirm", action: "reset_implementation", continuation };
-    default:
-      throw new Error(
-        `Action "${action}" uses unsupported host effect "${command.effect}". Update the client to use this action.`,
-      );
+  if (command.effects.includes("worktree.reset"))
+    return {
+      kind: "confirm",
+      action: "reset_implementation",
+      eventId: command.eventId,
+      continuation,
+    };
+  if (command.collectsFeedback) return { kind: "feedback", eventId: command.eventId, continuation };
+  return { kind: "event", eventId: command.eventId, launchActionIds: command.launchActionIds };
+};
+
+/**
+ * What the client does for an event action before its host command: confirm the worktree reset,
+ * collect human feedback, or nothing. Other actions give null.
+ */
+export const eventActionStep = (
+  workflow: TaskWorkflow,
+  actionId: TaskWorkflowAction,
+): "confirm" | "feedback" | "none" | null => {
+  const action = workflow.action(actionId);
+  if (action.kind !== "event") return null;
+  if (workflow.eventEffects(action.eventId).includes("worktree.reset")) return "confirm";
+  return (action.launchActionIds ?? []).some(
+    (id) => workflow.launchAction(id).context === "human_feedback",
+  )
+    ? "feedback"
+    : "none";
+};
+
+/**
+ * The event of an available event action that resets the task worktree, or null when the task
+ * offers no such action.
+ */
+export const availableWorktreeResetEvent = (task: ResolvedTaskCard): string | null => {
+  for (const id of task.availableActions) {
+    const action = task.taskWorkflow.action(id);
+    if (
+      action.kind === "event" &&
+      task.taskWorkflow.eventEffects(action.eventId).includes("worktree.reset")
+    )
+      return action.eventId;
   }
+  return null;
 };
 
 /** Whether the action sends a host command, so its control shows pending feedback. */

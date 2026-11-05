@@ -11,10 +11,13 @@ export type HumanReviewFeedbackModalModel = {
   onConfirm: () => Promise<void>;
 };
 
-/** What the feedback form does: start a feedback launch, or run Request Changes. */
+/**
+ * What the feedback form does: start a feedback launch, or apply an event whose following launch
+ * collects the feedback.
+ */
 export type HumanReviewFeedbackRequest =
   | { kind: "launch"; launchActionId: string }
-  | { kind: "request_changes"; continuation?: TaskWorkflowContinuation | undefined };
+  | { kind: "event"; eventId: string; continuation?: TaskWorkflowContinuation | undefined };
 
 export type HumanReviewFeedbackLaunch = {
   role: string;
@@ -24,10 +27,10 @@ export type HumanReviewFeedbackLaunch = {
 };
 
 export type HumanReviewFeedbackState = {
-  /** The session that receives the feedback. Request Changes without a following launch has none. */
+  /** The session that receives the feedback. An event without a following launch has none. */
   launch: HumanReviewFeedbackLaunch | null;
-  /** The host commits Request Changes, before the launch starts when there is one. */
-  requestChanges: boolean;
+  /** The event that the host commits, before the launch starts when there is one. */
+  eventId: string | null;
   confirmLabel: string;
   taskId: string;
   message: string;

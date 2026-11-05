@@ -47,7 +47,6 @@ const tasksState = (tasks: TaskCard[]): TasksStateContextValue => ({
   removeTaskWorktree: async () => {},
   resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
   resetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
-  humanRequestChangesTask: async () => {},
 });
 
 const session = (externalSessionId: string): AgentSessionRecord => ({

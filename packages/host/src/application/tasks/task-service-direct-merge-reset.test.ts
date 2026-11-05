@@ -412,7 +412,7 @@ describe("task completion recovery and reset", () => {
   });
 
   const resetTask = (service: ReturnType<typeof createHarness>["service"]) =>
-    service.resetImplementation(input).pipe(Effect.asVoid);
+    service.applyTaskEvent({ ...input, eventId: "reset-implementation" }).pipe(Effect.asVoid);
   test.each(["none", "clear merge", "transition", "publish"] as const)(
     `resetImplementation invalidates completion at the committed merge clear: %s`,
     async (failure) => {

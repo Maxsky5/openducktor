@@ -38,7 +38,7 @@ test("a fresh target outside the canonical task worktree fails before any task m
       decision: { startMode: "fresh", selectedModel: modelFor("codex"), targetWorkingDirectory },
     },
     instruction: { kind: "kickoff", feedback: "Required changes" },
-    beforeStartAction: { action: "human_request_changes", note: "Required changes" },
+    beforeStartAction: { eventId: "human-request-changes" },
   });
   const rejected = await Effect.runPromise(h.service.launch(request("/other")));
   expect(rejected).toMatchObject({
@@ -48,13 +48,41 @@ test("a fresh target outside the canonical task worktree fails before any task m
   expect(rejected.session).toBeUndefined();
   expect(h.getTask().status).toBe("human_review");
   expect(h.starts).toHaveLength(0);
+  expect(h.appliedEvents).toEqual([]);
 
   const accepted = await Effect.runPromise(h.service.launch(request("/worktrees/task")));
   expect(accepted).toMatchObject({
     status: "completed",
     session: { externalSessionId: "session-1", workingDirectory: "/worktrees/task" },
   });
+  expect(h.appliedEvents).toEqual(["human-request-changes"]);
   expect(h.getTask().status).toBe("in_progress");
+});
+
+test("a launch without the human feedback context cannot commit an event before its start", async () => {
+  const h = await createLaunchHarness();
+  h.setTaskStatus("human_review");
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("codex"),
+      policy: {
+        kind: "manual",
+        actionId: "qa_review",
+        decision: { startMode: "fresh", selectedModel: modelFor("codex") },
+      },
+      beforeStartAction: { eventId: "human-request-changes" },
+    }),
+  );
+  expect(result).toMatchObject({
+    status: "failed",
+    failure: {
+      message:
+        "Action 'qa_review' collects no human feedback, so it cannot commit event 'human-request-changes' before its start. Start the launch without that event.",
+    },
+  });
+  expect(h.appliedEvents).toEqual([]);
+  expect(h.getTask().status).toBe("human_review");
+  expect(h.starts).toHaveLength(0);
 });
 
 test("a saved override with an unsupported placeholder fails before any task mutation", async () => {
@@ -75,7 +103,7 @@ test("a saved override with an unsupported placeholder fails before any task mut
         decision: { startMode: "fresh", selectedModel: modelFor("codex") },
       },
       instruction: { kind: "kickoff", feedback: "Required changes" },
-      beforeStartAction: { action: "human_request_changes", note: "Required changes" },
+      beforeStartAction: { eventId: "human-request-changes" },
     }),
   );
   expect(result).toMatchObject({
@@ -218,7 +246,7 @@ test("a pre-start publication failure fails the launch after the task mutation w
         decision: { startMode: "fresh", selectedModel: modelFor("codex") },
       },
       instruction: { kind: "kickoff", text: "Apply feedback", feedback: "Review feedback" },
-      beforeStartAction: { action: "human_request_changes", note: "Review feedback" },
+      beforeStartAction: { eventId: "human-request-changes" },
     }),
   );
   expect(result).toMatchObject({

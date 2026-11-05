@@ -138,7 +138,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     onLaunch,
     onPullRequestGenerate,
     onOpenSession,
-    onHumanRequestChanges,
+    onHumanFeedback,
   } = useKanbanSessionStartFlow({
     activeWorkspaceId,
     branches: branches ?? [],
@@ -276,9 +276,9 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
         onOpenTaskDetails,
         onOpenSession,
         onHumanApprove: (taskId) => openTaskApproval(taskId),
-        onHumanRequestChanges,
-        onConfirm: (taskId, _action, onCommitted) =>
-          openResetImplementation(taskId, { closeDetailsAfterReset: true, onCommitted }),
+        onHumanFeedback,
+        onConfirm: (taskId, _action, eventId, onCommitted) =>
+          openResetImplementation(taskId, eventId, { closeDetailsAfterReset: true, onCommitted }),
         continueTaskWorkflow,
         showError: showWorkflowActionError,
       }),
@@ -288,7 +288,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       onOpenTaskDetails,
       onOpenSession,
       openTaskApproval,
-      onHumanRequestChanges,
+      onHumanFeedback,
       openResetImplementation,
       continueTaskWorkflow,
     ],

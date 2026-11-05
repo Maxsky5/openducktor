@@ -24,7 +24,6 @@ import type {
   ListAgentSessionsForTasksInput,
   WorkflowArtifactInput,
   WorkflowArtifactSaveInput,
-  OptionalNoteInput,
   PullRequestLinkMergedInput,
   PullRequestUpsertInput,
   RepoPathInput,
@@ -38,7 +37,6 @@ import {
   parseAgentSessionIdentity,
   parseCreateInput,
   parseDescriptionAssets,
-  parseOptionalNote,
   parsePullRequest,
   parsePullRequestContent,
   parseRequiredBoolean,
@@ -57,7 +55,6 @@ import {
 } from "./command-inputs";
 
 const requiredBooleanSchema = z.boolean();
-const optionalStringSchema = z.union([z.string(), z.null(), z.undefined()]);
 const taskIdsSchema = z.array(z.unknown());
 
 const optionalDescriptionAssetsSchema = taskAssetDescriptionMutationSchema.optional();
@@ -306,24 +303,6 @@ export const parseWorkflowArtifactSaveInput = (
   };
   if (record.verdict !== undefined) parsed.verdict = readRequiredString(record, "verdict");
   return parsed;
-};
-
-export const parseOptionalNoteInput = (
-  input: HostCommandArgs,
-  label: string,
-  noteLabel: string,
-): OptionalNoteInput => {
-  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
-  const note = parseOptionalNote(optionalStringSchema.safeParse(record.note), noteLabel);
-  const result: OptionalNoteInput = {
-    workspaceId: readRequiredString(record, "workspaceId"),
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-  };
-  if (note !== undefined) {
-    result.note = note;
-  }
-  return result;
 };
 
 export const parseDirectMergeCompleteInput = (input: HostCommandArgs) => {

@@ -51,6 +51,8 @@ type ResetFlowWorkspaceIdentity = {
 
 type ResetFlowRequest = ResetFlowWorkspaceIdentity & {
   taskId: string;
+  /** The workflow event whose `worktree.reset` effect resets the implementation. */
+  eventId: string;
   closeDetailsAfterReset: boolean;
   onCommitted?: OnTaskCommitted | undefined;
 };
@@ -58,16 +60,15 @@ type ResetFlowRequest = ResetFlowWorkspaceIdentity & {
 type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
   workspaceIdentity: ResetFlowWorkspaceIdentity | null;
-  resetTaskImplementation: (taskId: string) => Promise<WireTaskCard>;
+  resetTaskImplementation: (taskId: string, eventId: string) => Promise<WireTaskCard>;
   closeTaskDetails: (taskId: string) => void;
 };
 
-/** A task that does not offer the reset keeps its status, and the host rejects the request. */
-const deriveRollbackLabel = (task: TaskCard): string => {
+/** A task that does not admit the event keeps its status, and the host rejects the request. */
+const deriveRollbackLabel = (task: TaskCard, eventId: string): string => {
   const workflow = task.taskWorkflow;
-  const event = workflow.effectEvent("implementation.reset");
-  const decision = event ? workflow.decide(event, task) : null;
-  const status = decision?.kind === "transition" ? decision.to : task.status;
+  const decision = workflow.decide(eventId, task);
+  const status = decision.kind === "transition" ? decision.to : task.status;
   const state = workflow.state(status);
   return state.title ?? state.label;
 };
@@ -134,7 +135,7 @@ export function useTaskResetFlow({
   }, [isSubmitting]);
 
   const openResetImplementation = useCallback(
-    (nextTaskId: string, options?: ResetImplementationOptions): boolean => {
+    (nextTaskId: string, eventId: string, options?: ResetImplementationOptions): boolean => {
       const nextTask = tasks.find((entry) => entry.id === nextTaskId);
       if (!nextTask || !workspaceIdentity) {
         feedback.show("error", "Unable to reset implementation", {
@@ -146,6 +147,7 @@ export function useTaskResetFlow({
       setModalError(null);
       const nextRequest: ResetFlowRequest = {
         taskId: nextTaskId,
+        eventId,
         workspaceId: workspaceIdentity.workspaceId,
         repoPath: workspaceIdentity.repoPath,
         closeDetailsAfterReset: options?.closeDetailsAfterReset ?? false,
@@ -166,7 +168,7 @@ export function useTaskResetFlow({
       setIsSubmitting(true);
       setModalError(null);
       try {
-        const committed = await resetTaskImplementation(task.id);
+        const committed = await resetTaskImplementation(task.id, request.eventId);
         await request.onCommitted?.(committed);
         setRequest(null);
         if (request.closeDetailsAfterReset) {
@@ -186,7 +188,11 @@ export function useTaskResetFlow({
       openResetImplementation,
     } satisfies {
       resetImplementationModal: ResetImplementationModalModel | null;
-      openResetImplementation: (taskId: string, options?: ResetImplementationOptions) => boolean;
+      openResetImplementation: (
+        taskId: string,
+        eventId: string,
+        options?: ResetImplementationOptions,
+      ) => boolean;
     };
   }
 
@@ -195,7 +201,7 @@ export function useTaskResetFlow({
       open,
       taskId: task.id,
       taskTitle: task.title,
-      targetStatusLabel: deriveRollbackLabel(task),
+      targetStatusLabel: request ? deriveRollbackLabel(task, request.eventId) : "",
       isSubmitting,
       activeSessionCount,
       activeSessionCountError: stopImpactError,
@@ -220,6 +226,10 @@ export function useTaskResetFlow({
     openResetImplementation,
   } satisfies {
     resetImplementationModal: ResetImplementationModalModel | null;
-    openResetImplementation: (taskId: string, options?: ResetImplementationOptions) => boolean;
+    openResetImplementation: (
+      taskId: string,
+      eventId: string,
+      options?: ResetImplementationOptions,
+    ) => boolean;
   };
 }

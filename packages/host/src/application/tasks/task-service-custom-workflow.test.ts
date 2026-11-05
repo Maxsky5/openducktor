@@ -17,6 +17,8 @@ import {
 import { createTaskWorkflowResolver } from "./task-workflows";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { reviewTaskWorkflows, singleTaskWorkflow } from "../../test-support/task-workflows";
+import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
+import { HostOperationError } from "../../effect/host-errors";
 import type { WorkflowArtifactSaveInput } from "./task-inputs";
 import {
   createBuildSettingsConfig,
@@ -250,7 +252,7 @@ describe("task service with a custom task workflow", () => {
   });
 
   test.each([
-    ["request-rewrite", "review.request_changes host effect"],
+    ["request-rewrite", "No action that sends request-rewrite is available"],
     ["submit-draft", "not sent by an event action"],
     ["missing", "not sent by an event action"],
   ])("rejects event %s through the event command", async (eventId, message) => {
@@ -268,17 +270,19 @@ describe("task service with a custom task workflow", () => {
     expect(await status(id)).toBe("open");
   });
 
-  test("pauses, resumes, and completes a build with the effect events of the workflow", async () => {
+  test("pauses, resumes, and completes the writing with the agent events of the workflow", async () => {
     const { id } = await createArticle();
     const input = { ...harness.scope, taskId: id };
     await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
 
-    await Effect.runPromise(service().buildBlocked(input));
+    await Effect.runPromise(service().applyAgentEvent({ ...input, eventId: "pause-writing" }));
     expect(await status(id)).toBe("paused");
-    await Effect.runPromise(service().buildResumed(input));
+    await Effect.runPromise(service().applyAgentEvent({ ...input, eventId: "resume-writing" }));
     expect(await status(id)).toBe("writing");
 
-    const denied = await Effect.runPromiseExit(service().buildCompleted(input));
+    const denied = await Effect.runPromiseExit(
+      service().applyAgentEvent({ ...input, eventId: "finish-writing" }),
+    );
     expect(String(denied)).toContain("Save the draft first");
 
     await Effect.runPromise(
@@ -292,18 +296,29 @@ describe("task service with a custom task workflow", () => {
       }),
     );
     expect(await status(id)).toBe("writing");
-    await Effect.runPromise(service().buildCompleted(input));
+    await Effect.runPromise(service().applyAgentEvent({ ...input, eventId: "finish-writing" }));
     expect(await status(id)).toBe("reviewing");
   });
 
-  test("requests changes on a reviewed task with the review effect event", async () => {
+  test("rejects an event that agents cannot send through the agent event command", async () => {
+    const { id } = await createArticle();
+    const result = await Effect.runPromiseExit(
+      service().applyAgentEvent({ ...harness.scope, taskId: id, eventId: "drop-review" }),
+    );
+    expect(String(result)).toContain(
+      'Event drop-review is not an agent event of task workflow "review".',
+    );
+    expect(await status(id)).toBe("open");
+  });
+
+  test("requests changes on a reviewed task with a plain event", async () => {
     const { id } = await createArticle();
     const input = { ...harness.scope, taskId: id };
     await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
     await save(id, "draft", "writer");
     await save(id, "review", "editor", "accept");
 
-    await Effect.runPromise(service().humanRequestChanges({ ...input, note: "Shorter intro" }));
+    await Effect.runPromise(service().applyTaskEvent({ ...input, eventId: "request-rewrite" }));
     expect(await status(id)).toBe("writing");
   });
 
@@ -354,8 +369,8 @@ describe("task service with a custom task workflow", () => {
     const rejections = await Promise.all([
       Effect.runPromiseExit(service().applyTaskEvent({ ...input, eventId: "hold" })),
       Effect.runPromiseExit(service().applyStartEvent({ ...input, eventId: "start-writing" })),
-      Effect.runPromiseExit(service().buildBlocked(input)),
-      Effect.runPromiseExit(service().humanRequestChanges({ ...input, note: "Shorter intro" })),
+      Effect.runPromiseExit(service().applyAgentEvent({ ...input, eventId: "pause-writing" })),
+      Effect.runPromiseExit(service().applyTaskEvent({ ...input, eventId: "request-rewrite" })),
       Effect.runPromiseExit(service().resetTask(input)),
     ]);
     for (const rejection of rejections) expect(String(rejection)).toContain(blocked);
@@ -376,7 +391,7 @@ describe("task service with a custom task workflow", () => {
     expect(closed.status).toBe("closed");
   });
 
-  test("an unpublished local merge allows Reset Implementation", async () => {
+  test("an unpublished local merge allows an event with the worktree.reset effect", async () => {
     const { id } = await createArticle();
     const input = { ...harness.scope, taskId: id };
     await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
@@ -394,10 +409,62 @@ describe("task service with a custom task workflow", () => {
       }),
     );
 
-    const reset = await Effect.runPromise(service().resetImplementation(input));
+    const reset = await Effect.runPromise(
+      service().applyTaskEvent({ ...input, eventId: "drop-review" }),
+    );
     expect(reset.status).toBe("writing");
     const delivery = await Effect.runPromise(harness.store.getTaskDelivery(input));
     expect(delivery.directMerge).toBeUndefined();
+  });
+
+  test("runs the worktree.reset effect of an event, then commits the target state of the event", async () => {
+    const { id } = await createArticle();
+    const input = { ...harness.scope, taskId: id };
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
+    await save(id, "draft", "writer");
+    await save(id, "review", "editor", "accept");
+    expect(await status(id)).toBe("approval");
+
+    const reset = await Effect.runPromise(
+      service().applyTaskEvent({ ...input, eventId: "drop-review" }),
+    );
+
+    // drop-review chooses "writing", not the state of a Spec, Plan, Build reset.
+    expect(reset.status).toBe("writing");
+    expect(reset.artifactSummary.review).toEqual({ present: false });
+    expect(reset.artifactSummary.draft).toMatchObject({ present: true });
+    expect(readArtifactRows(id).map(({ code }) => code)).toEqual(["draft"]);
+  });
+
+  test("commits nothing when a host effect of the event fails", async () => {
+    const { id } = await createArticle();
+    const input = { ...harness.scope, taskId: id };
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
+    await save(id, "draft", "writer");
+    await save(id, "review", "editor", "accept");
+    const failing = createTaskService({
+      atomicTaskStore: harness.store,
+      taskWorkflows: reviewTaskWorkflows,
+      gitPort: createBuildStartGitPort({ calls: [] }),
+      settingsConfig: createBuildSettingsConfig(new Set([harness.repoPath])),
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getRepoConfig: () =>
+          Effect.fail(
+            new HostOperationError({
+              operation: "test.settings",
+              message: "Repository settings are unavailable.",
+            }),
+          ),
+      }),
+    });
+
+    const result = await Effect.runPromiseExit(
+      failing.applyTaskEvent({ ...input, eventId: "drop-review" }),
+    );
+
+    expect(String(result)).toContain("Repository settings are unavailable.");
+    expect(await status(id)).toBe("approval");
+    expect(readArtifactRows(id).map(({ code }) => code)).toEqual(["draft", "review"]);
   });
 
   test("commits the start event of a role step and rejects other events", async () => {

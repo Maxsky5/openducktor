@@ -33,12 +33,18 @@ The built-in workflow declares these workflow actions:
 | `open_builder` | Open the linked Builder session. No transition. |
 | `qa_start` | Open QA from `blocked`, `ai_review`, or `human_review`. No direct transition. |
 | `open_qa` | Open the linked QA session. No transition. |
-| `human_request_changes` | Move `ai_review` or `human_review` to `in_progress`. |
+| `human_request_changes` | Collect feedback, then move `ai_review` or `human_review` to `in_progress` and start the Builder with the feedback. |
 | `human_approve` | The `approval` action. Open the approval modal for an `ai_review` or `human_review` task. No direct transition. |
 
 ## Event actions
 
-An event action sends one workflow event. When the event names a host effect, the client calls the command of that effect, such as `task_reset_implementation` for `implementation.reset`. When the event has no effect, the client calls `task_apply_event` with the event ID. The host rejects `task_apply_event` for an event that has an effect, that no event action sends, or whose action is not available for the task. All event actions of the built-in workflow have an effect.
+An event action sends one workflow event. The client calls `task_apply_event` with the event ID. The host rejects an event that no event action sends, or whose action is not available for the task. The host runs the host effects of the event in order, then commits the event. When an effect fails, the host commits nothing.
+
+The client operation follows the event:
+
+- An event with the `worktree.reset` effect opens the Reset Implementation confirmation first. `reset_implementation` uses it.
+- An event action whose following launch has `context: "human_feedback"` opens the feedback form first. `human_request_changes` uses it. The session start sends `beforeStartAction: { eventId, note }`, and the host commits the event before the session starts. Without a launch to start, the form sends `task_apply_event`.
+- Another event action sends `task_apply_event` directly, then starts its following launch when it has one.
 
 `human_approve` is an `approval` action, not an event action. It opens the approval modal and sends no event. The host allows the approval reads and writes while the `availableWhen` condition of this action matches the task.
 

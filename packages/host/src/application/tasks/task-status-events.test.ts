@@ -100,7 +100,6 @@ const createServices = (
     failures,
     sync,
     service: createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: base,
       taskSyncService: sync,
     }),
@@ -116,8 +115,8 @@ const deferred = () => {
 };
 
 test.each([
-  ["buildCompleted", "in_progress", "build"],
-  ["buildCompleted", "blocked", "build"],
+  ["build-completed", "in_progress", "build"],
+  ["build-completed", "blocked", "build"],
   ["qaApproved", "blocked", "qa"],
   ["qaApproved", "ai_review", "qa"],
 ] as const)(
@@ -142,7 +141,7 @@ test.each([
           taskWorkflows: builtinTaskWorkflows,
           taskStore: store,
         }).workflowArtifactSave,
-        buildCompleted: () =>
+        applyAgentEvent: () =>
           transition(store, {
             repoPath,
             workspaceId,
@@ -166,7 +165,14 @@ test.each([
                 submit: true,
               })
               .pipe(Effect.asVoid)
-          : service.buildCompleted({ workspaceId, repoPath, taskId: task.id }).pipe(Effect.asVoid),
+          : service
+              .applyAgentEvent({
+                workspaceId,
+                repoPath,
+                taskId: task.id,
+                eventId: "build-completed",
+              })
+              .pipe(Effect.asVoid),
       );
       expect(events).toMatchObject([
         {
@@ -214,7 +220,7 @@ test.each([false, true])(
               committed.resolve();
               yield* Effect.promise(() => release.promise);
             }
-            return enrichTask(specPlanBuildWorkflow, result);
+            return { task: enrichTask(specPlanBuildWorkflow, result), artifactChanges: [] };
           }),
       });
       const first = Effect.runPromise(
@@ -285,11 +291,11 @@ test("publishes committed transitions when the rest of a mutation fails", async 
       }),
     );
     const failure = new HostOperationError({
-      operation: "reset-implementation",
+      operation: "worktree_reset.cleanup",
       message: "Cleanup failed",
     });
     const { service, events, failures } = createServices(harness, {
-      resetImplementation: (input) =>
+      applyTaskEvent: (input) =>
         Effect.gen(function* () {
           yield* transition(store, {
             workspaceId: input.workspaceId,
@@ -298,14 +304,21 @@ test("publishes committed transitions when the rest of a mutation fails", async 
             status: "spec_ready",
           });
           return yield* new TaskMutationProgressFailure({
-            operation: "reset-implementation",
+            operation: "apply-task-event",
             changes: { taskIds: [input.taskId], removedTaskIds: [] },
             failure,
           });
         }),
     });
     const result = await Effect.runPromise(
-      Effect.result(service.resetImplementation({ workspaceId, repoPath, taskId: task.id })),
+      Effect.result(
+        service.applyTaskEvent({
+          workspaceId,
+          repoPath,
+          taskId: task.id,
+          eventId: "reset-implementation",
+        }),
+      ),
     );
     expect(result._tag).toBe("Failure");
     if (result._tag === "Failure") expect(result.failure).toBe(failure);

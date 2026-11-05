@@ -22,7 +22,8 @@ type UseTaskResetOperationsArgs = {
 };
 
 export type TaskResetOperations = {
-  resetTaskImplementation: (taskId: string) => Promise<TaskCard>;
+  /** Applies an event whose `worktree.reset` effect resets the implementation. */
+  resetTaskImplementation: (taskId: string, eventId: string) => Promise<TaskCard>;
   resetTask: (taskId: string) => Promise<TaskCard>;
 };
 
@@ -37,13 +38,13 @@ export function useTaskResetOperations({
   const hostClient = host.client;
 
   const resetTaskImplementation = useCallback(
-    async (taskId: string): Promise<TaskCard> => {
+    async (taskId: string, eventId: string): Promise<TaskCard> => {
       const repoPath = requireActiveRepo(activeRepoPath);
       const scope = requireWorkspaceRef(repoPath, activeWorkspaceId);
       let committed: TaskCard;
       try {
         try {
-          committed = await hostClient.taskResetImplementation(scope, taskId);
+          committed = await hostClient.taskApplyEvent(scope, taskId, eventId);
         } finally {
           await invalidateTaskStopImpact(queryClient, scope);
         }

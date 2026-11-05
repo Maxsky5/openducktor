@@ -52,6 +52,20 @@ describe("definition display fields", () => {
     });
     const review = createTaskCardFixture({ status: "human_review" });
     expect(resolveWorkflowAction(review, "human_approve")).toEqual({ kind: "approval" });
+    expect(resolveWorkflowAction(review, "human_request_changes")).toEqual({
+      kind: "event",
+      eventId: "human-request-changes",
+      effects: [],
+      launchActionIds: ["build_after_human_request_changes"],
+      collectsFeedback: true,
+    });
+    expect(resolveWorkflowAction(review, "reset_implementation")).toEqual({
+      kind: "event",
+      eventId: "reset-implementation",
+      effects: ["worktree.reset"],
+      launchActionIds: [],
+      collectsFeedback: false,
+    });
     expect(review.taskWorkflow.approvalAvailable(review)).toBe(true);
     expect(closed.taskWorkflow.approvalAvailable(closed)).toBe(false);
   });

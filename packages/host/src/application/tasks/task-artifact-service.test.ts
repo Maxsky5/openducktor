@@ -114,7 +114,6 @@ describe("task artifact service", () => {
         });
         const events: ExternalTaskSyncEvent[] = [];
         const service = createEventPublishingTaskService({
-          taskWorkflows: builtinTaskWorkflows,
           taskService: base,
           taskSyncService: h.attachSync(base, events),
         });
@@ -225,7 +224,6 @@ describe("task artifact service", () => {
       const events: ExternalTaskSyncEvent[] = [];
       const sync = h.attachSync(h.base, events);
       const service = createEventPublishingTaskService({
-        taskWorkflows: builtinTaskWorkflows,
         taskService: h.base,
         taskSyncService: sync,
       });

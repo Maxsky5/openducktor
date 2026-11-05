@@ -250,7 +250,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     taskWorktreeRemove: taskClient.taskWorktreeRemove.bind(taskClient),
     taskMergeStatusGet: taskClient.taskMergeStatusGet.bind(taskClient),
     taskMergeStatusCheck: taskClient.taskMergeStatusCheck.bind(taskClient),
-    taskResetImplementation: taskClient.taskResetImplementation.bind(taskClient),
     taskReset: taskClient.taskReset.bind(taskClient),
     taskApplyEvent: taskClient.taskApplyEvent.bind(taskClient),
     taskMetadataGet: taskClient.taskMetadataGet.bind(taskClient),
@@ -299,7 +298,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     taskPullRequestDetect: agentClient.taskPullRequestDetect.bind(agentClient),
     taskPullRequestLinkMerged: agentClient.taskPullRequestLinkMerged.bind(agentClient),
     repoPullRequestSync: agentClient.repoPullRequestSync.bind(agentClient),
-    humanRequestChanges: agentClient.humanRequestChanges.bind(agentClient),
     agentSessionStop: agentClient.agentSessionStop.bind(agentClient),
     agentSessionControlFork:
       agentSessionLiveClient.agentSessionControlFork.bind(agentSessionLiveClient),

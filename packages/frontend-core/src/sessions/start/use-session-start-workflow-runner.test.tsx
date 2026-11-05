@@ -202,7 +202,7 @@ test.each([
             launchActionId: "build_after_human_request_changes",
             postStartAction: "send_message",
             message: "Continue",
-            beforeStartAction: { action: "human_request_changes", note: "Fix this" },
+            beforeStartAction: { eventId: "human-request-changes" },
           },
           decision: {
             startMode: "fresh",

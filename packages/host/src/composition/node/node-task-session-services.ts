@@ -138,7 +138,6 @@ export const createNodeTaskSessionServices = ({
   const eventServices = createNodeTaskEventServices({
     ...eventServiceInput,
     settingsConfig: taskServiceInput.settingsConfig,
-    taskWorkflows: taskServiceInput.taskWorkflows,
     baseTaskService,
     mergeDetection,
   });

@@ -49,9 +49,6 @@ type OdtMcpTaskAssetReadService = Pick<TaskAssetReadService, "readBatch">;
 type OdtMcpTaskService = Pick<
   TaskService,
   | "applyAgentEvent"
-  | "buildBlocked"
-  | "buildCompleted"
-  | "buildResumed"
   | "createTask"
   | "listTaskArtifacts"
   | "readTaskArtifact"

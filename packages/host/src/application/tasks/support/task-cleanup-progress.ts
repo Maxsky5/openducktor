@@ -27,10 +27,7 @@ const cleanupLabels = {
   task_close: { label: "Close", retryVerb: "close" },
   task_delete: { label: "Delete", retryVerb: "delete" },
   task_reset: { label: "Reset", retryVerb: "reset" },
-  task_reset_implementation: {
-    label: "Reset implementation",
-    retryVerb: "reset implementation",
-  },
+  worktree_reset: { label: "Worktree reset", retryVerb: "the worktree reset" },
   task_worktree_remove: { label: "Remove worktree", retryVerb: "remove worktree" },
 } as const;
 

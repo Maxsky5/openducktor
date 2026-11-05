@@ -73,7 +73,11 @@ export type UseTaskSessionStartFlowResult = {
   ) => Promise<SessionStartWorkflowResult | undefined>;
   onPullRequestGenerate: (taskId: string, launchActionId?: string) => Promise<string | undefined>;
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
-  onHumanRequestChanges: (taskId: string, continuation?: TaskWorkflowContinuation) => void;
+  onHumanFeedback: (
+    taskId: string,
+    eventId: string,
+    continuation?: TaskWorkflowContinuation,
+  ) => void;
   continueTaskWorkflow: ContinueTaskWorkflow;
   onLaunch: (taskId: string, launchActionId: string, committedTask?: TaskCard) => void;
 };
@@ -379,9 +383,9 @@ export function useTaskSessionStartFlow({
     ],
   );
 
-  const onHumanRequestChanges = useCallback(
-    (taskId: string, continuation?: TaskWorkflowContinuation): void => {
-      openHumanReviewFeedback(taskId, { kind: "request_changes", continuation });
+  const onHumanFeedback = useCallback(
+    (taskId: string, eventId: string, continuation?: TaskWorkflowContinuation): void => {
+      openHumanReviewFeedback(taskId, { kind: "event", eventId, continuation });
     },
     [openHumanReviewFeedback],
   );
@@ -395,6 +399,6 @@ export function useTaskSessionStartFlow({
     onLaunch,
     onPullRequestGenerate,
     onOpenSession,
-    onHumanRequestChanges,
+    onHumanFeedback,
   };
 }

@@ -316,20 +316,6 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      resetImplementation(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "task_reset_implementation", input });
-            return taskFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       resetTask(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -363,20 +349,6 @@ describe("createTaskCommandHandlers", () => {
           try: async () => {
             calls.push({ command: "task_metadata_get", input });
             return metadataFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      humanRequestChanges(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "human_request_changes", input });
-            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -473,15 +445,6 @@ describe("createTaskCommandHandlers", () => {
           repoPath: "/repo",
           taskId: "task-1",
           removeWorktree: false,
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.task_reset_implementation?.({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
         }),
       ),
     ).resolves.toBeDefined();
@@ -635,16 +598,6 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toEqual({ ok: true });
     await expect(
       runHandler(
-        handlers.human_request_changes?.({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          note: "Please adjust",
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
         handlers.workflow_artifact_save?.({
           workspaceId: "repo",
           repoPath: "/repo",
@@ -697,10 +650,6 @@ describe("createTaskCommandHandlers", () => {
       {
         command: "task_close",
         input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", removeWorktree: false },
-      },
-      {
-        command: "task_reset_implementation",
-        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "task_reset",
@@ -806,10 +755,6 @@ describe("createTaskCommandHandlers", () => {
       {
         command: "repo_pull_request_sync",
         input: { workspaceId: "repo", repoPath: "/repo" },
-      },
-      {
-        command: "human_request_changes",
-        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", note: "Please adjust" },
       },
       {
         command: "workflow_artifact_save",

@@ -366,14 +366,6 @@ export class HostTaskClient {
     );
   }
 
-  async taskResetImplementation(scope: WorkspaceRef, taskId: string): Promise<TaskCard> {
-    return this.invokeFn(
-      "task_reset_implementation",
-      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
-      taskCardSchema,
-    );
-  }
-
   async taskReset(scope: WorkspaceRef, taskId: string): Promise<TaskCard> {
     return this.invokeFn(
       "task_reset",
@@ -382,6 +374,7 @@ export class HostTaskClient {
     );
   }
 
+  /** Applies a workflow event. The host runs its host effects in order, then commits the event. */
   async taskApplyEvent(scope: WorkspaceRef, taskId: string, eventId: string): Promise<TaskCard> {
     return this.invokeFn(
       "task_apply_event",

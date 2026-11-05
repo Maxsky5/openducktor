@@ -13,13 +13,13 @@ import {
 } from "./task-mutation-progress-failure";
 import type { TaskServiceError } from "./task-service";
 
-export const mapTaskServiceErrors = <A, E>(
-  effect: Effect.Effect<A, E>,
-): Effect.Effect<A, TaskServiceError> => effect.pipe(Effect.mapError(toTaskServiceError));
+export const mapTaskServiceErrors = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, TaskServiceError, R> => effect.pipe(Effect.mapError(toTaskServiceError));
 
-export const mapTaskMutationProgressErrors = <A, E>(
-  effect: Effect.Effect<A, E>,
-): Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure> =>
+export const mapTaskMutationProgressErrors = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure, R> =>
   effect.pipe(
     Effect.mapError((cause) =>
       cause instanceof TaskMutationProgressFailure ? cause : toTaskServiceError(cause),

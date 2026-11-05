@@ -18,8 +18,10 @@ export type WorkflowSheetParams = {
   workspaceId: string | null;
   taskId: string | null;
   action: string | null;
-  /** What the human feedback sheet does: `launch` or `request_changes`. */
+  /** What the human feedback sheet does: `launch` or `event`. */
   mode: string | null;
+  /** The workflow event that the human feedback sheet applies in the `event` mode. */
+  event: string | null;
   /** The session launch action of a quick action, which the start sheet runs instead. */
   launch: string | null;
   continuation: TaskWorkflowContinuation | undefined;
@@ -31,6 +33,7 @@ export const useWorkflowSheetParams = (): WorkflowSheetParams => {
     taskId: string;
     action: string;
     mode: string;
+    event: string;
     launch: string;
     continuation: string;
   }>();
@@ -39,6 +42,7 @@ export const useWorkflowSheetParams = (): WorkflowSheetParams => {
     taskId: routeParam(params.taskId),
     action: routeParam(params.action),
     mode: routeParam(params.mode),
+    event: routeParam(params.event),
     launch: routeParam(params.launch),
     continuation: parseWorkflowContinuation(routeParam(params.continuation)),
   };

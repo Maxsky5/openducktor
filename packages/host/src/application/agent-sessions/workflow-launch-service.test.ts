@@ -641,7 +641,7 @@ test("a reuse launch refuses a source session that waits for blocking input", as
         decision: { startMode: "reuse", sourceSession },
       },
       instruction: { kind: "kickoff", feedback: "Rename the helper." },
-      beforeStartAction: { action: "human_request_changes", note: "Rename the helper." },
+      beforeStartAction: { eventId: "human-request-changes" },
     }),
   );
   expect(result).toMatchObject({

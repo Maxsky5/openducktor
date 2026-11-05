@@ -6,7 +6,7 @@ import {
 } from "../../../effect/host-errors";
 import { TaskAssetError, TaskCreatedAssetError } from "../../../effect/task-asset-error";
 import type { TaskStoreError } from "../../../ports/task-repository-ports";
-import { TaskPolicyError } from "../../../domain/task";
+import type { TaskPolicyError } from "../../../domain/task";
 import { decideTaskTransition, requireWorkflowIssueType } from "../support/task-workflow-events";
 import { commitWorkflowEvent, enrichTask } from "../support/task-workflow-helpers";
 import {
@@ -42,7 +42,7 @@ export const createTaskCrudUseCases = ({
   taskStore,
   taskWorkflows,
 }: CreateTaskServiceInput): Pick<TaskServiceWithMutationProgress, "createTask" | "updateTask"> &
-  Pick<TaskService, "applyTaskEvent" | "applyStartEvent"> => ({
+  Pick<TaskService, "applyStartEvent"> => ({
   createTask(input) {
     return Effect.gen(function* () {
       const { repoPath, task, descriptionAssets } = input;
@@ -90,51 +90,6 @@ export const createTaskCrudUseCases = ({
         .pipe(
           Effect.mapError((error) => preserveCommittedAssetMutation("update-task", taskId, error)),
         );
-      return enrichTask(taskWorkflows.forTask(updated), updated);
-    });
-  },
-
-  applyTaskEvent(input) {
-    return Effect.gen(function* () {
-      const { repoPath, taskId, eventId } = input;
-      const updated = yield* commitWorkflowEvent<TaskPolicyError | HostValidationErrorAggregate>(
-        taskStore,
-        input,
-        (current) => {
-          const workflow = taskWorkflows.forTask(current);
-          const event = workflow.definition.events.find(({ id }) => id === eventId);
-          const actionIds = workflow.definition.actions.flatMap((action) =>
-            action.kind === "event" && action.eventId === eventId ? [action.id] : [],
-          );
-          if (!event || actionIds.length === 0) {
-            return Result.fail(
-              new HostValidationError({
-                field: "eventId",
-                message: `Event ${eventId} is not sent by an event action of task workflow "${workflow.definition.id}".`,
-                details: { repoPath, taskId, eventId },
-              }),
-            );
-          }
-          if (event.effect !== undefined) {
-            return Result.fail(
-              new HostValidationError({
-                field: "eventId",
-                message: `Event ${eventId} runs the ${event.effect} host effect. Use the command of that effect.`,
-                details: { repoPath, taskId, eventId },
-              }),
-            );
-          }
-          const available = workflow.project(current).availableActions;
-          if (!actionIds.some((actionId) => available.includes(actionId))) {
-            return Result.fail(
-              TaskPolicyError.policy(
-                `No action that sends ${eventId} is available for task ${taskId} in ${current.status}.`,
-              ),
-            );
-          }
-          return decideTaskTransition(workflow, eventId, current);
-        },
-      );
       return enrichTask(taskWorkflows.forTask(updated), updated);
     });
   },

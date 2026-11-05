@@ -11,9 +11,8 @@ import type {
   WorkflowDefinition,
   WorkflowReference,
   TaskWorkflowStepState,
+  HostEffectId,
   WorkflowInput,
-  WorkflowAgentEventEffect,
-  WorkflowEventEffect,
   WorkflowNotificationKind,
 } from "@openducktor/contracts";
 import { deepFreeze } from "../deep-freeze";
@@ -55,10 +54,9 @@ export type TaskWorkflowAutomation = Definition["automations"][number] & {
   startMode: AgentSessionStartMode;
 };
 
-/** An agent event with the roles that may send it and its host effect. */
+/** An agent event with the roles that may send it. An agent event has no host effects. */
 export type TaskWorkflowAgentEventDefinition = TaskWorkflowAgentEvent & {
   readonly roles: readonly string[];
-  readonly effect: WorkflowAgentEventEffect | undefined;
 };
 
 /** The Autopilot signal and the source role that a committed transition reports. */
@@ -126,8 +124,8 @@ export type TaskWorkflow = {
   /** The event that a submit sends: the event of the review verdict, or the document save event. */
   artifactSubmitEvent(code: string, verdict: string | undefined): string | undefined;
   emptyArtifactSummary(): TaskArtifactSummary;
-  /** The event of a host effect. A host command fails when the workflow has no event for it. */
-  effectEvent(effect: WorkflowEventEffect): string | undefined;
+  /** The host effects that the host runs, in order, before it commits the event. */
+  eventEffects(eventId: string): readonly HostEffectId[];
   /** The events that agents of the role may send, in declaration order. */
   agentEvents(roleId: string): readonly TaskWorkflowAgentEvent[];
   /** The agent declaration of an event, or undefined when agents cannot send it. */
@@ -152,10 +150,6 @@ export type TaskWorkflow = {
   readonly approvalAction: TaskWorkflowAction | undefined;
   /** Whether the approval action of the workflow is available for the task. */
   approvalAvailable(task: TaskFacts): boolean;
-  /** The host effect of an event action, if any. */
-  actionEffect(actionId: string): WorkflowEventEffect | undefined;
-  /** The event actions whose event runs the host effect. */
-  effectActions(effect: WorkflowEventEffect): readonly string[];
   /** The agent step of a role, if the workflow has one. */
   agentStep(roleId: string): TaskWorkflowAgentStep | undefined;
   /** The role whose session a view action with a step opens. */
@@ -209,11 +203,8 @@ export const createTaskWorkflow = (
     }),
   );
   const agentEventsById = new Map(
-    definition.events.flatMap(({ id, agent, effect }) =>
-      // SAFETY: the definition check rejects an agent event with another effect.
-      agent
-        ? [[id, deepFreeze({ id, ...agent, effect: effect as WorkflowAgentEventEffect })] as const]
-        : [],
+    definition.events.flatMap(({ id, agent }) =>
+      agent ? [[id, deepFreeze({ id, ...agent })] as const] : [],
     ),
   );
   const agentEventsByRole = new Map(
@@ -250,11 +241,6 @@ export const createTaskWorkflow = (
   const artifactsById = new Map(definition.artifacts.map((artifact) => [artifact.id, artifact]));
   const eventsById = new Map(definition.events.map((event) => [event.id, event]));
   const event = lookup(definition.id, "event", eventsById);
-  const effectEvents = new Map(
-    definition.events.flatMap((entry) =>
-      entry.effect !== undefined ? [[entry.effect, entry.id] as const] : [],
-    ),
-  );
   const agentSteps = definition.steps.filter((step): step is AgentStep => step.kind === "agent");
   const stepByRole = new Map(agentSteps.map((step) => [step.roleId, step]));
   if (stepByRole.size !== agentSteps.length) {
@@ -291,15 +277,6 @@ export const createTaskWorkflow = (
     definition.actions.map((entry) => [entry.id, entry] as const),
   );
   const approvalAction = definition.actions.find(({ kind }) => kind === "approval");
-  const actionEffects = new Map(
-    definition.actions.flatMap((entry) => {
-      const effect = entry.kind === "event" ? eventsById.get(entry.eventId)?.effect : undefined;
-      return effect ? [[entry.id, effect] as const] : [];
-    }),
-  );
-  const effectActions = new Map<WorkflowEventEffect, string[]>();
-  for (const [actionId, effect] of actionEffects)
-    effectActions.set(effect, [...(effectActions.get(effect) ?? []), actionId]);
   const stepsById = new Map(definition.steps.map((step) => [step.id, step]));
   const viewActionRoles = new Map(
     definition.actions.flatMap((entry) => {
@@ -402,7 +379,7 @@ export const createTaskWorkflow = (
       return artifact?.saveEventId;
     },
     emptyArtifactSummary: inputs.emptyArtifactSummary,
-    effectEvent: (effect) => effectEvents.get(effect),
+    eventEffects: (eventId) => event(eventId).effects ?? [],
     agentEvents,
     agentEvent: (eventId) => agentEventsById.get(eventId),
     launchAfterEvent: (eventId, task, launchActionIds) => {
@@ -443,8 +420,6 @@ export const createTaskWorkflow = (
     approvalAction,
     approvalAvailable: (task) =>
       approvalAction !== undefined && project(task).availableActions.includes(approvalAction.id),
-    actionEffect: (actionId) => actionEffects.get(actionId),
-    effectActions: (effect) => effectActions.get(effect) ?? [],
     agentStep: (roleId) => stepByRole.get(roleId),
     viewActionRole: (actionId) => viewActionRoles.get(actionId),
     sessionViews,

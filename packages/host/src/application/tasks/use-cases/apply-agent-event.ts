@@ -8,10 +8,7 @@ import { decideTaskTransition } from "../support/task-workflow-events";
 import { commitWorkflowEvent, enrichTask } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
-/**
- * Commits an agent event that has no host effect beyond its transition. The command of a host
- * effect commits the other agent events.
- */
+/** Commits an agent event. An agent event has no host effects, so it only changes the state. */
 export const createTaskAgentEventUseCase = ({
   taskStore,
   taskWorkflows,
@@ -24,12 +21,11 @@ export const createTaskAgentEventUseCase = ({
         input,
         (current) => {
           const workflow = taskWorkflows.forTask(current);
-          const event = workflow.agentEvent(eventId);
-          if (!event || event.effect !== undefined)
+          if (!workflow.agentEvent(eventId))
             return Result.fail(
               new HostValidationError({
                 field: "eventId",
-                message: `Event ${eventId} is not an agent event without a host effect in task workflow "${workflow.definition.id}".`,
+                message: `Event ${eventId} is not an agent event of task workflow "${workflow.definition.id}".`,
                 details: { repoPath, taskId, eventId },
               }),
             );

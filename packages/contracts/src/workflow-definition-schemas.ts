@@ -300,26 +300,18 @@ export const workflowEventGuardSchema = z.strictObject({
 export type WorkflowEventGuard = z.infer<typeof workflowEventGuardSchema>;
 
 /**
- * The host effects. A host command finds its event through its effect and runs the effect when the
- * event admits the task.
+ * The host effects. The host owns them, and any workflow event can run them. The host runs the
+ * effects of an event in order, then commits the event. When an effect fails, the host commits
+ * nothing.
+ *
+ * - `worktree.reset`: stops the sessions of the worktree roles, runs the cleanup script, removes
+ *   their other worktrees and branches, restores the task worktree to its start point, and clears
+ *   the sessions of the worktree roles, the review artifacts, the pull request link, and the merge
+ *   record.
  */
-export const workflowEventEffectValues = [
-  "build.blocked",
-  "build.resumed",
-  "build.completed",
-  "review.request_changes",
-  "implementation.reset",
-] as const;
-export const workflowEventEffectSchema = z.enum(workflowEventEffectValues);
-export type WorkflowEventEffect = z.infer<typeof workflowEventEffectSchema>;
-
-/** The effects of an event that agents may send. An agent event can also have no effect. */
-export const workflowAgentEventEffectValues = [
-  "build.blocked",
-  "build.resumed",
-  "build.completed",
-] as const satisfies readonly WorkflowEventEffect[];
-export type WorkflowAgentEventEffect = (typeof workflowAgentEventEffectValues)[number];
+export const HOST_EFFECT_IDS = ["worktree.reset"] as const;
+export const hostEffectIdSchema = z.enum(HOST_EFFECT_IDS);
+export type HostEffectId = z.infer<typeof hostEffectIdSchema>;
 
 /**
  * An event that agents of the roles may send with `odt_apply_workflow_event`. The role prompt
@@ -332,13 +324,17 @@ export const workflowAgentEventSchema = z.strictObject({
 });
 export type WorkflowAgentEvent = z.infer<typeof workflowAgentEventSchema>;
 
-/** Guards run in order after the source check. The first matching outcome decides the result. */
+/**
+ * Guards run in order after the source check. The first matching outcome decides the result. The
+ * host runs the effects in order before it commits the event. Without effects, the event only
+ * changes the state. An agent event cannot have effects.
+ */
 export const workflowEventDefinitionSchema = z.strictObject({
   id: workflowIdSchema,
   from: z.array(workflowIdSchema).min(1),
   guards: z.array(workflowEventGuardSchema),
   outcomes: z.array(workflowEventOutcomeSchema).min(1),
-  effect: workflowEventEffectSchema.optional(),
+  effects: z.array(hostEffectIdSchema).optional(),
   agent: workflowAgentEventSchema.optional(),
 });
 export type WorkflowEventDefinition = z.infer<typeof workflowEventDefinitionSchema>;

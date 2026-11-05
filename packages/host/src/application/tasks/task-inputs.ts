@@ -96,7 +96,3 @@ export type WorkflowArtifactSaveInput = WorkflowArtifactInput & {
   /** The role of the acting session, or `user`. */
   updatedBy: string;
 };
-
-export type OptionalNoteInput = TaskIdInput & {
-  note?: string;
-};

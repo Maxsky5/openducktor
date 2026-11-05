@@ -104,6 +104,15 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
           selectWhen: revised,
           requiresWorktree: true,
         },
+        {
+          id: "write_feedback",
+          label: "Apply feedback",
+          startModes: ["fresh", "reuse"],
+          defaultStartMode: "reuse",
+          template: { kind: "kickoff", id: "messages.write_feedback" },
+          context: "human_feedback",
+          requiresWorktree: true,
+        },
       ],
     },
     {
@@ -155,7 +164,15 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       kind: "event",
       label: "Request rewrite",
       eventId: "request-rewrite",
+      launchActionIds: ["write_feedback"],
       availableWhen: { stateIn: ["approval"] },
+    },
+    {
+      id: "drop_review",
+      kind: "event",
+      label: "Drop review",
+      eventId: "drop-review",
+      availableWhen: { stateIn: ["writing", "paused", "reviewing", "approval"] },
     },
     {
       id: "hold",
@@ -210,7 +227,6 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
         { when: { stateIn: ["reviewing"] }, to: null },
         { when: true, to: "reviewing", signal: "draftSubmitted", sourceRole: "writer" },
       ],
-      effect: "build.completed",
       agent: { roles: ["writer"], note: "optional", description: "Submit the draft for review." },
     },
     {
@@ -218,7 +234,6 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       from: ["writing", "paused"],
       guards: [],
       outcomes: [{ when: true, to: "paused" }],
-      effect: "build.blocked",
       agent: { roles: ["writer"], note: "required", description: "Pause the writing." },
     },
     {
@@ -226,7 +241,6 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       from: ["paused", "writing"],
       guards: [],
       outcomes: [{ when: true, to: "writing" }],
-      effect: "build.resumed",
       agent: { roles: ["writer"], note: "optional", description: "Resume the writing." },
     },
     {
@@ -234,14 +248,13 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       from: ["approval"],
       guards: [],
       outcomes: [{ when: true, to: "writing" }],
-      effect: "review.request_changes",
     },
     {
       id: "drop-review",
       from: ["writing", "paused", "reviewing", "approval"],
       guards: [],
       outcomes: [{ when: true, to: "writing" }],
-      effect: "implementation.reset",
+      effects: ["worktree.reset"],
     },
   ],
   signals: [
@@ -336,6 +349,7 @@ export const reviewTaskPromptTemplates: readonly PromptTemplate[] = [
   template("messages.write_start", "kickoff", "Write the draft for {{task.id}}."),
   template("messages.write_revise", "kickoff", "Revise the draft for {{task.id}}."),
   template("messages.edit_review", "kickoff", "Review the draft of {{task.id}}."),
+  template("messages.write_feedback", "kickoff", "Apply this feedback: {{humanFeedback}}"),
 ];
 
 export const createReviewTaskWorkflow = (): TaskWorkflow =>

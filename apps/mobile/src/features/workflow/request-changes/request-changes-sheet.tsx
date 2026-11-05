@@ -14,12 +14,12 @@ import { useWorkflowSheetParams, WorkflowSheetFrame } from "../workflow-sheet-fr
 const TITLE = "Request changes";
 
 /**
- * Request Changes: the feedback for the Builder, then the session start choices of the Builder
+ * The human feedback sheet: the feedback for the agent, then the session start choices of the
  * session that receives it.
  */
 export function RequestChangesRoute(): ReactElement {
-  const { workspaceId, taskId, mode, launch, continuation } = useWorkflowSheetParams();
-  const request = feedbackRequest(mode, launch, continuation);
+  const { workspaceId, taskId, mode, event, launch, continuation } = useWorkflowSheetParams();
+  const request = feedbackRequest(mode, event, launch, continuation);
   return (
     <WorkflowSheetFrame title={TITLE} workspaceId={workspaceId} taskId={taskId}>
       {(workspace, id) => (
@@ -32,10 +32,11 @@ export function RequestChangesRoute(): ReactElement {
 /** The feedback request of the route params. A link without a valid mode has none. */
 const feedbackRequest = (
   mode: string | null,
+  event: string | null,
   launch: string | null,
   continuation: TaskWorkflowContinuation | undefined,
 ): HumanReviewFeedbackRequest | null => {
-  if (mode === "request_changes") return { kind: "request_changes", continuation };
+  if (mode === "event" && event) return { kind: "event", eventId: event, continuation };
   if (mode === "launch" && launch) return { kind: "launch", launchActionId: launch };
   return null;
 };
@@ -61,8 +62,8 @@ function RequestChangesContent({
     run: () => {
       if (!task) return;
       if (!request) throw new Error("The feedback action is missing. Open the task action again.");
-      if (request.kind === "request_changes")
-        flow.onHumanRequestChanges(task.id, request.continuation);
+      if (request.kind === "event")
+        flow.onHumanFeedback(task.id, request.eventId, request.continuation);
       else flow.onLaunch(task.id, request.launchActionId);
     },
     anyOpen: feedback !== null || start?.open === true,

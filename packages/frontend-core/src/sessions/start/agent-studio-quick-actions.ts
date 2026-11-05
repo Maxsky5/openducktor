@@ -21,6 +21,7 @@ import {
   CLOSE_TASK_ACTION,
   type CoreTaskAction,
 } from "../../tasks/workflow/core-task-actions";
+import { eventActionStep } from "../../tasks/workflow/task-action-destination";
 import type { AgentSessionSummary } from "../agent-sessions-store";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 
@@ -151,19 +152,17 @@ export const buildAgentStudioQuickActions = (
       taskActionLabel(id, task, { surface: "studio" }),
     );
   }
-  // One record per available task action. Request Changes with following launches places itself
-  // among the session starts, and its launches leave the step starts.
+  // One record per available task action. An event action whose following launch collects human
+  // feedback places itself among the session starts, and its launches leave the step starts.
   const taskEntries = evaluator
     .orderActions(input, task.availableActions)
     .filter((id) => !launchActionIds.has(id))
     .map((id) => {
       const action = task.taskWorkflow.action(id);
-      const effect = task.taskWorkflow.actionEffect(id);
+      const feedback = eventActionStep(task.taskWorkflow, id) === "feedback";
       const followingLaunches =
-        effect === "review.request_changes" && action.kind === "event"
-          ? (action.launchActionIds ?? [])
-          : [];
-      return { id, action, effect, follows: followingLaunches.length > 0, followingLaunches };
+        feedback && action.kind === "event" ? (action.launchActionIds ?? []) : [];
+      return { id, action, feedback, follows: followingLaunches.length > 0, followingLaunches };
     });
   const effectLaunches = new Set(taskEntries.flatMap(({ followingLaunches }) => followingLaunches));
   for (const step of task.taskWorkflow.definition.steps) {
@@ -187,12 +186,12 @@ export const buildAgentStudioQuickActions = (
       mergedTarget: params.mergedTarget,
       disabled: false,
     });
-  for (const { id, action, effect, follows } of taskEntries) {
+  for (const { id, action, feedback, follows } of taskEntries) {
     if (!actionShowsOn(action, "studio")) continue;
     const approvalLeads =
       action.kind === "approval" &&
       hasNoEnabledGitProvider(params.gitProviderContext, params.gitProviderReadError);
-    const placement = approvalLeads || effect === "review.request_changes" ? "leading" : "trailing";
+    const placement = approvalLeads || feedback ? "leading" : "trailing";
     const option: AgentStudioTaskQuickActionOption = {
       kind: "task_action",
       id: `task:${id}`,

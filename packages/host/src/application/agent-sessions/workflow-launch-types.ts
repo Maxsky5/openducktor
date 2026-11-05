@@ -34,7 +34,7 @@ export type WorkflowLaunchPreparationDependencies = {
   settingsConfig: Pick<SettingsConfigPort, "readGlobalConfig">;
   tasks: Pick<
     TaskService,
-    "agentSessionsList" | "agentSessionUpdateModel" | "humanRequestChanges" | "updateTask"
+    "agentSessionsList" | "agentSessionUpdateModel" | "applyTaskEvent" | "updateTask"
   >;
   taskReader: Pick<TaskStorePort, "getTask">;
   taskWorkflows: TaskWorkflowResolver;

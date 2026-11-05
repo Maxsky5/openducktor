@@ -69,8 +69,12 @@ export const workflowLaunchRequestSchema = z
         .strict(),
     ]),
     targetBranch: gitTargetBranchSchema.optional(),
+    /**
+     * A workflow event that the host commits before the session starts. Only a launch with the
+     * `human_feedback` context accepts it. The note is the feedback of the person.
+     */
     beforeStartAction: z
-      .object({ action: z.literal("human_request_changes"), note: z.string() })
+      .object({ eventId: z.string().trim().min(1) })
       .strict()
       .optional(),
   })

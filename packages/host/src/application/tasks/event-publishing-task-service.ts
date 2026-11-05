@@ -1,8 +1,7 @@
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type { TaskChangeSet, WorkspaceRef } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskSessionOwnershipCommittedError } from "../agent-sessions/task-session-ownership-error";
-import { removedArtifactChanges, workflowArtifactChange } from "./artifact-changes";
+import { removedArtifactChanges } from "./artifact-changes";
 import {
   createArtifactPublishingMethods,
   type ArtifactPublishingMethods,
@@ -22,7 +21,6 @@ import type {
 
 export type CreateEventPublishingTaskServiceInput = {
   taskService: TaskServiceWithMutationProgress;
-  taskWorkflows: TaskWorkflowResolver;
   taskSyncService: Pick<
     TaskSyncService,
     | "runStatusMutation"
@@ -57,7 +55,6 @@ export type EventPublishingTaskService = Omit<TaskService, keyof ArtifactPublish
 
 export const createEventPublishingTaskService = ({
   taskService,
-  taskWorkflows,
   taskSyncService,
 }: CreateEventPublishingTaskServiceInput): EventPublishingTaskService => {
   const agentSessionUpdateModelDeferredPublication: EventPublishingTaskService["agentSessionUpdateModelDeferredPublication"] =
@@ -301,19 +298,6 @@ export const createEventPublishingTaskService = ({
         changeForTask(input.taskId),
         taskService.closeTask(input),
       ),
-    resetImplementation: (input) =>
-      publishAfterMutation(
-        "reset-implementation",
-        input,
-        changeForTask(input.taskId),
-        taskService.resetImplementation(input),
-        {
-          artifactChanges: (task) =>
-            taskWorkflows
-              .forTask(task)
-              .reviewArtifactCodes.map((code) => workflowArtifactChange(input.taskId, code, true)),
-        },
-      ),
     resetTask: (input) =>
       publishAfterMutation(
         "reset-task",
@@ -338,7 +322,8 @@ export const createEventPublishingTaskService = ({
         input,
         changeForTask(input.taskId),
         taskService.applyTaskEvent(input),
-      ),
+        { artifactChanges: (result) => result.artifactChanges },
+      ).pipe(Effect.map(({ task }) => task)),
     applyStartEvent: (input) =>
       publishAfterMutation(
         "apply-task-event",
@@ -352,34 +337,6 @@ export const createEventPublishingTaskService = ({
         input,
         changeForTask(input.taskId),
         taskService.applyAgentEvent(input),
-      ),
-    buildBlocked: (input) =>
-      publishAfterMutation(
-        "build-blocked",
-        input,
-        changeForTask(input.taskId),
-        taskService.buildBlocked(input),
-      ),
-    buildResumed: (input) =>
-      publishAfterMutation(
-        "build-resumed",
-        input,
-        changeForTask(input.taskId),
-        taskService.buildResumed(input),
-      ),
-    buildCompleted: (input) =>
-      publishAfterMutation(
-        "build-completed",
-        input,
-        changeForTask(input.taskId),
-        taskService.buildCompleted(input),
-      ),
-    humanRequestChanges: (input) =>
-      publishAfterMutation(
-        "human-request-changes",
-        input,
-        changeForTask(input.taskId),
-        taskService.humanRequestChanges(input),
       ),
     repoPullRequestSync: (input) =>
       taskSyncService

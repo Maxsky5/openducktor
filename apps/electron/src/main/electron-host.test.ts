@@ -1700,7 +1700,7 @@ describe("createElectronHostCommandRouter", () => {
     ).toMatchObject({ id: "task-1", status: "open" });
   });
 
-  test("resets a task implementation through the host router", async () => {
+  test("resets a task implementation with its workflow event through the host router", async () => {
     const resetImplementationTaskStore = createTaskStore();
     const resetImplementationRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -1726,10 +1726,11 @@ describe("createElectronHostCommandRouter", () => {
       },
     });
     expect(
-      await resetImplementationRouter.invoke("task_reset_implementation", {
+      await resetImplementationRouter.invoke("task_apply_event", {
         workspaceId: "repo",
         repoPath,
         taskId: "task-1",
+        eventId: "reset-implementation",
       }),
     ).toMatchObject({ id: "task-1", status: "ready_for_dev" });
   });
@@ -2226,11 +2227,11 @@ describe("createElectronHostCommandRouter", () => {
       ).toMatchObject({ markdown, revision: 1 });
     }
     expect(
-      await reviewRouter.invoke("human_request_changes", {
+      await reviewRouter.invoke("task_apply_event", {
         workspaceId: "repo",
         repoPath,
         taskId: "task-1",
-        note: "Please adjust",
+        eventId: "human-request-changes",
       }),
     ).toMatchObject({
       id: "task-1",

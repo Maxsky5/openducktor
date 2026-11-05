@@ -67,7 +67,6 @@ const createTasksState = (tasks: TaskCard[]): TasksStateContextValue => ({
   removeTaskWorktree: async () => {},
   resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
   resetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
-  humanRequestChangesTask: async () => {},
 });
 
 let runIntent: ((intent: WorkspaceIntent) => void) | null = null;

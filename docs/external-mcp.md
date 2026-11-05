@@ -334,7 +334,7 @@ The MCP stdio input cap is 64 MiB to accept escaped text within the decoded limi
 { "taskId": "repo-123", "eventId": "build-blocked", "note": "The API contract needs a product decision." }
 ```
 
-A workflow declares the events that agents can send. Each event names the roles that can send it, a description, and if it requires a note. The system prompt of a role lists its events. The built-in workflow lets the Builder role send `build-blocked`, `build-resumed`, and `build-completed`. `build-blocked` requires a note.
+A workflow declares the events that agents can send. Each event names the roles that can send it, a description, and if it requires a note. The system prompt of a role lists its events. An agent event has no host effects, so it only changes the task state. The built-in workflow lets the Builder role send `build-blocked`, `build-resumed`, and `build-completed`. `build-blocked` requires a note.
 
 The host checks each call:
 
@@ -344,7 +344,7 @@ The host checks each call:
 - A required note must be present.
 - The workflow guards of the event apply. A denial fails with `TASK_TRANSITION_NOT_ALLOWED`.
 
-The host runs the effect of the event. The host does not store the note. The result is `{ task, eventId, note? }` and echoes the note.
+The host commits the event through the same workflow event commit as the other events, so a local merge that waits for its publication blocks it. The host does not store the note. The result is `{ task, eventId, note? }` and echoes the note.
 
 ## Ownership
 

@@ -15,6 +15,7 @@ import {
   CLOSE_TASK_ACTION,
   type CoreTaskAction,
 } from "../workflow/core-task-actions";
+import { eventActionStep } from "../workflow/task-action-destination";
 import type { KanbanTaskActivityState, KanbanTaskSession } from "./kanban-task-activity";
 import {
   resolveHistoricalSessionRoles,
@@ -92,10 +93,10 @@ export const getTaskFooter = ({
     const { kind } = task.taskWorkflow.action(action);
     if (kind === "session") return pendingState?.isSessionStarting ?? false;
     if (kind === "approval") return pendingState?.approvingTaskId === task.id;
-    switch (task.taskWorkflow.actionEffect(action)) {
-      case "review.request_changes":
+    switch (eventActionStep(task.taskWorkflow, action)) {
+      case "feedback":
         return pendingState?.requestingChangesTaskId === task.id;
-      case "implementation.reset":
+      case "confirm":
         return pendingState?.resettingImplementationTaskId === task.id;
       default:
         return false;

@@ -109,7 +109,8 @@ function ApproveTaskContent({
     tasks,
     requestPullRequestGeneration: flow.onPullRequestGenerate,
     closeTask,
-    openResetImplementation: (id) => openResetImplementation(id, { closeDetailsAfterReset: true }),
+    openResetImplementation: (id, eventId) =>
+      openResetImplementation(id, eventId, { closeDetailsAfterReset: true }),
     onResolveGitConflict: resolveConflict,
     showPullRequestCreated,
     showGitProviderContextLoadFailure,

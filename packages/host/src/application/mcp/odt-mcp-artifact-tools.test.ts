@@ -106,7 +106,6 @@ beforeEach(async () => {
     taskStore: harness.store,
   });
   service = createEventPublishingTaskService({
-    taskWorkflows: builtinTaskWorkflows,
     taskService: base,
     taskSyncService: createTaskSyncService({
       taskService: base,

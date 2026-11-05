@@ -6,7 +6,7 @@ import {
   type WorkflowAutomationDefinition,
   type WorkflowCondition,
   type WorkflowDefinition,
-  type WorkflowEventEffect,
+  type HostEffectId,
   type WorkflowEventGuard,
   type WorkflowIssueTypeDefinition,
   type WorkflowLaunchActionDefinition,
@@ -51,7 +51,7 @@ type SpecPlanBuildEvent = {
   from: SpecPlanBuildStateId[];
   guards: WorkflowEventGuard[];
   outcomes: SpecPlanBuildOutcome[];
-  effect?: WorkflowEventEffect;
+  effects?: HostEffectId[];
   agent?: WorkflowAgentEvent & { roles: BuiltinRoleId[] };
 };
 
@@ -127,7 +127,6 @@ const specPlanBuildEvents = {
     from: activeOrReview.stateIn,
     guards: [],
     outcomes: moveTo("blocked"),
-    effect: "build.blocked",
     agent: {
       roles: ["build"],
       note: "required",
@@ -138,7 +137,6 @@ const specPlanBuildEvents = {
     from: nonClosedStates,
     guards: [planningComplete],
     outcomes: moveTo("in_progress"),
-    effect: "build.resumed",
     agent: {
       roles: ["build"],
       note: "optional",
@@ -158,7 +156,6 @@ const specPlanBuildEvents = {
       },
       { when: true, to: "ai_review", signal: "taskProgressedToAiReview" },
     ],
-    effect: "build.completed",
     agent: {
       roles: ["build"],
       note: "optional",
@@ -183,7 +180,6 @@ const specPlanBuildEvents = {
     from: ["in_progress", ...humanReview.stateIn],
     guards: [],
     outcomes: moveTo("in_progress"),
-    effect: "review.request_changes",
   },
   "reset-implementation": {
     from: activeOrReview.stateIn,
@@ -193,7 +189,7 @@ const specPlanBuildEvents = {
       { when: specPresent, to: "spec_ready" },
       { when: true, to: "open" },
     ],
-    effect: "implementation.reset",
+    effects: ["worktree.reset"],
   },
 } satisfies Record<string, SpecPlanBuildEvent>;
 

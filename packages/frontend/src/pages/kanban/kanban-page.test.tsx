@@ -115,7 +115,13 @@ const sendAgentMessageMock = mock(async () => {
   return null;
 });
 const updateAgentSessionModelMock = mock(async () => {});
-const humanRequestChangesTaskMock = mock(async () => {});
+const taskApplyEventMock = mock(async () => {
+  currentTaskFixture = createTaskCardFixture({
+    ...currentTaskFixture,
+    status: "in_progress",
+  });
+  return toWireTaskCard(currentTaskFixture);
+});
 const deleteTaskMock = mock(async () => {});
 const resetTaskImplementationMock = mock(async (taskId: string) =>
   createWireTaskCardFixture({ id: taskId }),
@@ -425,7 +431,6 @@ const createTasksStateValue = (
   removeTaskWorktree: async () => {},
   resetTaskImplementation: resetTaskImplementationMock,
   resetTask: resetTaskMock,
-  humanRequestChangesTask: humanRequestChangesTaskMock,
 });
 
 const createChecksStateValue = (): ChecksStateContextValue => ({
@@ -884,13 +889,7 @@ const kanbanTest = (name: string, fn: () => Promise<void> | void): void => {
 describe("KanbanPage session start modal flow", () => {
   beforeEach(() => {
     hostClientFakes = {
-      humanRequestChanges: async () => {
-        currentTaskFixture = createTaskCardFixture({
-          ...currentTaskFixture,
-          status: "in_progress",
-        });
-        return toWireTaskCard(currentTaskFixture);
-      },
+      taskApplyEvent: taskApplyEventMock,
       tasksList: async () => [toWireTaskCard(currentTaskFixture)],
       tasksListAll: async () => [toWireTaskCard(currentTaskFixture)],
     };
@@ -953,7 +952,7 @@ describe("KanbanPage session start modal flow", () => {
     startAgentSessionMock.mockClear();
     sendAgentMessageMock.mockClear();
     updateAgentSessionModelMock.mockClear();
-    humanRequestChangesTaskMock.mockClear();
+    taskApplyEventMock.mockClear();
     deleteTaskMock.mockClear();
     resetTaskImplementationMock.mockClear();
     resetTaskMock.mockClear();
@@ -1561,7 +1560,7 @@ describe("KanbanPage session start modal flow", () => {
       await runTaskAction(renderer, "human_request_changes");
     });
 
-    expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
+    expect(taskApplyEventMock).not.toHaveBeenCalled();
     expect(renderer.getHumanReviewFeedbackModalModel()?.open).toBe(true);
     expect(renderer.getHumanReviewFeedbackModalModel()?.message).toBe("");
     expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1601,7 +1600,7 @@ describe("KanbanPage session start modal flow", () => {
       await waitForSessionStartModalReady(renderer);
 
       expect(startAgentSessionMock).not.toHaveBeenCalled();
-      expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
+      expect(taskApplyEventMock).not.toHaveBeenCalled();
       expect(sendAgentMessageMock).not.toHaveBeenCalled();
       expect(renderer.getSessionStartModalModel()?.open).toBe(true);
       expect(renderer.getSessionStartModalModel()?.selectedStartMode).toBe("reuse");
@@ -1795,7 +1794,7 @@ describe("KanbanPage session start modal flow", () => {
       await Promise.resolve();
     });
 
-    expect(resetTaskImplementationMock).toHaveBeenCalledWith("TASK-123");
+    expect(resetTaskImplementationMock).toHaveBeenCalledWith("TASK-123", "reset-implementation");
     await waitFor(() => {
       expect(renderer.getResetImplementationModalModel()).toBeNull();
     });

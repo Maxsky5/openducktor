@@ -6,6 +6,7 @@ import {
   workflowRoleCatalog,
 } from "@openducktor/workflows";
 import {
+  createReviewTaskWorkflow,
   createWorkflowTaskCardFixture,
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
@@ -330,7 +331,7 @@ describe("useKanbanSessionStartFlow", () => {
       workspaceGetRepoConfig: async () => repoConfig,
       workspaceApplyAgentStudioStateAction: applyAgentStudioStateAction,
       workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-      humanRequestChanges: async () =>
+      taskApplyEvent: async () =>
         toWireTaskCard(createTaskCardFixture({ id: "TASK-1", status: "in_progress" })),
       tasksList: async () => [
         toWireTaskCard(createTaskCardFixture({ id: "TASK-1", status: "in_progress" })),
@@ -983,105 +984,188 @@ describe("useKanbanSessionStartFlow", () => {
     { otherFeedbackLaunch: false, denied: false },
     { otherFeedbackLaunch: true, denied: false },
     { otherFeedbackLaunch: false, denied: true },
-  ])("requests changes without a following session %j", async ({ otherFeedbackLaunch, denied }) => {
-    const toastErrorMock = spyOn(toast, "error").mockImplementation(() => "feedback-error");
-    const definition = reviewTaskDefinition();
-    definition.actions.push({
-      id: "send_back",
-      label: "Send back",
-      kind: "event",
-      eventId: "request-rewrite",
-      availableWhen: { stateIn: ["approval"] },
-    });
-    if (otherFeedbackLaunch) {
-      const step = definition.steps.find(
-        (step) => step.kind === "agent" && step.roleId === "writer",
+  ])(
+    "applies a feedback event without a following session %j",
+    async ({ otherFeedbackLaunch, denied }) => {
+      const toastErrorMock = spyOn(toast, "error").mockImplementation(() => "feedback-error");
+      const definition = reviewTaskDefinition();
+      if (otherFeedbackLaunch) {
+        const step = definition.steps.find(
+          (step) => step.kind === "agent" && step.roleId === "writer",
+        );
+        if (step?.kind === "agent") step.launchActions[1]!.context = "human_feedback";
+      }
+      const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
+      const board = resolveWorkflowBoard(
+        { states: definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
+        [workflow],
       );
-      if (step?.kind === "agent") step.launchActions[1]!.context = "human_feedback";
-    }
-    const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
+      const task = createWorkflowTaskCardFixture(workflow, board, {
+        id: "TASK-1",
+        status: "approval",
+      });
+      const committed = createWorkflowTaskCardFixture(workflow, board, {
+        id: task.id,
+        status: "writing",
+      });
+      const mutation = createDeferred<ReturnType<typeof toWireTaskCard>>();
+      const taskApplyEvent = mock(() => mutation.promise);
+      const tasksList = mock(async () => [toWireTaskCard(committed)]);
+      hostClientFakes = {
+        ...hostClientFakes,
+        taskApplyEvent,
+        tasksList,
+        workflowCatalogGet: async () => ({
+          hostInstanceId: "feedback-host",
+          roles: [...workflowRoleCatalog([task.taskWorkflow])],
+          workflows: [taskWorkflowDescriptor(task.taskWorkflow)],
+        }),
+        workspaceWorkflowGet: async () => ({
+          hostInstanceId: "feedback-host",
+          board,
+          workflows: [task.workflow],
+          newTaskWorkflow: task.workflow,
+        }),
+      };
+      const runSessionStartWorkflow = mock(createRunSessionStartWorkflow());
+      const harness = createHookHarness({
+        ...createBaseArgs(),
+        tasks: [task],
+        sessions: [],
+        runSessionStartWorkflow,
+      });
+      try {
+        await harness.mount();
+        // A feedback event without a continuation has no launch, so the form applies it alone.
+        await harness.run((flow) => flow.onHumanFeedback(task.id, "request-rewrite"));
+        expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
+        await harness.run((flow) =>
+          flow.humanReviewFeedbackModal?.onMessageChange("  Rewrite the introduction.  "),
+        );
+        let submitted: Promise<void> | undefined;
+        await harness.run((flow) => {
+          submitted = flow.humanReviewFeedbackModal?.onConfirm();
+        });
+        expect(harness.getLatest().humanReviewFeedbackModal?.isSubmitting).toBe(true);
+        expect(harness.getLatest().sessionStartModal).toBeNull();
+        expect(taskApplyEvent).toHaveBeenCalledWith(
+          { workspaceId: "workspace-1", repoPath: "/repo" },
+          task.id,
+          "request-rewrite",
+        );
+        await harness.run(async () => {
+          if (denied) mutation.reject(new Error("The host denied this review."));
+          else mutation.resolve(toWireTaskCard(committed));
+          await submitted;
+        });
+        if (denied) {
+          expect(harness.getLatest().humanReviewFeedbackModal?.message).toBe(
+            "  Rewrite the introduction.  ",
+          );
+          expect(harness.getLatest().humanReviewFeedbackModal?.isSubmitting).toBe(false);
+          expect(tasksList).not.toHaveBeenCalled();
+          expect(toastErrorMock).toHaveBeenCalledWith("Failed to submit feedback.", {
+            description: "The host denied this review.",
+          });
+        } else {
+          expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();
+          // The task stream updates the views, so the command reads no task list.
+          expect(tasksList).not.toHaveBeenCalled();
+        }
+        expect(taskApplyEvent).toHaveBeenCalledTimes(1);
+        expect(runSessionStartWorkflow).not.toHaveBeenCalled();
+        expect(harness.getLatest().sessionStartModal).toBeNull();
+      } finally {
+        mutation.resolve(toWireTaskCard(committed));
+        await harness.unmount();
+        toastErrorMock.mockRestore();
+      }
+    },
+  );
+
+  test("a custom feedback event opens the form and commits its event with the session start", async () => {
+    const workflow = createReviewTaskWorkflow();
     const board = resolveWorkflowBoard(
-      { states: definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
+      { states: workflow.definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
       [workflow],
     );
     const task = createWorkflowTaskCardFixture(workflow, board, {
       id: "TASK-1",
       status: "approval",
     });
-    const committed = createWorkflowTaskCardFixture(workflow, board, {
-      id: task.id,
-      status: "writing",
-    });
-    const mutation = createDeferred<ReturnType<typeof toWireTaskCard>>();
-    const humanRequestChanges = mock(() => mutation.promise);
-    const tasksList = mock(async () => [toWireTaskCard(committed)]);
+    const taskApplyEvent = mock(async () => toWireTaskCard(task));
     hostClientFakes = {
       ...hostClientFakes,
-      humanRequestChanges,
-      tasksList,
+      taskApplyEvent,
+      tasksList: async () => [toWireTaskCard(task)],
+      tasksListAll: async () => [toWireTaskCard(task)],
       workflowCatalogGet: async () => ({
-        hostInstanceId: "feedback-host",
+        hostInstanceId: "feedback-event-host",
         roles: [...workflowRoleCatalog([task.taskWorkflow])],
         workflows: [taskWorkflowDescriptor(task.taskWorkflow)],
       }),
       workspaceWorkflowGet: async () => ({
-        hostInstanceId: "feedback-host",
+        hostInstanceId: "feedback-event-host",
         board,
         workflows: [task.workflow],
         newTaskWorkflow: task.workflow,
       }),
     };
-    const runSessionStartWorkflow = mock(createRunSessionStartWorkflow());
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      tasks: [task],
-      sessions: [],
-      runSessionStartWorkflow,
+    let submitted: import("@openducktor/contracts").WorkflowLaunchRequest | undefined;
+    const args = createBaseArgs();
+    args.tasks = [task];
+    args.sessions = [];
+    args.repoSettings = {
+      ...createDefaultRepoSettings(),
+      agentDefaults: {
+        writer: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "default",
+          profileId: "builder",
+        },
+      },
+    };
+    args.runSessionStartWorkflow = createRunSessionStartWorkflow({
+      onRequest: (request) => {
+        submitted = request;
+      },
     });
+    const harness = createHookHarness(args);
     try {
       await harness.mount();
-      await harness.run((flow) => runFlowAction(flow, task, "send_back"));
+      await harness.run((flow) => runFlowAction(flow, task, "request_rewrite"));
       expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);
+      expect(harness.getLatest().humanReviewFeedbackModal?.roleLabel).toBe("Writer");
       await harness.run((flow) =>
-        flow.humanReviewFeedbackModal?.onMessageChange("  Rewrite the introduction.  "),
+        flow.humanReviewFeedbackModal?.onMessageChange("Rewrite the introduction."),
       );
-      let submitted: Promise<void> | undefined;
       await harness.run((flow) => {
-        submitted = flow.humanReviewFeedbackModal?.onConfirm();
+        void flow.humanReviewFeedbackModal?.onConfirm();
       });
-      expect(harness.getLatest().humanReviewFeedbackModal?.isSubmitting).toBe(true);
-      expect(harness.getLatest().sessionStartModal).toBeNull();
-      expect(humanRequestChanges).toHaveBeenCalledWith(
-        { workspaceId: "workspace-1", repoPath: "/repo" },
-        task.id,
-        "Rewrite the introduction.",
+      await harness.waitFor(
+        (state) =>
+          state.sessionStartModal?.selectedModelSelection != null &&
+          state.sessionStartModal.isKickoffPromptLoading === false,
       );
-      await harness.run(async () => {
-        if (denied) mutation.reject(new Error("The host denied this review."));
-        else mutation.resolve(toWireTaskCard(committed));
-        await submitted;
-      });
-      if (denied) {
-        expect(harness.getLatest().humanReviewFeedbackModal?.message).toBe(
-          "  Rewrite the introduction.  ",
-        );
-        expect(harness.getLatest().humanReviewFeedbackModal?.isSubmitting).toBe(false);
-        expect(tasksList).not.toHaveBeenCalled();
-        expect(toastErrorMock).toHaveBeenCalledWith("Failed to submit feedback.", {
-          description: "The host denied this review.",
+      await harness.run(async (state) => {
+        await state.sessionStartModal?.onConfirm({
+          runInBackground: false,
+          startMode: "fresh",
+          sourceSessionOptionValue: null,
         });
-      } else {
-        expect(harness.getLatest().humanReviewFeedbackModal).toBeNull();
-        // The task stream updates the views, so the command reads no task list.
-        expect(tasksList).not.toHaveBeenCalled();
-      }
-      expect(humanRequestChanges).toHaveBeenCalledTimes(1);
-      expect(runSessionStartWorkflow).not.toHaveBeenCalled();
-      expect(harness.getLatest().sessionStartModal).toBeNull();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(submitted?.policy).toMatchObject({ actionId: "write_feedback" });
+      expect(submitted?.beforeStartAction).toEqual({
+        eventId: "request-rewrite",
+      });
+      // The host commits the event with the launch, so the client sends no separate event.
+      expect(taskApplyEvent).not.toHaveBeenCalled();
     } finally {
-      mutation.resolve(toWireTaskCard(committed));
       await harness.unmount();
-      toastErrorMock.mockRestore();
     }
   });
 
@@ -1112,7 +1196,7 @@ describe("useKanbanSessionStartFlow", () => {
     const requestChanges = mock(async () => toWireTaskCard(committed));
     hostClientFakes = {
       ...hostClientFakes,
-      humanRequestChanges: requestChanges,
+      taskApplyEvent: requestChanges,
       tasksList: async () => [toWireTaskCard(committed)],
       tasksListAll: async () => [toWireTaskCard(committed)],
       workflowCatalogGet: async () => ({
@@ -1169,7 +1253,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.mount();
     await harness.waitFor((state) => state !== null);
     await harness.run((state) => {
-      state.onHumanRequestChanges("TASK-1", {
+      state.onHumanFeedback("TASK-1", "human-request-changes", {
         workflow: createBaseArgs().tasks[0]!.workflow,
         launchActionIds: ["build_after_human_request_changes"],
       });
@@ -1222,7 +1306,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.mount();
     await harness.waitFor((state) => state !== null);
     await harness.run((state) => {
-      state.onHumanRequestChanges("TASK-1", {
+      state.onHumanFeedback("TASK-1", "human-request-changes", {
         workflow: createBaseArgs().tasks[0]!.workflow,
         launchActionIds: ["build_after_human_request_changes"],
       });
@@ -1259,7 +1343,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.mount();
     await harness.waitFor((state) => state !== null);
     await harness.run((state) => {
-      state.onHumanRequestChanges("TASK-1", {
+      state.onHumanFeedback("TASK-1", "human-request-changes", {
         workflow: createBaseArgs().tasks[0]!.workflow,
         launchActionIds: ["build_after_human_request_changes"],
       });
@@ -1297,7 +1381,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.mount();
     await harness.waitFor((state) => state !== null);
     await harness.run((state) => {
-      state.onHumanRequestChanges("TASK-1", {
+      state.onHumanFeedback("TASK-1", "human-request-changes", {
         workflow: createBaseArgs().tasks[0]!.workflow,
         launchActionIds: ["build_after_human_request_changes"],
       });
@@ -1569,13 +1653,13 @@ describe("useKanbanSessionStartFlow", () => {
 
 /** Runs a workflow action through the flow handlers that the shared dispatcher calls. */
 function runFlowAction(
-  flow: Pick<ReturnType<typeof useKanbanSessionStartFlow>, "onLaunch" | "onHumanRequestChanges">,
+  flow: Pick<ReturnType<typeof useKanbanSessionStartFlow>, "onLaunch" | "onHumanFeedback">,
   task: Parameters<typeof resolveTaskActionDestination>[0],
   action: string,
 ): void {
   const destination = resolveTaskActionDestination(task, action);
   if (destination.kind === "launch") flow.onLaunch(task.id, destination.launchActionId);
-  else if (destination.kind === "request_changes")
-    flow.onHumanRequestChanges(task.id, destination.continuation);
+  else if (destination.kind === "feedback")
+    flow.onHumanFeedback(task.id, destination.eventId, destination.continuation);
   else throw new Error(`Action "${action}" does not start a session flow.`);
 }

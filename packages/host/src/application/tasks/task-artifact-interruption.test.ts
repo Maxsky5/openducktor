@@ -100,7 +100,6 @@ const createInterruptedTaskMutation = async (
     onBackgroundFailure: () => Effect.void,
   });
   const service = createEventPublishingTaskService({
-    taskWorkflows: builtinTaskWorkflows,
     taskService: base,
     taskSyncService: sync,
   });

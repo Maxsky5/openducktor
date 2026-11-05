@@ -831,8 +831,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
     expect(submitted?.beforeStartAction).toEqual({
-      action: "human_request_changes",
-      note: "Please address the review comments.",
+      eventId: "human-request-changes",
     });
     expect(submitted?.instruction).toMatchObject({
       kind: "kickoff",

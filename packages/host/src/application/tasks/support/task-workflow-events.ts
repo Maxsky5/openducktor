@@ -1,9 +1,4 @@
-import {
-  type IssueType,
-  TASK_CLOSED_STATE,
-  TASK_OPEN_STATE,
-  type WorkflowEventEffect,
-} from "@openducktor/contracts";
+import { type IssueType, TASK_CLOSED_STATE, TASK_OPEN_STATE } from "@openducktor/contracts";
 import type {
   TaskEventDecision,
   TaskEventDenial,
@@ -27,36 +22,6 @@ export const decideTaskTransition = (workflow: TaskWorkflow, eventId: string, ta
         ...decisionTransition(decision),
         workflowId: workflow.definition.id,
       });
-};
-
-export const decideEffectTransition = (
-  workflow: TaskWorkflow,
-  effect: WorkflowEventEffect,
-  task: TaskFacts,
-) => {
-  const eventId = workflow.effectEvent(effect);
-  return eventId === undefined
-    ? Result.fail(
-        TaskPolicyError.policy(
-          `Task workflow "${workflow.definition.id}" has no event with the ${effect} effect. Add one to use this command.`,
-        ),
-      )
-    : decideTaskTransition(workflow, eventId, task);
-};
-
-/** The event of a host effect. A workflow without that event cannot run the command. */
-const requireEffectEvent = (
-  workflow: TaskWorkflow,
-  effect: WorkflowEventEffect,
-): Effect.Effect<string, TaskPolicyError> => {
-  const eventId = workflow.effectEvent(effect);
-  return eventId === undefined
-    ? Effect.fail(
-        TaskPolicyError.policy(
-          `Task workflow "${workflow.definition.id}" has no event with the ${effect} effect. Add one to use this command.`,
-        ),
-      )
-    : Effect.succeed(eventId);
 };
 
 /** Decides a named workflow event. A denial fails with its task policy error. */
@@ -169,18 +134,6 @@ const taskEventPolicyError = (
     `${eventId} is not allowed for task ${task.id} (${task.issueType}) from ${task.status}. ${recovery}`,
   );
 };
-
-/** Decides the event of a host effect for a command that reports a denial as invalid input. */
-export const requireEffectInput = <Details extends object>(
-  subject: string,
-  workflow: TaskWorkflow,
-  effect: WorkflowEventEffect,
-  task: TaskFacts,
-  details: Details,
-): Effect.Effect<AdmittedTaskEvent, TaskPolicyError | HostValidationError<Details>> =>
-  requireEffectEvent(workflow, effect).pipe(
-    Effect.flatMap((eventId) => requireTaskEventInput(subject, workflow, eventId, task, details)),
-  );
 
 /** Decides a named event for a command that reports a status denial as invalid input. */
 export const requireTaskEventInput = <Details extends object>(

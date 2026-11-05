@@ -1,7 +1,6 @@
 import {
   TASK_CLOSED_STATE,
   TASK_OPEN_STATE,
-  workflowAgentEventEffectValues,
   workflowConditionSchema,
   workflowDefinitionSchema,
   type CompiledWorkflowDefinition,
@@ -619,8 +618,6 @@ const createConditionCheck = (
   return check;
 };
 
-const AGENT_EVENT_EFFECTS: ReadonlySet<string> = new Set(workflowAgentEventEffectValues);
-
 const checkDefinition = (definition: WorkflowDefinition): void => {
   const invalid = (message: string): never => {
     throw new WorkflowEvaluationError(
@@ -783,21 +780,12 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
     invalid(
       `The approval actions at ${approvalPaths.join(" and ")} open the same approval. Keep one approval action.`,
     );
-  const effectPaths = new Map<string, string>();
   definition.events.forEach((event, index) => {
     const path = `events[${index}]`;
-    if (event.effect !== undefined) {
-      const firstPath = effectPaths.get(event.effect);
-      if (firstPath !== undefined)
-        invalid(
-          `The effect "${event.effect}" is at ${firstPath}.effect and ${path}.effect. Give each effect one event.`,
-        );
-      effectPaths.set(event.effect, path);
-    }
     if (event.agent !== undefined) {
-      if (event.effect !== undefined && !AGENT_EVENT_EFFECTS.has(event.effect))
+      if (event.effects !== undefined && event.effects.length > 0)
         invalid(
-          `The event at ${path} has the ${event.effect} effect, so agents cannot send it. Remove ${path}.agent, or use no effect or one of ${[...AGENT_EVENT_EFFECTS].join(", ")}.`,
+          `The agent event at ${path} has host effects, and agents cannot send an event with host effects. Remove ${path}.effects or ${path}.agent.`,
         );
       event.agent.roles.forEach((id, roleIndex) =>
         checkReference(id, roles, "roles", `${path}.agent.roles[${roleIndex}]`),

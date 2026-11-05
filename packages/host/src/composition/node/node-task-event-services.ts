@@ -1,4 +1,3 @@
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { Effect } from "effect";
 import {
   createEventPublishingTaskService,
@@ -25,7 +24,6 @@ export type NodeTaskEventServices = {
 
 export const createNodeTaskEventServices = ({
   baseTaskService,
-  taskWorkflows,
   acceptNotificationInput,
   notifyAutoCloseBlocked,
   observeStatusChanges,
@@ -37,7 +35,6 @@ export const createNodeTaskEventServices = ({
   settingsConfig,
 }: {
   baseTaskService: TaskServiceWithMutationProgress;
-  taskWorkflows: TaskWorkflowResolver;
   acceptNotificationInput?:
     | ((event: import("@openducktor/contracts").ExternalTaskSyncEvent) => void)
     | undefined;
@@ -83,7 +80,6 @@ export const createNodeTaskEventServices = ({
     taskEventStream,
     taskService: createEventPublishingTaskService({
       taskService: baseTaskService,
-      taskWorkflows,
       taskSyncService,
     }),
     taskSyncService,

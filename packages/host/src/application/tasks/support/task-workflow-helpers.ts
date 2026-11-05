@@ -3,27 +3,20 @@ import type {
   GlobalGitConfig,
   RepoConfig,
   TaskCard,
-  WorkflowEventEffect,
 } from "@openducktor/contracts";
 import { pathStartsWith } from "@openducktor/path-support";
 import type { TaskIdInput } from "../task-inputs";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 import { Effect } from "effect";
-import type { TaskPolicyError } from "../../../domain/task";
-import {
-  HostValidationError,
-  type HostValidationErrorAggregate,
-} from "../../../effect/host-errors";
+import { HostValidationError } from "../../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../../ports/settings-config-port";
 import type {
   DecideTaskTransition,
   TaskRecord,
-  TaskStoreError,
   TaskStorePort,
 } from "../../../ports/task-repository-ports";
 import { blockUnpublishedDirectMerge } from "./direct-merge-block";
-import { decideEffectTransition } from "./task-workflow-events";
 
 /**
  * Commits the transition of a workflow event. Every workflow event commits here, so a local direct
@@ -42,20 +35,6 @@ export const commitWorkflowEvent = <E>(
       taskId: input.taskId,
       decide: blockUnpublishedDirectMerge(directMerge, input.repoPath, decide),
     });
-  });
-
-/** Decides the event of a host effect for a task and commits its transition. */
-export const applyEffect = (
-  taskStore: Pick<TaskStorePort, "getTaskDelivery" | "transitionTask">,
-  taskWorkflows: TaskWorkflowResolver,
-  input: TaskIdInput,
-  effect: WorkflowEventEffect,
-): Effect.Effect<TaskCard, TaskPolicyError | TaskStoreError | HostValidationErrorAggregate> =>
-  Effect.gen(function* () {
-    const updated = yield* commitWorkflowEvent(taskStore, input, (task) =>
-      decideEffectTransition(taskWorkflows.forTask(task), effect, task),
-    );
-    return enrichTask(taskWorkflows.forTask(updated), updated);
   });
 
 /** Adds the workflow projection to stored tasks. */

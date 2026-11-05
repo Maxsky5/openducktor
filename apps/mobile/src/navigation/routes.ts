@@ -3,6 +3,7 @@ type RequestChangesParams = {
   workspaceId: string;
   taskId: string;
   mode?: HumanReviewFeedbackRequest["kind"];
+  event?: string;
   launch?: string;
   continuation?: string;
 };
@@ -128,11 +129,14 @@ export const routes = {
     ({ pathname: "/start-session", params: { workspaceId, taskId, launch } }) as const,
   approveTask: (workspaceId: string, taskId: string) =>
     ({ pathname: "/approve-task", params: { workspaceId, taskId } }) as const,
-  /** The human feedback sheet of a feedback launch, or of Request Changes. */
+  /** The human feedback sheet of a feedback launch, or of an event whose launch needs feedback. */
   requestChanges: (workspaceId: string, taskId: string, request: HumanReviewFeedbackRequest) => {
     const params: RequestChangesParams = { workspaceId, taskId, mode: request.kind };
     if (request.kind === "launch") params.launch = request.launchActionId;
-    else if (request.continuation) params.continuation = JSON.stringify(request.continuation);
+    else {
+      params.event = request.eventId;
+      if (request.continuation) params.continuation = JSON.stringify(request.continuation);
+    }
     return { pathname: "/request-changes", params } as const;
   },
   // Model, runtime profile, effort, and speed of the session that the composer sends to.

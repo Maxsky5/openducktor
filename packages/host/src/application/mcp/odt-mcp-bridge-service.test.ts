@@ -503,7 +503,6 @@ describe("createOdtMcpBridgeService", () => {
     };
     const service = createOdtMcpBridgeServiceForTest({
       taskService: createEventPublishingTaskService({
-        taskWorkflows: builtinTaskWorkflows,
         taskService: baseTaskService,
         taskSyncService,
       }),

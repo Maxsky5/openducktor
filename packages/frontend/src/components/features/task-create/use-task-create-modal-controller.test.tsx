@@ -104,7 +104,6 @@ const createTasksState = (
   removeTaskWorktree: async () => {},
   resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
   resetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
-  humanRequestChangesTask: async () => {},
 });
 
 type Controller = ReturnType<typeof useTaskCreateModalController>;

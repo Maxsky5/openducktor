@@ -13,7 +13,7 @@ import {
 
 describe("createTaskService build and review", () => {
   test.each(["in_progress", "ai_review", "human_review", "blocked"] as const)(
-    "buildBlocked accepts %s and preserves task documents",
+    "the build-blocked agent event accepts %s and preserves task documents",
     async (status) => {
       const current = task({
         id: "task-1",
@@ -37,10 +37,11 @@ describe("createTaskService build and review", () => {
           taskWorkflows: builtinTaskWorkflows,
           taskStore,
           gitPort: createBuildStartGitPort({ calls: [] }),
-        }).buildBlocked({
+        }).applyAgentEvent({
           workspaceId: "repo",
           repoPath: "/repo",
           taskId: current.id,
+          eventId: "build-blocked",
         }),
       );
       expect(result.status).toBe("blocked");
@@ -54,7 +55,7 @@ describe("createTaskService build and review", () => {
   );
 
   test.each(["open", "spec_ready", "ready_for_dev", "closed"] as const)(
-    "buildBlocked rejects %s without writing",
+    "the build-blocked agent event rejects %s without writing",
     async (status) => {
       const transitions: unknown[] = [];
       const taskStore: TaskStorePort = {
@@ -70,10 +71,11 @@ describe("createTaskService build and review", () => {
             taskWorkflows: builtinTaskWorkflows,
             taskStore,
             gitPort: createBuildStartGitPort({ calls: [] }),
-          }).buildBlocked({
+          }).applyAgentEvent({
             workspaceId: "repo",
             repoPath: "/repo",
             taskId: "task-1",
+            eventId: "build-blocked",
           }),
         ),
       ).rejects.toThrow(`build-blocked is not allowed for task task-1 (task) from ${status}`);
@@ -158,10 +160,11 @@ describe("createTaskService build and review", () => {
         taskWorkflows: builtinTaskWorkflows,
         taskStore,
         gitPort: createBuildStartGitPort({ calls: [] }),
-      }).buildBlocked({
+      }).applyAgentEvent({
         workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
+        eventId: "build-blocked",
       }),
     );
     expect(calls).toMatchObject([
@@ -269,10 +272,11 @@ describe("createTaskService build and review", () => {
       },
     };
     const resumed = await Effect.runPromise(
-      createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).buildResumed({
+      createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).applyAgentEvent({
         workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
+        eventId: "build-resumed",
       }),
     );
     expect(calls).toMatchObject([
@@ -377,10 +381,11 @@ describe("createTaskService build and review", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).buildResumed({
+        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).applyAgentEvent({
           workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
+          eventId: "build-resumed",
         }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "in_progress" });
@@ -470,10 +475,11 @@ describe("createTaskService build and review", () => {
       }),
     });
     const completed = await Effect.runPromise(
-      service.buildCompleted({
+      service.applyAgentEvent({
         workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
+        eventId: "build-completed",
       }),
     );
     expect(calls).not.toContainEqual(expect.objectContaining({ command: "sh" }));
@@ -581,11 +587,15 @@ describe("createTaskService build and review", () => {
             repoPath: "/repo",
             hooks: { beforeWorktreeRemoval: ["  "] },
           }),
-        }).buildCompleted({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+        }).applyAgentEvent({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          eventId: "build-completed",
+        }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "human_review" });
     expect(calls).toMatchObject([
-      { type: "list", input: { repoPath: "/repo" } },
       { type: "list", input: { repoPath: "/repo" } },
       {
         type: "transition",
@@ -678,12 +688,17 @@ describe("createTaskService build and review", () => {
             repoPath: "/repo",
             hooks: { beforeWorktreeRemoval: ["sh -lc 'exit 1'"] },
           }),
-        }).buildCompleted({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+        }).applyAgentEvent({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          eventId: "build-completed",
+        }),
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "human_review" });
   });
-  test.each(["open", "spec_ready", "ready_for_dev", "blocked", "closed"] as const)(
-    "human_request_changes rejects %s without writing",
+  test.each(["open", "spec_ready", "ready_for_dev", "in_progress", "blocked", "closed"] as const)(
+    "Request Changes rejects %s without writing, because its action is unavailable",
     async (status) => {
       const current = task({ id: "task-1", status });
       const transitions: unknown[] = [];
@@ -706,49 +721,19 @@ describe("createTaskService build and review", () => {
 
       const result = await Effect.runPromise(
         Effect.result(
-          service.humanRequestChanges({
+          service.applyTaskEvent({
             workspaceId: "repo",
             repoPath: "/repo",
             taskId: current.id,
+            eventId: "human-request-changes",
           }),
         ),
       );
 
-      expect(result).toMatchObject({
-        _tag: "Failure",
-        failure: { _tag: "TaskPolicyError", code: "TASK_TRANSITION_NOT_ALLOWED" },
-      });
+      expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "TaskPolicyError" } });
       expect(transitions).toMatchObject([]);
     },
   );
-
-  test("human_request_changes returns an in-progress task without writing", async () => {
-    const current = task({ id: "task-1", status: "in_progress" });
-    const transitions: unknown[] = [];
-    const service = createTaskService({
-      taskWorkflows: builtinTaskWorkflows,
-      taskStore: {
-        getTaskMetadata: () =>
-          Effect.succeed({
-            artifacts: {},
-            agentSessions: [],
-          }),
-        getTask: () => Effect.succeed(current),
-        transitionTask: (input) =>
-          Effect.sync(() => {
-            transitions.push(input);
-            return { ...current, status: input.status };
-          }),
-      },
-    });
-
-    const result = await Effect.runPromise(
-      service.humanRequestChanges({ workspaceId: "repo", repoPath: "/repo", taskId: current.id }),
-    );
-
-    expect(result).toMatchObject({ id: current.id, status: "in_progress" });
-    expect(transitions).toMatchObject([]);
-  });
 
   test("requests human changes after checking direct merge metadata", async () => {
     const calls: unknown[] = [];
@@ -852,14 +837,15 @@ describe("createTaskService build and review", () => {
       },
     };
     const reopened = await Effect.runPromise(
-      createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).humanRequestChanges({
+      createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).applyTaskEvent({
         workspaceId: "repo",
         repoPath: "/repo",
         taskId: "task-1",
-        note: "Please adjust",
+        eventId: "human-request-changes",
       }),
     );
     expect(calls).toMatchObject([
+      { type: "get", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
       { type: "metadata", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
       { type: "get", input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" } },
       {
@@ -964,10 +950,11 @@ describe("createTaskService build and review", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).humanRequestChanges({
+        createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore }).applyTaskEvent({
           workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
+          eventId: "human-request-changes",
         }),
       ),
     ).rejects.toThrow("Task task-1 has a local direct merge that is not published.");

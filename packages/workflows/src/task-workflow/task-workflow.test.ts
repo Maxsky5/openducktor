@@ -39,10 +39,12 @@ describe("createTaskWorkflow", () => {
     expect(() => review.role("build")).toThrow('Task workflow "review" has no role "build".');
   });
 
-  test("finds host effects through the definition", () => {
-    expect(review.effectEvent("build.completed")).toBe("finish-writing");
-    expect(review.effectEvent("review.request_changes")).toBe("request-rewrite");
-    expect(specPlanBuildWorkflow.effectEvent("implementation.reset")).toBe("reset-implementation");
+  test("reads the host effects of each event from the definition", () => {
+    expect(review.eventEffects("drop-review")).toEqual(["worktree.reset"]);
+    expect(review.eventEffects("request-rewrite")).toEqual([]);
+    expect(review.eventEffects("finish-writing")).toEqual([]);
+    expect(specPlanBuildWorkflow.eventEffects("reset-implementation")).toEqual(["worktree.reset"]);
+    expect(specPlanBuildWorkflow.eventEffects("human-request-changes")).toEqual([]);
   });
 
   test("evaluates the approval action of the workflow", () => {
@@ -65,7 +67,7 @@ describe("createTaskWorkflow", () => {
         });
       }),
     ).toThrow(
-      "The approval actions at actions[2] and actions[5] open the same approval. Keep one approval action.",
+      "The approval actions at actions[2] and actions[6] open the same approval. Keep one approval action.",
     );
   });
 
@@ -124,7 +126,7 @@ describe("createTaskWorkflow", () => {
       available: true,
       completed: false,
     });
-    expect(projection.availableActions).toEqual(["request_review"]);
+    expect(projection.availableActions).toEqual(["request_review", "drop_review"]);
   });
 
   test("resolves launch actions, automations, and continuations with their roles", () => {
@@ -203,7 +205,6 @@ describe("createTaskWorkflow", () => {
       description: "Pause the writing.",
       note: "required",
       roles: ["writer"],
-      effect: "build.blocked",
     });
     expect(review.agentEvent("approve-copy")).toBeUndefined();
     expect(specPlanBuildWorkflow.agentEvents("build").map(({ id }) => id)).toEqual([
@@ -234,12 +235,18 @@ describe("createTaskWorkflow", () => {
     const agent = { roles: ["writer"], note: "optional" as const, description: "Send it." };
     expect(
       withChange((definition) => {
-        const event = definition.events.find(({ id }) => id === "request-rewrite");
+        const event = definition.events.find(({ id }) => id === "drop-review");
         if (event) event.agent = agent;
       }),
     ).toThrow(
-      "The event at events[8] has the review.request_changes effect, so agents cannot send it. Remove events[8].agent, or use no effect or one of build.blocked, build.resumed, build.completed.",
+      "The agent event at events[9] has host effects, and agents cannot send an event with host effects. Remove events[9].effects or events[9].agent.",
     );
+    expect(
+      withChange((definition) => {
+        const event = definition.events.find(({ id }) => id === "pause-writing");
+        if (event) event.effects = ["worktree.reset"];
+      }),
+    ).toThrow("The agent event at events[6] has host effects");
     expect(
       withChange((definition) => {
         const event = definition.events.find(({ id }) => id === "accept-review");
@@ -285,12 +292,6 @@ describe("createTaskWorkflow", () => {
         if (edit?.kind === "agent") edit.roleId = "writer";
       }),
     ).toThrow("gives a role two agent steps");
-    expect(
-      withChange((definition) => {
-        const event = definition.events.find(({ id }) => id === "hold");
-        if (event) event.effect = "implementation.reset";
-      }),
-    ).toThrow('The effect "implementation.reset" is at');
     expect(() =>
       createTaskWorkflow(
         reviewTaskDefinition(),

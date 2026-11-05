@@ -69,7 +69,7 @@ export const prepareWorkflowLaunch = (
     }
     if (request.beforeStartAction && action.context !== "human_feedback")
       return yield* launchValidationError(
-        "Human request changes requires the Apply Human Changes action.",
+        `Action '${actionId}' collects no human feedback, so it cannot commit event '${request.beforeStartAction.eventId}' before its start. Start the launch without that event.`,
       );
     const targetBranch = request.targetBranch ?? task.targetBranch ?? config.defaultTargetBranch;
     if (action.context === "pull_request") {
@@ -198,12 +198,13 @@ export const prepareWorkflowLaunch = (
         `Runtime '${runtimeKind}' does not support '${decision.startMode}'. Select a supported launch mode.`,
       );
     yield* deps.registry.requireReady(runtimeKind);
+    // The event commits through the workflow event path, so its host effects run first.
     if (request.beforeStartAction) {
-      yield* deps.tasks.humanRequestChanges({
+      yield* deps.tasks.applyTaskEvent({
         workspaceId: request.workspaceId,
         repoPath,
         taskId: request.taskId,
-        note: request.beforeStartAction.note,
+        eventId: request.beforeStartAction.eventId,
       });
     }
     if (request.targetBranch) {

@@ -54,8 +54,7 @@ export function useWorkflowEventActions(
         const previous = tasks.find(({ id }) => id === taskId);
         if (!previous) throw new Error(`Task "${taskId}" is unavailable. Reload its workspace.`);
         const event = previous.taskWorkflow.definition.events.find(({ id }) => id === eventId);
-        if (!event || event.effect)
-          throw new Error(`Event "${eventId}" requires its host effect command.`);
+        if (!event) throw new Error(`Task workflow has no event "${eventId}". Reload the task.`);
         const finishes = event.outcomes.some(({ to }) => to === TASK_CLOSED_STATE);
         const mutation = runTaskStateMutation({
           canFinish: finishes,

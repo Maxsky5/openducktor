@@ -2,7 +2,6 @@ import {
   type ApplyWorkflowEventResult,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
-  type WorkflowAgentEventEffect,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType, z } from "zod";
@@ -149,7 +148,10 @@ const executeApplyWorkflowEvent: OdtMcpMutationHandler = (context, body) =>
       });
     }
     const scope = { workspaceId, repoPath, taskId: task.id };
-    const updated = yield* applyAgentEventEffect(context, scope, parsed.eventId, event.effect);
+    const updated = yield* context.taskService.applyAgentEvent({
+      ...scope,
+      eventId: parsed.eventId,
+    });
     const response: ApplyWorkflowEventResult = {
       task: mapPublicTask(updated),
       eventId: parsed.eventId,
@@ -161,25 +163,6 @@ const executeApplyWorkflowEvent: OdtMcpMutationHandler = (context, body) =>
       response,
     );
   });
-
-/** Runs the host effect of an agent event. An event without one only changes the task status. */
-const applyAgentEventEffect = (
-  context: OdtMcpToolContext,
-  scope: { workspaceId: string; repoPath: string; taskId: string },
-  eventId: string,
-  effect: WorkflowAgentEventEffect | undefined,
-) => {
-  switch (effect) {
-    case "build.blocked":
-      return context.taskService.buildBlocked(scope);
-    case "build.resumed":
-      return context.taskService.buildResumed(scope);
-    case "build.completed":
-      return context.taskService.buildCompleted(scope);
-    case undefined:
-      return context.taskService.applyAgentEvent({ ...scope, eventId });
-  }
-};
 
 const executeSetPullRequest: OdtMcpMutationHandler = (context, input) =>
   Effect.gen(function* () {

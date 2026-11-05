@@ -488,10 +488,10 @@ describe("shared host settings", () => {
       config.autopilot.rules = [
         {
           workflowId: "openducktor-spec-plan-build",
-          eventId: "build.completed",
+          eventId: "taskProgressedToAiReview",
           actionIds: ["qa"],
         },
-        { workflowId: "custom", eventId: "build.completed", actionIds: ["qa"] },
+        { workflowId: "custom", eventId: "taskProgressedToAiReview", actionIds: ["qa"] },
       ];
       await Effect.runPromise(
         session.transaction("test.import", (transaction) =>

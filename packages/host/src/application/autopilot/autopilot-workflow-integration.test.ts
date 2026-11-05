@@ -39,7 +39,9 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
   test("runs the feature flow, preserves artifact revisions, and distinguishes QA rejection from human changes", async () => {
     const workflow = await createWorkflowHarness();
     const input = await workflow.createTask("feature");
-    const prematureBuild = await run(Effect.result(workflow.tasks.buildResumed(input)));
+    const prematureBuild = await run(
+      Effect.result(workflow.tasks.applyAgentEvent({ ...input, eventId: "build-resumed" })),
+    );
     expect(prematureBuild._tag).toBe("Failure");
     if (prematureBuild._tag === "Failure") {
       expect(prematureBuild.failure.message).toContain("Complete required planning");
@@ -79,7 +81,7 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
       }),
     );
     await workflow.waitForOutcomes(2);
-    await run(workflow.tasks.buildResumed(input));
+    await run(workflow.tasks.applyAgentEvent({ ...input, eventId: "build-resumed" }));
     await run(
       workflow.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
@@ -91,9 +93,9 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
       }),
     );
     expect((await run(workflow.store.getTask(input))).status).toBe("in_progress");
-    await run(workflow.tasks.buildCompleted(input));
+    await run(workflow.tasks.applyAgentEvent({ ...input, eventId: "build-completed" }));
     await workflow.waitForOutcomes(3);
-    await run(workflow.tasks.buildCompleted(input));
+    await run(workflow.tasks.applyAgentEvent({ ...input, eventId: "build-completed" }));
     await run(
       workflow.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
@@ -106,7 +108,7 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
       }),
     );
     await workflow.waitForOutcomes(4);
-    await run(workflow.tasks.buildCompleted(input));
+    await run(workflow.tasks.applyAgentEvent({ ...input, eventId: "build-completed" }));
     await workflow.waitForOutcomes(5);
     await run(
       workflow.tasks.workflowArtifactSave({
@@ -120,8 +122,8 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
       }),
     );
     await workflow.waitForOutcomes(6);
-    await run(workflow.tasks.humanRequestChanges(input));
-    await run(workflow.tasks.buildCompleted(input));
+    await run(workflow.tasks.applyTaskEvent({ ...input, eventId: "human-request-changes" }));
+    await run(workflow.tasks.applyAgentEvent({ ...input, eventId: "build-completed" }));
     await workflow.waitForOutcomes(7);
 
     expect(workflow.actions).toEqual([
@@ -143,13 +145,13 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
     ).toEqual([
       ["save-workflow-artifact", "taskProgressedToSpecReady", "open", "spec_ready"],
       ["save-workflow-artifact", "taskProgressedToReadyForDev", "spec_ready", "ready_for_dev"],
-      ["build-resumed", undefined, "ready_for_dev", "in_progress"],
-      ["build-completed", "taskProgressedToAiReview", "in_progress", "ai_review"],
+      ["apply-task-event", undefined, "ready_for_dev", "in_progress"],
+      ["apply-task-event", "taskProgressedToAiReview", "in_progress", "ai_review"],
       ["save-workflow-artifact", "taskRejectedByQa", "ai_review", "in_progress"],
-      ["build-completed", "taskProgressedToAiReview", "in_progress", "ai_review"],
+      ["apply-task-event", "taskProgressedToAiReview", "in_progress", "ai_review"],
       ["save-workflow-artifact", "taskProgressedToHumanReview", "ai_review", "human_review"],
-      ["human-request-changes", undefined, "human_review", "in_progress"],
-      ["build-completed", "taskProgressedToHumanReview", "in_progress", "human_review"],
+      ["apply-task-event", undefined, "human_review", "in_progress"],
+      ["apply-task-event", "taskProgressedToHumanReview", "in_progress", "human_review"],
     ]);
     const metadata = await run(workflow.tasks.getTaskMetadata(input));
     expect(metadata.artifacts.spec).toMatchObject({ markdown: "# Revised spec", revision: 3 });
@@ -267,8 +269,8 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
   test("rolls back a failed QA report and keeps the AI review status", async () => {
     const workflow = await createWorkflowHarness();
     const input = await workflow.createTask();
-    await run(workflow.tasks.buildResumed(input));
-    await run(workflow.tasks.buildCompleted(input));
+    await run(workflow.tasks.applyAgentEvent({ ...input, eventId: "build-resumed" }));
+    await run(workflow.tasks.applyAgentEvent({ ...input, eventId: "build-completed" }));
     await workflow.waitForOutcomes(1);
     expect((await run(workflow.store.getTask(input))).status).toBe("ai_review");
     const commits = workflow.commits.length;
@@ -330,7 +332,7 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
     async (mode) => {
       const workflow = await createWorkflowHarness();
       const input = await workflow.createTask();
-      await run(workflow.tasks.buildResumed(input));
+      await run(workflow.tasks.applyAgentEvent({ ...input, eventId: "build-resumed" }));
       const entered = Deferred.makeUnsafe<void>();
       workflow.setPublicationGate(
         Deferred.succeed(entered, undefined).pipe(
@@ -347,7 +349,9 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
         ),
       );
       const publicationCount = workflow.events.length;
-      const fiber = Effect.runFork(workflow.tasks.buildCompleted(input));
+      const fiber = Effect.runFork(
+        workflow.tasks.applyAgentEvent({ ...input, eventId: "build-completed" }),
+      );
       await run(Deferred.await(entered));
       if (mode === "interruption") {
         expect(workflow.actions).toEqual([]);
@@ -368,9 +372,13 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
       expect(workflow.actions).toEqual(["startQa"]);
       expect(workflow.failures).toHaveLength(mode === "failure" ? 1 : 0);
       workflow.setPublicationGate(Effect.void);
-      await run(workflow.tasks.buildCompleted(input));
+      await run(workflow.tasks.applyAgentEvent({ ...input, eventId: "build-completed" }));
       expect(
-        workflow.commits.filter((change) => change.operation === "build-completed"),
+        workflow.commits.filter(
+          (change) =>
+            change.operation === "apply-task-event" &&
+            change.statusChange.task.status === "ai_review",
+        ),
       ).toHaveLength(1);
       expect(workflow.events).toHaveLength(publicationCount + 1);
       expect(workflow.actions).toEqual(["startQa"]);
@@ -485,7 +493,6 @@ const createWorkflowHarness = async ({
     },
   });
   const tasks = createEventPublishingTaskService({
-    taskWorkflows,
     taskService,
     taskSyncService,
   });

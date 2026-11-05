@@ -20,7 +20,6 @@ import {
   parseDirectMergeInput,
   parseDirectMergeCompleteInput,
   parseListAgentSessionsForTasksInput,
-  parseOptionalNoteInput,
   parsePullRequestLinkMergedInput,
   parsePullRequestUpsertInput,
   parseRepoPathInput,
@@ -52,10 +51,6 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
       taskService.agentSessionsList(parseTaskIdInput(args, "agent_sessions_list input")),
     agent_sessions_list_for_tasks: (args) =>
       taskService.agentSessionsListForTasks(parseListAgentSessionsForTasksInput(args)),
-    human_request_changes: (args) =>
-      taskService.humanRequestChanges(
-        parseOptionalNoteInput(args, "human_request_changes input", "human_request_changes note"),
-      ),
     repo_pull_request_sync: (args) =>
       taskService.repoPullRequestSync(parseRepoPullRequestSyncInput(args)),
     task_approval_context_get: (args) =>
@@ -90,8 +85,6 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
     task_metadata_get: (args) =>
       taskService.getTaskMetadata(parseTaskIdInput(args, "task_metadata_get input")),
     task_reset: (args) => taskService.resetTask(parseTaskIdInput(args, "task_reset input")),
-    task_reset_implementation: (args) =>
-      taskService.resetImplementation(parseTaskIdInput(args, "task_reset_implementation input")),
     task_stop_impact_get: (args) => taskService.getTaskStopImpact(parseTaskStopImpactInput(args)),
     task_worktree_cleanup_impact_get: (args) =>
       taskService.getTaskWorktreeCleanupImpact(

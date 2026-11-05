@@ -41,7 +41,10 @@ export type TaskActions = {
   ) => void;
   openSession: (task: TaskCard, role: AgentRole, options: SessionTargetOptions) => void;
   /** Asks for the confirmation of an action that has no workflow action ID, such as Delete. */
-  confirm: (task: TaskCard, action: TaskConfirmationAction) => void;
+  confirm: (
+    task: TaskCard,
+    action: Exclude<TaskConfirmationAction, "reset_implementation">,
+  ) => void;
   /** The confirmation of the current request. Render it once on the screen. */
   confirmations: ReactElement;
 };
@@ -112,11 +115,11 @@ export function useTaskActions({
   }, [openResetImplementation]);
 
   const confirm = useCallback(
-    (task: TaskCard, action: TaskConfirmationAction, onCommitted?: OnTaskCommitted) => {
-      if (action === "reset_implementation") {
-        openReset.current(task.id, { closeDetailsAfterReset: true, onCommitted });
-        return;
-      }
+    (
+      task: TaskCard,
+      action: Exclude<TaskConfirmationAction, "reset_implementation">,
+      onCommitted?: OnTaskCommitted,
+    ) => {
       nextRequestId.current += 1;
       setRequest({ id: nextRequestId.current, taskId: task.id, action, onCommitted });
     },
@@ -134,12 +137,14 @@ export function useTaskActions({
           options ? openSession(task, role, options) : showNoSession(feedback, task, role),
         onHumanApprove: (taskId) =>
           router.push(routes.approveTask(workspaceId, taskId), SINGLE_SHEET),
-        onHumanRequestChanges: (taskId, continuation) =>
+        onHumanFeedback: (taskId, eventId, continuation) =>
           router.push(
-            routes.requestChanges(workspaceId, taskId, { kind: "request_changes", continuation }),
+            routes.requestChanges(workspaceId, taskId, { kind: "event", eventId, continuation }),
             SINGLE_SHEET,
           ),
-        onConfirm: (_taskId, confirmation, onCommitted) => confirm(task, confirmation, onCommitted),
+        // The only workflow confirmation is the worktree reset of an event.
+        onConfirm: (taskId, _confirmation, eventId, onCommitted) =>
+          openReset.current(taskId, eventId, { closeDetailsAfterReset: true, onCommitted }),
         continueTaskWorkflow,
         showError: (title, description) => feedback.show("error", title, { description }),
       })(task, action, { sessionOptionsOf, onRemoveWorktree }),
@@ -150,7 +155,6 @@ export function useTaskActions({
       workspaceId,
       openSession,
       feedback,
-      confirm,
       continueTaskWorkflow,
       onRemoveWorktree,
     ],

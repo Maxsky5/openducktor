@@ -9,7 +9,7 @@ import type { AgentSessionSummary } from "../../sessions/agent-sessions-store";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import {
   type HumanReviewFeedbackStartRequest,
-  requestHumanReviewChanges,
+  applyHumanFeedbackEvent,
   submitHumanReviewFeedback,
 } from "./human-review-feedback-flow";
 import {
@@ -81,8 +81,8 @@ export function useHumanReviewFeedback({
       const result = await submitHumanReviewFeedback({
         feedback,
         state,
-        requestChangesTask: (taskId, note) =>
-          requestHumanReviewChanges(queryClient, scope, taskId, note),
+        applyFeedbackEvent: (taskId, eventId) =>
+          applyHumanFeedbackEvent(queryClient, scope, taskId, eventId),
         builderSessions: launch
           ? sessions
               .filter(({ taskId, role }) => taskId === state.taskId && role === launch.role)

@@ -10,20 +10,20 @@ import { appendTaskCleanupProgress } from "./task-cleanup-progress";
 import { collectResetWorktreePaths } from "./task-cleanup-support";
 
 describe("task cleanup support", () => {
-  test("reports reset implementation cleanup progress with the narrow operation label", () => {
+  test("reports worktree reset cleanup progress with the narrow operation label", () => {
     const error = appendTaskCleanupProgress(new Error("delete branch failed"), {
-      operation: "task_reset_implementation",
+      operation: "worktree_reset",
       removedWorktrees: ["/worktrees/repo/task-1"],
       deletedBranches: [],
     });
 
     expect(error).toBeInstanceOf(HostOperationError);
     if (!(error instanceof HostOperationError)) throw error;
-    expect(error.operation).toBe("task_reset_implementation.cleanup");
+    expect(error.operation).toBe("worktree_reset.cleanup");
     expect(error.message).toContain(
-      "Reset implementation cleanup already removed worktrees: /worktrees/repo/task-1.",
+      "Worktree reset cleanup already removed worktrees: /worktrees/repo/task-1.",
     );
-    expect(error.message).toContain("Retry reset implementation to finish cleanup safely.");
+    expect(error.message).toContain("Retry the worktree reset to finish cleanup safely.");
   });
 
   test("keeps legacy implementation worktrees as reset cleanup targets without a canonical worktree", async () => {

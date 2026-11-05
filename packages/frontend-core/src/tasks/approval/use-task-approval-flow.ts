@@ -41,6 +41,7 @@ import { useTaskApprovalGitConflictFlow } from "./use-task-approval-git-conflict
 import { useClientConnection, useHostClient } from "../../connection/client-connection-react";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
+import { availableWorktreeResetEvent } from "../workflow/task-action-destination";
 
 type UseTaskApprovalFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -50,7 +51,8 @@ type UseTaskApprovalFlowArgs = {
   tasks: TaskCard[];
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
   closeTask: (taskId: string, options: CloseTaskOptions) => Promise<WireTaskCard>;
-  openResetImplementation: (taskId: string) => boolean;
+  /** Opens the confirmation of an event whose `worktree.reset` effect resets the implementation. */
+  openResetImplementation: (taskId: string, eventId: string) => boolean;
   onResolveGitConflict?: (
     conflict: GitConflict,
     taskId: string,
@@ -462,10 +464,17 @@ export function useTaskApprovalFlow({
       return;
     }
 
-    if (openResetImplementation(state.taskId)) {
+    const eventId = openTask ? availableWorktreeResetEvent(openTask) : null;
+    if (eventId === null) {
+      feedback.show("error", "Unable to reset implementation", {
+        description: `Task ${state.taskId} offers no action that resets its worktree. Close the task instead.`,
+      });
+      return;
+    }
+    if (openResetImplementation(state.taskId, eventId)) {
       reset();
     }
-  }, [openResetImplementation, reset, state]);
+  }, [feedback, openResetImplementation, openTask, reset, state]);
 
   const completeDirectMerge = useCallback((): void => {
     if (

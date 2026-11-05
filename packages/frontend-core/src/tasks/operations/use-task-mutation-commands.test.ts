@@ -25,7 +25,6 @@ const createHostPort = (): TaskMutationCommandHostPort => ({
   taskDelete: async () => ({ ok: true }),
   taskClose: async () => createTaskCardFixture(),
   taskWorktreeRemove: async () => undefined,
-  humanRequestChanges: async () => createTaskCardFixture(),
 });
 
 const createRunTaskMutation =

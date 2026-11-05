@@ -104,19 +104,6 @@ const runtimeRestart = async (
   return invokeFn("runtime_restart", { runtimeKind, confirmation }, runtimeRestartResultSchema);
 };
 
-const humanRequestChanges = async (
-  invokeFn: InvokeFn,
-  scope: WorkspaceRef,
-  taskId: string,
-  note?: string,
-): Promise<TaskCard> => {
-  return invokeFn(
-    "human_request_changes",
-    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, note },
-    taskCardSchema,
-  );
-};
-
 const taskApprovalContextGet = async (
   invokeFn: InvokeFn,
   scope: WorkspaceRef,
@@ -287,10 +274,6 @@ export class HostAgentClient {
     confirmation: string,
   ): Promise<RuntimeRestartResult> {
     return runtimeRestart(this.invokeFn, runtimeKind, confirmation);
-  }
-
-  async humanRequestChanges(scope: WorkspaceRef, taskId: string, note?: string): Promise<TaskCard> {
-    return humanRequestChanges(this.invokeFn, scope, taskId, note);
   }
 
   async taskApprovalContextGet(

@@ -20,7 +20,7 @@ const renderFeedback = (tasks: Parameters<typeof useHumanReviewFeedback>[0]["tas
   );
 
 describe("useHumanReviewFeedback", () => {
-  test("opens Request Changes, edits its message, and closes", async () => {
+  test("opens the feedback of an event, edits its message, and closes", async () => {
     const task = createTaskCardFixture({
       id: "TASK-1",
       status: "human_review",
@@ -29,7 +29,9 @@ describe("useHumanReviewFeedback", () => {
     const harness = renderFeedback([task]);
     await harness.mount();
     try {
-      await harness.run((form) => form.open("TASK-1", { kind: "request_changes" }));
+      await harness.run((form) =>
+        form.open("TASK-1", { kind: "event", eventId: "human-request-changes" }),
+      );
       expect(harness.getLatest().modal).toMatchObject({ taskId: "TASK-1", roleLabel: null });
       await harness.run((form) => form.modal?.onMessageChange("Rework the API."));
       expect(harness.getLatest().modal?.message).toBe("Rework the API.");

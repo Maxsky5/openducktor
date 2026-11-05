@@ -2,6 +2,11 @@ import { describe, expect, mock, test } from "bun:test";
 import { createTaskCardFixture, toWireTaskCard } from "../../test-support/shared-test-fixtures";
 import { editBuiltinTaskWorkflow } from "../../test-support/workflow-fixtures";
 import { createTaskActionRunner, type TaskActionRunnerHandlers } from "./task-action-runner";
+import { resolveWorkflowBoard } from "@openducktor/workflows";
+import {
+  createReviewTaskWorkflow,
+  createWorkflowTaskCardFixture,
+} from "@openducktor/workflows/test-support";
 
 const createHandlers = (): TaskActionRunnerHandlers => ({
   onLaunch: mock(() => {}),
@@ -9,7 +14,7 @@ const createHandlers = (): TaskActionRunnerHandlers => ({
   onOpenTaskDetails: mock(() => {}),
   onOpenSession: mock(() => {}),
   onHumanApprove: mock(() => {}),
-  onHumanRequestChanges: mock(() => {}),
+  onHumanFeedback: mock(() => {}),
   onConfirm: mock(() => {}),
   continueTaskWorkflow: mock(async () => {}),
   showError: mock(() => {}),
@@ -34,13 +39,43 @@ describe("createTaskActionRunner", () => {
     const handlers = { ...createHandlers(), onConfirm };
     createTaskActionRunner(handlers)(task, "reset_implementation");
 
-    const [taskId, action, onCommitted] = onConfirm.mock.calls[0]!;
-    expect([taskId, action]).toEqual(["T-1", "reset_implementation"]);
+    const [taskId, action, eventId, onCommitted] = onConfirm.mock.calls[0]!;
+    expect([taskId, action, eventId]).toEqual([
+      "T-1",
+      "reset_implementation",
+      "reset-implementation",
+    ]);
     await onCommitted?.(toWireTaskCard(task));
     expect(handlers.continueTaskWorkflow).toHaveBeenCalledWith(toWireTaskCard(task), {
       workflow: task.workflow,
       launchActionIds: ["build_implementation_start"],
     });
+  });
+
+  test("routes a custom worktree reset event to its confirmation and a feedback event to its form", () => {
+    const workflow = createReviewTaskWorkflow();
+    const board = resolveWorkflowBoard(
+      { states: workflow.definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
+      [workflow],
+    );
+    const task = createWorkflowTaskCardFixture(workflow, board, { id: "T-1", status: "approval" });
+    const handlers = createHandlers();
+    const run = createTaskActionRunner(handlers);
+
+    run(task, "drop_review");
+    expect(handlers.onConfirm).toHaveBeenCalledWith(
+      "T-1",
+      "reset_implementation",
+      "drop-review",
+      undefined,
+    );
+    run(task, "request_rewrite");
+    expect(handlers.onHumanFeedback).toHaveBeenCalledWith("T-1", "request-rewrite", {
+      workflow: task.workflow,
+      launchActionIds: ["write_feedback"],
+    });
+    expect(handlers.onApplyEvent).not.toHaveBeenCalled();
+    expect(handlers.showError).not.toHaveBeenCalled();
   });
 
   test("opens the approval of OpenDucktor for an approval action", () => {

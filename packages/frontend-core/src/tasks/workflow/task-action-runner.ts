@@ -21,11 +21,19 @@ export type TaskActionRunnerHandlers = {
   onOpenSession: (taskId: string, role: string, options?: SessionTargetOptions) => void;
   /** The approval of OpenDucktor opens its own form, which can be a route. */
   onHumanApprove: (taskId: string) => void;
-  /** Request Changes opens its own form, which can be a route, so it gets the continuation. */
-  onHumanRequestChanges: (taskId: string, continuation?: TaskWorkflowContinuation) => void;
+  /**
+   * An event whose following launch collects human feedback opens its own form, which can be a
+   * route, so it gets the event and the continuation.
+   */
+  onHumanFeedback: (
+    taskId: string,
+    eventId: string,
+    continuation?: TaskWorkflowContinuation,
+  ) => void;
   onConfirm: (
     taskId: string,
     action: TaskActionConfirmation,
+    eventId: string,
     onCommitted?: OnTaskCommitted,
   ) => void;
   continueTaskWorkflow: ContinueTaskWorkflow;
@@ -78,15 +86,15 @@ export const createTaskActionRunner =
         case "approve":
           handlers.onHumanApprove(task.id);
           return;
-        case "request_changes":
-          handlers.onHumanRequestChanges(task.id, destination.continuation);
+        case "feedback":
+          handlers.onHumanFeedback(task.id, destination.eventId, destination.continuation);
           return;
       }
       const { continuation } = destination;
       const onCommitted: OnTaskCommitted | undefined = continuation
         ? (committed) => handlers.continueTaskWorkflow(committed, continuation)
         : undefined;
-      handlers.onConfirm(task.id, destination.action, onCommitted);
+      handlers.onConfirm(task.id, destination.action, destination.eventId, onCommitted);
     } catch (cause) {
       handlers.showError("Workflow action failed", errorMessage(cause));
     }

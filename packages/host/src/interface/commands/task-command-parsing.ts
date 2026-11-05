@@ -90,19 +90,6 @@ export const parseRequiredMarkdown = (
   return trimmed;
 };
 
-export const parseOptionalNote = (
-  result: z.ZodSafeParseResult<string | null | undefined>,
-  label: string,
-): string | undefined => {
-  if (!result.success) {
-    throw invalidInput(`${label} must be a string when present.`, label);
-  }
-  if (result.data === undefined || result.data === null) return undefined;
-
-  const trimmed = result.data.trim();
-  return trimmed ? trimmed : undefined;
-};
-
 const agentSessionStringKeys = [
   "externalSessionId",
   "runtimeKind",

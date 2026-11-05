@@ -1,13 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
+import { resolveWorkflowBoard } from "@openducktor/workflows";
 import {
+  createReviewTaskWorkflow,
   createSharedBoardWorkflows,
   createWorkflowTaskCardFixture,
 } from "@openducktor/workflows/test-support";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { editBuiltinTaskWorkflow } from "../../test-support/workflow-fixtures";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
-import { resolveTaskActionDestination, taskActionSendsCommand } from "./task-action-destination";
+import {
+  availableWorktreeResetEvent,
+  eventActionStep,
+  resolveTaskActionDestination,
+  taskActionSendsCommand,
+} from "./task-action-destination";
 
 /** The built-in actions that a task can show at once in these tests. */
 const BUILTIN_ACTIONS = [
@@ -78,7 +85,8 @@ describe("resolveTaskActionDestination", () => {
       taskWorkflow,
     };
     expect(resolveTaskActionDestination(task, "human_request_changes")).toEqual({
-      kind: "request_changes",
+      kind: "feedback",
+      eventId: "human-request-changes",
       continuation: { workflow: task.workflow, launchActionIds },
     });
   });
@@ -131,9 +139,42 @@ describe("resolveTaskActionDestination", () => {
     expect(resolveTaskActionDestination(task, "reset_implementation")).toEqual({
       kind: "confirm",
       action: "reset_implementation",
+      eventId: "reset-implementation",
       continuation: undefined,
     });
     expect(() => resolveTaskActionDestination(task, "set_spec")).toThrow("unavailable");
+  });
+
+  test("routes the events of a custom workflow by their effects and following launches", () => {
+    const workflow = createReviewTaskWorkflow();
+    const board = resolveWorkflowBoard(
+      { states: workflow.definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
+      [workflow],
+    );
+    const task = createWorkflowTaskCardFixture(workflow, board, { status: "approval" });
+    expect(resolveTaskActionDestination(task, "drop_review")).toEqual({
+      kind: "confirm",
+      action: "reset_implementation",
+      eventId: "drop-review",
+      continuation: undefined,
+    });
+    expect(resolveTaskActionDestination(task, "request_rewrite")).toEqual({
+      kind: "feedback",
+      eventId: "request-rewrite",
+      continuation: { workflow: task.workflow, launchActionIds: ["write_feedback"] },
+    });
+    expect(resolveTaskActionDestination(task, "hold")).toEqual({
+      kind: "event",
+      eventId: "hold",
+      launchActionIds: [],
+    });
+    expect(eventActionStep(workflow, "drop_review")).toBe("confirm");
+    expect(eventActionStep(workflow, "request_rewrite")).toBe("feedback");
+    expect(eventActionStep(workflow, "hold")).toBe("none");
+    expect(eventActionStep(workflow, "approve")).toBeNull();
+    expect(availableWorktreeResetEvent(task)).toBe("drop-review");
+    const open = createWorkflowTaskCardFixture(workflow, board, { status: "open" });
+    expect(availableWorktreeResetEvent(open)).toBeNull();
   });
 });
 
@@ -251,7 +292,8 @@ describe("resolveTaskActionDestination of built-in actions", () => {
         sessions,
       ),
     ).toEqual({
-      kind: "request_changes",
+      kind: "feedback",
+      eventId: "human-request-changes",
       continuation: {
         workflow: createTaskCardFixture().workflow,
         launchActionIds: ["build_after_human_request_changes"],
@@ -269,6 +311,7 @@ describe("resolveTaskActionDestination of built-in actions", () => {
     ).toEqual({
       kind: "confirm",
       action: "reset_implementation",
+      eventId: "reset-implementation",
     });
   });
 });

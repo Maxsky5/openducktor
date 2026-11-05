@@ -1,6 +1,7 @@
+import { mapTaskMutationProgressErrors } from "../task-error-mapping";
 import { loadTaskSessions } from "../support/task-sessions";
 import { getScopedRepoConfig } from "../support/scoped-repo-config";
-import { DEFAULT_BRANCH_PREFIX, type TaskArtifactChange } from "@openducktor/contracts";
+import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { workflowArtifactChange } from "../artifact-changes";
 import {
@@ -16,14 +17,22 @@ import {
   requireTaskDeleteDependencies,
 } from "../support/task-cleanup-dependencies";
 import { runTaskLocalCleanup } from "../support/task-cleanup-support";
-import { enrichTask } from "../support/task-workflow-helpers";
 import { acquireRemovableWorktrees } from "../support/task-worktree-owner-guard";
-import { requireEffectInput, decideEffectTransition } from "../support/task-workflow-events";
-import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
+import {
+  createTaskMutationProgressFailure,
+  TaskMutationProgressFailure,
+} from "../task-mutation-progress-failure";
 import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
-import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
+import type { TaskServiceUseCaseInput } from "../task-service";
+import type { HostEffectHandler } from "./host-effect-registry";
 
-export const createTaskImplementationResetUseCase = ({
+/**
+ * The `worktree.reset` host effect. It stops the sessions of the worktree roles, removes their other
+ * worktrees and branches, and restores the task worktree to its start point. Then it clears the
+ * sessions of the worktree roles, the review artifacts, the pull request link, and the merge record.
+ * A failure after the first store write reports the progress with the changed task.
+ */
+export const createWorktreeResetEffect = ({
   gitPort,
   taskStore,
   taskWorkflows,
@@ -36,25 +45,18 @@ export const createTaskImplementationResetUseCase = ({
   worktreeOwners,
   taskSessionLifecycleCoordinator: coordinator,
   completionState,
-}: TaskServiceUseCaseInput) => ({
-  resetImplementation(input: Parameters<TaskService["resetImplementation"]>[0]) {
-    return Effect.gen(function* () {
+}: TaskServiceUseCaseInput): HostEffectHandler => {
+  const reset: HostEffectHandler = ({ input, artifactChanges }, commit) =>
+    Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireTaskDeleteDependencies(gitPort, settingsConfig, workspaceSettingsService),
       );
       const storeDependencies = requireImplementationResetStoreDependencies(taskStore);
       const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
-      yield* coordinator.acquireLifecycle(canonicalInputRepo, [taskId], "reset implementation");
+      yield* coordinator.acquireLifecycle(canonicalInputRepo, [taskId], "reset the worktree");
       const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
-      yield* requireEffectInput(
-        "Implementation reset is",
-        workflow,
-        "implementation.reset",
-        current,
-        { repoPath, taskId, status: current.status },
-      );
       const currentSessions = yield* loadTaskSessions(taskStore, input);
       const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
@@ -103,7 +105,6 @@ export const createTaskImplementationResetUseCase = ({
       const cleanupProgress = createTaskCleanupProgressState();
       yield* cleanupActivity(activity, cleanupProgress);
       let taskStoreWriteCompleted = false;
-      const artifactChanges: TaskArtifactChange[] = [];
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
           beforeWorktreeRemoval: {
@@ -119,7 +120,7 @@ export const createTaskImplementationResetUseCase = ({
           settingsConfig: dependencies.settingsConfig,
           taskIds: [taskId],
           terminalService,
-          worktreeCleanupOperation: "task_reset_implementation",
+          worktreeCleanupOperation: "worktree_reset",
           worktreeFiles,
           worktreePaths: removedWorktreePaths,
         });
@@ -164,20 +165,15 @@ export const createTaskImplementationResetUseCase = ({
             yield* completionState.discard({ ...input, repoPath: effectiveRepoPath });
           }),
         );
-        const updated = yield* taskStore.transitionTask({
-          workspaceId: input.workspaceId,
-          repoPath: effectiveRepoPath,
-          taskId,
-          decide: (task) =>
-            decideEffectTransition(taskWorkflows.forTask(task), "implementation.reset", task),
-        });
-        return enrichTask(workflow, updated);
+        return yield* commit;
       }).pipe(
         Effect.catch((error) => {
+          // A later effect already reports its own progress.
+          if (error instanceof TaskMutationProgressFailure) return Effect.fail(error);
           const decoratedFailure = appendImplementationResetCleanupProgress(error, cleanupProgress);
           const failure = taskStoreWriteCompleted
             ? createTaskMutationProgressFailure(
-                "reset-implementation",
+                "apply-task-event",
                 taskId,
                 decoratedFailure,
                 artifactChanges,
@@ -186,6 +182,6 @@ export const createTaskImplementationResetUseCase = ({
           return Effect.fail(failure);
         }),
       );
-    }).pipe(Effect.scoped);
-  },
-});
+    }).pipe(mapTaskMutationProgressErrors);
+  return reset;
+};

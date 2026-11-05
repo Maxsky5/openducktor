@@ -123,7 +123,7 @@ test("submits the captured identity, model, edited text, and target branch in on
 
 test("sends the review feedback and the pre-start action with the kickoff", async () => {
   const launch = createLaunch();
-  const beforeStartAction = { action: "human_request_changes" as const, note: "Fix the result" };
+  const beforeStartAction = { eventId: "human-request-changes", note: "Fix the result" };
   await start(launch, {
     request: {
       ...baseRequest,

@@ -382,7 +382,9 @@ describe("direct merge completion session guard", () => {
           const start = yield* Effect.result(
             Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "start session")),
           );
-          const block = yield* Effect.result(service.buildBlocked(input));
+          const block = yield* Effect.result(
+            service.applyAgentEvent({ ...input, eventId: "build-blocked" }),
+          );
           expect(start._tag).toBe("Failure");
           expect(block._tag).toBe("Failure");
           yield* Deferred.succeed(release, undefined);

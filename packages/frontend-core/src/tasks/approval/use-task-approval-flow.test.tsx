@@ -1296,6 +1296,71 @@ describe("useTaskApprovalFlow", () => {
             workspaceName: "Repo",
             repoPath: "/repo",
           },
+          tasks: [
+            createTaskCardFixture({
+              id: "TASK-1",
+              title: "Task",
+              status: "human_review",
+              availableActions: ["reset_implementation"],
+            }),
+          ],
+          requestPullRequestGeneration: async () => undefined,
+          openResetImplementation: openResetImplementationMock,
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    await act(async () => {
+      expectMissingBuilderWorktreeModal().onResetMissingBuilderWorktree();
+      await Promise.resolve();
+    });
+
+    expect(openResetImplementationMock).toHaveBeenNthCalledWith(
+      1,
+      "TASK-1",
+      "reset-implementation",
+    );
+    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
+
+    await act(async () => {
+      expectMissingBuilderWorktreeModal().onResetMissingBuilderWorktree();
+      await Promise.resolve();
+    });
+
+    expect(openResetImplementationMock).toHaveBeenNthCalledWith(
+      2,
+      "TASK-1",
+      "reset-implementation",
+    );
+    await waitForTaskApprovalModalClosed();
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("keeps the recovery modal when the task offers no worktree reset", async () => {
+    taskApprovalContextGetMock.mockResolvedValueOnce(
+      createMissingBuilderWorktreeApprovalContextResult(),
+    );
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
           openResetImplementation: openResetImplementationMock,
@@ -1317,16 +1382,8 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(openResetImplementationMock).toHaveBeenNthCalledWith(1, "TASK-1");
+    expect(openResetImplementationMock).not.toHaveBeenCalled();
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
-
-    await act(async () => {
-      expectMissingBuilderWorktreeModal().onResetMissingBuilderWorktree();
-      await Promise.resolve();
-    });
-
-    expect(openResetImplementationMock).toHaveBeenNthCalledWith(2, "TASK-1");
-    await waitForTaskApprovalModalClosed();
 
     await act(async () => {
       await harness.unmount();
