@@ -24,6 +24,11 @@ export const HOST_CHANNEL_HEARTBEAT_INTERVAL_MS = 15_000;
 export const HOST_CHANNEL_SILENCE_LIMIT_MS = 3 * HOST_CHANNEL_HEARTBEAT_INTERVAL_MS;
 /** The largest client message that a host reads, such as a command with attachments. */
 export const HOST_CHANNEL_MAX_CLIENT_MESSAGE_BYTES = 64 * 1024 * 1024;
+/**
+ * A larger result body goes out in parts of this size. A client gets each part as one message, so
+ * heartbeats and other messages pass between the parts of a large result on a slow link.
+ */
+export const HOST_CHANNEL_RESULT_PART_BYTES = 256 * 1024;
 
 const requestIdSchema = z.number().int().nonnegative();
 const subscriptionIdSchema = z.uuid();
@@ -143,9 +148,14 @@ export const hostChannelErrorSchema = z.discriminatedUnion("kind", [
 ]);
 export type HostChannelError = z.infer<typeof hostChannelErrorSchema>;
 
-/** The header of a host message. A `result` and a `host_event` have a JSON body. */
+/**
+ * The header of a host message. A `result` and a `host_event` have a JSON body. A large result body
+ * comes in `result_part` messages, and its `result` message has the last part. The client joins the
+ * bytes of the parts before it reads the JSON.
+ */
 export const hostChannelMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("result"), id: requestIdSchema }),
+  z.strictObject({ type: z.literal("result_part"), id: requestIdSchema }),
   z.strictObject({ type: z.literal("error"), id: requestIdSchema, error: hostChannelErrorSchema }),
   /** The body is the host event envelope. `name` selects its replay buffer and its listeners. */
   z.strictObject({
@@ -176,6 +186,18 @@ export const encodeHostChannelFrame = (
 ): Uint8Array => {
   const text = JSON.stringify(header);
   return encoder.encode(body === undefined ? text : `${text}\n${body}`);
+};
+
+/** Encodes one frame with a body that is already encoded, such as a part of a result. */
+export const encodeHostChannelBytesFrame = (
+  header: HostChannelMessage,
+  body: Uint8Array,
+): Uint8Array => {
+  const head = encoder.encode(`${JSON.stringify(header)}\n`);
+  const frame = new Uint8Array(head.byteLength + body.byteLength);
+  frame.set(head);
+  frame.set(body, head.byteLength);
+  return frame;
 };
 
 type HostChannelFrame = {

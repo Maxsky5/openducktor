@@ -112,6 +112,22 @@ type Pending = {
   reject(cause: unknown): void;
   /** Runs in the turn of the result, before any later frame. */
   onResult?(value: JSONType): void;
+  /** The `result_part` bodies of a large result, in arrival order. */
+  parts: Uint8Array[];
+};
+
+/** Joins the parts of a large result and its last part. */
+const joinParts = (parts: Uint8Array[], last: Uint8Array): Uint8Array => {
+  if (parts.length === 0) return last;
+  const joined = new Uint8Array(
+    parts.reduce((bytes, part) => bytes + part.byteLength, last.byteLength),
+  );
+  let offset = 0;
+  for (const part of [...parts, last]) {
+    joined.set(part, offset);
+    offset += part.byteLength;
+  }
+  return joined;
 };
 
 // A decode call without `stream` keeps no state, so one decoder serves every body.
@@ -187,6 +203,7 @@ export const createHostChannelSession = ({
           settle();
           reject(cause);
         },
+        parts: [],
       };
       if (onResult) entry.onResult = onResult;
       pending.set(id, entry);
@@ -243,7 +260,8 @@ export const createHostChannelSession = ({
           pending.delete(message.id);
           let value: JSONType;
           try {
-            value = body === null ? null : parseJson(decodeBody(body), "result");
+            value =
+              body === null ? null : parseJson(decodeBody(joinParts(entry.parts, body)), "result");
             entry.onResult?.(value);
           } catch (cause) {
             // The request fails with the frame, and the caller ends the channel.
@@ -251,6 +269,15 @@ export const createHostChannelSession = ({
             throw cause;
           }
           entry.resolve(value);
+          return;
+        }
+        case "result_part": {
+          if (body === null)
+            throw new HostChannelProtocolError(
+              "The host channel sent a result part without a body.",
+            );
+          // A cancelled request has no entry, so its later parts drop.
+          pending.get(message.id)?.parts.push(body);
           return;
         }
         case "error": {

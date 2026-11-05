@@ -78,12 +78,15 @@ export const createFakeChannelSocket = (options: HostChannelOptions) => {
         ({ header }) => (header.type === "result" || header.type === "error") && header.id === id,
       );
     },
-    /** The parsed result body of request `id`. */
+    /** The parsed result body of request `id`, with the bodies of its result parts first. */
     result(id: number): JSONType {
       const reply = sent.find(({ header }) => header.type === "result" && header.id === id);
       if (!reply) throw new Error(`Request ${id} has no result.`);
       if (reply.body === null) return null;
-      const value: JSONType = JSON.parse(reply.body);
+      const parts = sent.flatMap(({ header, body }) =>
+        header.type === "result_part" && header.id === id ? [body] : [],
+      );
+      const value: JSONType = JSON.parse([...parts, reply.body].join(""));
       return value;
     },
     ofType<Type extends HostChannelMessage["type"]>(type: Type) {

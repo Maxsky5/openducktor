@@ -253,6 +253,8 @@ The channel uses binary frames of UTF-8 text. Each frame starts with one JSON he
 
 The client sends requests and cancels. Each request has a numeric `id`, and the host answers it with a `result` frame, whose body is the result, or an `error` frame.
 
+A result body larger than 256 KiB, `HOST_CHANNEL_RESULT_PART_BYTES`, comes in `result_part` frames, and the `result` frame has the last part. Each part body has the next bytes of the result JSON, so a part can stop inside a UTF-8 character. The client joins the bytes of all parts before it reads the JSON. The host sends the next part only after the socket sends all buffered data. So on a slow link, heartbeats, events, and other replies pass between the parts of a large result, and the client keeps getting frames. After a cancel, the host sends no more parts of that result.
+
 | Request method | Use |
 |---|---|
 | `events.open` | Send the host event cursor and the notification cursor. The host replays the retained events, answers with `hostEpoch`, `hostEventId`, `hostChanged`, and `gaps`, then sends live events and notification frames. A channel opens events once. |

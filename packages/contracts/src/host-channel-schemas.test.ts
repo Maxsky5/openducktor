@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  encodeHostChannelBytesFrame,
   encodeHostChannelFrame,
   hostChannelMessageSchema,
   hostChannelRequestSchema,
@@ -26,6 +27,16 @@ describe("host channel frames", () => {
     expect(JSON.parse(frame.header)).toEqual({ type: "host_event", id: 3, name: "message" });
     expect(frame.body).toBeInstanceOf(Uint8Array);
     expect(decode(frame.body ?? new Uint8Array())).toBe(body);
+  });
+
+  test("keeps the bytes of a result part as they are, also a cut UTF-8 sequence", () => {
+    const part = new TextEncoder().encode('{"text":"é"}').subarray(0, 11);
+    const frame = splitHostChannelFrame(
+      encodeHostChannelBytesFrame({ type: "result_part", id: 2 }, part),
+    );
+
+    expect(JSON.parse(frame.header)).toEqual({ type: "result_part", id: 2 });
+    expect(frame.body).toEqual(part);
   });
 
   test("rejects a header that is not UTF-8", () => {

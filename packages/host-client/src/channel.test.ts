@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  encodeHostChannelBytesFrame,
   encodeHostChannelFrame,
   hostChannelClientMessageSchema,
   type HostChannelMessage,
@@ -32,8 +33,12 @@ const setup = (handlers: Partial<HostChannelHandlers> = {}) => {
     handlers: { hostEvent: () => {}, notification: () => {}, ...handlers },
     onHandlerError: (cause) => handlerErrors.push(cause),
   });
-  const receive = (header: HostChannelMessage, body?: string) =>
-    session.receive(encodeHostChannelFrame(header, body));
+  const receive = (header: HostChannelMessage, body?: string | Uint8Array) =>
+    session.receive(
+      body instanceof Uint8Array
+        ? encodeHostChannelBytesFrame(header, body)
+        : encodeHostChannelFrame(header, body),
+    );
   /** The sent requests, without cancels. */
   const requests = () => sent.flatMap((message) => (message.type === "request" ? [message] : []));
   return { session, sent, requests, handlerErrors, receive };
@@ -93,6 +98,31 @@ describe("createHostChannelSession", () => {
     expect((await settled(request)).cause).toBe(reason);
     expect(sent.at(-1)).toEqual({ type: "cancel", id: 0 });
     expect(() => receive({ type: "result", id: 0 }, "true")).not.toThrow();
+  });
+
+  test("joins the parts of a large result before it reads the JSON", async () => {
+    const { session, receive } = setup();
+    const request = session.request({ method: "invoke", command: "read", args: {} });
+    // The cut falls inside the two bytes of "é", so each part alone is no valid UTF-8.
+    const bytes = new TextEncoder().encode(JSON.stringify({ text: "é".repeat(4) }));
+    receive({ type: "result_part", id: 0 }, bytes.subarray(0, 11));
+    receive({ type: "heartbeat" });
+    receive({ type: "result_part", id: 0 }, bytes.subarray(11, 14));
+    receive({ type: "result", id: 0 }, bytes.subarray(14));
+
+    expect(await request).toEqual({ text: "é".repeat(4) });
+  });
+
+  test("drops the later parts of an aborted request", async () => {
+    const { session, receive } = setup();
+    const caller = new AbortController();
+    const request = session.request({ method: "invoke", command: "read", args: {} }, caller.signal);
+    receive({ type: "result_part", id: 0 }, "[1,");
+    caller.abort(new Error("Closed."));
+
+    expect((await settled(request)).cause).toBe(caller.signal.reason);
+    expect(() => receive({ type: "result_part", id: 0 }, "2")).not.toThrow();
+    expect(() => receive({ type: "result", id: 0 }, "]")).not.toThrow();
   });
 
   test("an aborted signal sends nothing", async () => {

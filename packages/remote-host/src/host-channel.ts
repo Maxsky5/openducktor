@@ -1,9 +1,11 @@
 import {
   type HostCommandInputRecord,
+  encodeHostChannelBytesFrame,
   encodeHostChannelFrame,
   hostChannelClientMessageSchema,
   isHostReadCommand,
   HOST_CHANNEL_HEARTBEAT_INTERVAL_MS,
+  HOST_CHANNEL_RESULT_PART_BYTES,
   type HostChannelError,
   type HostChannelClientMessage,
   type HostChannelMessage,
@@ -68,6 +70,9 @@ export type HostChannelOptions = {
   reportFailure(cause: unknown): void;
 };
 
+/** A result body that goes out in parts. `sent` counts the bytes in the parts sent so far. */
+type PartedResult = { id: number; body: Uint8Array; sent: number };
+
 export type HostChannelSocketData = {
   kind: "channel";
   options: HostChannelOptions;
@@ -79,6 +84,8 @@ export type HostChannelSocketData = {
   remoteAccess: (() => void) | null;
   /** The running host reads that a cancel or a socket close interrupts. */
   reads: Map<number, AbortController>;
+  /** Large results in send order. A part goes out only while the socket buffers nothing. */
+  partedResults: PartedResult[];
 };
 
 export type HostChannelSocket = NodeServerSocket<HostChannelSocketData>;
@@ -94,6 +101,7 @@ export const createHostChannelSocketData = (
   stops: new Set(),
   remoteAccess: null,
   reads: new Map(),
+  partedResults: [],
 });
 
 export const remoteFailure = (
@@ -153,15 +161,37 @@ const refuse = (
 ): void =>
   sendError(socket, id, { kind: "refused", failure: remoteFailure(code, message, nextAction) });
 
+/**
+ * Sends the next parts of the large results. A part waits while the socket buffers data, so on a
+ * slow link the heartbeat and other messages pass between the parts. The drain sends the next part.
+ */
+const sendResultParts = (socket: HostChannelSocket): void => {
+  const queue = socket.data.partedResults;
+  while (!socket.data.closed && socket.bufferedAmount() === 0) {
+    const [next] = queue;
+    if (!next) return;
+    const end = Math.min(next.sent + HOST_CHANNEL_RESULT_PART_BYTES, next.body.byteLength);
+    const last = end === next.body.byteLength;
+    const header: HostChannelMessage = { type: last ? "result" : "result_part", id: next.id };
+    sendFrame(socket, encodeHostChannelBytesFrame(header, next.body.subarray(next.sent, end)));
+    next.sent = end;
+    if (last) queue.shift();
+  }
+};
+
 const sendResult = (socket: HostChannelSocket, id: number, result: HostChannelResult): void => {
-  const frame = encodeHostChannelFrame({ type: "result", id }, JSON.stringify(result ?? null));
+  const body = Buffer.from(JSON.stringify(result ?? null));
   const limit = socket.data.options.maxReplyBytes;
-  // The header adds a few bytes to the reply, which the limit does not need to tell apart.
-  if (limit !== undefined && frame.byteLength > limit) {
+  if (limit !== undefined && body.byteLength > limit) {
     sendError(socket, id, { kind: "reply_too_large", limitBytes: limit });
     return;
   }
-  sendFrame(socket, frame);
+  if (body.byteLength <= HOST_CHANNEL_RESULT_PART_BYTES) {
+    sendFrame(socket, encodeHostChannelBytesFrame({ type: "result", id }, body));
+    return;
+  }
+  socket.data.partedResults.push({ id, body, sent: 0 });
+  sendResultParts(socket);
 };
 
 /** Starts a fiber that the socket stops when it closes. */
@@ -449,11 +479,16 @@ export const hostChannelWebSocketHandler = {
     }
     if (message.type === "cancel") {
       socket.data.reads.get(message.id)?.abort(new Error("The client cancelled the request."));
+      // The client no longer reads this result, so its remaining parts stay unsent.
+      const queue = socket.data.partedResults;
+      const parted = queue.findIndex((result) => result.id === message.id);
+      if (parted >= 0) queue.splice(parted, 1);
       return;
     }
     handleRequest(socket, message);
   },
   drain(socket: HostChannelSocket): void {
+    sendResultParts(socket);
     const { leases } = socket.data.options;
     for (const [subscriptionId, generation] of socket.data.leases) {
       const lease = leases.get(subscriptionId);
@@ -466,6 +501,7 @@ export const hostChannelWebSocketHandler = {
     for (const read of socket.data.reads.values())
       read.abort(new Error("The host channel closed."));
     socket.data.reads.clear();
+    socket.data.partedResults = [];
     // Each stop deletes itself, which a Set iteration allows.
     for (const stop of socket.data.stops) stop();
     socket.data.remoteAccess = null;

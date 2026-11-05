@@ -1,6 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
 import {
   HOST_CHANNEL_HEARTBEAT_INTERVAL_MS,
+  HOST_CHANNEL_RESULT_PART_BYTES,
+  HOST_CHANNEL_SUBPROTOCOL,
+  splitHostChannelFrame,
   hostEventEnvelopeSchema,
   taskEventLeaseSchema,
   type HostEventEnvelope,
@@ -10,7 +13,11 @@ import {
 import { Effect, Queue, Stream } from "effect";
 import { createNotificationStream } from "../../host/src/application/notifications/notification-stream";
 import { createTaskEventStream } from "../../host/src/events/task-event-stream";
-import type { HostChannelOptions } from "./host-channel";
+import { createHostChannelSession } from "@openducktor/host-client/channel";
+import { WebSocket } from "ws";
+import { createHostChannelSocketData, type HostChannelOptions } from "./host-channel";
+import { hostWebSocketHandler, type HostWebSocketData } from "./host-websocket-handler";
+import { startNodeFetchServer } from "./node-fetch-server";
 import { createFakeChannelSocket, type FakeChannelSocket } from "./host-channel.test-support";
 import { BufferedHostEventStream } from "./host-event-bus";
 import {
@@ -415,6 +422,90 @@ test("refuses a command while the host refuses work, without running it", async 
     error: { kind: "refused", failure: refused },
   });
   expect(calls).toBe(0);
+});
+
+/** A host whose `read` command returns a string that needs three result parts. */
+const createLargeResultHost = () => {
+  const large = "x".repeat(2 * HOST_CHANNEL_RESULT_PART_BYTES);
+  const socket = createHost({
+    invoke: async (command) => ({ result: command === "read" ? large : "small" }),
+  }).connect();
+  /** The messages of request `id` as their types, in send order. */
+  const typesOf = (id: number) =>
+    socket.sent.flatMap(({ header }) =>
+      "id" in header && header.id === id && header.type !== "host_event" ? [header.type] : [],
+    );
+  return { socket, large, typesOf };
+};
+
+test("sends a large result in parts, and other replies pass between parts on a slow socket", async () => {
+  const { socket, large, typesOf } = createLargeResultHost();
+  socket.stall();
+  const read = socket.request({ method: "invoke", command: "read", args: {} });
+  await waitFor(() => typesOf(read).length === 1, "the first result part");
+  const small = socket.request({ method: "invoke", command: "small", args: {} });
+  await waitFor(() => socket.reply(small) !== undefined, "the small reply");
+
+  expect(typesOf(read)).toEqual(["result_part"]);
+  socket.flush();
+  expect(typesOf(read)).toEqual(["result_part", "result_part", "result"]);
+  expect(indexOfReply(socket, small)).toBeLessThan(indexOfReply(socket, read));
+  expect(socket.result(read)).toBe(large);
+  expect(socket.result(small)).toBe("small");
+});
+
+test("a client session joins a large result in parts over a compressed socket", async () => {
+  const large = { text: "é".repeat(HOST_CHANNEL_RESULT_PART_BYTES) };
+  const host = createHost({ invoke: async () => ({ result: large }) });
+  const server = await startNodeFetchServer<HostWebSocketData>({
+    hostname: "127.0.0.1",
+    port: 0,
+    websocket: hostWebSocketHandler,
+    fetch: (_request, requestServer) =>
+      Promise.resolve(
+        requestServer.upgrade({ data: createHostChannelSocketData(host.options) })
+          ? undefined
+          : new Response("WebSocket upgrade failed.", { status: 500 }),
+      ),
+    onError: (cause) => host.failures.push(cause),
+  });
+  const socket = new WebSocket(`ws://127.0.0.1:${server.port}/channel`, [HOST_CHANNEL_SUBPROTOCOL]);
+  cleanups.push(() => server.stop(true));
+  const types: string[] = [];
+  const session = createHostChannelSession({
+    send: (frame) => socket.send(frame),
+    handlers: { hostEvent: () => {}, notification: () => {} },
+    onHandlerError: (cause) => host.failures.push(cause),
+  });
+  socket.on("message", (data: Buffer) => {
+    const frame = new Uint8Array(data);
+    types.push(JSON.parse(splitHostChannelFrame(frame).header).type);
+    session.receive(frame);
+  });
+  await new Promise<void>((resolve, reject) => {
+    socket.once("open", () => resolve());
+    socket.once("error", reject);
+  });
+
+  const result = await session.request({ method: "invoke", command: "read", args: {} });
+
+  expect(socket.extensions).toContain("permessage-deflate");
+  expect(result).toEqual(large);
+  expect(types.filter((type) => type === "result_part").length).toBeGreaterThan(1);
+  expect(types.at(-1)).toBe("result");
+  expect(host.failures).toEqual([]);
+  socket.close();
+});
+
+test("a cancel drops the unsent parts of a large result", async () => {
+  const { socket, typesOf } = createLargeResultHost();
+  socket.stall();
+  const read = socket.request({ method: "invoke", command: "read", args: {} });
+  await waitFor(() => typesOf(read).length === 1, "the first result part");
+  socket.raw(JSON.stringify({ type: "cancel", id: read }));
+  socket.flush();
+
+  expect(typesOf(read)).toEqual(["result_part"]);
 });
 
 test("sends a host error and refuses a reply over the size limit", async () => {
