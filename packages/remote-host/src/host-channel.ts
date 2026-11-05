@@ -20,6 +20,7 @@ import {
   type HostCommandResult,
 } from "@openducktor/host";
 import { Effect, Fiber, Stream } from "effect";
+import { errorMessage } from "./effect/web-errors";
 import type { BufferedHostEventStream } from "./host-event-bus";
 import type { NodeServerSocket } from "./node-fetch-server";
 import type { TaskEventFrameSink, TaskEventLeaseManager } from "./task-event-leases";
@@ -103,9 +104,7 @@ export const remoteFailure = (
 
 /** The error payload of a host command that ran and failed. */
 export const hostErrorResponse = (cause: unknown): HostErrorResponse => {
-  const response: HostErrorResponse = {
-    message: cause instanceof Error ? cause.message : String(cause),
-  };
+  const response: HostErrorResponse = { message: errorMessage(cause) };
   const failure = hostInvokeFailureFromError(cause);
   if (failure) response.failure = failure;
   return response;
@@ -389,7 +388,7 @@ const handleRequest = (socket: HostChannelSocket, request: HostChannelRequestMes
           socket,
           request.id,
           "invalid_protocol",
-          `Task event acknowledgement was rejected: ${cause instanceof Error ? cause.message : String(cause)}`,
+          `Task event acknowledgement was rejected: ${errorMessage(cause)}`,
           "Subscribe again from the last applied cursor.",
         );
         return;

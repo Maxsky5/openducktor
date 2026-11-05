@@ -12,9 +12,7 @@ import { localAttachmentPreviewResponse } from "@openducktor/remote-host/local-a
 import {
   type HostCommandInputRecord,
   type HostErrorResponse,
-  type HostInvokeFailure,
   hostErrorResponseSchema,
-  hostInvokeFailureSchema,
 } from "@openducktor/contracts";
 import {
   createFilesystemRemoteApprovalStore,
@@ -91,13 +89,6 @@ export type TypescriptHostBackendOptions = {
   processEnv?: NodeJS.ProcessEnv;
   runtimeDistribution: HostRuntimeDistribution;
   providedToolPaths?: Partial<Record<ToolDiscoveryId, string>>;
-};
-
-type HostErrorPayloadInput = {
-  error: string;
-  message: string;
-  failureKind?: string;
-  failure?: HostInvokeFailure;
 };
 
 const scheduleNonFatalWebEventFailure = (
@@ -216,29 +207,12 @@ const jsonResponse = <const Payload>(
     },
   });
 
-const hostErrorPayload = (
-  message: string,
-  failureKind?: string,
-  failure?: HostInvokeFailure,
-): HostErrorResponse => {
-  const payload: HostErrorPayloadInput = { error: message, message };
-  if (failureKind) {
-    payload.failureKind = failureKind;
-  }
-  if (failure) {
-    payload.failure = failure;
-  }
-  return hostErrorResponseSchema.parse(payload);
-};
-
-const errorResponse = (
-  message: string,
-  status: number,
-  corsHeaders?: HeadersInit,
-  failureKind?: string,
-  failure?: HostInvokeFailure,
-): Response =>
-  jsonResponse(hostErrorPayload(message, failureKind, failure), { status }, corsHeaders);
+const errorResponse = (message: string, status: number, corsHeaders?: HeadersInit): Response =>
+  jsonResponse(
+    hostErrorResponseSchema.parse({ error: message, message } satisfies HostErrorResponse),
+    { status },
+    corsHeaders,
+  );
 
 const corsHeadersForRequest = (
   request: Request,
@@ -275,10 +249,6 @@ const preflightResponse = (request: Request, allowedOrigins: Set<string>): Respo
     },
   });
 };
-
-const webHostRequestDetailsSchema = z.object({
-  hostInvokeFailure: hostInvokeFailureSchema.optional(),
-});
 
 /**
  * Runs a command of the local frontend and returns its result or its host error payload. A defect
@@ -377,24 +347,12 @@ const validateAppCookieOrHeader = (
 const rejectWebHostRequest = (
   message: string,
   status: number,
-  failureKind?: string,
 ): Effect.Effect<never, WebHostRequestError> =>
-  Effect.fail(
-    new WebHostRequestError(failureKind ? { failureKind, message, status } : { message, status }),
-  );
+  Effect.fail(new WebHostRequestError({ message, status }));
 const webHostRequestErrorResponse = (
   error: WebHostRequestError,
   corsHeaders: HeadersInit,
-): Response => {
-  const { hostInvokeFailure } = webHostRequestDetailsSchema.parse(error.details ?? {});
-  return errorResponse(
-    error.message,
-    error.status,
-    corsHeaders,
-    error.failureKind,
-    hostInvokeFailure,
-  );
-};
+): Response => errorResponse(error.message, error.status, corsHeaders);
 const routeCorsRequest = ({
   appSessionCookieName,
   appToken,

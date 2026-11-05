@@ -1,4 +1,3 @@
-import type { HostErrorResponse } from "@openducktor/contracts";
 import { createLocalHostConnection } from "@openducktor/frontend-core/connection/local-host-connection";
 import type { HostClient } from "@openducktor/host-client";
 import { openWebSocket } from "@openducktor/host-client/remote/socket";
@@ -19,34 +18,16 @@ export const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SESSION_PATH = "session";
 const SESSION_TIMEOUT_MS = 10_000;
 
-type LocalHostRequestErrorInput = {
-  message: string;
-  status: number;
-  cause?: HostErrorResponse;
-  failureKind?: string;
-};
-
-const createLocalHostRequestError = (
-  response: Response,
-  message: string,
-  payload: HostErrorResponse | null,
-): WebHostRequestError => {
-  const input: LocalHostRequestErrorInput = { message, status: response.status };
-  if (payload !== null) {
-    input.cause = payload;
-  }
-  if (payload?.failureKind) {
-    input.failureKind = payload.failureKind;
-  }
-  return new WebHostRequestError(input);
-};
-
 const localHostRequestErrorEffect = (
   response: Response,
 ): Effect.Effect<never, WebDependencyError | WebHostRequestError> =>
   Effect.gen(function* () {
     const { message, payload } = yield* readLocalHostErrorPayloadEffect(response);
-    return yield* createLocalHostRequestError(response, message, payload);
+    return yield* new WebHostRequestError({
+      message,
+      status: response.status,
+      cause: payload ?? undefined,
+    });
   });
 
 /** Sets the app session cookie. `signal` aborts the request and releases its connection. */

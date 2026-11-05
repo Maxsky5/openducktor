@@ -1,5 +1,4 @@
 import { Cause, Data, Effect, Exit } from "effect";
-import type { FailureKind, HostInvokeFailure } from "@openducktor/contracts";
 
 export type WebValidationErrorDetails =
   | { readonly basePath: string }
@@ -47,12 +46,6 @@ export type WebResourceErrorDetails =
   | { readonly channel: string }
   | { readonly indexPath: string; readonly staticRoot: string };
 
-export type WebHostCommandErrorDetails = {
-  command: string;
-  hostDetails?: { readonly failureKind?: FailureKind };
-  hostInvokeFailure?: HostInvokeFailure;
-};
-
 export class WebValidationError extends Data.TaggedError("WebValidationError")<{
   readonly message: string;
   readonly field?: string | undefined;
@@ -86,9 +79,7 @@ export class WebResourceError extends Data.TaggedError("WebResourceError")<{
 export class WebHostRequestError extends Data.TaggedError("WebHostRequestError")<{
   readonly message: string;
   readonly status: number;
-  readonly failureKind?: string | undefined;
   readonly cause?: unknown | undefined;
-  readonly details?: Readonly<WebHostCommandErrorDetails>;
 }> {}
 
 export type WebError =
