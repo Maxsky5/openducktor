@@ -236,6 +236,15 @@ const migrateRepositoryActions = (workspaceId: string, workspace: JSONType): JSO
   return { ...migrated, actions: { items, defaultActionId } };
 };
 
+// Renames the worktree cleanup script, which now runs before a worktree removal.
+const migrateWorktreeRemovalHooks = (workspace: JSONType): JSONType => {
+  if (!isPersistedConfigObject(workspace)) return workspace;
+  const hooks = workspace.hooks;
+  if (!isPersistedConfigObject(hooks) || hooks.postComplete === undefined) return workspace;
+  const { postComplete, ...currentHooks } = hooks;
+  return { ...workspace, hooks: { ...currentHooks, beforeWorktreeRemoval: postComplete } };
+};
+
 const migratePersistedConfig = (payload: PersistedConfigObject) => {
   const migrated = { ...payload };
   delete migrated.trustedHooks;
@@ -273,7 +282,10 @@ const migratePersistedConfig = (payload: PersistedConfigObject) => {
   }
   return migrateWorkspaces(migrateReusablePrompts(migrated), (workspaceId, workspace) =>
     migrateDefaultTargetBranch(
-      migrateRepositoryActions(workspaceId, migrateRepositoryGitConfig(workspaceId, workspace)),
+      migrateRepositoryActions(
+        workspaceId,
+        migrateRepositoryGitConfig(workspaceId, migrateWorktreeRemovalHooks(workspace)),
+      ),
     ),
   );
 };

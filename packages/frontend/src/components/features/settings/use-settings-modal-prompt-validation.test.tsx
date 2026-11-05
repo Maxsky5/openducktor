@@ -33,7 +33,7 @@ const createSnapshot = (): SettingsSnapshot =>
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {
@@ -53,7 +53,7 @@ const createSnapshot = (): SettingsSnapshot =>
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},

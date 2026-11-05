@@ -15,7 +15,7 @@ const createRepoSettings = (overrides: Partial<RepoSettingsInput> = {}): RepoSet
   branchPrefix: "",
   defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  postCompleteHooks: [],
+  beforeWorktreeRemovalHooks: [],
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   agentDefaults: {

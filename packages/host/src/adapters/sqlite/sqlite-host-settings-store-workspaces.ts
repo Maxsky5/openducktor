@@ -89,23 +89,25 @@ export const saveWorkspace = (
             }),
         operation,
       );
-    if (!jsonValuesEqual(previous?.hooks.postComplete, config.hooks.postComplete)) {
+    if (
+      !jsonValuesEqual(previous?.hooks.beforeWorktreeRemoval, config.hooks.beforeWorktreeRemoval)
+    ) {
       if (previous)
         yield* session.execute(
           (db) =>
             db
-              .delete(schema.workspaceBuildCompletionCommands)
-              .where(eq(schema.workspaceBuildCompletionCommands.workspaceId, workspaceId)),
+              .delete(schema.workspaceBeforeWorktreeRemovalCommands)
+              .where(eq(schema.workspaceBeforeWorktreeRemovalCommands.workspaceId, workspaceId)),
           operation,
         );
-      const commands = config.hooks.postComplete.map((command, position) => ({
+      const commands = config.hooks.beforeWorktreeRemoval.map((command, position) => ({
         workspaceId,
         position,
         command,
       }));
       for (const rows of settingsRowBatches(commands))
         yield* session.execute(
-          (db) => db.insert(schema.workspaceBuildCompletionCommands).values(rows),
+          (db) => db.insert(schema.workspaceBeforeWorktreeRemovalCommands).values(rows),
           operation,
         );
     }

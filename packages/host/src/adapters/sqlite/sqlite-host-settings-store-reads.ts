@@ -204,7 +204,7 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
         JSON.parse,
       ),
       commands: sql<string>`(select json_group_array(command) from (
-    select command from workspace_build_completion_commands
+    select command from workspace_before_worktree_removal_commands
     where workspace_id = ${schema.workspaces.workspaceId} order by position
   ))`.mapWith(JSON.parse),
       actions: sql<string>`(select json_group_array(json_object(
@@ -335,7 +335,7 @@ const mapWorkspace = ({
           },
           defaultModel: model ?? undefined,
           agentDefaults: collections.agentDefaults,
-          hooks: { postComplete: collections.commands },
+          hooks: { beforeWorktreeRemoval: collections.commands },
           actions: { items: collections.actions, defaultActionId: row.defaultActionId },
           worktreeCopyPaths: collections.paths,
           promptOverrides: collections.prompts,

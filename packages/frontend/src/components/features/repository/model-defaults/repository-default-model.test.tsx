@@ -18,7 +18,7 @@ const repoConfig: SettingsRepoConfig = {
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},

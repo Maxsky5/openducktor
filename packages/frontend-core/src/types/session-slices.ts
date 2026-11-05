@@ -44,7 +44,7 @@ export type RepoSettingsInput = {
   branchPrefix: string;
   /** Default branch used for ahead/behind comparison, rebase, and PR creation. */
   defaultTargetBranch: GitTargetBranch;
-  postCompleteHooks: string[];
+  beforeWorktreeRemovalHooks: string[];
   actions: RepoActions;
   /** Paths copied from the main repo into a new worktree on creation. */
   worktreeCopyPaths: string[];

@@ -407,7 +407,7 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: null,
       branchPrefix: "obp",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
     });
 
     expect(parsed.worktreeBasePath).toBeUndefined();
@@ -425,7 +425,7 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       agentDefaults: {
         spec: {
           runtimeKind: "opencode",
@@ -449,7 +449,7 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       promptOverrides: {
         [KICKOFF_KEY]: {
           template: "Custom kickoff for {{task.id}}",
@@ -469,7 +469,7 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       promptOverrides: {
         [GUARDS_KEY]: {
           template: "",
@@ -488,7 +488,7 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       agentDefaults: {
         spec: {
           runtimeKind: "opencode",
@@ -1912,7 +1912,7 @@ describe("runtime schemas", () => {
         repoPath: "/repo",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         branchPrefix: "obp",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     ).toMatchObject({ workspaceId: "repo" });
 
@@ -1920,7 +1920,7 @@ describe("runtime schemas", () => {
       repoConfigSchema.parse({
         ...baseRepoConfigInput,
         branchPrefix: "obp",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         agentDefaults: {
           spec: {
             providerId: "openai",
@@ -1934,7 +1934,7 @@ describe("runtime schemas", () => {
       repoConfigSchema.parse({
         ...baseRepoConfigInput,
         branchPrefix: "obp",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         defaultModel: {
           providerId: "openai",
           modelId: "gpt-5",

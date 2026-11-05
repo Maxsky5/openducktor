@@ -7,11 +7,11 @@ import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
+import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
 import type { TaskStorePort, TaskRecord } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import { requireWorktreeFiles } from "../../git/git-service-inputs";
-import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import type { RuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
 import type {
   WorkspaceSettingsError,
@@ -27,7 +27,11 @@ import type { requireBuildStartDependencies } from "./required-task-dependencies
 import { startWorktreeSessionHint } from "./task-workflow-events";
 import { loadRemoveWorktreeOnClose } from "./task-workflow-helpers";
 import { createTaskCleanupProgressState } from "./task-cleanup-progress";
-import { runTaskRuntimeCleanup, selectWorkflowCleanupSessionRecords } from "./task-cleanup-support";
+import {
+  removeTaskWorktree,
+  runTaskRuntimeCleanup,
+  selectWorkflowCleanupSessionRecords,
+} from "./task-cleanup-support";
 import type { TaskWorktreeOwnerReader } from "../../../ports/task-worktree-owner-port";
 import { acquireRemovableWorktrees } from "./task-worktree-owner-guard";
 
@@ -108,10 +112,12 @@ export const findLatestCleanupTarget = (
 type MergedTaskCleanupServices = {
   gitPort: GitPort;
   settingsConfig: SettingsConfigPort;
+  systemCommands: SystemCommandPort | undefined;
   taskActivityGuard?: TaskActivityGuardPort | undefined;
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
   taskWorktreeService: TaskWorktreeService;
   terminalService: TaskTerminalCleanupPort;
+  workspaceSettingsService: WorkspaceSettingsService;
   worktreeFiles?: WorktreeFilePort;
   worktreeOwners: TaskWorktreeOwnerReader | undefined;
   /** The task workflow of the task. Its roles own the sessions and worktrees to clean. */
@@ -243,8 +249,16 @@ export const cleanupMergedTaskState = (
       const canonicalCleanupTarget = yield* dependencies.gitPort.canonicalizePath(checkedTarget);
       const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(repoPath);
       if (!canonicalPathsEqual(canonicalCleanupTarget, canonicalRepoPath, canonicalPathPlatform)) {
-        yield* removeWorktreeAndFilesystemPath(
+        const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, {
+          workspaceId,
+          repoPath,
+        });
+        yield* removeTaskWorktree(
           {
+            beforeWorktreeRemoval: {
+              commands: repoConfig.hooks.beforeWorktreeRemoval,
+              systemCommands: dependencies.systemCommands,
+            },
             gitPort: dependencies.gitPort,
             settingsConfig: dependencies.settingsConfig,
             worktreeFiles,

@@ -20,7 +20,6 @@ export const withoutTaskMutationProgress = (
 ): TaskService => {
   return {
     ...taskService,
-    buildCompleted: (input) => discardTaskMutationProgress(taskService.buildCompleted(input)),
     createTask: (input) => discardTaskMutationProgress(taskService.createTask(input)),
     deleteTask: (input) => discardTaskMutationProgress(taskService.deleteTask(input)),
     directMerge: (input) => discardTaskMutationProgress(taskService.directMerge(input)),

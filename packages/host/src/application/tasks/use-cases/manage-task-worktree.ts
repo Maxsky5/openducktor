@@ -30,6 +30,7 @@ export const createTaskWorktreeUseCases = ({
   taskStore,
   taskWorkflows,
   settingsConfig,
+  systemCommands,
   terminalService,
   taskWorktreeService,
   worktreeFiles,
@@ -157,6 +158,10 @@ export const createTaskWorktreeUseCases = ({
       });
       const progress = createTaskCleanupProgressState();
       yield* runTaskLocalCleanup({
+        beforeWorktreeRemoval: {
+          commands: repoConfig.hooks.beforeWorktreeRemoval,
+          systemCommands,
+        },
         workspaceId: input.workspaceId,
         branchNames,
         gitPort: dependencies.gitPort,

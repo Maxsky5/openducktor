@@ -114,7 +114,7 @@ const copyMigrationsUpTo = async (directory: string, lastIndex: number) => {
   return folder;
 };
 
-test("0002 moves prompt overrides to their owners and Autopilot rules to the built-in workflow", async () => {
+test("0002 moves prompt overrides to their owners, Autopilot rules to the built-in workflow, and renames the cleanup commands", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "odt-host-migration-"));
   cleanups.add(() => rm(directory, { recursive: true, force: true }));
   const databasePath = path.join(directory, "database.sqlite");
@@ -136,6 +136,11 @@ test("0002 moves prompt overrides to their owners and Autopilot rules to the bui
         yield* run(
           `INSERT INTO workspaces (workspace_id, workspace_name, repo_path, branch_prefix, default_target_branch, closed)
            VALUES ('ws', 'Workspace', '/repo', 'odt', 'main', 0)`,
+        );
+        yield* run(
+          `INSERT INTO workspace_build_completion_commands (workspace_id, position, command) VALUES
+           ('ws', 0, 'docker compose down'),
+           ('ws', 1, 'rm -rf .cache')`,
         );
         yield* run(
           `INSERT INTO global_prompt_overrides (template_id, template, base_version, enabled) VALUES
@@ -173,6 +178,9 @@ test("0002 moves prompt overrides to their owners and Autopilot rules to the bui
           actions: yield* read(
             "SELECT workflow_id, event_id, position, action_id FROM autopilot_rule_actions ORDER BY workflow_id, position",
           ),
+          worktreeRemovalCommands: yield* read(
+            "SELECT workspace_id, position, command FROM workspace_before_worktree_removal_commands ORDER BY position",
+          ),
           foreignKeyViolations: yield* read("PRAGMA foreign_key_check"),
         };
       }),
@@ -192,6 +200,10 @@ test("0002 moves prompt overrides to their owners and Autopilot rules to the bui
   expect(result.rules).toEqual([
     ["custom", "taskProgressedToSpecReady"],
     [specPlanBuild, "taskProgressedToSpecReady"],
+  ]);
+  expect(result.worktreeRemovalCommands).toEqual([
+    ["ws", 0, "docker compose down"],
+    ["ws", 1, "rm -rf .cache"],
   ]);
   expect(result.actions).toEqual([
     ["custom", "taskProgressedToSpecReady", 0, "startPlanner"],

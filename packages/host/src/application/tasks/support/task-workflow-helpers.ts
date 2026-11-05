@@ -10,16 +10,15 @@ import type { TaskIdInput } from "../task-inputs";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 import { Effect } from "effect";
-import { TaskPolicyError } from "../../../domain/task";
-import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
+import type { TaskPolicyError } from "../../../domain/task";
+import { HostValidationError } from "../../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../../ports/settings-config-port";
 import type {
   TaskRecord,
   TaskStoreError,
   TaskStorePort,
 } from "../../../ports/task-repository-ports";
-import { taskWorktreeIdError } from "../worktrees/task-worktree-id";
-import { decideEffectTransition, startWorktreeSessionHint } from "./task-workflow-events";
+import { decideEffectTransition } from "./task-workflow-events";
 
 /** Decides the event of a host effect for a task and commits its transition. */
 export const applyEffect = (
@@ -106,71 +105,6 @@ export const loadRemoveWorktreeOnClose = (
   settingsConfig: SettingsConfigPort,
 ): Effect.Effect<boolean, SettingsConfigError | HostValidationError> =>
   loadGlobalGitConfig(settingsConfig).pipe(Effect.map((git) => git.removeWorktreeOnClose));
-export const buildCompletionWorktreePath = (
-  settingsConfig: SettingsConfigPort,
-  workflow: TaskWorkflow,
-  repoConfig: RepoConfig,
-  taskId: string,
-) =>
-  Effect.gen(function* () {
-    const idError = taskWorktreeIdError(taskId);
-    if (idError) return yield* idError;
-    const basePath =
-      repoConfig.worktreeBasePath === undefined
-        ? settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId)
-        : settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath);
-    const worktreePath = settingsConfig.join(basePath, taskId);
-    if (!(yield* settingsConfig.pathExists(worktreePath))) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Worktree cleanup scripts require a task worktree for task ${taskId}. ${startWorktreeSessionHint(workflow)}`,
-          details: { taskId, worktreePath },
-        }),
-      );
-    }
-    const canonicalRepoPath = yield* settingsConfig.canonicalizePath(repoConfig.repoPath);
-    const canonicalWorktreePath = yield* settingsConfig.canonicalizePath(worktreePath);
-    if (canonicalRepoPath === canonicalWorktreePath) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `The worktree path of task ${taskId} is the repository root. Change the worktree base path in the repository settings.`,
-          details: { taskId, worktreePath },
-        }),
-      );
-    }
-    return worktreePath;
-  });
-export const blockBuildCompletionTask = (
-  taskStore: Pick<TaskStorePort, "transitionTask">,
-  taskWorkflows: TaskWorkflowResolver,
-  input: TaskIdInput,
-) => {
-  const { workspaceId, repoPath, taskId } = input;
-  return Effect.gen(function* () {
-    yield* taskStore.transitionTask({
-      workspaceId,
-      repoPath,
-      taskId,
-      decide: (task) => decideEffectTransition(taskWorkflows.forTask(task), "build.blocked", task),
-    });
-  }).pipe(
-    Effect.mapError((error) => {
-      if (error instanceof TaskPolicyError) {
-        return error;
-      }
-
-      return new HostOperationError({
-        operation: "task.build_completed.block_task",
-        message: errorMessage(error),
-        cause: error,
-        details: { repoPath, taskId },
-      });
-    }),
-  );
-};
-
 const tryCanonicalizePath = (
   settingsConfig: SettingsConfigPort,
   rawPath: string | null | undefined,

@@ -32,6 +32,7 @@ export const createTaskFullResetUseCase = ({
   taskWorkflows,
   taskActivityGuard: activityGuard,
   settingsConfig,
+  systemCommands,
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
@@ -128,6 +129,10 @@ export const createTaskFullResetUseCase = ({
 
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
+          beforeWorktreeRemoval: {
+            commands: repoConfig.hooks.beforeWorktreeRemoval,
+            systemCommands,
+          },
           workspaceId: input.workspaceId,
           branchNames,
           gitPort: dependencies.gitPort,

@@ -67,7 +67,7 @@ describe("settings snapshot edits", () => {
       branchPrefix: "feature",
       defaultTargetBranch: { remote: "upstream", branch: "develop" },
       git: { provider: { id: "github", enabled: true, autoDetected: false } },
-      hooks: { postComplete: ["bun test"] },
+      hooks: { beforeWorktreeRemoval: ["bun test"] },
       actions: {
         items: [
           {

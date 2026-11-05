@@ -285,11 +285,11 @@ test("publishes committed transitions when the rest of a mutation fails", async 
       }),
     );
     const failure = new HostOperationError({
-      operation: "build-completed",
+      operation: "reset-implementation",
       message: "Cleanup failed",
     });
     const { service, events, failures } = createServices(harness, {
-      buildCompleted: (input) =>
+      resetImplementation: (input) =>
         Effect.gen(function* () {
           yield* transition(store, {
             workspaceId: input.workspaceId,
@@ -298,14 +298,14 @@ test("publishes committed transitions when the rest of a mutation fails", async 
             status: "spec_ready",
           });
           return yield* new TaskMutationProgressFailure({
-            operation: "build-completed",
+            operation: "reset-implementation",
             changes: { taskIds: [input.taskId], removedTaskIds: [] },
             failure,
           });
         }),
     });
     const result = await Effect.runPromise(
-      Effect.result(service.buildCompleted({ workspaceId, repoPath, taskId: task.id })),
+      Effect.result(service.resetImplementation({ workspaceId, repoPath, taskId: task.id })),
     );
     expect(result._tag).toBe("Failure");
     if (result._tag === "Failure") expect(result.failure).toBe(failure);

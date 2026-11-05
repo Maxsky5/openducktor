@@ -35,7 +35,7 @@ const repoConfig: RepoConfig = {
       repository,
     },
   },
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},

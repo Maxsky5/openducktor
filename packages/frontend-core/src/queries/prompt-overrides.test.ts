@@ -17,7 +17,7 @@ const createRepoConfig = (): RepoConfig => ({
     branch: "main",
   },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   promptOverrides: {
     [specPlanBuildPromptKey("messages.plan_start")]: {

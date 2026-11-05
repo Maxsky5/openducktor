@@ -79,7 +79,7 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},

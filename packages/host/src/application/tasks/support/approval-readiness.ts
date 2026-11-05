@@ -153,6 +153,7 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
       taskStore,
       taskActivityGuard,
       settingsConfig,
+      systemCommands,
       taskSessionLifecycleCoordinator,
       taskWorktreeService,
       terminalService,
@@ -167,6 +168,7 @@ export const prepareDirectMerge = (services: TaskServiceUseCaseInput, input: Dir
       requireDirectMergeDependencies({
         gitPort,
         settingsConfig,
+        systemCommands,
         taskWorktreeService,
         terminalService,
         worktreeFiles,

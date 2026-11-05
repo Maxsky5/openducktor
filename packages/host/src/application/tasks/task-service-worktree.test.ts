@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { type GitBranch, type TaskCard, type TaskMetadataPayload } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { GitRefTip } from "../../ports/git-port";
+import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { TaskWorktreeOwnerReader } from "../../ports/task-worktree-owner-port";
 import {
   createGitPortTestDouble,
@@ -59,6 +60,9 @@ const createService = ({
   otherExistingPaths = [],
   calls = [],
   worktreeOwners = noWorktreeOwners,
+  beforeWorktreeRemoval = [],
+  scriptSucceeds = true,
+  transitions = [],
 }: {
   current?: TaskCard;
   metadata?: Partial<TaskMetadataPayload>;
@@ -66,6 +70,9 @@ const createService = ({
   otherExistingPaths?: string[];
   calls?: string[];
   worktreeOwners?: TaskWorktreeOwnerReader;
+  beforeWorktreeRemoval?: string[];
+  scriptSucceeds?: boolean;
+  transitions?: string[];
 }) => {
   const existing = new Set([...(worktreeExists ? [worktreePath] : []), ...otherExistingPaths]);
   const branches: GitBranch[] = [
@@ -76,7 +83,23 @@ const createService = ({
     taskStore: createTaskStoreTestDouble({
       getTask: () => Effect.succeed(current),
       getTaskMetadata: () => Effect.succeed({ artifacts: {}, agentSessions: [], ...metadata }),
+      transitionTask: (transition) =>
+        Effect.sync(() => {
+          transitions.push(transition.status);
+          return { ...current, status: transition.status };
+        }),
     }),
+    systemCommands: {
+      resolveCommandPath: (command) => Effect.succeed(command),
+      versionCommand: () => Effect.die(new Error("Unexpected version command")),
+      runCommandAllowFailure: (command, args, options) =>
+        Effect.sync(() => {
+          calls.push(`script:${[command, ...args].join(" ")}@${options?.cwd}`);
+          return scriptSucceeds
+            ? { ok: true, stdout: "", stderr: "" }
+            : { ok: false, exitCode: 3, stdout: "stopping services", stderr: "port 3000 is busy" };
+        }),
+    } satisfies SystemCommandPort,
     gitPort: createGitPortTestDouble({
       canonicalizePath: (value: string) => Effect.succeed(value),
       isGitRepository: () => Effect.succeed(true),
@@ -117,6 +140,7 @@ const createService = ({
         Effect.succeed(
           repoConfigFixture({
             worktreeBasePath: "/worktrees/repo",
+            hooks: { beforeWorktreeRemoval },
           }),
         ),
     }),
@@ -233,6 +257,49 @@ describe("remove the worktree of a closed task", () => {
     ]);
   });
 
+  test("runs the before worktree removal script in the worktree right before its removal", async () => {
+    const calls: string[] = [];
+
+    await Effect.runPromise(
+      createService({
+        current: task({ status: "closed" }),
+        calls,
+        beforeWorktreeRemoval: ["docker compose down", "rm -rf .cache"],
+      }).removeTaskWorktree(input),
+    );
+
+    expect(calls).toEqual([
+      "stop-terminals",
+      `script:docker compose down@${worktreePath}`,
+      `script:rm -rf .cache@${worktreePath}`,
+      `remove-worktree:${worktreePath}`,
+      "delete-branch:odt/task-1",
+    ]);
+  });
+
+  test("keeps the worktree and the branch when a script command fails", async () => {
+    const calls: string[] = [];
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        createService({
+          current: task({ status: "closed" }),
+          calls,
+          beforeWorktreeRemoval: ["docker compose down", "rm -rf .cache"],
+          scriptSucceeds: false,
+        }).removeTaskWorktree(input),
+      ),
+    );
+
+    expect(failure.message).toContain(
+      "Before worktree removal script command failed: docker compose down",
+    );
+    expect(failure.message).toContain("stopping services\nport 3000 is busy\nExit code 3.");
+    expect(failure.message).toContain(`OpenDucktor kept the worktree ${worktreePath}.`);
+    expect(failure.message).not.toContain("cleanup already completed");
+    expect(calls).toEqual(["stop-terminals", `script:docker compose down@${worktreePath}`]);
+  });
+
   test("rejects a task that is not closed", async () => {
     const calls: string[] = [];
 
@@ -244,5 +311,61 @@ describe("remove the worktree of a closed task", () => {
       "Task task-1 is not closed. Close the task to remove its worktree.",
     );
     expect(calls).toEqual([]);
+  });
+});
+
+describe("close a task with worktree removal", () => {
+  test("runs the before worktree removal script in the worktree right before its removal", async () => {
+    const calls: string[] = [];
+    const transitions: string[] = [];
+
+    await Effect.runPromise(
+      createService({ calls, transitions, beforeWorktreeRemoval: ["make clean"] }).closeTask({
+        ...input,
+        removeWorktree: true,
+      }),
+    );
+
+    expect(calls).toEqual([
+      "stop-terminals",
+      `script:make clean@${worktreePath}`,
+      `remove-worktree:${worktreePath}`,
+      "delete-branch:odt/task-1",
+    ]);
+    expect(transitions).toEqual(["closed"]);
+  });
+
+  test("keeps the worktree, the branch, and the task status when a script command fails", async () => {
+    const calls: string[] = [];
+    const transitions: string[] = [];
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        createService({
+          calls,
+          transitions,
+          beforeWorktreeRemoval: ["make clean"],
+          scriptSucceeds: false,
+        }).closeTask({ ...input, removeWorktree: true }),
+      ),
+    );
+
+    expect(failure.message).toContain("Before worktree removal script command failed: make clean");
+    expect(failure.message).toContain("port 3000 is busy");
+    expect(calls).toEqual(["stop-terminals", `script:make clean@${worktreePath}`]);
+    expect(transitions).toEqual([]);
+  });
+
+  test("does not run the script when the close keeps the worktree", async () => {
+    const calls: string[] = [];
+
+    await Effect.runPromise(
+      createService({ calls, beforeWorktreeRemoval: ["make clean"] }).closeTask({
+        ...input,
+        removeWorktree: false,
+      }),
+    );
+
+    expect(calls).toEqual(["stop-terminals"]);
   });
 });

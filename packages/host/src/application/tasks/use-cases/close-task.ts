@@ -32,6 +32,7 @@ export const createTaskCloseUseCase = ({
   taskWorkflows,
   taskActivityGuard,
   settingsConfig,
+  systemCommands,
   terminalService,
   taskWorktreeService,
   worktreeFiles,
@@ -123,6 +124,10 @@ export const createTaskCloseUseCase = ({
           recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
         }
         yield* runTaskLocalCleanup({
+          beforeWorktreeRemoval: {
+            commands: repoConfig.hooks.beforeWorktreeRemoval,
+            systemCommands,
+          },
           workspaceId: input.workspaceId,
           branchNames,
           gitPort: dependencies.gitPort,

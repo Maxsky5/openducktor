@@ -42,7 +42,7 @@ test("one workspace keeps mixed-workflow projections and mutations separate in s
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "fairnest",
       repoPath,
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
     }),
   });
   const create = async (workflow: TaskWorkflow) => {

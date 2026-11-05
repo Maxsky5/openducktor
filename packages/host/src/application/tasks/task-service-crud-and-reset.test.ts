@@ -110,7 +110,7 @@ const createCleanupTaskServiceInput = (taskStore: TaskStorePort) => ({
   workspaceSettingsService: createBuildWorkspaceSettingsService({
     workspaceId: "repo",
     repoPath: "/repo",
-    hooks: { postComplete: [] },
+    hooks: { beforeWorktreeRemoval: [] },
   }),
 });
 describe("createTaskService task mutations and reset", () => {
@@ -566,7 +566,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -708,7 +708,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -862,7 +862,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -949,7 +949,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -1059,7 +1059,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -1322,7 +1322,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).resetImplementation({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -1562,7 +1562,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).resetTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -1671,7 +1671,7 @@ describe("createTaskService task mutations and reset", () => {
           taskActivityGuard,
         }).resetTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
-    ).rejects.toThrow(/Reset cleanup already completed: Stopped 2 live agent sessions,/);
+    ).rejects.toThrow(/Reset cleanup already completed: Stopped 2 live agent sessions\./);
   });
   test("reports implementation reset failures after the first store clear as partial progress", async () => {
     const failure = new HostOperationError({
@@ -1701,7 +1701,7 @@ describe("createTaskService task mutations and reset", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
 
@@ -1756,7 +1756,7 @@ describe("createTaskService task mutations and reset", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
 
@@ -1810,7 +1810,7 @@ describe("createTaskService task mutations and reset", () => {
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
           repoPath: "/repo",
-          hooks: { postComplete: [] },
+          hooks: { beforeWorktreeRemoval: [] },
         }),
       });
 
@@ -1869,7 +1869,7 @@ describe("createTaskService task mutations and reset", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
 
@@ -2017,7 +2017,7 @@ describe("createTaskService task mutations and reset", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).resetImplementation({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),

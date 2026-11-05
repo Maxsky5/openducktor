@@ -69,7 +69,7 @@ const createReadOnlyRepoConfig = (): RepoConfig => ({
   branchPrefix: "odt/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   promptOverrides: {
     [specPlanBuildPromptKey("workflow.read_only_rejection")]: {

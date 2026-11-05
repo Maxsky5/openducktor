@@ -94,7 +94,6 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
     await run(workflow.tasks.buildCompleted(input));
     await workflow.waitForOutcomes(3);
     await run(workflow.tasks.buildCompleted(input));
-    expect(workflow.hookCalls).toHaveLength(1);
     await run(
       workflow.tasks.workflowArtifactSave({
         sourceTool: "workflow_artifact_save",
@@ -160,12 +159,6 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
       revision: 2,
       verdict: "approved",
     });
-    expect(workflow.hookCalls).toEqual(
-      Array.from({ length: 3 }, () => ({
-        command: "check-worktree",
-        cwd: `/worktrees/workflow/${input.taskId}`,
-      })),
-    );
     expect(
       workflow.events
         .flatMap((event) => (event.kind === "tasks_updated" ? event.statusChanges : []))
@@ -332,35 +325,6 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
     });
   });
 
-  test("commits and publishes a blocked build when its completion hook fails, then completes once", async () => {
-    const workflow = await createWorkflowHarness();
-    const input = await workflow.createTask();
-    await run(workflow.tasks.buildResumed(input));
-    workflow.setHookSucceeds(false);
-    const failed = await run(Effect.result(workflow.tasks.buildCompleted(input)));
-    expect(failed._tag).toBe("Failure");
-    if (failed._tag === "Failure") expect(failed.failure.message).toContain("Hook failed");
-    expect((await run(workflow.store.getTask(input))).status).toBe("blocked");
-    expect(workflow.commits.at(-1)).toMatchObject({
-      operation: "build-completed",
-      statusChange: { previousStatus: "in_progress", task: { status: "blocked" } },
-    });
-    expect(workflow.events.at(-1)).toMatchObject({
-      statusChanges: [{ previousStatus: "in_progress", task: { status: "blocked" } }],
-    });
-    expect(workflow.actions).toEqual([]);
-    workflow.setHookSucceeds(true);
-    await run(workflow.tasks.buildCompleted(input));
-    await workflow.waitForOutcomes(1);
-    await run(workflow.tasks.buildCompleted(input));
-    expect(workflow.hookCalls).toHaveLength(2);
-    expect(workflow.actions).toEqual(["startQa"]);
-    expect(workflow.commits.at(-1)).toMatchObject({
-      operation: "build-completed",
-      statusChange: { previousStatus: "blocked", task: { status: "ai_review" } },
-    });
-  });
-
   test.each(["failure", "interruption"] as const)(
     "keeps a committed completion and hands off once after publication %s",
     async (mode) => {
@@ -405,7 +369,6 @@ describe("workflow commands through SQLite, publication, and Autopilot", () => {
       expect(workflow.failures).toHaveLength(mode === "failure" ? 1 : 0);
       workflow.setPublicationGate(Effect.void);
       await run(workflow.tasks.buildCompleted(input));
-      expect(workflow.hookCalls).toHaveLength(1);
       expect(
         workflow.commits.filter((change) => change.operation === "build-completed"),
       ).toHaveLength(1);
@@ -443,7 +406,7 @@ const createWorkflowHarness = async ({
     workspaceId: "workflow",
     workspaceName: "Workflow",
     repoPath,
-    hooks: { postComplete: ["check-worktree"] },
+    hooks: { beforeWorktreeRemoval: [] },
   });
   const config = globalConfigSchema.parse({
     version: 4,
@@ -473,8 +436,6 @@ const createWorkflowHarness = async ({
     join: (...parts) => parts.join("/"),
   });
   let publicationGate: Effect.Effect<void, HostOperationError> = Effect.void;
-  let hookSucceeds = true;
-  const hookCalls: Array<{ command: string; cwd: string | undefined }> = [];
   const workspaceSettingsService = createWorkspaceSettingsServiceTestDouble({
     getRepoConfigByRepoPath: () => Effect.succeed(repo),
     getRepoConfig: () => Effect.succeed(repo),
@@ -491,15 +452,6 @@ const createWorkflowHarness = async ({
     taskStore: store,
     settingsConfig,
     workspaceSettingsService,
-    systemCommands: {
-      resolveCommandPath: (command) => Effect.succeed(command),
-      versionCommand: () => Effect.die(new Error("Unexpected version command")),
-      runCommandAllowFailure: (command, _args, options) =>
-        Effect.sync(() => {
-          hookCalls.push({ command, cwd: options?.cwd });
-          return { ok: hookSucceeds, stdout: "", stderr: hookSucceeds ? "" : "Hook failed" };
-        }),
-    },
   });
   const events: ExternalTaskSyncEvent[] = [];
   const failures: unknown[] = [];
@@ -582,10 +534,6 @@ const createWorkflowHarness = async ({
     commits,
     actions,
     outcomes,
-    hookCalls,
-    setHookSucceeds: (value: boolean) => {
-      hookSucceeds = value;
-    },
     setPublicationGate: (gate: typeof publicationGate) => {
       publicationGate = gate;
     },

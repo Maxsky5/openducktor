@@ -8,7 +8,6 @@ import type { TaskServiceError } from "./task-service";
 
 export class TaskMutationProgressFailure extends Data.TaggedError("TaskMutationProgressFailure")<{
   readonly operation:
-    | "build-completed"
     | "create-task"
     | "delete-task"
     | "direct-merge"

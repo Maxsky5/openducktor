@@ -35,7 +35,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         defaultTargetBranch: { branch: "main" },
       }),
     });
@@ -93,7 +93,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
     const result = await Effect.runPromise(
@@ -224,7 +224,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
     await expect(
@@ -377,7 +377,7 @@ describe("createTaskService direct merge", () => {
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
           repoPath: "/repo",
-          hooks: { postComplete: [] },
+          hooks: { beforeWorktreeRemoval: [] },
         }),
       });
 
@@ -505,7 +505,7 @@ describe("createTaskService direct merge", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).directMerge({
           workspaceId: "repo",
@@ -610,7 +610,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
     await expect(
@@ -705,7 +705,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
     const input = { repoPath: "/repo", taskId: "task-1" };
@@ -782,7 +782,7 @@ describe("createTaskService direct merge", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).completeDirectMerge({
           workspaceId: "repo",
@@ -827,7 +827,7 @@ describe("createTaskService direct merge", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).completeDirectMerge({
           workspaceId: "repo",

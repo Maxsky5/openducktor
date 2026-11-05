@@ -1,14 +1,12 @@
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import {
   createBuildSettingsConfig,
   createBuildStartGitPort,
   createBuildSystemCommands,
   createBuildWorkspaceSettingsService,
   createTaskService,
-  createTaskServiceWithMutationProgress,
   type TaskStorePort,
   task,
 } from "./test-support/task-workflow-harness";
@@ -387,7 +385,7 @@ describe("createTaskService build and review", () => {
       ),
     ).resolves.toMatchObject({ id: "task-1", status: "in_progress" });
   });
-  test("completes a build into AI review and runs post-complete hooks in the task worktree", async () => {
+  test("completes a build into AI review without running the before worktree removal script", async () => {
     const calls: unknown[] = [];
     const updatedTask = task({ id: "task-1", status: "ai_review" });
     const taskStore: TaskStorePort = {
@@ -464,11 +462,11 @@ describe("createTaskService build and review", () => {
       taskWorkflows: builtinTaskWorkflows,
       taskStore,
       settingsConfig: createBuildSettingsConfig(existingPaths),
-      systemCommands: createBuildSystemCommands(calls),
+      systemCommands: createBuildSystemCommands(calls, false),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: ["sh -lc 'printf cleanup'"] },
+        hooks: { beforeWorktreeRemoval: ["sh -lc 'printf cleanup'"] },
       }),
     });
     const completed = await Effect.runPromise(
@@ -478,53 +476,17 @@ describe("createTaskService build and review", () => {
         taskId: "task-1",
       }),
     );
-    expect(calls).toMatchObject([
-      { type: "list", input: { repoPath: "/repo" } },
-      {
-        command: "sh",
-        args: ["-lc", "printf cleanup"],
-        options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
-      },
-      { type: "list", input: { repoPath: "/repo" } },
-      {
-        type: "transition",
-        input: {
-          repoPath: "/repo",
-          taskId: "task-1",
-          status: "ai_review",
-          cause: { signal: "taskProgressedToAiReview" },
-        },
-      },
-    ]);
-    expect(completed).toMatchObject({ id: "task-1", status: "ai_review" });
-  });
-  test("does not run post-complete hooks outside the task worktree", async () => {
-    const taskId = "../elsewhere";
-    const calls: unknown[] = [];
-    const current = task({ id: taskId, status: "in_progress" });
-    const taskStore: TaskStorePort = {
-      listTasks: () => Effect.succeed([current]),
-      transitionTask: (input) => {
-        calls.push({ type: "transition", input });
-        return Effect.succeed({ ...current, status: input.status });
-      },
-    };
-    const service = createTaskService({
-      taskWorkflows: builtinTaskWorkflows,
-      taskStore,
-      settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/../elsewhere"])),
-      systemCommands: createBuildSystemCommands(calls),
-      workspaceSettingsService: createBuildWorkspaceSettingsService({
-        workspaceId: "repo",
-        repoPath: "/repo",
-        hooks: { postComplete: ["sh -lc 'printf cleanup'"] },
-      }),
-    });
-
-    await expect(
-      Effect.runPromise(service.buildCompleted({ workspaceId: "repo", repoPath: "/repo", taskId })),
-    ).rejects.toThrow("Task ID must name one worktree directory");
     expect(calls).not.toContainEqual(expect.objectContaining({ command: "sh" }));
+    expect(calls.at(-1)).toMatchObject({
+      type: "transition",
+      input: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        status: "ai_review",
+        cause: { signal: "taskProgressedToAiReview" },
+      },
+    });
+    expect(completed).toMatchObject({ id: "task-1", status: "ai_review" });
   });
   test("completes a build into human review when QA is already approved", async () => {
     const calls: unknown[] = [];
@@ -617,7 +579,7 @@ describe("createTaskService build and review", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: ["  "] },
+            hooks: { beforeWorktreeRemoval: ["  "] },
           }),
         }).buildCompleted({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -635,146 +597,6 @@ describe("createTaskService build and review", () => {
         },
       },
     ]);
-  });
-  test("blocks build completion when a post-complete hook fails", async () => {
-    const calls: unknown[] = [];
-    const taskStore: TaskStorePort = {
-      listTasks(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "list", input });
-            return [task({ id: "task-1", status: "in_progress" })];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "transition", input });
-            return task({ id: "task-1", status: input.status });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    await expect(
-      Effect.runPromise(
-        createTaskService({
-          taskWorkflows: builtinTaskWorkflows,
-          taskStore,
-          settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-          systemCommands: createBuildSystemCommands(calls, false),
-          workspaceSettingsService: createBuildWorkspaceSettingsService({
-            workspaceId: "repo",
-            repoPath: "/repo",
-            hooks: { postComplete: ["sh -lc 'echo cleanup failed >&2; exit 1'"] },
-          }),
-        }).buildCompleted({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
-      ),
-    ).rejects.toThrow("Worktree cleanup script command failed");
-    expect(calls).toMatchObject([
-      { type: "list", input: { repoPath: "/repo" } },
-      {
-        command: "sh",
-        args: ["-lc", "echo cleanup failed >&2; exit 1"],
-        options: { cwd: "/worktrees/repo/task-1", timeoutMs: 300_000 },
-      },
-      { type: "list", input: { repoPath: "/repo" } },
-      {
-        type: "transition",
-        input: {
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          status: "blocked",
-          cause: {},
-        },
-      },
-    ]);
-  });
-  test("reports blocked build completion as partial progress", async () => {
-    const transitions: string[] = [];
-    const taskStore: TaskStorePort = {
-      listTasks: () => Effect.succeed([task({ id: "task-1", status: "in_progress" })]),
-      transitionTask: (input) => {
-        transitions.push(input.status);
-        return Effect.succeed(task({ id: "task-1", status: input.status }));
-      },
-    };
-
-    const result = await Effect.runPromise(
-      createTaskServiceWithMutationProgress({
-        taskWorkflows: builtinTaskWorkflows,
-        taskStore,
-        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-        systemCommands: createBuildSystemCommands([], false),
-        workspaceSettingsService: createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { postComplete: ["sh -lc 'exit 1'"] },
-        }),
-      })
-        .buildCompleted({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" })
-        .pipe(Effect.flip),
-    );
-
-    if (!(result instanceof TaskMutationProgressFailure)) {
-      throw new Error("Expected a TaskMutationProgressFailure");
-    }
-    expect(transitions).toMatchObject(["blocked"]);
-    expect(result.operation).toBe("build-completed");
-    expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
-    expect(result.failure.message).toContain("Worktree cleanup script command failed");
   });
   test("returns review tasks unchanged from duplicate build completion", async () => {
     const taskStore: TaskStorePort = {
@@ -854,7 +676,7 @@ describe("createTaskService build and review", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: ["sh -lc 'exit 1'"] },
+            hooks: { beforeWorktreeRemoval: ["sh -lc 'exit 1'"] },
           }),
         }).buildCompleted({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),

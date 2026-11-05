@@ -12,7 +12,7 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
   hooks: {
-    postComplete: [],
+    beforeWorktreeRemoval: [],
   },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],

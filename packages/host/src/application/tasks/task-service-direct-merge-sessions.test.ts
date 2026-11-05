@@ -84,7 +84,7 @@ const createHarness = (
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath: "/repo",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       defaultTargetBranch: publish ? { remote: "origin", branch: "main" } : { branch: "main" },
     }),
     taskStore: {

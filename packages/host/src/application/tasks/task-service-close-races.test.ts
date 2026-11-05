@@ -17,7 +17,7 @@ const repoConfig: RepoConfig = {
   defaultTargetBranch: { remote: "origin", branch: "main" },
   worktreeBasePath: "/worktrees/repo",
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},

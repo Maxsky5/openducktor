@@ -48,7 +48,7 @@ export const toRepoSettingsInput = (config: RepoConfig): RepoSettingsInput => ({
   worktreeBasePath: config.worktreeBasePath ?? "",
   branchPrefix: config.branchPrefix,
   defaultTargetBranch: normalizeTargetBranch(config.defaultTargetBranch),
-  postCompleteHooks: config.hooks.postComplete,
+  beforeWorktreeRemovalHooks: config.hooks.beforeWorktreeRemoval,
   actions: config.actions,
   worktreeCopyPaths: config.worktreeCopyPaths ?? [],
   agentDefaults: {

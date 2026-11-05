@@ -73,8 +73,8 @@ export const workspaceRoleDefaults = sqliteTable(
   (table) => [primaryKey({ columns: [table.workspaceId, table.roleId] })],
 );
 
-export const workspaceBuildCompletionCommands = sqliteTable(
-  "workspace_build_completion_commands",
+export const workspaceBeforeWorktreeRemovalCommands = sqliteTable(
+  "workspace_before_worktree_removal_commands",
   {
     workspaceId: text("workspace_id")
       .notNull()
@@ -84,7 +84,10 @@ export const workspaceBuildCompletionCommands = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.position] }),
-    check("chk_workspace_build_completion_commands_position", sql`${column(table.position)} >= 0`),
+    check(
+      "chk_workspace_before_worktree_removal_commands_position",
+      sql`${column(table.position)} >= 0`,
+    ),
   ],
 );
 
@@ -452,7 +455,7 @@ export const hostSettingsSchema = {
   workspaces,
   workspaceDefaultModels,
   workspaceRoleDefaults,
-  workspaceBuildCompletionCommands,
+  workspaceBeforeWorktreeRemovalCommands,
   workspaceActions,
   workspaceCopyPaths,
   workspacePromptOverrides,

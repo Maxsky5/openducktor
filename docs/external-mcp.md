@@ -344,7 +344,7 @@ The host checks each call:
 - A required note must be present.
 - The workflow guards of the event apply. A denial fails with `TASK_TRANSITION_NOT_ALLOWED`.
 
-The host runs the effect of the event. `build-completed` runs the post-complete hooks before the move. The host does not store the note. The result is `{ task, eventId, note? }` and echoes the note.
+The host runs the effect of the event. The host does not store the note. The result is `{ task, eventId, note? }` and echoes the note.
 
 ## Ownership
 

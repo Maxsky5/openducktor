@@ -416,7 +416,7 @@ describe("shared host settings", () => {
             repository: { host: "github.com", owner: "owner", name: "one" },
           },
         },
-        hooks: { postComplete: ["echo done", "echo done"] },
+        hooks: { beforeWorktreeRemoval: ["echo done", "echo done"] },
         worktreeCopyPaths: [".env", ".env"],
         actions: {
           items: [
@@ -633,7 +633,7 @@ describe("shared host settings", () => {
         next.workspaces.one!.closed = false;
       }, 1);
       await edit((next) => {
-        next.workspaces.one!.hooks.postComplete = [
+        next.workspaces.one!.hooks.beforeWorktreeRemoval = [
           "echo third",
           "echo first",
           "echo third",

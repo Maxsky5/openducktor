@@ -916,7 +916,7 @@ describe("createAgentSessionCommandService", () => {
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
           repoPath: "/repo",
-          hooks: { postComplete: [] },
+          hooks: { beforeWorktreeRemoval: [] },
         }),
         runtimeDefinitionsService: createRuntimeDefinitionsService(),
         runtimeRegistry: createBuildStartRuntimeRegistry(calls),
@@ -1060,7 +1060,7 @@ describe("createAgentSessionCommandService", () => {
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
           repoPath: "/repo",
-          hooks: { postComplete: [] },
+          hooks: { beforeWorktreeRemoval: [] },
         }),
         runtimeDefinitionsService: createRuntimeDefinitionsService(),
         runtimeRegistry: createBuildStartRuntimeRegistry(calls),

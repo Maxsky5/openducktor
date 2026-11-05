@@ -197,7 +197,7 @@ const createDefaultRepoSettings = (): RepoSettingsInput => ({
     profileId: "",
   },
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  postCompleteHooks: [],
+  beforeWorktreeRemovalHooks: [],
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   agentDefaults: {
@@ -217,7 +217,7 @@ const createRepoConfigFixture = (): RepoConfig => ({
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
   hooks: {
-    postComplete: [],
+    beforeWorktreeRemoval: [],
   },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],

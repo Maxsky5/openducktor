@@ -61,7 +61,7 @@ describe("rollbackFailedTaskWorktree", () => {
             createBuildWorkspaceSettingsService({
               workspaceId: "repo",
               repoPath: "/repo",
-              hooks: { postComplete: [] },
+              hooks: { beforeWorktreeRemoval: [] },
             }),
           ),
           "/repo",

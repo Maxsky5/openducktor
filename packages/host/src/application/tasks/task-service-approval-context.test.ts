@@ -203,7 +203,7 @@ describe("createTaskService approval context", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         git: {
           provider: {
             id: "github",
@@ -372,7 +372,7 @@ describe("createTaskService approval context", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).getApprovalContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),

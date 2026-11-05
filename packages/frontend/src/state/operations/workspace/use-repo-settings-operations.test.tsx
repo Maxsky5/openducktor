@@ -255,7 +255,7 @@ const createRepoConfig = (): Awaited<ReturnType<typeof host.workspaceGetRepoConf
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: ["b"] },
+  hooks: { beforeWorktreeRemoval: ["b"] },
   actions: createRepoActions(),
   worktreeCopyPaths: [],
   promptOverrides: {},
@@ -398,7 +398,7 @@ describe("use-repo-settings-operations", () => {
         branchPrefix: "codex/",
         defaultModel: null,
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        postCompleteHooks: ["b"],
+        beforeWorktreeRemovalHooks: ["b"],
         actions: createRepoActions(),
         worktreeCopyPaths: [],
         agentDefaults: {
@@ -1061,7 +1061,7 @@ describe("use-repo-settings-operations", () => {
       workspaces: {
         "repo-a": {
           ...createRepoSettingsConfigFixture("repo-a", "/repo-a"),
-          hooks: { postComplete: ["bun run cleanup"] },
+          hooks: { beforeWorktreeRemoval: ["bun run cleanup"] },
         },
       },
     });
@@ -1325,7 +1325,7 @@ describe("use-repo-settings-operations", () => {
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
-          hooks: { postComplete: [] },
+          hooks: { beforeWorktreeRemoval: [] },
           actions: { items: [], defaultActionId: null },
           worktreeCopyPaths: [],
           promptOverrides: repoPromptOverrides,

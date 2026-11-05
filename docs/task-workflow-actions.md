@@ -148,6 +148,12 @@ The host keeps each task that the last pull request sync could not close in memo
 
 A worktree that no longer exists has nothing to remove, so its owners do not count.
 
+## Before worktree removal script
+
+The repository setting `hooks.beforeWorktreeRemoval` holds one command per line. The host runs these commands in a task worktree right before it removes that worktree. Close, Delete, Reset Task, Reset Implementation, Remove worktree, and merged task cleanup run them. A worktree that no longer exists has no script run.
+
+The host runs the commands in order. The first failed command stops the cleanup: the host keeps that worktree, deletes no branch, and does not change the task status. The error names the command and shows its output. Fix the cause, then run the action again.
+
 ## Merge detection
 
 The host checks whether task branches are merged into their targets. It never closes a task. It only proposes Close Task.

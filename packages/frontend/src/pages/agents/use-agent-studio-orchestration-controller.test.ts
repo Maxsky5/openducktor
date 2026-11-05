@@ -441,7 +441,7 @@ describe("task chat drafts", () => {
       worktreeBasePath: "",
       branchPrefix: "codex/",
       defaultTargetBranch: { remote: "origin", branch: "main" },
-      postCompleteHooks: [],
+      beforeWorktreeRemovalHooks: [],
       actions: { items: [], defaultActionId: null },
       worktreeCopyPaths: [],
       agentDefaults: { spec: null, planner: null, build: null, qa: null },

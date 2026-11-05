@@ -36,4 +36,19 @@ DROP TABLE `global_prompt_overrides`;--> statement-breakpoint
 ALTER TABLE `__new_global_prompt_overrides` RENAME TO `global_prompt_overrides`;--> statement-breakpoint
 INSERT INTO `autopilot_rules`("workflow_id", "event_id") SELECT 'openducktor-spec-plan-build', "event_id" FROM `autopilot_rules` WHERE "workflow_id" = 'openducktor';--> statement-breakpoint
 UPDATE `autopilot_rule_actions` SET "workflow_id" = 'openducktor-spec-plan-build' WHERE "workflow_id" = 'openducktor';--> statement-breakpoint
-DELETE FROM `autopilot_rules` WHERE "workflow_id" = 'openducktor';
+DELETE FROM `autopilot_rules` WHERE "workflow_id" = 'openducktor';--> statement-breakpoint
+ALTER TABLE `workspace_build_completion_commands` RENAME TO `workspace_before_worktree_removal_commands`;--> statement-breakpoint
+PRAGMA foreign_keys=OFF;--> statement-breakpoint
+CREATE TABLE `__new_workspace_before_worktree_removal_commands` (
+	`workspace_id` text NOT NULL,
+	`position` integer NOT NULL,
+	`command` text NOT NULL,
+	PRIMARY KEY(`workspace_id`, `position`),
+	FOREIGN KEY (`workspace_id`) REFERENCES `workspaces`(`workspace_id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "chk_workspace_before_worktree_removal_commands_position" CHECK("position" >= 0)
+);
+--> statement-breakpoint
+INSERT INTO `__new_workspace_before_worktree_removal_commands`("workspace_id", "position", "command") SELECT "workspace_id", "position", "command" FROM `workspace_before_worktree_removal_commands`;--> statement-breakpoint
+DROP TABLE `workspace_before_worktree_removal_commands`;--> statement-breakpoint
+ALTER TABLE `__new_workspace_before_worktree_removal_commands` RENAME TO `workspace_before_worktree_removal_commands`;--> statement-breakpoint
+PRAGMA foreign_keys=ON;

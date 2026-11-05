@@ -231,7 +231,6 @@ export type TaskResetResult = {
 };
 export type TaskServiceWithMutationProgress = Omit<
   TaskService,
-  | "buildCompleted"
   | "createTask"
   | "deleteTask"
   | "directMerge"
@@ -242,9 +241,6 @@ export type TaskServiceWithMutationProgress = Omit<
   | "workflowArtifactSave"
   | "updateTask"
 > & {
-  buildCompleted(
-    input: TaskIdInput,
-  ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
   createTask(
     input: CreateTaskUseCaseInput,
   ): Effect.Effect<TaskCard, TaskServiceError | TaskCreationProgressFailure>;
@@ -339,7 +335,7 @@ const createTaskServiceImplementation = (
       mapTaskServiceErrors(service.agentSessionsListForTasks(input)),
     agentSessionUpsert: (input) => mapTaskServiceErrors(service.agentSessionUpsert(input)),
     buildBlocked: (input) => mapTaskServiceErrors(service.buildBlocked(input)),
-    buildCompleted: (input) => mapTaskMutationProgressErrors(service.buildCompleted(input)),
+    buildCompleted: (input) => mapTaskServiceErrors(service.buildCompleted(input)),
     buildResumed: (input) => mapTaskServiceErrors(service.buildResumed(input)),
     completeDirectMerge: (input) =>
       mapTaskMutationProgressErrors(service.completeDirectMerge(input)),

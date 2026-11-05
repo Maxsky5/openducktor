@@ -32,6 +32,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   gitProviderResolver,
   taskStore,
   settingsConfig,
+  systemCommands,
   taskActivityGuard,
   taskSessionLifecycleCoordinator,
   taskWorktreeService,
@@ -43,7 +44,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   linkMergedPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, pullRequest, removeWorktree } = input;
-
       const current = yield* taskStore.getTask(input);
       const metadata = yield* taskStore.getTaskMetadata(input);
       const sameExistingPullRequest =
@@ -84,6 +84,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         requireLinkMergedPullRequestDependencies({
           gitPort,
           settingsConfig,
+          systemCommands,
           taskWorktreeService,
           terminalService,
           worktreeFiles,
@@ -141,7 +142,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           }
         }
       }
-
       if (hasTaskBranch) {
         yield* requireWorktreeFiles(dependencies.worktreeFiles);
       }

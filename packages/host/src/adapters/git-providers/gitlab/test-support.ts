@@ -31,7 +31,7 @@ export const gitlabTestRepoConfig: RepoConfig = {
       repository: gitlabTestRepository,
     },
   },
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},

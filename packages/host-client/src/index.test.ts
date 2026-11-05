@@ -1006,7 +1006,7 @@ describe("HostClient", () => {
               branchPrefix: "obp",
               defaultTargetBranch: { remote: "origin", branch: "main" },
               git: {},
-              hooks: { postComplete: [] },
+              hooks: { beforeWorktreeRemoval: [] },
               worktreeCopyPaths: [],
               promptOverrides: {},
               agentDefaults: {},

@@ -168,7 +168,9 @@ const normalizeOptionalNonEmptyString = (value: string | undefined): string | un
 const normalizeHooks = (value: RepoHooks): RepoHooks => {
   const hooks = repoHooksSchema.parse(value);
   return {
-    postComplete: hooks.postComplete.map((command) => command.trim()).filter(Boolean),
+    beforeWorktreeRemoval: hooks.beforeWorktreeRemoval
+      .map((command) => command.trim())
+      .filter(Boolean),
   };
 };
 const normalizeWorktreeCopyPaths = (value: string[]): string[] =>

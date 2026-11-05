@@ -61,7 +61,7 @@ const repoConfig = (workspaceId: string, repoPath: string): RepoConfig => ({
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
@@ -1140,7 +1140,10 @@ describe("createWorkspaceSettingsService", () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({
         workspaces: {
-          repo: { ...repoConfig("repo", "/repos/repo"), hooks: { postComplete: ["bun lint"] } },
+          repo: {
+            ...repoConfig("repo", "/repos/repo"),
+            hooks: { beforeWorktreeRemoval: ["bun lint"] },
+          },
         },
         workspaceOrder: ["repo"],
       }),
@@ -1153,7 +1156,7 @@ describe("createWorkspaceSettingsService", () => {
     const repo = await Effect.runPromise(service.getRepoConfig("repo"));
     expect(updated).toMatchObject({ workspaceId: "repo" });
     expect(repo.git).toEqual(git);
-    expect(repo.hooks).toEqual({ postComplete: ["bun lint"] });
+    expect(repo.hooks).toEqual({ beforeWorktreeRemoval: ["bun lint"] });
   });
   test("saves repository actions and keeps them when a later save omits them", async () => {
     const actions: RepoConfig["actions"] = {

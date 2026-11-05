@@ -230,7 +230,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         git: {
           provider: {
             id: "github",
@@ -299,7 +299,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
 
@@ -476,7 +476,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         git: {
           provider: {
             id: "github",
@@ -666,7 +666,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
             git: {
               provider: {
                 id: "github",
@@ -831,7 +831,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
             git: {
               provider: {
                 id: "github",
@@ -1053,7 +1053,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         git: {
           provider: {
             id: "github",
@@ -1332,7 +1332,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
             git: {
               provider: {
                 id: "github",
@@ -1538,7 +1538,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
             git: {
               provider: {
                 id: "github",
@@ -1684,7 +1684,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).upsertPullRequest({
           workspaceId: "repo",
@@ -1857,7 +1857,7 @@ describe("createTaskService pull requests", () => {
             workspaceSettingsService: createBuildWorkspaceSettingsService({
               workspaceId: "repo",
               repoPath: "/repo",
-              hooks: { postComplete: [] },
+              hooks: { beforeWorktreeRemoval: [] },
               git: {
                 provider: {
                   id: "github",
@@ -1992,7 +1992,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         git: {
           provider: {
             id: "github",
@@ -2137,7 +2137,7 @@ describe("createTaskService pull requests", () => {
             workspaceSettingsService: createBuildWorkspaceSettingsService({
               workspaceId: "repo",
               repoPath: "/repo",
-              hooks: { postComplete: [] },
+              hooks: { beforeWorktreeRemoval: [] },
               git: {
                 provider: {
                   id: "github",
@@ -2206,7 +2206,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         git: {
           provider: {
             id: "github",
@@ -2263,7 +2263,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         git: {
           provider: {
             id: "github",
@@ -2317,7 +2317,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         git: {
           provider: {
             id: "github",
@@ -2384,7 +2384,7 @@ describe("createTaskService pull requests", () => {
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
           repoPath: "/repo",
-          hooks: { postComplete: [] },
+          hooks: { beforeWorktreeRemoval: [] },
           git: {
             provider: {
               id: "github",
@@ -2542,7 +2542,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
             git: {
               provider: {
                 id: "github",
@@ -2857,7 +2857,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
 
@@ -3013,7 +3013,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
     await expect(
@@ -3107,7 +3107,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
 
@@ -3155,7 +3155,7 @@ describe("createTaskService pull requests", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
 
@@ -3291,7 +3291,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).linkMergedPullRequest({
           workspaceId: "repo",
@@ -3415,7 +3415,7 @@ describe("createTaskService pull requests", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).linkMergedPullRequest({
           workspaceId: "repo",

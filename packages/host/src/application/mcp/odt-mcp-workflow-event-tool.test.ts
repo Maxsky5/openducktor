@@ -34,7 +34,7 @@ const setup = (
   status: TaskCard["status"],
   options: {
     owner?: RuntimeSessionOwner;
-    postComplete?: string[];
+    beforeWorktreeRemoval?: string[];
     taskWorkflows?: TaskWorkflowResolver;
     issueType?: TaskCard["issueType"];
   } = {},
@@ -50,7 +50,7 @@ const setup = (
   const workspaceSettingsService = createBuildWorkspaceSettingsService({
     workspaceId: "repo",
     repoPath: "/repo",
-    hooks: { postComplete: options.postComplete ?? [] },
+    hooks: { beforeWorktreeRemoval: options.beforeWorktreeRemoval ?? [] },
   });
   const taskService = createTaskService({
     taskWorkflows,
@@ -201,10 +201,10 @@ describe("odt_apply_workflow_event", () => {
     ]);
   });
 
-  test("build-completed runs the post-complete hook before the transition", async () => {
+  test("build-completed moves the task without running the before worktree removal script", async () => {
     const bridge = setup("in_progress", {
       owner: owner("build"),
-      postComplete: ["bun run cleanup"],
+      beforeWorktreeRemoval: ["bun run cleanup"],
     });
 
     const exit = await bridge.send({ eventId: "build-completed", note: "Done", caller });
@@ -216,9 +216,7 @@ describe("odt_apply_workflow_event", () => {
         note: "Done",
       }),
     );
-    expect(bridge.commands).toMatchObject([
-      { options: expect.objectContaining({ cwd: "/worktrees/repo/task-1" }) },
-    ]);
+    expect(bridge.commands).toEqual([]);
     expect(bridge.transitions).toMatchObject([
       { status: "ai_review", cause: { signal: "taskProgressedToAiReview" } },
     ]);

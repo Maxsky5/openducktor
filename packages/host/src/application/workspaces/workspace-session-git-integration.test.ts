@@ -146,7 +146,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       branchPrefix: "odt",
       worktreeBasePath: path.join(root, "worktrees"),
       worktreeCopyPaths: [".env"],
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       actions: actions
         ? {
             items: [

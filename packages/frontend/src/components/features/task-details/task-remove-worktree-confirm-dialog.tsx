@@ -47,7 +47,9 @@ export function TaskRemoveWorktreeConfirmDialog({
             ))}
           </div>
           <TaskReadError read={impact} />
-          {operation.error ? <p className="text-destructive-muted">{operation.error}</p> : null}
+          {operation.error ? (
+            <p className="whitespace-pre-line text-destructive-muted">{operation.error}</p>
+          ) : null}
         </DialogBody>
 
         <DialogFooter className="mt-0 border-t border-border px-6 py-4">

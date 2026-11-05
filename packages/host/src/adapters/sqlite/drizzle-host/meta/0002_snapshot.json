@@ -1860,8 +1860,8 @@
         }
       }
     },
-    "workspace_build_completion_commands": {
-      "name": "workspace_build_completion_commands",
+    "workspace_before_worktree_removal_commands": {
+      "name": "workspace_before_worktree_removal_commands",
       "columns": {
         "workspace_id": {
           "name": "workspace_id",
@@ -1887,9 +1887,9 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "workspace_build_completion_commands_workspace_id_workspaces_workspace_id_fk": {
-          "name": "workspace_build_completion_commands_workspace_id_workspaces_workspace_id_fk",
-          "tableFrom": "workspace_build_completion_commands",
+        "workspace_before_worktree_removal_commands_workspace_id_workspaces_workspace_id_fk": {
+          "name": "workspace_before_worktree_removal_commands_workspace_id_workspaces_workspace_id_fk",
+          "tableFrom": "workspace_before_worktree_removal_commands",
           "tableTo": "workspaces",
           "columnsFrom": ["workspace_id"],
           "columnsTo": ["workspace_id"],
@@ -1898,15 +1898,15 @@
         }
       },
       "compositePrimaryKeys": {
-        "workspace_build_completion_commands_workspace_id_position_pk": {
+        "workspace_before_worktree_removal_commands_workspace_id_position_pk": {
           "columns": ["workspace_id", "position"],
-          "name": "workspace_build_completion_commands_workspace_id_position_pk"
+          "name": "workspace_before_worktree_removal_commands_workspace_id_position_pk"
         }
       },
       "uniqueConstraints": {},
       "checkConstraints": {
-        "chk_workspace_build_completion_commands_position": {
-          "name": "chk_workspace_build_completion_commands_position",
+        "chk_workspace_before_worktree_removal_commands_position": {
+          "name": "chk_workspace_before_worktree_removal_commands_position",
           "value": "\"position\" >= 0"
         }
       }
@@ -2622,7 +2622,9 @@
   "enums": {},
   "_meta": {
     "schemas": {},
-    "tables": {},
+    "tables": {
+      "\"workspace_build_completion_commands\"": "\"workspace_before_worktree_removal_commands\""
+    },
     "columns": {}
   },
   "internal": {

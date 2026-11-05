@@ -30,7 +30,7 @@ const repoConfig: RepoConfig = {
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: { provider: { id: "azure_devops", enabled: true, autoDetected: false, repository } },
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},

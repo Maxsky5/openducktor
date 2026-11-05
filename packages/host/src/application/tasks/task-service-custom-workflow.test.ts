@@ -45,7 +45,7 @@ const service = (taskWorkflows: TaskWorkflowResolver = reviewTaskWorkflows) =>
     systemCommands: createBuildSystemCommands([]),
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       ...harness.scope,
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
     }),
   });
 

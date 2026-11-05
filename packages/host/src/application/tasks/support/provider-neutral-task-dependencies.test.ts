@@ -52,6 +52,7 @@ describe("provider-neutral task dependency gates", () => {
       requireDirectMergeDependencies({
         gitPort,
         settingsConfig,
+        systemCommands: undefined,
         taskWorktreeService,
         terminalService,
         worktreeFiles,
@@ -60,6 +61,7 @@ describe("provider-neutral task dependency gates", () => {
     ).toEqual({
       gitPort,
       settingsConfig,
+      systemCommands: undefined,
       taskWorktreeService,
       terminalService,
       worktreeFiles,
@@ -82,6 +84,7 @@ describe("provider-neutral task dependency gates", () => {
       requireLinkMergedPullRequestDependencies({
         gitPort,
         settingsConfig,
+        systemCommands: undefined,
         taskWorktreeService,
         terminalService,
         worktreeFiles,
@@ -90,6 +93,7 @@ describe("provider-neutral task dependency gates", () => {
     ).toEqual({
       gitPort,
       settingsConfig,
+      systemCommands: undefined,
       taskWorktreeService,
       terminalService,
       worktreeFiles,

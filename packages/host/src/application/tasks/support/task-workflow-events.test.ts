@@ -1,4 +1,3 @@
-import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
@@ -6,7 +5,6 @@ import type { TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
-import type { TaskStorePort } from "../../../ports/task-repository-ports";
 import {
   formatStatusList,
   requirePullRequestManagement,
@@ -14,7 +12,6 @@ import {
   requireTaskEventInput,
   startWorktreeSessionHint,
 } from "./task-workflow-events";
-import { blockBuildCompletionTask } from "./task-workflow-helpers";
 
 const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
@@ -141,30 +138,5 @@ describe("task workflow events", () => {
     expect(startWorktreeSessionHint(createReviewTaskWorkflow())).toBe(
       "Start a Writer session first.",
     );
-  });
-
-  test("blockBuildCompletionTask preserves transition policy errors", async () => {
-    const current = task({ issueType: "bug", status: "closed" });
-    const taskStore = {
-      transitionTask(input) {
-        return Effect.fromResult(input.decide(current)).pipe(
-          Effect.andThen(Effect.die("transition should not run")),
-        );
-      },
-    } satisfies Pick<TaskStorePort, "transitionTask">;
-
-    const error = await Effect.runPromise(
-      Effect.flip(
-        blockBuildCompletionTask(taskStore, builtinTaskWorkflows, {
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: current.id,
-        }),
-      ),
-    );
-
-    expect(error).toBeInstanceOf(TaskPolicyError);
-    if (!(error instanceof TaskPolicyError)) throw error;
-    expect(error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
   });
 });

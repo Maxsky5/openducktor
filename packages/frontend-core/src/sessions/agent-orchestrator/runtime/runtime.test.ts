@@ -14,7 +14,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   },
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},

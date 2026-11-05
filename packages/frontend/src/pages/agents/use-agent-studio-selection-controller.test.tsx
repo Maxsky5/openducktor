@@ -139,7 +139,7 @@ const repoSettings: RepoSettingsInput = {
     profileId: "",
   },
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  postCompleteHooks: [],
+  beforeWorktreeRemovalHooks: [],
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   agentDefaults: {

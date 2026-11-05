@@ -32,7 +32,7 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
   hooks: {
-    postComplete: [" npm test ", ""],
+    beforeWorktreeRemoval: [" npm test ", ""],
   },
   actions: {
     items: [
@@ -200,7 +200,7 @@ describe("settings save transforms", () => {
     expect(saveReady.branchPrefix).toBe("odt");
     expect(saveReady.defaultTargetBranch).toEqual({ remote: "origin", branch: "main" });
     expect(saveReady.worktreeBasePath).toBe("/tmp/worktrees");
-    expect(saveReady.hooks).toEqual({ postComplete: ["npm test"] });
+    expect(saveReady.hooks).toEqual({ beforeWorktreeRemoval: ["npm test"] });
     expect(saveReady.actions).toEqual(createRepoConfig().actions);
     expect(saveReady.worktreeCopyPaths).toEqual([".env"]);
     expect(saveReady.promptOverrides).toEqual({
@@ -410,10 +410,10 @@ describe("settings save transforms", () => {
   test("normalizes empty hook commands to empty arrays", () => {
     const saveReady = prepareRepoConfigForSave({
       ...createRepoConfig(),
-      hooks: { postComplete: ["   ", ""] },
+      hooks: { beforeWorktreeRemoval: ["   ", ""] },
     });
 
-    expect(saveReady.hooks).toEqual({ postComplete: [] });
+    expect(saveReady.hooks).toEqual({ beforeWorktreeRemoval: [] });
   });
 
   test("normalizes changed editor values into sparse workspace and global edits", () => {
@@ -430,7 +430,7 @@ describe("settings save transforms", () => {
           content: " Review this. ",
         },
       ],
-      workspaces: { "repo-a": { ...repo, hooks: { postComplete: [" bun test ", ""] } } },
+      workspaces: { "repo-a": { ...repo, hooks: { beforeWorktreeRemoval: [" bun test ", ""] } } },
       globalPromptOverrides: {
         [specPlanBuildPromptKey("messages.spec_start")]: {
           template: " global ",
@@ -442,7 +442,7 @@ describe("settings save transforms", () => {
     const input = prepareSettingsSnapshotForSave(draft, baseline);
     expect(input.workspaces?.["repo-a"]).toEqual({
       expectedRepoPath: "/repo-a",
-      hooks: { postComplete: ["bun test"] },
+      hooks: { beforeWorktreeRemoval: ["bun test"] },
     });
     expect(input.global?.chat).toEqual({ showThinkingMessages: true });
     expect(input.global?.reusablePrompts).toEqual([

@@ -268,7 +268,7 @@ describe("global config", () => {
             workspaceId: "repo",
             workspaceName: "Repo",
             repoPath: "/repo",
-            hooks: { preStart: [], postComplete: [], extra: true },
+            hooks: { preStart: [], beforeWorktreeRemoval: [], extra: true },
           },
         },
       },
@@ -350,7 +350,7 @@ describe("global config", () => {
     },
   );
 
-  test("converts the worktree setup script and dev servers into actions", () => {
+  test("converts the worktree setup script and dev servers into actions and renames the cleanup script", () => {
     const config = parsePersistedGlobalConfig({
       version: 4,
       workspaces: {
@@ -400,7 +400,7 @@ describe("global config", () => {
       ],
       defaultActionId: "web",
     });
-    expect(config.workspaces.repo?.hooks).toEqual({ postComplete: ["make clean"] });
+    expect(config.workspaces.repo?.hooks).toEqual({ beforeWorktreeRemoval: ["make clean"] });
     expect(config.workspaces.repo?.worktreeCopyPaths).toEqual([".env"]);
     expect(config.workspaces.repo).not.toHaveProperty("devServers");
   });
@@ -448,7 +448,7 @@ describe("global config", () => {
     });
 
     expect(config.workspaces.repo?.actions).toEqual({ items: [], defaultActionId: null });
-    expect(config.workspaces.repo?.hooks).toEqual({ postComplete: [] });
+    expect(config.workspaces.repo?.hooks).toEqual({ beforeWorktreeRemoval: [] });
   });
 
   test("gives the converted setup action an id that no dev server uses", () => {

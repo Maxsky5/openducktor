@@ -29,6 +29,7 @@ export const createTaskImplementationResetUseCase = ({
   taskWorkflows,
   taskActivityGuard,
   settingsConfig,
+  systemCommands,
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
@@ -105,6 +106,10 @@ export const createTaskImplementationResetUseCase = ({
       const artifactChanges: TaskArtifactChange[] = [];
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
+          beforeWorktreeRemoval: {
+            commands: repoConfig.hooks.beforeWorktreeRemoval,
+            systemCommands,
+          },
           workspaceId: input.workspaceId,
           branchNames: cleanupTargets.branchNames,
           gitPort: dependencies.gitPort,

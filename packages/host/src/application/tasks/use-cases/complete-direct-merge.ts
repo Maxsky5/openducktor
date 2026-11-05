@@ -15,6 +15,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
   taskStore,
   taskActivityGuard,
   settingsConfig,
+  systemCommands,
   taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
@@ -31,6 +32,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
           {
             gitPort,
             settingsConfig,
+            systemCommands,
             taskWorktreeService,
             terminalService,
             workspaceSettingsService,

@@ -174,7 +174,7 @@ describe("settings modal content", () => {
         removed: {
           ...createRepoSettingsConfigFixture("removed", "/removed"),
           workspaceName: "Removed repository",
-          hooks: { postComplete: ["UNSAVED cleanup command"] },
+          hooks: { beforeWorktreeRemoval: ["UNSAVED cleanup command"] },
         },
       },
     });
@@ -226,7 +226,7 @@ describe("settings modal content", () => {
       });
 
       const cleanupField = screen.getByLabelText<HTMLTextAreaElement>(
-        "Worktree cleanup script (one command per line)",
+        "Before worktree removal script (one command per line)",
       );
       expect(cleanupField.value).toBe("UNSAVED cleanup command");
       expect(cleanupField.disabled).toBe(false);
@@ -247,7 +247,7 @@ describe("settings modal content", () => {
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
-          hooks: { postComplete: ["bun run clean"] },
+          hooks: { beforeWorktreeRemoval: ["bun run clean"] },
           actions: {
             items: [
               {
@@ -305,10 +305,10 @@ describe("settings modal content", () => {
     );
 
     expect(scriptsHtml).toContain("Actions are repository commands");
-    expect(scriptsHtml).toContain("Worktree cleanup script");
+    expect(scriptsHtml).toContain("Before worktree removal script");
     expect(scriptsHtml).toContain("Files copied to worktrees");
     expect(configurationHtml).not.toContain("Actions are repository commands");
-    expect(configurationHtml).not.toContain("Worktree cleanup script");
+    expect(configurationHtml).not.toContain("Before worktree removal script");
     expect(configurationHtml).not.toContain("Files copied to worktrees");
   });
 
@@ -328,7 +328,7 @@ describe("settings modal content", () => {
           repository: { host: "github.com", owner: "openai", name: "saved" },
         },
       },
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       actions: { items: [], defaultActionId: null },
       worktreeCopyPaths: [],
       promptOverrides: {},
