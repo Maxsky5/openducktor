@@ -549,7 +549,7 @@ export function AgentChatComposerEditor({
   });
 
   useLayoutEffect(() => {
-    const editor = editorRef.current?.querySelector<HTMLDivElement>("[data-composer-content-root]");
+    const editor = editorRef.current;
     if (!editor) {
       return;
     }
@@ -643,9 +643,17 @@ export function AgentChatComposerEditor({
           onSelectSkill={selectSkillReference}
         />
       ) : null}
+      {!draftHasMeaningfulContent(draft) ? (
+        // An empty draft keeps a one-line editor, so the placeholder stays on one line.
+        <div className="pointer-events-none absolute inset-x-3 top-2.5 truncate text-[15px] leading-6 text-muted-foreground">
+          {placeholder}
+        </div>
+      ) : null}
+      {/* The editing host holds only draft content, so text typed after a select-all stays in the draft. */}
       <div
         ref={editorRef}
         data-composer-editor
+        data-composer-content-root
         role="combobox"
         aria-label="Message composer"
         aria-expanded={activePopup !== null}
@@ -657,7 +665,7 @@ export function AgentChatComposerEditor({
         suppressContentEditableWarning
         spellCheck={false}
         className={cn(
-          "min-h-11 max-h-[220px] overflow-y-auto px-3 py-2.5 text-[15px] leading-6 outline-none",
+          "relative z-10 min-h-11 max-h-[220px] overflow-y-auto whitespace-pre-wrap break-words px-3 py-2.5 text-[15px] leading-6 outline-none",
           !draftHasMeaningfulContent(draft) &&
             "selection:bg-transparent [&_*::selection]:bg-transparent",
           disabled ? "cursor-not-allowed opacity-60" : "cursor-text",
@@ -712,23 +720,7 @@ export function AgentChatComposerEditor({
           event.preventDefault();
           focusLastTextSegment();
         }}
-      >
-        {!draftHasMeaningfulContent(draft) ? (
-          // An empty draft keeps a one-line editor, so the placeholder stays on one line.
-          <div className="pointer-events-none absolute inset-x-3 top-2.5 truncate text-[15px] leading-6 text-muted-foreground">
-            {placeholder}
-          </div>
-        ) : null}
-
-        <div
-          className={cn(
-            "relative z-10 min-h-6 whitespace-pre-wrap break-words",
-            !draftHasMeaningfulContent(draft) &&
-              "selection:bg-transparent [&_*::selection]:bg-transparent",
-          )}
-          data-composer-content-root
-        />
-      </div>
+      />
     </div>
   );
 }
