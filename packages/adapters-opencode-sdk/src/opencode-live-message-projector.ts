@@ -20,7 +20,11 @@ import {
 } from "./opencode-message-projection";
 import { isShellNotice } from "./opencode-shell-projection";
 
-/** OpenCode 2.0 compaction messages require `recent`. Version 2.1 removed it, and no projection reads it. */
+/**
+ * The pinned `@opencode/client` 2.0.32 type requires `recent` on running and completed compaction messages.
+ * OpenCode 2.1 removed the field from the wire, and no projection reads it.
+ * Delete this constant when the client upgrade drops the field.
+ */
 const EMPTY_NATIVE_RECENT = "";
 
 export class OpenCodeLiveMessageProjector {
