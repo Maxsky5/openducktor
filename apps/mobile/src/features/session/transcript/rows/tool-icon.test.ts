@@ -14,4 +14,13 @@ describe("tool icons", () => {
     expect(toolIcon({ tool: "edit", toolType: "file_edit" })).toBe("wrench");
     expect(toolIcon({ tool: "question", toolType: "question" })).toBe("wrench");
   });
+
+  test("draw the icon of an ODT tool card in place of the tool type", () => {
+    expect(toolIcon({ tool: "odt_apply_workflow_event", toolType: "workflow" }, "workflow")).toBe(
+      "workflow",
+    );
+    expect(
+      toolIcon({ tool: "odt_set_pull_request", toolType: "workflow" }, "git-pull-request"),
+    ).toBe("git-pull-request");
+  });
 });

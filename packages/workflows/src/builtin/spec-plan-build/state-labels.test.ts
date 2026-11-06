@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { SPEC_PLAN_BUILD_DEFINITION } from "./definition";
 
 describe("Spec, Plan, Build state labels", () => {
-  test("give a short label only to a long state, so every surface uses the same words", () => {
-    const shortLabels = SPEC_PLAN_BUILD_DEFINITION.states.flatMap((state) =>
-      "shortLabel" in state && state.shortLabel ? [[state.id, state.shortLabel]] : [],
-    );
-    expect(shortLabels).toEqual([["blocked", "Blocked"]]);
-  });
+  test.each(SPEC_PLAN_BUILD_DEFINITION.states.map((state) => [state.id, state] as const))(
+    "gives %s a short label that is its label or the first word of it",
+    (_id, state) => {
+      const shortLabel = ("shortLabel" in state ? state.shortLabel : undefined) ?? state.label;
+      expect([state.label, state.label.split(" ")[0]]).toContain(shortLabel);
+    },
+  );
 });

@@ -3,6 +3,7 @@ import type {
   AgentMessageQueueSnapshot,
   AgentMessageSubmitMode,
   AgentSessionUsageLimit,
+  OdtToolName,
   RuntimeApprovalReplyOutcome,
   RuntimeKind,
 } from "@openducktor/contracts";
@@ -52,10 +53,9 @@ export type AgentChatTranscriptNotice = {
 export type AgentChatTaskToolName = "create_task" | "search_tasks" | "update_task";
 
 export type AgentChatToolCallPresentation =
-  | {
-      kind: "regular" | "workflow";
-      displayName: string;
-    }
+  | { kind: "regular"; displayName: string }
+  /** `odtTool` is the ODT tool of the call, or null for a workflow tool of a runtime. */
+  | { kind: "workflow"; displayName: string; odtTool: OdtToolName | null }
   | { kind: "artifact"; displayName: string; operation: "set" | "delete" }
   | { kind: "task"; displayName: string; taskTool: AgentChatTaskToolName }
   /** An `odt_browser_*` call. `action` is the browser action, such as `click`. */

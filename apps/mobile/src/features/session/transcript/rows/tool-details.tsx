@@ -80,7 +80,7 @@ function FormattedText({ read, color }: { read: () => string; color: string }): 
 
 /**
  * The desktop Input, Output, and Error boxes of a Tool Call. Each box opens on its own, and its
- * text builds only when it opens. The Error box opens at first when `errorOpen` is true.
+ * text builds only when it opens.
  */
 export const ToolDetails = memo(function ToolDetails(props: ToolDetailsProps): ReactElement {
   return (
@@ -95,9 +95,9 @@ type ToolDetailsProps = {
   resetKey: string;
   hasInput: boolean;
   hasOutput: boolean;
-  hasError: boolean;
+  /** The text of the Error box, or null for no box. */
+  errorText: string | null;
   colors: ToolDetailsColors;
-  errorOpen?: boolean;
 };
 
 function ToolDetailsBody({
@@ -105,17 +105,16 @@ function ToolDetailsBody({
   resetKey,
   hasInput,
   hasOutput,
-  hasError,
+  errorText,
   colors,
-  errorOpen = false,
 }: ToolDetailsProps): ReactElement {
   const output = useMemo(
     () => formatOnce(() => formatRawJsonLikeText(meta.output ?? "")),
     [meta.output],
   );
   const error = useMemo(
-    () => formatOnce(() => formatRawJsonLikeText(meta.error ?? "")),
-    [meta.error],
+    () => formatOnce(() => formatRawJsonLikeText(errorText ?? "")),
+    [errorText],
   );
   const outputCut = meta.detailsOmitted?.output === true;
   return (
@@ -138,11 +137,10 @@ function ToolDetailsBody({
           )}
         </DetailsBox>
       ) : null}
-      {hasError && meta.error ? (
+      {errorText ? (
         <DetailsBox
           label="Error"
           resetKey={`${resetKey}:error`}
-          defaultOpen={errorOpen}
           frameStyle={colors.errorFrame}
           textColor={colors.errorText}
           copyText={error}

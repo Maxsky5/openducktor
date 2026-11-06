@@ -4,8 +4,9 @@ import {
 } from "@openducktor/frontend-core/sessions/messages/tool-lifecycle";
 import {
   isWorkflowToolActive,
-  readToolDetailAvailability,
   readToolTiming,
+  readWorkflowToolCard,
+  type WorkflowToolCard,
   workflowToolStatusLabel,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
@@ -14,10 +15,12 @@ import {
   readArtifactToolCall,
   readArtifactToolTaskId,
 } from "@openducktor/frontend-core/sessions/messages/artifact-tool-call";
+import type { OdtToolName } from "@openducktor/contracts";
 import { memo, type ReactElement, type ReactNode, useMemo } from "react";
-import { View } from "react-native";
+import { type StyleProp, View, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { workflowDocumentKey } from "@/features/tasks/artifacts/artifact-list-model";
+import { PullRequestLinkButton } from "@/features/workflow/pull-requests/pull-request-link-button";
 import type { HostDocumentKey } from "@/features/tasks/documents/document-rows";
 import { useToolTaskWorkflow } from "../use-tool-task-workflow";
 import { useAppTheme } from "@/theme/app-theme-context";
@@ -26,8 +29,11 @@ import { type AppTheme, sansWeight } from "@/theme/tokens";
 import { Button } from "@/ui/button";
 import { Icon, type IconName } from "@/ui/icon";
 import { Text } from "@/ui/text";
+import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
-import { StatusPill, ToolTiming } from "./row-parts";
+import { type Disclosure, useDisclosure } from "./disclosure";
+import { TranscriptMarkdown } from "./markdown-blocks";
+import { DisclosureMarker, StatusPill, ToolTiming } from "./row-parts";
 import { toolIcon } from "./tool-icon";
 import { ToolDetails, type ToolDetailsColors } from "./tool-details";
 
@@ -91,8 +97,10 @@ const familyColors = (theme: AppTheme, family: Family) => {
 
 /**
  * The desktop `WorkflowToolMessage`: a card in the color of the call phase, with the tool icon,
- * its name, the uppercase status pill, and the timing. Its Input, Output, and Error boxes show
- * under the header; the Error box opens when the call failed.
+ * its title, the pull request of the call, the uppercase status pill, and the timing. A workflow
+ * event call takes its event as the title. A failed call shows its error message under the header.
+ * A press on the title shows the event note as Markdown, then the Input, Output, and Error boxes,
+ * all closed.
  *
  * A phone has no document panel beside the transcript, so a call that saves a task document, such
  * as Set Plan, shows Open instead of its Input and Output once the document is saved. A call that
@@ -100,6 +108,7 @@ const familyColors = (theme: AppTheme, family: Family) => {
  */
 export const WorkflowToolRow = memo(function WorkflowToolRow({
   meta,
+  odtTool = null,
   messageTimestamp,
   timeLabel,
   displayName,
@@ -110,6 +119,8 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
   summary,
 }: {
   meta: ToolMeta;
+  /** The ODT tool of the call, as `presentToolCall` resolved it. */
+  odtTool?: OdtToolName | null | undefined;
   messageTimestamp: string;
   timeLabel: string;
   displayName: string;
@@ -128,9 +139,25 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
   const openDocument = document ? onOpenDocument : null;
   const phase = getToolLifecyclePhase(meta);
   const statusLabel = workflowToolStatusLabel(phase);
+  const active = isWorkflowToolActive(phase);
   const { durationMs } = readToolTiming(meta, messageTimestamp);
   const card = familyColors(theme, CARD_FAMILIES[phase]);
   const pill = familyColors(theme, PILL_FAMILIES[phase]);
+  const toolCard = readWorkflowToolCard({
+    meta,
+    odtTool,
+    displayName,
+    opensDocument: openDocument !== null,
+  });
+  const disclosure = useDisclosure(false, `${rowKey}:details`);
+  const titleDisclosure = toolCard.hasDetails ? disclosure : null;
+  const openButton =
+    document && openDocument && phase === "completed" ? (
+      <OpenDocumentButton document={document} onPress={() => openDocument(document)} />
+    ) : null;
+  // The first header line is as tall as the tallest control on it, so all its items share one
+  // center line.
+  const lineStyle = openButton || action ? styles.buttonLine : styles.line;
   // The text color of the phase. Timing is the text at 75%; box outlines are the text at 20%.
   const text = card.text;
   const colors = useMemo<ToolDetailsColors>(
@@ -151,80 +178,140 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
       accessible={false}
     >
       <View style={styles.headerRow}>
-        <View
-          style={styles.header}
-          accessible
-          accessibilityRole="text"
-          accessibilityLabel={`${displayName}, ${statusLabel ? statusLabel.toLowerCase() : "done"}`}
-          accessibilityState={{ busy: isWorkflowToolActive(phase) }}
-        >
-          <Icon name={icon ?? toolIcon(meta)} size={14} colorValue={text} />
-          <Text numberOfLines={1} style={[styles.name, { color: text }]}>
-            {displayName}
-          </Text>
-          {statusLabel ? (
-            <StatusPill
-              label={statusLabel}
-              surface={pill.surface}
-              border={pill.border}
-              text={pill.text}
-            />
-          ) : null}
-          <ToolTiming
-            active={isWorkflowToolActive(phase)}
-            durationMs={durationMs}
-            timeLabel={timeLabel}
-            color={withAlpha(text, 0.75)}
+        <View style={styles.header}>
+          <Icon name={icon ?? toolIcon(meta, toolCard.iconKind)} size={14} colorValue={text} />
+          <WorkflowToolTitle
+            title={toolCard.title}
+            statusLabel={statusLabel}
+            active={active}
+            color={text}
+            disclosure={titleDisclosure}
+            lineStyle={lineStyle}
           />
+          {toolCard.pullRequest ? (
+            <PullRequestLinkButton pullRequest={toolCard.pullRequest} />
+          ) : null}
+          {statusLabel ? (
+            // The title label already says the status.
+            <View {...HIDDEN_FROM_SCREEN_READERS}>
+              <StatusPill
+                label={statusLabel}
+                surface={pill.surface}
+                border={pill.border}
+                text={pill.text}
+              />
+            </View>
+          ) : null}
         </View>
-        {document && openDocument && phase === "completed" ? (
-          <OpenDocumentButton document={document} onPress={() => openDocument(document)} />
-        ) : null}
-        {action}
+        <View style={[styles.trailing, lineStyle]}>
+          <View {...HIDDEN_FROM_SCREEN_READERS}>
+            <ToolTiming
+              active={active}
+              durationMs={durationMs}
+              timeLabel={timeLabel}
+              color={withAlpha(text, 0.75)}
+            />
+          </View>
+          {openButton}
+          {action}
+        </View>
       </View>
-      {summary ? (
+      {toolCard.error ? (
+        <Text style={[styles.error, { color: theme.desktop.destructiveSurfaceForeground }]}>
+          {toolCard.error.message}
+        </Text>
+      ) : summary ? (
         <Text style={[styles.summary, { color: withAlpha(text, 0.75) }]}>{summary}</Text>
       ) : null}
-      <WorkflowToolDetails
-        meta={meta}
-        rowKey={rowKey}
-        colors={colors}
-        opensDocument={openDocument !== null}
-        failed={phase === "failed"}
-      />
+      {titleDisclosure?.open ? (
+        <WorkflowToolBoxes meta={meta} rowKey={rowKey} card={toolCard} colors={colors} />
+      ) : null}
     </View>
   );
 });
 
-/** The Input, Output, and Error boxes. A call that opens a document shows only its error. */
-function WorkflowToolDetails({
+/** The title of a card. A card with Input or Output boxes shows them with a press on its title. */
+function WorkflowToolTitle({
+  title,
+  statusLabel,
+  active,
+  color,
+  disclosure,
+  lineStyle,
+}: {
+  title: string;
+  statusLabel: string | null;
+  active: boolean;
+  color: string;
+  disclosure: Disclosure | null;
+  /** The height of the first header line. */
+  lineStyle: StyleProp<ViewStyle>;
+}): ReactElement {
+  const label = `${title}, ${statusLabel ? statusLabel.toLowerCase() : "done"}`;
+  const name = <Text style={[styles.name, { color }]}>{title}</Text>;
+  if (!disclosure) {
+    return (
+      <View
+        style={[styles.nameContainer, lineStyle]}
+        accessible
+        accessibilityRole="text"
+        accessibilityLabel={label}
+        accessibilityState={{ busy: active }}
+      >
+        {name}
+      </View>
+    );
+  }
+  return (
+    <Touchable
+      feedback="opacity"
+      onPress={disclosure.toggle}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={disclosure.open ? "Hides the details." : "Shows the details."}
+      accessibilityState={{ expanded: disclosure.open, busy: active }}
+      hitSlop={{ top: 8, bottom: 8 }}
+      containerStyle={[styles.nameContainer, lineStyle]}
+      style={styles.nameButton}
+    >
+      {name}
+      <DisclosureMarker open={disclosure.open} animated={disclosure.pressed} color={color} />
+    </Touchable>
+  );
+}
+
+/**
+ * While the title is open, the event note as compact Markdown, then the Input, Output, and Error
+ * boxes.
+ */
+function WorkflowToolBoxes({
   meta,
   rowKey,
+  card,
   colors,
-  opensDocument,
-  failed,
 }: {
   meta: ToolMeta;
   rowKey: string;
+  card: WorkflowToolCard;
   colors: ToolDetailsColors;
-  opensDocument: boolean;
-  failed: boolean;
-}): ReactElement | null {
-  const { hasInput, hasOutput, hasError } = readToolDetailAvailability(meta);
-  if (opensDocument ? !hasError : !(hasInput || hasOutput || hasError)) return null;
+}): ReactElement {
   return (
     <View style={styles.details}>
+      {card.note ? (
+        <TranscriptMarkdown
+          markdown={card.note}
+          revision={`${rowKey}:note`}
+          rowKey={rowKey}
+          variant="compact"
+        />
+      ) : null}
       <ToolDetails
         meta={meta}
         resetKey={rowKey}
-        hasInput={!opensDocument && hasInput}
-        hasOutput={
-          !opensDocument &&
-          (meta.resultContent !== undefined || (hasOutput && Boolean(meta.output)))
-        }
-        hasError={hasError}
+        hasInput={card.showsInput}
+        hasOutput={card.showsOutput}
+        errorText={card.errorDetail}
         colors={colors}
-        errorOpen={failed}
       />
     </View>
   );
@@ -351,6 +438,12 @@ function OpenDocumentButton({
   );
 }
 
+/** Hides a part that a nearby accessibility label already says. */
+const HIDDEN_FROM_SCREEN_READERS = {
+  accessibilityElementsHidden: true,
+  importantForAccessibility: "no-hide-descendants",
+} as const;
+
 const styles = StyleSheet.create((theme) => ({
   // The desktop article: `rounded-md border px-3 py-2 my-2`.
   card: {
@@ -362,17 +455,29 @@ const styles = StyleSheet.create((theme) => ({
     borderWidth: 1,
     gap: theme.space.sm,
   },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: theme.space.sm },
+  // The timing and the buttons stay at the end of the first header line. The title, the pull
+  // request, and the status pill wrap on the start side.
+  headerRow: { flexDirection: "row", alignItems: "flex-start", gap: theme.space.sm },
   header: {
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
-    gap: theme.space.sm,
-    minHeight: 24,
+    columnGap: theme.space.sm,
+    rowGap: theme.space.xs,
   },
+  trailing: { flexDirection: "row", alignItems: "center", gap: theme.space.sm, flexShrink: 0 },
+  // The height of the pull request link.
+  line: { minHeight: 28 },
+  // The height of a small button.
+  buttonLine: { minHeight: 32 },
+  nameContainer: { flexShrink: 1, minWidth: 0, justifyContent: "center" },
+  nameButton: { flexDirection: "row", alignItems: "center", gap: theme.space.xs },
   name: { ...sansWeight("semibold"), fontSize: 12, lineHeight: 16, flexShrink: 1 },
   // The desktop summary: `text-[11px] text-current/75` under the header.
   summary: { fontSize: 11, lineHeight: 15 },
+  // The desktop error line: `text-[11px] font-medium text-destructive-surface-foreground`.
+  error: { ...sansWeight("medium"), fontSize: 11, lineHeight: 15 },
   details: { gap: theme.space.sm },
 }));

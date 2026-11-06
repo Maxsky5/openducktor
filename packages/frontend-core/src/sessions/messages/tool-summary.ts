@@ -1,10 +1,4 @@
-import {
-  agentToolDataSchema,
-  type AgentToolData,
-  toClaudeOdtToolAliases,
-  toOpencodeOdtToolAliases,
-} from "@openducktor/contracts";
-import { normalizeOdtToolName } from "@openducktor/core";
+import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
 import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData } from "./file-edit-tool";
@@ -12,6 +6,7 @@ import { extractPathFromInput, readInputString } from "./tool-input-utils";
 import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
 import { relativizeDisplayPath, relativizeSearchSummary } from "./tool-path-utils";
 import { compactText, stripToolPrefix } from "./tool-text-utils";
+import { ODT_TOOL_CARDS, readOdtToolName } from "./odt-tool-call";
 
 const OUTPUT_IGNORED_TOOL_NAMES = new Set([
   "read",
@@ -181,24 +176,27 @@ const extractTaskId = (input: AgentToolData | undefined): string | null => {
   return hasNonEmptyText(taskId) ? taskId.trim() : null;
 };
 
+/**
+ * The compact summary of a Tool Call. A cancelled call with error text shows that text. A reader
+ * shows the error of a failed call in place of this summary.
+ */
 export const buildToolSummary = (
   meta: ToolMeta,
   content: string,
   workingDirectory?: string | null,
 ): string => {
+  const lifecyclePhase = getToolLifecyclePhase(meta);
+  if (lifecyclePhase === "cancelled" && hasNonEmptyText(meta.error)) {
+    return compactText(meta.error, 220);
+  }
   const lowerTool = meta.tool.toLowerCase();
   const toolType = meta.toolType;
   const isTodoTool = toolType === "todo";
-  const lifecyclePhase = getToolLifecyclePhase(meta);
-  const odtTool = normalizeOdtToolName(lowerTool, (canonical) => [
-    ...toOpencodeOdtToolAliases(canonical),
-    ...toClaudeOdtToolAliases(canonical),
-  ]);
+  const odtTool = readOdtToolName(lowerTool);
   const isArtifactRead = odtTool === "odt_read_task_artifacts";
   const isDocumentRead = RETIRED_DOCUMENT_READERS.has(lowerTool);
   if (isArtifactRead || odtTool === "odt_delete_task_artifact" || isDocumentRead) {
-    if (meta.status === "error") {
-      if (hasNonEmptyText(meta.error)) return compactText(meta.error, 220);
+    if (lifecyclePhase === "cancelled") {
       return hasNonEmptyText(meta.output) ? compactText(meta.output, 220) : "";
     }
     const taskId = extractTaskId(meta.input);
@@ -216,29 +214,12 @@ export const buildToolSummary = (
       : readInputString(meta.input, ["code"]);
     return requestedCodes ? `${taskId} · ${requestedCodes}` : taskId;
   }
-  if (odtTool === "odt_apply_workflow_event") {
-    if (meta.status === "error") {
-      if (hasNonEmptyText(meta.error)) return compactText(meta.error, 220);
-      return hasNonEmptyText(meta.output) ? compactText(meta.output, 220) : "";
-    }
-    // The event and the note tell what the agent reported, so they lead the summary.
-    const eventId = readInputString(meta.input, ["eventId"]);
-    const note = readInputString(meta.input, ["note"]);
-    if (!eventId) return "";
-    return note ? `${eventId} · ${compactText(note, 160)}` : eventId;
-  }
+  if (odtTool !== null && ODT_TOOL_CARDS.has(odtTool)) return "";
   if (lifecyclePhase === "preparing") return "";
   const fileEditData =
     toolType === "file_edit" ? extractAllFileEditData(meta, workingDirectory) : [];
 
-  if (
-    lowerTool === "read_task" ||
-    lowerTool === "odt_read_task" ||
-    lowerTool.endsWith("_odt_read_task")
-  ) {
-    if (meta.status === "error" && hasNonEmptyText(meta.error)) {
-      return compactText(meta.error, 220);
-    }
+  if (lowerTool === "read_task" || odtTool === "odt_read_task") {
     const taskId = extractTaskId(meta.input);
     if (taskId) {
       return taskId;
@@ -259,10 +240,6 @@ export const buildToolSummary = (
     if (lifecyclePhase === "cancelled") {
       return "todos update cancelled";
     }
-  }
-
-  if (meta.status === "error" && hasNonEmptyText(meta.error)) {
-    return compactText(meta.error, 220);
   }
 
   if (lowerTool === "execute") {

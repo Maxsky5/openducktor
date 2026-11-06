@@ -5,6 +5,7 @@ import {
   workflowArtifactVerdict,
 } from "@openducktor/workflows";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import { parseToolOutput } from "./tool-output-utils";
 import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
 
 /** What an `odt_set_task_artifact` call saves: a workflow document, a review, or a free file. */
@@ -53,15 +54,8 @@ const readInputText = (meta: ToolMeta, field: string): string | null => {
   return hasNonEmptyText(value) ? value.trim() : null;
 };
 
-const readSavedArtifact = (output: string | undefined): McpTaskArtifact | null => {
-  if (!output) return null;
-  try {
-    const result = mcpArtifactSaveResultSchema.safeParse(JSON.parse(output));
-    return result.success ? result.data.artifact : null;
-  } catch {
-    return null;
-  }
-};
+const readSavedArtifact = (output: string | undefined): McpTaskArtifact | null =>
+  parseToolOutput(mcpArtifactSaveResultSchema, output)?.artifact ?? null;
 
 /** Documents read "Set <name>". A review reads "Approve" or "Reject" by its verdict. */
 const workflowHeading = (

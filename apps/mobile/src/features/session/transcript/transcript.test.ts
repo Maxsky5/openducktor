@@ -136,7 +136,17 @@ describe("transcript rows", () => {
       operation: "delete",
     });
     // A session from before artifacts keeps its retired tool calls.
-    expect(rowKind("odt_set_spec")).toEqual({ kind: "workflow_tool", displayName: "set_spec" });
+    expect(rowKind("odt_set_spec")).toEqual({
+      kind: "workflow_tool",
+      displayName: "set_spec",
+      odtTool: null,
+    });
+    // The row carries the ODT tool, so its card reads its event and pull request from it.
+    expect(rowKind("openducktor_odt_apply_workflow_event")).toEqual({
+      kind: "workflow_tool",
+      displayName: "Workflow Event",
+      odtTool: "odt_apply_workflow_event",
+    });
   });
 
   test("resolve the tool presentation of a message once, however often the list asks", () => {

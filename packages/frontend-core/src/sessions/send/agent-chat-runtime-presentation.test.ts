@@ -88,6 +88,7 @@ describe("resolveAgentChatRuntimePresentation", () => {
     expect(presentation.presentToolCall("openducktor_odt_set_spec")).toEqual({
       kind: "workflow",
       displayName: "set_spec",
+      odtTool: null,
     });
     expect(presentation.presentToolCall("bash", "Shell command")).toEqual({
       kind: "regular",
@@ -100,6 +101,7 @@ describe("resolveAgentChatRuntimePresentation", () => {
     expect(presentation.presentToolCall("openducktor_odt_set_plan", "Plan update")).toEqual({
       kind: "workflow",
       displayName: "Plan update",
+      odtTool: null,
     });
   });
 
@@ -118,6 +120,12 @@ describe("resolveAgentChatRuntimePresentation", () => {
     expect(presentation.presentToolCall("odt_apply_workflow_event")).toEqual({
       kind: "workflow",
       displayName: "Workflow Event",
+      odtTool: "odt_apply_workflow_event",
+    });
+    expect(presentation.presentToolCall("odt_set_pull_request")).toEqual({
+      kind: "workflow",
+      displayName: "Set Pull Request",
+      odtTool: "odt_set_pull_request",
     });
   });
 

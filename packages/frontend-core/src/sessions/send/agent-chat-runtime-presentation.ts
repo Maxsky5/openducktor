@@ -3,15 +3,14 @@ import {
   type OdtToolName,
   type RuntimeDescriptor,
   type RuntimeKind,
-  toOpencodeExposedOdtToolIds,
 } from "@openducktor/contracts";
 import {
   isOdtWorkflowMutationToolName,
-  normalizeOdtToolName,
   retiredArtifactToolName,
   toOdtWorkflowToolDisplayName,
 } from "@openducktor/core";
 import { findRuntimeDefinition } from "../../lib/agent-runtime";
+import { ODT_TOOL_CARDS, readOdtToolName } from "../messages/odt-tool-call";
 import type { AgentChatTaskToolName, AgentChatRuntimePresentation } from "./agent-chat.types";
 
 const BROWSER_TOOL_PREFIX = "odt_browser_";
@@ -72,11 +71,7 @@ const buildRuntimePresentation = ({
   return {
     runtimeKind,
     presentToolCall: (toolName, displayLabel) => {
-      const odtTool = normalizeOdtToolName(toolName, (canonical) => {
-        if (runtimeKind === "opencode") return toOpencodeExposedOdtToolIds(canonical);
-        if (runtimeKind === "claude") return [`mcp__openducktor__${canonical}`];
-        return [];
-      });
+      const odtTool = readOdtToolName(toolName);
       const taskTool = resolveTaskTool(odtTool);
       if (taskTool) {
         return { kind: "task", displayName: taskTool, taskTool };
@@ -90,8 +85,9 @@ const buildRuntimePresentation = ({
       if (odtTool === "odt_read_task_artifacts") {
         return { kind: "regular", displayName: "read_task_artifacts" };
       }
-      if (odtTool === "odt_apply_workflow_event") {
-        return { kind: "workflow", displayName: "Workflow Event" };
+      const odtCard = odtTool === null ? undefined : ODT_TOOL_CARDS.get(odtTool);
+      if (odtCard) {
+        return { kind: "workflow", displayName: odtCard.displayName, odtTool };
       }
       // Browser tools act on web pages, so they show as browser actions, not workflow steps.
       const browserAction = odtTool === null ? null : readBrowserToolAction(odtTool);
@@ -99,16 +95,13 @@ const buildRuntimePresentation = ({
         return { kind: "browser", displayName: `Browser ${browserAction}`, action: browserAction };
       }
       const retiredTool = retiredArtifactToolName(toolName);
-      return {
-        kind:
-          retiredTool || isOdtWorkflowMutationToolName(toolName, workflowToolAliasesByCanonical)
-            ? "workflow"
-            : "regular",
-        displayName:
-          displayLabel?.trim() ||
-          retiredTool?.slice(4) ||
-          toOdtWorkflowToolDisplayName(toolName, workflowToolAliasesByCanonical),
-      };
+      const displayName =
+        displayLabel?.trim() ||
+        retiredTool?.slice(4) ||
+        toOdtWorkflowToolDisplayName(toolName, workflowToolAliasesByCanonical);
+      return retiredTool || isOdtWorkflowMutationToolName(toolName, workflowToolAliasesByCanonical)
+        ? { kind: "workflow", displayName, odtTool }
+        : { kind: "regular", displayName };
     },
     supportedApprovalReplyOutcomes:
       runtimeDefinition?.capabilities.approvals.supportedReplyOutcomes ?? null,

@@ -12,7 +12,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { useClipboardCopy } from "@/platform/use-clipboard-copy";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { LoaderSpinner } from "@/ui/loader-spinner";
-import { monoWeight, motion, sansWeight } from "@/theme/tokens";
+import { type AppTheme, monoWeight, motion, sansWeight } from "@/theme/tokens";
 import { Icon, type IconName } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
@@ -143,6 +143,22 @@ export const ToolTiming = memo(function ToolTiming({
 
 export type ToolLineTone = "plain" | "preparing" | "failed" | "cancelled";
 
+/** The name and icon colors of a tool line in each tone. */
+type ToolLineColors = { nameColor: string; iconColor: string };
+
+const toolLineColors = (desktop: AppTheme["desktop"], tone: ToolLineTone): ToolLineColors => {
+  switch (tone) {
+    case "failed":
+      return { nameColor: desktop.destructiveMuted, iconColor: desktop.destructiveAccent };
+    case "cancelled":
+      return { nameColor: desktop.cancelledMuted, iconColor: desktop.cancelledAccent };
+    case "preparing":
+      return { nameColor: desktop.mutedForeground, iconColor: desktop.mutedForeground };
+    case "plain":
+      return { nameColor: desktop.foreground, iconColor: desktop.mutedForeground };
+  }
+};
+
 /**
  * The desktop `RegularToolSummary`: a plain muted icon, the tool name as the runtime names it,
  * the summary in muted text, and the timing at the end. A failed or cancelled call draws its
@@ -160,10 +176,13 @@ export const ToolLine = memo(function ToolLine({
   timeLabel,
   disclosure,
   accessibilityLabel,
+  summaryIsError = false,
 }: {
   icon: IconName;
   name: string;
   summary: string;
+  /** The summary is the error message of a failed tool call: it wraps, in the error color. */
+  summaryIsError?: boolean | undefined;
   /** "middle" keeps both ends of a path in view. */
   summaryEllipsis?: "tail" | "middle" | undefined;
   tone: ToolLineTone;
@@ -173,22 +192,8 @@ export const ToolLine = memo(function ToolLine({
   disclosure?: Disclosure | null | undefined;
   accessibilityLabel: string;
 }): ReactElement {
-  const theme = useAppTheme();
-  const { desktop } = theme;
-  const nameColor =
-    tone === "failed"
-      ? desktop.destructiveMuted
-      : tone === "cancelled"
-        ? desktop.cancelledMuted
-        : tone === "preparing"
-          ? desktop.mutedForeground
-          : desktop.foreground;
-  const iconColor =
-    tone === "failed"
-      ? desktop.destructiveAccent
-      : tone === "cancelled"
-        ? desktop.cancelledAccent
-        : desktop.mutedForeground;
+  const { desktop } = useAppTheme();
+  const { nameColor, iconColor } = toolLineColors(desktop, tone);
   const content = (
     <>
       <Icon name={icon} size={14} colorValue={iconColor} />
@@ -197,9 +202,13 @@ export const ToolLine = memo(function ToolLine({
       </Text>
       {summary.length > 0 ? (
         <Text
-          numberOfLines={1}
+          numberOfLines={summaryIsError ? undefined : 1}
           ellipsizeMode={summaryEllipsis}
-          style={[styles.lineText, styles.lineSummary]}
+          style={[
+            styles.lineText,
+            styles.lineSummary,
+            summaryIsError && { color: desktop.destructiveMuted },
+          ]}
         >
           {summary}
         </Text>

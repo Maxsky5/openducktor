@@ -6,23 +6,10 @@ import {
   searchTasksResultSchema,
   taskSummarySchema,
 } from "@openducktor/contracts";
-import type { ZodType } from "zod";
 import type { AgentChatTaskToolName } from "../send/agent-chat.types";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { getToolLifecyclePhase } from "./tool-lifecycle";
-
-const readTaskToolResult = <Result>(
-  schema: ZodType<Result>,
-  output: string | undefined,
-): Result | null => {
-  if (!output) return null;
-  try {
-    const result = schema.safeParse(JSON.parse(output));
-    return result.success ? result.data : null;
-  } catch {
-    return null;
-  }
-};
+import { parseToolOutput } from "./tool-output-utils";
 
 const taskSearchSummary = (meta: ToolMeta): string => {
   const input = SearchTasksInputSchema.safeParse(meta.input);
@@ -40,7 +27,7 @@ const taskSearchSummary = (meta: ToolMeta): string => {
   }
   const phase = getToolLifecyclePhase(meta);
   if (phase === "completed") {
-    const result = readTaskToolResult(searchTasksResultSchema, meta.output);
+    const result = parseToolOutput(searchTasksResultSchema, meta.output);
     if (result) {
       const { totalCount, results } = result;
       const count = `${totalCount} ${totalCount === 1 ? "result" : "results"}`;
@@ -61,10 +48,10 @@ export const resolveTaskToolTask = (
 ): PublicTaskSummaryTask | null => {
   if (getToolLifecyclePhase(meta) !== "completed") return null;
   if (tool === "create_task") {
-    return readTaskToolResult(createTaskResultSchema, meta.output)?.task ?? null;
+    return parseToolOutput(createTaskResultSchema, meta.output)?.task ?? null;
   }
   if (tool === "update_task") {
-    return readTaskToolResult(taskSummarySchema, meta.output)?.task ?? null;
+    return parseToolOutput(taskSummarySchema, meta.output)?.task ?? null;
   }
   return null;
 };

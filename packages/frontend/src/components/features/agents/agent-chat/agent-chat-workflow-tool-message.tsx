@@ -1,14 +1,21 @@
+import type { OdtToolName } from "@openducktor/contracts";
+import { ChevronDown } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
+import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import {
   getToolDuration,
   getToolLifecyclePhase,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
 import {
-  readToolDetailAvailability,
+  readWorkflowToolCard,
+  type WorkflowToolCard,
   workflowToolStatusLabel,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
+import type { ToolCallError } from "@openducktor/frontend-core/sessions/messages/tool-call-error";
+import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 import { toolIcon } from "./agent-chat-tool-icon";
 import { ToolInputDetails } from "./agent-chat-tool-input-details";
 import { ToolJsonDetails } from "./agent-chat-tool-json-details";
@@ -59,6 +66,8 @@ const WORKFLOW_TOOL_APPEARANCE = {
 
 type WorkflowToolMessageProps = {
   meta: ToolMeta;
+  /** The ODT tool of the call, as `presentToolCall` resolved it. */
+  odtTool?: OdtToolName | null;
   messageTimestamp: string;
   timeLabel: string;
   sessionWorkingDirectory?: string | null | undefined;
@@ -68,8 +77,15 @@ type WorkflowToolMessageProps = {
   action?: ReactNode;
 };
 
+/**
+ * A workflow tool call: a header with the title, the pull request of the call, its status, and
+ * its timing; then its summary, or the error message of a failed call. A workflow event call
+ * takes its event as the title. A press on the title shows the note of the event as Markdown,
+ * then the Input, Output, and Error boxes, all closed.
+ */
 export const WorkflowToolMessage = ({
   meta,
+  odtTool = null,
   messageTimestamp,
   timeLabel,
   sessionWorkingDirectory,
@@ -78,24 +94,45 @@ export const WorkflowToolMessage = ({
   icon,
   action,
 }: WorkflowToolMessageProps): ReactElement => {
-  const durationMs = getToolDuration(meta, messageTimestamp);
-  const { hasInput, hasOutput, hasError } = readToolDetailAvailability(meta);
   const lifecyclePhase = getToolLifecyclePhase(meta);
-  const isFailure = lifecyclePhase === "failed";
   const statusLabel = workflowToolStatusLabel(lifecyclePhase);
   const { activity, statusClassName, foregroundClassName } =
     WORKFLOW_TOOL_APPEARANCE[lifecyclePhase];
+  const card = readWorkflowToolCard({ meta, odtTool, displayName, opensDocument: false });
+  const { title, hasDetails } = card;
+  const titleClassName = cn("min-w-0 break-words text-[11px] font-semibold", foregroundClassName);
 
   return (
-    <div className="flex min-w-0 flex-col gap-2">
+    <Collapsible className="flex min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <div className="flex min-w-0 max-w-full flex-auto items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-auto flex-wrap items-center gap-2">
           <span aria-hidden="true" className={cn("shrink-0", foregroundClassName)}>
-            {icon ?? toolIcon(meta)}
+            {icon ?? toolIcon(meta, card.iconKind)}
           </span>
-          <p className={cn("min-w-0 break-words text-[11px] font-semibold", foregroundClassName)}>
-            {displayName}
-          </p>
+          {hasDetails ? (
+            // A card with details shows them with a press on its title.
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                aria-label={`${title} details`}
+                className={cn(
+                  "group inline-flex min-w-0 cursor-pointer items-center gap-1 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring",
+                  titleClassName,
+                )}
+              >
+                <span className="min-w-0 break-words">{title}</span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className="size-3 shrink-0 transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-180"
+                />
+              </button>
+            </CollapsibleTrigger>
+          ) : (
+            <p className={titleClassName}>{title}</p>
+          )}
+          {card.pullRequest ? (
+            <TaskPullRequestLink pullRequest={card.pullRequest} className="py-0.5" />
+          ) : null}
           {statusLabel ? (
             <span
               className={cn(
@@ -110,45 +147,84 @@ export const WorkflowToolMessage = ({
         <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
           <ToolMessageTiming
             activity={activity}
-            durationMs={durationMs}
+            durationMs={getToolDuration(meta, messageTimestamp)}
             timeLabel={timeLabel}
             className="text-current/75 font-normal normal-case"
           />
           {action}
         </div>
       </div>
-      {summary ? (
-        <p className="min-w-0 break-words text-[11px] text-current/75">{summary}</p>
+      <WorkflowToolLine error={card.error} summary={summary} />
+      {hasDetails ? (
+        <CollapsibleContent className="space-y-2">
+          <WorkflowToolDetailBoxes
+            meta={meta}
+            sessionWorkingDirectory={sessionWorkingDirectory}
+            card={card}
+          />
+        </CollapsibleContent>
       ) : null}
-      {(hasInput || hasOutput || hasError) && (
-        <div className="space-y-2">
-          {hasInput && meta.input ? (
-            <ToolInputDetails
-              meta={meta}
-              workingDirectory={sessionWorkingDirectory}
-              className="rounded border border-current/20 bg-card"
-              textClassName="text-current"
-            />
-          ) : null}
-          {hasOutput ? (
-            <ToolOutputDetails
-              meta={meta}
-              className="rounded border border-current/20 bg-card"
-              summaryClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
-              bodyClassName="space-y-2 px-2 pb-2 text-[11px]"
-            />
-          ) : null}
-          {hasError && meta.error ? (
-            <ToolJsonDetails
-              label="Error"
-              value={meta.error}
-              className="rounded border border-current/20 bg-muted/90"
-              titleClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
-              open={isFailure}
-            />
-          ) : null}
-        </div>
-      )}
-    </div>
+    </Collapsible>
   );
 };
+
+/** The line under the header: the error message of a failed call, or else the summary. */
+const WorkflowToolLine = ({
+  error,
+  summary,
+}: {
+  error: ToolCallError | null;
+  summary: string | undefined;
+}): ReactElement | null => {
+  if (error) {
+    return (
+      <p className="min-w-0 break-words text-[11px] font-medium text-destructive-surface-foreground">
+        {error.message}
+      </p>
+    );
+  }
+  if (!summary) return null;
+  return <p className="min-w-0 break-words text-[11px] text-current/75">{summary}</p>;
+};
+
+/**
+ * The details of an open card: the event note as Markdown, then the Input, Output, and Error
+ * boxes, all closed.
+ */
+const WorkflowToolDetailBoxes = ({
+  meta,
+  sessionWorkingDirectory,
+  card: { note, showsInput, showsOutput, errorDetail },
+}: {
+  meta: ToolMeta;
+  sessionWorkingDirectory?: string | null | undefined;
+  card: WorkflowToolCard;
+}): ReactElement => (
+  <>
+    {note ? <AgentChatMarkdownRenderer markdown={note} variant="compact" /> : null}
+    {showsInput ? (
+      <ToolInputDetails
+        meta={meta}
+        workingDirectory={sessionWorkingDirectory}
+        className="rounded border border-current/20 bg-card"
+        textClassName="text-current"
+      />
+    ) : null}
+    {showsOutput ? (
+      <ToolOutputDetails
+        meta={meta}
+        className="rounded border border-current/20 bg-card"
+        summaryClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
+        bodyClassName="space-y-2 px-2 pb-2 text-[11px]"
+      />
+    ) : null}
+    {errorDetail ? (
+      <ToolJsonDetails
+        label="Error"
+        value={errorDetail}
+        className="rounded border border-current/20 bg-muted/90"
+        titleClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
+      />
+    ) : null}
+  </>
+);

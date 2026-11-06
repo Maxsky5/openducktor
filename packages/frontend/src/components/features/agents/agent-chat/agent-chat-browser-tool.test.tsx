@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { LocalImageReadResult } from "@openducktor/contracts";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -62,6 +62,39 @@ describe("BrowserToolMessage", () => {
       expect((await screen.findByRole("alert")).textContent).toBe(
         "Screenshot could not be loaded: /tmp/shot.png does not exist.",
       );
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("shows the error message of a failed call and keeps its Error box closed", () => {
+    const { output: _output, ...failedCall } = screenshotCall;
+    const envelope = JSON.stringify({
+      ok: false,
+      error: { code: "ODT_TOOL_EXECUTION_ERROR", message: "The tab is closed. Open a new tab." },
+    });
+    const view = render(
+      <QueryProvider connection={createTestClientConnection()}>
+        <BrowserToolMessage
+          meta={{ ...failedCall, status: "error", error: envelope }}
+          action="screenshot"
+          messageTimestamp="2026-10-21T20:00:00.000Z"
+          timeLabel="20:00"
+        />
+      </QueryProvider>,
+    );
+    try {
+      expect(screen.getByText("The tab is closed. Open a new tab.")).toBeTruthy();
+      expect(view.container.textContent).not.toContain("ODT_TOOL_EXECUTION_ERROR");
+      const details = view.container.querySelector("details");
+      if (!details) throw new Error("Expected the details of the call.");
+      act(() => {
+        details.open = true;
+        fireEvent(details, new Event("toggle"));
+      });
+      const error = screen.getByText("Error").closest("details");
+      expect(error?.open).toBe(false);
+      expect(error?.textContent).toContain("ODT_TOOL_EXECUTION_ERROR");
     } finally {
       view.unmount();
     }

@@ -131,6 +131,7 @@ function MessageRow({
       return (
         <WorkflowToolRow
           meta={row.meta}
+          odtTool={row.odtTool}
           messageTimestamp={message.timestamp}
           timeLabel={timeLabel}
           displayName={row.displayName}

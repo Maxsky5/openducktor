@@ -142,6 +142,7 @@ describe("WorkflowToolMessage with cut details", () => {
       />,
     );
     try {
+      fireEvent.click(screen.getByRole("button", { name: "Read artifacts details" }));
       const labels = [...view.container.querySelectorAll("summary")].map(
         (summary) => summary.textContent,
       );

@@ -57,7 +57,7 @@ describe("ComputerUseToolMessage", () => {
     }
   });
 
-  test("keeps the failure out of the collapsed summary and shows the full error in the details", () => {
+  test("shows the error line under the row and the full error in a closed Error box", () => {
     const manual = "Script error: boom\n\nComputer Use API manual line 1\nline 2";
     const view = render(
       <ComputerUseToolMessage
@@ -70,23 +70,23 @@ describe("ComputerUseToolMessage", () => {
       />,
     );
     try {
-      const collapsedText = view.container.textContent ?? "";
-      expect(collapsedText).toContain("Click the button");
-      expect(collapsedText).not.toContain("boom");
-      expect(collapsedText).not.toContain("Computer Use API manual");
+      expect(view.getByText("Click the button")).toBeDefined();
+      expect(
+        view.getByText("Script error: boom Computer Use API manual line 1 line 2"),
+      ).toBeDefined();
       const details = view.container.querySelector("details");
       if (!details) throw new Error("Expected computer use details.");
       expect(details.open).toBe(false);
       toggle(details, true);
-      expect(view.getByText("Error")).toBeDefined();
-      const errorBlock = view.getByText("Error").closest("div");
-      expect(errorBlock?.querySelector("pre")?.textContent).toBe(manual);
+      const errorBox = view.getByText("Error").closest("details");
+      expect(errorBox?.open).toBe(false);
+      expect(errorBox?.querySelector("pre")?.textContent).toBe(manual);
     } finally {
       view.unmount();
     }
   });
 
-  test("keeps an oversized failure out of the collapsed summary", () => {
+  test("shows only the start of an oversized failure under the row", () => {
     const manual = `Computer Use API manual ${"step ".repeat(100_000)}`;
     const view = render(
       <ComputerUseToolMessage
@@ -103,24 +103,24 @@ describe("ComputerUseToolMessage", () => {
       if (!details) throw new Error("Expected computer use details.");
       expect(details.open).toBe(false);
       const collapsedText = view.container.textContent ?? "";
-      expect(collapsedText).not.toContain("Computer Use API manual");
+      expect(collapsedText).toContain("Computer Use API manual step");
       expect(collapsedText.length).toBeLessThan(1_000);
       toggle(details, true);
-      const errorBlock = view.getByText("Error").closest("div");
-      expect(errorBlock?.querySelector("pre")?.textContent).toBe(manual);
+      const errorBox = view.getByText("Error").closest("details");
+      expect(errorBox?.querySelector("pre")?.textContent).toBe(manual);
     } finally {
       view.unmount();
     }
   });
 
-  test("marks a failed call with the destructive surface and no inline error", () => {
+  test("marks a failed call with the destructive surface and its error line", () => {
     const view = render(
       <ComputerUseToolMessage {...baseProps} meta={toolMeta({ status: "error", error: "boom" })} />,
     );
     try {
       const card = view.container.firstElementChild;
       expect(card?.className).toContain("border-destructive-border");
-      expect(view.container.textContent).not.toContain("boom");
+      expect(view.getByText("boom")).toBeDefined();
     } finally {
       view.unmount();
     }
@@ -182,7 +182,7 @@ describe("ComputerUseToolMessage", () => {
     }
   });
 
-  test("keeps the code and output closed in the open card, and shows an error at once", () => {
+  test("keeps the code, error, and output closed in the open card of a failed call", () => {
     const code = "await tab.click('#submit')";
     const view = render(
       <ComputerUseToolMessage
@@ -206,7 +206,8 @@ describe("ComputerUseToolMessage", () => {
         ]),
       );
       expect(sections).toEqual([]);
-      expect(openState).toEqual({ JavaScript: false, Error: true, Output: false });
+      expect(openState).toEqual({ JavaScript: false, Error: false, Output: false });
+      expect(view.getByText("The page closed.", { selector: "p" })).toBeDefined();
     } finally {
       view.unmount();
     }

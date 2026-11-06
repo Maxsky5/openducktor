@@ -475,6 +475,7 @@ const ToolMessageBody = ({
     return (
       <WorkflowToolMessage
         meta={meta}
+        odtTool={toolCallPresentation.odtTool}
         messageTimestamp={message.timestamp}
         timeLabel={timeLabel}
         sessionWorkingDirectory={sessionWorkingDirectory}
