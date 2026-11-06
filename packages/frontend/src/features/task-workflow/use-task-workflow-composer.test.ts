@@ -112,6 +112,20 @@ describe("useTaskWorkflowComposer", () => {
     });
   });
 
+  test("closes an edit form whose task changed after its save started", async () => {
+    const hook = await mount(inA);
+    await hook.run((state) => state.onEdit(task.id));
+    // A save keeps the close handler of the render where the user clicked Save.
+    const closeAfterSave = hook.getLatest().composer.onOpenChange;
+    const savedTask = createTaskCardFixture({ ...task, title: "Saved title" });
+
+    await hook.update({ ...inA, tasks: [savedTask] });
+    expect(hook.getLatest().composer).toMatchObject({ open: true, task: savedTask });
+
+    await hook.run(() => closeAfterSave(false));
+    expect(hook.getLatest().composer.open).toBe(false);
+  });
+
   test("ignores the close handler of an earlier form", async () => {
     const hook = await mount(inA);
     await hook.run((state) => state.onEdit(task.id));

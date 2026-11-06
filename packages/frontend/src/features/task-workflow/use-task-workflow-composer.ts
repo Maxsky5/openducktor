@@ -27,7 +27,6 @@ type TaskComposerState =
       repoPath: string;
       taskId: string;
       section: EditTaskSection;
-      task: TaskCard | null;
     };
 
 const CLOSED_TASK_COMPOSER: TaskComposerState = { kind: "closed" };
@@ -52,7 +51,13 @@ export function useTaskWorkflowComposer({
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
 }): TaskWorkflowComposer {
+  // A state object is one opening of the form. A task refresh keeps it, so the close handler that
+  // a save captured still closes the form.
   const [state, setState] = useState<TaskComposerState>(CLOSED_TASK_COMPOSER);
+  const [lastSavedEditTask, setLastSavedEditTask] = useState<{
+    opening: TaskComposerState;
+    task: TaskCard;
+  } | null>(null);
   const workspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceName = activeWorkspace?.workspaceName ?? null;
   const repoPath = activeWorkspace?.repoPath ?? null;
@@ -69,19 +74,17 @@ export function useTaskWorkflowComposer({
     editTaskId,
     editingActiveWorkspace ? tasks : [],
   );
-  const editWorkspaceId = state.kind === "edit" ? state.workspaceId : null;
   const savedEditTask = composerTasks.find((task) => task.id === editTaskId) ?? null;
   useEffect(() => {
     if (!savedEditTask) return;
-    setState((current) =>
-      current.kind === "edit" &&
-      current.workspaceId === editWorkspaceId &&
-      current.taskId === savedEditTask.id &&
-      current.task !== savedEditTask
-        ? { ...current, task: savedEditTask }
-        : current,
+    setLastSavedEditTask((current) =>
+      current?.opening === state && current.task === savedEditTask
+        ? current
+        : { opening: state, task: savedEditTask },
     );
-  }, [savedEditTask, editWorkspaceId]);
+  }, [savedEditTask, state]);
+  const editTask =
+    savedEditTask ?? (lastSavedEditTask?.opening === state ? lastSavedEditTask.task : null);
 
   const onCreateTask = useCallback(
     (options?: { initialTitle?: string }): void => {
@@ -107,26 +110,24 @@ export function useTaskWorkflowComposer({
           repoPath,
           taskId,
           section,
-          task: tasks.find((task) => task.id === taskId) ?? null,
         });
     },
-    [workspaceId, workspaceName, repoPath, tasks],
+    [workspaceId, workspaceName, repoPath],
   );
 
   return {
     onCreateTask,
     onEdit,
-    composer: taskComposerModel(state, composerTasks, savedEditTask, onOpenChange),
+    composer: taskComposerModel(state, composerTasks, editTask, onOpenChange),
   };
 }
 
 function taskComposerModel(
   state: TaskComposerState,
   composerTasks: TaskCard[],
-  savedEditTask: TaskCard | null,
+  editTask: TaskCard | null,
   onOpenChange: (open: boolean) => void,
 ): TaskWorkflowTaskComposerModel {
-  const editTask = savedEditTask ?? (state.kind === "edit" ? state.task : null);
   return {
     open: state.kind === "create" || editTask !== null,
     task: editTask,
