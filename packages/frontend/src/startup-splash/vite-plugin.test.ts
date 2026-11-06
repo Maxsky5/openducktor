@@ -100,7 +100,7 @@ describe("startup splash Vite plugin", () => {
           .map((match) => match[1] ?? "")
           .filter((face) => face.includes('font-family: "IBM Plex Mono"'))
           .map((face) => face.match(/font-weight:\s*(\d+)/)?.[1]);
-        // Markdown code requests medium; the syntax highlighter requests regular.
+        // Keep both mono weights from the former Google stylesheet.
         expect(new Set(monoWeights)).toEqual(new Set(["400", "500"]));
         expect(urls).toHaveLength(13);
         expect(urls).toContain(preload);

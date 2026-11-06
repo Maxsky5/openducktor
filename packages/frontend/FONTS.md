@@ -16,7 +16,7 @@ The files are unchanged WOFF2 assets from `@fontsource-variable/space-grotesk@5.
 
 The Space Grotesk static files for 400, 500, 600, and 700 from `@fontsource/space-grotesk@5.3.0` total 118,768 bytes across the same three subsets. The variable files save 70,828 bytes. Their original axis includes 300, but the CSS exposes only 400 through 700. The Latin variable file is 22,288 bytes. It replaces the old 13,276-byte Latin 600 splash file so the splash and application reuse one payload. Keeping the old file would add a second Latin payload and overlapping faces.
 
-IBM Plex Mono applies to `code, pre` and the Markdown syntax block. The syntax highlighter requests 400. Inline code and plain Markdown code blocks request 500 through `prose-code:font-medium` in both renderer variants. Both weights ship for every subset, as they did in the former Google stylesheet. Tailwind `font-mono` keeps its default stack because the theme still has no `--font-mono`. The family names, fallback stacks, and terminal font policy do not change.
+IBM Plex Mono applies to `code, pre` and the Markdown syntax block. Inline code, plain Markdown code blocks, and highlighted code request 500 through `prose-code:font-medium` in both renderer variants. Both weights ship for every subset, as they did in the former Google stylesheet. Tailwind `font-mono` keeps its default stack because the theme still has no `--font-mono`. The family names, fallback stacks, and terminal font policy do not change.
 
 The first local-font implementation omitted 500. Electron then selected the 400 face for a 500 request, so code lost its medium weight. A successful font request alone does not detect this error. Check the weight of the selected face as well as its load status.
 
