@@ -3,7 +3,7 @@ import {
   type WorkflowActionEmphasis,
   type WorkflowIcon,
 } from "@openducktor/contracts";
-import type { ResolvedTaskCard } from "@openducktor/workflows";
+import { taskWaitsForMergePublication, type ResolvedTaskCard } from "@openducktor/workflows";
 
 /** The menu entry of a task action that OpenDucktor gives every workflow. */
 export type CoreTaskActionPresentation = {
@@ -42,15 +42,22 @@ export const CLOSE_TASK_ACTION: CoreTaskAction = {
 };
 
 const CORE_TASK_ACTIONS: readonly CoreTaskAction[] = [RESET_TASK_ACTION, CLOSE_TASK_ACTION];
+const CLOSE_ONLY_ACTIONS: readonly CoreTaskAction[] = [CLOSE_TASK_ACTION];
 
-/** Whether Close Task and Reset Task are available: the task is not closed. */
+/** Whether Close Task is available: the task is not closed. */
 export const canRunCoreTaskActions = (task: Pick<ResolvedTaskCard, "status">): boolean =>
   task.status !== TASK_CLOSED_STATE;
 
-/** The core actions of the task in menu order: none for a closed task. */
+/**
+ * The core actions of the task in menu order: none for a closed task. While a local direct merge
+ * waits for its publication, the host rejects Reset Task, so only Close Task stays.
+ */
 export const coreTaskActions = (
-  task: Pick<ResolvedTaskCard, "status">,
-): readonly CoreTaskAction[] => (canRunCoreTaskActions(task) ? CORE_TASK_ACTIONS : []);
+  task: Pick<ResolvedTaskCard, "status" | "directMerge">,
+): readonly CoreTaskAction[] => {
+  if (!canRunCoreTaskActions(task)) return [];
+  return taskWaitsForMergePublication(task) ? CLOSE_ONLY_ACTIONS : CORE_TASK_ACTIONS;
+};
 
 /**
  * Removes the kept worktree and task branch of a closed task. Only the task details read the

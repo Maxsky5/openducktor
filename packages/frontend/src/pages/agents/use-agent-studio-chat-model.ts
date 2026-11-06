@@ -1,5 +1,6 @@
 import { sessionForkDisabledReason } from "@openducktor/frontend-core/sessions/session-fork-availability";
 import { useTaskSessionFork } from "./use-task-session-fork";
+import { taskWaitsForMergePublication } from "@openducktor/workflows";
 import type { AgentChatSend } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
@@ -484,6 +485,9 @@ export function useAgentStudioChatModel({
       readOnly: surfaceState.composerReadOnly,
       readOnlyReason: surfaceState.composerReadOnlyReason,
       error: selectedSessionState.preparation.error,
+      waitsForMergePublication:
+        selectedSession.selectedTask !== null &&
+        taskWaitsForMergePublication(selectedSession.selectedTask),
     }),
   });
 

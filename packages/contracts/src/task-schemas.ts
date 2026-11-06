@@ -2,6 +2,7 @@ import { workspaceRefSchema } from "./workspace-id-schemas";
 import { z } from "zod";
 import { workflowReferenceSchema } from "./workflow-reference-schemas";
 import {
+  directMergeRecordSchema,
   gitConflictSchema,
   gitMergeMethodSchema,
   gitTargetBranchSchema,
@@ -78,6 +79,11 @@ export const taskRecordDataSchema = z.object({
   sourceIssue: z.preprocess(
     (value) => (value === null ? undefined : value),
     sourceIssueReferenceSchema.optional(),
+  ),
+  /** The local direct merge of the task. Until the task closes, it waits for its publication. */
+  directMerge: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    directMergeRecordSchema.optional(),
   ),
   artifactSummary: taskArtifactSummarySchema,
   updatedAt: z.string(),

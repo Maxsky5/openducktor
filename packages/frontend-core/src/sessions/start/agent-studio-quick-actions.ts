@@ -8,6 +8,7 @@ import {
   taskWorkflowInput,
   taskActionLabel,
   taskGitConflictLaunch,
+  taskWaitsForMergePublication,
   type WorkflowRoleId as AgentRole,
   type WorkflowLaunchActionId as SessionLaunchActionId,
   type ResolvedTaskCard as TaskCard,
@@ -25,11 +26,19 @@ import { eventActionStep } from "../../tasks/workflow/task-action-destination";
 import type { AgentSessionSummary } from "../agent-sessions-store";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 
-/** The workflow roles that a task can start now. */
-export const buildRoleEnabledMapForTask = (task: TaskCard | null): Record<AgentRole, boolean> =>
-  Object.fromEntries(
-    Object.entries(task?.agentWorkflows ?? {}).map(([role, state]) => [role, state.available]),
+/**
+ * The workflow roles that a task can start now. While a local direct merge waits for its
+ * publication, the host rejects the work of every session, so the task starts none.
+ */
+export const buildRoleEnabledMapForTask = (task: TaskCard | null): Record<AgentRole, boolean> => {
+  const startsSessions = task !== null && !taskWaitsForMergePublication(task);
+  return Object.fromEntries(
+    Object.entries(task?.agentWorkflows ?? {}).map(([role, state]) => [
+      role,
+      startsSessions && state.available,
+    ]),
   );
+};
 
 /** A quick action that starts or continues a role session. */
 export type AgentStudioSessionQuickActionOption = {

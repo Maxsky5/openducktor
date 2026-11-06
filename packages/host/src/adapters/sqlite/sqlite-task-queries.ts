@@ -19,6 +19,7 @@ export type TaskCardRow = {
   task: TaskRow;
   labels: string[];
   pullRequest: typeof taskPullRequests.$inferSelect | null;
+  directMerge: typeof taskDirectMerges.$inferSelect | null;
   sourceIssue: typeof taskIssueLinks.$inferSelect | null;
 };
 
@@ -74,6 +75,7 @@ export const taskCardRows = (
           .select({
             task: tasks,
             pullRequest: taskPullRequests,
+            directMerge: taskDirectMerges,
             sourceIssue: taskIssueLinks,
             labels: sql<string>`(select json_group_array(label) from (
               select label from task_labels
@@ -87,6 +89,13 @@ export const taskCardRows = (
             and(
               eq(taskPullRequests.workspaceId, tasks.workspaceId),
               eq(taskPullRequests.taskId, tasks.id),
+            ),
+          )
+          .leftJoin(
+            taskDirectMerges,
+            and(
+              eq(taskDirectMerges.workspaceId, tasks.workspaceId),
+              eq(taskDirectMerges.taskId, tasks.id),
             ),
           )
           .leftJoin(

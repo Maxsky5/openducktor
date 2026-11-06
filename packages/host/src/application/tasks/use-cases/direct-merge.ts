@@ -129,7 +129,7 @@ export const createTaskDirectMergeUseCase = (
               // A recorded remote merge keeps the task state until a separate publication intent.
               return {
                 outcome: "completed" as const,
-                task: enrichTask(workflow, current),
+                task: enrichTask(workflow, { ...current, directMerge }),
               };
             }),
           );

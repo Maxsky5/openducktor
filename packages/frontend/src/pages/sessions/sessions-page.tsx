@@ -14,6 +14,7 @@ import { SessionViews, useSessionViews } from "./session-views";
 import { previewSessionViewId } from "./session-view-resolution";
 import { useActiveWorkspace } from "@/state/app-state-provider";
 import { useTaskSnapshotContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
+import { buildKanbanWorkspaceHref } from "@/pages/kanban/kanban-task-link";
 import { SessionsEmptyState } from "./sessions-empty-state";
 import {
   isSessionsWorkspaceReady,
@@ -56,7 +57,7 @@ export function SessionsPage(): ReactElement {
   if (kind === "task" && workspaceMatch.kind === "ready") {
     const taskId = searchParams.get(TASK_SESSION_QUERY_KEYS.task);
     if (tasks.some((task) => task.id === taskId && !taskHasSessionPage(task))) {
-      return <Navigate to="/kanban" replace />;
+      return <Navigate to={buildKanbanWorkspaceHref(activeWorkspace.workspaceId)} replace />;
     }
   }
   return (

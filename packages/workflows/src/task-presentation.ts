@@ -3,6 +3,7 @@ import type {
   WorkflowActionEmphasis,
   WorkflowActionSurface,
   HostEffectId,
+  TaskRecordData,
 } from "@openducktor/contracts";
 import { TASK_CLOSED_STATE, workflowActionSurfaceSchema } from "@openducktor/contracts";
 import { taskWorkflowInput, type ResolvedTaskCard } from "./task-workflow-view";
@@ -52,6 +53,34 @@ export const isRoleAvailableForTask = (
 ): boolean => roleWorkflowForTask(task, role).available;
 export const taskHasSessionPage = (task: ResolvedTaskCard): boolean =>
   task.status !== TASK_CLOSED_STATE;
+/**
+ * Whether a local direct merge of the task waits for its publication. Until the task closes, the
+ * host rejects workflow events and Reset Task.
+ */
+export const taskWaitsForMergePublication = (
+  task: Pick<TaskRecordData, "directMerge" | "status">,
+): boolean => task.directMerge !== undefined && task.status !== TASK_CLOSED_STATE;
+/**
+ * The available actions of a task card. While a local direct merge waits for its publication, only
+ * the approval that publishes it, the view actions, and the event actions that run `worktree.reset`
+ * stay, so each client offers only what the host allows.
+ */
+export const availableTaskActions = (
+  workflow: TaskWorkflow,
+  task: Pick<TaskRecordData, "directMerge" | "status">,
+  actions: string[],
+): string[] =>
+  taskWaitsForMergePublication(task)
+    ? actions.filter((id) => {
+        const action = workflow.action(id);
+        return (
+          action.kind === "approval" ||
+          action.kind === "view" ||
+          (action.kind === "event" &&
+            workflow.eventEffects(action.eventId).includes("worktree.reset"))
+        );
+      })
+    : actions;
 export const taskReviewRejection = (
   task: ResolvedTaskCard | null | undefined,
 ): { label: string; description: string } | null => {
@@ -87,9 +116,12 @@ export const resolveTaskCardActions = (
   const { evaluator } = task.taskWorkflow;
   const surface = options.surface ?? "kanban";
   const declared = task.taskWorkflow;
+  // A task without a session page has no session to open, so it shows no session view action.
+  const sessionPage = taskHasSessionPage(task);
   const allowed = (id: string) =>
     (!options.include || options.include.includes(id)) &&
-    actionShowsOn(declared.action(id), surface);
+    actionShowsOn(declared.action(id), surface) &&
+    (sessionPage || declared.viewActionRole(id) === undefined);
   const views = task.taskWorkflow.sessionViews;
   let enabled = task.availableActions.filter(allowed);
   if (options.hasActiveSession)

@@ -46,6 +46,15 @@ const realAgentsPage = { AgentsPage };
 const realWorkspacePage = { default: WorkspaceSessionsPage };
 const workspace = createWorkspaceRecordFixture({ workspaceId: "alpha" });
 
+function KanbanBoard(): ReactElement {
+  return (
+    <>
+      <p>Kanban board</p>
+      <p>{useLocation().search}</p>
+    </>
+  );
+}
+
 function Harness({
   initiallyClosed = false,
   visits = [],
@@ -128,7 +137,7 @@ function Harness({
                   </button>
                   <Routes>
                     <Route path="/before-session" element={<p>Previous page</p>} />
-                    <Route path="/kanban" element={<p>Kanban board</p>} />
+                    <Route path="/kanban" element={<KanbanBoard />} />
                     <Route path="/sessions" element={<SessionsPage />} />
                   </Routes>
                   {probe}
@@ -564,6 +573,7 @@ test("redirects a saved closed-task address before mounting its conversation", a
   );
   try {
     await waitFor(() => expect(screen.getByText("Kanban board")).toBeTruthy());
+    expect(screen.getByText("?workspace=alpha")).toBeTruthy();
     expect(mountConversation).not.toHaveBeenCalled();
   } finally {
     view.unmount();

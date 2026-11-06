@@ -2,13 +2,13 @@ import type { AgentSessionForkPoint } from "@openducktor/contracts";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useAgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
-import { sessionForkDisabledReason } from "@openducktor/frontend-core/sessions/session-fork-availability";
 import {
   forkTaskSession,
   sessionForkRequestKey,
   useSessionForkRequests,
 } from "@openducktor/frontend-core/sessions/session-forks";
 import { useQueryClient } from "@tanstack/react-query";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import {
   createContext,
@@ -23,6 +23,7 @@ import {
 } from "react";
 import { routes, switchedSessionParams } from "@/navigation/routes";
 import { useSessionScreen } from "../session-target";
+import { mobileSessionForkDisabledReason } from "./session-fork-model";
 import { useVisibleHandoff } from "@/features/session-startup/use-visible-handoff";
 import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { useRepairedStartupHandoff } from "@/features/session-startup/use-repaired-startup-handoff";
@@ -46,7 +47,13 @@ export const useSessionFork = (): SessionForkActions | null => use(SessionForkCo
  * screen then shows the fork. A chat opens the Fork Chat sheet, which asks where the fork works.
  * A Read-only Session View and a session without an owner offer no fork.
  */
-export function SessionForkProvider({ children }: PropsWithChildren): ReactElement {
+export function SessionForkProvider({
+  task,
+  children,
+}: PropsWithChildren<{
+  /** The loaded task of a task session, or null. */
+  task: TaskCard | null;
+}>): ReactElement {
   const { target, interaction } = useSessionScreen();
   const queryClient = useQueryClient();
   const store = useAgentSessionsContext();
@@ -97,14 +104,7 @@ export function SessionForkProvider({ children }: PropsWithChildren): ReactEleme
     [navigation, router, startupAttempts],
   );
   useRepairedStartupHandoff(startupAttempt, false, openReadyFork);
-  const archived = owner.kind === "chat" && owner.record.archivedAt !== null;
-  const disabledReason = sessionForkDisabledReason({
-    runtimeReadiness: interaction.runtimeReadiness,
-    interactionEnabled: interaction.canInteract,
-    readOnly: archived,
-    readOnlyReason: archived ? "Restore this chat before forking a reply." : null,
-    error: interaction.canInteract ? null : interaction.blockedReason,
-  });
+  const disabledReason = mobileSessionForkDisabledReason({ owner, task, interaction });
   const actions = useMemo<SessionForkActions | null>(() => {
     if (readOnly || owner.kind === "none") return null;
     const isPending = (point: AgentSessionForkPoint) =>

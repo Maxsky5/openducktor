@@ -12,6 +12,7 @@ import { Stack, useFocusEffect } from "expo-router";
 import { type ReactElement, useCallback, useMemo } from "react";
 import { useMobileWorkspaces } from "@/composition/workspace-selection";
 import { findChatRecord } from "@/features/work-owner/work-owner-model";
+import { useRepoTask } from "@/features/work-owner/use-repo-task";
 import type { RawRouteParams } from "@/navigation/route-params";
 import { useCommandGate } from "@/host-session/active-session-context";
 import { Screen } from "@/ui/screen";
@@ -298,13 +299,17 @@ function SessionScreenContent({
     () => ({ canInteract, blockedReason, isPreparing, reasonShown, runtimeReadiness }),
     [blockedReason, canInteract, isPreparing, reasonShown, runtimeReadiness],
   );
+  const { task } = useRepoTask(
+    { workspaceId: target.workspace.workspaceId, repoPath: target.repoPath },
+    target.owner.kind === "task" ? target.owner.taskId : null,
+  );
   return (
     <SessionScreenProvider
       target={target}
       interaction={interaction}
       focusPendingInput={focusPendingInput}
     >
-      <SessionForkProvider>
+      <SessionForkProvider task={task}>
         <SessionView />
       </SessionForkProvider>
     </SessionScreenProvider>

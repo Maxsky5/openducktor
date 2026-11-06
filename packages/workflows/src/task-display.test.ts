@@ -4,6 +4,7 @@ import { createTaskCardFixture } from "../test-support/task-card-fixture";
 import { reviewTaskDefinition } from "../test-support/review-task-workflow";
 import { createWorkflow } from "./evaluate";
 import {
+  availableTaskActions,
   resolveTaskCardActions,
   resolveWorkflowAction,
   taskActionLabel,
@@ -26,6 +27,38 @@ describe("definition display fields", () => {
     );
     expect(resolveTaskCardActions(task, { surface: "details" }).allActions).toEqual([]);
     expect(resolveTaskCardActions(task, { surface: "palette" }).allActions).toEqual([]);
+  });
+
+  test("a closed task has no session page, so its past sessions add no session view action", () => {
+    const options = { historicalSessionRoles: ["build", "qa"], activeSessionRole: "build" };
+    const review = createTaskCardFixture({ status: "human_review" });
+    expect(resolveTaskCardActions(review, { surface: "details", ...options }).allActions).toContain(
+      "open_qa",
+    );
+    const closed = createTaskCardFixture({ status: "closed" });
+    for (const surface of ["kanban", "details", "palette"] as const)
+      expect(resolveTaskCardActions(closed, { surface, ...options }).allActions).toEqual([]);
+  });
+
+  test("a local direct merge that waits for its publication leaves only the approval, the views, and worktree.reset", () => {
+    const review = createTaskCardFixture({ status: "human_review" });
+    expect(review.availableActions).toEqual(
+      expect.arrayContaining(["human_request_changes", "qa_start", "set_spec"]),
+    );
+    const directMerge = {
+      method: "squash" as const,
+      sourceBranch: "odt/task-1",
+      targetBranch: { branch: "main", remote: "origin" },
+      mergedAt: "2026-11-06T10:00:00.000Z",
+    };
+    const { taskWorkflow, availableActions } = review;
+    expect(
+      availableTaskActions(taskWorkflow, { status: "human_review", directMerge }, availableActions),
+    ).toEqual(["view_details", "open_builder", "reset_implementation", "human_approve"]);
+    // A closed task has published its merge, so the rule no longer applies.
+    expect(
+      availableTaskActions(taskWorkflow, { status: "closed", directMerge }, availableActions),
+    ).toBe(availableActions);
   });
 
   test("an action without surfaces stays off every surface", () => {

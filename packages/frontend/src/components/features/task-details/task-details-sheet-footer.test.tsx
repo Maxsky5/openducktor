@@ -116,6 +116,28 @@ describe("TaskDetailsSheetFooter", () => {
     unmount();
   });
 
+  test("shows no session view action for a closed task with past sessions", () => {
+    const { unmount } = render(
+      <TaskDetailsSheetFooter
+        task={createTaskCardFixture({ status: "closed", availableActions: [] })}
+        onOpenChange={() => {}}
+        includeActions={["open_builder", "open_qa"]}
+        historicalSessionRoles={["build", "qa"]}
+        onWorkflowAction={() => {}}
+        onDeleteSelect={() => {}}
+      />,
+    );
+
+    expect(screen.queryByText("Open Builder")).toBeNull();
+    fireEvent.click(screen.getByText("More"));
+    const buttons = within(screen.getByRole("dialog"))
+      .getAllByRole("button")
+      .map((button) => button.textContent?.trim());
+    expect(buttons).toEqual(["Delete Task"]);
+
+    unmount();
+  });
+
   test("shows no core action for a closed task", () => {
     const { unmount } = render(
       <TaskDetailsSheetFooter

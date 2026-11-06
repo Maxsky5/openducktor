@@ -16,7 +16,7 @@ import { artifactSummariesByTaskId } from "./sqlite-task-workflow-artifact-queri
 import { taskCardRows, type TaskCardRow } from "./sqlite-task-queries";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type HostDatabaseSession, tasks } from "./sqlite-host-database-schema";
-import { pullRequestFromRow } from "./sqlite-task-delivery-rows";
+import { directMergeFromRow, pullRequestFromRow } from "./sqlite-task-delivery-rows";
 
 const taskRecordSchema = taskRecordDataSchema;
 
@@ -107,7 +107,7 @@ const rowsToTaskRecords = (
   });
 
 const rowToTaskRecord = (
-  { task: row, labels, pullRequest, sourceIssue }: TaskCardRow,
+  { task: row, labels, pullRequest, directMerge, sourceIssue }: TaskCardRow,
   artifactSummary: TaskArtifactSummary | undefined,
 ): Effect.Effect<TaskRecord, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
@@ -129,6 +129,7 @@ const rowToTaskRecord = (
       labels: normalizeLabels(labels),
       priority: row.priority,
       pullRequest: pullRequest === null ? undefined : pullRequestFromRow(pullRequest),
+      directMerge: directMerge === null ? undefined : directMergeFromRow(directMerge),
       sourceIssue:
         sourceIssue === null
           ? undefined

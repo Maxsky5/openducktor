@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { pathStartsWith } from "@openducktor/path-support";
 import type { TaskIdInput } from "../task-inputs";
-import type { TaskWorkflow } from "@openducktor/workflows";
+import { availableTaskActions, type TaskWorkflow } from "@openducktor/workflows";
 import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
@@ -42,10 +42,14 @@ export const enrichTasks = (
   taskWorkflows: TaskWorkflowResolver,
   tasks: readonly TaskRecord[],
 ): TaskCard[] => tasks.map((task) => enrichTask(taskWorkflows.forTask(task), task));
-export const enrichTask = (workflow: TaskWorkflow, task: TaskRecord): TaskCard => ({
-  ...task,
-  ...workflow.project(task),
-});
+export const enrichTask = (workflow: TaskWorkflow, task: TaskRecord): TaskCard => {
+  const projection = workflow.project(task);
+  return {
+    ...task,
+    ...projection,
+    availableActions: availableTaskActions(workflow, task, projection.availableActions),
+  };
+};
 export const validateAgentSessionWorkingDirectory = (
   settingsConfig: SettingsConfigPort,
   workspace: RepoConfig,

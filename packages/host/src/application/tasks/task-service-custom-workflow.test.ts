@@ -354,17 +354,21 @@ describe("task service with a custom task workflow", () => {
     await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
     await save(id, "draft", "writer");
     await save(id, "review", "editor", "accept");
-    await Effect.runPromise(
-      harness.store.setDirectMerge({
-        ...input,
-        directMerge: {
-          method: "merge_commit",
-          sourceBranch: "odt/launch-post",
-          targetBranch: { remote: "origin", branch: "main" },
-          mergedAt: "2026-05-10T00:00:00.000Z",
-        },
-      }),
+    const card = () => Effect.runPromise(service().findTask(input));
+    expect((await card())?.availableActions).toEqual(
+      expect.arrayContaining(["approve", "request_rewrite", "drop_review", "hold"]),
     );
+    const directMerge = {
+      method: "merge_commit" as const,
+      sourceBranch: "odt/launch-post",
+      targetBranch: { remote: "origin", branch: "main" },
+      mergedAt: "2026-05-10T00:00:00.000Z",
+    };
+    await Effect.runPromise(harness.store.setDirectMerge({ ...input, directMerge }));
+    // The card offers only the approval that publishes the merge and the worktree.reset event.
+    const merged = await card();
+    expect(merged?.directMerge).toEqual(directMerge);
+    expect(merged?.availableActions.toSorted()).toEqual(["approve", "drop_review"]);
     const blocked = "has a local direct merge that is not published";
     const rejections = await Promise.all([
       Effect.runPromiseExit(service().applyTaskEvent({ ...input, eventId: "hold" })),

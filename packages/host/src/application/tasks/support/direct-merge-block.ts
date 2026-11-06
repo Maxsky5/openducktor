@@ -1,4 +1,5 @@
-import { type DirectMergeRecord, TASK_CLOSED_STATE } from "@openducktor/contracts";
+import type { DirectMergeRecord } from "@openducktor/contracts";
+import { taskWaitsForMergePublication } from "@openducktor/workflows";
 import { Effect, Result } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
 import type { TaskRecord, TaskStorePort } from "../../../ports/task-repository-ports";
@@ -62,7 +63,7 @@ const unpublishedDirectMergeError = (repoPath: string, taskId: string) =>
   });
 
 const waitsForPublication = (directMerge: DirectMergeRecord | undefined, status: string) =>
-  directMerge !== undefined && status !== TASK_CLOSED_STATE;
+  taskWaitsForMergePublication({ directMerge, status });
 
 /**
  * Adds the unpublished direct merge check to a workflow event decision. The store runs the
