@@ -115,7 +115,6 @@ export const createTaskApprovalContextUseCase = ({
         current,
         taskWorktree.workingDirectory,
         repoConfig,
-        input.workspaceId,
       );
 
       const approvalContext: TaskApprovalContext = {

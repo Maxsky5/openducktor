@@ -34,7 +34,6 @@ export const loadLiveApprovalPreparation = (
   current: TaskRecord,
   workingDirectory: string,
   repoConfig: RepoConfig,
-  workspaceId: string,
 ) =>
   Effect.gen(function* () {
     const currentBranch = yield* dependencies.gitPort.getCurrentBranch(workingDirectory);
@@ -62,7 +61,7 @@ export const loadLiveApprovalPreparation = (
         dependencies.workspaceSettingsService,
         current,
         repoConfig.repoPath,
-        workspaceId,
+        repoConfig.workspaceId,
       ),
     );
     const publishTarget =
@@ -131,7 +130,6 @@ export const loadOpenApprovalContext = (
       current,
       taskWorktree.workingDirectory,
       repoConfig,
-      repoConfig.workspaceId,
     );
     return {
       taskId,
