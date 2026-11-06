@@ -60,7 +60,7 @@ function HintButton({
       // The palette uses Tab, so hints stay out of the tab order. A click keeps input focus.
       tabIndex={-1}
       className={cn(
-        "flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground",
+        "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground",
         primary && "font-medium text-foreground",
       )}
       onMouseDown={(event) => event.preventDefault()}

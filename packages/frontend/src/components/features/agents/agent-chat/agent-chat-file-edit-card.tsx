@@ -51,7 +51,7 @@ const FileEditCardHeader = ({
     <button
       type="button"
       className={cn(
-        "flex w-full items-center gap-2 px-3 py-2 text-left cursor-pointer",
+        "flex w-full items-center gap-2 px-3 py-2 text-left",
         isExpanded && "border-b border-border",
       )}
       onClick={onToggle}

@@ -74,7 +74,7 @@ export function CommandPaletteScope({
                 type="button"
                 tabIndex={-1}
                 aria-label={`Workspace filter: ${label}`}
-                className="flex h-7 max-w-48 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-border bg-muted/60 px-2 text-xs font-medium text-foreground hover:bg-muted"
+                className="flex h-7 max-w-48 shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/60 px-2 text-xs font-medium text-foreground hover:bg-muted"
                 onMouseDown={(event) => event.preventDefault()}
               >
                 {workspace ? (

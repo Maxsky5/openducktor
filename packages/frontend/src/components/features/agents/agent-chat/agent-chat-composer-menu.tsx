@@ -106,7 +106,7 @@ export function AgentChatComposerMenuRow({
       tabIndex={-1}
       type="button"
       className={cn(
-        "flex w-full shrink-0 cursor-pointer gap-3 px-3 py-2 text-left",
+        "flex w-full shrink-0 gap-3 px-3 py-2 text-left",
         isActive ? "bg-selected-surface" : "hover:bg-muted/80",
       )}
       onPointerDown={(event) => {

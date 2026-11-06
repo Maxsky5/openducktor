@@ -111,7 +111,7 @@ function WorkflowStepButton({
       size={compact ? "xs" : "sm"}
       variant="outline"
       className={cn(
-        "border transition-none cursor-pointer",
+        "border transition-none",
         compact
           ? "h-7 min-w-0 flex-1 gap-1 rounded-md px-1.5 text-[11px] [&_svg]:size-3 [&_svg]:shrink-0"
           : "h-9 shrink-0 gap-2 rounded-lg px-4 text-sm @max-[480px]/workflow:gap-1 @max-[480px]/workflow:px-1.5 @max-[480px]/workflow:text-xs @max-[480px]/workflow:[&_svg]:size-3",

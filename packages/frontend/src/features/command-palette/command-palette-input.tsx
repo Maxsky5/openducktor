@@ -91,7 +91,7 @@ export function RowChip({
         type="button"
         tabIndex={-1}
         aria-label="Back to all results"
-        className="flex size-5 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
+        className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
         onMouseDown={(event) => event.preventDefault()}
         onClick={onBack}
       >

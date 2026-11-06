@@ -44,7 +44,7 @@ export function Stepper<Id extends string>({
           isActive && "border-info-border bg-info-surface",
           isComplete && "border-success-border bg-success-surface",
           !isActive && !isComplete && "border-border bg-card",
-          canSelect && "cursor-pointer transition-colors hover:border-primary/50",
+          canSelect && "transition-colors hover:border-primary/50",
         );
         const content = (
           <>

@@ -51,7 +51,7 @@ export const FILE_LIST_ROW_HEIGHT = {
 
 /** Layout of the button in a file list row. `fileListRowStyle` gives its height and indent. */
 export const FILE_LIST_ROW_CLASS_NAME =
-  "flex w-full min-w-0 cursor-pointer items-center gap-2 py-1 pr-3 text-left text-xs";
+  "flex w-full min-w-0 items-center gap-2 py-1 pr-3 text-left text-xs";
 
 /** Minimum height and left padding of a file list row button. The padding is 0.75rem plus 1rem for each directory level. */
 export const fileListRowStyle = (viewMode: FileListViewMode, depth: number) => ({

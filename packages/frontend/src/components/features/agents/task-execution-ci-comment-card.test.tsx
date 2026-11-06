@@ -295,7 +295,6 @@ test("shows the comment header as clickable and vertically centers its actions",
   const collapseButton = view.getByRole("button", { name: "Collapse comment from reviewer" });
   const externalButton = view.getByRole("button", { name: "Open comment from reviewer" });
 
-  expect(collapseButton.classList.contains("cursor-pointer")).toBe(true);
   expect(collapseButton.classList.contains("items-center")).toBe(true);
   expect(collapseButton.classList.contains("items-start")).toBe(false);
   expect(externalButton.parentElement?.classList.contains("items-center")).toBe(true);

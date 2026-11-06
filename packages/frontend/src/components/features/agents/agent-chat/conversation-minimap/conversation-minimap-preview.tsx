@@ -248,7 +248,7 @@ function JumpCover({
       type="button"
       tabIndex={-1}
       aria-label="Jump to message"
-      className="absolute inset-0 cursor-pointer rounded-[inherit]"
+      className="absolute inset-0 rounded-[inherit]"
       onClick={onClick}
       onPointerEnter={onPointerEnter}
     />

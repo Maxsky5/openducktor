@@ -206,7 +206,7 @@ function ShowActionsButton({
       tabIndex={-1}
       aria-label={`Show actions for ${title}`}
       title="Show actions"
-      className="-mr-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-data-[selected=true]/row:opacity-100"
+      className="-mr-1.5 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-data-[selected=true]/row:opacity-100"
       onMouseDown={(event) => event.preventDefault()}
       onClick={(event) => {
         event.stopPropagation();

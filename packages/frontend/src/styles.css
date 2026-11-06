@@ -434,6 +434,15 @@ body {
   overscroll-behavior: none;
 }
 
+/* Tailwind v4 gives buttons the default cursor. Every enabled button of the app shows the pointer,
+   also the buttons of Radix primitives and plain button elements. A utility class still wins. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
 body {
   font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
   color: var(--foreground);

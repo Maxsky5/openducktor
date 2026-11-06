@@ -113,7 +113,7 @@ export function TagSelector({
               endAdornment={
                 <button
                   type="button"
-                  className="-mr-0.5 cursor-pointer rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  className="-mr-0.5 rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => removeTag(label)}
                   aria-label={`Remove label ${label}`}
@@ -142,7 +142,7 @@ export function TagSelector({
           {canCreateCandidate ? (
             <button
               type="button"
-              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => selectSuggestion(candidateTag)}
             >
@@ -156,7 +156,7 @@ export function TagSelector({
               key={label}
               type="button"
               className={cn(
-                "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
               )}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => selectSuggestion(label)}

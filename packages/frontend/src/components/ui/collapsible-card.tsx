@@ -45,7 +45,7 @@ export function CollapsibleCard({
           <CollapsibleTrigger asChild>
             <button
               type="button"
-              className="flex w-full min-w-0 cursor-pointer items-center gap-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-none after:absolute after:inset-0 after:rounded-xl group-data-[state=open]/card:after:rounded-b-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
+              className="flex w-full min-w-0 items-center gap-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-none after:absolute after:inset-0 after:rounded-xl group-data-[state=open]/card:after:rounded-b-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
             >
               {icon}
               <span className="truncate">{title}</span>

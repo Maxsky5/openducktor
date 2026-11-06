@@ -106,7 +106,7 @@ function HistoryCommitRow({
     <button
       type="button"
       className={cn(
-        "group/history-row flex h-full w-full min-w-0 cursor-pointer items-center text-left outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-[state=open]:bg-muted",
+        "group/history-row flex h-full w-full min-w-0 items-center text-left outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-[state=open]:bg-muted",
         entering.has(commit.oid) && "motion-safe:animate-[history-row-enter_200ms_ease-out]",
         leaving.has(commit.oid) &&
           "pointer-events-none motion-safe:animate-[history-row-leave_200ms_ease-in_forwards]",

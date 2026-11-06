@@ -56,7 +56,7 @@ function SessionPanelLauncherCard({
       type="button"
       aria-labelledby={`${id}-label`}
       aria-describedby={`${id}-description`}
-      className="group relative flex h-full w-full cursor-pointer items-center gap-3.5 rounded-xl border border-border bg-muted/20 py-3.5 pr-10 pl-3.5 text-left transition-[background-color,border-color,scale] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none enabled:hover:border-selected-accent/40 enabled:hover:bg-muted/50 enabled:active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:enabled:active:scale-100"
+      className="group relative flex h-full w-full items-center gap-3.5 rounded-xl border border-border bg-muted/20 py-3.5 pr-10 pl-3.5 text-left transition-[background-color,border-color,scale] duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none enabled:hover:border-selected-accent/40 enabled:hover:bg-muted/50 enabled:active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:enabled:active:scale-100"
       disabled={entry.disabledReason !== null}
       onClick={() => onPick(entry.kind)}
     >
