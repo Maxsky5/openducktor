@@ -106,6 +106,7 @@ export function AgentsPageWorkspacePanes({
       model={rightPanel}
       direction="horizontal"
       sizes={RIGHT_PANEL_SIZES}
+      separatorLabel="Resize right panel"
       className="h-full min-h-0 overflow-hidden"
       mainClassName="flex h-full min-h-0 flex-col overflow-hidden"
       main={

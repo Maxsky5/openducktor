@@ -221,6 +221,7 @@ export function WorkspaceSessionContent({
         keepPanelMounted
         direction={isNarrow ? "vertical" : "horizontal"}
         sizes={isNarrow ? NARROW_TOOLS_PANEL_SIZES : TOOLS_PANEL_SIZES}
+        separatorLabel={isNarrow ? "Resize bottom panel" : "Resize right panel"}
         className="h-full min-h-0 overflow-hidden"
         mainClassName="h-full min-h-0"
         panelClassName="bg-card"
