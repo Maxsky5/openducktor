@@ -74,7 +74,7 @@ describe("startup splash Vite plugin", () => {
     );
   });
   // This test runs real Vite builds for both shell bases.
-  test("built font URLs resolve on web routes and beside Electron HTML", async () => {
+  test("builds required font weights for web routes and Electron HTML", async () => {
     const directory = mkdtempSync(join(tmpdir(), "odt-font-build-"));
     try {
       writeFileSync(
@@ -96,7 +96,13 @@ describe("startup splash Vite plugin", () => {
           (match) => match[1] ?? "",
         );
         const preload = html.match(/rel="preload" href="([^"]+)"/)?.[1] ?? "";
-        expect(urls).toHaveLength(8);
+        const monoWeights = [...html.matchAll(/@font-face\s*\{([^}]+)\}/g)]
+          .map((match) => match[1] ?? "")
+          .filter((face) => face.includes('font-family: "IBM Plex Mono"'))
+          .map((face) => face.match(/font-weight:\s*(\d+)/)?.[1]);
+        // Keep both mono weights from the former Google stylesheet.
+        expect(new Set(monoWeights)).toEqual(new Set(["400", "500"]));
+        expect(urls).toHaveLength(13);
         expect(urls).toContain(preload);
         const documents =
           base === "/"
