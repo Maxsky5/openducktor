@@ -109,6 +109,19 @@ describe("agent-studio-quick-actions", () => {
     for (const option of options) expect(option.description).not.toBe(option.label);
   });
 
+  test("tells why a feedback action waits while a session runs", () => {
+    const options = buildAgentStudioQuickActions({
+      ...buildPrActionArgs(),
+      createSessionDisabled: true,
+    });
+    expect(
+      options.find(
+        (option) =>
+          option.kind === "task_action" && option.taskAction.action === "human_request_changes",
+      ),
+    ).toMatchObject({ disabled: true, disabledReason: "Wait for the current session to finish." });
+  });
+
   test("hides unsupported Pull Request generation", () => {
     const actions = buildSessionQuickActions({
       ...buildPrActionArgs(),

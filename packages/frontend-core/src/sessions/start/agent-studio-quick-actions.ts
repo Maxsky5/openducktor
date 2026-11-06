@@ -204,6 +204,7 @@ export const buildAgentStudioQuickActions = (
       disabled: follows && params.createSessionDisabled,
     };
     if (action.description) option.description = action.description;
+    if (option.disabled) option.disabledReason = SESSION_BUSY_REASON;
     if (follows) following.push(option);
     else if (placement === "leading") leading.push(option);
     else trailing.push(option);
