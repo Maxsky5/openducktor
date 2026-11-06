@@ -4101,7 +4101,7 @@ describe("OpenCode V2 live observation", () => {
     );
   });
 
-  test("updates manual compaction under the native input ID in live events and history", () => {
+  test("shows only the native compaction text under the native input ID in live events and history", () => {
     const projector = new OpenCodeLiveMessageProjector();
     const start = projector.apply({
       id: "evt_compact_start",
@@ -4138,18 +4138,18 @@ describe("OpenCode V2 live observation", () => {
       {
         type: "session_compacted",
         messageId: "msg_compact",
-        message: "Summary\nRecent",
-        summary: "Summary\nRecent",
+        message: "Summary",
+        summary: "Summary",
       },
     ]);
     expect([...projector.messages.keys()]).toEqual(["msg_compact"]);
     expect(projectMessage(projector.messages.get("msg_compact")!)).toMatchObject({
       messageId: "msg_compact",
-      text: "Summary\nRecent",
+      text: "Summary",
       notice: {
         reason: "session_compacted",
         compactionStatus: "completed",
-        summary: "Summary\nRecent",
+        summary: "Summary",
       },
     });
   });
