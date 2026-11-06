@@ -634,34 +634,32 @@ describe.each(["getApprovalContext", "upsertPullRequest"] as const)(
           _tag: "HostValidationError",
           message: "Human approval is only allowed from ai_review or human_review.",
         });
+      } else if (scenario === "missing") {
+        expect(result.failure).toMatchObject({
+          _tag: "HostValidationError",
+          field: "taskId",
+          message:
+            "Human approval requires a task worktree for task task-1. Start a Builder or QA session first.",
+          details: { repoPath: "/repo", taskId: "task-1" },
+        });
+      } else if (scenario === "targetError") {
+        expect(result.failure).toMatchObject({
+          _tag: "HostValidationError",
+          field: "targetBranch",
+          message: "Repair the target branch.",
+          details: { repoPath: "/repo", taskId: "task-1" },
+        });
       } else {
         const branchError =
           scenario === "detached"
             ? "Human approval requires a task branch, but the task worktree is detached."
             : "Human approval requires a task branch name.";
-        expect(result.failure).toMatchObject(
-          scenario === "missing"
-            ? {
-                _tag: "HostValidationError",
-                field: "taskId",
-                message:
-                  "Human approval requires a task worktree for task task-1. Start a Builder or QA session first.",
-                details: { repoPath: "/repo", taskId: "task-1" },
-              }
-            : scenario === "targetError"
-              ? {
-                  _tag: "HostValidationError",
-                  field: "targetBranch",
-                  message: "Repair the target branch.",
-                  details: { repoPath: "/repo", taskId: "task-1" },
-                }
-              : {
-                  _tag: "HostValidationError",
-                  field: "workingDirectory",
-                  message: branchError,
-                  details: { workingDirectory: "/worktrees/repo/task-1" },
-                },
-        );
+        expect(result.failure).toMatchObject({
+          _tag: "HostValidationError",
+          field: "workingDirectory",
+          message: branchError,
+          details: { workingDirectory: "/worktrees/repo/task-1" },
+        });
       }
     });
   },
