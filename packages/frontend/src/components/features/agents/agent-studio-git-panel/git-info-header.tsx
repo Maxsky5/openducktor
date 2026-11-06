@@ -2,6 +2,7 @@ import { ArrowDown, ArrowRight, ArrowUp, GitBranch } from "lucide-react";
 import { memo, type ReactElement, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { BRANCH_CHIP_CLASS_NAME } from "@/components/features/repository/branch-chip-classnames";
+import { InlineCodeText } from "@/components/ui/inline-code-text";
 import type { GitPanelTab } from "./constants";
 import { GitActionRow } from "./git-header-actions";
 import { headerNotices } from "./git-header-notice-items";
@@ -119,8 +120,10 @@ export const GitInfoHeader = memo(function GitInfoHeader(props: GitInfoHeaderPro
         rebaseOntoTarget={props.rebaseOntoTarget}
         rebaseTooltip={view.rebaseTooltip}
       />
-      {view.notices.map(({ key, ...notice }) => (
-        <HeaderNotice key={key} {...notice} />
+      {view.notices.map(({ key, children, ...notice }) => (
+        <HeaderNotice key={key} {...notice}>
+          <InlineCodeText text={children} />
+        </HeaderNotice>
       ))}
       <GitPanelTabs
         activeTab={props.activeTab}

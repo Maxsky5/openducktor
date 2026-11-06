@@ -10,6 +10,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
+import { InlineCodeText } from "@/components/ui/inline-code-text";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SessionActionButton, SessionActionMenuTrigger } from "./session-action-button";
@@ -158,7 +159,9 @@ function QuickActionCommandItem({
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-foreground">{option.label}</p>
         {description ? (
-          <p className="truncate text-[11px] text-muted-foreground">{description}</p>
+          <p className="truncate text-[11px] text-muted-foreground">
+            <InlineCodeText text={description} />
+          </p>
         ) : null}
       </div>
     </CommandItem>

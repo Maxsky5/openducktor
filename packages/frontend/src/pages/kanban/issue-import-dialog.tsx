@@ -5,6 +5,7 @@ import { type ReactElement, useState } from "react";
 import { toast } from "sonner";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
 import { Button } from "@/components/ui/button";
+import { InlineCodeText } from "@/components/ui/inline-code-text";
 import {
   Dialog,
   DialogBody,
@@ -216,7 +217,9 @@ function IssueImportBodyContent({
   if (unavailableReason) {
     return (
       <div className="flex flex-col gap-3 rounded-md border border-warning-border bg-warning-surface p-4 text-sm text-warning-surface-foreground">
-        <p>{unavailableReason}</p>
+        <p>
+          <InlineCodeText text={unavailableReason} />
+        </p>
         <Button type="button" variant="outline" onClick={onOpenSettings}>
           {ISSUE_IMPORT_LABELS.openRepositorySettings}
         </Button>

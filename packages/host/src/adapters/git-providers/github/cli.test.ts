@@ -91,6 +91,23 @@ describe("createGithubCli", () => {
     });
   });
 
+  test("names gh auth login as code when gh reports no auth reason", async () => {
+    const { port } = createSystemCommandPort({
+      runResult: { ok: false, stdout: "", stderr: "" },
+    });
+    const githubCli = createGithubCli({
+      systemCommands: port,
+      toolDiscovery: createToolDiscovery(),
+    });
+    const command = await Effect.runPromise(githubCli.resolve());
+
+    await expect(Effect.runPromise(command.getAuth("github.com"))).resolves.toEqual({
+      authenticated: false,
+      account: null,
+      reason: "GitHub authentication is not configured. Run `gh auth login`.",
+    });
+  });
+
   test("run keeps options and sets machine-readable env", async () => {
     const { port, runCalls } = createSystemCommandPort();
     const githubCli = createGithubCli({

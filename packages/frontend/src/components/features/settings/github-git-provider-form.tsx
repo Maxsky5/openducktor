@@ -2,6 +2,7 @@ import { Github, LoaderCircle, PencilLine, RefreshCcw } from "lucide-react";
 import { useState, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { InlineCodeText } from "@/components/ui/inline-code-text";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -146,7 +147,9 @@ function GithubProviderHeader({ model }: Pick<GithubGitProviderFormProps, "model
           {hasConfiguredNonGithubProvider ? (
             <p className="text-xs text-muted-foreground">{providerDescription}</p>
           ) : null}
-          <p className="text-xs text-muted-foreground">{githubReadinessMessage}</p>
+          <p className="text-xs text-muted-foreground">
+            <InlineCodeText text={githubReadinessMessage} />
+          </p>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3">

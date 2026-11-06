@@ -12,6 +12,7 @@ import type { TaskCloseMergeCheck } from "@openducktor/frontend-core/tasks/appro
 import type { TaskApprovalImpact } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
+import { InlineCodeText } from "@/components/ui/inline-code-text";
 import { Label } from "@/components/ui/label";
 import { TaskCloseConfirmContent } from "@/components/features/task-details/task-close-confirm-content";
 import { TaskApprovalDirectMergeSection } from "./task-approval-direct-merge-section";
@@ -121,7 +122,9 @@ function TaskApprovalApprovalContent({
         />
         {!model.pullRequestAvailable && model.pullRequestUnavailableReason ? (
           <p className="text-sm text-muted-foreground">
-            {taskApprovalPullRequestUnavailableMessage(model.pullRequestUnavailableReason)}
+            <InlineCodeText
+              text={taskApprovalPullRequestUnavailableMessage(model.pullRequestUnavailableReason)}
+            />
           </p>
         ) : null}
       </div>

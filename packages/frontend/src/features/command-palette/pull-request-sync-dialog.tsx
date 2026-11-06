@@ -3,6 +3,7 @@ import { useQueries } from "@tanstack/react-query";
 import { FolderGit2, Folders, RefreshCcw } from "lucide-react";
 import { type ReactElement, type ReactNode, useId } from "react";
 import { Button } from "@/components/ui/button";
+import { InlineCodeText } from "@/components/ui/inline-code-text";
 import {
   Dialog,
   DialogBody,
@@ -57,7 +58,9 @@ export function PullRequestSyncDialog({
           {workspaceHint}
         </p>
       ) : (
-        <ScopeWarning id={workspaceHintId}>{workspaceHint}</ScopeWarning>
+        <ScopeWarning id={workspaceHintId}>
+          <InlineCodeText text={workspaceHint} />
+        </ScopeWarning>
       );
   }
   return (
@@ -117,7 +120,7 @@ export function PullRequestSyncDialog({
           />
           {failures.map((entry) => (
             <ScopeWarning key={entry.workspace.workspaceId}>
-              {entry.workspace.workspaceName}: {entry.hint}
+              <InlineCodeText text={`${entry.workspace.workspaceName}: ${entry.hint}`} />
             </ScopeWarning>
           ))}
           {noWorkspaces ? (

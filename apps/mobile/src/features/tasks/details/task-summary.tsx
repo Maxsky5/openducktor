@@ -8,6 +8,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { useCommandGate } from "@/host-session/active-session-context";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { Icon, type IconName } from "@/ui/icon";
+import { InlineCodeText } from "@/ui/inline-code-text";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import {
@@ -134,7 +135,7 @@ export const TaskSummary = memo(function TaskSummary({
       </View>
       {pullRequest.showDetect && pullRequest.detectDisabledReason ? (
         <Text variant="footnote" selectable style={styles.detectError}>
-          {pullRequest.detectDisabledReason}
+          <InlineCodeText text={pullRequest.detectDisabledReason} />
         </Text>
       ) : null}
       {labels.length > 0 ? (
