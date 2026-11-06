@@ -50,12 +50,12 @@
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.6",
     "eslint-plugin-react-hooks": "7.1.1",
     "husky": "^9.1.7",
-    "knip": "^6.42.0",
-    "oxfmt": "^0.73.0",
-    "oxlint": "^1.88.0",
+    "knip": "^6.44.1",
+    "oxfmt": "^0.76.0",
+    "oxlint": "^1.90.0",
     "typescript": "7.0.2",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
