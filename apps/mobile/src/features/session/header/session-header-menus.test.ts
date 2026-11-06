@@ -117,8 +117,26 @@ describe("quickActionItems", () => {
         disabled: false,
         detail: undefined,
         command: true,
+        destructive: false,
       },
     ]);
+  });
+
+  test("shows a destructive task action in red, as the card and details menus do", () => {
+    const items = quickActionItems(
+      [
+        {
+          kind: "task_action",
+          id: "task:reset_implementation",
+          taskAction: { kind: "workflow", action: "reset_implementation" },
+          placement: "trailing",
+          label: "Reset Implementation",
+          disabled: false,
+        },
+      ],
+      createTaskCardFixture({ status: "human_review" }),
+    );
+    expect(items[0]?.destructive).toBe(true);
   });
 
   test("shows the core Close Task of a merged branch with its target", () => {
@@ -145,6 +163,7 @@ describe("quickActionItems", () => {
         disabled: false,
         detail: "Merged into origin/main",
         command: true,
+        destructive: false,
       },
     ]);
   });

@@ -4,6 +4,7 @@ import {
   workflowRoleIcon,
 } from "@openducktor/workflows";
 import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
+import { taskActionIsDestructive } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { formatElapsedAgo } from "@openducktor/frontend-core/lib/relative-time";
 import type { TaskSessionGroup } from "@/features/tasks/details/task-sessions-model";
 import {
@@ -55,12 +56,18 @@ export const quickActionItems = (
               : option.disabledReason,
           command: true,
         };
-        if (option.kind === "task_action")
+        if (option.kind === "task_action") {
+          const { taskAction } = option;
           item.icon =
-            option.taskAction.kind === "core"
-              ? coreTaskActionIcon(option.taskAction.action)
-              : taskActionIcon(option.taskAction.action, task);
-        else if (isPullRequestLaunch(option.launchActionId)) {
+            taskAction.kind === "core"
+              ? coreTaskActionIcon(taskAction.action)
+              : taskActionIcon(taskAction.action, task);
+          // As in the card and details menus, a destructive action shows in red.
+          item.destructive =
+            taskAction.kind === "core"
+              ? taskAction.action.emphasis === "destructive"
+              : taskActionIsDestructive(taskAction.action, task);
+        } else if (isPullRequestLaunch(option.launchActionId)) {
           item.icon = "git-pull-request";
         } else item.role = workflowRoleIcon(task.taskWorkflow, option.role);
         return item;
