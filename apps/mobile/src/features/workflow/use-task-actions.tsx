@@ -61,12 +61,10 @@ export function useTaskActions({
   workspace,
   tasks: visibleTasks,
   outcome = NO_OUTCOME_LISTENER,
-  onRemoveWorktree,
 }: {
   workspace: WorkspaceRecord;
   tasks: TaskCard[];
   outcome?: ConfirmationOutcomeListener<ConfirmedTaskAction> | undefined;
-  onRemoveWorktree?: (() => void) | undefined;
 }): TaskActions {
   const router = useRouter();
   const { feedback } = useClientConnection();
@@ -147,17 +145,8 @@ export function useTaskActions({
           openReset.current(taskId, eventId, { closeDetailsAfterReset: true, onCommitted }),
         continueTaskWorkflow,
         showError: (title, description) => feedback.show("error", title, { description }),
-      })(task, action, { sessionOptionsOf, onRemoveWorktree }),
-    [
-      launch,
-      events,
-      router,
-      workspaceId,
-      openSession,
-      feedback,
-      continueTaskWorkflow,
-      onRemoveWorktree,
-    ],
+      })(task, action, { sessionOptionsOf }),
+    [launch, events, router, workspaceId, openSession, feedback, continueTaskWorkflow],
   );
 
   // A Delete from the task details pops the details. The confirmation is its own native window, so

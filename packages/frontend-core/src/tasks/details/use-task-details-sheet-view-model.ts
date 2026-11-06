@@ -98,19 +98,15 @@ export function useTaskDetailsSheetViewModel({
   });
   const { openDialog: openResetDialog } = resetConfirm;
   const { openDialog: openCloseDialog } = closeConfirm;
-  const { openDialog: openRemoveWorktreeDialog } = removeWorktreeConfirm;
   const runWorkflowAction = useCallback(
     (action: TaskWorkflowAction): void => {
       if (!runAction)
         throw new Error("Task details need the task workflow actions to run a workflow action.");
-      runAction(task, action, {
-        sessionOptionsOf: resolveSessionOptionsByRole,
-        onRemoveWorktree: openRemoveWorktreeDialog,
-      });
+      runAction(task, action, { sessionOptionsOf: resolveSessionOptionsByRole });
       // The session opens in place of the current view, so the sheet must not stay over it.
       if (task.taskWorkflow.viewActionRole(action)) onOpenChange(false);
     },
-    [runAction, task, resolveSessionOptionsByRole, openRemoveWorktreeDialog, onOpenChange],
+    [runAction, task, resolveSessionOptionsByRole, onOpenChange],
   );
   // The sheet is not modal, so its confirmations stay inside it to keep focus.
   const runCoreTaskAction = useCallback(

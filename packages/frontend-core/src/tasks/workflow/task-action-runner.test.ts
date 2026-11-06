@@ -92,25 +92,6 @@ describe("createTaskActionRunner", () => {
     expect(handlers.showError).not.toHaveBeenCalled();
   });
 
-  test("lets a surface own its worktree removal", () => {
-    const task = createTaskCardFixture({
-      id: "T-1",
-      status: "closed",
-      availableActions: ["remove_worktree"],
-    });
-    const handlers = createHandlers();
-    const onRemoveWorktree = mock(() => {});
-    const run = createTaskActionRunner(handlers);
-
-    run(task, "remove_worktree", { onRemoveWorktree });
-    expect(onRemoveWorktree).toHaveBeenCalledTimes(1);
-    expect(handlers.onConfirm).not.toHaveBeenCalled();
-
-    // Without the surface handler, the task details own the worktree removal.
-    run(task, "remove_worktree");
-    expect(handlers.onOpenTaskDetails).toHaveBeenCalledWith("T-1");
-  });
-
   test("shows the error of an unavailable action", () => {
     const handlers = createHandlers();
     createTaskActionRunner(handlers)(createTaskCardFixture({ id: "T-1" }), "set_spec");

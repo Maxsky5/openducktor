@@ -27,7 +27,6 @@ const SPEC_PLAN_BUILD_ACTION_IDS = [
   "reset_implementation",
   "human_request_changes",
   "human_approve",
-  "remove_worktree",
 ] as const;
 export type SpecPlanBuildActionId = (typeof SPEC_PLAN_BUILD_ACTION_IDS)[number];
 

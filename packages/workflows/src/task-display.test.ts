@@ -19,14 +19,20 @@ import {
 const qaRejected = { qaReport: { present: true, verdict: "rejected" } };
 
 describe("definition display fields", () => {
-  test("action surfaces keep task-level actions out of the Kanban card", () => {
+  test("a closed task has no workflow action, since Remove Worktree is a core task action", () => {
     const task = createTaskCardFixture({ status: "closed" });
-    expect(resolveTaskCardActions(task, { surface: "kanban" }).allActions).not.toContain(
+    expect(task.taskWorkflow.definition.actions.map(({ id }) => id)).not.toContain(
       "remove_worktree",
     );
-    expect(resolveTaskCardActions(task, { surface: "details" }).allActions).toContain(
-      "remove_worktree",
-    );
+    expect(resolveTaskCardActions(task, { surface: "details" }).allActions).toEqual([]);
+    expect(resolveTaskCardActions(task, { surface: "palette" }).allActions).toEqual([]);
+  });
+
+  test("an action without surfaces stays off every surface", () => {
+    const task = createTaskCardFixture({ status: "open" });
+    expect(task.availableActions).toContain("view_details");
+    for (const surface of ["kanban", "details", "palette"] as const)
+      expect(resolveTaskCardActions(task, { surface }).allActions).not.toContain("view_details");
   });
 
   test("the Studio label replaces only the base action label", () => {
@@ -45,11 +51,12 @@ describe("definition display fields", () => {
   });
 
   test("view targets and the approval action resolve from the definition", () => {
-    const closed = createTaskCardFixture({ status: "closed" });
-    expect(resolveWorkflowAction(closed, "remove_worktree")).toEqual({
+    const open = createTaskCardFixture({ status: "open" });
+    expect(resolveWorkflowAction(open, "view_details")).toEqual({
       kind: "view",
-      target: "worktree_cleanup",
+      target: "task_details",
     });
+    const closed = createTaskCardFixture({ status: "closed" });
     const review = createTaskCardFixture({ status: "human_review" });
     expect(resolveWorkflowAction(review, "human_approve")).toEqual({ kind: "approval" });
     expect(resolveWorkflowAction(review, "human_request_changes")).toEqual({

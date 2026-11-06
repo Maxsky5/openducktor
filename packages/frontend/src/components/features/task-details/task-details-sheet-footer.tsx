@@ -6,6 +6,7 @@ import {
 import {
   type CoreTaskAction,
   coreTaskActions,
+  REMOVE_WORKTREE_ACTION,
 } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import { PencilLine, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
@@ -24,6 +25,8 @@ export type TaskDetailsSheetFooterProps = {
   onWorkflowAction?: (action: TaskWorkflowAction) => void;
   /** Shows Close Task and Reset Task, which OpenDucktor gives every task. */
   onCoreTaskAction?: (action: CoreTaskAction) => void;
+  /** Shows Remove Worktree. The sheet passes it only while a closed task keeps its worktree. */
+  onRemoveWorktreeSelect?: () => void;
   onDeleteSelect?: () => void;
 };
 
@@ -52,6 +55,7 @@ export function TaskDetailsSheetFooter({
   historicalSessionRoles,
   onWorkflowAction,
   onCoreTaskAction,
+  onRemoveWorktreeSelect,
   onDeleteSelect,
 }: TaskDetailsSheetFooterProps): ReactElement {
   const extraMenuActions = [
@@ -59,6 +63,9 @@ export function TaskDetailsSheetFooter({
       ? coreTaskActions(task).map((action) =>
           coreTaskActionMenuItem(action, () => onCoreTaskAction(action)),
         )
+      : []),
+    ...(onRemoveWorktreeSelect
+      ? [coreTaskActionMenuItem(REMOVE_WORKTREE_ACTION, onRemoveWorktreeSelect)]
       : []),
     ...deleteMenuActions(onDeleteSelect),
   ];

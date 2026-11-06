@@ -18,7 +18,6 @@ export type TaskActionDestination =
   | { kind: "launch"; launchActionId: string }
   | { kind: "event"; eventId: string; launchActionIds: readonly string[] }
   | { kind: "details" }
-  | { kind: "cleanup" }
   | { kind: "open_session"; role: string; options: SessionTargetOptions }
   | { kind: "no_session"; role: string }
   | { kind: "approve" }
@@ -52,7 +51,7 @@ export const resolveTaskActionDestination = (
       return options
         ? { kind: "open_session", role: command.role, options }
         : { kind: "no_session", role: command.role };
-    return command.target === "task_details" ? { kind: "details" } : { kind: "cleanup" };
+    return { kind: "details" };
   }
   if (command.kind === "approval") return { kind: "approve" };
   const continuation: TaskWorkflowContinuation | undefined = command.launchActionIds.length

@@ -137,4 +137,30 @@ describe("TaskDetailsSheetFooter", () => {
 
     unmount();
   });
+
+  test("shows the core Remove Worktree of a closed task before Delete Task", () => {
+    const onRemoveWorktreeSelect = mock(() => {});
+    const { unmount } = render(
+      <TaskDetailsSheetFooter
+        task={createTaskCardFixture({ status: "closed", availableActions: [] })}
+        onOpenChange={() => {}}
+        includeActions={[]}
+        onWorkflowAction={() => {}}
+        onCoreTaskAction={() => {}}
+        onRemoveWorktreeSelect={onRemoveWorktreeSelect}
+        onDeleteSelect={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("More"));
+    const buttons = within(screen.getByRole("dialog"))
+      .getAllByRole("button")
+      .map((button) => button.textContent?.trim());
+    expect(buttons).toEqual(["Remove Worktree", "Delete Task"]);
+
+    fireEvent.click(screen.getByText("Remove Worktree"));
+    expect(onRemoveWorktreeSelect).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
 });

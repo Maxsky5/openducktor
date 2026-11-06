@@ -114,7 +114,7 @@ export function TaskDetailsSheetContent(
   const footerProps = getTaskDetailsFooterProps({
     task,
     onOpenChange,
-    detailActions: taskDetailsWorkflowActions(viewModel.removeWorktreeConfirm.isAvailable, task),
+    detailActions: taskDetailsWorkflowActions(task),
     hasActiveSession,
     activeSessionRole,
     historicalSessionRoles,
@@ -122,6 +122,9 @@ export function TaskDetailsSheetContent(
     onDelete,
     runWorkflowAction: (action) => claimDialog(() => viewModel.runWorkflowAction(action)),
     runCoreTaskAction: workflowActions ? viewModel.runCoreTaskAction : undefined,
+    openRemoveWorktreeDialog: viewModel.removeWorktreeConfirm.isAvailable
+      ? viewModel.removeWorktreeConfirm.openDialog
+      : undefined,
     openDeleteDialog: viewModel.deleteConfirm.openDialog,
   });
 
@@ -295,6 +298,7 @@ function getTaskDetailsFooterProps({
   onDelete,
   runWorkflowAction,
   runCoreTaskAction,
+  openRemoveWorktreeDialog,
   openDeleteDialog,
 }: {
   task: NonNullable<TaskDetailsSheetProps["task"]>;
@@ -307,6 +311,7 @@ function getTaskDetailsFooterProps({
   onDelete: TaskWorkflowActions["onDelete"] | undefined;
   runWorkflowAction: TaskDetailsViewModel["runWorkflowAction"];
   runCoreTaskAction: TaskDetailsViewModel["runCoreTaskAction"] | undefined;
+  openRemoveWorktreeDialog: (() => void) | undefined;
   openDeleteDialog: TaskDetailsViewModel["deleteConfirm"]["openDialog"];
 }): TaskDetailsSheetFooterProps {
   const footerProps: TaskDetailsSheetFooterProps = {
@@ -327,6 +332,9 @@ function getTaskDetailsFooterProps({
   }
   if (runCoreTaskAction) {
     footerProps.onCoreTaskAction = runCoreTaskAction;
+  }
+  if (openRemoveWorktreeDialog) {
+    footerProps.onRemoveWorktreeSelect = openRemoveWorktreeDialog;
   }
   if (onDelete) {
     footerProps.onDeleteSelect = openDeleteDialog;

@@ -79,7 +79,6 @@ export function useTaskDetailsActions({
   const { runAction, confirm, confirmations } = useTaskActions({
     workspace,
     tasks,
-    onRemoveWorktree: removeWorktree.openDialog,
     outcome: {
       onStarted: (request) => {
         if (request.action === "delete") onDeleteStarted();
@@ -104,7 +103,7 @@ export function useTaskDetailsActions({
     () => deriveActiveTaskSessionContextByTaskId(taskSessionsByTaskId).get(task.id),
     [taskSessionsByTaskId, task.id],
   );
-  const canRemoveWorktree = removeWorktree.isAvailable;
+  const { isAvailable: canRemoveWorktree, openDialog: openRemoveWorktree } = removeWorktree;
   const actions = useMemo(
     () =>
       resolveTaskDetailsActions({
@@ -143,9 +142,12 @@ export function useTaskDetailsActions({
         case "core":
           confirm(task, choice.action.confirmation);
           return;
+        case "remove_worktree":
+          openRemoveWorktree();
+          return;
       }
     },
-    [actions, confirm, runDetailsAction, task, unlinkPullRequest],
+    [actions, confirm, openRemoveWorktree, runDetailsAction, task, unlinkPullRequest],
   );
   const menu = useMemo(
     () => <TaskActionsMenu taskTitle={task.title} items={menuItems} onSelect={selectMenu} />,

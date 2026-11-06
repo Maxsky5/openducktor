@@ -37,7 +37,7 @@ When task Markdown contains `odt-asset:<assetId>` images needed for the work, co
 
 Then call `odt_read_task_artifacts` with a nonempty array of distinct `codes` from `task.artifacts`. For example, `{ "taskId": "repo-123", "codes": ["spec"] }` returns the full spec. The built-in workflow declares the codes `spec`, `plan`, and `qaReport`; free artifacts have their own stable codes. Each read returns the complete content or fails. Internal artifact IDs remain within the UI and store.
 
-Human actions are `human_request_changes(taskId, feedback)` and `human_approve(taskId)`. `human_approve` is the `approval` action of the workflow, and it opens the approval modal. The core task actions of every workflow are `reset_task(taskId)` and `close_task(taskId, removeWorktree)`. No workflow event controls them. The approval outcomes and pull request management are also core rules. `reset_implementation(taskId)` is an event action whose event has the `worktree.reset` host effect. `remove_worktree(taskId)` is a native task action.
+Human actions are `human_request_changes(taskId, feedback)` and `human_approve(taskId)`. `human_approve` is the `approval` action of the workflow, and it opens the approval modal. The core task actions of every workflow are `reset_task(taskId)` and `close_task(taskId, removeWorktree)`. No workflow event controls them. The approval outcomes and pull request management are also core rules. `reset_implementation(taskId)` is an event action whose event has the `worktree.reset` host effect. The core task action `remove_worktree(taskId)` removes the kept worktree of a closed task.
 
 Free-artifact creation, rename, replacement, and deletion require a non-closed task. They preserve task status, QA verdict, and workflow readiness. The setter routes workflow codes through the existing workflow actions and enforces managed role access. Delete rejects workflow codes. Manual Specification and Implementation Plan saves keep status unchanged, including on closed tasks.
 
@@ -69,7 +69,7 @@ A trigger such as `build-completed` is an event that `odt_apply_workflow_event` 
 | `human_request_changes` | `in_progress` | The action is not available, so the host rejects the event. | Unchanged. |
 | `human_approve` | `ai_review`, `human_review` | Opens the approval modal. | Unchanged. |
 | Core `close_task` | Any status. | No live role activity. Cleanup succeeds. | `closed`. A `closed` task stays unchanged and no cleanup runs. |
-| `remove_worktree` | `closed` | No live role activity. Cleanup succeeds. | Unchanged. |
+| Core `remove_worktree` | `closed` | No live role activity. Cleanup succeeds. | Unchanged. |
 | Core local direct merge | `ai_review`, `human_review` | The approval is available. Merge and cleanup succeed. | `closed` |
 | Core direct merge with a publish target | `ai_review`, `human_review` | The approval is available. Merge succeeds. Publication remains pending. | Unchanged. |
 | Core complete direct merge | Any status. | Publication and cleanup succeed. | `closed`. A `closed` task stays unchanged. |

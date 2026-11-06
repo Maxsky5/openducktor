@@ -43,8 +43,6 @@ export type TaskActionRunnerHandlers = {
 /** The surface parts of a workflow action run. Without them, the shared controls run it. */
 export type TaskActionRunOptions = {
   sessionOptionsOf?: SessionOptionsOf | undefined;
-  /** The details sheet reads the worktree, so it owns the removal. Other surfaces open the details. */
-  onRemoveWorktree?: (() => void) | undefined;
 };
 
 export type RunTaskAction = (
@@ -71,11 +69,6 @@ export const createTaskActionRunner =
           return;
         case "details":
           handlers.onOpenTaskDetails(task.id);
-          return;
-        case "cleanup":
-          // The task details read the worktree, so they own its removal.
-          if (options?.onRemoveWorktree) options.onRemoveWorktree();
-          else handlers.onOpenTaskDetails(task.id);
           return;
         case "open_session":
           handlers.onOpenSession(task.id, destination.role, destination.options);

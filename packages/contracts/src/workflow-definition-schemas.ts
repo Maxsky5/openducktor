@@ -273,7 +273,7 @@ export const workflowActionDefinitionSchema = z.discriminatedUnion("kind", [
     ...workflowActionDefinitionFields,
     kind: z.literal("view"),
     /** The destination of a view action without a step. The default is the task details. */
-    target: z.enum(["task_details", "worktree_cleanup"]).optional(),
+    target: z.enum(["task_details"]).optional(),
   }),
   z.strictObject({
     ...workflowActionDefinitionFields,

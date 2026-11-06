@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { WORKFLOW_ICONS } from "@/lib/agent-role-presentation";
 import type { TaskWorkflowAction, ResolvedTaskCard } from "@openducktor/workflows";
 import { taskActionTone } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
-import type { CoreTaskAction } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
+import type { CoreTaskActionPresentation } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 
 const PRIMARY_ACTION_VARIANTS = {
   prominent: "default",
@@ -37,16 +37,20 @@ export const taskActionIcon = (action: string, task: ResolvedTaskCard): ReactEle
   return <Icon className="size-3.5" />;
 };
 
-export const coreTaskActionIcon = (action: CoreTaskAction): ReactElement => {
+export const coreTaskActionIcon = (action: CoreTaskActionPresentation): ReactElement => {
   const Icon = WORKFLOW_ICONS[action.icon];
   return <Icon className="size-3.5" />;
 };
 
-export const coreTaskActionPrimaryVariant = (action: CoreTaskAction): "destructive" | "warning" =>
-  PRIMARY_ACTION_VARIANTS[action.emphasis];
+export const coreTaskActionPrimaryVariant = (
+  action: CoreTaskActionPresentation,
+): "destructive" | "warning" => PRIMARY_ACTION_VARIANTS[action.emphasis];
 
 /** The menu entry of a core task action, after the workflow actions. */
-export const coreTaskActionMenuItem = (action: CoreTaskAction, onSelect: () => void) => ({
+export const coreTaskActionMenuItem = (
+  action: CoreTaskActionPresentation,
+  onSelect: () => void,
+) => ({
   id: action.id,
   label: action.label,
   icon: coreTaskActionIcon(action),

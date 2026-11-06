@@ -71,8 +71,8 @@ describe("resolveTaskDetailsActions", () => {
     expect(all([builder])).toContainEqual(["open_builder", false]);
   });
 
-  test("offers Remove Worktree only while the worktree or the task branch remains", () => {
-    const task = createTaskCardFixture({ status: "closed", availableActions: ["remove_worktree"] });
+  test("offers the core Remove Worktree in the menu only while the worktree or the task branch remains", () => {
+    const task = createTaskCardFixture({ status: "closed", availableActions: [] });
     const resolve = (canRemoveWorktree: boolean) =>
       resolveTaskDetailsActions({
         task,
@@ -80,9 +80,19 @@ describe("resolveTaskDetailsActions", () => {
         historicalSessions: [],
         activeSessionRole: undefined,
         canRemoveWorktree,
-      }).primary?.label ?? null;
-    expect(resolve(true)).toBe("Remove Worktree");
-    expect(resolve(false)).toBeNull();
+      });
+    const menu = (canRemoveWorktree: boolean) => {
+      const actions = resolve(canRemoveWorktree);
+      return taskDetailsMenuItems({ actions, enabled: true, showUnlink: false, unlinking: false });
+    };
+    expect(resolve(true).primary).toBeNull();
+    expect(menu(true).map((item) => item.title)).toEqual(["Remove Worktree", "Delete Task"]);
+    expect(menu(true)[0]).toMatchObject({ icon: "folder-x", destructive: true, command: true });
+    expect(taskDetailsMenuChoice("remove_worktree", resolve(true))).toEqual({
+      kind: "remove_worktree",
+    });
+    expect(menu(false).map((item) => item.title)).toEqual(["Delete Task"]);
+    expect(taskDetailsMenuChoice("remove_worktree", resolve(false))).toBeNull();
   });
 
   test("shows no action that the host does not list", () => {

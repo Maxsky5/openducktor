@@ -1,5 +1,6 @@
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { useMinimumLoader } from "../../lib/use-minimum-loader";
+import { canRemoveTaskWorktree } from "../workflow/core-task-actions";
 import type { TaskConfirmDialogState } from "./task-confirm-dialog-types";
 import { useTaskAsyncConfirmDialog } from "./use-task-async-confirm-dialog";
 import {
@@ -34,13 +35,12 @@ export function useTaskRemoveWorktreeConfirmDialog({
   enabled,
   run,
 }: {
-  task: Pick<TaskCard, "id" | "availableActions">;
+  task: Pick<TaskCard, "id" | "status">;
   /** The details sheet passes its open state. */
   enabled: boolean;
   run: ((taskId: string) => Promise<void>) | undefined;
 }): UseTaskRemoveWorktreeConfirmDialogResult {
-  const canRemove =
-    enabled && run !== undefined && task.availableActions.includes("remove_worktree");
+  const canRemove = enabled && run !== undefined && canRemoveTaskWorktree(task);
   const { openDialog, dialog } = useTaskAsyncConfirmDialog({
     enabled: canRemove,
     scopeKey: task.id,

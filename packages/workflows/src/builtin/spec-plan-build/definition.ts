@@ -656,16 +656,6 @@ const specPlanBuildActions = [
     icon: "complete",
     emphasis: "prominent",
   },
-  {
-    id: "remove_worktree",
-    kind: "view",
-    label: "Remove Worktree",
-    availableWhen: { stateIn: ["closed"] },
-    icon: "remove_worktree",
-    emphasis: "destructive",
-    surfaces: ["details", "palette"],
-    target: "worktree_cleanup",
-  },
 ] satisfies SpecPlanBuildAction[];
 
 const specPlanBuildSignals = [
@@ -774,7 +764,6 @@ const secondaryActions: SpecPlanBuildActionId[] = [
   "human_approve",
   "human_request_changes",
   "reset_implementation",
-  "remove_worktree",
 ];
 
 /** The source of the Spec, Plan, Build definition. */

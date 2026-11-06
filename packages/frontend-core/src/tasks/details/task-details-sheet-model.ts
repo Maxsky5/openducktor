@@ -12,17 +12,10 @@ export const collectSingleTaskCleanupImpactTaskIds = (task: TaskCard | null): st
   return [task.id];
 };
 
-/** Details use declared surfaces and keep cleanup behind its existing worktree read. */
-export const taskDetailsWorkflowActions = (
-  canRemoveWorktree: boolean,
-  task: TaskCard,
-): readonly TaskWorkflowAction[] =>
+/** The workflow actions that the task details show. */
+export const taskDetailsWorkflowActions = (task: TaskCard): readonly TaskWorkflowAction[] =>
   task.taskWorkflow.definition.actions
-    .filter(
-      (action) =>
-        actionShowsOn(action, "details") &&
-        (canRemoveWorktree || action.kind !== "view" || action.target !== "worktree_cleanup"),
-    )
+    .filter((action) => actionShowsOn(action, "details"))
     .map(({ id }) => id);
 
 /** The title and empty text of the task description section. */

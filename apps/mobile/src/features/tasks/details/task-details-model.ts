@@ -32,6 +32,7 @@ import {
 import {
   type CoreTaskAction,
   coreTaskActions,
+  REMOVE_WORKTREE_ACTION,
 } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import type { ActionMenuItem } from "@/ui/action-menu";
 import {
@@ -87,6 +88,8 @@ export type TaskDetailsActions = {
   others: TaskDetailsAction[];
   /** Close Task and Reset Task, which OpenDucktor gives every task that is not closed. */
   core: readonly CoreTaskAction[];
+  /** Remove Worktree: the task is closed and keeps its worktree or task branch. */
+  removeWorktree: boolean;
   sessionOptionsOf: (role: AgentRole) => SessionTargetOptions | undefined;
 };
 
@@ -110,7 +113,7 @@ export const resolveTaskDetailsActions = ({
 }): TaskDetailsActions => {
   const resolved = resolveTaskCardActions(task, {
     surface: "details",
-    include: taskDetailsWorkflowActions(canRemoveWorktree, task),
+    include: taskDetailsWorkflowActions(task),
     hasActiveSession: activeSessionRole !== undefined,
     historicalSessionRoles: resolveHistoricalSessionRoles(historicalSessions),
     activeSessionRole,
@@ -131,6 +134,7 @@ export const resolveTaskDetailsActions = ({
     primary: resolved.primaryAction ? describe(resolved.primaryAction) : null,
     others: resolved.secondaryActions.map(describe),
     core: coreTaskActions(task),
+    removeWorktree: canRemoveWorktree,
     sessionOptionsOf,
   };
 };
@@ -140,14 +144,15 @@ export type TaskDetailsMenuChoice =
   | { kind: "delete" }
   | { kind: "unlink_pull_request" }
   | { kind: "action"; action: TaskDetailsAction }
-  | { kind: "core"; action: CoreTaskAction };
+  | { kind: "core"; action: CoreTaskAction }
+  | { kind: "remove_worktree" };
 
 const ACTION_PREFIX = "action:";
 const CORE_PREFIX = "core:";
 
 /**
- * The task actions menu: the workflow actions after the prominent one, the core actions, Unlink
- * PR, and Delete. Edit is a button of the view. Every item waits while the task belongs to another
+ * The task actions menu: the workflow actions after the prominent one, the core actions, Remove
+ * Worktree, Unlink PR, and Delete. Edit is a button of the view. Every item waits while the task belongs to another
  * workspace than the selected one.
  */
 export const taskDetailsMenuItems = ({
@@ -184,6 +189,17 @@ export const taskDetailsMenuItems = ({
       command: true,
     });
   }
+  if (actions.removeWorktree) {
+    items.push({
+      id: REMOVE_WORKTREE_ACTION.id,
+      title: REMOVE_WORKTREE_ACTION.label,
+      icon: coreTaskActionIcon(REMOVE_WORKTREE_ACTION),
+      destructive: true,
+      disabled: !enabled,
+      // The confirmation runs a host command.
+      command: true,
+    });
+  }
   if (showUnlink) {
     items.push({
       id: "unlink_pull_request",
@@ -214,6 +230,8 @@ export const taskDetailsMenuChoice = (
 ): TaskDetailsMenuChoice | null => {
   if (id === "delete") return { kind: "delete" };
   if (id === "unlink_pull_request") return { kind: "unlink_pull_request" };
+  if (id === REMOVE_WORKTREE_ACTION.id && actions.removeWorktree)
+    return { kind: "remove_worktree" };
   const core = actions.core.find((entry) => `${CORE_PREFIX}${entry.id}` === id);
   if (core) return { kind: "core", action: core };
   const action = actions.others.find((entry) => `${ACTION_PREFIX}${entry.action}` === id);

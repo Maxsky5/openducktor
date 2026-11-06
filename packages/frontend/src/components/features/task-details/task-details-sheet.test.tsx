@@ -518,7 +518,7 @@ describe("TaskDetailsSheet", () => {
     const task = createTaskCardFixture({
       id: "TASK-1",
       status: "closed",
-      availableActions: ["remove_worktree"],
+      availableActions: [],
     });
     const message = "Unable to read the kept worktree: permission denied.";
     const view = render(

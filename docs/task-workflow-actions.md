@@ -2,7 +2,7 @@
 
 The backend returns allowed workflow actions in `TaskCard.availableActions`. The frontend renders that list. It does not infer workflow actions from status.
 
-OpenDucktor also gives every task the core task actions Close Task and Reset Task. No workflow declares them, so they are not in `availableActions`. Each client shows them for every task that is not `closed`, from `coreTaskActions(task)` in `packages/frontend-core`.
+OpenDucktor also gives every task the core task actions Close Task, Reset Task, and Remove Worktree. No workflow declares them, so they are not in `availableActions`. Each client shows Close Task and Reset Task for every task that is not `closed`, from `coreTaskActions(task)` in `packages/frontend-core`. Remove Worktree applies to a `closed` task, from `canRemoveTaskWorktree(task)` in the same module.
 
 Approve is also an OpenDucktor feature. A workflow only declares when it is available, with one action of kind `approval`. Read [the architecture overview](architecture-overview.md#change-task-workflow-state) for the approval and pull request rules.
 
@@ -20,7 +20,6 @@ The built-in workflow declares these workflow actions:
 - `reset_implementation`
 - `qa_start`
 - `open_qa`
-- `remove_worktree`
 - `human_request_changes`
 - `human_approve`
 
@@ -135,7 +134,7 @@ A confirmed close removes the task worktree, the session worktrees, and the rela
 
 ## Remove worktree
 
-`remove_worktree` is available for a closed task. The detail sheet shows it while the task has a managed worktree or a related local branch.
+Remove Worktree is a core task action of a closed task. The host rejects `task_worktree_remove` for a task that is not `closed`. The detail sheet reads the worktree of a closed task and shows the action while the task has a managed worktree or a related local branch. The desktop detail sheet and the mobile task details show it in the actions menu, after Reset Task and Close Task and before Delete Task. The command palette shows it for every closed task and opens the task details, because the palette does not read the worktree. A Kanban card does not show it.
 
 `task_worktree_remove` stops task terminals, removes the managed worktrees, and force-deletes the related local branches. Commits that exist only on these branches are lost. It changes no other task data.
 
