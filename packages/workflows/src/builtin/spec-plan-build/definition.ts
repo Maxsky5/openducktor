@@ -716,13 +716,13 @@ const specPlanBuildAutomations = [
   },
   {
     id: "startReviewQaFeedbacks",
-    label: "Start Review QA Feedbacks",
+    label: "Fix QA Rejection",
     description: "Resume Builder to address rejected QA findings at the root cause.",
     launchActionId: "build_after_qa_rejected",
   },
   {
     id: "startGeneratePullRequest",
-    label: "Start Generate Pull Request",
+    label: "Generate Pull Request",
     description: "Fork from the latest Builder session to generate or update the pull request.",
     launchActionId: PULL_REQUEST_LAUNCH_ID,
     startMode: "fork",

@@ -130,9 +130,7 @@ describe("settings Autopilot section", () => {
       );
     });
     expect(
-      screen
-        .getByRole("option", { name: /Start Generate Pull Request/ })
-        .getAttribute("aria-disabled"),
+      screen.getByRole("option", { name: /Generate Pull Request/ }).getAttribute("aria-disabled"),
     ).toBe("false");
   });
 
@@ -147,16 +145,14 @@ describe("settings Autopilot section", () => {
 
     expect(
       screen.getByRole("button", { name: "When a task progresses to Human Review" }).textContent,
-    ).toContain("Start Generate Pull Request");
+    ).toContain("Generate Pull Request");
     await act(async () => {
       fireEvent.click(
         screen.getByRole("button", { name: "When a task progresses to Human Review" }),
       );
     });
     expect(
-      screen
-        .getByRole("option", { name: /Start Generate Pull Request/ })
-        .getAttribute("aria-disabled"),
+      screen.getByRole("option", { name: /Generate Pull Request/ }).getAttribute("aria-disabled"),
     ).toBe("false");
   });
 });
