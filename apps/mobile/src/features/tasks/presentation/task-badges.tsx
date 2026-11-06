@@ -107,8 +107,11 @@ export const SourceIssueBadge = memo(function SourceIssueBadge({
   );
 });
 
-/** The desktop QA Rejected badge: QA rejected the previous implementation. */
-export const QaRejectedBadge = memo(function QaRejectedBadge({
+/**
+ * The desktop `ReviewRejectedBadge`: a review rejected the previous implementation. The workflow
+ * names the badge.
+ */
+export const ReviewRejectedBadge = memo(function ReviewRejectedBadge({
   task,
   size = "md",
 }: {
@@ -178,27 +181,27 @@ const MergedBadge = memo(function MergedBadge({
 });
 
 /**
- * The status badges of a task, as the desktop card status row: QA Rejected, the pull request,
+ * The status badges of a task, as the desktop card status row: the review rejection, the pull request,
  * the source issue, and Merged. It renders nothing when the task has none.
  */
 export const TaskStatusChips = memo(function TaskStatusChips({
   task,
-  qaRejected,
+  reviewRejected,
   mergedTarget,
   size = "md",
 }: {
   task: TaskCard;
-  qaRejected: boolean;
+  reviewRejected: boolean;
   /** The target that the task branch is merged into. */
   mergedTarget?: string | undefined;
   size?: ChipSize;
 }): ReactElement | null {
-  if (!qaRejected && !task.pullRequest && !task.sourceIssue && mergedTarget === undefined) {
+  if (!reviewRejected && !task.pullRequest && !task.sourceIssue && mergedTarget === undefined) {
     return null;
   }
   return (
     <View pointerEvents="box-none" style={styles.row}>
-      {qaRejected ? <QaRejectedBadge task={task} size={size} /> : null}
+      {reviewRejected ? <ReviewRejectedBadge task={task} size={size} /> : null}
       {task.pullRequest ? <PullRequestBadge pullRequest={task.pullRequest} size={size} /> : null}
       {task.sourceIssue ? <SourceIssueBadge sourceIssue={task.sourceIssue} size={size} /> : null}
       {mergedTarget !== undefined ? <MergedBadge target={mergedTarget} size={size} /> : null}

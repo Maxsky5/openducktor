@@ -18,7 +18,7 @@ import type {
 import {
   IssueTypeBadge,
   PriorityBadge,
-  QaRejectedBadge,
+  ReviewRejectedBadge,
 } from "@/components/features/kanban/kanban-task-badges";
 import { resolveTaskLabelOverflow } from "@/components/features/kanban/kanban-task-label-overflow";
 import {
@@ -551,7 +551,7 @@ function TaskStatus({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {mergedTarget !== undefined ? <MergedBadge target={mergedTarget} /> : null}
-      <QaRejectedBadge task={task} />
+      <ReviewRejectedBadge task={task} />
       {task.pullRequest ? (
         <TaskPullRequestLink
           pullRequest={task.pullRequest}

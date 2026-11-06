@@ -14,7 +14,7 @@ import {
   IssueTypeBadge,
   PriorityBadge,
   PullRequestBadge,
-  QaRejectedBadge,
+  ReviewRejectedBadge,
   SourceIssueBadge,
   TaskLabelChip,
 } from "../presentation/task-badges";
@@ -157,7 +157,7 @@ function TaskSummaryBadges({ task }: { task: TaskCard }): ReactElement {
       <PriorityBadge priority={task.priority} />
       {task.pullRequest ? <PullRequestBadge pullRequest={task.pullRequest} /> : null}
       {task.sourceIssue ? <SourceIssueBadge sourceIssue={task.sourceIssue} /> : null}
-      {isReviewRejectedTask(task) ? <QaRejectedBadge task={task} /> : null}
+      {isReviewRejectedTask(task) ? <ReviewRejectedBadge task={task} /> : null}
     </View>
   );
 }

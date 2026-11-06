@@ -88,7 +88,7 @@ export type TaskCardModel = {
   taskId: string;
   visibleLabels: string[];
   hiddenLabels: string[];
-  qaRejected: boolean;
+  reviewRejected: boolean;
   liveSession: TaskCardLiveSession | null;
   primary: TaskCardPrimary | null;
   menu: TaskCardMenuItem[];
@@ -219,7 +219,7 @@ export const buildTaskCardModel = ({
   }
   const priority = getPriorityLabel(task.priority);
   const labels = toDisplayTaskLabels(task.labels);
-  const qaRejected = isReviewRejectedTask(task);
+  const reviewRejected = isReviewRejectedTask(task);
   const summary = [
     task.title,
     task.id,
@@ -236,7 +236,7 @@ export const buildTaskCardModel = ({
     taskId: task.id,
     visibleLabels: labels.slice(0, CARD_VISIBLE_LABEL_COUNT),
     hiddenLabels: labels.slice(CARD_VISIBLE_LABEL_COUNT),
-    qaRejected,
+    reviewRejected,
     liveSession,
     primary,
     menu,

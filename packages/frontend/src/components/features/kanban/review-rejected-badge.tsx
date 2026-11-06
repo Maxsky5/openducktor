@@ -2,7 +2,7 @@ import { taskReviewRejection, type ResolvedTaskCard as TaskCard } from "@openduc
 import { memo, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 
-export const QaRejectedBadge = memo(function QaRejectedBadge({
+export const ReviewRejectedBadge = memo(function ReviewRejectedBadge({
   task,
 }: {
   task: TaskCard;

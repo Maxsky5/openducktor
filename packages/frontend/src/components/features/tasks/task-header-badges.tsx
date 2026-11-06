@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import {
   IssueTypeBadge,
   PriorityBadge,
-  QaRejectedBadge,
+  ReviewRejectedBadge,
 } from "@/components/features/kanban/kanban-task-badges";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskSourceIssueLink } from "@/components/features/task-source-issue-link";
@@ -17,7 +17,7 @@ export function TaskHeaderBadges({ task }: { task: TaskCard }): ReactElement {
       <PriorityBadge priority={task.priority} />
       {task.pullRequest ? <TaskPullRequestLink pullRequest={task.pullRequest} /> : null}
       {task.sourceIssue ? <TaskSourceIssueLink sourceIssue={task.sourceIssue} /> : null}
-      <QaRejectedBadge task={task} />
+      <ReviewRejectedBadge task={task} />
     </div>
   );
 }

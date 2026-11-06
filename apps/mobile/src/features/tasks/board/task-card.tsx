@@ -199,7 +199,7 @@ export const TaskCard = memo(function TaskCard({
         </View>
         <TaskStatusChips
           task={task}
-          qaRejected={model.qaRejected}
+          reviewRejected={model.reviewRejected}
           mergedTarget={mergedTarget}
           size="sm"
         />
