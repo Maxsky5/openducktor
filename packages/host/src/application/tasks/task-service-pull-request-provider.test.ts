@@ -512,85 +512,94 @@ describe("createTaskService Pull Request provider ports", () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  test("uses the provider port to resolve the publish remote and upsert", async () => {
-    const calls: unknown[] = [];
-    const resolvePublishRemote = mock(() => Effect.succeed("publish"));
-    const upsert = mock(() => Effect.succeed(linkedPullRequest("gitea")));
-    const pullRequests = createPullRequestPort("gitea", {
-      resolvePublishRemote,
-      upsert,
-    });
-    const provider = createProvider(giteaDescriptor, pullRequests);
-    const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
-    const taskStore: TaskStorePort = {
-      getTask: () => Effect.succeed(task({ status: "human_review" })),
-      getTaskMetadata: () =>
-        Effect.succeed({
-          artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
-          agentSessions: [],
-        }),
-      setPullRequest: () => Effect.succeed(true),
-    };
-    const gitPort = extendGitPort(
-      createDirectMergeGitPort({
-        calls,
-        currentBranches: {
-          "/worktrees/repo/task-1": { name: "odt/task-42", detached: false },
-        },
-      }),
-      {
-        getWorktreeStatusSummaryData: () =>
+  test.each(["Task 42", undefined])(
+    "uses the provider port to upsert with squash message %s",
+    async (message) => {
+      const calls: unknown[] = [];
+      const resolvePublishRemote = mock(() => Effect.succeed("publish"));
+      const upsert = mock((input: Parameters<PullRequestProviderPort["upsert"]>[0]) => {
+        expect(Object.hasOwn(input.approval, "pullRequest")).toBe(true);
+        expect(input.approval.pullRequest).toBeUndefined();
+        expect(Object.hasOwn(input.approval, "suggestedSquashCommitMessage")).toBe(true);
+        expect(input.approval.suggestedSquashCommitMessage).toBe(message);
+        return Effect.succeed(linkedPullRequest("gitea"));
+      });
+      const pullRequests = createPullRequestPort("gitea", {
+        resolvePublishRemote,
+        upsert,
+      });
+      const provider = createProvider(giteaDescriptor, pullRequests);
+      const gitProviderResolver = Effect.runSync(createGitProviderResolver([provider]));
+      const taskStore: TaskStorePort = {
+        getTask: () => Effect.succeed(task({ status: "human_review" })),
+        getTaskMetadata: () =>
           Effect.succeed({
-            currentBranch: { name: "odt/task-42", detached: false },
-            fileStatuses: [],
-            fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-            targetAheadBehind: { ahead: 1, behind: 0 },
-            upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
+            agentSessions: [],
           }),
-        suggestedSquashCommitMessage: () => Effect.succeed("Task 42"),
-        pushBranch: (workingDirectory, branch, options) =>
-          Effect.sync(() => {
-            calls.push({ type: "pushBranch", workingDirectory, branch, options });
-            return { outcome: "pushed", remote: "publish", branch, output: "pushed" };
-          }),
-      },
-    );
-    const service = createTaskService({
-      taskWorkflows: builtinTaskWorkflows,
-      gitPort,
-      gitProviderResolver,
-      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-      taskStore,
-      taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-      workspaceSettingsService,
-    });
+        setPullRequest: () => Effect.succeed(true),
+      };
+      const gitPort = extendGitPort(
+        createDirectMergeGitPort({
+          calls,
+          currentBranches: {
+            "/worktrees/repo/task-1": { name: "odt/task-42", detached: false },
+          },
+        }),
+        {
+          getWorktreeStatusSummaryData: () =>
+            Effect.succeed({
+              currentBranch: { name: "odt/task-42", detached: false },
+              fileStatuses: [],
+              fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+              targetAheadBehind: { ahead: 1, behind: 0 },
+              upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
+            }),
+          suggestedSquashCommitMessage: () => Effect.succeed(message),
+          pushBranch: (workingDirectory, branch, options) =>
+            Effect.sync(() => {
+              calls.push({ type: "pushBranch", workingDirectory, branch, options });
+              return { outcome: "pushed", remote: "publish", branch, output: "pushed" };
+            }),
+        },
+      );
+      const service = createTaskService({
+        taskWorkflows: builtinTaskWorkflows,
+        gitPort,
+        gitProviderResolver,
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+        taskStore,
+        taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+        workspaceSettingsService,
+      });
 
-    await Effect.runPromise(
-      service.upsertPullRequest({
-        workspaceId: "repo",
-        repoPath: "/repo",
-        taskId: "task-1",
-        content: { title: "Task 42", body: "Task body" },
-      }),
-    );
+      await Effect.runPromise(
+        service.upsertPullRequest({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          taskId: "task-1",
+          content: { title: "Task 42", body: "Task body" },
+        }),
+      );
 
-    expect(resolvePublishRemote).toHaveBeenCalledWith({
-      repoConfig: expect.objectContaining({ repoPath: "/repo" }),
-    });
-    expect(calls).toContainEqual({
-      type: "pushBranch",
-      workingDirectory: "/worktrees/repo/task-1",
-      branch: "odt/task-42",
-      options: { remote: "publish", setUpstream: true, forceWithLease: false },
-    });
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
+      expect(resolvePublishRemote).toHaveBeenCalledWith({
         repoConfig: expect.objectContaining({ repoPath: "/repo" }),
-        title: "Task 42",
-        body: "Task body",
-      }),
-    );
-  });
+      });
+      expect(calls).toContainEqual({
+        type: "pushBranch",
+        workingDirectory: "/worktrees/repo/task-1",
+        branch: "odt/task-42",
+        options: { remote: "publish", setUpstream: true, forceWithLease: false },
+      });
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repoConfig: expect.objectContaining({ repoPath: "/repo" }),
+          title: "Task 42",
+          body: "Task body",
+        }),
+      );
+    },
+  );
 
   test("rejects linking a merged Pull Request from another provider", async () => {
     const pullRequests = createPullRequestPort("gitea");

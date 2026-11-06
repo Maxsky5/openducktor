@@ -1,20 +1,13 @@
 import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import type { TaskApprovalContext } from "@openducktor/contracts";
 import { Effect } from "effect";
-import {
-  canonicalTargetBranch,
-  normalizeApprovalTargetBranch,
-  publishTargetFromTargetBranch,
-} from "../../../domain/task";
-import { HostValidationError } from "../../../effect/host-errors";
+import { normalizeApprovalTargetBranch, publishTargetFromTargetBranch } from "../../../domain/task";
 import { requireApprovalContextDependencies } from "../support/approval-context-dependencies";
 import { requireDependencies } from "../support/required-task-dependencies";
 import { loadDefaultMergeMethod } from "../support/task-workflow-helpers";
 import { requireHumanReviewStatus } from "../support/task-workflow-events";
-import {
-  effectiveTargetBranchForTask,
-  findLatestCleanupTarget,
-} from "../support/task-worktree-cleanup";
+import { findLatestCleanupTarget } from "../support/task-worktree-cleanup";
+import { loadLiveApprovalPreparation } from "../support/approval-readiness";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskApprovalContextUseCase = ({
@@ -111,51 +104,18 @@ export const createTaskApprovalContextUseCase = ({
         };
       }
 
-      const currentBranch = yield* dependencies.gitPort.getCurrentBranch(
-        taskWorktree.workingDirectory,
-      );
-      if (currentBranch.detached) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "workingDirectory",
-            message: "Human approval requires a task branch, but the task worktree is detached.",
-            details: { workingDirectory: taskWorktree.workingDirectory },
-          }),
-        );
-      }
-      const sourceBranch = currentBranch.name?.trim();
-      if (!sourceBranch) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "workingDirectory",
-            message: "Human approval requires a task branch name.",
-            details: { workingDirectory: taskWorktree.workingDirectory },
-          }),
-        );
-      }
-
-      const targetBranch = normalizeApprovalTargetBranch(
-        yield* effectiveTargetBranchForTask(
-          dependencies.workspaceSettingsService,
-          current,
-          effectiveRepoPath,
-          input.workspaceId,
-        ),
-      );
-      const publishTarget =
-        current.targetBranch === undefined
-          ? publishTargetFromTargetBranch(repoConfig.defaultTargetBranch)
-          : publishTargetFromTargetBranch(current.targetBranch);
-      const targetRef = canonicalTargetBranch(targetBranch);
-      const worktreeStatus = yield* dependencies.gitPort.getWorktreeStatusSummaryData(
-        taskWorktree.workingDirectory,
-        targetRef,
-        "uncommitted",
-      );
-      const suggestedSquashCommitMessage = yield* dependencies.gitPort.suggestedSquashCommitMessage(
-        effectiveRepoPath,
+      const {
         sourceBranch,
-        targetRef,
+        targetBranch,
+        publishTarget,
+        worktreeStatus,
+        suggestedSquashCommitMessage,
+      } = yield* loadLiveApprovalPreparation(
+        dependencies,
+        current,
+        taskWorktree.workingDirectory,
+        repoConfig,
+        input.workspaceId,
       );
 
       const approvalContext: TaskApprovalContext = {

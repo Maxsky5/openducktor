@@ -26,6 +26,69 @@ import {
 import type { TaskWorkflow } from "@openducktor/workflows";
 import type { TaskRecord } from "../../../ports/task-repository-ports";
 
+export const loadLiveApprovalPreparation = (
+  dependencies: {
+    gitPort: GitPort;
+    workspaceSettingsService: WorkspaceSettingsService;
+  },
+  current: TaskRecord,
+  workingDirectory: string,
+  repoConfig: RepoConfig,
+  workspaceId: string,
+) =>
+  Effect.gen(function* () {
+    const currentBranch = yield* dependencies.gitPort.getCurrentBranch(workingDirectory);
+    if (currentBranch.detached) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "workingDirectory",
+          message: "Human approval requires a task branch, but the task worktree is detached.",
+          details: { workingDirectory },
+        }),
+      );
+    }
+    const sourceBranch = currentBranch.name?.trim();
+    if (!sourceBranch) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "workingDirectory",
+          message: "Human approval requires a task branch name.",
+          details: { workingDirectory },
+        }),
+      );
+    }
+    const targetBranch = normalizeApprovalTargetBranch(
+      yield* effectiveTargetBranchForTask(
+        dependencies.workspaceSettingsService,
+        current,
+        repoConfig.repoPath,
+        workspaceId,
+      ),
+    );
+    const publishTarget =
+      current.targetBranch === undefined
+        ? publishTargetFromTargetBranch(repoConfig.defaultTargetBranch)
+        : publishTargetFromTargetBranch(current.targetBranch);
+    const targetRef = canonicalTargetBranch(targetBranch);
+    const worktreeStatus = yield* dependencies.gitPort.getWorktreeStatusSummaryData(
+      workingDirectory,
+      targetRef,
+      "uncommitted",
+    );
+    const suggestedSquashCommitMessage = yield* dependencies.gitPort.suggestedSquashCommitMessage(
+      repoConfig.repoPath,
+      sourceBranch,
+      targetRef,
+    );
+    return {
+      sourceBranch,
+      targetBranch,
+      publishTarget,
+      worktreeStatus,
+      suggestedSquashCommitMessage,
+    };
+  });
+
 export const loadOpenApprovalContext = (
   dependencies: {
     gitPort: GitPort;
@@ -57,50 +120,18 @@ export const loadOpenApprovalContext = (
         }),
       );
     }
-    const currentBranch = yield* dependencies.gitPort.getCurrentBranch(
-      taskWorktree.workingDirectory,
-    );
-    if (currentBranch.detached) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "workingDirectory",
-          message: "Human approval requires a task branch, but the task worktree is detached.",
-          details: { workingDirectory: taskWorktree.workingDirectory },
-        }),
-      );
-    }
-    const sourceBranch = currentBranch.name?.trim();
-    if (!sourceBranch) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "workingDirectory",
-          message: "Human approval requires a task branch name.",
-          details: { workingDirectory: taskWorktree.workingDirectory },
-        }),
-      );
-    }
-    const targetBranch = normalizeApprovalTargetBranch(
-      yield* effectiveTargetBranchForTask(
-        dependencies.workspaceSettingsService,
-        current,
-        effectiveRepoPath,
-        repoConfig.workspaceId,
-      ),
-    );
-    const publishTarget =
-      current.targetBranch === undefined
-        ? publishTargetFromTargetBranch(repoConfig.defaultTargetBranch)
-        : publishTargetFromTargetBranch(current.targetBranch);
-    const targetRef = canonicalTargetBranch(targetBranch);
-    const worktreeStatus = yield* dependencies.gitPort.getWorktreeStatusSummaryData(
-      taskWorktree.workingDirectory,
-      targetRef,
-      "uncommitted",
-    );
-    const suggestedSquashCommitMessage = yield* dependencies.gitPort.suggestedSquashCommitMessage(
-      effectiveRepoPath,
+    const {
       sourceBranch,
-      targetRef,
+      targetBranch,
+      publishTarget,
+      worktreeStatus,
+      suggestedSquashCommitMessage,
+    } = yield* loadLiveApprovalPreparation(
+      dependencies,
+      current,
+      taskWorktree.workingDirectory,
+      repoConfig,
+      repoConfig.workspaceId,
     );
     return {
       taskId,
