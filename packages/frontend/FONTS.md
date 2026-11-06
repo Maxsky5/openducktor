@@ -11,12 +11,14 @@ The files are unchanged WOFF2 assets from `@fontsource-variable/space-grotesk@5.
 | Family | Weights exposed | Subsets | WOFF2 bytes per shell |
 | --- | --- | --- | ---: |
 | Space Grotesk variable | 400 through 700 | Latin, Latin-ext, Vietnamese | 47,940 |
-| IBM Plex Mono static | 400 | Latin, Latin-ext, Vietnamese, Cyrillic, Cyrillic-ext | 49,192 |
-| Total | | Eight files | 97,132 |
+| IBM Plex Mono static | 400 and 500 | Latin, Latin-ext, Vietnamese, Cyrillic, Cyrillic-ext | 98,984 |
+| Total | | Thirteen files | 146,924 |
 
 The Space Grotesk static files for 400, 500, 600, and 700 from `@fontsource/space-grotesk@5.3.0` total 118,768 bytes across the same three subsets. The variable files save 70,828 bytes. Their original axis includes 300, but the CSS exposes only 400 through 700. The Latin variable file is 22,288 bytes. It replaces the old 13,276-byte Latin 600 splash file so the splash and application reuse one payload. Keeping the old file would add a second Latin payload and overlapping faces.
 
-IBM Plex Mono applies to `code, pre` and the Markdown syntax block. Neither owner requests 500, so only 400 ships. Tailwind `font-mono` keeps its default stack because the theme still has no `--font-mono`. The family names, fallback stacks, and terminal font policy do not change.
+IBM Plex Mono applies to `code, pre` and the Markdown syntax block. The syntax highlighter requests 400. Inline code and plain Markdown code blocks request 500 through `prose-code:font-medium` in both renderer variants. Both weights ship for every subset, as they did in the former Google stylesheet. Tailwind `font-mono` keeps its default stack because the theme still has no `--font-mono`. The family names, fallback stacks, and terminal font policy do not change.
+
+The first local-font implementation omitted 500. Electron then selected the 400 face for a 500 request, so code lost its medium weight. A successful font request alone does not detect this error. Check the weight of the selected face as well as its load status.
 
 ## Loading policy
 
@@ -24,7 +26,11 @@ Space Grotesk uses `font-display: block` for the shared faces and an early Latin
 
 ## Validation
 
-Both development Vite configurations served all eight WOFF2 files. The web shell loaded the Latin face once during startup. Fresh Chromium contexts loaded all required weights and language subsets with external requests blocked. The standalone HTTP build requested each of the eight payloads once. A real Electron BrowserWindow loaded all eight faces from the renderer build through `file:` URLs. The shell builds contain identical font bytes and both notices. A Vite build regression test checks font URL resolution from `/sessions/`, `/kanban/`, and an Electron `file:` document. Fresh Chromium contexts also loaded all eight faces from each trailing-slash web route through the production static asset resolver, with one local request per font file and external requests blocked.
+The weight regression test builds both shell bases, checks that IBM Plex Mono exposes 400 and 500, and resolves each declared font URL to its emitted WOFF2 asset. A native macOS Electron probe selected 400 for a 500 request before the repair and 500 after the repair. The repair restores the missing faces without changing text sizes.
+
+### Initial font migration
+
+The initial migration checks loaded all eight declared faces in Chromium and Electron, with external requests blocked. They verified emitted bytes, notices, and URL resolution from `/sessions/`, `/kanban/`, and an Electron `file:` document. They did not check that a 500 request selected a medium face. Those checks could pass while inline code used regular weight.
 
 Light and dark specimens covered body text, headings at all four Space Grotesk weights, `pre` and `code`, Latin-ext text `Łódź Œuvre`, Vietnamese `Tiếng Việt`, Cyrillic `Привет мир`, and Cyrillic-ext `Ѣ Ѫ`. Space Grotesk has no Cyrillic subset, so its existing fallback stack supplies Cyrillic text. IBM Plex Mono supplies the code samples. The Markdown syntax block keeps the same IBM Plex Mono stack. No typography component or theme token changed.
 
