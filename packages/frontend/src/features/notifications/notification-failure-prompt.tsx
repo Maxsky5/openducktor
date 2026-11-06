@@ -1,6 +1,7 @@
 import { type ReactElement, useEffect } from "react";
 import { toast } from "sonner";
 import type { NotificationDispatchFailure } from "@openducktor/frontend-core/notifications/notification-policy";
+import { osPermissionMessage } from "@/state/notifications/use-notification-test-controls";
 
 export function NotificationFailurePrompt({
   failure,
@@ -30,7 +31,7 @@ export function NotificationFailurePrompt({
     const showToast = osDenied ? toast.info : toast.error;
     showToast(title, {
       id,
-      description: failure.message,
+      description: osPermissionMessage(failure.message, failure.osPermission),
       action,
     });
     return () => {

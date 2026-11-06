@@ -347,6 +347,7 @@ export const createNotificationRuntime = ({
       if (capability.permission === "denied") {
         return {
           status: "denied",
+          permission: "denied",
           message: capability.failureMessage ?? "OS notification permission was denied.",
         };
       }

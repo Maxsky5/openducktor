@@ -200,6 +200,53 @@ describe("session occurrence projector", () => {
     expect(projector.accept({ type: "session_upsert", session: next })).toEqual([]);
   });
 
+  test.each([
+    [
+      "Codex wants to run a shell command.",
+      { command: { command: "ls -a" } },
+      "Codex wants to run a shell command: ls -a",
+    ],
+    [
+      "Claude wants to read a file:",
+      { tool: { name: "read_file" } },
+      "Claude wants to read a file: read_file",
+    ],
+    ["Allow network access?", { command: { command: "curl x" } }, "Allow network access? curl x"],
+    [
+      "OpenCode requested approval.",
+      { action: { name: "edit" } },
+      "OpenCode requested approval: edit",
+    ],
+    ["Allow edit.", { action: { name: "edit" } }, "Allow edit."],
+    ["List the tools folder", { command: { command: "ls" } }, "List the tools folder: ls"],
+    ["List the tools", { command: { command: "ls" } }, "List the tools: ls"],
+    ["Run bun install", { command: { command: "bun install" } }, "Run bun install"],
+    ["Run (a+b)?", { command: { command: "(a+b)" } }, "Run (a+b)?"],
+  ] as const)("joins the permission summary %p and its action", (summary, fields, expected) => {
+    const projector = createProjector();
+    projector.accept({
+      type: "snapshot",
+      messageQueues: [],
+      repoPath: "/repo",
+      sessions: [snapshot()],
+    });
+    const [occurrence] = projector.accept({
+      type: "session_upsert",
+      session: snapshot({
+        pendingApprovals: [
+          {
+            requestId: "approval-1",
+            requestType: "permission_grant",
+            title: "Approve",
+            summary,
+            ...fields,
+          },
+        ],
+      }),
+    });
+    expect(occurrence?.status).toBe(expected);
+  });
+
   test("notifies once for a new background question and uses snapshots as a baseline", () => {
     const projector = createProjector();
     const existingQuestion = {

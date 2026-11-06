@@ -1,5 +1,6 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
+  type NotificationDeliveryResult,
   type NotificationOccurrence,
   type NotificationOsCapability,
   type NotificationOsDeliveryRequest,
@@ -129,7 +130,7 @@ describe("notification permission recovery", () => {
     ["failed", "failed"],
     ["failed", "throw"],
   ] as const)(
-    "Test OS clears a denial and keeps real failures: prior %s, test delivery %s",
+    "Test system notification clears a denial and keeps real failures: prior %s, test delivery %s",
     async (status, delivery) => {
       const h = createHarness(status);
       try {
@@ -222,10 +223,11 @@ const createHarness = (
   status: "denied" | "failed",
   permission: "granted" | "denied" | "prompt" | "throw" = "granted",
 ) => {
-  const showOsNotification = mock(async () => ({
-    status,
-    message: "OS delivery is blocked.",
-  }));
+  const showOsNotification = mock(async (): Promise<NotificationDeliveryResult> =>
+    status === "denied"
+      ? { status, permission: "denied", message: "OS delivery is blocked." }
+      : { status, message: "OS delivery is blocked." },
+  );
   let onOccurrence: Parameters<NotificationBridge["subscribeOccurrences"]>[0] | undefined;
   let onFrame: Parameters<HostConnection["subscribeNotificationStream"]>[1] | undefined;
   let onStreamFailure: Parameters<HostConnection["subscribeNotificationStream"]>[2] | undefined;

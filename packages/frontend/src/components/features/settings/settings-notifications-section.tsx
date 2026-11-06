@@ -21,7 +21,10 @@ import {
   type SettingsNotificationKind,
 } from "@openducktor/frontend-core/notifications/catalogue";
 import { useNotificationContext } from "@/state/notifications/notification-context";
-import { useNotificationTestControls } from "@/state/notifications/use-notification-test-controls";
+import {
+  TEST_SYSTEM_NOTIFICATION_LABEL,
+  useNotificationTestControls,
+} from "@/state/notifications/use-notification-test-controls";
 import { NotificationPermissionNotice } from "./notification-permission-notice";
 import {
   createNotificationSoundOptions,
@@ -368,7 +371,7 @@ export function SettingsNotificationsSection({
               disabled={actionsDisabled || isOsTestDisabled}
               onClick={() => void testNotification("os")}
             >
-              <BellRing data-icon="inline-start" /> Test system notification
+              <BellRing data-icon="inline-start" /> {TEST_SYSTEM_NOTIFICATION_LABEL}
             </Button>
           </div>
         </div>

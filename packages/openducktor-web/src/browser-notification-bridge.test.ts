@@ -108,6 +108,45 @@ describe("browser notification bridge", () => {
     expect(requestPermission).toHaveBeenCalledTimes(1);
   });
 
+  test.each([
+    [
+      "denied",
+      "denied",
+      "Browser notification permission is denied. Enable it in browser settings.",
+    ],
+    ["default", "prompt", "Browser notification permission is needed."],
+  ] as const)(
+    "blocks delivery with %s browser permission as %s permission",
+    async (browserPermission, permission, message) => {
+      class TestNotification implements BrowserNotificationInstance {
+        static permission: NotificationPermission = browserPermission;
+        static requestPermission = async (): Promise<NotificationPermission> => browserPermission;
+        onclick: ((event: Event) => void) | null = null;
+        onclose: ((event: Event) => void) | null = null;
+        onerror: ((event: Event) => void) | null = null;
+        onshow: ((event: Event) => void) | null = null;
+        silent: boolean | null = null;
+        close(): void {}
+      }
+      const bridge = createBrowserNotificationBridge({
+        NativeNotification: TestNotification,
+        coordinator: createCoordinator(),
+        canGuaranteeSilent: true,
+        focusWindow: () => {},
+      });
+
+      await expect(
+        bridge.showOsNotification({
+          occurrenceId: occurrence.occurrenceId,
+          title: "Task closed",
+          body: "Task moved to Closed.",
+          silent: true,
+          navigationTarget: occurrence.navigationTarget,
+        }),
+      ).resolves.toEqual({ status: "denied", permission, message });
+    },
+  );
+
   test("keeps a coordination failure after unrelated OS delivery succeeds", async () => {
     const failureMessage: string | null = "Lock snapshot failed.";
     const coordinator = createCoordinator();

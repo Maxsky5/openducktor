@@ -1,5 +1,6 @@
 import type {
   NotificationCue,
+  NotificationDeliveryPermission,
   NotificationOsCapability,
   NotificationSettings,
 } from "@openducktor/contracts";
@@ -13,6 +14,18 @@ import { useNotificationContext } from "./notification-context";
 
 const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
+
+/** The label of the settings button that sends a test OS notification and asks for permission. */
+export const TEST_SYSTEM_NOTIFICATION_LABEL = "Test system notification";
+
+/** The message of a blocked OS delivery, with the recovery step when the user has not chosen yet. */
+export const osPermissionMessage = (
+  message: string,
+  permission: NotificationDeliveryPermission | undefined,
+): string =>
+  permission === "prompt"
+    ? `${message} Select ${TEST_SYSTEM_NOTIFICATION_LABEL} in the Notifications settings.`
+    : message;
 
 export const describeNotificationOsCapability = (
   capability: NotificationOsCapability | undefined,
@@ -33,7 +46,7 @@ export const describeNotificationOsCapability = (
     if (capability.platform === "browser") {
       return "Allow notifications to receive alerts outside the app.";
     }
-    return "OS notifications are not enabled yet. Test OS to choose whether to allow them.";
+    return `OS notifications are not enabled yet. Select ${TEST_SYSTEM_NOTIFICATION_LABEL} to choose whether to allow them.`;
   }
   if (capability.failureMessage) return capability.failureMessage;
   if (capability.permission === "granted") {
@@ -85,7 +98,10 @@ export const useNotificationTestControls = (settings: NotificationSettings | nul
       }
 
       const result = await runtime.testOs(settings);
-      setStatus(result.status === "shown" ? "OS test sent." : result.message);
+      if (result.status === "shown") setStatus("OS test sent.");
+      else if (result.status === "denied")
+        setStatus(osPermissionMessage(result.message, result.permission));
+      else setStatus(result.message);
     } catch (cause) {
       setStatus(errorMessage(cause));
     } finally {

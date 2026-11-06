@@ -30,10 +30,13 @@ describe("notification delivery and previews", () => {
       const runtime = createNotificationRuntime({
         bridge: createBridge({
           requestPermission,
-          showOsNotification: async () =>
-            blocked
-              ? { status, message: "OS notification delivery is blocked." }
-              : { status: "shown" },
+          showOsNotification: async () => {
+            if (!blocked) return { status: "shown" };
+            const message = "OS notification delivery is blocked.";
+            return status === "denied"
+              ? { status, permission: "denied", message }
+              : { status, message };
+          },
         }),
         selectSettings: async () => settings,
         navigate: async () => {},

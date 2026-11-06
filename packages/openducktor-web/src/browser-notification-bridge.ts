@@ -113,12 +113,19 @@ export const createBrowserNotificationBridge = ({
         message: capability.failureMessage ?? "Browser OS notifications are unavailable.",
       };
     }
+    if (capability.permission === "denied") {
+      return {
+        status: "denied",
+        permission: "denied",
+        message: "Browser notification permission is denied. Enable it in browser settings.",
+      };
+    }
     if (capability.permission !== "granted") {
-      const message =
-        capability.permission === "denied"
-          ? "Browser notification permission is denied. Enable it in browser settings."
-          : "Browser notification permission is needed. Use Test OS in Notifications settings.";
-      return { status: "denied", message };
+      return {
+        status: "denied",
+        permission: "prompt",
+        message: "Browser notification permission is needed.",
+      };
     }
     const SupportedNotification = NativeNotification;
     if (!SupportedNotification) {

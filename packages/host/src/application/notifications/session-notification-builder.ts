@@ -118,9 +118,20 @@ const permissionStatus = (request: AgentSessionLivePendingApprovalRequest): stri
     request.tool?.title ??
     request.tool?.name;
   return (
-    toNotificationStatus([summary, action].filter(Boolean).join(": ")) ||
+    toNotificationStatus(joinSummaryAndAction(summary, action?.trim())) ||
     "Approval is needed to continue."
   );
+};
+
+// Runtimes send summaries with and without end punctuation. Some runtime summaries already end with
+// the action as a word, such as "Run bun install".
+const joinSummaryAndAction = (summary: string, action: string | undefined): string => {
+  if (!action) return summary;
+  if (!summary) return action;
+  const words = summary.replace(/[.:?!]+$/u, "");
+  if (words === action || words.endsWith(` ${action}`)) return summary;
+  const lead = summary.replace(/[.:]+$/u, "");
+  return /[?!]$/u.test(lead) ? `${lead} ${action}` : `${lead}: ${action}`;
 };
 
 const questionStatus = (request: AgentSessionLivePendingQuestionRequest): string => {
