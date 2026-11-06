@@ -4,7 +4,7 @@ import { useSettingsModal } from "@/components/features/settings/settings-modal"
 import {
   useWorkspaceDialogs,
   type WorkspaceDialogRequest,
-} from "@/components/layout/workspace-dialogs";
+} from "@/components/layout/workspace-dialogs-context";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";

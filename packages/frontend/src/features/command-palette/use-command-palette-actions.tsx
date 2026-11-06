@@ -32,7 +32,7 @@ import { SETTINGS_SECTIONS } from "@/components/features/settings/settings-modal
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
 import { THEME_PREFERENCE_LABELS } from "@/components/layout/theme-preference";
 import { useTheme } from "@/components/layout/theme-provider";
-import { useWorkspaceDialogs } from "@/components/layout/workspace-dialogs";
+import { useWorkspaceDialogs } from "@/components/layout/workspace-dialogs-context";
 import { WorkspaceTile } from "@/components/layout/workspace-tile";
 import {
   issueImportActionLabel,
