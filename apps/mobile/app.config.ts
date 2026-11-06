@@ -4,6 +4,8 @@ import { version as packageVersion } from "./package.json";
 // The store version follows the repository release version. `scripts/release-version.ts` writes
 // the numeric base version to package.json. CI sets a build number that always increases.
 const buildNumber = process.env.OPENDUCKTOR_MOBILE_BUILD_NUMBER ?? "1";
+// Apple registers a bundle ID to one team, so a build from source in another team needs its own ID.
+const iosBundleIdentifier = process.env.OPENDUCKTOR_IOS_BUNDLE_ID ?? "com.openducktor.mobile";
 if (!/^[1-9]\d*$/.test(buildNumber)) {
   throw new Error(
     `OPENDUCKTOR_MOBILE_BUILD_NUMBER must be a positive whole number. It is "${buildNumber}".`,
@@ -75,7 +77,7 @@ const config: ExpoConfig = {
   icon: "./assets/images/icon.png",
   backgroundColor: NATIVE_COLORS.dark.background,
   ios: {
-    bundleIdentifier: "com.openducktor.mobile",
+    bundleIdentifier: iosBundleIdentifier,
     buildNumber,
     supportsTablet: true,
     infoPlist: {
