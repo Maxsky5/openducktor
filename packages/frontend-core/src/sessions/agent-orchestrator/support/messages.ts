@@ -364,24 +364,6 @@ export const updateLastSessionMessage = (
   return lastIndex >= 0 ? updateMessageAtIndex(owner, lastIndex, updater) : getSessionState(owner);
 };
 
-const updateLastSessionMessageByRole = (
-  owner: SessionMessageOwner,
-  role: MessageRole,
-  predicate: (message: AgentChatMessage, index: number) => boolean,
-  updater: (message: AgentChatMessage) => AgentChatMessage,
-): SessionMessagesState => {
-  const index = findLastMessageIndexByRole(owner, role, predicate);
-  return index >= 0 ? updateMessageAtIndex(owner, index, updater) : getSessionState(owner);
-};
-
-export const updateLastToolSessionMessage = (
-  owner: SessionMessageOwner,
-  predicate: (message: AgentChatMessage, index: number) => boolean,
-  updater: (message: AgentChatMessage) => AgentChatMessage,
-): SessionMessagesState => {
-  return updateLastSessionMessageByRole(owner, "tool", predicate, updater);
-};
-
 export const updateSessionMessagesByRole = (
   owner: SessionMessageOwner,
   role: MessageRole,

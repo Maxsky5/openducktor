@@ -18,7 +18,6 @@ import {
   getSessionMessageCount,
   isFinalAssistantChatMessage,
   updateLastSessionMessage,
-  updateLastToolSessionMessage,
   upsertSessionMessage,
   upsertUserSessionMessage,
 } from "./messages";
@@ -224,48 +223,6 @@ describe("agent-orchestrator/support/messages", () => {
     ];
 
     expect(findLastUserSessionMessage(createSession(messages))?.id).toBe("u2");
-  });
-
-  test("updates only the last matching tool message", () => {
-    const messages: AgentChatMessage[] = [
-      {
-        id: "tool-1",
-        role: "tool",
-        content: "running",
-        timestamp: "2026-02-22T08:00:00.000Z",
-        meta: {
-          kind: "tool",
-          partId: "p1",
-          callId: "c1",
-          tool: "bash",
-          toolType: "bash",
-          status: "running",
-        },
-      },
-      {
-        id: "tool-2",
-        role: "tool",
-        content: "running",
-        timestamp: "2026-02-22T08:00:01.000Z",
-        meta: {
-          kind: "tool",
-          partId: "p2",
-          callId: "c2",
-          tool: "bash",
-          toolType: "bash",
-          status: "running",
-        },
-      },
-    ];
-
-    const updated = updateLastToolSessionMessage(
-      createSession(messages),
-      (message) => message.meta?.kind === "tool" && message.meta.callId === "c2",
-      (message) => ({ ...message, content: "completed" }),
-    );
-
-    expect(sessionMessageAt(createSession(updated), 0)?.content).toBe("running");
-    expect(sessionMessageAt(createSession(updated), 1)?.content).toBe("completed");
   });
 
   test("updates the last message without exposing indexes", () => {
