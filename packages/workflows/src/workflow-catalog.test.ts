@@ -55,7 +55,7 @@ describe("workflow catalog and shared board", () => {
       id: "spec_ready",
       label: "Spec ready",
       title: "Spec Ready",
-      shortLabel: "Spec",
+      shortLabel: "Spec ready",
       tone: "pending",
       taskOrder: "updated",
     });
