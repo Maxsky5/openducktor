@@ -36,7 +36,7 @@ describe("settings prompt inheritance", () => {
       "builtin prompt",
     );
     expect(fromBuiltin).toEqual({
-      sourceLabel: "Builtin prompt",
+      sourceLabel: "Built-in prompt",
       template: "builtin prompt",
     });
 

@@ -23,10 +23,8 @@ import {
 } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { coreTaskActionIcon, taskActionIcon } from "@/components/features/kanban/task-action-ui";
 import {
-  canRemoveTaskWorktree,
   type CoreTaskAction,
   coreTaskActions,
-  REMOVE_WORKTREE_ACTION,
 } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import type { WorkspaceSessionLiveState } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import { roleIconForHint } from "@/lib/agent-role-presentation";
@@ -235,12 +233,9 @@ const workflowAction = (
   command: { kind: "workflow", action },
 });
 
-/**
- * Close Task and Reset Task of a task that is not closed, and Remove Worktree of a closed task.
- * The palette does not read the worktree, so Remove Worktree opens the task details.
- */
-const coreActions = (task: TaskCard): PaletteTaskAction[] => [
-  ...coreTaskActions(task).map((action): PaletteTaskAction => ({
+/** Close Task and Reset Task of a task that is not closed. */
+const coreActions = (task: TaskCard): PaletteTaskAction[] =>
+  coreTaskActions(task).map((action): PaletteTaskAction => ({
     key: action.id,
     label: action.label,
     keywords: ["workflow", "task"],
@@ -248,28 +243,14 @@ const coreActions = (task: TaskCard): PaletteTaskAction[] => [
     destructive: action.emphasis === "destructive",
     disabled: false,
     command: { kind: "core", action },
-  })),
-  ...(canRemoveTaskWorktree(task)
-    ? [
-        {
-          key: REMOVE_WORKTREE_ACTION.id,
-          label: REMOVE_WORKTREE_ACTION.label,
-          keywords: ["worktree", "branch", "cleanup"],
-          icon: coreTaskActionIcon(REMOVE_WORKTREE_ACTION),
-          destructive: true,
-          disabled: false,
-          command: { kind: "details" } as const,
-        },
-      ]
-    : []),
-];
+  }));
 
 /** Actions that need no session data. */
 const taskActions = (task: TaskCard): PaletteTaskAction[] => [
   ...coreActions(task),
   {
     key: "edit",
-    label: "Edit task",
+    label: "Edit Task",
     keywords: ["rename", "change", "update"],
     icon: <Pencil />,
     destructive: false,
@@ -278,7 +259,7 @@ const taskActions = (task: TaskCard): PaletteTaskAction[] => [
   },
   {
     key: "details",
-    label: "Open task details",
+    label: "Open Task Details",
     keywords: ["view", "show", "artifacts"],
     icon: <PanelRightOpen />,
     destructive: false,
@@ -287,7 +268,7 @@ const taskActions = (task: TaskCard): PaletteTaskAction[] => [
   },
   {
     key: "copy-id",
-    label: "Copy task ID",
+    label: "Copy Task ID",
     keywords: ["clipboard", task.id],
     icon: <Copy />,
     destructive: false,
@@ -296,7 +277,7 @@ const taskActions = (task: TaskCard): PaletteTaskAction[] => [
   },
   {
     key: "delete",
-    label: "Delete task",
+    label: "Delete Task",
     keywords: ["remove", "trash"],
     icon: <Trash2 />,
     destructive: true,

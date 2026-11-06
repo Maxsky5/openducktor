@@ -44,7 +44,7 @@ import { taskCreationBlockedReason } from "@openducktor/frontend-core/tasks/boar
 import { KANBAN_PATH } from "@/pages/kanban/kanban-task-link";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";
-import { useManualMergeCheckState } from "@/state/providers/manual-merge-check-provider";
+import { useManualMergeCheckState } from "@/state/providers/manual-merge-check-context";
 import { useManualPullRequestSyncState } from "@/state/providers/manual-pull-request-sync-provider";
 import {
   classifyDiagnosticsQueryError,

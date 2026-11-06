@@ -9,6 +9,7 @@ import {
   useReducer,
 } from "react";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
+import { cn } from "@/lib/utils";
 import {
   IssueMarkdownRenderer,
   type IssueImageContext,
@@ -109,7 +110,7 @@ function DeferredTaskDetailsMarkdown({
 
   return (
     <div className="relative">
-      <div className="max-h-84 overflow-y-auto">
+      <div className={cn("max-h-84 overflow-y-auto", copyableMarkdown && "pr-9")}>
         <TaskDetailsRenderedMarkdown
           markdown={markdown}
           hasLabeledCodeFence={hasLabeledCodeFence}
@@ -175,7 +176,7 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
 
   return (
     <div className="relative">
-      <div className="max-h-84 overflow-y-auto">
+      <div className={cn("max-h-84 overflow-y-auto", copyableMarkdown && "pr-9")}>
         <TaskDetailsRenderedMarkdown
           markdown={markdown}
           hasLabeledCodeFence={hasLabeledCodeFence}

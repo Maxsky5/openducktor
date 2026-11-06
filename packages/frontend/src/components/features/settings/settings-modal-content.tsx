@@ -146,7 +146,7 @@ export function SettingsModalContent({
           override && override.enabled !== false
             ? undefined
             : {
-                sourceLabel: "Builtin prompt",
+                sourceLabel: "Built-in prompt",
                 template: builtinTemplate,
               }
         }

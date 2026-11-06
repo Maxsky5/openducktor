@@ -35,7 +35,7 @@ const deleteMenuActions = (onDeleteSelect: (() => void) | undefined) =>
     ? [
         {
           id: "delete-task",
-          label: "Delete task",
+          label: "Delete Task",
           icon: <Trash2 className="size-3.5" />,
           variant: "destructiveGhost" as const,
           onSelect: onDeleteSelect,

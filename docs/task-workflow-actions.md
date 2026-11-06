@@ -134,7 +134,7 @@ A confirmed close removes the task worktree, the session worktrees, and the rela
 
 ## Remove worktree
 
-Remove Worktree is a core task action of a closed task. The host rejects `task_worktree_remove` for a task that is not `closed`. The detail sheet reads the worktree of a closed task and shows the action while the task has a managed worktree or a related local branch. The desktop detail sheet and the mobile task details show it in the actions menu, after Reset Task and Close Task and before Delete Task. The command palette shows it for every closed task and opens the task details, because the palette does not read the worktree. A Kanban card does not show it.
+Remove Worktree is a core task action of a closed task. The host rejects `task_worktree_remove` for a task that is not `closed`. The detail sheet reads the worktree of a closed task and shows the action while the task has a managed worktree or a related local branch. The desktop detail sheet and the mobile task details show it in the actions menu, after Reset Task and Close Task and before Delete Task. The command palette and the Kanban card do not show it, because they do not read the worktree.
 
 `task_worktree_remove` stops task terminals, removes the managed worktrees, and force-deletes the related local branches. Commits that exist only on these branches are lost. It changes no other task data.
 

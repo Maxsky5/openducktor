@@ -1,7 +1,7 @@
 import { renderWithWorkflow as render } from "@/test-utils/render-with-workflow";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { type AutopilotSettings, createDefaultAutopilotSettings } from "@openducktor/contracts";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { act } from "react";
 import { setAutopilotRuleAction } from "@/features/autopilot/autopilot-catalog";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
@@ -63,6 +63,15 @@ describe("settings Autopilot section", () => {
       screen.getByText(
         "Autopilot reacts only to task changes committed while the host runs. It does not start work for changes from before the host started. Work that has not started when the host stops is lost.",
       ),
+    ).toBeDefined();
+  });
+
+  test("groups the rules under the workflow that owns them", async () => {
+    renderSection(createDefaultAutopilotSettings());
+
+    const workflow = await screen.findByRole("region", { name: "Spec, Plan, Build" });
+    expect(
+      within(workflow).getByRole("button", { name: "When a task progresses to Human Review" }),
     ).toBeDefined();
   });
 

@@ -369,7 +369,7 @@ describe("useTaskPullRequestOperations", () => {
         {
           level: "success",
           title: "Pull request linked",
-          description: "PR #17 for task-1 (/repo).",
+          description: "PR #17 for task-1.",
         },
       ]);
     } finally {
@@ -494,7 +494,7 @@ describe("useTaskPullRequestOperations", () => {
         {
           level: "warning",
           title: "No pull request found",
-          description: "No open pull request found for task-1 on feature/task-1 (/repo).",
+          description: "No open pull request found for task-1 on feature/task-1.",
         },
       ]);
     } finally {

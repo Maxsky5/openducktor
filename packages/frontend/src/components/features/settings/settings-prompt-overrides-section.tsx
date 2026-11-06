@@ -98,6 +98,7 @@ export function PromptOverridesSection({
             <PromptOverrideCard
               key={builtin.key}
               label={builtin.label}
+              owner={builtin.owner}
               description={builtin.description}
               override={override}
               inheritedPreview={inheritedPreview}

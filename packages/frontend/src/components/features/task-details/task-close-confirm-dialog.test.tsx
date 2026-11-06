@@ -124,7 +124,9 @@ describe("TaskCloseConfirmDialog", () => {
       screen.getByText("1 active agent session will be stopped before closing."),
     ).toBeDefined();
     expect(screen.getByText("Closing does not merge code or change a pull request.")).toBeDefined();
-    expect(screen.getByText(/moves to its workflow's terminal state/)).toBeDefined();
+    expect(
+      screen.getByText(/keeps its artifacts, session history, and pull request link/),
+    ).toBeDefined();
 
     unmount();
   });
@@ -137,7 +139,7 @@ describe("TaskCloseConfirmDialog", () => {
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
     expect(
       document.getElementById(dialog.getAttribute("aria-describedby") ?? "")?.textContent,
-    ).toContain("Move to Done and keep the task's history.");
+    ).toContain("Close the task and keep its history.");
     expect(screen.getByRole("button", { name: "Copy task ID" })).toBeDefined();
     expect(screen.queryByText("Move this task to Done.")).toBeNull();
     // Focus on the copy control would open its tooltip, so the dialog takes the focus.

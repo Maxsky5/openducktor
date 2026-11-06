@@ -138,28 +138,8 @@ describe("command palette task model", () => {
       "edit",
       "details",
       "copy-id",
-      "remove_worktree",
       "delete",
     ]);
-  });
-
-  test("offers the core Remove Worktree of a closed task, which opens the task details", () => {
-    const closed = buildPaletteTaskView({
-      task: createTaskCardFixture({ status: "closed", availableActions: [] }),
-      sessions: ready([]),
-      live: liveState([]),
-    });
-    expect(closed.actions.find((action) => action.key === "remove_worktree")).toMatchObject({
-      label: "Remove Worktree",
-      destructive: true,
-      command: { kind: "details" },
-    });
-    const open = buildPaletteTaskView({
-      task: inProgressTask(),
-      sessions: ready([]),
-      live: liveState([]),
-    });
-    expect(open.actions.map((action) => action.key)).not.toContain("remove_worktree");
   });
 
   test("lists session actions, workflow steps, and task actions of the palette, destructive last", () => {

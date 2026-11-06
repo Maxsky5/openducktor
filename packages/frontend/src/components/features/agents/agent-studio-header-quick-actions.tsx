@@ -157,7 +157,9 @@ function QuickActionCommandItem({
       <Icon className="size-3.5 text-muted-foreground" />
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-foreground">{option.label}</p>
-        <p className="truncate text-[11px] text-muted-foreground">{description}</p>
+        {description ? (
+          <p className="truncate text-[11px] text-muted-foreground">{description}</p>
+        ) : null}
       </div>
     </CommandItem>
   );

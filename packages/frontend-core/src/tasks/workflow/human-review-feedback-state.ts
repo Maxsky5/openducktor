@@ -101,10 +101,10 @@ export const buildHumanReviewFeedbackModalModel = ({
 
 /** The text of the Request Changes feedback step. */
 export const HUMAN_REVIEW_FEEDBACK_COPY = {
-  title: "Send Human Feedback",
+  title: "Request changes",
   description: (roleLabel: string | null) =>
     roleLabel
-      ? `Describe the changes you want the ${roleLabel} to make. The next step will use the standard session-start flow to choose whether to reuse an existing ${roleLabel} session or start a new one.`
+      ? `Describe the changes you want the ${roleLabel} to make. Next, you choose to continue an existing ${roleLabel} session or start a new one.`
       : "Describe the changes you want. This action updates the task without starting an agent session.",
   messageLabel: "Your feedback",
   messagePlaceholder: (roleLabel: string | null) =>

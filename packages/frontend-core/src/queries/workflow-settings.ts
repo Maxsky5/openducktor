@@ -12,7 +12,11 @@ import { useQuery } from "@tanstack/react-query";
 import { workflowCatalogQueryOptions } from "./workflows";
 
 /** A prompt in Settings, with the override key of its owner. */
-export type SettingsPromptTemplate = WorkflowDescriptor["templates"][number] & { key: string };
+export type SettingsPromptTemplate = WorkflowDescriptor["templates"][number] & {
+  key: string;
+  /** The role or workflow that owns the prompt, for example "Workflow: Spec, Plan, Build". */
+  owner: string;
+};
 
 /**
  * Settings list each catalog role once, with its system prompt, and the prompts of the latest
@@ -25,20 +29,25 @@ export const workflowSettingsData = (catalog: CompiledWorkflowCatalog) => {
     label: definition.label,
     definition,
   }));
-  const roleTemplates = catalog.roles.map(({ id, systemPrompt }): SettingsPromptTemplate => ({
-    ...systemPrompt,
-    id: ROLE_INSTRUCTIONS_PROMPT_ID,
-    key: promptOverrideKey({
-      ownerKind: "role",
-      ownerId: id,
-      promptId: ROLE_INSTRUCTIONS_PROMPT_ID,
+  const roleTemplates = catalog.roles.map(
+    ({ id, label, systemPrompt }): SettingsPromptTemplate => ({
+      ...systemPrompt,
+      owner: `Role: ${label}`,
+      id: ROLE_INSTRUCTIONS_PROMPT_ID,
+      key: promptOverrideKey({
+        ownerKind: "role",
+        ownerId: id,
+        promptId: ROLE_INSTRUCTIONS_PROMPT_ID,
+      }),
+      purpose: "system",
+      roleIds: [id],
     }),
-    purpose: "system",
-    roleIds: [id],
-  }));
-  const workflowTemplates = latestWorkflowRevisions(workflows).flatMap((workflow) =>
+  );
+  const latestWorkflows = latestWorkflowRevisions(workflows);
+  const workflowTemplates = latestWorkflows.flatMap((workflow) =>
     workflowPromptTemplates(workflow).map((template): SettingsPromptTemplate => ({
       ...template,
+      owner: `Workflow: ${workflow.definition.label}`,
       key: promptOverrideKey({
         ownerKind: "workflow",
         ownerId: workflow.reference.id,
@@ -61,7 +70,7 @@ export const workflowSettingsData = (catalog: CompiledWorkflowCatalog) => {
       templates: templates.filter((template) => template.roleIds.includes(role.role)),
     })),
   ];
-  return { workflows, roles, templates, promptTabs };
+  return { workflows, latestWorkflows, roles, templates, promptTabs };
 };
 export type WorkflowSettingsData = ReturnType<typeof workflowSettingsData>;
 export const useWorkflowSettings = () =>

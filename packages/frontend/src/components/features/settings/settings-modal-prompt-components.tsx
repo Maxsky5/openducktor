@@ -3,7 +3,7 @@ type WorkflowPromptRoleTabId = string;
 import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow-settings";
 import type { RepoPromptOverrides } from "@openducktor/contracts";
 import { ChevronDown, CircleAlert } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
@@ -85,6 +85,8 @@ export function PromptRoleTabs({
 
 type PromptOverrideCardProps = {
   label: string;
+  /** The role or workflow that owns the prompt. */
+  owner: string;
   description: string;
   override?: RepoPromptOverrides[AgentPromptTemplateId] | undefined;
   inheritedPreview?: PromptInheritedPreview | undefined;
@@ -98,6 +100,7 @@ type PromptOverrideCardProps = {
 
 export function PromptOverrideCard({
   label,
+  owner,
   description,
   override,
   inheritedPreview,
@@ -111,12 +114,14 @@ export function PromptOverrideCard({
   const isOverrideEnabled = Boolean(override && override.enabled !== false);
   const editorValue = override?.template ?? inheritedPreview?.template ?? "";
   const [isInheritedPromptExpanded, setIsInheritedPromptExpanded] = useState(false);
+  const editorId = useId();
 
   return (
     <div className="grid gap-3 rounded-lg border border-border bg-card p-4">
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
         <div className="min-w-0 space-y-1">
           <h4 className="text-sm font-semibold text-foreground">{label}</h4>
+          <p className="text-xs font-medium text-muted-foreground">{owner}</p>
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
         <Label className="flex shrink-0 items-center gap-2 text-xs text-foreground sm:justify-self-end">
@@ -162,8 +167,11 @@ export function PromptOverrideCard({
       ) : null}
 
       <div className="grid gap-2">
-        <Label className="text-xs text-foreground">Override prompt</Label>
+        <Label htmlFor={editorId} className="text-xs text-foreground">
+          Override prompt
+        </Label>
         <Textarea
+          id={editorId}
           value={editorValue}
           rows={7}
           className="font-mono text-xs"

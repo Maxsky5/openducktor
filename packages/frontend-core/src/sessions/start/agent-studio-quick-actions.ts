@@ -47,7 +47,7 @@ export type AgentStudioSessionQuickActionOption = {
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
   label: string;
-  description: string;
+  description?: string;
   postStartAction: SessionStartPostAction;
   disabled: boolean;
   disabledReason?: string;
@@ -71,7 +71,7 @@ export type AgentStudioTaskQuickActionOption = {
   /** A leading action comes before the session actions, a trailing one after them. */
   placement: "leading" | "trailing";
   label: string;
-  description: string;
+  description?: string;
   /** The target that the task branch is merged into. The header shows it beside the action. */
   mergedTarget?: string;
   disabled: boolean;
@@ -105,7 +105,7 @@ export const buildAgentStudioQuickActions = (
   const availableSteps = new Set(
     task.workflowSteps.filter(({ available }) => available).map(({ id }) => id),
   );
-  const append = (launchId: string, label?: string) => {
+  const append = (launchId: string, label?: string, actionDescription?: string) => {
     if (options.some((option) => option.launchActionId === launchId)) return;
     const launch = task.taskWorkflow.launchAction(launchId);
     if (!params.roleEnabledByTask[launch.role]) return;
@@ -135,12 +135,13 @@ export const buildAgentStudioQuickActions = (
       role: launch.role,
       launchActionId: launch.id,
       label: label ?? launch.label,
-      description: launch.description ?? launch.label,
       postStartAction: launchSessionCommand(launch),
       disabled: reason !== null,
       requiresHumanFeedback: launch.context === "human_feedback",
       surface: "studio",
     };
+    const description = launch.description ?? actionDescription;
+    if (description) option.description = description;
     if (reason) option.disabledReason = reason;
     if (sources.length && launch.startModes.some((mode) => mode !== "fresh")) {
       option.existingSessionOptions = sources;
@@ -159,6 +160,7 @@ export const buildAgentStudioQuickActions = (
     append(
       evaluator.actionLaunchAction(input, id),
       taskActionLabel(id, task, { surface: "studio" }),
+      actionById.get(id)?.description,
     );
   }
   // One record per available task action. An event action whose following launch collects human
@@ -207,9 +209,9 @@ export const buildAgentStudioQuickActions = (
       taskAction: { kind: "workflow", action: id },
       placement,
       label: taskActionLabel(id, task, { surface: "studio" }),
-      description: action.label,
       disabled: follows && params.createSessionDisabled,
     };
+    if (action.description) option.description = action.description;
     if (follows) following.push(option);
     else if (placement === "leading") leading.push(option);
     else trailing.push(option);
@@ -244,10 +246,10 @@ export const buildGitConflictQuickAction = (params: {
     role: launch.role,
     launchActionId: launch.id,
     label: launch.label,
-    description: launch.description ?? launch.label,
     postStartAction: "send_message",
     disabled: params.createSessionDisabled,
   };
+  if (launch.description) option.description = launch.description;
   if (params.createSessionDisabled) option.disabledReason = SESSION_BUSY_REASON;
   return option;
 };

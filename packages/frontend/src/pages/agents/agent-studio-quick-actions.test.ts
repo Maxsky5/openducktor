@@ -93,6 +93,22 @@ describe("agent-studio-quick-actions", () => {
     });
   });
 
+  test("describes each action with the workflow description, never with its label", () => {
+    const options = buildAgentStudioQuickActions(buildPrActionArgs());
+
+    expect(
+      options.find(
+        (option) =>
+          option.kind === "task_action" && option.taskAction.action === "human_request_changes",
+      )?.description,
+    ).toBe("Send your feedback to the Builder, which applies the changes.");
+    expect(
+      options.find((option) => option.kind === "session_start" && option.role === "spec")
+        ?.description,
+    ).toBe("Start a Spec session that writes the task spec.");
+    for (const option of options) expect(option.description).not.toBe(option.label);
+  });
+
   test("allows a fresh PR launch without a prior role session", () => {
     const args = buildPrActionArgs();
     let launchId = "";

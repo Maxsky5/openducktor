@@ -238,6 +238,8 @@ const workflowActionDefinitionFields = {
   id: workflowIdSchema,
   label: z.string(),
   labels: z.array(workflowLabelVariantSchema).optional(),
+  /** One sentence that tells what the action does. Menus show it under the label. */
+  description: z.string().optional(),
   stepId: workflowIdSchema.optional(),
   availableWhen: workflowConditionSchema,
   /** The surfaces that show the action. The default is every surface. */

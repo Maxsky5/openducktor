@@ -135,6 +135,8 @@ Follow these rules, or sheets and screens open and close late. React Native show
 
 `src/platform/install-globals.ts` runs before all other app code. It supplies a streaming UTF-8 `TextDecoder`, a grapheme `Intl.Segmenter`, `Array.prototype.toSorted`, and `crypto` when Hermes or React Native does not have them. Then it checks every global and built-in that shared code needs, and startup stops with the name of each missing one.
 
+Hermes has no `Intl.ListFormat`, `Intl.PluralRules`, `Intl.RelativeTimeFormat`, `Intl.DisplayNames`, or `Intl.Locale`. With inline requires, a module that calls one stops the app when a screen first uses the module. The `no-restricted-properties` lint rule rejects them in the app and in the shared packages that it bundles.
+
 ### Task artifacts
 
 - The Artifacts work view follows [task artifacts](../../docs/task-artifacts.md#mobile-app).

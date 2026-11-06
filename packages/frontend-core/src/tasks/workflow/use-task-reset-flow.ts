@@ -1,6 +1,9 @@
 import type { TaskCard as WireTaskCard } from "@openducktor/contracts";
 import type { OnTaskCommitted } from "./task-workflow-continuation";
-import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+import {
+  type ResolvedTaskCard as TaskCard,
+  taskWaitsForMergePublication,
+} from "@openducktor/workflows";
 import { useCallback, useMemo, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
 import { isOutcomeUnknown } from "../../lib/command-outcome";
@@ -17,7 +20,13 @@ export type TaskResetImplementationModalModel = {
   open: boolean;
   taskId: string;
   taskTitle: string;
+  /** The label of the workflow action that resets the worktree, for example "Reset Implementation". */
+  actionLabel: string;
   targetStatusLabel: string;
+  /** The roles whose sessions the reset clears, by label. */
+  worktreeRoleLabels: readonly string[];
+  /** A local direct merge waits for its publication. The reset drops its record. */
+  dropsLocalMerge: boolean;
   isSubmitting: boolean;
   activeSessionCount: number | null;
   activeSessionCountError: string | null;
@@ -65,6 +74,16 @@ type UseTaskResetFlowArgs = {
 };
 
 /** A task that does not admit the event keeps its status, and the host rejects the request. */
+/** The label of the event action of the reset, so the dialog uses the workflow's own name. */
+const resetActionLabel = (task: TaskCard, eventId: string): string => {
+  const action = task.taskWorkflow.definition.actions.find(
+    (entry) => entry.kind === "event" && entry.eventId === eventId,
+  );
+  if (!action)
+    throw new Error(`Task workflow has no action for event "${eventId}". Reload the task.`);
+  return action.label;
+};
+
 const deriveRollbackLabel = (task: TaskCard, eventId: string): string => {
   const workflow = task.taskWorkflow;
   const decision = workflow.decide(eventId, task);
@@ -201,7 +220,12 @@ export function useTaskResetFlow({
       open,
       taskId: task.id,
       taskTitle: task.title,
+      actionLabel: request ? resetActionLabel(task, request.eventId) : "",
       targetStatusLabel: request ? deriveRollbackLabel(task, request.eventId) : "",
+      worktreeRoleLabels: task.taskWorkflow.worktreeRoles.map(
+        (role) => task.taskWorkflow.role(role).label,
+      ),
+      dropsLocalMerge: taskWaitsForMergePublication(task),
       isSubmitting,
       activeSessionCount,
       activeSessionCountError: stopImpactError,

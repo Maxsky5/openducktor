@@ -10,8 +10,9 @@ describe("PromptOverrideCard", () => {
     const markup = renderToStaticMarkup(
       <PromptOverrideCard
         label="Spec kickoff"
+        owner="Workflow: Spec, Plan, Build"
         description="Prompt used to start spec sessions."
-        inheritedPreview={{ sourceLabel: "Builtin prompt", template: "builtin prompt" }}
+        inheritedPreview={{ sourceLabel: "Built-in prompt", template: "builtin prompt" }}
         disabled={false}
         canClearOverride={false}
         onToggleEnabled={noop}
@@ -29,6 +30,7 @@ describe("PromptOverrideCard", () => {
     const markup = renderToStaticMarkup(
       <PromptOverrideCard
         label="Spec kickoff"
+        owner="Workflow: Spec, Plan, Build"
         description="Prompt used to start spec sessions."
         override={{ template: "reusable prompt", baseVersion: 2, enabled: true }}
         disabled={false}
@@ -40,6 +42,26 @@ describe("PromptOverrideCard", () => {
     );
 
     expect(markup).toContain(">reusable prompt</textarea>");
+  });
+
+  test("names the prompt owner and labels the override editor", () => {
+    const markup = renderToStaticMarkup(
+      <PromptOverrideCard
+        label="Spec kickoff"
+        owner="Workflow: Spec, Plan, Build"
+        description="Prompt used to start spec sessions."
+        disabled={false}
+        canClearOverride={false}
+        onToggleEnabled={noop}
+        onTemplateChange={noop}
+        onClearOverride={noop}
+      />,
+    );
+
+    expect(markup).toContain("Workflow: Spec, Plan, Build");
+    const editorId = /<textarea[^>]*id="([^"]+)"/.exec(markup)?.[1];
+    expect(editorId).toBeDefined();
+    expect(markup).toContain(`for="${editorId}"`);
   });
 });
 

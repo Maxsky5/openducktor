@@ -89,7 +89,7 @@ describe("TaskDetailsSheetFooter", () => {
       .getAllByRole("button")
       .map((button) => button.textContent?.trim());
 
-    expect(buttons).toEqual(["Reset Implementation", "Reset Task", "Close Task", "Delete task"]);
+    expect(buttons).toEqual(["Reset Implementation", "Reset Task", "Close Task", "Delete Task"]);
 
     unmount();
   });
@@ -155,7 +155,7 @@ describe("TaskDetailsSheetFooter", () => {
       .getAllByRole("button")
       .map((button) => button.textContent?.trim());
 
-    expect(buttons).toEqual(["Delete task"]);
+    expect(buttons).toEqual(["Delete Task"]);
 
     unmount();
   });

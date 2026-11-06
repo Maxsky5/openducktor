@@ -180,7 +180,7 @@ export function useTaskPullRequestOperations({
           await invalidatePullRequestReviewContextQueries(queryClient);
           if (operationsRef.current.get(taskKey(operation)) !== operation) return;
           feedback.show("success", "Pull request linked", {
-            description: `PR #${result.pullRequest.number} for ${taskId} (${repoPath}).`,
+            description: `PR #${result.pullRequest.number} for ${taskId}.`,
           });
         } else if (result.outcome === "merged") {
           updateOperation(operation, {
@@ -203,7 +203,7 @@ export function useTaskPullRequestOperations({
           }
         } else {
           feedback.show("warning", "No pull request found", {
-            description: `No open pull request found for ${taskId} on ${result.sourceBranch} (${repoPath}).`,
+            description: `No open pull request found for ${taskId} on ${result.sourceBranch}.`,
           });
         }
       } catch (error) {

@@ -2137,7 +2137,7 @@ describe("AppShell command palette", () => {
       const input = search(palette, "checkout");
       fireEvent.keyDown(input, { key: "Tab" });
       search(palette, "copy");
-      expect(selectedOption(palette)?.textContent).toBe("Copy task ID");
+      expect(selectedOption(palette)?.textContent).toBe("Copy Task ID");
 
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -2282,11 +2282,11 @@ describe("AppShell command palette", () => {
       "Open Builder session",
       "Start Builder",
       "Close Task",
-      "Edit task",
-      "Open task details",
-      "Copy task ID",
+      "Edit Task",
+      "Open Task Details",
+      "Copy Task ID",
       "Reset Task",
-      "Delete task",
+      "Delete Task",
     ]);
     expect(input.value).toBe("");
 

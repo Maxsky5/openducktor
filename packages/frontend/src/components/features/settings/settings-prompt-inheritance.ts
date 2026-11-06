@@ -21,7 +21,7 @@ export const buildInheritedPromptPreview = (
     globalOverride && globalOverride.enabled !== false ? globalOverride : undefined;
 
   return {
-    sourceLabel: globalEnabledOverride ? "Global override" : "Builtin prompt",
+    sourceLabel: globalEnabledOverride ? "Global override" : "Built-in prompt",
     template: globalEnabledOverride?.template ?? builtinTemplate,
   };
 };

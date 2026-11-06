@@ -59,12 +59,22 @@ export function SettingsAutopilotSection({
         }
       />
 
-      <div className="grid gap-3 rounded-md border border-border bg-card p-4">
-        {workflows.data.workflows.flatMap((taskWorkflow) =>
-          taskWorkflow.definition.signals.map((eventDefinition) => {
+      {workflows.data.latestWorkflows.map((taskWorkflow) => (
+        <section
+          key={taskWorkflow.reference.id}
+          aria-labelledby={`autopilot-${taskWorkflow.reference.id}-heading`}
+          className="grid gap-3 rounded-md border border-border bg-card p-4"
+        >
+          <h4
+            id={`autopilot-${taskWorkflow.reference.id}-heading`}
+            className="text-sm font-semibold text-foreground"
+          >
+            {taskWorkflow.definition.label}
+          </h4>
+          {taskWorkflow.definition.signals.map((eventDefinition) => {
             const rule = getAutopilotRule(autopilot, taskWorkflow.reference.id, eventDefinition.id);
             const selectedValue = getAutopilotSelectedValue(rule);
-            const labelId = `autopilot-${taskWorkflow.reference.id}-${taskWorkflow.reference.revision}-${eventDefinition.id}-label`;
+            const labelId = `autopilot-${taskWorkflow.reference.id}-${eventDefinition.id}-label`;
             const automationById = new Map(
               taskWorkflow.definition.automations.map((automation) => [automation.id, automation]),
             );
@@ -123,9 +133,9 @@ export function SettingsAutopilotSection({
                 </div>
               </div>
             );
-          }),
-        )}
-      </div>
+          })}
+        </section>
+      ))}
 
       <div className="rounded-md border border-border bg-muted/60 p-3 text-xs text-muted-foreground">
         Autopilot reacts only to task changes committed while the host runs. It does not start work
