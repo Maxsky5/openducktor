@@ -555,7 +555,7 @@ export const projectMessage = (
     case "compaction":
       text =
         message.status === "completed"
-          ? `${message.summary}\n${message.recent}`
+          ? message.summary
           : message.status === "failed"
             ? message.error.message
             : "Session compaction is running.";

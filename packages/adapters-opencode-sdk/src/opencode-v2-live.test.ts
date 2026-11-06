@@ -4101,7 +4101,8 @@ describe("OpenCode V2 live observation", () => {
     );
   });
 
-  test("updates manual compaction under the native input ID in live events and history", () => {
+  test("shows only the native compaction text under the native input ID in live events and history", () => {
+    // OpenCode 2.0 sends `recent` on compaction events and messages. The projection must ignore it.
     const projector = new OpenCodeLiveMessageProjector();
     const start = projector.apply({
       id: "evt_compact_start",
@@ -4138,20 +4139,40 @@ describe("OpenCode V2 live observation", () => {
       {
         type: "session_compacted",
         messageId: "msg_compact",
-        message: "Summary\nRecent",
-        summary: "Summary\nRecent",
+        message: "Summary",
+        summary: "Summary",
       },
     ]);
     expect([...projector.messages.keys()]).toEqual(["msg_compact"]);
     expect(projectMessage(projector.messages.get("msg_compact")!)).toMatchObject({
       messageId: "msg_compact",
-      text: "Summary\nRecent",
+      text: "Summary",
       notice: {
         reason: "session_compacted",
         compactionStatus: "completed",
-        summary: "Summary\nRecent",
+        summary: "Summary",
       },
     });
+    const saved: Extract<SessionMessageInfo, { type: "compaction" }> = {
+      id: "msg_compact_saved",
+      type: "compaction",
+      status: "completed",
+      reason: "auto",
+      summary: "Saved summary",
+      recent: "Saved recent context",
+      time: { created: 6 },
+    };
+    expect(projector.projectHistory([saved])).toMatchObject([
+      {
+        messageId: "msg_compact_saved",
+        text: "Saved summary",
+        notice: {
+          reason: "session_compacted",
+          compactionStatus: "completed",
+          summary: "Saved summary",
+        },
+      },
+    ]);
   });
   test("retains open text and tool progress when native snapshots omit ephemeral updates", () => {
     const projector = new OpenCodeLiveMessageProjector();

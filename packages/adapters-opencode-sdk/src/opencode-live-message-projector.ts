@@ -20,6 +20,13 @@ import {
 } from "./opencode-message-projection";
 import { isShellNotice } from "./opencode-shell-projection";
 
+/**
+ * The pinned `@opencode/client` 2.0.32 type requires `recent` on running and completed compaction messages.
+ * OpenCode 2.1 removed the field from the wire, and no projection reads it.
+ * Delete this constant when the client upgrade drops the field.
+ */
+const EMPTY_NATIVE_RECENT = "";
+
 export class OpenCodeLiveMessageProjector {
   readonly messages = new Map<string, SessionMessageInfo>();
   readonly inbox = new Map<string, SessionInboxInfo>();
@@ -467,7 +474,7 @@ export class OpenCodeLiveMessageProjector {
           status: "running",
           reason: event.data.reason,
           summary: "",
-          recent: event.data.recent,
+          recent: EMPTY_NATIVE_RECENT,
           time: { created },
         };
         break;
@@ -483,7 +490,7 @@ export class OpenCodeLiveMessageProjector {
           status: "completed",
           reason: event.data.reason,
           summary: event.data.text,
-          recent: event.data.recent,
+          recent: EMPTY_NATIVE_RECENT,
           time: current?.time ?? { created },
         };
         if (event.data.model) system.model = event.data.model;
