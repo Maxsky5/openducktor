@@ -14,6 +14,8 @@ type TaskPromptContext = {
 
 type SharedPromptOptions = {
   taskWorkflow: import("@openducktor/workflows").TaskWorkflow;
+  /** The role of the session. The core pull request launch needs it. */
+  role?: string;
   overrides?: RepoPromptOverrides;
   task?: TaskPromptContext;
 };
@@ -31,6 +33,7 @@ export const kickoffPromptForLaunchAction = (
 ): string =>
   options.taskWorkflow.prompts.kickoffPrompt({
     launchActionId,
+    role: options.role,
     task: { taskId, ...options.task },
     overrides: options.overrides,
     humanFeedback: options.extraPlaceholders?.humanFeedback,

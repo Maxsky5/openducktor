@@ -32,7 +32,8 @@ test.each(cases)("shutdown cancels a %s launch during %s before saving", async (
       ...request,
       policy: {
         kind: "manual",
-        actionId: "build_pull_request_generation",
+        actionId: "pull_request",
+        role: "build",
         decision: { startMode: "fork", sourceSession, selectedModel: modelFor("codex") },
       },
     };

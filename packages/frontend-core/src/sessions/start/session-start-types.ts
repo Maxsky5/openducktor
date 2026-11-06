@@ -13,6 +13,11 @@ import type {
 export type SessionStartExistingSessionOption = {
   value: string;
   sourceSession: AgentSessionIdentity;
+  /**
+   * The role of the source session when it can differ from the role of the request, as for the
+   * core pull request launch. The start then runs as this role.
+   */
+  role?: AgentRole;
   label: string;
   description: string;
   secondaryLabel?: string;

@@ -328,18 +328,20 @@ test("automatic Pull Request launch skips missing prerequisites and forks the la
     policy: { kind: "automatic", actionId: "startGeneratePullRequest" },
     instruction: { kind: "kickoff" },
   };
+  const sourceMissing = await Effect.runPromise(h.launchAutomatic(request));
+  expect(sourceMissing).toMatchObject({
+    status: "skipped",
+    skipReason: "No Builder session is available to create the pull request for task task.",
+  });
+  const builderModel = { ...modelFor("codex"), modelId: "retired-builder-model" };
+  h.addTaskSession("builder", { selectedModel: builderModel });
   const providerMissing = await Effect.runPromise(h.launchAutomatic(request));
   expect(providerMissing.status).toBe("skipped");
   expect(providerMissing.skipReason).toContain("does not support Pull Requests");
-  h.enablePullRequests();
-  const sourceMissing = await Effect.runPromise(h.launchAutomatic(request));
-  expect(sourceMissing.status).toBe("skipped");
-  expect(sourceMissing.skipReason).toContain("No build session");
   expect(h.starts).toHaveLength(0);
   expect(h.forks).toHaveLength(0);
 
-  const builderModel = { ...modelFor("codex"), modelId: "retired-builder-model" };
-  h.addTaskSession("builder", { selectedModel: builderModel });
+  h.enablePullRequests();
   const forked = await Effect.runPromise(h.launchAutomatic(request));
   expect(forked).toMatchObject({
     status: "completed",
@@ -349,6 +351,143 @@ test("automatic Pull Request launch skips missing prerequisites and forks the la
   });
   expect(h.forks).toEqual(["builder"]);
   expect(h.catalogLoads()).toBe(0);
+});
+
+const launchPullRequestAutomation = async (
+  pullRequestRoles: string[],
+  sessions: { id: string; role: string; startedAt: string }[],
+) => {
+  const definition = reviewTaskDefinition();
+  definition.pullRequestRoles = pullRequestRoles;
+  definition.automations.push({
+    id: "startPullRequest",
+    label: "Generate Pull Request",
+    description: "Generate the pull request.",
+    launchActionId: "pull_request",
+  });
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
+  const h = await createLaunchHarness("codex", {
+    taskWorkflows: singleTaskWorkflow(workflow),
+    task: { issueType: "feature", status: "approval" },
+  });
+  h.enablePullRequests();
+  for (const { id, role, startedAt } of sessions) h.addTaskSession(id, { role, startedAt });
+  const result = await Effect.runPromise(
+    h.launchAutomatic({
+      ...requestFor("codex"),
+      policy: { kind: "automatic", actionId: "startPullRequest" },
+      instruction: { kind: "kickoff" },
+    }),
+  );
+  return { h, result };
+};
+
+test.each([
+  [["writer", "editor"], "writer"],
+  [[], "writer"],
+  [["writer", "editor"], "editor"],
+  [[], "editor"],
+] as const)(
+  "automatic Pull Request launch with pull request roles %p continues the latest %s session",
+  async (pullRequestRoles, latestRole) => {
+    const older = "2026-10-03T12:00:00.000Z";
+    const newer = "2026-10-03T13:00:00.000Z";
+    const { h, result } = await launchPullRequestAutomation(
+      [...pullRequestRoles],
+      [
+        { id: "writer-1", role: "writer", startedAt: latestRole === "writer" ? newer : older },
+        { id: "editor-1", role: "editor", startedAt: latestRole === "editor" ? newer : older },
+      ],
+    );
+    expect(result).toMatchObject({
+      status: "completed",
+      role: latestRole,
+      startMode: "reuse",
+      session: { externalSessionId: `${latestRole}-1` },
+    });
+    expect(h.starts).toHaveLength(0);
+    expect(h.sends).toHaveLength(1);
+  },
+);
+
+test("automatic Pull Request launch ignores a newer session of a role that cannot create it", async () => {
+  const { result } = await launchPullRequestAutomation(
+    ["writer"],
+    [
+      { id: "writer-1", role: "writer", startedAt: "2026-10-03T12:00:00.000Z" },
+      { id: "editor-1", role: "editor", startedAt: "2026-10-03T13:00:00.000Z" },
+    ],
+  );
+  expect(result).toMatchObject({
+    status: "completed",
+    role: "writer",
+    session: { externalSessionId: "writer-1" },
+  });
+});
+
+test("automatic Pull Request launch skips when no pull request role has a session", async () => {
+  const { h, result } = await launchPullRequestAutomation([], []);
+  expect(result).toMatchObject({
+    status: "skipped",
+    skipReason:
+      "No Writer or Editor session is available to create the pull request for task task.",
+  });
+  expect(h.starts).toHaveLength(0);
+  expect(h.forks).toHaveLength(0);
+  expect(h.sends).toHaveLength(0);
+});
+
+test("a manual Pull Request launch runs only as a pull request role of its source session", async () => {
+  const h = await createLaunchHarness();
+  h.enablePullRequests();
+  h.setTaskStatus("human_review");
+  const qaSession = h.addTaskSession("qa-session", { role: "qa" });
+  const launch = (role: string | undefined) => {
+    const policy: WorkflowLaunchRequest["policy"] = {
+      kind: "manual",
+      actionId: "pull_request",
+      decision: { startMode: "reuse", sourceSession: qaSession },
+    };
+    if (role !== undefined) policy.role = role;
+    return h.service.launch({ ...requestFor("codex"), policy, instruction: { kind: "kickoff" } });
+  };
+  expect((await Effect.runPromise(Effect.flip(launch(undefined)))).message).toContain(
+    "needs the role of its session",
+  );
+  expect((await Effect.runPromise(Effect.flip(launch("qa")))).message).toContain(
+    'Role "qa" cannot create pull requests',
+  );
+  expect(await Effect.runPromise(launch("build"))).toMatchObject({
+    status: "failed",
+    failure: { message: expect.stringContaining("does not own the selected build source") },
+  });
+  expect(h.sends).toHaveLength(0);
+});
+
+test("a manual Pull Request launch fails while the task approval is not available", async () => {
+  const h = await createLaunchHarness();
+  h.enablePullRequests();
+  h.setTaskStatus("in_progress");
+  const sourceSession = h.addTaskSession("builder");
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("codex"),
+      policy: {
+        kind: "manual",
+        actionId: "pull_request",
+        role: "build",
+        decision: { startMode: "reuse", sourceSession },
+      },
+      instruction: { kind: "kickoff" },
+    }),
+  );
+  expect(result).toMatchObject({
+    status: "failed",
+    failure: {
+      message: expect.stringContaining("Pull request generation is not available for task"),
+    },
+  });
+  expect(h.sends).toHaveLength(0);
 });
 
 test("automatic Pull Request launch skips when the Git provider is not enabled", async () => {

@@ -1,5 +1,6 @@
 import {
   resolveWorkflowAction,
+  taskActionLabel,
   type ResolvedTaskCard,
   type TaskWorkflow,
   type TaskWorkflowAction,
@@ -87,17 +88,19 @@ export const eventActionStep = (
 };
 
 /**
- * The event of an available event action that resets the task worktree, or null when the task
- * offers no such action.
+ * The available event action that resets the task worktree, with its event and label, or null when
+ * the task offers no such action.
  */
-export const availableWorktreeResetEvent = (task: ResolvedTaskCard): string | null => {
+export const availableWorktreeResetAction = (
+  task: ResolvedTaskCard,
+): { eventId: string; label: string } | null => {
   for (const id of task.availableActions) {
     const action = task.taskWorkflow.action(id);
     if (
       action.kind === "event" &&
       task.taskWorkflow.eventEffects(action.eventId).includes("worktree.reset")
     )
-      return action.eventId;
+      return { eventId: action.eventId, label: taskActionLabel(id, task) };
   }
   return null;
 };

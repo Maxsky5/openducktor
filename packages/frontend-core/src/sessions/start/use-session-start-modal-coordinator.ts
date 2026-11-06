@@ -31,7 +31,7 @@ export const buildSessionStartModalDescription = ({
   launchActionId: SessionLaunchActionId;
   taskWorkflow: import("@openducktor/workflows").TaskWorkflow;
 }): string => {
-  const action = taskWorkflow.launchAction(launchActionId);
+  const action = taskWorkflow.launchDefinition(launchActionId);
   if (action.startModes.length > 1) return "Choose how to start this session.";
   return `${startModeLabelFor(action.defaultStartMode)}.`;
 };

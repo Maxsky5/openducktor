@@ -109,40 +109,12 @@ describe("agent-studio-quick-actions", () => {
     for (const option of options) expect(option.description).not.toBe(option.label);
   });
 
-  test("allows a fresh PR launch without a prior role session", () => {
-    const args = buildPrActionArgs();
-    let launchId = "";
-    const task = withEditedTaskWorkflow(args.selectedTask!, (definition) => {
-      const launch = definition.steps
-        .flatMap((step) => (step.kind === "agent" ? step.launchActions : []))
-        .find(({ context }) => context === "pull_request")!;
-      launchId = launch.id;
-      launch.startModes = ["fresh"];
-      launch.defaultStartMode = "fresh";
-      for (const automation of definition.automations) {
-        if (automation.launchActionId === launch.id) automation.startMode = "fresh";
-      }
-    });
-    const options = buildSessionQuickActions({
-      ...args,
-      selectedTask: task,
-      roleEnabledByTask: buildRoleEnabledMapForTask(task),
-      sessionsForTask: [],
-      gitProviderContext: createGitProviderContextFixture(),
-    });
-    expect(options.find(({ launchActionId }) => launchActionId === launchId)).toMatchObject({
-      disabled: false,
-    });
-  });
-
   test("hides unsupported Pull Request generation", () => {
     const actions = buildSessionQuickActions({
       ...buildPrActionArgs(),
       gitProviderContext: null,
     });
-    expect(
-      actions.some((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toBe(false);
+    expect(actions.some((option) => option.launchActionId === "pull_request")).toBe(false);
   });
 
   test("disables Pull Request generation when provider health blocks use", () => {
@@ -150,9 +122,7 @@ describe("agent-studio-quick-actions", () => {
       ...buildPrActionArgs(),
       gitProviderContext: createGitProviderContextFixture({ available: false }),
     });
-    expect(
-      actions.find((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toMatchObject({
+    expect(actions.find((option) => option.launchActionId === "pull_request")).toMatchObject({
       disabled: true,
       disabledReason: "Sign in to GitHub CLI.",
     });
@@ -165,9 +135,7 @@ describe("agent-studio-quick-actions", () => {
       gitProviderReadError: "Could not load the current Git provider: connection failed",
     });
 
-    expect(
-      actions.find((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toMatchObject({
+    expect(actions.find((option) => option.launchActionId === "pull_request")).toMatchObject({
       disabled: true,
       disabledReason: "Could not load the current Git provider: connection failed",
     });
@@ -179,9 +147,7 @@ describe("agent-studio-quick-actions", () => {
       gitProviderReadError: "Could not load the current Git provider: connection failed",
     });
 
-    expect(
-      actions.find((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toMatchObject({
+    expect(actions.find((option) => option.launchActionId === "pull_request")).toMatchObject({
       disabled: true,
       disabledReason: "Could not load the current Git provider: connection failed",
     });
@@ -194,9 +160,7 @@ describe("agent-studio-quick-actions", () => {
       gitProviderReadError: "Could not load the current Git provider: connection failed",
     });
 
-    expect(
-      actions.some((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toBe(false);
+    expect(actions.some((option) => option.launchActionId === "pull_request")).toBe(false);
   });
 
   test("builds quick actions from backend actions, role workflows, and builder sessions", () => {
@@ -254,9 +218,7 @@ describe("agent-studio-quick-actions", () => {
         taskAction: { kind: "workflow", action: "human_request_changes" },
       }),
     );
-    expect(
-      options.some((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toBe(false);
+    expect(options.some((option) => option.launchActionId === "pull_request")).toBe(false);
     expect(selectPrimaryAgentStudioQuickAction(options)?.id).toBe("quick:spec_initial");
     expect(selectPrimaryAgentStudioQuickAction(options)?.label).toBe("Start Spec");
   });
@@ -326,17 +288,17 @@ describe("agent-studio-quick-actions", () => {
       gitProviderContext: createGitProviderContextFixture(),
     });
     expect(selectPrimaryAgentStudioQuickAction(humanReviewOptions)).toMatchObject({
-      launchActionId: "build_pull_request_generation",
+      launchActionId: "pull_request",
       label: "Generate Pull Request",
     });
     expect(humanReviewOptions[0]).toMatchObject({
-      launchActionId: "build_pull_request_generation",
+      launchActionId: "pull_request",
       initialSourceSession: expect.objectContaining({
         externalSessionId: humanReviewBuilderSession.externalSessionId,
       }),
     });
     expect(humanReviewOptions.map((option) => option.launchActionId)).toEqual([
-      "build_pull_request_generation",
+      "pull_request",
       "qa_review",
       "build_implementation_start",
       "spec_initial",
@@ -397,7 +359,7 @@ describe("agent-studio-quick-actions", () => {
       "build_implementation_start",
       "spec_initial",
       "planner_initial",
-      "build_pull_request_generation",
+      "pull_request",
     ]);
   });
 
@@ -465,7 +427,7 @@ describe("agent-studio-quick-actions", () => {
       );
 
       expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         disabled: true,
       });
     });
@@ -560,9 +522,7 @@ describe("agent-studio-quick-actions", () => {
       launchActionId: "qa_review",
     });
     expect(
-      aiReviewWithoutPullRequestOptions.some(
-        (option) => option.launchActionId === "build_pull_request_generation",
-      ),
+      aiReviewWithoutPullRequestOptions.some((option) => option.launchActionId === "pull_request"),
     ).toBe(false);
 
     const aiReviewTaskWithPullRequest = buildTask({
@@ -589,9 +549,7 @@ describe("agent-studio-quick-actions", () => {
       launchActionId: "qa_review",
     });
     expect(
-      aiReviewWithPullRequestOptions.some(
-        (option) => option.launchActionId === "build_pull_request_generation",
-      ),
+      aiReviewWithPullRequestOptions.some((option) => option.launchActionId === "pull_request"),
     ).toBe(false);
     expect(
       buildAgentStudioQuickActions({
@@ -735,9 +693,7 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
 
-    expect(
-      nonReviewOptions.some((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toBe(false);
+    expect(nonReviewOptions.some((option) => option.launchActionId === "pull_request")).toBe(false);
 
     const aiReviewTask = buildTask({
       id: "task-1",
@@ -767,9 +723,7 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
 
-    expect(
-      aiReviewOptions.some((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toBe(false);
+    expect(aiReviewOptions.some((option) => option.launchActionId === "pull_request")).toBe(false);
 
     const humanReviewTask = buildTask({
       ...aiReviewTask,
@@ -795,7 +749,7 @@ describe("agent-studio-quick-actions", () => {
 
     expect(humanReviewOptions).toContainEqual(
       expect.objectContaining({
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         initialSourceSession: expect.objectContaining({
           externalSessionId: humanReviewBuilderSession.externalSessionId,
         }),
@@ -824,12 +778,12 @@ describe("agent-studio-quick-actions", () => {
     });
 
     expect(options[0]).toMatchObject({
-      launchActionId: "build_pull_request_generation",
+      launchActionId: "pull_request",
       disabled: true,
       disabledReason: "Requires an existing Builder session.",
     });
     expect(options.map((option) => option.launchActionId)).toEqual([
-      "build_pull_request_generation",
+      "pull_request",
       "qa_review",
       "build_implementation_start",
       "spec_initial",
@@ -907,10 +861,7 @@ describe("agent-studio-quick-actions", () => {
       }),
     ).toBeNull();
     expect(
-      options.some(
-        (option) =>
-          option.role === "build" || option.launchActionId === "build_pull_request_generation",
-      ),
+      options.some((option) => option.role === "build" || option.launchActionId === "pull_request"),
     ).toBe(false);
   });
 });

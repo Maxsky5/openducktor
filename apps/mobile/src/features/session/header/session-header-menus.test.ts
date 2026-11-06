@@ -70,11 +70,7 @@ describe("quickActionItems", () => {
     const items = quickActionItems(
       [
         option("Start Builder", "build_implementation_start"),
-        option(
-          "Generate Pull Request",
-          "build_pull_request_generation",
-          "Requires an existing Builder session.",
-        ),
+        option("Generate Pull Request", "pull_request", "Requires an existing Builder session."),
       ],
       createTaskCardFixture(),
     );

@@ -185,11 +185,12 @@ The definition also declares the data that host and frontend code read instead o
 
 - Artifacts. A document names the event that its submit sends. A review lists its verdicts, and each verdict names its event and tells if it accepts the work.
 - Roles. A workflow binds roles by ID. Each binding lists the workflow artifacts that the role can write and its default artifact.
+- Pull request roles. `pullRequestRoles` lists the roles whose sessions can create the pull request. Each ID must be a role of the workflow. An empty list lets the sessions of every role create it.
 - States. Each state has its labels, its notification, and its Agent Studio role.
 - Launch actions. Each agent step lists the ways to start its role: start modes, prompt template, selection condition, prompt context, target branch choice, and worktree need.
-- Signals and automations. An event outcome can raise a signal with its source role. A signal lists the automations that the user can attach to it. An automation names the launch action that Autopilot starts and its start mode. The default start mode of the launch action applies when the automation has none. A reuse start that finds no role session in the task worktree starts fresh if the launch action permits it. When `alwaysStartQaReviewsFresh` is on, a role that writes a review artifact starts fresh instead of a reuse or fork, if the launch action permits fresh.
+- Signals and automations. An event outcome can raise a signal with its source role. A signal lists the automations that the user can attach to it. An automation names the launch action that Autopilot starts and its start mode. Autopilot continues the latest task session of the automation role. An automation can also name the core pull request launch `pull_request`. Then Autopilot uses the latest task session of any pull request role, and the launch runs as the role of that session. With an empty `pullRequestRoles` list, it uses the latest session of any role. Autopilot skips the pull request launch when no such session exists. The default start mode of the launch action applies when the automation has none. A reuse start that finds no role session in the task worktree starts fresh if the launch action permits it. When `alwaysStartQaReviewsFresh` is on, a role that writes a review artifact starts fresh instead of a reuse or fork, if the launch action permits fresh.
 - Action order and priority. Task cards show actions in the declared order. The first matching priority rule selects the primary action.
-- Prompts. Every workflow provides the base prompts of `WORKFLOW_PROMPT_IDS` in `packages/contracts`: `workflow.rules`, `workflow.tool_rules`, `workflow.task_context`, and `workflow.read_only_rejection`. The system prompt of a session is the role instructions, then the first three, in this order. `workflow.read_only_rejection` rejects a mutating tool of a read-only role. Each launch action names a prompt in the `messages.` group, which the session gets as its first message or as a message in a running session.
+- Prompts. Every workflow provides the base prompts of `WORKFLOW_PROMPT_IDS` in `packages/contracts`: `workflow.rules`, `workflow.tool_rules`, `workflow.task_context`, `workflow.read_only_rejection`, and `messages.pull_request`. The system prompt of a session is the role instructions, then the first three, in this order. `workflow.read_only_rejection` rejects a mutating tool of a read-only role. `messages.pull_request` is the message of the core pull request launch, and it must keep the `git.targetBranch` placeholder. Each launch action names a prompt in the `messages.` group, which the session gets as its first message or as a message in a running session.
 - Merge detection. A state with `mergeDetection` lets the host check the task branch for a merge.
 
 Roles are separate from workflows. The host role catalog holds the built-in roles (`BUILTIN_ROLES` in `packages/workflows/src/builtin/roles/roles.ts`) and will hold custom roles. A catalog role (`agentRoleDefinitionSchema`) owns its label, `odt_*` tools, workspace access, working location, runtime scopes, icon, default panel, and system prompt. A workflow cannot change these. `createTaskWorkflow` merges each binding with its catalog role, and fails for an unknown role ID. The workflow catalog sends each role once. Model defaults and runtime role overrides stay keyed by role ID. The host rejects two workflows that bind one role ID to different catalog roles.
@@ -277,10 +278,12 @@ Managed and external MCP clients use the same bridge. The host alone owns SQLite
 
 ## Generate a pull request
 
-1. The approval flow starts Builder with `build_pull_request_generation`.
-2. The launch uses `reuse` or `fork` from an existing Builder session.
-3. Builder uses provider Git or GitHub tools to create or update the pull request.
-4. Builder calls `odt_set_pull_request`.
+Pull request generation is an OpenDucktor feature. No workflow declares its launch. `PULL_REQUEST_LAUNCH` in `packages/workflows/src/task-workflow/pull-request-launch.ts` defines the core launch `pull_request` (`PULL_REQUEST_LAUNCH_ID` in `packages/contracts`). It continues or forks a session in the task worktree, with `reuse` as the default start mode. It sends the `messages.pull_request` prompt of the workflow with the task target branch.
+
+1. The approval dialog, the Agent Studio quick action, and the mobile quick action start the core launch. They show it while the task is not closed and its approval is available (`pullRequestLaunchAvailable(task)`), and while the Git provider supports pull requests.
+2. The user selects a session of a pull request role. With an empty `pullRequestRoles` list, every task session can create the pull request. The launch runs as the role of the selected session. The manual launch request names that role, and the host checks that the source session has it.
+3. The agent uses provider Git or GitHub tools to create or update the pull request.
+4. The agent calls `odt_set_pull_request`.
 5. The host resolves the configured provider and pull request number, then stores the canonical metadata.
 
 The page does not parse chat text to create a pull request.

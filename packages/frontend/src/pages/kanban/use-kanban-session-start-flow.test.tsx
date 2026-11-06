@@ -25,7 +25,7 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toast } from "sonner";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { editTaskWorkflow, withEditedTaskWorkflow } from "@/test-utils/edited-task-workflow";
+import { editTaskWorkflow } from "@/test-utils/edited-task-workflow";
 import { sonnerFeedback } from "@/lib/sonner-feedback";
 import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { ChecksOperationsContext, ChecksStateContext } from "@/state/app-state-contexts";
@@ -444,90 +444,6 @@ describe("useKanbanSessionStartFlow", () => {
     }
   });
 
-  test.each(["kickoff", "message"] as const)(
-    "offers a declared fresh %s PR launch without any prior session",
-    async (kind) => {
-      const errorSpy = spyOn(toast, "error").mockImplementation(() => "test-error");
-      const args = createBaseArgs();
-      args.sessions = [];
-      args.repoSettings = createDefaultRepoSettings();
-      let submitted: Parameters<HookArgs["runSessionStartWorkflow"]>[0] | undefined;
-      args.runSessionStartWorkflow = async (input) => {
-        submitted = input;
-        return { ...sessionIdentity("session-new"), postStartActionError: null };
-      };
-      let launchId = "";
-      const task = withEditedTaskWorkflow(args.tasks[0]!, (definition, templates) => {
-        const launch = definition.steps
-          .flatMap((step) => (step.kind === "agent" ? step.launchActions : []))
-          .find(({ context }) => context === "pull_request")!;
-        launchId = launch.id;
-        launch.template.kind = kind;
-        const template = templates.find(({ id }) => id === launch.template.id)!;
-        template.purpose = kind;
-        if (kind === "message")
-          template.template = "Prepare {{task.title}} against {{git.targetBranch}}";
-        launch.startModes = ["fresh"];
-        launch.defaultStartMode = "fresh";
-        for (const automation of definition.automations) {
-          if (automation.launchActionId === launch.id) automation.startMode = "fresh";
-        }
-      });
-      args.tasks = [task, ...args.tasks.slice(1)];
-      const launch = task.taskWorkflow.launchAction(launchId);
-      const harness = createHookHarness(args);
-      let started: Promise<string | undefined> | undefined;
-      let failure: unknown;
-      await harness.mount();
-      try {
-        await harness.run((state) => {
-          started = state.onPullRequestGenerate(task.id, launch.id).catch((cause) => {
-            failure = cause;
-            return undefined;
-          });
-        });
-        expect(failure).toBeUndefined();
-        expect(harness.getLatest().sessionStartModal?.availableStartModes).toEqual(["fresh"]);
-        await harness.waitFor(
-          (state) =>
-            state.sessionStartModal !== null && !state.sessionStartModal.isKickoffPromptLoading,
-        );
-        expect(harness.getLatest().sessionStartModal?.kickoffPromptError).toBeNull();
-        await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
-        await harness.run((state) => {
-          state.sessionStartModal?.onSelectRuntimeProfile("builder");
-          state.sessionStartModal?.onSelectModelPair({
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-          });
-        });
-        await harness.run(async (state) => {
-          await state.sessionStartModal?.onConfirm({
-            runInBackground: false,
-            startMode: "fresh",
-            sourceSessionOptionValue: null,
-            targetBranch: "refs/remotes/origin/release/2026.04",
-          });
-        });
-        expect(errorSpy.mock.calls).toEqual([]);
-        expect(submitted).toBeDefined();
-        expect(await started).toBe("session-new");
-        expect(submitted?.request.launchActionId).toBe(launch.id);
-        expect(submitted?.request.postStartAction).toBe(
-          kind === "message" ? "send_message" : "kickoff",
-        );
-        expect(submitted?.decision.targetBranch).toEqual({
-          remote: "origin",
-          branch: "release/2026.04",
-        });
-      } finally {
-        errorSpy.mockRestore();
-        await harness.unmount();
-      }
-    },
-  );
-
   test("opens the shared session start modal for pull request generation with reuse as the default builder flow", async () => {
     const harness = createHookHarness(createBaseArgs());
     let startPromise: Promise<string | undefined> | undefined;
@@ -580,41 +496,6 @@ describe("useKanbanSessionStartFlow", () => {
     expect(await startPromise).toBeUndefined();
 
     await harness.unmount();
-  });
-
-  test("keeps the selected pull request launch when a role declares two choices", async () => {
-    const args = createBaseArgs();
-    args.tasks = [
-      withEditedTaskWorkflow(args.tasks[0]!, (definition) => {
-        const step = definition.steps.find(
-          (step) => step.kind === "agent" && step.roleId === "build",
-        );
-        if (!step || step.kind !== "agent") throw new Error("Expected builder step");
-        const initial = step.launchActions.find(({ context }) => context === "pull_request")!;
-        step.launchActions.push({
-          ...initial,
-          id: "alternate_pull_request",
-          label: "Alternate PR",
-          startModes: ["fork"],
-          defaultStartMode: "fork",
-        });
-      }),
-      ...args.tasks.slice(1),
-    ];
-    const harness = createHookHarness(args);
-    let startPromise: Promise<string | undefined> | undefined;
-    try {
-      await harness.mount();
-      await harness.run((state) => {
-        startPromise = state.onPullRequestGenerate("TASK-1", "alternate_pull_request");
-      });
-      expect(harness.getLatest().sessionStartModal?.availableStartModes).toEqual(["fork"]);
-      expect(harness.getLatest().sessionStartModal?.description).toBe("Fork an existing session.");
-      await harness.run((state) => state.sessionStartModal?.onOpenChange(false));
-      expect(await startPromise).toBeUndefined();
-    } finally {
-      await harness.unmount();
-    }
   });
 
   test("pull request generation resolves with the started builder session id using reuse by default", async () => {
@@ -908,7 +789,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     await expect(startPromise).rejects.toThrow(
-      'No Builder session is available to fork or reuse for task "TASK-1".',
+      'No session that can create the pull request is available to fork or reuse for task "TASK-1".',
     );
     expect(harness.getLatest().sessionStartModal).toBeNull();
 
@@ -921,7 +802,7 @@ describe("useKanbanSessionStartFlow", () => {
     const baseArgs = createBaseArgs();
     const harness = createHookHarness({
       ...baseArgs,
-      tasks: [createTaskCardFixture({ id: "TASK-1", status: "ready_for_dev" })],
+      tasks: [createTaskCardFixture({ id: "TASK-1", status: "human_review" })],
       sessions: baseArgs.sessions.map((session) => ({ ...session, selectedModel: null })),
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
     });

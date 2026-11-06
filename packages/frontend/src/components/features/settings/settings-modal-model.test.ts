@@ -329,7 +329,7 @@ describe("settings-modal-model", () => {
         baseVersion: 1,
         enabled: true,
       },
-      [specPlanBuildPromptKey("messages.build_pull_request")]: {
+      [specPlanBuildPromptKey("messages.pull_request")]: {
         template:
           "Bad {{task.foo}} and {{unknown.value}} with {{git.targetBranch}} and {{git.pullRequestBaseBranch}}",
         baseVersion: 1,
@@ -338,7 +338,7 @@ describe("settings-modal-model", () => {
     } satisfies RepoPromptOverrides;
 
     expect(buildPromptOverrideValidationErrors(overrides, builtinSettingsTemplates)).toEqual({
-      [specPlanBuildPromptKey("messages.build_pull_request")]:
+      [specPlanBuildPromptKey("messages.pull_request")]:
         "Unsupported placeholders: {{task.foo}}, {{unknown.value}}, {{git.pullRequestBaseBranch}}.",
     });
   });
@@ -360,7 +360,7 @@ describe("settings-modal-model", () => {
 
   test("ignores validation errors in disabled prompt overrides", () => {
     const overrides = {
-      [specPlanBuildPromptKey("messages.build_pull_request")]: {
+      [specPlanBuildPromptKey("messages.pull_request")]: {
         template: "Publish the pull request.",
         baseVersion: 4,
         enabled: false,

@@ -1,10 +1,7 @@
 import type { TaskApprovalContext } from "@openducktor/contracts";
 import type { PullRequestDraftMode, TaskApprovalMode } from "./task-approval-types";
 
-export type TaskApprovalFlowStage =
-  | "approval"
-  | "complete_direct_merge"
-  | "missing_builder_worktree";
+export type TaskApprovalFlowStage = "approval" | "complete_direct_merge" | "missing_worktree";
 export type TaskApprovalMergeMethod = "merge_commit" | "squash" | "rebase";
 
 export type TaskApprovalWorkspaceIdentity = {
@@ -60,7 +57,7 @@ export type TaskApprovalFlowAction =
       type: "load_succeeded";
       approvalContext: TaskApprovalContext;
     } & TaskApprovalFlowOpenPayload)
-  | ({ type: "load_missing_builder_worktree" } & TaskApprovalFlowOpenPayload)
+  | ({ type: "load_missing_worktree" } & TaskApprovalFlowOpenPayload)
   | ({ type: "load_failed"; approvalContextError: string } & TaskApprovalFlowOpenPayload)
   | { type: "close" }
   | { type: "start_submitting" }
@@ -140,12 +137,12 @@ const buildTaskApprovalLoadedState = (
   workspaceIdentity: payload.workspaceIdentity,
 });
 
-const buildMissingBuilderWorktreeState = (
+const buildMissingWorktreeState = (
   payload: TaskApprovalFlowOpenPayload,
 ): TaskApprovalFlowOpenState => ({
   kind: "open",
   phase: "ready",
-  stage: "missing_builder_worktree",
+  stage: "missing_worktree",
   taskId: payload.taskId,
   mode: payload.mode,
   mergeMethod: "merge_commit",
@@ -170,8 +167,8 @@ export function taskApprovalFlowReducer(
       return buildTaskApprovalLoadingState(action);
     case "load_succeeded":
       return buildTaskApprovalLoadedState(action);
-    case "load_missing_builder_worktree":
-      return buildMissingBuilderWorktreeState(action);
+    case "load_missing_worktree":
+      return buildMissingWorktreeState(action);
     case "load_failed":
       return {
         ...buildTaskApprovalLoadingState(action),

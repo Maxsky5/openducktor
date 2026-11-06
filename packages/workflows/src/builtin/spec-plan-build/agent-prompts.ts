@@ -1,8 +1,10 @@
-import type {
-  IssueType,
-  GitConflictOperation,
-  GitTargetBranch,
-  RepoPromptOverrides,
+import {
+  PULL_REQUEST_LAUNCH_ID,
+  WORKFLOW_PROMPT_IDS,
+  type IssueType,
+  type GitConflictOperation,
+  type GitTargetBranch,
+  type RepoPromptOverrides,
 } from "@openducktor/contracts";
 import {
   requirePullRequestTarget,
@@ -90,13 +92,14 @@ export type BuildReadOnlyPermissionRejectionMessageInput = {
 const prompts = specPlanBuildWorkflow.prompts;
 
 /** The launch action of each kickoff and message template. Built-in templates have one each. */
-const launchActionByTemplate = new Map(
-  specPlanBuildWorkflow.definition.steps.flatMap((step) =>
+const launchActionByTemplate = new Map<string, string>([
+  ...specPlanBuildWorkflow.definition.steps.flatMap((step) =>
     step.kind === "agent"
       ? step.launchActions.map((launch) => [launch.template.id, launch.id] as const)
       : [],
   ),
-);
+  [WORKFLOW_PROMPT_IDS.pullRequest, PULL_REQUEST_LAUNCH_ID],
+]);
 const launchActionOf = (templateId: string): string => {
   const launchActionId = launchActionByTemplate.get(templateId);
   if (launchActionId === undefined) {
@@ -151,7 +154,7 @@ export const buildGitConflictAssistancePrompt = (input: {
 };
 
 export const resolvePullRequestTarget = (targetBranch: GitTargetBranch | undefined): string =>
-  requirePullRequestTarget("messages.build_pull_request", targetBranch);
+  requirePullRequestTarget(WORKFLOW_PROMPT_IDS.pullRequest, targetBranch);
 
 /** The prompts of the Spec, Plan, Build workflow and of the roles that it binds. */
 export const listSpecPlanBuildPromptTemplates = (): OwnedPromptTemplate[] =>
@@ -169,6 +172,7 @@ export const buildAgentKickoffPromptBundle = (
 ): BuiltAgentPrompt =>
   prompts.kickoffPrompt({
     launchActionId: launchActionOf(input.templateId),
+    role: input.role,
     task: input.task,
     humanFeedback: input.extraPlaceholders?.humanFeedback,
     targetBranch: input.git?.targetBranch,

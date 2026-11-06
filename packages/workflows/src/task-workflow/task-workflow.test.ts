@@ -133,10 +133,75 @@ describe("createTaskWorkflow", () => {
     expect(review.launchAction("write_revise").role).toBe("writer");
     expect(review.automation("startEditor")).toMatchObject({
       launchActionId: "edit_review",
-      role: "editor",
+      roles: ["editor"],
     });
     expect(review.roleStartEvent("writer")).toBe("start-writing");
     expect(review.roleStartEvent("editor")).toBeUndefined();
+  });
+
+  test("lets every role create the pull request when the workflow names no pull request role", () => {
+    expect(review.pullRequestRoles).toEqual([]);
+    expect(review.createsPullRequest("writer")).toBe(true);
+    expect(review.createsPullRequest("editor")).toBe(true);
+    expect(review.createsPullRequest("missing")).toBe(false);
+    expect(review.launchAction("pull_request", "editor")).toMatchObject({
+      id: "pull_request",
+      role: "editor",
+      startModes: ["reuse", "fork"],
+      defaultStartMode: "reuse",
+      template: { kind: "kickoff", id: "messages.pull_request" },
+      targetBranch: true,
+      requiresWorktree: true,
+    });
+    expect(() => review.launchAction("pull_request")).toThrow("needs the role of its session");
+    expect(review.prompts.templateRoles("messages.pull_request")).toEqual(["writer", "editor"]);
+  });
+
+  test("limits the pull request launch to the declared pull request roles", () => {
+    const workflow = withChange((definition) => {
+      definition.pullRequestRoles = ["writer"];
+    })();
+    expect(workflow.createsPullRequest("writer")).toBe(true);
+    expect(workflow.createsPullRequest("editor")).toBe(false);
+    expect(() => workflow.launchAction("pull_request", "editor")).toThrow(
+      'Role "editor" cannot create pull requests',
+    );
+    expect(workflow.prompts.templateRoles("messages.pull_request")).toEqual(["writer"]);
+    const prompt = workflow.prompts.kickoffPrompt({
+      launchActionId: "pull_request",
+      role: "writer",
+      task: { taskId: "task-1" },
+      targetBranch: { remote: "origin", branch: "main" },
+    }).prompt;
+    expect(prompt).toBe("Publish the pull request of task-1 against main.");
+  });
+
+  test("gives a pull request automation every pull request role as a candidate", () => {
+    const automate = (pullRequestRoles: string[]) =>
+      withChange((definition) => {
+        definition.pullRequestRoles = pullRequestRoles;
+        definition.automations[0]!.launchActionId = "pull_request";
+        delete definition.automations[0]!.startMode;
+      })().automation("startEditor");
+    expect(automate([])).toMatchObject({ roles: ["writer", "editor"], startMode: "reuse" });
+    expect(automate(["editor", "writer"]).roles).toEqual(["writer", "editor"]);
+    expect(automate(["editor"]).roles).toEqual(["editor"]);
+  });
+
+  test("offers the pull request launch only while the task approval is available", () => {
+    expect(review.pullRequestLaunchAvailable(reviewTask({ status: "approval" }))).toBe(true);
+    expect(review.pullRequestLaunchAvailable(reviewTask({ status: "open" }))).toBe(false);
+    expect(review.pullRequestLaunchAvailable(reviewTask({ status: "closed" }))).toBe(false);
+  });
+
+  test("requires the pull request prompt in every workflow", () => {
+    expect(() =>
+      createTaskWorkflow(
+        reviewTaskDefinition(),
+        reviewTaskPromptTemplates.filter(({ id }) => id !== "messages.pull_request"),
+        reviewTaskRoles,
+      ),
+    ).toThrow('has no prompt template "messages.pull_request" for launch action "pull_request"');
   });
 
   test("reads state notifications and their default settings", () => {

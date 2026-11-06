@@ -1,6 +1,7 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
+  isPullRequestLaunch,
   resolveWorkflowAction,
   type ResolvedTaskCard,
   type WorkflowLaunchActionId as SessionLaunchActionId,
@@ -34,10 +35,10 @@ const sheetLaunch = (task: ResolvedTaskCard, request: StartRequest) => {
       "This action does not start a session. Close this sheet and use the task actions.",
     );
   const launch = request.kind === "launch" ? request.launch : operation!.launchActionId;
-  const choice = task.taskWorkflow.launchAction(launch);
+  const choice = task.taskWorkflow.launchDefinition(launch);
   if (choice.context === "human_feedback")
     throw new Error("Use Request Changes to provide feedback before this session.");
-  return { launch, choice };
+  return { launch };
 };
 
 const startRequestOf = (action: string | null, launch: string | null): StartRequest | null =>
@@ -89,9 +90,9 @@ function StartSessionContent({
   const run = () => {
     if (!task) return;
     try {
-      const { launch, choice } = sheetLaunch(task, request);
-      if (choice.context === "pull_request") {
-        void flow.onPullRequestGenerate(task.id, launch).catch((cause) =>
+      const { launch } = sheetLaunch(task, request);
+      if (isPullRequestLaunch(launch)) {
+        void flow.onPullRequestGenerate(task.id).catch((cause) =>
           feedback.show("error", "The pull request session did not start.", {
             description: errorMessage(cause),
           }),

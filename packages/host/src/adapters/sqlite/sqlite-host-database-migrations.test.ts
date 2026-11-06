@@ -146,12 +146,14 @@ test("0002 moves prompt overrides to their owners, Autopilot rules to the built-
           `INSERT INTO global_prompt_overrides (template_id, template, base_version, enabled) VALUES
            ('system.role.build.base', 'global build', 1, 1),
            ('system.shared.workflow_guards', 'global guards', 2, 0),
-           ('kickoff.qa_review', 'global kickoff', 3, NULL)`,
+           ('kickoff.qa_review', 'global kickoff', 3, NULL),
+           ('kickoff.build_pull_request_generation', 'global pull request', 5, 1)`,
         );
         yield* run(
           `INSERT INTO workspace_prompt_overrides (workspace_id, template_id, template, base_version, enabled) VALUES
            ('ws', 'system.role.qa.base', 'workspace qa', 1, 1),
-           ('ws', 'message.build_rebase_conflict_resolution', 'workspace message', 4, 0)`,
+           ('ws', 'message.build_rebase_conflict_resolution', 'workspace message', 4, 0),
+           ('ws', 'kickoff.build_pull_request_generation', 'workspace pull request', 6, 1)`,
         );
         yield* run(
           `INSERT INTO autopilot_rules (workflow_id, event_id) VALUES
@@ -190,12 +192,14 @@ test("0002 moves prompt overrides to their owners, Autopilot rules to the built-
   const specPlanBuild = "openducktor-spec-plan-build";
   expect(result.globalOverrides).toEqual([
     ["role", "build", "instructions", "global build", 1, 1],
+    ["workflow", specPlanBuild, "messages.pull_request", "global pull request", 5, 1],
     ["workflow", specPlanBuild, "messages.qa_review", "global kickoff", 3, null],
     ["workflow", specPlanBuild, "workflow.rules", "global guards", 2, 0],
   ]);
   expect(result.workspaceOverrides).toEqual([
     ["ws", "role", "qa", "instructions", "workspace qa", 1, 1],
     ["ws", "workflow", specPlanBuild, "messages.build_git_conflict", "workspace message", 4, 0],
+    ["ws", "workflow", specPlanBuild, "messages.pull_request", "workspace pull request", 6, 1],
   ]);
   expect(result.rules).toEqual([
     ["custom", "taskProgressedToSpecReady"],

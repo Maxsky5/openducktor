@@ -285,7 +285,7 @@ export function useAgentStudioSessionActions({
   });
   const kickoffLabel =
     selectedTask && launchActionId
-      ? selectedTask.taskWorkflow.launchAction(launchActionId).label
+      ? selectedTask.taskWorkflow.launchDefinition(launchActionId).label
       : "Start session";
   const canStopSession =
     selectedSessionIdentity !== null &&

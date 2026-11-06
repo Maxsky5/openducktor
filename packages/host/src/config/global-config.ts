@@ -38,7 +38,7 @@ const LEGACY_WORKFLOW_PROMPT_IDS = new Map([
   ["kickoff.build_implementation_start", "messages.build_start"],
   ["kickoff.build_after_qa_rejected", "messages.build_after_qa_rejection"],
   ["kickoff.build_after_human_request_changes", "messages.build_requested_changes"],
-  ["kickoff.build_pull_request_generation", "messages.build_pull_request"],
+  ["kickoff.build_pull_request_generation", "messages.pull_request"],
   ["message.build_rebase_conflict_resolution", "messages.build_git_conflict"],
   ["kickoff.qa_review", "messages.qa_review"],
 ]);

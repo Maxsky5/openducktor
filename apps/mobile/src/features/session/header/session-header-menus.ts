@@ -1,4 +1,8 @@
-import { type ResolvedTaskCard, workflowRoleIcon } from "@openducktor/workflows";
+import {
+  isPullRequestLaunch,
+  type ResolvedTaskCard,
+  workflowRoleIcon,
+} from "@openducktor/workflows";
 import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import { formatElapsedAgo } from "@openducktor/frontend-core/lib/relative-time";
 import type { TaskSessionGroup } from "@/features/tasks/details/task-sessions-model";
@@ -56,7 +60,7 @@ export const quickActionItems = (
             option.taskAction.kind === "core"
               ? coreTaskActionIcon(option.taskAction.action)
               : taskActionIcon(option.taskAction.action, task);
-        else if (task.taskWorkflow.launchAction(option.launchActionId).context === "pull_request") {
+        else if (isPullRequestLaunch(option.launchActionId)) {
           item.icon = "git-pull-request";
         } else item.role = workflowRoleIcon(task.taskWorkflow, option.role);
         return item;

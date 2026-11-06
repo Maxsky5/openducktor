@@ -407,13 +407,13 @@ describe("buildAgentSystemPrompt", () => {
     ["messages.build_start", 5, 6, "build"],
     ["messages.build_after_qa_rejection", 5, 6, "build"],
     ["messages.build_requested_changes", 6, 7, "build"],
-    ["messages.build_pull_request", 8, 9, "build"],
+    ["messages.pull_request", 8, 9, "build"],
     ["messages.qa_review", 4, 5, "qa"],
   ] as const)(
     "keeps prior overrides and reports the new version for %s",
     (id, previous, current, role) => {
       let custom = "Custom {{task.id}}";
-      if (id === "messages.build_pull_request") {
+      if (id === "messages.pull_request") {
         custom += " {{git.targetBranch}}";
       }
       if (id === "messages.build_requested_changes") {
@@ -638,7 +638,7 @@ describe("kickoff and permission prompts", () => {
   test("pull request generation kickoff drives repo-aware publication for reused sessions and forks", () => {
     const result = buildAgentKickoffPromptBundle({
       role: "build",
-      templateId: "messages.build_pull_request",
+      templateId: "messages.pull_request",
       task: {
         taskId: "task-1",
       },
@@ -679,19 +679,19 @@ describe("kickoff and permission prompts", () => {
     expect(() =>
       buildAgentKickoffPrompt({
         role: "build",
-        templateId: "messages.build_pull_request",
+        templateId: "messages.pull_request",
         task: {
           taskId: "task-1",
         },
       }),
-    ).toThrow('Missing required git context for "messages.build_pull_request": targetBranch.');
+    ).toThrow('Missing required git context for "messages.pull_request": targetBranch.');
   });
 
   test("rejects an upstream-relative pull request target", () => {
     expect(() =>
       buildAgentKickoffPrompt({
         role: "build",
-        templateId: "messages.build_pull_request",
+        templateId: "messages.pull_request",
         task: {
           taskId: "task-1",
         },

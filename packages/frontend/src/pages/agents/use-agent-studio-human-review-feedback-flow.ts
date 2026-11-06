@@ -50,7 +50,8 @@ export function useAgentStudioHumanReviewFeedbackFlow({
   const shouldInterceptCreateSession = useCallback(
     (option: SessionCreateOption): boolean =>
       selectedTask !== null &&
-      selectedTask.taskWorkflow.launchAction(option.launchActionId).context === "human_feedback",
+      selectedTask.taskWorkflow.launchDefinition(option.launchActionId).context ===
+        "human_feedback",
     [selectedTask],
   );
   const openHumanReviewFeedback = useCallback(

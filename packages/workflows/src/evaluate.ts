@@ -1,4 +1,5 @@
 import {
+  PULL_REQUEST_LAUNCH_ID,
   TASK_CLOSED_STATE,
   TASK_OPEN_STATE,
   workflowConditionSchema,
@@ -15,6 +16,7 @@ import {
   type WorkflowValue,
 } from "@openducktor/contracts";
 import { deepFreeze } from "./deep-freeze";
+import { PULL_REQUEST_LAUNCH } from "./task-workflow/pull-request-launch";
 
 export type WorkflowEvaluationErrorCode =
   | "invalid_definition"
@@ -670,10 +672,19 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
     if (step.kind === "agent")
       checkIds(step.launchActions, `steps[${index}].launchActions`, launchActions);
   });
+  if (launchActions.has(PULL_REQUEST_LAUNCH_ID))
+    invalid(
+      `Launch action ID "${PULL_REQUEST_LAUNCH_ID}" names the core pull request launch. Use another ID.`,
+    );
+  // Automations and launch order rules can also name the core pull request launch.
+  const startableLaunches = new Set([...launchActions, PULL_REQUEST_LAUNCH_ID]);
 
   for (const core of [TASK_OPEN_STATE, TASK_CLOSED_STATE])
     if (!states.has(core))
       invalid(`Missing core state "${core}" in states. Declare it with its label and tone.`);
+  definition.pullRequestRoles.forEach((id, index) =>
+    checkReference(id, roles, "roles", `pullRequestRoles[${index}]`),
+  );
   definition.roles.forEach((role, index) =>
     role.writes.forEach((id, writeIndex) =>
       checkReference(id, artifacts, "artifacts", `roles[${index}].writes[${writeIndex}]`),
@@ -818,18 +829,19 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
       ),
     ),
   );
-  const launchStartModes = new Map(
-    definition.steps.flatMap((step) =>
+  const launchStartModes = new Map<string, readonly string[]>([
+    ...definition.steps.flatMap((step) =>
       step.kind === "agent"
         ? step.launchActions.map((launch) => [launch.id, launch.startModes] as const)
         : [],
     ),
-  );
+    [PULL_REQUEST_LAUNCH_ID, PULL_REQUEST_LAUNCH.startModes],
+  ]);
   definition.automations.forEach((automation, index) => {
     const path = `automations[${index}]`;
     checkReference(
       automation.launchActionId,
-      launchActions,
+      startableLaunches,
       "launch actions",
       `${path}.launchActionId`,
     );
@@ -854,7 +866,7 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
     rule.order.forEach((id, orderIndex) =>
       checkReference(
         id,
-        launchActions,
+        startableLaunches,
         "launch actions",
         `launchOrder[${index}].order[${orderIndex}]`,
       ),

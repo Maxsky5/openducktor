@@ -10,10 +10,18 @@ import {
   taskActionLabel,
 } from "./task-presentation";
 import {
+  createReviewTaskWorkflow,
+  reviewTaskPromptTemplates,
+  reviewTaskRoles,
+} from "../test-support/review-task-workflow";
+import { createTaskWorkflow } from "./task-workflow/task-workflow";
+import {
+  pullRequestRoleLabel,
   roleDefaultPanel,
   roleFocusArtifact,
   taskLaunchOrder,
   taskSessionHistory,
+  taskPullRequestSessions,
   taskSurfaceLaunches,
 } from "./task-launches";
 
@@ -110,9 +118,51 @@ describe("definition display fields", () => {
     expect(closed.taskWorkflow.approvalAvailable(closed)).toBe(false);
   });
 
+  test("the pull request sessions are the task sessions of the pull request roles, latest first", () => {
+    const task = createTaskCardFixture({ id: "TASK-1", status: "human_review" });
+    const session = (id: string, role: string, startedAt: string, taskId = "TASK-1") => ({
+      id,
+      taskId,
+      role,
+      startedAt,
+    });
+    const sessions = [
+      session("spec", "spec", "2026-01-03T00:00:00.000Z"),
+      session("build-old", "build", "2026-01-01T00:00:00.000Z"),
+      session("build-new", "build", "2026-01-02T00:00:00.000Z"),
+      session("other-task", "build", "2026-01-04T00:00:00.000Z", "TASK-2"),
+    ];
+    expect(taskPullRequestSessions(task, sessions).map(({ id }) => id)).toEqual([
+      "build-new",
+      "build-old",
+    ]);
+    const anyRole = { ...task, taskWorkflow: createReviewTaskWorkflow() };
+    const reviewSessions = [
+      session("writer", "writer", "2026-01-01T00:00:00.000Z"),
+      session("editor", "editor", "2026-01-02T00:00:00.000Z"),
+      session("removed-role", "spec", "2026-01-03T00:00:00.000Z"),
+    ];
+    expect(taskPullRequestSessions(anyRole, reviewSessions).map(({ id }) => id)).toEqual([
+      "editor",
+      "writer",
+    ]);
+  });
+
+  test("the pull request role label names only one declared pull request role", () => {
+    expect(pullRequestRoleLabel(createTaskCardFixture().taskWorkflow)).toBe("Builder");
+    expect(pullRequestRoleLabel(createReviewTaskWorkflow())).toBeNull();
+    const twoRoles = reviewTaskDefinition();
+    twoRoles.pullRequestRoles = ["writer", "editor"];
+    expect(
+      pullRequestRoleLabel(
+        createTaskWorkflow(twoRoles, reviewTaskPromptTemplates, reviewTaskRoles),
+      ),
+    ).toBeNull();
+  });
+
   test("launch order rules match the pull request presence", () => {
     const withoutPullRequest = createTaskCardFixture({ status: "human_review" });
-    expect(taskLaunchOrder(withoutPullRequest)[0]).toBe("build_pull_request_generation");
+    expect(taskLaunchOrder(withoutPullRequest)[0]).toBe("pull_request");
     const withPullRequest = createTaskCardFixture({
       status: "human_review",
       pullRequest: {

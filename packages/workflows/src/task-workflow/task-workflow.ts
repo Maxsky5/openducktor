@@ -1,19 +1,20 @@
-import type {
-  AgentRoleDefinition,
-  CompiledAgentRoleDefinition,
-  AgentSessionStartMode,
-  IssueType,
-  AgentWorkflowState,
-  AgentWorkflows,
-  CompiledWorkflowDefinition,
-  NotificationKindSetting,
-  TaskArtifactSummary,
-  WorkflowDefinition,
-  WorkflowReference,
-  TaskWorkflowStepState,
-  HostEffectId,
-  WorkflowInput,
-  WorkflowNotificationKind,
+import {
+  TASK_CLOSED_STATE,
+  type AgentRoleDefinition,
+  type CompiledAgentRoleDefinition,
+  type AgentSessionStartMode,
+  type IssueType,
+  type AgentWorkflowState,
+  type AgentWorkflows,
+  type CompiledWorkflowDefinition,
+  type NotificationKindSetting,
+  type TaskArtifactSummary,
+  type WorkflowDefinition,
+  type WorkflowReference,
+  type TaskWorkflowStepState,
+  type HostEffectId,
+  type WorkflowInput,
+  type WorkflowNotificationKind,
 } from "@openducktor/contracts";
 import { deepFreeze } from "../deep-freeze";
 import {
@@ -23,6 +24,7 @@ import {
   type WorkflowPredicate,
 } from "../evaluate";
 import { workflowNotificationDefaults } from "../notification-defaults";
+import { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./pull-request-launch";
 import { createTaskInputs, taskIssueTypes, type TaskFacts } from "./task-input";
 import {
   createTaskPrompts,
@@ -47,10 +49,17 @@ export type TaskWorkflowSurfaceLaunch = {
 };
 /** A view action that opens the latest session of its step role. */
 export type TaskWorkflowSessionView = { action: string; role: string; label: string };
-export type TaskWorkflowLaunchAction = AgentStep["launchActions"][number] & { role: string };
-/** An automation with the role of its launch action and the start mode that Autopilot uses. */
+/** A launch action as a workflow step or the core pull request launch declares it. */
+export type TaskWorkflowLaunchDefinition = AgentStep["launchActions"][number];
+export type TaskWorkflowLaunchAction = TaskWorkflowLaunchDefinition & { role: string };
+/**
+ * An automation with its candidate roles and the start mode that Autopilot uses. Autopilot
+ * continues the latest task session of a candidate role, and the launch runs as the role of that
+ * session. An automation of a workflow launch action has the one role of its step. An automation
+ * of the core pull request launch has every pull request role of the workflow.
+ */
 export type TaskWorkflowAutomation = Definition["automations"][number] & {
-  role: string;
+  roles: readonly string[];
   startMode: AgentSessionStartMode;
 };
 
@@ -113,6 +122,15 @@ export type TaskWorkflow = {
   readonly reviewArtifactCodes: readonly string[];
   /** Roles whose sessions run in the task worktree. */
   readonly worktreeRoles: readonly string[];
+  /** The declared pull request roles. Empty: the sessions of every role can create it. */
+  readonly pullRequestRoles: readonly string[];
+  /** Whether the sessions of the role can create the pull request of a task. */
+  createsPullRequest(roleId: string): boolean;
+  /**
+   * Whether the core pull request launch is available for the task: the task is not closed and
+   * its approval is available.
+   */
+  pullRequestLaunchAvailable(task: TaskFacts): boolean;
   usesWorktree(roleId: string): boolean;
   /** Whether merge detection checks the task branch of a task in this state. */
   detectsMerge(status: string): boolean;
@@ -144,7 +162,13 @@ export type TaskWorkflow = {
   eventSourceStates(eventId: string): readonly string[];
   /** Tasks with equal inputs share one frozen projection. */
   project(task: TaskFacts): TaskProjection;
-  launchAction(launchActionId: string): TaskWorkflowLaunchAction;
+  /**
+   * The launch action of an ID. The core pull request launch needs the role of the session that
+   * it continues or forks, because any pull request role can run it.
+   */
+  launchAction(launchActionId: string, role?: string): TaskWorkflowLaunchAction;
+  /** The launch action of an ID without its role, such as its start modes and its prompt. */
+  launchDefinition(launchActionId: string): TaskWorkflowLaunchDefinition;
   action(actionId: string): TaskWorkflowAction;
   /** The approval action of the workflow. Without it, no task of the workflow can be approved. */
   readonly approvalAction: TaskWorkflowAction | undefined;
@@ -249,20 +273,40 @@ export const createTaskWorkflow = (
       `Task workflow "${definition.id}" gives a role two agent steps. Give each role one agent step.`,
     );
   }
-  const launchAction = lookup(
+  const workflowLaunchAction = lookup(
     definition.id,
     "launch action",
     agentSteps.flatMap((step) =>
       step.launchActions.map((launch) => [launch.id, { ...launch, role: step.roleId }] as const),
     ),
   );
+  const createsPullRequest = (roleId: string) =>
+    rolesById.has(roleId) &&
+    (definition.pullRequestRoles.length === 0 || definition.pullRequestRoles.includes(roleId));
+  const launchAction = (launchActionId: string, roleId?: string): TaskWorkflowLaunchAction => {
+    if (!isPullRequestLaunch(launchActionId)) return workflowLaunchAction(launchActionId);
+    if (roleId === undefined)
+      throw new Error(
+        `The pull request launch of task workflow "${definition.id}" needs the role of its session. Select a session to continue.`,
+      );
+    if (!createsPullRequest(roleId))
+      throw new Error(
+        `Role "${roleId}" cannot create pull requests in task workflow "${definition.id}". Select a session of a pull request role.`,
+      );
+    return { ...PULL_REQUEST_LAUNCH, role: roleId };
+  };
+  const pullRequestRoleIds = roles.map(({ id }) => id).filter(createsPullRequest);
   const automation = lookup(
     definition.id,
     "automation",
-    definition.automations.map((entry) => {
-      const launch = launchAction(entry.launchActionId);
+    definition.automations.map((entry): readonly [string, TaskWorkflowAutomation] => {
+      if (isPullRequestLaunch(entry.launchActionId)) {
+        const startMode = entry.startMode ?? PULL_REQUEST_LAUNCH.defaultStartMode;
+        return [entry.id, { ...entry, roles: pullRequestRoleIds, startMode }] as const;
+      }
+      const launch = workflowLaunchAction(entry.launchActionId);
       const startMode = entry.startMode ?? launch.defaultStartMode;
-      return [entry.id, { ...entry, role: launch.role, startMode }] as const;
+      return [entry.id, { ...entry, roles: [launch.role], startMode }] as const;
     }),
   );
   const mergeDetectionStates = new Set(
@@ -296,7 +340,7 @@ export const createTaskWorkflow = (
       step.launchActions
         .filter((launch) => launch.surface === surface)
         .map((launch) => ({
-          launch: launchAction(launch.id),
+          launch: workflowLaunchAction(launch.id),
           stepId: step.id,
           show: evaluator.condition(launch.showWhen ?? true),
         })),
@@ -365,6 +409,12 @@ export const createTaskWorkflow = (
       .filter(({ kind }) => kind === "review")
       .map(({ id }) => id),
     worktreeRoles: [...worktreeRoleSet],
+    pullRequestRoles: definition.pullRequestRoles,
+    createsPullRequest,
+    pullRequestLaunchAvailable: (task) =>
+      task.status !== TASK_CLOSED_STATE &&
+      approvalAction !== undefined &&
+      project(task).availableActions.includes(approvalAction.id),
     detectsMerge: (status) => mergeDetectionStates.has(status),
     usesWorktree: (roleId) => worktreeRoleSet.has(roleId),
     state,
@@ -416,6 +466,10 @@ export const createTaskWorkflow = (
     eventSourceStates: (eventId) => event(eventId).from,
     project,
     launchAction,
+    launchDefinition: (launchActionId) =>
+      isPullRequestLaunch(launchActionId)
+        ? PULL_REQUEST_LAUNCH
+        : workflowLaunchAction(launchActionId),
     action,
     approvalAction,
     approvalAvailable: (task) =>

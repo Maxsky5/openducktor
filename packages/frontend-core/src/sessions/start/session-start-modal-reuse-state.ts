@@ -93,7 +93,7 @@ const resolveInitialStartState = ({
   launchActionId: SessionLaunchActionId;
   taskWorkflow: import("@openducktor/workflows").TaskWorkflow;
 }) => {
-  const allowedStartModes = taskWorkflow.launchAction(launchActionId).startModes;
+  const allowedStartModes = taskWorkflow.launchDefinition(launchActionId).startModes;
   const hasExistingSession = existingSessionOptions.length > 0;
   let selectedStartMode: AgentSessionStartMode;
 
@@ -200,7 +200,9 @@ export function useSessionStartModalReuseState({
 
   const availableStartModes = useMemo<AgentSessionStartMode[]>(
     () =>
-      intent ? [...intent.taskWorkflow.launchAction(intent.launchActionId).startModes] : ["fresh"],
+      intent
+        ? [...intent.taskWorkflow.launchDefinition(intent.launchActionId).startModes]
+        : ["fresh"],
     [intent],
   );
 

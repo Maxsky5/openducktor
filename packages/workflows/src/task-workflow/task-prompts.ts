@@ -1,5 +1,6 @@
 import {
   isOdtBrowserToolName,
+  PULL_REQUEST_LAUNCH_ID,
   promptOverrideKey,
   ROLE_INSTRUCTIONS_PROMPT_ID,
   validatePromptTemplatePlaceholders,
@@ -13,6 +14,7 @@ import {
   type RepoPromptOverrides,
 } from "@openducktor/contracts";
 import { formatOdtToolArgs } from "./prompt-tool-args";
+import { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./pull-request-launch";
 
 export type PromptPurpose = "system" | "kickoff" | "message" | "permission";
 
@@ -98,6 +100,8 @@ export type SystemPromptInput = {
 
 export type KickoffPromptInput = {
   launchActionId: string;
+  /** The role of the session. The core pull request launch needs it. */
+  role?: string | undefined;
   task: PromptTaskContext;
   humanFeedback?: string | undefined;
   targetBranch?: GitTargetBranch | undefined;
@@ -106,6 +110,8 @@ export type KickoffPromptInput = {
 
 export type MessagePromptInput = {
   launchActionId: string;
+  /** The role of the session. The core pull request launch needs it. */
+  role?: string | undefined;
   task: PromptTaskContext;
   git?: AgentPromptGitContext | undefined;
   humanFeedback?: string | undefined;
@@ -136,7 +142,7 @@ export type TaskPrompts = {
   findOverrideProblem(overrides: RepoPromptOverrides | undefined): string | undefined;
 };
 
-type LaunchTemplate = { templateId: string; kind: "kickoff" | "message"; context?: string };
+type LaunchTemplate = { templateId: string; kind: "kickoff" | "message" };
 
 /** How an error message names a prompt. */
 const promptName = (template: OwnedPromptTemplate, roleIds: readonly string[]): string =>
@@ -202,8 +208,8 @@ const placeholderProblem = (
 };
 
 /**
- * Checks that the workflow provides each base prompt and the prompt of each launch action. Every
- * other prompt ID is in the messages group.
+ * Checks that the workflow provides each base prompt and the prompt of each launch action, with
+ * the core pull request launch. Every other prompt ID is in the messages group.
  */
 const checkTemplates = (
   definition: CompiledWorkflowDefinition,
@@ -275,20 +281,23 @@ export const createTaskPrompts = (
   const templates = [...workflowTemplatesById.values(), ...roleTemplates];
   const templatesByKey = new Map(templates.map((template) => [template.key, template]));
   const rolesById = new Map(roles.map((role) => [role.id, role]));
-  const launchTemplates = new Map<string, LaunchTemplate>(
-    definition.steps.flatMap((step) =>
+  const launchTemplates = new Map<string, LaunchTemplate>([
+    ...definition.steps.flatMap((step) =>
       step.kind === "agent"
-        ? step.launchActions.map((launch) => {
-            const entry: LaunchTemplate = {
-              templateId: launch.template.id,
-              kind: launch.template.kind,
-            };
-            if (launch.context !== undefined) entry.context = launch.context;
-            return [launch.id, entry] as const;
-          })
+        ? step.launchActions.map(
+            (launch) =>
+              [launch.id, { templateId: launch.template.id, kind: launch.template.kind }] as const,
+          )
         : [],
     ),
-  );
+    [
+      PULL_REQUEST_LAUNCH_ID,
+      { templateId: PULL_REQUEST_LAUNCH.template.id, kind: PULL_REQUEST_LAUNCH.template.kind },
+    ],
+  ]);
+  const createsPullRequest = (roleId: string) =>
+    rolesById.has(roleId) &&
+    (definition.pullRequestRoles.length === 0 || definition.pullRequestRoles.includes(roleId));
   checkTemplates(definition, workflowTemplatesById, launchTemplates);
   const templateRolesByKey = new Map(
     templates.map((entry) => {
@@ -296,12 +305,14 @@ export const createTaskPrompts = (
         entry.roleIds ??
         roles
           .filter((role) =>
-            definition.steps.some(
-              (step) =>
-                step.kind === "agent" &&
-                step.roleId === role.id &&
-                step.launchActions.some((launch) => launch.template.id === entry.id),
-            ),
+            entry.ownerKind === "workflow" && entry.id === WORKFLOW_PROMPT_IDS.pullRequest
+              ? createsPullRequest(role.id)
+              : definition.steps.some(
+                  (step) =>
+                    step.kind === "agent" &&
+                    step.roleId === role.id &&
+                    step.launchActions.some((launch) => launch.template.id === entry.id),
+                ),
           )
           .map(({ id }) => id);
       for (const role of templateRoles)
@@ -466,7 +477,14 @@ export const createTaskPrompts = (
         : [],
     ),
   );
-  const roleOfLaunch = (launchActionId: string): string => {
+  const roleOfLaunch = (launchActionId: string, sessionRole: string | undefined): string => {
+    if (isPullRequestLaunch(launchActionId)) {
+      if (sessionRole === undefined || !createsPullRequest(sessionRole))
+        throw new Error(
+          `The pull request prompt of task workflow "${definition.id}" needs a session of a pull request role.`,
+        );
+      return sessionRole;
+    }
     const role = launchRole.get(launchActionId);
     if (role === undefined) {
       throw new Error(`Task workflow "${definition.id}" has no launch action "${launchActionId}".`);
@@ -483,16 +501,15 @@ export const createTaskPrompts = (
         placeholderValues({ role, task }),
         overrides,
       ),
-    kickoffPrompt: ({ launchActionId, task, humanFeedback, targetBranch, overrides }) => {
+    kickoffPrompt: ({ launchActionId, role, task, humanFeedback, targetBranch, overrides }) => {
       const launch = launchTemplate(launchActionId, "kickoff");
-      const pullRequestTarget =
-        launch.context === "pull_request"
-          ? requirePullRequestTarget(launch.templateId, targetBranch)
-          : undefined;
+      const pullRequestTarget = isPullRequestLaunch(launchActionId)
+        ? requirePullRequestTarget(launch.templateId, targetBranch)
+        : undefined;
       return buildPrompt(
         [workflowKey(launch.templateId)],
         placeholderValues({
-          role: roleOfLaunch(launchActionId),
+          role: roleOfLaunch(launchActionId, role),
           task,
           humanFeedback,
           pullRequestTarget,
@@ -500,7 +517,15 @@ export const createTaskPrompts = (
         overrides,
       );
     },
-    messagePrompt: ({ launchActionId, task, git, humanFeedback, targetBranch, overrides }) => {
+    messagePrompt: ({
+      launchActionId,
+      role,
+      task,
+      git,
+      humanFeedback,
+      targetBranch,
+      overrides,
+    }) => {
       const launch = launchTemplate(launchActionId, "message");
       if (git && !git.operationLabel?.trim()) {
         throw new Error(
@@ -510,14 +535,13 @@ export const createTaskPrompts = (
       return buildPrompt(
         [workflowKey(launch.templateId)],
         placeholderValues({
-          role: roleOfLaunch(launchActionId),
+          role: roleOfLaunch(launchActionId, role),
           task,
           git,
           humanFeedback,
-          pullRequestTarget:
-            launch.context === "pull_request"
-              ? requirePullRequestTarget(launch.templateId, targetBranch)
-              : undefined,
+          pullRequestTarget: isPullRequestLaunch(launchActionId)
+            ? requirePullRequestTarget(launch.templateId, targetBranch)
+            : undefined,
         }),
         overrides,
       );

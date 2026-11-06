@@ -292,17 +292,25 @@ export function useSessionStartModalRunner({
         scopeRef.current !== scopeKey
       )
         return;
-      const requestContext = pendingRun.request;
-
       confirmationsRef.current = new Map(confirmationsRef.current).set(scopeKey, pendingRun);
       setConfirmations(confirmationsRef.current);
       try {
         const decision = buildSessionStartModalDecision({
           input,
           existingSessionOptions,
-          requestContext,
+          requestContext: pendingRun.request,
           selectedModel: selection,
         });
+        // A source session of another role, as for the core pull request launch, gives the role.
+        const sourceRole =
+          decision.startMode === "fresh"
+            ? undefined
+            : existingSessionOptions.find(
+                (option) => option.value === input.sourceSessionOptionValue,
+              )?.role;
+        const requestContext = sourceRole
+          ? { ...pendingRun.request, role: sourceRole }
+          : pendingRun.request;
 
         if (decision.startMode === "reuse") {
           const sourceOption = existingSessionOptions.find(

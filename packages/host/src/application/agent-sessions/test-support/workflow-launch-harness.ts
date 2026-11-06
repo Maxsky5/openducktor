@@ -679,6 +679,7 @@ export const createLaunchHarness = async (
       externalSessionId: string,
       options: {
         role?: string;
+        startedAt?: string;
         selectedModel?: AgentSessionModelSelection;
         live?: boolean;
         working?: boolean;
@@ -691,7 +692,7 @@ export const createLaunchHarness = async (
         runtimeKind,
         workingDirectory,
         role: options.role ?? "build",
-        startedAt: timestamp,
+        startedAt: options.startedAt ?? timestamp,
         selectedModel: options.selectedModel ?? modelFor(runtimeKind),
       });
       if (options.live) {

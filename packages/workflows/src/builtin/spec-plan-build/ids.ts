@@ -36,7 +36,6 @@ const SPEC_PLAN_BUILD_LAUNCH_ACTION_IDS = [
   "build_implementation_start",
   "build_after_qa_rejected",
   "build_after_human_request_changes",
-  "build_pull_request_generation",
   "build_rebase_conflict_resolution",
   "qa_review",
 ] as const;
@@ -70,7 +69,7 @@ const SPEC_PLAN_BUILD_PROMPT_IDS = [
   "messages.build_start",
   "messages.build_after_qa_rejection",
   "messages.build_requested_changes",
-  "messages.build_pull_request",
+  "messages.pull_request",
   "messages.qa_review",
   "messages.build_git_conflict",
   "workflow.read_only_rejection",

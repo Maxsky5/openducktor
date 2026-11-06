@@ -56,7 +56,10 @@ export const createWorkflowLaunchClient = (args: FixtureArgs): WorkflowLaunchCli
     if (request.policy.kind !== "manual")
       throw new Error("This UI fixture requires a manual request.");
     args.onRequest?.(request);
-    const role = specPlanBuildWorkflow.launchAction(request.policy.actionId).role;
+    const role = specPlanBuildWorkflow.launchAction(
+      request.policy.actionId,
+      request.policy.role,
+    ).role;
     const base: WorkflowLaunchResult = {
       workspaceId: request.workspaceId,
       repoPath: request.repoPath,

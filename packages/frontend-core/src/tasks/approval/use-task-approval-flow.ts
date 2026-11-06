@@ -39,9 +39,9 @@ import {
 } from "./task-approval-transition-resolver";
 import { useTaskApprovalGitConflictFlow } from "./use-task-approval-git-conflict-flow";
 import { useClientConnection, useHostClient } from "../../connection/client-connection-react";
-import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+import { pullRequestRoleLabel, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
-import { availableWorktreeResetEvent } from "../workflow/task-action-destination";
+import { availableWorktreeResetAction } from "../workflow/task-action-destination";
 
 type UseTaskApprovalFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -238,9 +238,9 @@ export function useTaskApprovalFlow({
             taskId,
           );
           if (isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
-            if (approvalContextResult.outcome === "missing_builder_worktree") {
+            if (approvalContextResult.outcome === "missing_worktree") {
               dispatch({
-                type: "load_missing_builder_worktree",
+                type: "load_missing_worktree",
                 taskId,
                 mode: effectiveMode,
                 pullRequestDraftMode,
@@ -332,7 +332,7 @@ export function useTaskApprovalFlow({
     }
 
     if (
-      submissionRoute.kind === "close_missing_builder_worktree" ||
+      submissionRoute.kind === "close_missing_worktree" ||
       submissionRoute.kind === "close_task"
     ) {
       if (removeWorktree === null) return;
@@ -455,23 +455,23 @@ export function useTaskApprovalFlow({
     completeApproval,
   ]);
 
-  const resetMissingBuilderWorktree = useCallback((): void => {
+  const resetMissingWorktree = useCallback((): void => {
     if (
       !isTaskApprovalInteractive(state) ||
-      state.stage !== "missing_builder_worktree" ||
+      state.stage !== "missing_worktree" ||
       !hasSameWorkspaceIdentity(workspaceIdentityRef.current, state.workspaceIdentity)
     ) {
       return;
     }
 
-    const eventId = openTask ? availableWorktreeResetEvent(openTask) : null;
-    if (eventId === null) {
-      feedback.show("error", "Unable to reset implementation", {
+    const resetAction = openTask ? availableWorktreeResetAction(openTask) : null;
+    if (resetAction === null) {
+      feedback.show("error", "Unable to reset the worktree", {
         description: `Task ${state.taskId} offers no action that resets its worktree. Close the task instead.`,
       });
       return;
     }
-    if (openResetImplementation(state.taskId, eventId)) {
+    if (openResetImplementation(state.taskId, resetAction.eventId)) {
       reset();
     }
   }, [feedback, openResetImplementation, openTask, reset, state]);
@@ -544,9 +544,11 @@ export function useTaskApprovalFlow({
     confirm,
     dispatch,
     reset,
-    resetMissingBuilderWorktree,
+    resetMissingWorktree,
     state,
     taskTitle: openTask?.title ?? "",
+    pullRequestRoleLabel: openTask ? pullRequestRoleLabel(openTask.taskWorkflow) : null,
+    worktreeResetLabel: openTask ? (availableWorktreeResetAction(openTask)?.label ?? null) : null,
     removeWorktree,
     onRemoveWorktreeChange: (nextRemoveWorktree: boolean) => {
       dispatch({ type: "clear_error" });

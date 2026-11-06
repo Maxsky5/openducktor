@@ -600,8 +600,6 @@ test.each([
   { context: "none" as const, override: true },
   { context: "human_feedback" as const, override: false },
   { context: "human_feedback" as const, override: true },
-  { context: "pull_request" as const, override: false },
-  { context: "pull_request" as const, override: true },
 ])(
   "renders declared message instructions at the shared launch interface: %j",
   async ({ context, override }) => {
@@ -621,11 +619,6 @@ test.each([
         contents: "{{humanFeedback}}",
         required: ["humanFeedback"] as const,
         expected: "Revise the introduction.",
-      },
-      pull_request: {
-        contents: "{{git.targetBranch}}",
-        required: ["git.targetBranch"] as const,
-        expected: "chosen",
       },
     };
     const { contents, required, expected } = samples[context];

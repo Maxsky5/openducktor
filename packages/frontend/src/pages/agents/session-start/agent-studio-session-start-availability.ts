@@ -40,6 +40,6 @@ export const canUseAgentStudioKickoffPrompt = ({
   selectedTask,
 }: AgentStudioKickoffAvailabilityInput): boolean => {
   if (!selectedTask || !launchActionId) return false;
-  const selectedLaunchAction = selectedTask.taskWorkflow.launchAction(launchActionId);
+  const selectedLaunchAction = selectedTask.taskWorkflow.launchDefinition(launchActionId);
   return canStartSession && selectedLaunchAction.template.kind === "kickoff";
 };

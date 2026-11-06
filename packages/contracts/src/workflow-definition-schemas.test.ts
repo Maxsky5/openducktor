@@ -24,6 +24,7 @@ const createDefinition = (): WorkflowDefinition => ({
   ],
   issueTypes: [],
   roles: [{ id: "reviewer", writes: ["release-review"] }],
+  pullRequestRoles: ["reviewer"],
   artifacts: [
     { id: "release-notes", label: "Release notes", shortLabel: "Notes", kind: "document" },
     {
@@ -73,7 +74,7 @@ const createDefinition = (): WorkflowDefinition => ({
           defaultStartMode: "reuse",
           template: { kind: "kickoff", id: "messages.review" },
           selectWhen: { artifact: "release-notes", present: true },
-          context: "pull_request",
+          context: "human_feedback",
           targetBranch: true,
           requiresWorktree: false,
         },
@@ -191,6 +192,21 @@ describe("workflow definition schemas", () => {
     expect(rejected.error?.issues.map(({ message }) => message)).toContain(
       'A launch action prompt ID starts with "messages.".',
     );
+  });
+
+  test("defaults the pull request roles to every role and keeps no pull request launch context", () => {
+    const { pullRequestRoles: _roles, ...withoutRoles } = createDefinition();
+    expect(workflowDefinitionSchema.parse(withoutRoles).pullRequestRoles).toEqual([]);
+    const definition = createDefinition();
+    const step = definition.steps[0];
+    if (step?.kind !== "agent") throw new Error("Expected an agent step.");
+    const launch = step.launchActions[0]!;
+    expect(
+      workflowDefinitionSchema.safeParse({
+        ...definition,
+        steps: [{ ...step, launchActions: [{ ...launch, context: "pull_request" }] }],
+      }).success,
+    ).toBe(false);
   });
 
   test("lets a workflow support a subset of the fixed issue types and no other type", () => {

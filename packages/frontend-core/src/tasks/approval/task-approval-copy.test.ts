@@ -6,7 +6,9 @@ import {
   getDirectMergeCompletionContextError,
   getTaskApprovalSubmitState,
   taskApprovalCompletionNextStepText,
+  taskApprovalGeneratePullRequestNotice,
   taskApprovalModeOptions,
+  taskApprovalPullRequestDraftOptions,
   taskApprovalSquashCommitHint,
   taskApprovalUncommittedChangesMessage,
 } from "./task-approval-copy";
@@ -62,6 +64,7 @@ const approvalModel = (
   mode: "direct_merge",
   mergeMethod: "merge_commit",
   pullRequestDraftMode: "manual",
+  pullRequestRoleLabel: "Builder",
   pullRequestSupported: true,
   pullRequestAvailable: true,
   pullRequestUnavailableReason: null,
@@ -122,6 +125,35 @@ describe("taskApprovalModeOptions", () => {
       { value: "pull_request", label: "Pull request", disabled: true },
       { value: "close_task", label: "Close task", disabled: false },
     ]);
+  });
+});
+
+describe("pull request draft labels", () => {
+  test("name the one pull request role of the workflow", () => {
+    expect(taskApprovalPullRequestDraftOptions("Builder")[1]).toEqual({
+      value: "generate_ai",
+      label: "Ask Builder",
+      description: "Let Builder create or update the pull request.",
+    });
+    expect(taskApprovalGeneratePullRequestNotice("Builder")).toBe(
+      "Next, choose the Builder session to use.",
+    );
+  });
+
+  test("name an agent when the workflow names zero or several pull request roles", () => {
+    expect(taskApprovalPullRequestDraftOptions(null)[1]).toEqual({
+      value: "generate_ai",
+      label: "Ask agent",
+      description: "Let an agent create or update the pull request.",
+    });
+    expect(taskApprovalGeneratePullRequestNotice(null)).toBe("Next, choose the session to use.");
+    expect(
+      submitState({
+        mode: "pull_request",
+        pullRequestDraftMode: "generate_ai",
+        pullRequestRoleLabel: null,
+      }).confirmLabel,
+    ).toBe("Choose session");
   });
 });
 

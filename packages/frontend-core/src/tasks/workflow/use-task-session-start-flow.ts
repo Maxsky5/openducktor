@@ -6,11 +6,11 @@ import {
 import type { SessionStartWorkflowResult } from "../../sessions/start/session-start-workflow";
 import { useSessionStartContext } from "../../sessions/start/use-session-start-context";
 import type { GitBranch } from "@openducktor/contracts";
+import { PULL_REQUEST_LAUNCH_ID } from "@openducktor/contracts";
 import {
   defaultSessionLaunchActionForRole,
   type WorkflowRoleId as AgentRole,
   type ResolvedTaskCard as TaskCard,
-  taskPullRequestLaunch,
   launchSessionCommand,
 } from "@openducktor/workflows";
 import { useCallback, useMemo } from "react";
@@ -21,7 +21,7 @@ import type { SessionTargetOptions } from "../board/session-target-resolution";
 import { resolvePreferredActiveSession } from "../board/session-target-resolution";
 import type { HumanReviewFeedbackModalModel } from "./human-review-feedback-types";
 import { useHumanReviewFeedback } from "./use-human-review-feedback";
-import { buildReusableSessionOptions } from "../../sessions/start/session-start-reuse-options";
+import { buildPullRequestSessionOptions } from "../../sessions/start/session-start-reuse-options";
 import {
   buildSessionStartModalRequest,
   type RunSessionStartWorkflow,
@@ -71,7 +71,8 @@ export type UseTaskSessionStartFlowResult = {
     intent: SessionStartFlowRequest,
     committedTask?: TaskCard,
   ) => Promise<SessionStartWorkflowResult | undefined>;
-  onPullRequestGenerate: (taskId: string, launchActionId?: string) => Promise<string | undefined>;
+  /** Starts the core pull request launch from a session that can create the pull request. */
+  onPullRequestGenerate: (taskId: string) => Promise<string | undefined>;
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onHumanFeedback: (
     taskId: string,
@@ -210,11 +211,12 @@ export function useTaskSessionStartFlow({
           taskSessions,
           selectedTask,
         }),
-        async ({ decision, runInBackground, startupAttemptId }) => {
+        async ({ decision, runInBackground, startupAttemptId, request }) => {
           const input: Parameters<typeof startKanbanSessionFlow>[0] = {
             startupAttemptId,
             workspaceId: activeWorkspaceId,
-            request: intent,
+            // The selected source session can give another role, as for a pull request launch.
+            request: { ...intent, role: request.role },
             decision,
             startInBackground: runInBackground,
             isCurrent: isCurrentContext,
@@ -288,32 +290,24 @@ export function useTaskSessionStartFlow({
   const continueTaskWorkflow = useTaskWorkflowContinuation(workflowScope, onLaunch);
 
   const onPullRequestGenerate = useCallback(
-    async (taskId: string, launchActionId?: string): Promise<string | undefined> => {
+    async (taskId: string): Promise<string | undefined> => {
       const task = tasks.find((task) => task.id === taskId);
       if (!task) throw new Error("Task workflow is unavailable. Reload the task.");
-      const launch = taskPullRequestLaunch(task, launchActionId);
-      if (!launch) throw new Error(`Task "${taskId}" declares no pull request launch.`);
-      const { role } = launch;
-      const roleLabel = task.taskWorkflow.role(role).label;
-      const builderSessions = findSessionsByRoleForTask(sessions, taskId, role);
-      if (builderSessions.length === 0 && !launch.startModes.includes("fresh")) {
+      if (!task.taskWorkflow.pullRequestLaunchAvailable(task))
+        throw new Error(`Pull request generation is not available for task "${taskId}" now.`);
+      const existingSessionOptions = buildPullRequestSessionOptions({ task, sessions });
+      const [latest] = existingSessionOptions;
+      if (!latest?.role)
         throw new Error(
-          `No ${roleLabel} session is available to fork or reuse for task "${taskId}".`,
+          `No session that can create the pull request is available to fork or reuse for task "${taskId}".`,
         );
-      }
-
+      const launch = task.taskWorkflow.launchAction(PULL_REQUEST_LAUNCH_ID, latest.role);
       const session = await startSessionIntent({
         taskId,
-        role,
+        role: launch.role,
         launchActionId: launch.id,
-        initialSourceSession: builderSessions[0]
-          ? toAgentSessionIdentity(builderSessions[0])
-          : null,
-        existingSessionOptions: buildReusableSessionOptions({
-          sessions: builderSessions,
-          role,
-          roleLabel: task.taskWorkflow.role(role).label,
-        }),
+        initialSourceSession: latest.sourceSession,
+        existingSessionOptions,
         postStartAction: launchSessionCommand(launch),
       });
       return session?.externalSessionId;

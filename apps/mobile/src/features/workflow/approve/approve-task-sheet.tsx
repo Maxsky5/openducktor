@@ -255,7 +255,7 @@ function ApprovalStage({
         />
       );
       break;
-    case "missing_builder_worktree":
+    case "missing_worktree":
       content = (
         <MissingWorktreeStep
           model={modal}

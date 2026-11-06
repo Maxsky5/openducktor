@@ -34,7 +34,7 @@ import { createTestClientConnection } from "../../test-support/test-client-conne
 import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
-  TaskApprovalMissingBuilderWorktreeModalModel,
+  TaskApprovalMissingWorktreeModalModel,
 } from "./task-approval-types";
 import { useTaskApprovalFlow } from "./use-task-approval-flow";
 
@@ -296,12 +296,10 @@ const createReadyTaskApprovalContextResult = (
   approvalContext: createTaskApprovalContextFixture(overrides),
 });
 
-const createMissingBuilderWorktreeApprovalContextResult = (
-  overrides: Partial<
-    Extract<TaskApprovalContextLoadResult, { outcome: "missing_builder_worktree" }>
-  > = {},
+const createMissingWorktreeApprovalContextResult = (
+  overrides: Partial<Extract<TaskApprovalContextLoadResult, { outcome: "missing_worktree" }>> = {},
 ): TaskApprovalContextLoadResult => ({
-  outcome: "missing_builder_worktree",
+  outcome: "missing_worktree",
   taskId: "TASK-1",
   taskStatus: "human_review",
   ...overrides,
@@ -378,10 +376,10 @@ const expectCompletionModal = (): TaskApprovalCompletionModalModel => {
   return modal;
 };
 
-const expectMissingBuilderWorktreeModal = (): TaskApprovalMissingBuilderWorktreeModalModel => {
+const expectMissingWorktreeModal = (): TaskApprovalMissingWorktreeModalModel => {
   const modal = latestHarnessValue?.taskApprovalModal;
-  expect(modal?.stage).toBe("missing_builder_worktree");
-  if (modal?.stage !== "missing_builder_worktree") {
+  expect(modal?.stage).toBe("missing_worktree");
+  if (modal?.stage !== "missing_worktree") {
     throw new Error("Expected missing-builder-worktree modal");
   }
   return modal;
@@ -1041,9 +1039,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("opens the recovery modal when the builder worktree is missing", async () => {
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult(),
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(createMissingWorktreeApprovalContextResult());
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
@@ -1068,7 +1064,7 @@ describe("useTaskApprovalFlow", () => {
     });
     await waitForTaskApprovalModalLoaded();
 
-    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("missing_builder_worktree");
+    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("missing_worktree");
     expect(toastErrorMock).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -1189,9 +1185,7 @@ describe("useTaskApprovalFlow", () => {
         reason: "Run `gh auth login` to connect GitHub.",
       },
     } satisfies RepositoryGitProviderContext;
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult(),
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(createMissingWorktreeApprovalContextResult());
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
@@ -1220,7 +1214,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      expectMissingBuilderWorktreeModal().onCloseMissingBuilderWorktree();
+      expectMissingWorktreeModal().onCloseMissingWorktree();
       await Promise.resolve();
     });
 
@@ -1233,9 +1227,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("keeps the recovery modal open when completion fails from missing-builder-worktree recovery", async () => {
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult(),
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(createMissingWorktreeApprovalContextResult());
     closeTaskMock.mockImplementationOnce(async () => {
       throw new Error("Task is no longer reviewable");
     });
@@ -1265,11 +1257,11 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      expectMissingBuilderWorktreeModal().onCloseMissingBuilderWorktree();
+      expectMissingWorktreeModal().onCloseMissingWorktree();
       await Promise.resolve();
     });
 
-    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("missing_builder_worktree");
+    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("missing_worktree");
     expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
     expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe(
       "Task is no longer reviewable",
@@ -1283,9 +1275,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("only closes the recovery modal after reset handoff succeeds", async () => {
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult(),
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(createMissingWorktreeApprovalContextResult());
     openResetImplementationMock.mockReturnValueOnce(false).mockReturnValueOnce(true);
 
     const Harness = (): ReactElement | null => {
@@ -1318,9 +1308,11 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
     await waitForTaskApprovalModalLoaded();
+    // The reset control uses the label of the workflow action that resets the worktree.
+    expect(expectMissingWorktreeModal().resetLabel).toBe("Reset Implementation");
 
     await act(async () => {
-      expectMissingBuilderWorktreeModal().onResetMissingBuilderWorktree();
+      expectMissingWorktreeModal().onResetMissingWorktree();
       await Promise.resolve();
     });
 
@@ -1332,7 +1324,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
 
     await act(async () => {
-      expectMissingBuilderWorktreeModal().onResetMissingBuilderWorktree();
+      expectMissingWorktreeModal().onResetMissingWorktree();
       await Promise.resolve();
     });
 
@@ -1349,9 +1341,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("keeps the recovery modal when the task offers no worktree reset", async () => {
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult(),
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(createMissingWorktreeApprovalContextResult());
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
@@ -1376,9 +1366,11 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
     await waitForTaskApprovalModalLoaded();
+    // Without a worktree reset action, the platforms hide the reset control.
+    expect(expectMissingWorktreeModal().resetLabel).toBeNull();
 
     await act(async () => {
-      expectMissingBuilderWorktreeModal().onResetMissingBuilderWorktree();
+      expectMissingWorktreeModal().onResetMissingWorktree();
       await Promise.resolve();
     });
 

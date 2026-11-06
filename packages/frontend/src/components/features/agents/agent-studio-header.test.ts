@@ -157,9 +157,9 @@ const buildModel = () => ({
     },
     {
       kind: "session_start" as const,
-      id: "quick:build_pull_request_generation",
+      id: "quick:pull_request",
       role: "build" as const,
-      launchActionId: "build_pull_request_generation" as const,
+      launchActionId: "pull_request" as const,
       label: "Generate Pull Request",
       description: "Reuse or fork a Builder session to create or update a pull request.",
       postStartAction: "kickoff" as const,

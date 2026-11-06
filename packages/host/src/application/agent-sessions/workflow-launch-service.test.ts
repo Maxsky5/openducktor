@@ -596,7 +596,8 @@ test.each(runtimeKinds)(
         ...requestFor(kind),
         policy: {
           kind: "manual",
-          actionId: "build_pull_request_generation",
+          actionId: "pull_request",
+          role: "build",
           decision: { startMode: "fork", sourceSession, selectedModel: modelFor(kind) },
         },
       }),

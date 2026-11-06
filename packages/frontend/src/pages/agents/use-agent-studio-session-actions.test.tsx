@@ -685,6 +685,7 @@ describe("useAgentStudioSessionActions", () => {
       role: "build",
       launchActionId: "build_implementation_start",
       selectedTask: createTask({
+        status: "human_review",
         agentWorkflows: {
           build: { required: true, canSkip: false, available: true, completed: false },
         },
@@ -703,9 +704,9 @@ describe("useAgentStudioSessionActions", () => {
     await harness.run((state) => {
       state.handleQuickAction({
         kind: "session_start",
-        id: "quick:build_pull_request_generation",
+        id: "quick:pull_request",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         label: "Generate Pull Request",
         description: "Reuse or fork a Builder session to create or update a pull request.",
         postStartAction: "kickoff",

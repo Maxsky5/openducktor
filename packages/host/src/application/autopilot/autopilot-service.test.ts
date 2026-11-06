@@ -89,7 +89,7 @@ const launchResult = (
   workspaceId: request.workspaceId,
   repoPath: request.repoPath,
   taskId: request.taskId,
-  role: specPlanBuildWorkflow.automation(request.policy.actionId).role,
+  role: specPlanBuildWorkflow.automation(request.policy.actionId).roles[0]!,
   status: "completed",
   ...patch,
 });
@@ -1206,6 +1206,33 @@ describe("host Autopilot", () => {
     expect(h.outcomes().map((outcome) => outcome.kind)).toEqual(["started", "started"]);
     // A reused session already existed, so only the new Builder session notifies its start.
     expect(h.notifications.map((occurrence) => occurrence.role)).toEqual(["build"]);
+  });
+
+  test("a started notification names the role of the session that the launch used", async () => {
+    const h = await startedHarness();
+    h.setBuildCompletedStatus("human_review");
+    const taskId = await h.createTask("/repos/alpha", "in_progress", "Ship it");
+    h.setRespond((request) =>
+      Effect.succeed(launchResult(request, { role: "qa", session, startMode: "fork" })),
+    );
+    await run(
+      h.tasks.applyAgentEvent({
+        workspaceId: "alpha",
+        repoPath: "/repos/alpha",
+        taskId,
+        eventId: "build-completed",
+      }),
+    );
+    await waitUntil(() => h.outcomes().length === 1, "the outcome");
+
+    expect(actionsOf(h)).toEqual(["startGeneratePullRequest"]);
+    expect(h.notifications).toEqual([
+      expect.objectContaining({
+        kind: "agent.session_started",
+        role: "qa",
+        copy: expect.objectContaining({ title: "QA" }),
+      }),
+    ]);
   });
 
   test("launch failures notify once, stay held for clients, never retry, and allow one recovery", async () => {

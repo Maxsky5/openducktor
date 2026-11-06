@@ -98,7 +98,7 @@ export const createTaskApprovalContextUseCase = ({
       });
       if (!taskWorktree) {
         return {
-          outcome: "missing_builder_worktree",
+          outcome: "missing_worktree",
           taskId,
           taskStatus: current.status,
         };

@@ -150,6 +150,7 @@ describe("global config", () => {
         "system.role.build.base": override("build"),
         "system.shared.workflow_guards": override("guards"),
         "kickoff.qa_review": override("kickoff"),
+        "kickoff.build_pull_request_generation": override("pull request"),
         [rolePromptKey("qa")]: override("current"),
       },
       workspaces: {
@@ -176,6 +177,7 @@ describe("global config", () => {
       [rolePromptKey("build")]: override("build"),
       [specPlanBuildPromptKey("workflow.rules")]: override("guards"),
       [specPlanBuildPromptKey("messages.qa_review")]: override("kickoff"),
+      [specPlanBuildPromptKey("messages.pull_request")]: override("pull request"),
       [rolePromptKey("qa")]: override("current"),
     });
     expect(config.workspaces.repo?.promptOverrides).toEqual({

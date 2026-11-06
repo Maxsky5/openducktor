@@ -4,7 +4,7 @@ import { gitProviderReadError } from "../../review/git-provider-health";
 import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
-  TaskApprovalMissingBuilderWorktreeModalModel,
+  TaskApprovalMissingWorktreeModalModel,
   TaskApprovalModalModel,
 } from "./task-approval-types";
 import type { TaskApprovalFlowAction, TaskApprovalFlowOpenState } from "./task-approval-flow-state";
@@ -15,9 +15,13 @@ type BuildTaskApprovalModalModelArgs = {
   confirm: () => void;
   dispatch: Dispatch<TaskApprovalFlowAction>;
   reset: () => void;
-  resetMissingBuilderWorktree: () => void;
+  resetMissingWorktree: () => void;
   state: TaskApprovalFlowOpenState;
   taskTitle: string;
+  /** The label of the one pull request role of the task workflow, or null. */
+  pullRequestRoleLabel: string | null;
+  /** The label of the available action that resets the task worktree, or null. */
+  worktreeResetLabel: string | null;
   /** The effective cleanup choice. Null while its default value loads. */
   removeWorktree: boolean | null;
   onRemoveWorktreeChange: (removeWorktree: boolean) => void;
@@ -30,9 +34,11 @@ export const buildTaskApprovalModalModel = ({
   confirm,
   dispatch,
   reset,
-  resetMissingBuilderWorktree,
+  resetMissingWorktree,
   state,
   taskTitle,
+  pullRequestRoleLabel,
+  worktreeResetLabel,
   removeWorktree,
   onRemoveWorktreeChange,
   gitProviderContext,
@@ -76,13 +82,14 @@ export const buildTaskApprovalModalModel = ({
     },
   };
 
-  if (state.stage === "missing_builder_worktree") {
+  if (state.stage === "missing_worktree") {
     return {
       ...baseModal,
-      stage: "missing_builder_worktree",
-      onCloseMissingBuilderWorktree: confirm,
-      onResetMissingBuilderWorktree: resetMissingBuilderWorktree,
-    } satisfies TaskApprovalMissingBuilderWorktreeModalModel;
+      stage: "missing_worktree",
+      resetLabel: worktreeResetLabel,
+      onCloseMissingWorktree: confirm,
+      onResetMissingWorktree: resetMissingWorktree,
+    } satisfies TaskApprovalMissingWorktreeModalModel;
   }
 
   if (state.stage === "complete_direct_merge") {
@@ -104,6 +111,7 @@ export const buildTaskApprovalModalModel = ({
     mode,
     mergeMethod: state.mergeMethod,
     pullRequestDraftMode: state.pullRequestDraftMode,
+    pullRequestRoleLabel,
     pullRequestSupported,
     pullRequestAvailable,
     pullRequestUnavailableReason,

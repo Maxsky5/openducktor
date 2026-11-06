@@ -11,7 +11,7 @@ export const resolveLaunchStartMode = ({
   taskWorkflow: import("@openducktor/workflows").TaskWorkflow;
   existingSessionOptions: SessionStartExistingSessionOption[];
 }): AgentSessionStartMode => {
-  const launchAction = taskWorkflow.launchAction(launchActionId);
+  const launchAction = taskWorkflow.launchDefinition(launchActionId);
   const preferredStartMode = launchAction.defaultStartMode;
   const hasExistingSession = existingSessionOptions.length > 0;
   const canStartFresh = launchAction.startModes.includes("fresh");

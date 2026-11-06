@@ -625,10 +625,7 @@ describe("useSessionStartModalState", () => {
             source: "task_action",
             taskId: "TASK-PROFILE",
             role: "build",
-            launchActionId:
-              startMode === "fresh"
-                ? "build_implementation_start"
-                : "build_pull_request_generation",
+            launchActionId: startMode === "fresh" ? "build_implementation_start" : "pull_request",
             initialStartMode: startMode,
             existingSessionOptions: [source],
             selectedModel: source.selectedModel,
@@ -1081,7 +1078,7 @@ describe("useSessionStartModalState", () => {
         taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-6C",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [
           {
             value: "session-build-pr",
@@ -1771,7 +1768,7 @@ describe("useSessionStartModalState", () => {
         taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-7A",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [
           {
             value: "session-fallback",
@@ -1942,7 +1939,7 @@ describe("useSessionStartModalState", () => {
         taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-PR",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [
           {
             value: "session-pr-2",
@@ -2071,7 +2068,7 @@ describe("useSessionStartModalState", () => {
         taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-PR-RUNTIME-MODE",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [
           createExistingSessionWithModel({
             value: "session-pr-runtime",
@@ -2143,7 +2140,7 @@ describe("useSessionStartModalState", () => {
         taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-PR-NO-FORK-RUNTIME",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [
           createExistingSessionWithModel({
             value: "session-pr-no-fork",
@@ -2186,7 +2183,7 @@ describe("useSessionStartModalState", () => {
         taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-PR-REUSE-INCOMPATIBLE",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [
           createExistingSessionWithModel({
             value: "session-pr-fork-runtime",
@@ -2295,7 +2292,7 @@ describe("useSessionStartModalState", () => {
         taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-10-FORK",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         initialStartMode: "fork",
         existingSessionOptions: [
           {
@@ -2347,7 +2344,7 @@ describe("useSessionStartModalState", () => {
         taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-10-STALE-FORK-MODEL",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         initialStartMode: "fork",
         existingSessionOptions: [
           {
@@ -2407,7 +2404,7 @@ describe("useSessionStartModalState", () => {
         taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-10-CROSS-RUNTIME-FORK",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         initialStartMode: "fork",
         existingSessionOptions: [
           {

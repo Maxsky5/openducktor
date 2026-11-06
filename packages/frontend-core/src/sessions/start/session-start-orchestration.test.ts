@@ -53,7 +53,7 @@ describe("session-start-orchestration", () => {
       request: {
         taskId: "TASK-1",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         postStartAction: "kickoff",
       },
       selectedModel: BUILD_SELECTION,
@@ -61,6 +61,7 @@ describe("session-start-orchestration", () => {
       preferredSourceSession,
       selectedTask: createTaskCardFixture({
         id: "TASK-1",
+        status: "human_review",
         targetBranch: {
           remote: "origin",
           branch: "release/2026.04",
@@ -111,10 +112,10 @@ describe("session-start-orchestration", () => {
       request: {
         taskId: "TASK-1",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         postStartAction: "kickoff",
       },
-      selectedTask: createTaskCardFixture({ id: "TASK-1" }),
+      selectedTask: createTaskCardFixture({ id: "TASK-1", status: "human_review" }),
       selectedModel: null,
       taskSessions: [latestSession, olderSession],
     });

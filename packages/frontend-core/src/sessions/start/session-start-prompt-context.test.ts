@@ -52,7 +52,7 @@ describe("resolveSessionStartKickoffPromptContext", () => {
   test("maps the selected pull request target into nested Git context", () => {
     expect(
       resolveSessionStartKickoffPromptContext({
-        templateId: "messages.build_pull_request",
+        templateId: "messages.pull_request",
         context: "pull_request",
         taskTargetBranch: {
           remote: "upstream",
@@ -73,7 +73,7 @@ describe("resolveSessionStartKickoffPromptContext", () => {
   test("uses the repository default for pull request context when the task has no target", () => {
     expect(
       resolveSessionStartKickoffPromptContext({
-        templateId: "messages.build_pull_request",
+        templateId: "messages.pull_request",
         context: "pull_request",
         repoDefaultTargetBranch: { remote: "upstream", branch: "develop" },
       }),

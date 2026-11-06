@@ -494,7 +494,7 @@ describe("approval preparation", () => {
     if (scenario === "missing" && entryPoint === "getApprovalContext") {
       if (result._tag !== "Success") throw new Error("Expected missing-worktree result");
       expect(result.success).toEqual({
-        outcome: "missing_builder_worktree",
+        outcome: "missing_worktree",
         taskId: "task-1",
         taskStatus,
       });

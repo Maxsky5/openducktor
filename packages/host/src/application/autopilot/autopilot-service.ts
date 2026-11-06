@@ -188,7 +188,10 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
   const notify = (attempt: Attempt, outcome: AutopilotOutcome): Effect.Effect<string | null> =>
     Effect.gen(function* () {
       const target = attempt.notificationTarget;
-      const { role } = attempt.workflow.automation(outcome.actionId);
+      // The launch names the role of the session that it used. A launch that failed before it
+      // ran names the first candidate role of the automation.
+      const launch = outcome.kind === "skipped" ? undefined : outcome.launch;
+      const role = launch?.role ?? attempt.workflow.automation(outcome.actionId).roles[0]!;
       const input = {
         launchAttemptId: outcome.outcomeId,
         taskId: outcome.task.id,

@@ -25,6 +25,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
     { id: "writer", writes: ["draft"] },
     { id: "editor", writes: ["review"] },
   ],
+  pullRequestRoles: [],
   artifacts: [
     { id: "draft", label: "Draft", kind: "document", saveEventId: "submit-draft" },
     {
@@ -350,6 +351,11 @@ export const reviewTaskPromptTemplates: readonly PromptTemplate[] = [
   template("messages.write_revise", "kickoff", "Revise the draft for {{task.id}}."),
   template("messages.edit_review", "kickoff", "Review the draft of {{task.id}}."),
   template("messages.write_feedback", "kickoff", "Apply this feedback: {{humanFeedback}}"),
+  template(
+    "messages.pull_request",
+    "kickoff",
+    "Publish the pull request of {{task.id}} against {{git.targetBranch}}.",
+  ),
 ];
 
 export const createReviewTaskWorkflow = (): TaskWorkflow =>

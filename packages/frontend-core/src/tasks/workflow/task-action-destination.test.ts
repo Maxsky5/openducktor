@@ -10,7 +10,7 @@ import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { editBuiltinTaskWorkflow } from "../../test-support/workflow-fixtures";
 import type { SessionTargetOptions } from "../board/session-target-resolution";
 import {
-  availableWorktreeResetEvent,
+  availableWorktreeResetAction,
   eventActionStep,
   resolveTaskActionDestination,
   taskActionSendsCommand,
@@ -172,9 +172,12 @@ describe("resolveTaskActionDestination", () => {
     expect(eventActionStep(workflow, "request_rewrite")).toBe("feedback");
     expect(eventActionStep(workflow, "hold")).toBe("none");
     expect(eventActionStep(workflow, "approve")).toBeNull();
-    expect(availableWorktreeResetEvent(task)).toBe("drop-review");
+    expect(availableWorktreeResetAction(task)).toEqual({
+      eventId: "drop-review",
+      label: "Drop review",
+    });
     const open = createWorkflowTaskCardFixture(workflow, board, { status: "open" });
-    expect(availableWorktreeResetEvent(open)).toBeNull();
+    expect(availableWorktreeResetAction(open)).toBeNull();
   });
 });
 

@@ -83,13 +83,15 @@ export const ROLE_INSTRUCTIONS_PROMPT_ID = "instructions";
 
 /**
  * The prompts that every workflow provides. The system prompt of a session is the role
- * instructions, then the rules, the tool rules, and the task context of the workflow.
+ * instructions, then the rules, the tool rules, and the task context of the workflow. The pull
+ * request prompt is the session message of the core pull request launch.
  */
 export const WORKFLOW_PROMPT_IDS = {
   rules: "workflow.rules",
   toolRules: "workflow.tool_rules",
   taskContext: "workflow.task_context",
   readOnlyRejection: "workflow.read_only_rejection",
+  pullRequest: "messages.pull_request",
 } as const;
 
 /** A workflow prompt that a launch action sends as a session message has an ID in this group. */

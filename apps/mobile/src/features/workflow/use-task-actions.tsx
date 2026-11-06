@@ -85,7 +85,7 @@ export function useTaskActions({
     (taskId: string, launchActionId: string, committedTask?: TaskCard) => {
       const task = committedTask ?? tasks.find(({ id }) => id === taskId);
       if (!task) throw new Error("Task workflow is unavailable. Reload the task.");
-      const choice = task.taskWorkflow.launchAction(launchActionId);
+      const choice = task.taskWorkflow.launchDefinition(launchActionId);
       router.push(
         choice.context === "human_feedback"
           ? routes.requestChanges(workspaceId, taskId, {

@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { openExternalUrl } from "@/lib/open-external-url";
 import {
   TASK_APPROVAL_COPY as COPY,
-  TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS,
+  taskApprovalGeneratePullRequestNotice,
+  taskApprovalPullRequestDraftOptions,
 } from "@openducktor/frontend-core/tasks/approval/task-approval-copy";
 import type { TaskApprovalApprovalModalModel } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
 import { OptionCard, SECTION_LABEL_CLASS } from "./task-approval-stage-controls";
@@ -37,7 +38,7 @@ export function TaskApprovalPullRequestSection({
       <div className="space-y-3">
         <Label className={SECTION_LABEL_CLASS}>{COPY.pullRequestDraftLabel}</Label>
         <div className="grid gap-3 md:grid-cols-2">
-          {TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS.map((option) => (
+          {taskApprovalPullRequestDraftOptions(model.pullRequestRoleLabel).map((option) => (
             <OptionCard
               key={option.value}
               value={option.value}
@@ -76,7 +77,7 @@ export function TaskApprovalPullRequestSection({
         </div>
       ) : (
         <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
-          {COPY.generatePullRequestNotice}
+          {taskApprovalGeneratePullRequestNotice(model.pullRequestRoleLabel)}
         </div>
       )}
 

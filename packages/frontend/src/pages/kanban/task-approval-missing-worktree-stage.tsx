@@ -2,9 +2,9 @@ import { CircleCheckBig, LoaderCircle, RotateCcw } from "lucide-react";
 import type { ReactElement } from "react";
 import {
   TASK_APPROVAL_COPY as COPY,
-  missingBuilderWorktreeConfirmDisabled,
+  missingWorktreeConfirmDisabled,
 } from "@openducktor/frontend-core/tasks/approval/task-approval-copy";
-import type { TaskApprovalMissingBuilderWorktreeModalModel } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
+import type { TaskApprovalMissingWorktreeModalModel } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
 import type { TaskCloseMergeCheck } from "@openducktor/frontend-core/tasks/approval/use-task-approval-merge-check";
 import { taskCloseConfirmLabel } from "@openducktor/frontend-core/tasks/details/task-close-copy";
 import type { TaskCloseImpact } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
@@ -17,14 +17,17 @@ import {
   STAGE_CONTENT_CLASS,
 } from "./task-approval-stage-controls";
 
-/** The recovery stage when the builder worktree is missing. It offers Close Task. */
-export function TaskApprovalMissingBuilderWorktreeStage({
+/**
+ * The recovery stage when the task worktree is missing. It offers Close Task, and the workflow
+ * action that resets the worktree when the workflow has one.
+ */
+export function TaskApprovalMissingWorktreeStage({
   model,
   impact,
   isPreparing,
   mergeCheck,
 }: {
-  model: TaskApprovalMissingBuilderWorktreeModalModel;
+  model: TaskApprovalMissingWorktreeModalModel;
   impact: TaskCloseImpact;
   /** A read of the modal still runs, so the stage shows the loader. */
   isPreparing: boolean;
@@ -60,20 +63,22 @@ export function TaskApprovalMissingBuilderWorktreeStage({
           {COPY.cancel}
         </Button>
         <div className="flex w-full flex-col-reverse gap-2 [&>button]:w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:[&>button]:w-auto">
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={model.isSubmitting}
-            onClick={model.onResetMissingBuilderWorktree}
-          >
-            <RotateCcw data-icon="inline-start" />
-            {COPY.resetImplementation}
-          </Button>
+          {model.resetLabel ? (
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={model.isSubmitting}
+              onClick={model.onResetMissingWorktree}
+            >
+              <RotateCcw data-icon="inline-start" />
+              {model.resetLabel}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="warning"
-            disabled={missingBuilderWorktreeConfirmDisabled(model, impact, isPreparing)}
-            onClick={model.onCloseMissingBuilderWorktree}
+            disabled={missingWorktreeConfirmDisabled(model, impact, isPreparing)}
+            onClick={model.onCloseMissingWorktree}
           >
             {model.isSubmitting ? (
               <LoaderCircle className="animate-spin" data-icon="inline-start" />

@@ -1,8 +1,9 @@
-import type { RepositoryGitProviderContext } from "@openducktor/contracts";
+import { PULL_REQUEST_LAUNCH_ID, type RepositoryGitProviderContext } from "@openducktor/contracts";
 import { type AgentSessionStartMode } from "@openducktor/core";
 import {
   actionShowsOn,
   launchSessionCommand,
+  pullRequestRoleLabel,
   taskLaunchOrder,
   taskSurfaceLaunches,
   taskWorkflowInput,
@@ -13,7 +14,10 @@ import {
   type WorkflowLaunchActionId as SessionLaunchActionId,
   type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
-import { buildReusableSessionOptions } from "./session-start-reuse-options";
+import {
+  buildPullRequestSessionOptions,
+  buildReusableSessionOptions,
+} from "./session-start-reuse-options";
 import { type SessionStartExistingSessionOption } from "./session-start-types";
 import { type SessionStartPostAction } from "./session-start-workflow";
 import { pullRequestHealthError } from "../../review/git-provider-health";
@@ -114,21 +118,7 @@ export const buildAgentStudioQuickActions = (
       role: launch.role,
       roleLabel: task.taskWorkflow.role(launch.role).label,
     });
-    let reason = params.createSessionDisabled ? SESSION_BUSY_REASON : null;
-    if (launch.context === "pull_request") {
-      if (
-        params.gitProviderContext?.descriptor.capabilities.supportsPullRequests === false ||
-        (!params.gitProviderContext && !params.gitProviderReadError)
-      )
-        return;
-      reason =
-        params.gitProviderReadError ??
-        pullRequestHealthError(params.gitProviderContext) ??
-        reason ??
-        (sources.length || launch.startModes.includes("fresh")
-          ? null
-          : `Requires an existing ${task.taskWorkflow.role(launch.role).label} session.`);
-    }
+    const reason = params.createSessionDisabled ? SESSION_BUSY_REASON : null;
     const option: AgentStudioSessionQuickActionOption = {
       kind: "session_start",
       id: `quick:${launch.id}`,
@@ -182,6 +172,8 @@ export const buildAgentStudioQuickActions = (
     if (!effectLaunches.has(launch)) append(launch);
   }
   for (const launch of taskSurfaceLaunches(task, "studio")) append(launch.id);
+  const pullRequestOption = buildPullRequestQuickAction(task, params);
+  if (pullRequestOption) options.push(pullRequestOption);
   const leading: AgentStudioTaskQuickActionOption[] = [];
   const following: AgentStudioTaskQuickActionOption[] = [];
   const trailing: AgentStudioTaskQuickActionOption[] = [];
@@ -227,6 +219,58 @@ export const buildAgentStudioQuickActions = (
   };
   const ordered = [...options, ...following].sort((left, right) => rank(left) - rank(right));
   return [...leading, ...ordered, ...trailing];
+};
+
+const pullRequestSessionRequiredReason = (roleLabel: string | null): string =>
+  roleLabel
+    ? `Requires an existing ${roleLabel} session.`
+    : "Requires an existing session that can create the pull request.";
+
+/**
+ * The core pull request launch, while the task approval is available and the Git provider
+ * supports pull requests. The latest session that can create the pull request gives its role.
+ */
+const buildPullRequestQuickAction = (
+  task: TaskCard,
+  params: QuickActionParams,
+): AgentStudioSessionQuickActionOption | null => {
+  const { taskWorkflow } = task;
+  if (!taskWorkflow.pullRequestLaunchAvailable(task) || taskWaitsForMergePublication(task))
+    return null;
+  if (
+    params.gitProviderContext?.descriptor.capabilities.supportsPullRequests === false ||
+    (!params.gitProviderContext && !params.gitProviderReadError)
+  )
+    return null;
+  const sources = buildPullRequestSessionOptions({ task, sessions: params.sessionsForTask });
+  const role = sources[0]?.role ?? taskWorkflow.pullRequestRoles[0];
+  if (role === undefined) return null;
+  const launch = taskWorkflow.launchAction(PULL_REQUEST_LAUNCH_ID, role);
+  const roleLabel = pullRequestRoleLabel(taskWorkflow);
+  const reason =
+    params.gitProviderReadError ??
+    pullRequestHealthError(params.gitProviderContext) ??
+    (params.createSessionDisabled ? SESSION_BUSY_REASON : null) ??
+    (sources.length ? null : pullRequestSessionRequiredReason(roleLabel));
+  const option: AgentStudioSessionQuickActionOption = {
+    kind: "session_start",
+    id: `quick:${launch.id}`,
+    role: launch.role,
+    launchActionId: launch.id,
+    label: launch.label,
+    postStartAction: launchSessionCommand(launch),
+    disabled: reason !== null,
+    requiresHumanFeedback: false,
+    surface: "studio",
+  };
+  if (launch.description) option.description = launch.description;
+  if (reason) option.disabledReason = reason;
+  if (sources.length) {
+    option.existingSessionOptions = sources;
+    option.initialSourceSession = sources[0]!.sourceSession;
+    option.initialStartMode = launch.defaultStartMode;
+  }
+  return option;
 };
 
 export const buildGitConflictQuickAction = (params: {

@@ -9,25 +9,25 @@ import {
   type TaskApprovalFlowState,
 } from "./task-approval-flow-state";
 
-type MissingBuilderWorktreeApprovalState = TaskApprovalFlowOpenState & {
+type MissingWorktreeApprovalState = TaskApprovalFlowOpenState & {
   phase: "ready";
-  stage: "missing_builder_worktree";
+  stage: "missing_worktree";
 };
 
 export type TaskApprovalSubmissionRoute =
   | { kind: "ignore" }
   | {
-      kind: "close_missing_builder_worktree";
-      approval: MissingBuilderWorktreeApprovalState;
+      kind: "close_missing_worktree";
+      approval: MissingWorktreeApprovalState;
     }
   | { kind: "close_task"; approval: TaskApprovalFlowInteractiveState }
   | { kind: "submit_direct_merge"; approval: TaskApprovalFlowReadyState; repoPath: string }
   | { kind: "submit_pull_request"; approval: TaskApprovalFlowReadyState; repoPath: string };
 
-const isMissingBuilderWorktreeApprovalState = (
+const isMissingWorktreeApprovalState = (
   state: TaskApprovalFlowState,
-): state is MissingBuilderWorktreeApprovalState =>
-  state.kind === "open" && state.phase === "ready" && state.stage === "missing_builder_worktree";
+): state is MissingWorktreeApprovalState =>
+  state.kind === "open" && state.phase === "ready" && state.stage === "missing_worktree";
 
 export const resolveTaskApprovalOpenMode = (args: {
   gitProviderContext: RepositoryGitProviderContext;
@@ -64,9 +64,9 @@ export const resolveTaskApprovalSubmissionRoute = (
   state: TaskApprovalFlowState,
   repoPath: string | null,
 ): TaskApprovalSubmissionRoute => {
-  if (isMissingBuilderWorktreeApprovalState(state)) {
+  if (isMissingWorktreeApprovalState(state)) {
     return {
-      kind: "close_missing_builder_worktree",
+      kind: "close_missing_worktree",
       approval: state,
     };
   }

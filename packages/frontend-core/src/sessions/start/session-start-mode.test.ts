@@ -49,7 +49,7 @@ describe("resolveLaunchStartMode", () => {
     expect(
       resolveLaunchStartMode({
         taskWorkflow: specPlanBuildWorkflow,
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [],
       }),
     ).toBe("reuse");

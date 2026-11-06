@@ -21,6 +21,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
     { id: "author", writes: ["copy"] },
     { id: "reviewer", writes: ["first-review", "second-review"] },
   ],
+  pullRequestRoles: [],
   artifacts: [
     { id: "copy", label: "Copy", kind: "document", saveEventId: "submit" },
     {

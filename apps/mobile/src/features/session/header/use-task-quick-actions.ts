@@ -1,4 +1,3 @@
-import { taskSurfaceLaunches } from "@openducktor/workflows";
 import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
 import { gitProviderReadError } from "@openducktor/frontend-core/review/git-provider-health";
@@ -31,9 +30,7 @@ export function useTaskQuickActions({
 }) {
   const provider = useQuery({
     ...repositoryGitProviderContextQueryOptions({ workspaceId, repoPath }),
-    enabled:
-      !!task &&
-      taskSurfaceLaunches(task, "studio").some(({ context }) => context === "pull_request"),
+    enabled: !!task && task.taskWorkflow.pullRequestLaunchAvailable(task),
   });
   const providerError = gitProviderReadError(provider.error);
   const providerContext = provider.data;

@@ -1,11 +1,14 @@
-import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+import { isPullRequestLaunch, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "../../lib/agent-session-identity";
 import type { AgentSessionSummary } from "../agent-sessions-store";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import type { SessionStartModalSource } from "./session-start-modal-types";
-import { buildReusableSessionOptions } from "./session-start-reuse-options";
+import {
+  buildPullRequestSessionOptions,
+  buildReusableSessionOptions,
+} from "./session-start-reuse-options";
 import type { ResolvedSessionStartDecision, SessionStartFlowRequest } from "./session-start-types";
 export type { ResolvedSessionStartDecision, SessionStartFlowRequest } from "./session-start-types";
 import {
@@ -207,19 +210,22 @@ export const buildSessionStartModalRequest = ({
 }: BuildSessionStartModalRequestArgs): SessionStartModalOpenRequest => {
   if (!selectedTask)
     throw new Error("Task workflow is unavailable. Reload the task before starting a session.");
-  const launch = selectedTask.taskWorkflow.launchAction(request.launchActionId);
-  const step = selectedTask.workflowSteps.find(
-    (step) => step.kind === "agent" && step.roleId === request.role,
-  );
-  if (!step?.available || launch.role !== request.role)
-    throw new Error(
-      `Workflow step for role "${request.role}" is unavailable for task "${selectedTask.id}".`,
+  const launch = selectedTask.taskWorkflow.launchAction(request.launchActionId, request.role);
+  if (isPullRequestLaunch(launch.id)) {
+    if (!selectedTask.taskWorkflow.pullRequestLaunchAvailable(selectedTask))
+      throw new Error(
+        `Pull request generation is not available for task "${selectedTask.id}" now.`,
+      );
+  } else {
+    const step = selectedTask.workflowSteps.find(
+      (step) => step.kind === "agent" && step.roleId === request.role,
     );
-  const existingSessionOptions = resolveExistingSessionOptions(
-    request,
-    taskSessions,
-    selectedTask.taskWorkflow,
-  );
+    if (!step?.available || launch.role !== request.role)
+      throw new Error(
+        `Workflow step for role "${request.role}" is unavailable for task "${selectedTask.id}".`,
+      );
+  }
+  const existingSessionOptions = resolveExistingSessionOptions(request, taskSessions, selectedTask);
   const initialSourceSession = resolveInitialSourceSession({
     request,
     existingSessionOptions,
@@ -273,18 +279,21 @@ const launchActionSupportsReusableSessions = (
   taskWorkflow: import("@openducktor/workflows").TaskWorkflow,
 ): boolean => {
   return taskWorkflow
-    .launchAction(launchActionId)
+    .launchDefinition(launchActionId)
     .startModes.some((mode) => mode === "reuse" || mode === "fork");
 };
 
 const resolveExistingSessionOptions = (
   request: SessionStartFlowRequest,
   taskSessions: AgentSessionSummary[],
-  taskWorkflow: import("@openducktor/workflows").TaskWorkflow,
+  task: TaskCard,
 ) => {
   if (request.existingSessionOptions) {
     return request.existingSessionOptions;
   }
+  const { taskWorkflow } = task;
+  if (isPullRequestLaunch(request.launchActionId))
+    return buildPullRequestSessionOptions({ task, sessions: taskSessions });
 
   if (!launchActionSupportsReusableSessions(request.launchActionId, taskWorkflow)) {
     return [];
@@ -313,7 +322,6 @@ const resolveInitialSourceSession = ({
   if (
     preferredSourceSession &&
     preferredSourceSession.taskId === request.taskId &&
-    preferredSourceSession.role === request.role &&
     existingSessionOptions.some(
       (option) => option.value === agentSessionIdentityKey(preferredSourceSession),
     )

@@ -31,6 +31,8 @@ export type TaskApprovalApprovalModalModel = TaskApprovalModalBase & {
   mode: TaskApprovalMode;
   mergeMethod: "merge_commit" | "squash" | "rebase";
   pullRequestDraftMode: PullRequestDraftMode;
+  /** The label of the one pull request role of the workflow. Null for zero or several roles. */
+  pullRequestRoleLabel: string | null;
   pullRequestSupported: boolean;
   pullRequestAvailable: boolean;
   pullRequestUnavailableReason: string | null;
@@ -54,10 +56,12 @@ export type TaskApprovalApprovalModalModel = TaskApprovalModalBase & {
   onConfirm: () => void;
 };
 
-export type TaskApprovalMissingBuilderWorktreeModalModel = TaskApprovalModalBase & {
-  stage: "missing_builder_worktree";
-  onCloseMissingBuilderWorktree: () => void;
-  onResetMissingBuilderWorktree: () => void;
+export type TaskApprovalMissingWorktreeModalModel = TaskApprovalModalBase & {
+  stage: "missing_worktree";
+  /** The label of the workflow action that resets the task worktree. Null when it has none. */
+  resetLabel: string | null;
+  onCloseMissingWorktree: () => void;
+  onResetMissingWorktree: () => void;
 };
 
 export type TaskApprovalCompletionModalModel = TaskApprovalModalBase & {
@@ -71,7 +75,7 @@ export type TaskApprovalCompletionModalModel = TaskApprovalModalBase & {
 
 export type TaskApprovalModalModel =
   | TaskApprovalApprovalModalModel
-  | TaskApprovalMissingBuilderWorktreeModalModel
+  | TaskApprovalMissingWorktreeModalModel
   | TaskApprovalCompletionModalModel;
 
 export type TaskGitConflictDialogModel = {

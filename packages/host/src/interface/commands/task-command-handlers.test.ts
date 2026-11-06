@@ -57,7 +57,7 @@ const pullRequestFixture: PullRequest = {
   updatedAt: "2026-05-10T10:00:00.000Z",
 };
 const approvalContextFixture: TaskApprovalContextLoadResult = {
-  outcome: "missing_builder_worktree",
+  outcome: "missing_worktree",
   taskId: taskFixture.id,
   taskStatus: taskFixture.status,
 };

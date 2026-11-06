@@ -118,6 +118,7 @@ export function useAgentStudioSessionStartFlow({
       executeWithDecision: (
         decision: ResolvedSessionStartDecision,
         startupAttemptId: string,
+        role: string,
       ) => Promise<T | undefined>,
     ): Promise<T | undefined> => {
       const isSameTaskAndRole = request.taskId === taskId && request.role === role;
@@ -143,7 +144,9 @@ export function useAgentStudioSessionStartFlow({
             : null,
           selectedTask: request.taskId === taskId ? selectedTask : null,
         }),
-        async ({ decision, startupAttemptId }) => executeWithDecision(decision, startupAttemptId),
+        // The selected source session can give another role, as for a pull request launch.
+        async ({ decision, startupAttemptId, request: started }) =>
+          executeWithDecision(decision, startupAttemptId, started.role),
       );
     },
     [
@@ -178,10 +181,11 @@ export function useAgentStudioSessionStartFlow({
       const executeWithDecision = async (
         decision: ResolvedSessionStartDecision,
         startupAttemptId: string,
+        role: string,
       ): Promise<SessionStartWorkflowResult | undefined> => {
         const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
           startupAttemptId,
-          request: request,
+          request: { ...request, role },
           decision,
           task: request.taskId === taskId ? selectedTask : null,
         };
@@ -197,7 +201,7 @@ export function useAgentStudioSessionStartFlow({
             buildAgentStudioSelectionQueryUpdate({
               taskId: request.taskId,
               sessionExternalId: workflow.externalSessionId,
-              role: request.role,
+              role,
             }),
           );
         return workflow;
@@ -299,7 +303,7 @@ export function useAgentStudioSessionStartFlow({
     }
     if (
       selectedTask &&
-      selectedTask.taskWorkflow.launchAction(launchActionId).context === "human_feedback"
+      selectedTask.taskWorkflow.launchDefinition(launchActionId).context === "human_feedback"
     ) {
       openHumanReviewFeedback(launchActionId);
       return;
@@ -308,7 +312,7 @@ export function useAgentStudioSessionStartFlow({
     const workflow = await runSessionStart({
       postStartAction:
         selectedTask &&
-        launchSessionCommand(selectedTask.taskWorkflow.launchAction(launchActionId)) ===
+        launchSessionCommand(selectedTask.taskWorkflow.launchDefinition(launchActionId)) ===
           "send_message"
           ? "send_message"
           : "kickoff",
@@ -335,7 +339,7 @@ export function useAgentStudioSessionStartFlow({
         launchActionId: nextLaunchActionId,
         postStartAction:
           selectedTask &&
-          launchSessionCommand(selectedTask.taskWorkflow.launchAction(nextLaunchActionId)) ===
+          launchSessionCommand(selectedTask.taskWorkflow.launchDefinition(nextLaunchActionId)) ===
             "send_message"
             ? "send_message"
             : "kickoff",

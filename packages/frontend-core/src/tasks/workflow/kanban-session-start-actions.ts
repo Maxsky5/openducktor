@@ -42,7 +42,7 @@ export const startKanbanSessionFlow = async ({
   if (isCurrent) workflowInput.isCurrent = isCurrent;
   const workflow = await runSessionStartWorkflow(workflowInput);
   const conflictContextChanged =
-    task?.taskWorkflow.launchAction(request.launchActionId).surface === "git_conflict" &&
+    task?.taskWorkflow.launchDefinition(request.launchActionId).surface === "git_conflict" &&
     isCurrent &&
     !isCurrent();
   if (!startInBackground && !conflictContextChanged) {

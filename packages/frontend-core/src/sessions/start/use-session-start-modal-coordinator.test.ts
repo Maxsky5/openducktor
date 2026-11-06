@@ -46,7 +46,7 @@ describe("use-session-start-modal-coordinator", () => {
     expect(
       buildSessionStartModalDescription({
         taskWorkflow: specPlanBuildWorkflow,
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
       }),
     ).toBe("Choose how to start this session.");
   });

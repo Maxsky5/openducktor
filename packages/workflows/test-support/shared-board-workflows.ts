@@ -40,6 +40,7 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
       { id: writer, writes: [draft] },
       { id: editor, writes: [review] },
     ],
+    pullRequestRoles: [writer],
     artifacts: [
       { id: draft, label: `${prefix} Draft`, kind: "document", saveEventId: `${prefix}_submit` },
       {
@@ -253,7 +254,7 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
       systemPrompt: systemPrompt(editor),
     },
   ];
-  const kickoffs = ["write_start", "write_revise", "edit_review"].map((action) => ({
+  const kickoffs = ["write_start", "write_revise", "edit_review", "pull_request"].map((action) => ({
     id: `messages.${action}`,
     purpose: "kickoff" as const,
     builtinVersion: 1,

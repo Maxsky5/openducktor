@@ -31,12 +31,14 @@ export {
   type TaskWorkflowArtifact,
   type TaskWorkflowAutomation,
   type TaskWorkflowLaunchAction,
+  type TaskWorkflowLaunchDefinition,
   type TaskWorkflowRole,
   type TaskWorkflowState,
   type TransitionCause,
 } from "./task-workflow/task-workflow";
 export type { TaskFacts } from "./task-workflow/task-input";
 export { requirePullRequestTarget } from "./task-workflow/task-prompts";
+export { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./task-workflow/pull-request-launch";
 export type {
   PromptTemplate as TaskPromptTemplate,
   TaskPrompts,

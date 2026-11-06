@@ -85,7 +85,9 @@ Cleanup releases the live state of the task sessions before it removes the task 
 
 The approval modal offers Direct Merge, Pull Request, and Close Task. Pull Request needs a provider that supports pull requests. A pull request keeps the task state. Close Task runs `task_close`, so it merges no code and changes no pull request.
 
-Uncommitted changes block Direct Merge and Pull Request. When merge detection reports the task branch as merged, the modal selects Close Task. When the builder worktree is missing, the modal offers Close Task and Reset Implementation. When the approval context read fails, it offers only Close Task.
+Pull Request offers Write manually and a generated draft. The generated draft starts the core pull request launch from a session of a pull request role. With exactly one pull request role, the option names that role, for example "Ask Builder". With zero or several roles, it reads "Ask agent". Read [the architecture overview](architecture-overview.md#generate-a-pull-request) for the launch rules.
+
+Uncommitted changes block Direct Merge and Pull Request. When merge detection reports the task branch as merged, the modal selects Close Task. When the task worktree is missing, the modal offers Close Task and the available workflow action that resets the worktree, with the label of that action. A workflow without such an action gets only Close Task. When the approval context read fails, it offers only Close Task.
 
 ## Reset implementation
 

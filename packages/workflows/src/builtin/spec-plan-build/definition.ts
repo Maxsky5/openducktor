@@ -1,4 +1,5 @@
 import {
+  PULL_REQUEST_LAUNCH_ID,
   type WorkflowActionDefinition,
   type WorkflowArtifactDefinition,
   type WorkflowArtifactVerdict,
@@ -80,7 +81,7 @@ export type SpecPlanBuildSignal = Omit<WorkflowSignalDefinition, "id" | "automat
 };
 export type SpecPlanBuildAutomation = WorkflowAutomationDefinition & {
   id: SpecPlanBuildAutomationId;
-  launchActionId: SpecPlanBuildLaunchActionId;
+  launchActionId: SpecPlanBuildLaunchActionId | typeof PULL_REQUEST_LAUNCH_ID;
 };
 type SpecPlanBuildAction = WorkflowActionDefinition & {
   id: SpecPlanBuildActionId;
@@ -494,19 +495,6 @@ const specPlanBuildSteps = [
         description: "Address human review feedback.",
       },
       {
-        id: "build_pull_request_generation",
-        label: "Generate Pull Request",
-        startModes: ["reuse", "fork"],
-        defaultStartMode: "reuse",
-        template: { kind: "kickoff", id: "messages.build_pull_request" },
-        context: "pull_request",
-        targetBranch: true,
-        requiresWorktree: true,
-        surface: "studio",
-        showWhen: { stateIn: ["human_review"] },
-        description: "Generate or update the pull request.",
-      },
-      {
         id: "build_rebase_conflict_resolution",
         label: "Resolve Git Conflict",
         ...freshOrReuse(),
@@ -736,7 +724,7 @@ const specPlanBuildAutomations = [
     id: "startGeneratePullRequest",
     label: "Start Generate Pull Request",
     description: "Fork from the latest Builder session to generate or update the pull request.",
-    launchActionId: "build_pull_request_generation",
+    launchActionId: PULL_REQUEST_LAUNCH_ID,
     startMode: "fork",
   },
 ] satisfies SpecPlanBuildAutomation[];
@@ -787,6 +775,7 @@ export const SPEC_PLAN_BUILD_DEFINITION = {
   issueTypes: specPlanBuildIssueTypes,
   defaultIssueType: "task",
   roles: specPlanBuildRoles,
+  pullRequestRoles: ["build"],
   artifacts: specPlanBuildArtifacts,
   states: specPlanBuildStates,
   steps: specPlanBuildSteps,
@@ -834,14 +823,14 @@ export const SPEC_PLAN_BUILD_DEFINITION = {
         "build_implementation_start",
         "spec_initial",
         "planner_initial",
-        "build_pull_request_generation",
+        PULL_REQUEST_LAUNCH_ID,
       ],
     },
     {
       when: { stateIn: ["human_review"] },
       pullRequest: false,
       order: [
-        "build_pull_request_generation",
+        PULL_REQUEST_LAUNCH_ID,
         "build_after_human_request_changes",
         "qa_review",
         "build_implementation_start",

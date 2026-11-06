@@ -49,6 +49,11 @@ export const workflowLaunchRequestSchema = z
       .object({
         kind: z.literal("manual"),
         actionId: sessionLaunchActionIdSchema,
+        /**
+         * The role of the source session. Only the core pull request launch needs it, because any
+         * pull request role can run it. The host checks that the source session has this role.
+         */
+        role: agentRoleSchema.optional(),
         decision: workflowLaunchDecisionSchema,
       })
       .strict(),

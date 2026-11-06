@@ -200,7 +200,7 @@ describe("useSessionStartKickoffPrompt", () => {
     input.kickoff!.request = {
       taskId: "TASK-1",
       role: "build",
-      launchActionId: "build_pull_request_generation",
+      launchActionId: "pull_request",
     };
     const harness = renderPrompt(input, connection);
     try {

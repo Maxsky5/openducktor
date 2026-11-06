@@ -50,7 +50,7 @@ describe("prompts copied from the product", () => {
     expect(KICKOFF.build).toBe(builtin("messages.build_start"));
     expect(KICKOFF.qa).toBe(builtin("messages.qa_review"));
     expect(KICKOFF.fix).toBe(builtin("messages.build_after_qa_rejection"));
-    expect(KICKOFF.pullRequest).toBe(builtin("messages.build_pull_request"));
+    expect(KICKOFF.pullRequest).toBe(builtin("messages.pull_request"));
   });
 
   test("the prompt override view shows the built-in QA prompts", () => {

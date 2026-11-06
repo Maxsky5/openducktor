@@ -389,7 +389,7 @@ export const taskApprovalContextLoadResultSchema = z.discriminatedUnion("outcome
     approvalContext: taskApprovalContextSchema,
   }),
   z.object({
-    outcome: z.literal("missing_builder_worktree"),
+    outcome: z.literal("missing_worktree"),
     taskId: z.string(),
     taskStatus: z.string(),
   }),

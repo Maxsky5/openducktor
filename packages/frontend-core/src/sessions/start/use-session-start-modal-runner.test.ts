@@ -26,7 +26,7 @@ import { observeStartupPreparation } from "../startup/startup-prepared-handoff";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const REQUEST_CONTEXT = {
-  launchActionId: "build_pull_request_generation",
+  launchActionId: "pull_request",
   role: "build",
   taskId: "TASK-1",
 } as const;
@@ -186,7 +186,7 @@ describe("buildSessionStartModalDecision", () => {
         selectedModel: null,
       }),
     ).toThrow(
-      "Starting a build build_pull_request_generation session for TASK-1 requires an explicit model selection.",
+      "Starting a build pull_request session for TASK-1 requires an explicit model selection.",
     );
 
     expect(() =>
@@ -199,9 +199,7 @@ describe("buildSessionStartModalDecision", () => {
         requestContext: REQUEST_CONTEXT,
         selectedModel: SELECTED_MODEL,
       }),
-    ).toThrow(
-      "Starting a build build_pull_request_generation session for TASK-1 requires a source session.",
-    );
+    ).toThrow("Starting a build pull_request session for TASK-1 requires a source session.");
   });
 
   test("keeps required guard errors ahead of invalid target branch parsing", () => {
@@ -217,7 +215,7 @@ describe("buildSessionStartModalDecision", () => {
         selectedModel: null,
       }),
     ).toThrow(
-      "Starting a build build_pull_request_generation session for TASK-1 requires an explicit model selection.",
+      "Starting a build pull_request session for TASK-1 requires an explicit model selection.",
     );
 
     expect(() =>
@@ -231,9 +229,7 @@ describe("buildSessionStartModalDecision", () => {
         requestContext: REQUEST_CONTEXT,
         selectedModel: null,
       }),
-    ).toThrow(
-      "Starting a build build_pull_request_generation session for TASK-1 requires a source session.",
-    );
+    ).toThrow("Starting a build pull_request session for TASK-1 requires a source session.");
 
     expect(() =>
       buildSessionStartModalDecision({
@@ -247,7 +243,7 @@ describe("buildSessionStartModalDecision", () => {
         selectedModel: null,
       }),
     ).toThrow(
-      "Starting a build build_pull_request_generation session for TASK-1 requires an explicit model selection.",
+      "Starting a build pull_request session for TASK-1 requires an explicit model selection.",
     );
 
     expect(() =>
@@ -261,9 +257,7 @@ describe("buildSessionStartModalDecision", () => {
         requestContext: REQUEST_CONTEXT,
         selectedModel: SELECTED_MODEL,
       }),
-    ).toThrow(
-      "Starting a build build_pull_request_generation session for TASK-1 requires a source session.",
-    );
+    ).toThrow("Starting a build pull_request session for TASK-1 requires a source session.");
   });
 });
 
@@ -644,7 +638,7 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
     expect(() =>
       assertRuntimeSupportsSelectedStartMode({
         taskWorkflow: specPlanBuildWorkflow,
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         role: "build",
         runtimeDescriptor: FORKLESS_RUNTIME,
         runtimeKind: FORKLESS_RUNTIME.kind,
@@ -658,7 +652,7 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
     expect(() =>
       assertRuntimeSupportsSelectedStartMode({
         taskWorkflow: specPlanBuildWorkflow,
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         role: "build",
         runtimeDescriptor: FORKLESS_RUNTIME,
         runtimeKind: FORKLESS_RUNTIME.kind,
@@ -666,7 +660,7 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
         taskId: "TASK-1",
       }),
     ).toThrow(
-      'Runtime "Reuse Runtime" does not support fork session starts for build_pull_request_generation. Select a compatible runtime or start mode.',
+      'Runtime "Reuse Runtime" does not support fork session starts for pull_request. Select a compatible runtime or start mode.',
     );
   });
 
@@ -853,7 +847,7 @@ test("blocks confirmation while prompt settings load and uses the current branch
     source: "agent_studio",
     taskId: "TASK-1",
     role: "build",
-    launchActionId: "build_pull_request_generation",
+    launchActionId: "pull_request",
     postStartAction: "kickoff",
     selectedModel: SELECTED_MODEL,
   } as const;

@@ -121,6 +121,11 @@ export const TASK_OPEN_STATE = "open";
  * Events may list it as a source to admit repeats.
  */
 export const TASK_CLOSED_STATE = "closed";
+/**
+ * The core launch that creates or updates the pull request of a task. OpenDucktor owns it, so no
+ * workflow declares it. Workflow automations and launch order rules can name it.
+ */
+export const PULL_REQUEST_LAUNCH_ID = "pull_request";
 
 /**
  * A workflow state. Every workflow declares the core states `open` and `closed` with its other
@@ -167,7 +172,7 @@ export const workflowLaunchActionDefinitionSchema = z.strictObject({
   /** The first candidate whose condition matches is the default. Without a match, the first one is. */
   selectWhen: workflowConditionSchema.optional(),
   /** Extra prompt context that the session start must collect. */
-  context: z.enum(["human_feedback", "pull_request"]).optional(),
+  context: z.enum(["human_feedback"]).optional(),
   /** The user chooses the task target branch before the start. */
   targetBranch: z.boolean().optional(),
   /** An automatic continuation needs an existing task worktree. */
@@ -406,6 +411,8 @@ export const workflowDefinitionSchema = z.strictObject({
   /** The issue type that a new task form or an import proposes. The default is the first one. */
   defaultIssueType: issueTypeSchema.optional(),
   roles: z.array(workflowRoleDefinitionSchema),
+  /** Roles whose sessions can create the pull request. Empty: every task session. */
+  pullRequestRoles: z.array(workflowIdSchema).default([]),
   artifacts: z.array(workflowArtifactDefinitionSchema),
   /** The states, with the core states `open` and `closed`. A task starts in `open`. */
   states: z.array(workflowStateDefinitionSchema),

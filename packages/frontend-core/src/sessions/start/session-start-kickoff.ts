@@ -32,7 +32,7 @@ export const buildSessionStartKickoffPrompt = ({
 }): string => {
   if (!task)
     throw new Error("Task workflow is unavailable. Reload the task before preparing a prompt.");
-  const launchAction = task.taskWorkflow.launchAction(intent.launchActionId);
+  const launchAction = task.taskWorkflow.launchAction(intent.launchActionId, intent.role);
   const { template } = launchAction;
   if (template.kind !== "kickoff") {
     throw new Error(`Launch action "${intent.launchActionId}" does not define a kickoff prompt.`);
@@ -60,6 +60,7 @@ export const buildSessionStartKickoffPrompt = ({
 
   return kickoffPromptForLaunchAction(intent.launchActionId, intent.taskId, {
     overrides,
+    role: intent.role,
     taskWorkflow: task.taskWorkflow,
     ...promptContext,
     task: {
@@ -86,7 +87,7 @@ export const prepareSessionStartInstruction = async ({
 }): Promise<SessionStartFlowRequest> => {
   if (!task)
     throw new Error("Task workflow is unavailable. Reload the task before preparing a prompt.");
-  const launch = task.taskWorkflow.launchAction(request.launchActionId);
+  const launch = task.taskWorkflow.launchAction(request.launchActionId, request.role);
   if (
     request.postStartAction !== "send_message" ||
     request.message !== undefined ||
@@ -111,6 +112,7 @@ export const prepareSessionStartInstruction = async ({
   const context = resolveSessionStartKickoffPromptContext(contextInput);
   const message = workflow.prompts.messagePrompt({
     launchActionId: launch.id,
+    role: request.role,
     task: {
       taskId: task.id,
       title: task.title,
