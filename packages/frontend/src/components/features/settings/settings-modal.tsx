@@ -305,7 +305,7 @@ function SettingsDialog({
         </DialogHeader>
 
         <DialogBody className="min-h-0 flex-1 overflow-clip">
-          <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1">
+          <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[minmax(13.75rem,max-content)_minmax(0,1fr)] md:grid-rows-1">
             <SettingsSidebar
               section={navigation.section}
               disabled={isInteractionDisabled}
