@@ -62,7 +62,7 @@ describe("settings chat section", () => {
 
     renderSettingsChatSection(chatSettings);
 
-    expect(screen.getByText("Chat settings")).toBeDefined();
+    expect(screen.getByText("Session settings")).toBeDefined();
     expect(screen.getByText("Show thinking messages")).toBeDefined();
     expect(screen.getByText(/Thinking messages are hidden by default/)).toBeDefined();
     expect(
@@ -252,7 +252,7 @@ describe("settings chat section", () => {
     renderSettingsChatSection(chatSettings);
 
     expect(
-      screen.getByText("Changes to chat settings will take effect after you save your settings."),
+      screen.getByText("Changes to session settings apply after you save your settings."),
     ).toBeDefined();
   });
 

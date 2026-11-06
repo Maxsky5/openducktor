@@ -191,7 +191,7 @@ describe("chat owner resolution", () => {
     });
     expect(resolveChatOwner(ref, ready([workspace]), ready([]))).toMatchObject({
       status: "error",
-      title: "Chat Not Found",
+      title: "Session Not Found",
     });
   });
 

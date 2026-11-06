@@ -13,8 +13,8 @@ export type WorkspaceSessionForkDestination = WorkspaceSessionForkInput["destina
 
 /** The words of the Fork chat form. Each client renders them with its own controls. */
 export const FORK_CHAT_TEXT = {
-  title: "Fork chat",
-  description: "Copy the conversation through this reply, then choose where the new chat works.",
+  title: "Fork session",
+  description: "Copy the conversation through this reply, then choose where the new session works.",
   locationLabel: "Fork work location",
   sameFolder: "Same folder",
   sameFolderDescription: "Work with the files already here.",
@@ -23,8 +23,8 @@ export const FORK_CHAT_TEXT = {
   sourceFolder: "Source folder",
   loadingDefaults: "Loading branch defaults…",
   uncommittedChanges: "Uncommitted changes in the source folder do not go to the new worktree.",
-  confirm: "Fork chat",
-  confirming: "Forking chat…",
+  confirm: "Fork session",
+  confirming: "Forking session…",
   forkedWithWarning: "The fork was created",
 } as const;
 

@@ -39,10 +39,10 @@ export default function AppLayout(): ReactElement {
         <Stack.Screen name="start-session" options={fullSheetOptions("Start Session")} />
         <Stack.Screen name="approve-task" options={fullSheetOptions("Approve Task")} />
         <Stack.Screen name="request-changes" options={fullSheetOptions("Request Changes")} />
-        <Stack.Screen name="new-chat" options={fullSheetOptions("New Chat")} />
+        <Stack.Screen name="new-chat" options={fullSheetOptions("New Session")} />
         <Stack.Screen name="rename-chat" options={compactSheetOptions(colors.surface)} />
         <Stack.Screen name="archive-chat" options={compactSheetOptions(colors.surface)} />
-        <Stack.Screen name="fork-chat" options={fullSheetOptions("Fork Chat")} />
+        <Stack.Screen name="fork-chat" options={fullSheetOptions("Fork Session")} />
         <Stack.Screen name="composer-options" options={choiceSheetOptions("Message Options")} />
         <Stack.Screen name="add-host" options={compactSheetOptions(colors.surface)} />
         <Stack.Screen

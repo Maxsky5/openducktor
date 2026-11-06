@@ -32,8 +32,8 @@ export type OpenWorkspaceChat = {
 
 const NOT_CONNECTED: CommandFailure = {
   kind: "failed",
-  title: "Could not open the chat",
-  message: "This chat has not started yet. Wait for the host connection, then open it again.",
+  title: "Could not open the session",
+  message: "This session has not started yet. Wait for the host connection, then open it again.",
 };
 
 /** Opens chats from a list row or after New chat, with progress and the reason of a failure. */
@@ -82,7 +82,7 @@ export function useOpenWorkspaceChat(): OpenWorkspaceChat {
             }),
           );
       } catch (cause) {
-        const next = toCommandFailure(cause, "Could not start the chat");
+        const next = toCommandFailure(cause, "Could not start the session");
         if (mounted.current) setFailure({ recordId: record.id, failure: next });
       }
       starting.current = false;

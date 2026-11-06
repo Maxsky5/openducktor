@@ -21,7 +21,7 @@ export const mobileSessionForkDisabledReason = ({
     runtimeReadiness: interaction.runtimeReadiness,
     interactionEnabled: interaction.canInteract,
     readOnly: archived,
-    readOnlyReason: archived ? "Restore this chat before forking a reply." : null,
+    readOnlyReason: archived ? "Restore this session before you fork a reply." : null,
     error: interaction.canInteract ? null : interaction.blockedReason,
     waitsForMergePublication:
       owner.kind === "task" && task !== null && taskWaitsForMergePublication(task),

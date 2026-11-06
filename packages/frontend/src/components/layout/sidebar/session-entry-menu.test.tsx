@@ -142,8 +142,8 @@ test.each(["list", "rail"] as const)(
     try {
       const initialAddress = view.getByLabelText("Current address").textContent;
       let menu = await openMenu(view, entry.title);
-      expect(menu.queryByRole("menuitem", { name: "Rename chat" })).toBeNull();
-      expect(menu.queryByRole("menuitem", { name: "Archive chat" })).toBeNull();
+      expect(menu.queryByRole("menuitem", { name: "Rename session" })).toBeNull();
+      expect(menu.queryByRole("menuitem", { name: "Archive session" })).toBeNull();
       expect(view.queryByRole("dialog") === null).toBe(true);
       fireEvent.click(menu.getByRole("menuitem", { name: "Mark as unread" }));
       const row = view.getByRole("button", { name: new RegExp(entry.title) });
@@ -196,8 +196,8 @@ test("workspace menu copies the external ID and renames in its own workspace wit
     fireEvent.click(menu.getByRole("menuitem", { name: "Copy external session ID" }));
     await waitFor(() => expect(copied).toEqual(["native-id"]));
     menu = await openMenu(view, entry.title);
-    fireEvent.click(menu.getByRole("menuitem", { name: "Rename chat" }));
-    const dialog = within(await view.findByRole("dialog", { name: "Rename chat" }));
+    fireEvent.click(menu.getByRole("menuitem", { name: "Rename session" }));
+    const dialog = within(await view.findByRole("dialog", { name: "Rename session" }));
     fireEvent.change(dialog.getByRole("textbox", { name: "Name" }), {
       target: { value: "Renamed chat" },
     });
@@ -243,16 +243,16 @@ test.each(
     const openArchive = async () => {
       if (source === "menu") {
         const menu = await openMenu(view, entry.title);
-        fireEvent.click(menu.getByRole("menuitem", { name: "Archive chat" }));
+        fireEvent.click(menu.getByRole("menuitem", { name: "Archive session" }));
       } else {
         fireEvent.focus(row);
         const preview = await view.findByRole("dialog", { name: entry.title });
         fireEvent.keyDown(row, { key: "ArrowRight" });
         const header = preview.querySelector("header");
         if (!header) throw new Error("Expected a preview header.");
-        fireEvent.click(within(header).getByRole("button", { name: "Archive chat" }));
+        fireEvent.click(within(header).getByRole("button", { name: "Archive session" }));
       }
-      const dialog = await view.findByRole("dialog", { name: "Archive chat" });
+      const dialog = await view.findByRole("dialog", { name: "Archive session" });
       await waitFor(() =>
         expect(view.queryByRole("dialog", { name: entry.title }) === null).toBe(true),
       );
@@ -268,7 +268,7 @@ test.each(
       await waitFor(() => expect(document.activeElement === row).toBe(true));
       expect(archive).not.toHaveBeenCalled();
       dialog = await openArchive();
-      fireEvent.click(dialog.getByRole("button", { name: "Archive chat" }));
+      fireEvent.click(dialog.getByRole("button", { name: "Archive session" }));
       await waitFor(() => expect(archive).toHaveBeenCalledTimes(1));
       expect(archive).toHaveBeenCalledWith({
         workspaceId: "beta",

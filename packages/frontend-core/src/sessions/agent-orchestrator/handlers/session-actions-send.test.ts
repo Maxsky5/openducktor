@@ -216,7 +216,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       expect(feedback.shownOf("error")).toEqual([
         {
           kind: "error",
-          message: "Message sent to 'session-1', but the chat update failed",
+          message: "Message sent to 'session-1', but the session update failed",
           options: { description: "Frontend update failed after acceptance" },
         },
       ]);

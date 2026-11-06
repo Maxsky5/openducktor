@@ -62,7 +62,7 @@ export const createSessionCreationPreparation = ({
       if (input.forkPoint ? !sourceMatches || !scopeMatches : !sameTask && !scopeMatches)
         return yield* new HostValidationError({
           field: "sessionScope",
-          message: "The fork parent belongs to another task or workspace chat.",
+          message: "The fork parent belongs to another task or workspace session.",
         });
       const destination = { ...source, workingDirectory: input.workingDirectory };
       yield* turnPreparation.model(
@@ -79,7 +79,7 @@ export const createSessionCreationPreparation = ({
           return yield* new HostValidationError({
             field: "sessionScope",
             message:
-              "The saved workspace role context is unavailable. Reopen the saved chat before forking.",
+              "The saved workspace role context is unavailable. Reopen the saved session before forking.",
           });
         prepared.systemPrompt = sourceSettings.systemPrompt;
       } else if (systemPrompt !== undefined) prepared.systemPrompt = systemPrompt;

@@ -130,7 +130,7 @@ export const createAgentSessionCommandService = ({
       if (live.type !== "live")
         return yield* new HostValidationError({
           field: "externalSessionId",
-          message: "The session is not attached to its runtime. Reopen the chat before sending.",
+          message: "The session is not attached to its runtime. Reopen the session before sending.",
         });
       return live;
     });

@@ -354,7 +354,7 @@ const readDraftStoragePayload = (
   try {
     return storage.getItem(key);
   } catch (cause) {
-    throw new Error(`Failed to read chat draft storage key "${key}".`, { cause });
+    throw new Error(`Failed to read message draft storage key "${key}".`, { cause });
   }
 };
 
@@ -365,7 +365,7 @@ const removeDraftStoragePayload = (
   try {
     storage.removeItem(key);
   } catch (cause) {
-    throw new Error(`Failed to remove chat draft storage key "${key}".`, { cause });
+    throw new Error(`Failed to remove message draft storage key "${key}".`, { cause });
   }
 };
 
@@ -432,7 +432,7 @@ export const writeAgentChatDraftToStorage = ({
   try {
     storage.setItem(key, result.payload);
   } catch (cause) {
-    throw new Error(`Failed to persist chat draft storage key "${key}".`, { cause });
+    throw new Error(`Failed to persist message draft storage key "${key}".`, { cause });
   }
 
   return result;

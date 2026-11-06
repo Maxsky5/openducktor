@@ -20,7 +20,7 @@ export const closeOwnerBrowserTabs = (
           (cause) =>
             new HostOperationError({
               operation,
-              message: `Could not close the browser tabs of this ${owner.kind === "task" ? "task" : "chat"}: ${cause.message}`,
+              message: `Could not close the browser tabs of this ${owner.kind === "task" ? "task" : "session"}: ${cause.message}`,
               cause,
             }),
         ),

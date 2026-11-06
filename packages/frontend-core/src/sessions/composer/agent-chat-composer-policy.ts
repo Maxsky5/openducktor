@@ -132,7 +132,7 @@ export function useComposerPolicy({
   const steerBlockedReason = steersTurn ? draftSteerBlockedReason(draft, model) : null;
   const sendBlockedReason = settingsReady
     ? steerBlockedReason
-    : "Load chat settings before sending. Use Retry settings if the read failed.";
+    : "Load session settings before sending. Use Retry settings if the read failed.";
   const sendDisabled =
     !settingsReady ||
     sendInputBlocked ||
@@ -181,7 +181,7 @@ const composerPlaceholderFor = (
     };
   }
   if (isReadOnly && readOnlyReason) return { text: readOnlyReason, hints: null };
-  if (!settingsReady) return { text: "Load chat settings before sending", hints: null };
+  if (!settingsReady) return { text: "Load session settings before sending", hints: null };
 
   let referenceHint: string | null = null;
   if (supportsFileSearch && supportsSubagentReferences) {

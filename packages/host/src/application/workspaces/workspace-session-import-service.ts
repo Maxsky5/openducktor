@@ -332,7 +332,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           if (existing) {
             if (existing.archivedAt !== null)
               return yield* invalidImport(
-                "This conversation belongs to an archived chat. Restore it from archived sessions.",
+                "This conversation belongs to an archived session. Restore it from archived sessions.",
               );
             return { session: existing, created: false, openError: null };
           }
@@ -444,7 +444,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
               return {
                 ...saved,
                 openError: Exit.isFailure(opened)
-                  ? `The chat was saved, but opening failed: ${causeMessage(opened.cause)}. Open the saved chat to retry.`
+                  ? `The session was saved, but opening failed: ${causeMessage(opened.cause)}. Open the saved session to retry.`
                   : null,
               };
             }),

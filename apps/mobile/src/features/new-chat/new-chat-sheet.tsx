@@ -105,7 +105,7 @@ export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): Rea
   if (attemptId && showProgress)
     return (
       <SheetScreen
-        title="New chat"
+        title="New session"
         closable={!starting}
         onClose={() => {
           requestClose();
@@ -124,7 +124,7 @@ export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): Rea
 
   return (
     <SheetScreen
-      title="New chat"
+      title="New session"
       closable={!starting}
       onClose={requestClose}
       intro={<FormLead text="Choose where the agent works and how it starts." />}
@@ -182,7 +182,7 @@ function ChatForm({
           maxLength={WORKSPACE_SESSION_MANUAL_TITLE_LIMIT}
           autoComplete="off"
           clearButtonMode="while-editing"
-          hint="Optional. A chat without a name gets a generated title."
+          hint="Optional. A session without a name gets a generated title."
           error={request.fieldErrors.name}
           editable={!starting}
           returnKeyType="done"
@@ -286,13 +286,13 @@ function CreateChatButton({
 }): ReactElement {
   return (
     <Button
-      label={creating ? "Creating chat…" : "Create chat"}
+      label={creating ? "Creating session…" : "Create session"}
       icon="message-square-plus"
       size="lg"
       loading={creating}
       command
       disabled={disabled}
-      accessibilityHint="Creates the chat and opens it."
+      accessibilityHint="Creates the session and opens it."
       onPress={onCreate}
       fill
     />

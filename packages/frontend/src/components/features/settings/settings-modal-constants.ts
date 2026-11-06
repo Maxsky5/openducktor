@@ -43,7 +43,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   { id: "prompts", label: "System prompts", icon: MessageSquareText },
   { id: "reusable-prompts", label: "Reusable prompts", icon: MessageSquarePlus },
   { id: "custom-agent-roles", label: "Custom agent roles", icon: MessageSquareText },
-  { id: "chat", label: "Chat", icon: MessageSquare },
+  { id: "chat", label: "Sessions", icon: MessageSquare },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "kanban", label: "Kanban", icon: Columns3 },
   { id: "autopilot", label: "Autopilot", icon: Workflow },

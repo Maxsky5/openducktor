@@ -154,7 +154,7 @@ describe("rowListOf", () => {
     expect(replyLabel([["question"]])?.label).toBe("Reply to question");
     expect(replyLabel([["permission"]])?.label).toBe("Reply to permission request");
     expect(replyLabel([["question"], ["permission"]])?.label).toBe("Reply to requests");
-    expect(replyLabel([["blocked"]])?.label).toBe("Open chat");
+    expect(replyLabel([["blocked"]])?.label).toBe("Open session");
     replyLabel([["question"]])?.run();
     expect(showReply).toHaveBeenCalledWith({ kind: "chat", item: chat });
   });

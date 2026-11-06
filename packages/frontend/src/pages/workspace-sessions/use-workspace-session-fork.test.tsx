@@ -113,7 +113,7 @@ test("keeps historical fork buttons idle for record updates and publishes change
         },
       ).catch((cause: unknown) => expect(cause).toBe(failure));
     });
-    expect(view.getByLabelText("Forking chat…").tabIndex).toBe(0);
+    expect(view.getByLabelText("Forking session…").tabIndex).toBe(0);
     expect(
       view.getByRole("button", { name: "Fork from this reply" }).hasAttribute("disabled"),
     ).toBe(true);

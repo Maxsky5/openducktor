@@ -142,18 +142,18 @@ Remove Worktree is a core task action of a closed task. The host rejects `task_w
 
 ## Other owners of a task worktree
 
-The host checks the others that need a task worktree before Close, Delete, Reset Task, Reset Implementation, Remove worktree, and merged task cleanup remove it. It uses the owner rules of chat archive with worktree removal. It checks every configured workspace, also closed workspaces. It compares paths after alias resolution, so a symlink path and its real path are the same worktree.
+The host checks the others that need a task worktree before Close, Delete, Reset Task, Reset Implementation, Remove worktree, and merged task cleanup remove it. It uses the owner rules of session archive with worktree removal. It checks every configured workspace, also closed workspaces. It compares paths after alias resolution, so a symlink path and its real path are the same worktree.
 
 | Owner | Effect |
 |---|---|
 | Another workspace that uses the worktree as its repository checkout | Blocks. Remove that workspace. |
 | An open task, other than the task itself, whose worktree or session uses the directory | Blocks. Close that task. |
-| A saved chat that works in the worktree and is not archived | Blocks. Archive that chat. |
-| A saved Claude chat whose native history uses the worktree, also when archived | Warns. The chat cannot resume after the removal. |
+| A saved session that works in the worktree and is not archived | Blocks. Archive that session. |
+| A saved Claude session whose native history uses the worktree, also when archived | Warns. The session cannot resume after the removal. |
 
 Each confirmation reads these owners with `task_worktree_owners_get` when it opens, and shows its content when this read also has its first result. A close, approval, or merged pull request confirmation uses the owners only while its choice removes the worktree, so a change of that choice only changes their color. A blocking owner disables Confirm, and the host also refuses the cleanup before it stops task sessions or removes a worktree. A confirmed cleanup removes a worktree that only Claude history needs, because its confirmation showed the warning.
 
-A saved Claude chat whose native history the host cannot read only warns in a confirmation, and the warning names the chat and its workspace. A failed owner read blocks only the removal, and its error row has a retry.
+A saved Claude session whose native history the host cannot read only warns in a confirmation, and the warning names the session and its workspace. A failed owner read blocks only the removal, and its error row has a retry.
 
 Pull request sync closes a merged task without a confirmation. It also blocks on a Claude history owner, so the user must close that task. A task that cannot close does not stop the sync of the other tasks. The sync then fails with the reason for each task.
 

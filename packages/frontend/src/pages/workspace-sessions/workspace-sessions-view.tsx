@@ -280,7 +280,7 @@ function WorkspaceSessionRecordsRefreshNotice({
   return (
     <div role="alert" className="flex items-center gap-3 border-b border-border p-3 text-sm">
       <span className="flex-1 text-destructive">
-        Could not refresh chats: {errorMessage(error)}
+        Could not refresh sessions: {errorMessage(error)}
       </span>
       <Button size="sm" variant="outline" onClick={onRetry}>
         Retry
@@ -381,10 +381,10 @@ function WorkspaceSessionUnavailable({ onDismiss }: { onDismiss: () => void }): 
       className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-card p-6 text-center"
       role="alert"
     >
-      <h1 className="text-lg font-semibold">This chat is unavailable</h1>
+      <h1 className="text-lg font-semibold">This session is unavailable</h1>
       <p className="max-w-sm text-sm text-muted-foreground">
         The requested workspace session is archived, removed, or not in this workspace. Restore it
-        from Archived chats or choose another session.
+        from Archived sessions or choose another session.
       </p>
       <Button variant="outline" onClick={onDismiss}>
         Close

@@ -291,7 +291,7 @@ function RuntimeSessionResults({
             }}
           >
             <MessageSquare data-icon="inline-start" />
-            Open saved chat
+            Open saved session
           </Button>
         </div>
       )}

@@ -170,7 +170,7 @@ export function useGitConflictActions({
   } else if (builderSessions === null) {
     askBlockedReason = "The sessions of this workspace are still loading. Try again in a moment.";
   }
-  let askDescription = `Sends the conflict to the ${owner.recipientLabel} of this chat.`;
+  let askDescription = `Sends the conflict to the ${owner.recipientLabel} of this session.`;
   if (task) {
     askDescription = defaultBuilder
       ? "Sends the conflict to the latest Builder in the conflict worktree."
@@ -245,7 +245,7 @@ export function useGitConflictActions({
     async (target: GitConflict): Promise<void> => {
       if (!record) return;
       const identity = workspaceSessionIdentity(record);
-      if (!identity) throw new Error("Send a first message in this chat, then ask again.");
+      if (!identity) throw new Error("Send a first message in this session, then ask again.");
       const workingDirectory = normalizeWorkingDirectory(target.workingDir);
       const receipt = await sendAgentMessage(
         identity,
@@ -259,7 +259,7 @@ export function useGitConflictActions({
           },
         },
       );
-      if (!receipt) throw new Error("The chat session is not loaded. Open the chat and try again.");
+      if (!receipt) throw new Error("The session is not loaded. Open the session and try again.");
       showReceipt(receipt);
       onOpenSession(identity);
     },

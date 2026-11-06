@@ -13,7 +13,7 @@ import type { GitConflict } from "../contracts";
 export class GitConflictRequestCancelled extends Error {
   constructor() {
     super(
-      "The selected chat or conflict directory changed. Ask for assistance again in the current chat.",
+      "The selected session or conflict directory changed. Ask for assistance again in the current session.",
     );
     this.name = "GitConflictRequestCancelled";
   }
@@ -48,19 +48,19 @@ export const workspaceConflictRecipientBlockedReason = (
   record: WorkspaceSession,
 ): string | null => {
   if (record.archivedAt !== null)
-    return "Restore the saved workspace chat before asking for assistance.";
+    return "Restore the saved workspace session before asking for assistance.";
   if (
     !record.executionTarget.workingDirectory.trim() ||
     (record.executionTarget.kind === "local_worktree" &&
       record.executionTarget.worktreeState === "removed")
   )
-    return "Restore this chat's saved working directory before asking for assistance.";
+    return "Restore this session's saved working directory before asking for assistance.";
   return null;
 };
 
 /** Why a chat cannot work on a conflict: the chat works in another directory. */
 export const CHAT_CONFLICT_DIRECTORY_MISMATCH_REASON =
-  "Select the chat for the conflict directory or restore this chat's saved target.";
+  "Select the session for the conflict directory or restore this session's saved target.";
 
 /**
  * Why a saved workspace chat cannot receive a conflict request, or null when it can. The chat must

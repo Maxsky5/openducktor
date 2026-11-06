@@ -634,9 +634,9 @@ describe("AppShell", () => {
   test("opens New chat on the first menu click", async () => {
     renderAppShellForTest();
     fireEvent.click(screen.getByRole("button", { name: "More actions for OpenDucktor" }));
-    fireEvent.click(await screen.findByRole("button", { name: "New chat" }));
+    fireEvent.click(await screen.findByRole("button", { name: "New session" }));
 
-    const dialog = screen.getByRole("dialog", { name: "New chat" });
+    const dialog = screen.getByRole("dialog", { name: "New session" });
     expect(within(dialog).getByRole("textbox", { name: /^Name/ })).toBeTruthy();
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeTruthy();
   });
@@ -1867,7 +1867,7 @@ describe("AppShell command palette", () => {
 
     await expectActiveOptionLinked(palette, "New task");
     fireEvent.keyDown(input, { key: "ArrowDown" });
-    await expectActiveOptionLinked(palette, "New chat");
+    await expectActiveOptionLinked(palette, "New session");
     search(palette, "polish");
     await expectActiveOptionLinked(palette, "Polish the command palette");
     fireEvent.keyDown(input, { key: "Tab" });
@@ -2210,18 +2210,18 @@ describe("AppShell command palette", () => {
 
       fireEvent.keyDown(input, { key: "Tab" });
 
-      expect(within(palette).getByPlaceholderText("Search chat actions…")).toBeTruthy();
+      expect(within(palette).getByPlaceholderText("Search session actions…")).toBeTruthy();
       expect(
         within(palette)
           .getAllByRole("option")
           .map((option) => option.textContent),
       ).toEqual([
-        "Open chat",
+        "Open session",
         "Mark as unread",
-        "Rename chat",
+        "Rename session",
         "Copy working directory",
         "Copy external session ID",
-        "Archive chat",
+        "Archive session",
       ]);
       search(palette, "external");
       fireEvent.keyDown(input, { key: "Enter" });
@@ -2239,9 +2239,11 @@ describe("AppShell command palette", () => {
 
     fireEvent.keyDown(input, { key: "e", metaKey: true });
     await flushQueryUpdates();
-    const rename = await screen.findByRole("dialog", { name: "Rename chat" });
+    const rename = await screen.findByRole("dialog", { name: "Rename session" });
     fireEvent.keyDown(rename, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Rename chat" })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Rename session" })).toBeNull(),
+    );
 
     const palette = await openPalette();
     const reopened = search(palette, "release notes");
@@ -2250,7 +2252,7 @@ describe("AppShell command palette", () => {
     fireEvent.keyDown(reopened, { key: "Enter" });
     await flushQueryUpdates();
 
-    expect(await screen.findByRole("dialog", { name: "Archive chat" })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: "Archive session" })).toBeTruthy();
   });
 
   test("shows the sidebar status dot at the start of a task row with sessions", async () => {

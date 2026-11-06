@@ -18,7 +18,7 @@ export const useChatRecord = (workspaceId: string, sessionId: string): ChatRecor
   const workspace = workspaces.find((candidate) => candidate.workspaceId === workspaceId);
   const isPreparing = useMinimumLoader(workspace !== undefined && chats.isPending);
   if (!workspace) {
-    return { status: "missing", reason: "The workspace of this chat is no longer open." };
+    return { status: "missing", reason: "The workspace of this session is no longer open." };
   }
   if (isPreparing) return { status: "loading" };
   if (chats.data === undefined) {
@@ -35,7 +35,7 @@ export const useChatRecord = (workspaceId: string, sessionId: string): ChatRecor
   }
   const record = chats.data.find((candidate) => candidate.id === sessionId);
   if (!record) {
-    return { status: "missing", reason: "This chat is archived or removed." };
+    return { status: "missing", reason: "This session is archived or removed." };
   }
   return { status: "ready", workspace, record };
 };

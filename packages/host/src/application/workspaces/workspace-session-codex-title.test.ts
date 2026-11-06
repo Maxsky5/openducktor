@@ -354,7 +354,7 @@ describe("Codex Workspace Session title sync", () => {
     await waitFor(() => h.renameFailures.length === 1);
     expect(h.state.nativeTitle).toBe("First accepted prompt");
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
-    expect(h.renameFailures[0]).toContain("Reattach this chat or rename it to retry");
+    expect(h.renameFailures[0]).toContain("Reattach this session or rename it to retry");
 
     h.state.failTitleAfterWrite = false;
     const renamed = await Effect.runPromise(

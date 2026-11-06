@@ -40,7 +40,7 @@ export function AgentsPageShell({
           onRetry={onRetryChatSettingsLoad}
           repositoryPath={workspaceRepoPath}
           retryLabel="Retry load"
-          title="Task sessions couldn't load chat settings."
+          title="Task sessions couldn't load session settings."
         />
       ) : null}
       {gitProviderContextLoadError ? (

@@ -9,7 +9,7 @@ import { matchesQuery, segments } from "./match";
 /** The list or the form that the palette shows. */
 type PaletteList = "home" | "search" | "target" | "waiting" | "reply";
 
-const SEARCH_PLACEHOLDER = "Search actions, tasks, and chats…";
+const SEARCH_PLACEHOLDER = "Search actions, tasks, and sessions…";
 const ACTIONS_PLACEHOLDER = "Search task actions…";
 
 /** Writes `text` into `element` with a mark on each part that `query` finds. */

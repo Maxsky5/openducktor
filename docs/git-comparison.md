@@ -22,8 +22,8 @@ History shows the commits of the current branch and the target that the other br
 
 | Session context | Initial comparison | Choice owner |
 | --- | --- | --- |
-| Workspace repository root | Saved chat target or repository default | The workspace chat |
-| Workspace worktree | Saved chat target or repository default | The workspace chat |
+| Workspace repository root | Saved session target or repository default | The workspace session |
+| Workspace worktree | Saved session target or repository default | The workspace session |
 | Task worktree | Saved task target or repository default | The task |
 | Task repository root | Current branch upstream | No comparison editor |
 
@@ -31,7 +31,7 @@ During a rebase, the current branch upstream is the upstream of the branch that 
 
 ## Repository default target branch
 
-Each workspace saves one default target branch. Tasks and chats without their own target use it.
+Each workspace saves one default target branch. Tasks and sessions without their own target use it.
 
 When OpenDucktor creates a workspace, it reads the default branch of the repository from local Git data. It does not contact a remote.
 
@@ -49,21 +49,21 @@ After creation, change the value in Settings > Repositories > Configuration > De
 
 Existing workspaces keep their saved default target branch. A settings file from an earlier version without this value reads it as `origin/main`, as that version did.
 
-## Workspace chat target
+## Workspace session target
 
-The New chat dialog has a Target branch field for each work location. It preselects the repository default target branch and marks it in the list. Only Current checkout offers Tracked upstream. A change to New worktree or Existing worktree replaces a Tracked upstream choice with the repository default.
+The New session dialog has a Target branch field for each work location. It preselects the repository default target branch and marks it in the list. Only Current checkout offers Tracked upstream. A change to New worktree or Existing worktree replaces a Tracked upstream choice with the repository default.
 
-The chat saves its target in its record on the host. Every client of the host shows the same target. The target stays after an app reload, a host restart, an archive, and a restore. A later change of the repository default does not change a saved target.
+The session saves its target in its record on the host. Every client of the host shows the same target. The target stays after an app reload, a host restart, an archive, and a restore. A later change of the repository default does not change a saved target.
 
 A New branch worktree starts its branch from the target branch, as a task build does. A remote target also sets the branch upstream. An Existing branch worktree uses the target only for comparison. If the target is unavailable, creation fails and leaves no worktree or branch.
 
-An Existing worktree chat uses a registered worktree of the repository as it is. The target is only for comparison, and a target change never switches the checkout of that worktree.
+An Existing worktree session uses a registered worktree of the repository as it is. The target is only for comparison, and a target change never switches the checkout of that worktree.
 
-An imported chat saves the repository default target at import time. A chat from before this field has no saved target and follows the current repository default. A worktree chat cannot use a Tracked upstream default. An imported worktree chat then saves no target, and its Git panel asks the user to choose a target branch.
+An imported session saves the repository default target at import time. A session from before this field has no saved target and follows the current repository default. A worktree session cannot use a Tracked upstream default. An imported worktree session then saves no target, and its Git panel asks the user to choose a target branch.
 
-A pick in the Git panel saves the new target to the chat. A failed save keeps the previous target and shows the reason.
+A pick in the Git panel saves the new target to the session. A failed save keeps the previous target and shows the reason.
 
-A restore of a removed worktree recreates the branch from the chat target. The Archived chats dialog shows that target for each chat with a removed worktree, and the user can choose another branch there. This is the only change that an archived chat accepts. If the target branch is unavailable, or the chat has no usable target, restore fails and the chat stays archived.
+A restore of a removed worktree recreates the branch from the session target. The Archived sessions dialog shows that target for each session with a removed worktree, and the user can choose another branch there. This is the only change that an archived session accepts. If the target branch is unavailable, or the session has no usable target, restore fails and the session stays archived.
 
 Task target choices continue to use the saved task record. Sessions for the same task share its saved target.
 
@@ -83,7 +83,7 @@ Every refresh reads the branch first and follows a branch that its own read find
 
 Manual Refresh shows its pending state before any Git work starts. More clicks join the pending refresh. A Refresh that starts before the checkout is known belongs to the first checkout that the panel shows. Each session, target choice, and checkout keeps its own Refresh: a return shows its running Refresh, and a click joins it. A checkout from another place shows the new branch without the old Refresh state or failure. A branch that Refresh itself finds takes that Refresh. A new target choice starts its own Refresh, and a failure of the previous choice does not show for it. Loaded default settings keep the default choice, so that Refresh continues. The local changes read starts with the fetch, so a slow fetch does not delay it. Local changes also hold the upstream counts, so a manual Refresh reads them again after the fetch, and that read gives the result. Without a fetch, a failure of the first read stays, and the refresh reports it after the other steps end. If Refresh finds a new branch or loads missing settings, it continues with the new comparison, and it stays pending until that work ends. Its result includes a failure of that work. If another session or target opens before that work starts, the work ends without a read, because that view has its own refresh. Branch changes and History read again after the fetch ends. The file views read again after the Git steps, also when a Git step fails, because local files can change without the remote. They show their own state. A failed manual refresh keeps the last loaded changes and shows the failure until a later refresh succeeds. A failed read of local changes, Branch changes, or a shown History fails the manual refresh and the refresh after a Git action. A confirmed commit, change, push, pull, or rebase stays a success, and its message tells the user that the panel could not update. A background refresh leaves each read failure to the view that shows it. After a failed target check or fetch, the Git reads run one time and no read repeats.
 
-The Git reads of one refresh send one refresh ID. The host checks a worktree directory once for that ID: it reads the repository and the directory with one `git rev-parse` each, in parallel, and the worktree list once. The branch, comparison, Branch changes, local changes, file tree, and file reads of that refresh share the result. A new refresh checks again. A chat file save checks the directory again, because it must check it at write time.
+The Git reads of one refresh send one refresh ID. The host checks a worktree directory once for that ID: it reads the repository and the directory with one `git rev-parse` each, in parallel, and the worktree list once. The branch, comparison, Branch changes, local changes, file tree, and file reads of that refresh share the result. A new refresh checks again. A workspace session file save checks the directory again, because it must check it at write time.
 
 When an agent of an open workspace ends a turn, the Git data of its working directory reads again: at once when a panel shows it, and otherwise when a panel shows it next. A refresh that a hidden panel or another context stops leaves the Git data of its context stale, so a return to it reads again. A focus, soft, or action refresh reads both diff scopes and the shown History again. It ends when its view moves to another session or closes, also when the user returns. The returned view reads again by itself. A completed Git change keeps its original directory, and a late refresh error cannot appear in another session.
 

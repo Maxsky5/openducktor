@@ -59,7 +59,7 @@ export function FileScreen(): ReactElement {
               message={
                 link.kind === "invalid"
                   ? link.message
-                  : `${path} is outside ${owner.ref.kind === "task" ? "the task worktree" : "the chat directory"}. The app opens only files inside it.`
+                  : `${path} is outside ${owner.ref.kind === "task" ? "the task worktree" : "the session directory"}. The app opens only files inside it.`
               }
             />
           );

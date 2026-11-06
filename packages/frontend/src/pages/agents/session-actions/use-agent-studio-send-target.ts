@@ -112,7 +112,7 @@ export function useAgentStudioSendTarget({
                   !matchesAgentSessionIdentity(session, selectedSessionIdentity)
                 )
                   throw new Error(
-                    "The original chat is no longer selected. Reopen it to send your draft.",
+                    "The original session is no longer selected. Reopen it to send your draft.",
                   );
                 assertCanPrepareSession(selectedSessionIdentity);
               },
@@ -131,7 +131,7 @@ export function useAgentStudioSendTarget({
             assertBeforeLaunch: () => {
               if (!isCurrentContext())
                 throw new Error(
-                  "The original chat is no longer selected. Reopen it to send your draft.",
+                  "The original session is no longer selected. Reopen it to send your draft.",
                 );
             },
           },

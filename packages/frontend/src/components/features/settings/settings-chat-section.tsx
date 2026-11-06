@@ -67,9 +67,9 @@ export function SettingsChatSection({
   return (
     <div className="grid gap-4 p-4">
       <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold text-foreground">Chat settings</h3>
+        <h3 className="text-sm font-semibold text-foreground">Session settings</h3>
         <p className="text-xs text-muted-foreground">
-          Choose how chats look and how you send messages.
+          Choose how sessions look and how you send messages.
         </p>
       </div>
 
@@ -167,7 +167,7 @@ export function SettingsChatSection({
       />
 
       <div className="rounded-md border border-border bg-muted/60 p-3 text-xs text-muted-foreground">
-        Changes to chat settings will take effect after you save your settings.
+        Changes to session settings apply after you save your settings.
       </div>
     </div>
   );

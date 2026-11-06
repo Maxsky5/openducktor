@@ -143,7 +143,7 @@ describe("useComposerPolicy", () => {
 
     expect(policy.sendDisabled).toBe(true);
     expect(policy.sendBlockedReason).toBe(
-      "Load chat settings before sending. Use Retry settings if the read failed.",
+      "Load session settings before sending. Use Retry settings if the read failed.",
     );
   });
 

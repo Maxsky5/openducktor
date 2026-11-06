@@ -2,8 +2,8 @@
 export const SESSION_MENU_LABELS = {
   markRead: "Mark as read",
   markUnread: "Mark as unread",
-  rename: "Rename chat",
+  rename: "Rename session",
   copyWorkingDirectory: "Copy working directory",
   copyExternalSessionId: "Copy external session ID",
-  archive: "Archive chat",
+  archive: "Archive session",
 } as const;

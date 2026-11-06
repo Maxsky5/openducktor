@@ -99,7 +99,7 @@ export const validateWorkspaceSessionTarget = (
     if (checkout === "not_git_directory") {
       return yield* Effect.fail(
         new HostValidationError({
-          message: `The directory of this chat is not a Git checkout: ${target.workingDirectory}. Restore the checkout at this path, or archive this chat.`,
+          message: `The directory of this session is not a Git checkout: ${target.workingDirectory}. Restore the checkout at this path, or archive this session.`,
           field: "workingDirectory",
         }),
       );
@@ -110,7 +110,7 @@ export const validateWorkspaceSessionTarget = (
     if (target.kind === "local_repo_root") {
       return yield* Effect.fail(
         new HostValidationError({
-          message: `This chat works in ${target.workingDirectory}, but the workspace repository is now ${repoPath}. Archive this chat and start a new chat.`,
+          message: `This session works in ${target.workingDirectory}, but the workspace repository is now ${repoPath}. Archive this session and start a new one.`,
           field: "workingDirectory",
         }),
       );
@@ -118,14 +118,14 @@ export const validateWorkspaceSessionTarget = (
     if (checkout === "local_repo_root") {
       return yield* Effect.fail(
         new HostValidationError({
-          message: `The worktree of this chat is now the repository checkout: ${canonicalPath}. Archive this chat, or start a Current checkout chat.`,
+          message: `The worktree of this session is now the repository checkout: ${canonicalPath}. Archive this session, or start a Current checkout session.`,
           field: "workingDirectory",
         }),
       );
     }
     return yield* Effect.fail(
       new HostValidationError({
-        message: `The directory of this chat is not a registered worktree of ${repoPath}: ${canonicalPath}. If you moved this worktree, run git worktree repair in it. Otherwise archive this chat.`,
+        message: `The directory of this session is not a registered worktree of ${repoPath}: ${canonicalPath}. If you moved this worktree, run git worktree repair in it. Otherwise archive this session.`,
         field: "workingDirectory",
       }),
     );

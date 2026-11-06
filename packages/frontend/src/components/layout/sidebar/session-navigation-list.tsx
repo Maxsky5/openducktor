@@ -91,7 +91,7 @@ export function SessionNavigationList({
         ) : null}
         {!model.isLoading && model.issues.length === 0 && model.entryCount === 0 ? (
           <p className="px-1 text-sm text-sidebar-muted-foreground">
-            No sessions yet. Start with New task or New chat.
+            No sessions yet. Start with New task or New session.
           </p>
         ) : null}
         <SessionSourceIssues issues={model.issues} onRetry={onRetry} />

@@ -202,7 +202,7 @@ test("keeps a saved chat available when admission reports an error", async () =>
   try {
     await choose(view, "OpenCode");
     fireEvent.click(await view.findByRole("button", { name: "Import Native title" }));
-    fireEvent.click(await view.findByRole("button", { name: "Open saved chat" }));
+    fireEvent.click(await view.findByRole("button", { name: "Open saved session" }));
     expect(imports).toBe(1);
     expect(view.opened).toEqual([saved]);
   } finally {

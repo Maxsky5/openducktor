@@ -142,7 +142,9 @@ export function useAgentChatSend({
           stageAttachment: stageSendAttachment,
         });
         if (!parts) {
-          throw new Error("The edited message is empty or has content that this chat cannot send.");
+          throw new Error(
+            "The edited message is empty or has content that this session cannot send.",
+          );
         }
         await manageAgentMessageQueue(identity, { kind: "save_edit", submissionId, editId, parts });
       },
@@ -188,7 +190,7 @@ export function useAgentChatSend({
           assertCanSubmit: (session) => {
             if (!isCurrentRecipient())
               throw new Error(
-                "The original chat is no longer selected. Reopen it to send your draft.",
+                "The original session is no longer selected. Reopen it to send your draft.",
               );
             resolved.sendOptions?.assertCanSubmit?.(session);
           },

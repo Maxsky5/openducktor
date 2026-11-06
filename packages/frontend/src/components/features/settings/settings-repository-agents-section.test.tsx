@@ -102,7 +102,7 @@ describe("RepositoryAgentsSection", () => {
 
     expect(html).toContain("Default model");
     expect(html).toContain(
-      "Used for new chats and for workflow sessions that have no role default.",
+      "Used for new sessions and for task sessions that have no role default.",
     );
     expect(html).toContain("o3");
     expect(html).not.toContain("Missing complete defaults");

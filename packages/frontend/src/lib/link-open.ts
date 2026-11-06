@@ -77,7 +77,7 @@ export const openLink = async (url: string, choice: LinkOpenChoice): Promise<voi
   }
   const target = inAppLinkTarget();
   if (target === null) {
-    throw new Error("Open a task or chat page to open links in a browser tab.");
+    throw new Error("Open a task or session page to open links in a browser tab.");
   }
   if (target.blockedReason !== null) throw new Error(target.blockedReason);
   await target.open(url);

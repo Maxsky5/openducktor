@@ -214,7 +214,7 @@ describe("frontend core without a DOM", () => {
 
       if (!(failure instanceof AggregateError)) throw new Error("Disposal must reject.");
       expect(failure.errors.map((error) => errorMessage(error))).toEqual([
-        expect.stringContaining("Could not save a chat draft."),
+        expect.stringContaining("Could not save a message draft."),
       ]);
       expect(connection.drafts.chat.readVersion(chatDraftIdentity)).not.toBeNull();
     } finally {

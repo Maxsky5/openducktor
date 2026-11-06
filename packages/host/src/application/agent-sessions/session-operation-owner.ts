@@ -112,7 +112,7 @@ export const createSessionOperationOwner = (deps: {
             return yield* new HostValidationError({
               field: "sessionScope",
               message:
-                "This session belongs to another task, role, or workspace chat. Reload the chat before continuing.",
+                "This agent session belongs to another task, role, or workspace session. Reload the session before continuing.",
             });
           if (kind !== "stop" && session.unresolved) {
             const previous = session.unresolved;
@@ -299,7 +299,7 @@ export const createSessionOperationOwner = (deps: {
             return yield* new HostValidationError({
               field: "externalSessionId",
               message:
-                "Fork requires the saved root session of this task and role. Select its root chat and retry.",
+                "Fork requires the saved root session of this task and role. Select its root session and retry.",
             });
           return yield* effect;
         }),

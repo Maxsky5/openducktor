@@ -320,7 +320,7 @@ describe("Sidebar session previews", () => {
     expect(within(preview).getByText("Feature")).toBeTruthy();
     expect(within(preview).queryByLabelText("Task labels")).toBeNull();
     expect(within(preview).queryByText("auth")).toBeNull();
-    expect(within(preview).queryByRole("button", { name: "Archive chat" })).toBeNull();
+    expect(within(preview).queryByRole("button", { name: "Archive session" })).toBeNull();
     const header = preview.querySelector("header")!;
     expect(within(header).getByRole("button", { name: /PR #134/ })).toBeTruthy();
     expect(within(header).getByRole("button", { name: "Copy task ID" })).toBeTruthy();

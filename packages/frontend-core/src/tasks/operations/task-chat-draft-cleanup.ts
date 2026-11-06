@@ -46,7 +46,7 @@ export const createTaskChatDraftCleanup = ({
   feedback: ClientFeedback;
 }): TaskChatDraftCleanup => {
   const reportFailure = (cause: unknown): void => {
-    feedback.show("error", "Task updated, but chat draft cleanup failed", {
+    feedback.show("error", "Task updated, but message draft cleanup failed", {
       description: errorMessage(cause),
     });
   };
@@ -58,7 +58,7 @@ export const createTaskChatDraftCleanup = ({
     taskIds,
   }: TaskChatDraftCleanupInput): Promise<TaskChatDraftCleanupPlan> => {
     if (!workspaceId) {
-      throw new Error("Cannot clean chat drafts without an active workspace id.");
+      throw new Error("Cannot clean message drafts without an active workspace id.");
     }
 
     const sessionListsByTaskId = await loadAgentSessionListsFromQuery(

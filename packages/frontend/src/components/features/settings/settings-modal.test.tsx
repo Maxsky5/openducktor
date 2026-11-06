@@ -71,7 +71,9 @@ for (const shared of [true, false]) {
       expect(content.getByRole("button", { name: "Checking…" }).hasAttribute("disabled")).toBe(
         true,
       );
-      expect(content.getByRole("button", { name: "Chat" }).hasAttribute("disabled")).toBe(false);
+      expect(content.getByRole("button", { name: "Sessions" }).hasAttribute("disabled")).toBe(
+        false,
+      );
       await act(async () => discovery.resolve(result(input.value)));
       await waitFor(() =>
         expect(
@@ -111,7 +113,7 @@ for (const shared of [true, false]) {
       expect(content.getByRole("tab", { name: "Builder" }).getAttribute("aria-selected")).toBe(
         "true",
       );
-      fireEvent.click(content.getByRole("button", { name: "Chat" }));
+      fireEvent.click(content.getByRole("button", { name: "Sessions" }));
       const thinkingMessages = content.getByRole("switch", {
         name: "Show thinking messages in session transcripts",
       });
@@ -124,7 +126,7 @@ for (const shared of [true, false]) {
       expect(content.getByRole("tab", { name: "Builder" }).getAttribute("aria-selected")).toBe(
         "true",
       );
-      fireEvent.click(content.getByRole("button", { name: "Chat" }));
+      fireEvent.click(content.getByRole("button", { name: "Sessions" }));
       expect(
         content
           .getByRole("switch", { name: "Show thinking messages in session transcripts" })
@@ -141,7 +143,7 @@ for (const shared of [true, false]) {
       let content = await settings.open();
       fireEvent.click(content.getByRole("button", { name: "System prompts" }));
       fireEvent.click(content.getByRole("tab", { name: "Builder" }));
-      fireEvent.click(content.getByRole("button", { name: "Chat" }));
+      fireEvent.click(content.getByRole("button", { name: "Sessions" }));
       const thinkingMessages = content.getByRole("switch", {
         name: "Show thinking messages in session transcripts",
       });
@@ -154,7 +156,7 @@ for (const shared of [true, false]) {
         undefined,
       );
       content = await settings.open();
-      expect(content.getByRole("heading", { name: "Chat settings" })).toBeDefined();
+      expect(content.getByRole("heading", { name: "Session settings" })).toBeDefined();
       fireEvent.click(content.getByRole("button", { name: "System prompts" }));
       expect(content.getByRole("tab", { name: "Builder" }).getAttribute("aria-selected")).toBe(
         "true",
@@ -271,7 +273,7 @@ test("shared settings clears the repository target after closing", async () => {
   }
 });
 
-for (const section of ["Chat", "Scripts"]) {
+for (const section of ["Sessions", "Scripts"]) {
   test(`issue import opens repository configuration after ${section}`, async () => {
     const settings = renderSettings(true);
     try {

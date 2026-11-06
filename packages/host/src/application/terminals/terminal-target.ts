@@ -180,7 +180,7 @@ export const createTerminalTargetResolver = ({
         return yield* new TerminalServiceError({
           code: "workspace_session_unavailable",
           operation: "create",
-          message: "Workspace repository changed. Reopen this chat and retry the terminal.",
+          message: "Workspace repository changed. Reopen this session and retry the terminal.",
         });
       }
       const session = yield* store
@@ -193,7 +193,7 @@ export const createTerminalTargetResolver = ({
                 operation: "create",
                 message:
                   cause instanceof HostResourceError
-                    ? `Workspace Session ${context.sessionId} no longer exists. Select an active chat.`
+                    ? `Workspace Session ${context.sessionId} no longer exists. Select an active session.`
                     : `Cannot read Workspace Session ${context.sessionId}: ${cause.message}`,
                 cause,
               }),
@@ -203,7 +203,7 @@ export const createTerminalTargetResolver = ({
         return yield* new TerminalServiceError({
           code: "workspace_session_unavailable",
           operation: "create",
-          message: "This chat is archived. Restore it before opening a terminal.",
+          message: "This session is archived. Restore it before opening a terminal.",
         });
       }
       const target = session.executionTarget;
@@ -212,7 +212,7 @@ export const createTerminalTargetResolver = ({
           code: "workspace_session_unavailable",
           operation: "create",
           message:
-            "This chat's worktree was removed. Restore the worktree before opening a terminal.",
+            "This session's worktree was removed. Restore the worktree before opening a terminal.",
         });
       }
       yield* validateWorkspaceSessionTarget({ git }, repoPath, target).pipe(
@@ -221,7 +221,7 @@ export const createTerminalTargetResolver = ({
             new TerminalServiceError({
               code: "workspace_session_unavailable",
               operation: "create",
-              message: `Cannot use this chat's saved directory: ${cause.message}`,
+              message: `Cannot use this session's saved directory: ${cause.message}`,
               cause,
             }),
         ),
@@ -244,7 +244,7 @@ export const createTerminalTargetResolver = ({
             new TerminalServiceError({
               code: "workspace_session_unavailable",
               operation: "create",
-              message: `Cannot resolve this chat's saved directory: ${cause.message}`,
+              message: `Cannot resolve this session's saved directory: ${cause.message}`,
               cause,
             }),
         ),
@@ -253,7 +253,7 @@ export const createTerminalTargetResolver = ({
         return yield* new TerminalServiceError({
           code: "invalid_working_directory",
           operation: "create",
-          message: `Terminal directory does not match this chat's saved directory: ${target.workingDirectory}. Reopen the chat and retry.`,
+          message: `Terminal directory does not match this session's saved directory: ${target.workingDirectory}. Reopen the session and retry.`,
           workingDir,
         });
       }

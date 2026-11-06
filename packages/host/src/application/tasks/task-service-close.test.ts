@@ -440,7 +440,7 @@ describe("TaskService.closeTask", () => {
         }),
       ),
     ).rejects.toThrow(
-      "Cannot close task task-1 because others still need its worktree. Workspaces use a removed worktree as their repository checkout: Other. Remove these workspaces first. Open tasks use a removed worktree: Other task (task-2). Close these tasks first. Saved chats work in a removed worktree: “Hi”. Archive these chats first.",
+      "Cannot close task task-1 because others still need its worktree. Workspaces use a removed worktree as their repository checkout: Other. Remove these workspaces first. Open tasks use a removed worktree: Other task (task-2). Close these tasks first. Saved sessions work in a removed worktree: “Hi”. Archive these sessions first.",
     );
     // A confirmed close warns about native history in its confirmation, so it does not read it.
     expect(readOwners).toHaveBeenCalledWith({

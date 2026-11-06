@@ -472,7 +472,7 @@ const terminalStartBlockedReason = ({
   isCreating: boolean;
   tabCount: number;
 }): string | null => {
-  if (scope === null) return "Select a task or chat to use terminals.";
+  if (scope === null) return "Select a task or session to use terminals.";
   if (scope.workingDirectory === null) return scope.workingDirectoryError;
   if (isLoading) return "Terminals are loading.";
   if (discoveryError !== null) return "Terminal discovery failed. Retry terminal discovery.";

@@ -13,23 +13,23 @@ import "./Features.css";
   <div class="wrap-wide">
     <SectionHead eyebrow="Features" id="features-title">
       <Fragment slot="title"
-        >Plan in a chat, control every prompt, and run your commands in the worktree.</Fragment
+        >Plan in a session, control every prompt, and run your commands in the worktree.</Fragment
       >
       <p>
-        Chats and the MCP server use the same local task store as the board. A task that an agent
-        creates in a chat or through MCP shows on the board at once.
+        Sessions and the MCP server use the same local task store as the board. A task that an agent
+        creates in a session or through MCP shows on the board at once.
       </p>
     </SectionHead>
     <div class="features-grid">
       <FeatureTile
         id="feature-chat"
-        label="Chats"
-        title="Plan a feature in a chat, and get tasks on the board."
+        label="Sessions"
+        title="Plan a feature in a session, and get tasks on the board."
         size="full"
       >
-        A chat works outside a task. Give it a custom role and a reusable prompt. The agent searches
-        your tasks and creates the missing ones. Open a new task from the chat, and start its
-        Builder without leaving the chat.
+        A session can work outside a task. Give it a custom role and a reusable prompt. The agent
+        searches your tasks and creates the missing ones. Open a new task from the session, and
+        start its Builder without leaving the session.
         <ChatView slot="view" />
       </FeatureTile>
       <FeatureTile
@@ -62,8 +62,8 @@ import "./Features.css";
       >
         An action is a named command of the repository, such as your dev server or your tests. Run
         it from the top bar of a session: each run opens a new terminal in the worktree of the task,
-        or in the folder of the chat. An action can also run when OpenDucktor creates a worktree,
-        and the agent can wait until it finishes.
+        or in the folder of a session without a task. An action can also run when OpenDucktor
+        creates a worktree, and the agent can wait until it finishes.
         <ActionsView slot="view" />
       </FeatureTile>
     </div>

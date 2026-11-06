@@ -110,7 +110,7 @@ export const resolveSessionOwner = ({
   if (activeChats.error) {
     return {
       status: "error",
-      title: "Chats could not load",
+      title: "Sessions could not load",
       message: activeChats.error,
       canRetry: true,
     };
@@ -121,7 +121,7 @@ export const resolveSessionOwner = ({
   if (archivedChats.error) {
     return {
       status: "error",
-      title: "Chats could not load",
+      title: "Sessions could not load",
       message: archivedChats.error,
       canRetry: true,
     };
@@ -140,8 +140,8 @@ export const resolveSessionOwner = ({
   if (association?.kind === "repository") {
     return {
       status: "error",
-      title: "This chat is not saved",
-      message: "The host has no saved chat for this session. Open the chat again from Chats.",
+      title: "This session is not saved",
+      message: "The host has no saved record of this session. Open it again from Sessions.",
       canRetry: false,
     };
   }
@@ -149,7 +149,7 @@ export const resolveSessionOwner = ({
     status: "error",
     title: "Session not found",
     message:
-      "The host does not list this session for the workspace. It may have been removed. Open the session again from its task or chat.",
+      "The host does not list this session for the workspace. It may have been removed. Open the session again from its task or from Sessions.",
     canRetry: true,
   };
 };

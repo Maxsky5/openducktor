@@ -11,7 +11,7 @@ export function WorkspaceSessionEmptyState({ hasSessions, onCreate }: Props): Re
   return (
     <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-card p-6 text-center">
       <MessageCirclePlus className="size-8 text-muted-foreground" aria-hidden="true" />
-      <h1 className="text-lg font-semibold">Workspace chat</h1>
+      <h1 className="text-lg font-semibold">Workspace session</h1>
       <p className="text-muted-foreground">
         {hasSessions ? "Select a session in the sidebar." : "No active sessions."}
       </p>
@@ -20,7 +20,7 @@ export function WorkspaceSessionEmptyState({ hasSessions, onCreate }: Props): Re
       </p>
       <Button onClick={onCreate}>
         <MessageCirclePlus />
-        New chat
+        New session
       </Button>
     </section>
   );

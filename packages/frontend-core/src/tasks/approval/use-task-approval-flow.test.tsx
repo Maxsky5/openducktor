@@ -1781,7 +1781,7 @@ describe("useTaskApprovalFlow", () => {
       },
     );
     await waitForTaskApprovalModalClosed();
-    expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
+    expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but message draft cleanup failed", {
       description: "session lookup failed",
     });
 
@@ -1847,7 +1847,7 @@ describe("useTaskApprovalFlow", () => {
       expect.any(Object),
     );
     await waitForTaskApprovalModalClosed();
-    expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
+    expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but message draft cleanup failed", {
       description: "session lookup failed",
     });
 

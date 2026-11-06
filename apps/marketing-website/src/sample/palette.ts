@@ -93,7 +93,7 @@ export const SUGGESTED: readonly PaletteAction[] = [
   {
     kind: "action",
     id: "new-chat",
-    label: "New chat",
+    label: "New session",
     icon: "message-circle-plus",
     ...inFieldnotes,
   },
@@ -107,7 +107,7 @@ export const SUGGESTED: readonly PaletteAction[] = [
   {
     kind: "action",
     id: "import-chat",
-    label: "Import chat from an external runtime",
+    label: "Import session from an external runtime",
     icon: "import",
     ...inFieldnotes,
   },
@@ -192,7 +192,7 @@ export const SEARCH_ROWS: readonly PaletteRow[] = [
     title: "Why does search miss accented words?",
     workspace: fieldnotes,
     dot: "read",
-    hints: { enter: "Open chat", edit: "Rename", tab: true },
+    hints: { enter: "Open session", edit: "Rename", tab: true },
   },
   {
     kind: "chat",
@@ -200,7 +200,7 @@ export const SEARCH_ROWS: readonly PaletteRow[] = [
     title: "Plan the export feature",
     workspace: fieldnotes,
     dot: "read",
-    hints: { enter: "Open chat", edit: "Rename", tab: true },
+    hints: { enter: "Open session", edit: "Rename", tab: true },
   },
   { kind: "action", id: "settings-repos", label: "Settings: Repositories", icon: "folder-git-2" },
   {
@@ -209,7 +209,7 @@ export const SEARCH_ROWS: readonly PaletteRow[] = [
     label: "Settings: System Prompts",
     icon: "message-square-text",
   },
-  { kind: "action", id: "archived", label: "Archived chats", icon: "archive", ...inFieldnotes },
+  { kind: "action", id: "archived", label: "Archived sessions", icon: "archive", ...inFieldnotes },
   { kind: "action", id: "refresh", label: "Refresh tasks", icon: "refresh-ccw", ...inFieldnotes },
 ];
 

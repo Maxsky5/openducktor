@@ -57,7 +57,7 @@ export const createWorkspaceSessionRestore = (
               return yield* new HostValidationError({
                 field: "targetBranch",
                 message:
-                  "The repository default target branch is Tracked upstream, which cannot recreate a branch. Choose a target branch for this chat, then restore it.",
+                  "The repository default target branch is Tracked upstream, which cannot recreate a branch. Choose a target branch for this session, then restore it.",
               });
             }
             return yield* withRestoredWorkspaceSessionWorktree(

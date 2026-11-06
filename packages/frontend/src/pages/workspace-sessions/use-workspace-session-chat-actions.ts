@@ -31,9 +31,10 @@ import { startWorkspaceSessionRuntime } from "@openducktor/frontend-core/workspa
 import { useChatSessionPreparation } from "@openducktor/frontend-core/sessions/composer/use-chat-session-preparation";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
-const CHAT_UNAVAILABLE = "The original chat is no longer available. Reopen it to send your draft.";
+const CHAT_UNAVAILABLE =
+  "The original session is no longer available. Reopen it to send your draft.";
 const CONFLICT_MESSAGE_NOT_ACCEPTED =
-  "The agent did not accept a conflict message. Reopen the chat and try again.";
+  "The agent did not accept a conflict message. Reopen the session and try again.";
 
 export function useWorkspaceSessionChatActions(
   workspace: ActiveWorkspace,
@@ -130,7 +131,9 @@ export function useWorkspaceSessionChatActions(
     if (isSendInFlight() || savingModel.current || resuming.current)
       throw new Error("Wait for the current send or model change to finish.");
     if (!isMounted() || record.archivedAt !== null)
-      throw new Error("Select or restore the saved workspace chat before asking for assistance.");
+      throw new Error(
+        "Select or restore the saved workspace session before asking for assistance.",
+      );
     options.assertCurrent();
     const version = recipientVersion.current;
     const send = activity.begin(activityKey);
@@ -149,7 +152,7 @@ export function useWorkspaceSessionChatActions(
       };
       assertCurrent();
       if (!preparation.ready || !identity)
-        throw new Error("The session is not ready. Reopen the chat before sending.");
+        throw new Error("The session is not ready. Reopen it before sending.");
       const sendOptions: AgentMessageSendOptions = {
         sessionScope: { kind: "repository", workspaceId: workspace.workspaceId },
         assertCanSubmit: (session) => {
@@ -258,7 +261,7 @@ export function useWorkspaceSessionChatActions(
         assertCurrentRecipient();
         const identity = workspaceSessionIdentity(record);
         if (!preparation.ready || !identity)
-          throw new Error("The session is not ready. Reopen the chat before sending.");
+          throw new Error("The session is not ready. Reopen it before sending.");
         const session = store.getSessionSnapshot(identity);
         if (!session)
           throw new Error(
@@ -274,7 +277,7 @@ export function useWorkspaceSessionChatActions(
               assertCurrentRecipient();
               if (!matchesAgentSessionIdentity(session, identity))
                 throw new Error(
-                  "The send recipient changed. Reopen the original chat to send your draft.",
+                  "The send recipient changed. Reopen the original session to send your draft.",
                 );
               assertCanSubmit(session);
             },

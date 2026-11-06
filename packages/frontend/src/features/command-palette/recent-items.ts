@@ -43,7 +43,7 @@ const storeOf = perConnection(({ storage }) =>
         try {
           storage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(next));
         } catch (cause) {
-          toast.error("Could not save recent tasks and chats.", {
+          toast.error("Could not save recent tasks and sessions.", {
             description: `Allow local storage for this app. ${errorMessage(cause)}`,
           });
         }
@@ -100,7 +100,7 @@ export const readRecentItems = (storage: ClientStorage): RecentItemsRead => {
     if (saved === null) return { items: [], error: null };
     const parsed = recentItemsSchema.safeParse(JSON.parse(saved));
     if (!parsed.success) {
-      return { items: [], error: "The saved list of recent tasks and chats is invalid." };
+      return { items: [], error: "The saved list of recent tasks and sessions is invalid." };
     }
     return { items: parsed.data, error: null };
   } catch (error) {

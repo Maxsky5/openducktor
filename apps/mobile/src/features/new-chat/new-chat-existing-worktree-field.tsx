@@ -44,7 +44,7 @@ export function ExistingWorktreeField({
         label="Worktree"
         hint={
           selected === null
-            ? "Chats that use this worktree share its files and branch."
+            ? "Sessions that use this worktree share its files and branch."
             : `${selected}\nChats that use this worktree share its files and branch.`
         }
       >

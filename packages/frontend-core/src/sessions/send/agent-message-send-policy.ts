@@ -25,16 +25,17 @@ export const getAgentMessageSendBlockedReason = (input: {
   if (input.readModel.kind !== "ready") return "Wait for session data to load.";
   if (input.readiness.state !== "ready")
     return (
-      input.readiness.message ?? "The selected runtime is unavailable. Select Recheck in the chat."
+      input.readiness.message ??
+      "The selected runtime is unavailable. Select Recheck in the session."
     );
   if (input.readOnlyReason) return input.readOnlyReason;
   if (!input.runtime) return MISSING_RUNTIME_REASON;
   if (!input.session)
     return input.isDraft
       ? null
-      : "The selected session is missing. Reload session data or restore the chat.";
+      : "The selected session is missing. Reload session data or restore it.";
   if (input.session.runtimeAvailability === "missing")
-    return "The selected runtime session is unavailable. Restore the runtime and reload the chat.";
+    return "The selected runtime session is unavailable. Restore the runtime and reload the session.";
   const transcriptState = deriveLoadedAgentSessionTranscriptState({
     session: input.session,
     runtimeReadinessState: input.readiness.state,

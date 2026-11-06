@@ -197,9 +197,9 @@ export function useCommandPaletteActions({
       ),
       workspaceAction(
         "new-chat",
-        "New chat",
+        "New session",
         icon(MessageCirclePlus),
-        ["create chat", "conversation", "session", "ask"],
+        ["create session", "chat", "conversation", "ask"],
         () => openWorkspaceDialog({ kind: "chat", workspace: target }, previousFocus()),
         { suggested: true },
       ),
@@ -221,7 +221,7 @@ export function useCommandPaletteActions({
       ),
       workspaceAction(
         "import-chat",
-        "Import chat from an external runtime",
+        "Import session from an external runtime",
         icon(Import),
         ["import session", "external session", "claude", "codex", "opencode"],
         () => openWorkspaceDialog({ kind: "import_chat", workspace: target }, previousFocus()),
@@ -229,9 +229,9 @@ export function useCommandPaletteActions({
       ),
       workspaceAction(
         "archived-chats",
-        "Archived chats",
+        "Archived sessions",
         icon(Archive),
-        ["archive", "history", "old chats", "restore chat"],
+        ["archive", "history", "old sessions", "restore session", "chat"],
         () => openWorkspaceDialog({ kind: "archived_chats", workspace: target }, previousFocus()),
       ),
       workspaceAction(

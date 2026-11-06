@@ -190,7 +190,7 @@ describe("archive consent", () => {
       removeWorktree: false,
       destructive: false,
       sharedNotice:
-        "This worktree stays because these saved chats need it for files or history: Docs.",
+        "This worktree stays because these saved sessions need it for files or history: Docs.",
       notice: { kind: "keep" },
     });
     expect(

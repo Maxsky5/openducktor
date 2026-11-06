@@ -87,7 +87,7 @@ export function WorkspaceSessionHeader({
                 <TooltipTrigger asChild>
                   <span className="inline-flex">
                     <SessionActionButton
-                      aria-label="Archive chat"
+                      aria-label="Archive session"
                       disabled={isArchiving}
                       onClick={(event) => archive(event.currentTarget)}
                     >
@@ -96,7 +96,7 @@ export function WorkspaceSessionHeader({
                     </SessionActionButton>
                   </span>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">Archive chat</TooltipContent>
+                <TooltipContent side="bottom">Archive session</TooltipContent>
               </Tooltip>
               <Popover open={menuOpen} onOpenChange={setMenuOpen}>
                 <Tooltip>
@@ -142,7 +142,7 @@ export function WorkspaceSessionHeader({
                     onClick={() => archive(actionsButton.current)}
                   >
                     <Archive aria-hidden="true" />
-                    Archive chat
+                    Archive session
                   </Button>
                 </PopoverContent>
               </Popover>

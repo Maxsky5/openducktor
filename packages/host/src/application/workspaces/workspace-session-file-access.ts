@@ -54,8 +54,8 @@ export const createWorkspaceSessionFileAccess = (
           if (!(yield* dependencies.settingsConfig.pathExists(directory))) {
             return yield* invalidRoot(
               target.kind === "local_repo_root"
-                ? `The repository of this chat is missing: ${directory}. Restore the repository at this path, or archive this chat.`
-                : `The directory of this chat is missing: ${directory}. Recreate the worktree at this path, or archive this chat.`,
+                ? `The repository of this session is missing: ${directory}. Restore the repository at this path, or archive this session.`
+                : `The directory of this session is missing: ${directory}. Recreate the worktree at this path, or archive this session.`,
             );
           }
           const canonicalDirectory = yield* validateWorkspaceSessionTarget(
@@ -66,7 +66,7 @@ export const createWorkspaceSessionFileAccess = (
           );
           if ((yield* dependencies.git.canonicalizePath(rootPath)) !== canonicalDirectory) {
             return yield* invalidRoot(
-              `${rootPath} is not the directory of this chat: ${directory}. Reopen the chat and retry.`,
+              `${rootPath} is not the directory of this session: ${directory}. Reopen the session and retry.`,
             );
           }
           return yield* use;

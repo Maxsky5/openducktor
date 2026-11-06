@@ -50,7 +50,7 @@ function DocumentsContent({ owner }: { owner: WorkOwner }): ReactElement {
         <EmptyState
           icon="file-text"
           title="No Task Documents"
-          message="Chats have no task documents. Open Documents from a task."
+          message="This session has no task documents. Open Documents from a task."
         />
       </>
     );

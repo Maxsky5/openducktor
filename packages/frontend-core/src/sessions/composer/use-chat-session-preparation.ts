@@ -117,6 +117,6 @@ function preparationResult(attempt: Attempt | null, presence: string) {
   const result = attempt?.result;
   let error = result?.error ?? null;
   if (result && error === null && (attempt?.closed || presence === "absent"))
-    error = "The session closed during preparation. Reopen the chat.";
+    error = "The session closed during preparation. Reopen it.";
   return { ready: result != null && error === null, error };
 }

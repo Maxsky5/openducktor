@@ -100,7 +100,7 @@ export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPa
       if (!pruneErrorShown) {
         pruneErrorShown = true;
         toast.error("Could not remove old panel layouts", {
-          description: `${errorMessage(error)} Saved layouts of removed tasks and chats stay on this computer.`,
+          description: `${errorMessage(error)} Saved layouts of removed tasks and sessions stay on this computer.`,
         });
       }
       return [];

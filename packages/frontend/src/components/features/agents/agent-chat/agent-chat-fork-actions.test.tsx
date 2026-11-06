@@ -79,7 +79,7 @@ describe("final reply actions", () => {
       expect((await view.findByRole("tooltip")).textContent).toContain("Start Codex");
       view.rerender(reply({}, false, { ...actions, disabledReason: null, isPending: () => true }));
       fireEvent.click(view.getByRole("button", { name: "Fork from this reply" }));
-      expect(view.getByLabelText("Forking chat…").tabIndex).toBe(0);
+      expect(view.getByLabelText("Forking session…").tabIndex).toBe(0);
       expect(clicks).toBe(0);
     } finally {
       view.unmount();

@@ -11,14 +11,14 @@ import {
 import { workspaceSessionTitle } from "../sessions/agent-orchestrator/session-read-model/workspace-session-records";
 
 export const ARCHIVED_CHATS_TEXT = {
-  title: "Archived chats",
-  description: "Restore a chat to return it to your workspace.",
-  filterLabel: "Filter archived chats",
+  title: "Archived sessions",
+  description: "Restore a session to return it to your workspace.",
+  filterLabel: "Filter archived sessions",
   filterPlaceholder: "Filter by title, role, or path…",
-  loading: "Loading archived chats…",
-  empty: "No archived chats.",
-  noMatch: "No chats match your filter.",
-  worktreeRemoved: "Worktree removed. Restore recreates it from the chat's target branch.",
+  loading: "Loading archived sessions…",
+  empty: "No archived sessions.",
+  noMatch: "No sessions match your filter.",
+  worktreeRemoved: "Worktree removed. Restore recreates it from the session's target branch.",
   restore: "Restore",
 } as const;
 

@@ -34,7 +34,7 @@ export function WorkspaceSessionGitTools({
     ...actions,
     subjectKey: JSON.stringify([commentOwner.workspaceId, commentOwner.sessionId]),
     commentOwner,
-    commentPlaceholder: "Add a comment for this chat",
+    commentPlaceholder: "Add a comment for this session",
     ...control,
     refresh: manualRefresh.refresh,
     isRefreshing: manualRefresh.isRefreshing,

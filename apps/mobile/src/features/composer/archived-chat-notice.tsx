@@ -48,7 +48,7 @@ export function ArchivedChatNotice({
   }, [feedback, mutateAsync, record.id, title]);
   const action = (
     <ComposerTextButton
-      label="Restore Chat"
+      label="Restore Session"
       icon="rotate-ccw"
       variant="outline"
       command
@@ -63,11 +63,11 @@ export function ArchivedChatNotice({
     return (
       <ComposerNotice
         tone={unknown ? "warning" : "destructive"}
-        title={unknown ? RESULT_UNKNOWN_TITLE : "The chat was not restored"}
+        title={unknown ? RESULT_UNKNOWN_TITLE : "The session was not restored"}
         message={errorMessage(failure)}
         action={action}
       />
     );
   }
-  return <ComposerNotice tone="warning" title="This chat is archived" action={action} />;
+  return <ComposerNotice tone="warning" title="This session is archived" action={action} />;
 }

@@ -92,14 +92,14 @@ describe("buildNewChatRequest", () => {
     expect(noDefault.fieldErrors.model).toBe(
       "This repository has no Default Model. Choose a model, or set a Default Model in the repository settings on the host.",
     );
-    expect(noDefault.blockedReason).toBe("Fix the fields above to create the chat.");
+    expect(noDefault.blockedReason).toBe("Fix the fields above to create the session.");
 
     const settingsFailed = buildNewChatRequest(
       form({ selection: null, model: { kind: "settings_failed", message: "Host timed out." } }),
     );
     expect(settingsFailed.input).toBeNull();
     expect(settingsFailed.fieldErrors.model).toBe(
-      "The repository settings did not load, so the Default Model is unknown. Host timed out. Choose a model, or close and open New Chat again.",
+      "The repository settings did not load, so the Default Model is unknown. Host timed out. Choose a model, or close and open New Session again.",
     );
 
     const missing = buildNewChatRequest(

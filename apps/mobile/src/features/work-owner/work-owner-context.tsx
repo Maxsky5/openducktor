@@ -122,7 +122,7 @@ const WorkOwnerContext = createContext<WorkOwnerState | null>(null);
  */
 export const useWorkOwner = (): WorkOwnerState => {
   const state = use(WorkOwnerContext);
-  if (!state) throw new Error("Work views need a WorkOwnerProvider for their task or chat.");
+  if (!state) throw new Error("Work views need a WorkOwnerProvider for their task or session.");
   return state;
 };
 
@@ -431,7 +431,7 @@ function ChatOwnerSource({
   if (resolution.status !== "ready") {
     const state = toOwnerState(resolution, retry) ?? {
       status: "loading",
-      label: "Loading the chat",
+      label: "Loading the session",
     };
     return <WorkOwnerContext value={state}>{children}</WorkOwnerContext>;
   }
@@ -508,7 +508,7 @@ function ChatGitSource({
       target,
       allowUpstream: isRepositoryRoot,
       command: false,
-      hint: "This choice applies only to this chat, until the app restarts.",
+      hint: "This choice applies only to this session, until the app restarts.",
       apply: (next) => {
         void applyTarget(next);
       },

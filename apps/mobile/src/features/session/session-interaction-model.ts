@@ -47,7 +47,7 @@ export const resolveSessionInteraction = (
   if (input.readOnly) return blocked("This is a read-only view of a Subagent session.");
   // The composer placeholder says that the chat is archived.
   if (input.archived) {
-    return blocked("This chat is archived. Restore it to send messages.", { reasonShown: true });
+    return blocked("This session is archived. Restore it to send messages.", { reasonShown: true });
   }
   // The connection banner of the screen says that the host is not connected.
   if (!input.gateOpen) {

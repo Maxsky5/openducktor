@@ -34,7 +34,7 @@ export function SessionsEmptyState({
         </Button>
         <Button type="button" variant="outline" onClick={openNewChat}>
           <MessageCirclePlus data-icon="inline-start" aria-hidden="true" />
-          New chat
+          New session
         </Button>
       </div>
       <div className="w-full max-w-xs pt-4 text-left">

@@ -159,7 +159,7 @@ export function SessionForkProvider({
           },
           (cause: unknown) => {
             if (!submittedAttemptId)
-              feedback.show("error", "Could not fork the chat", {
+              feedback.show("error", "Could not fork the session", {
                 description: errorMessage(cause),
               });
           },
