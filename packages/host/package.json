@@ -16,7 +16,7 @@
     "build": "bunx tsc -p tsconfig.build.json",
     "db:generate": "drizzle-kit generate --config drizzle.host.config.ts",
     "typecheck": "bun check -p tsconfig.json",
-    "test": "bun test --preload ../../tools/bun-test-preload.ts --pass-with-no-tests --timeout 5000 --parallel=2 --no-isolate",
+    "test": "bun test --pass-with-no-tests --timeout 5000 --parallel=2 --no-isolate",
     "test:browser-conformance": "ODT_CHROME_FOR_TESTING_CONFIG_ROOT=../../node_modules/.cache/openducktor-chrome-for-testing bun test --timeout 120000 src/adapters/browser/chrome-for-testing/chrome-for-testing-engine.live.test.ts",
     "lint": "oxlint -c ../../.oxlintrc.json src drizzle.host.config.ts"
   },
