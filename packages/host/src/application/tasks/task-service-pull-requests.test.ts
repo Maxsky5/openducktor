@@ -515,6 +515,71 @@ describe("createTaskService pull requests", () => {
       },
     });
   });
+  describe("links a pull request to a task that has one", () => {
+    const linkedPullRequest = { ...pullRequest(), number: 141, state: "open" as const };
+    const createLinkedTaskService = (calls: unknown[], commands: string[][]) =>
+      createGithubTaskService({
+        taskStore: {
+          getTask: () => Effect.succeed(task({ status: "ai_review" })),
+          getTaskMetadata: () =>
+            Effect.succeed({ artifacts: {}, agentSessions: [], pullRequest: linkedPullRequest }),
+          setPullRequest: (input) =>
+            Effect.sync(() => {
+              calls.push(input);
+              return true;
+            }),
+        },
+        systemCommands: createSystemCommandPort({
+          runCommandAllowFailure: (command, args) => {
+            commands.push([command, ...args]);
+            return Effect.die(new Error(`unexpected command: ${command} ${args.join(" ")}`));
+          },
+        }),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { beforeWorktreeRemoval: [] },
+          git: {
+            provider: {
+              id: "github",
+              enabled: true,
+              repository: { host: "github.com", owner: "openai", name: "openducktor" },
+              autoDetected: false,
+            },
+          },
+        }),
+      });
+    const link = (calls: unknown[], commands: string[][], number: number) =>
+      createLinkedTaskService(calls, commands).linkPullRequest({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        taskId: "task-1",
+        number,
+      });
+
+    test("returns the linked pull request without a provider call for its own number", async () => {
+      const calls: unknown[] = [];
+      const commands: string[][] = [];
+      await expect(Effect.runPromise(link(calls, commands, 141))).resolves.toEqual(
+        linkedPullRequest,
+      );
+      expect(commands).toEqual([]);
+      expect(calls).toEqual([]);
+    });
+
+    test("rejects another number and names the linked pull request", async () => {
+      const calls: unknown[] = [];
+      const commands: string[][] = [];
+      const error = await Effect.runPromise(Effect.flip(link(calls, commands, 143)));
+      expect(error).toBeInstanceOf(HostValidationError);
+      expect(error.message).toBe(
+        "Task task-1 already has pull request #141. Unlink it in the task details before you link #143.",
+      );
+      expect(commands).toEqual([]);
+      expect(calls).toEqual([]);
+    });
+  });
+
   test("detects a merged pull request without linking metadata", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
