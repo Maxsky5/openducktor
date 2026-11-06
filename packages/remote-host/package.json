@@ -17,9 +17,9 @@
     "@openducktor/contracts": "workspace:*",
     "@openducktor/host": "workspace:*",
     "@openducktor/host-client": "workspace:*",
-    "effect": "4.0.5",
+    "effect": "4.1.2",
     "mime-types": "^3.0.2",
-    "ws": "8.22.0",
+    "ws": "8.22.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
