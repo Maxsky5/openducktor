@@ -2,6 +2,7 @@ import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { useMinimumLoader } from "../../lib/use-minimum-loader";
 import { canRemoveTaskWorktree } from "../workflow/core-task-actions";
 import type { TaskConfirmDialogState } from "./task-confirm-dialog-types";
+import { useConfirmedImpact } from "./use-confirmed-impact";
 import { useTaskAsyncConfirmDialog } from "./use-task-async-confirm-dialog";
 import {
   isWorktreeRemovalBlocked,
@@ -55,11 +56,14 @@ export function useTaskRemoveWorktreeConfirmDialog({
     enabled: canRemove,
     readsOwners: false,
   });
-  const impact = useTaskWorktreeImpact({
-    taskId: task.id,
-    enabled: canRemove && dialog.open,
-    readsOwners: true,
-  });
+  const impact = useConfirmedImpact(
+    useTaskWorktreeImpact({
+      taskId: task.id,
+      enabled: canRemove && dialog.open,
+      readsOwners: true,
+    }),
+    dialog,
+  );
   const isPreparing = useMinimumLoader(!impact.isReady);
   // The action stays while the confirmation reads again. Only a successful read that finds no
   // worktree and no branch hides it. A failed read keeps it and shows the error in the sheet.

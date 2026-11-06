@@ -5,6 +5,7 @@ import { useTaskWorktreeOwners } from "../../queries/use-task-worktree-owners";
 import type { TaskConfirmAction } from "../workflow/task-confirm-actions";
 import { buildTaskConfirmImpact } from "./task-cleanup-impact-model";
 import { collectSingleTaskCleanupImpactTaskIds } from "./task-details-sheet-model";
+import { useConfirmedImpact } from "./use-confirmed-impact";
 import { useTaskCleanupImpact } from "./use-task-cleanup-impact";
 import type { TaskConfirmDialogState } from "./task-confirm-dialog-types";
 import { useTaskAsyncConfirmDialog } from "./use-task-async-confirm-dialog";
@@ -65,8 +66,7 @@ export function useTaskConfirmDialog<Result>({
     enabled: loadImpact,
   });
 
-  return {
-    openDialog,
-    dialog: { ...dialog, impact: buildTaskConfirmImpact(cleanup, stop, owners) },
-  };
+  const impact = useConfirmedImpact(buildTaskConfirmImpact(cleanup, stop, owners), dialog);
+
+  return { openDialog, dialog: { ...dialog, impact } };
 }

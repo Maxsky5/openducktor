@@ -1,5 +1,5 @@
 import { CircleCheckBig, Loader2 } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import {
@@ -30,11 +30,6 @@ export function TaskCloseConfirmDialog({
   confirmDisabled,
   onCloseAutoFocus,
 }: TaskCloseConfirmDialogProps): ReactElement {
-  // The dialog keeps the impact it showed while it closes. The close refreshes the task, and its
-  // exit animation must not show the removed worktree.
-  const [openImpact, setOpenImpact] = useState(impact);
-  if (open && impact !== openImpact) setOpenImpact(impact);
-  const shownImpact = open ? impact : openImpact;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -47,13 +42,13 @@ export function TaskCloseConfirmDialog({
         <TaskDialogHeader
           title={TASK_CLOSE_COPY.title}
           description={TASK_CLOSE_COPY.description}
-          subject={{ id: shownImpact.taskId, title: shownImpact.taskTitle }}
+          subject={{ id: impact.taskId, title: impact.taskTitle }}
           icon={CircleCheckBig}
         />
 
         <DialogBody className="grid min-h-0 gap-4 overflow-y-auto px-6 pb-6">
           <TaskCloseConfirmContent
-            impact={shownImpact}
+            impact={impact}
             removeWorktree={removeWorktree}
             onRemoveWorktreeChange={onRemoveWorktreeChange}
             disabled={operation.isPending}

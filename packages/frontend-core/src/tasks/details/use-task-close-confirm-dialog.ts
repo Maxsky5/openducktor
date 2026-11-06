@@ -11,6 +11,7 @@ import {
   useTaskCloseImpact,
   useTaskCloseLoader,
 } from "./use-task-close-impact";
+import { useConfirmedImpact } from "./use-confirmed-impact";
 
 export type CloseTaskRun = (taskId: string, options: CloseTaskOptions) => Promise<WireTaskCard>;
 
@@ -60,7 +61,7 @@ export function useTaskCloseConfirmDialog({
     onSucceeded,
     onCommitted,
   });
-  const impact = useTaskCloseImpact({ task, enabled: dialog.open });
+  const impact = useConfirmedImpact(useTaskCloseImpact({ task, enabled: dialog.open }), dialog);
   const isPreparing = useTaskCloseLoader(impact, removeWorktree);
   return {
     openDialog: (onCommitted) => {
