@@ -1,11 +1,13 @@
-import { liveSessionStreamEventName } from "@openducktor/remote-host/host-event-stream-name";
-import { get, type IncomingMessage } from "node:http";
 import { describe, expect, mock, spyOn, test } from "bun:test";
+import { WebSocket as NodeWebSocket } from "ws";
 import * as host from "@openducktor/host";
 import {
+  type HostCommandInputRecord,
+  encodeHostChannelFrame,
+  HOST_CHANNEL_SUBPROTOCOL,
   REMOTE_PROTOCOL_VERSION,
+  splitHostChannelFrame,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
-  type HostEventEnvelope,
 } from "@openducktor/contracts";
 import {
   RuntimeQueryError,
@@ -21,9 +23,6 @@ import {
 } from "@openducktor/host";
 import { Stream, Effect } from "effect";
 import { WorkspaceTextFileWriteError } from "../../host/src/application/filesystem/workspace-text-file-service";
-import { HostOperationError } from "../../host/src/effect/host-errors";
-import { createTaskEventStream } from "../../host/src/events/task-event-stream";
-import { createNotificationStream } from "../../host/src/application/notifications/notification-stream";
 import type { HostCommandHandlerError } from "../../host/src/interface/router/host-command-router";
 import type { WebLogger } from "./logger";
 import {
@@ -40,15 +39,19 @@ import {
   readinessHostForBind,
   waitForBackend,
 } from "./launcher-support";
-import {
-  createTaskEventLeaseManager,
-  type TaskEventLeaseManager,
-} from "@openducktor/remote-host/task-event-leases";
-import { writeTaskFrameSseEvent } from "@openducktor/remote-host/task-event-sse";
+import { createTaskEventLeaseManager } from "@openducktor/remote-host/task-event-leases";
 import { BufferedHostEventBus } from "@openducktor/remote-host/host-event-bus";
+import {
+  createHostChannelSocketData,
+  type HostChannelReply,
+  type HostChannelSocketData,
+} from "@openducktor/remote-host/host-channel";
+import {
+  hostWebSocketHandler,
+  type HostWebSocketData,
+} from "@openducktor/remote-host/host-websocket-handler";
 import { allowedFrontendOrigins, validateFrontendOriginEffect } from "./frontend-origin";
 import { stopHostBackend } from "./host-backend-lifecycle";
-import type { TaskEventStreamFrame } from "@openducktor/contracts";
 
 const nativeResponse = await Bun.fetch("data:,");
 Object.defineProperty(globalThis, "Response", {
@@ -56,12 +59,13 @@ Object.defineProperty(globalThis, "Response", {
   value: nativeResponse.constructor,
 });
 
-const { handleHostFetch, handleTypescriptHostBackendRequest, resolveAppSessionCookieName } =
-  await import("./typescript-host-backend");
+const {
+  handleHostFetch,
+  handleTypescriptHostBackendRequest,
+  invokeLocalHostCommand,
+  resolveAppSessionCookieName,
+} = await import("./typescript-host-backend");
 const { startTypescriptHostBackend } = await import("./typescript-host-backend");
-
-const { terminalWebSocketHandler } =
-  await import("@openducktor/remote-host/terminals/terminal-websocket-handler");
 
 const APP_TOKEN = "app-token";
 const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
@@ -95,37 +99,6 @@ const createDeferred = <Value = void>() => {
     resolve = nextResolve;
   });
   return { promise, resolve };
-};
-
-const PENDING_STREAM_READ = Symbol("pending-stream-read");
-type StreamReadResult = Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]>>;
-
-const readImmediateStreamChunk = async (
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-): Promise<StreamReadResult> => {
-  const readPromise = reader.read().then((value): StreamReadResult => value);
-  await Promise.resolve();
-  const result = await Promise.race([readPromise, Promise.resolve(PENDING_STREAM_READ)]);
-  if (result === PENDING_STREAM_READ) {
-    await reader.cancel();
-    throw new Error("Expected the SSE response to flush an initial frame immediately.");
-  }
-
-  return result;
-};
-
-// Reads SSE frames until one contains the expected text.
-const readStreamUntil = async (
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  expected: string,
-): Promise<string> => {
-  let text = "";
-  while (!text.includes(expected)) {
-    const chunk = await reader.read();
-    if (chunk.done) throw new Error(`The SSE response ended before '${expected}'.`);
-    text += new TextDecoder().decode(chunk.value);
-  }
-  return text;
 };
 
 const createTestHostCommandRouter = (
@@ -217,11 +190,17 @@ const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
   browserService: createBrowserServiceFake(),
 });
 
+type UpgradeOptions = { host?: string; protocol?: string; cookie?: string | null };
+
 const performWebSocketUpgrade = (
   port: number,
   path: string,
   origin: string,
-  host: string = `127.0.0.1:${port}`,
+  {
+    host = `127.0.0.1:${port}`,
+    protocol = TERMINAL_PROTOCOL_SUBPROTOCOL,
+    cookie = `${APP_SESSION_COOKIE_NAME}=${APP_TOKEN}`,
+  }: UpgradeOptions = {},
 ): Promise<string> =>
   new Promise((resolve, reject) => {
     let responseText = "";
@@ -239,8 +218,8 @@ const performWebSocketUpgrade = (
               "Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==",
               "Sec-WebSocket-Version: 13",
               `Origin: ${origin}`,
-              `Sec-WebSocket-Protocol: ${TERMINAL_PROTOCOL_SUBPROTOCOL}`,
-              `Cookie: ${APP_SESSION_COOKIE_NAME}=${APP_TOKEN}`,
+              `Sec-WebSocket-Protocol: ${protocol}`,
+              ...(cookie === null ? [] : [`Cookie: ${cookie}`]),
               "\r\n",
             ].join("\r\n"),
           );
@@ -264,13 +243,10 @@ type TestRequestOptions = Partial<{
   appSessionCookieName: string;
   appToken: string;
   controlToken: string;
-  eventBus: BufferedHostEventBus;
-  hostCommandRouter: EffectHostCommandRouter;
   taskAssetReadService: TaskAssetReadService;
   beginShutdown: () => void;
   shutdownStarted: boolean;
   stop: () => Promise<void>;
-  taskEventLeaseManager: TaskEventLeaseManager;
   sessionCookieSecure: boolean;
 }>;
 
@@ -278,31 +254,48 @@ const handleTestRequest = (
   request: Request,
   options: TestRequestOptions = {},
 ): Promise<Response> => {
-  const hostCommandRouter = options.hostCommandRouter ?? createTestHostCommandRouter();
   const requestInput: Parameters<typeof handleTypescriptHostBackendRequest>[0] = {
     allowedOrigins: new Set(),
     appSessionCookieName: options.appSessionCookieName ?? APP_SESSION_COOKIE_NAME,
     appToken: options.appToken ?? APP_TOKEN,
     browserPreviews: unexpectedBrowserPreviews,
     controlToken: options.controlToken ?? CONTROL_TOKEN,
-    eventBus: options.eventBus ?? new BufferedHostEventBus({ report: () => {} }),
-    hostCommandRouter,
-    notificationStream: createNotificationStream(),
     taskAssetReadService: options.taskAssetReadService ?? missingTaskAssetReadService,
     localAttachments: createLocalAttachmentAdapter(),
     logger: testLogger,
     request,
     sessionCookieSecure: options.sessionCookieSecure ?? false,
     shutdownStarted: options.shutdownStarted ?? false,
-    isHostShutdownStarted: () => options.shutdownStarted ?? false,
     beginShutdown: options.beginShutdown ?? (() => {}),
     stop: options.stop ?? (async () => {}),
   };
-  if (options.taskEventLeaseManager) {
-    requestInput.taskEventLeaseManager = options.taskEventLeaseManager;
-  }
   return Effect.runPromise(handleTypescriptHostBackendRequest(requestInput));
 };
+
+/** A local host channel whose commands run on `hostCommandRouter`. */
+const createTestChannel = (
+  hostCommandRouter: EffectHostCommandRouter = createTestHostCommandRouter(),
+): HostChannelSocketData => {
+  const nodeRouter = createTestNodeHostCommandRouter();
+  return createHostChannelSocketData({
+    hostEvents: new BufferedHostEventBus({ report: () => {} }).stream(),
+    notifications: nodeRouter.notificationStream,
+    leases: createTaskEventLeaseManager({
+      taskEventStream: nodeRouter.taskEventStream,
+      reportDeliveryFailure: () => {},
+    }),
+    ownedLeases: new Set(),
+    invoke: (command, args) => invokeLocalHostCommand(hostCommandRouter, command, args),
+    refusal: () => null,
+    reportFailure: () => {},
+  });
+};
+
+const invokeTestCommand = (
+  hostCommandRouter: EffectHostCommandRouter,
+  command: string,
+  args: HostCommandInputRecord = {},
+): Promise<HostChannelReply> => invokeLocalHostCommand(hostCommandRouter, command, args);
 
 describe("TypeScript web host backend", () => {
   const TERMINAL_UPGRADE_FRONTEND_ORIGIN = "http://127.0.0.1:1420";
@@ -407,31 +400,23 @@ describe("TypeScript web host backend", () => {
         }),
       });
       const connection = await negotiation.json();
-      const remoteWork = await Bun.fetch(`${base}/invoke/system_get_platform`, {
-        method: "POST",
+      const assetPath = `${base}/task-assets/workspace-1/task-1/description/550e8400-e29b-41d4-a716-446655440000`;
+      const remoteWork = await Bun.fetch(assetPath, {
         headers: {
-          "content-type": "application/json",
           "x-openducktor-connection-id": connection.connectionId,
           authorization: `Bearer ${connection.connectionToken}`,
         },
-        body: "{}",
       });
-      expect(remoteWork.status).toBe(200);
-      const invalidAdmission = await Bun.fetch(`${base}/invoke/system_get_platform`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-connection-id": "expired",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-        body: "{}",
+      // The remote handler admits the request and finds no asset.
+      expect(remoteWork.status).toBe(404);
+      const invalidAdmission = await Bun.fetch(assetPath, {
+        headers: { "x-openducktor-connection-id": "expired", "x-openducktor-app-token": APP_TOKEN },
       });
       expect(invalidAdmission.status).toBe(409);
       const privateWork = () =>
-        Bun.fetch(`${base}/invoke/system_get_platform`, {
+        Bun.fetch(`${base}/session`, {
           method: "POST",
-          headers: { "content-type": "application/json", "x-openducktor-app-token": APP_TOKEN },
-          body: "{}",
+          headers: { "x-openducktor-app-token": APP_TOKEN },
         });
       expect((await privateWork()).status).toBe(200);
       const privateState = await Bun.fetch(`${base}/remote-access`, {
@@ -466,11 +451,8 @@ describe("TypeScript web host backend", () => {
     basePath = TERMINAL_UPGRADE_BASE_PATH,
     bindHost = "127.0.0.1",
     port = 0,
-  ): Promise<
-    NodeFetchServer<
-      import("@openducktor/remote-host/terminals/terminal-websocket-handler").TerminalWebSocketData
-    >
-  > =>
+    shutdownStarted = false,
+  ): Promise<NodeFetchServer<HostWebSocketData>> =>
     startNodeFetchServer({
       hostname: bindHost,
       port,
@@ -488,7 +470,7 @@ describe("TypeScript web host backend", () => {
           appToken: APP_TOKEN,
           browserPreviews: unexpectedBrowserPreviews,
           controlToken: CONTROL_TOKEN,
-          eventBus: new BufferedHostEventBus({ report: () => {} }),
+          createChannel: () => createTestChannel(),
           hostCommandRouter: createTestNodeHostCommandRouter(),
           taskAssetReadService: missingTaskAssetReadService,
           localAttachments: createLocalAttachmentAdapter(),
@@ -498,12 +480,11 @@ describe("TypeScript web host backend", () => {
           request,
           server: requestServer,
           sessionCookieSecure: false,
-          shutdownStarted: false,
-          isHostShutdownStarted: () => false,
+          shutdownStarted,
           beginShutdown: () => {},
           stop: () => Promise.resolve(),
         }),
-      websocket: terminalWebSocketHandler,
+      websocket: hostWebSocketHandler,
     });
 
   test("uses one session cookie name per development instance", () => {
@@ -562,7 +543,7 @@ describe("TypeScript web host backend", () => {
   });
 
   test.each(["/api", "/api/"])(
-    "routes normalized launcher base path %s with POST bodies and WebSocket upgrades",
+    "routes normalized launcher base path %s with session requests and WebSocket upgrades",
     async (rawBasePath) => {
       const basePath = await Effect.runPromise(
         validateLauncherNetworkOptionsEffect({
@@ -594,13 +575,14 @@ describe("TypeScript web host backend", () => {
         });
         expect(session.status).toBe(200);
         await session.text();
-        const command = await Bun.fetch(`http://127.0.0.1:${port}/api/invoke/runtime_status`, {
-          method: "POST",
-          headers: { "x-openducktor-app-token": APP_TOKEN, "content-type": "application/json" },
-          body: JSON.stringify({}),
-        });
-        expect(command.status).toBe(200);
-        await command.json();
+        const channelHead = await performWebSocketUpgrade(
+          port,
+          `${TERMINAL_UPGRADE_BASE_PATH}/channel`,
+          TERMINAL_UPGRADE_FRONTEND_ORIGIN,
+          { protocol: HOST_CHANNEL_SUBPROTOCOL },
+        );
+        expect(channelHead).toContain("101 Switching Protocols");
+        expect(channelHead).toContain(`Sec-WebSocket-Protocol: ${HOST_CHANNEL_SUBPROTOCOL}`);
         const responseHead = await performWebSocketUpgrade(
           port,
           `${TERMINAL_UPGRADE_BASE_PATH}/terminal`,
@@ -671,7 +653,7 @@ describe("TypeScript web host backend", () => {
         port,
         `${TERMINAL_UPGRADE_BASE_PATH}/terminal`,
         TERMINAL_UPGRADE_FRONTEND_ORIGIN,
-        "evil.example",
+        { host: "evil.example" },
       );
       expect(responseHead).toContain("403");
     } finally {
@@ -756,10 +738,7 @@ describe("TypeScript web host backend", () => {
     },
   );
 
-  test("routes a base-prefixed POST body to the host command router", async () => {
-    const BASE_PATH = "/api";
-    const eventBus = new BufferedHostEventBus({ report: () => {} });
-    let shutdownStarted = false;
+  test("runs a command over a base-prefixed host channel", async () => {
     const server = await startNodeFetchServer({
       hostname: "127.0.0.1",
       port: 0,
@@ -768,54 +747,122 @@ describe("TypeScript web host backend", () => {
       },
       fetch: (request, requestServer) =>
         handleHostFetch({
-          allowedHostnames: allowedHostnamesFor({
-            bindHost: "127.0.0.1",
-            externalUrl: undefined,
-          }),
-          allowedOrigins: new Set(),
+          allowedHostnames: allowedHostnamesFor({ bindHost: "127.0.0.1", externalUrl: undefined }),
+          allowedOrigins: allowedFrontendOrigins(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
           appSessionCookieName: APP_SESSION_COOKIE_NAME,
           appToken: APP_TOKEN,
           browserPreviews: unexpectedBrowserPreviews,
           controlToken: CONTROL_TOKEN,
-          eventBus,
+          createChannel: () =>
+            createTestChannel(createTestHostCommandRouter(() => Effect.succeed("linux"))),
           hostCommandRouter: createTestNodeHostCommandRouter(),
           taskAssetReadService: missingTaskAssetReadService,
           localAttachments: createLocalAttachmentAdapter(),
           logger: testLogger,
-          basePath: BASE_PATH,
+          basePath: "/api",
           onBackgroundFailure: () => {},
           request,
           server: requestServer,
           sessionCookieSecure: false,
-          shutdownStarted,
-          isHostShutdownStarted: () => shutdownStarted,
-          beginShutdown: () => {
-            shutdownStarted = true;
-          },
+          shutdownStarted: false,
+          beginShutdown: () => {},
           stop: () => Promise.resolve(),
         }),
-      websocket: terminalWebSocketHandler,
+      websocket: hostWebSocketHandler,
     });
-
-    try {
-      const port = server.port;
-      if (port === undefined) {
-        throw new Error("Expected the test server to expose a port.");
-      }
-      const response = await Bun.fetch(`http://127.0.0.1:${port}/api/invoke/runtime_status`, {
-        method: "POST",
+    const socket = new NodeWebSocket(
+      `ws://127.0.0.1:${server.port}/api/channel`,
+      [HOST_CHANNEL_SUBPROTOCOL],
+      {
         headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
+          origin: TERMINAL_UPGRADE_FRONTEND_ORIGIN,
+          cookie: `${APP_SESSION_COOKIE_NAME}=${APP_TOKEN}`,
         },
-        body: JSON.stringify({}),
+      },
+    );
+    try {
+      const reply = new Promise<{ header: string; body: string | null }>((resolve, reject) => {
+        socket.once("message", (data: Buffer) => {
+          const frame = splitHostChannelFrame(new Uint8Array(data));
+          resolve({
+            header: frame.header,
+            body: frame.body === null ? null : new TextDecoder().decode(frame.body),
+          });
+        });
+        socket.once("error", reject);
       });
-      expect(response.status).toBe(200);
-      await response.json();
+      await new Promise<void>((resolve, reject) => {
+        socket.once("open", () => resolve());
+        socket.once("error", reject);
+      });
+      socket.send(
+        encodeHostChannelFrame({
+          type: "request",
+          id: 7,
+          method: "invoke",
+          command: "system_get_platform",
+          args: {},
+        }),
+      );
+      expect(await reply).toEqual({
+        header: JSON.stringify({ type: "result", id: 7 }),
+        body: JSON.stringify("linux"),
+      });
+    } finally {
+      socket.close();
+      await server.stop(true);
+    }
+  });
+
+  test.each([
+    { name: "a foreign origin", origin: "https://evil.example", options: {}, status: "403" },
+    { name: "a missing session cookie", options: { cookie: null }, status: "401" },
+    {
+      name: "a wrong session cookie",
+      options: { cookie: `${APP_SESSION_COOKIE_NAME}=wrong` },
+      status: "401",
+    },
+    { name: "another subprotocol", options: { protocol: "openducktor-channel.v0" }, status: "426" },
+  ])("refuses a host channel upgrade with $name", async ({ origin, options, status }) => {
+    const server = await createTerminalUpgradeTestServer();
+    try {
+      const responseHead = await performWebSocketUpgrade(
+        server.port,
+        `${TERMINAL_UPGRADE_BASE_PATH}/channel`,
+        origin ?? TERMINAL_UPGRADE_FRONTEND_ORIGIN,
+        { protocol: HOST_CHANNEL_SUBPROTOCOL, ...options },
+      );
+      expect(responseHead.split("\r\n")[0]).toContain(status);
     } finally {
       await server.stop(true);
     }
   });
+
+  test.each(["/channel", "/terminal"])(
+    "refuses %s upgrades after shutdown starts",
+    async (path) => {
+      const server = await createTerminalUpgradeTestServer(
+        TERMINAL_UPGRADE_BASE_PATH,
+        "127.0.0.1",
+        0,
+        true,
+      );
+      try {
+        const responseHead = await performWebSocketUpgrade(
+          server.port,
+          `${TERMINAL_UPGRADE_BASE_PATH}${path}`,
+          TERMINAL_UPGRADE_FRONTEND_ORIGIN,
+          {
+            protocol:
+              path === "/channel" ? HOST_CHANNEL_SUBPROTOCOL : TERMINAL_PROTOCOL_SUBPROTOCOL,
+          },
+        );
+        expect(responseHead.split("\r\n")[0]).toContain("503");
+      } finally {
+        await server.stop(true);
+      }
+    },
+  );
 
   test("rejects invalid browser frontend origins before opening a host port", () => {
     expect(() => Effect.runSync(validateFrontendOriginEffect("ftp://127.0.0.1:1420"))).toThrow(
@@ -894,8 +941,6 @@ describe("TypeScript web host backend", () => {
           appToken: APP_TOKEN,
           browserPreviews: unexpectedBrowserPreviews,
           controlToken: CONTROL_TOKEN,
-          eventBus: new BufferedHostEventBus({ report: () => {} }),
-          hostCommandRouter: createTestHostCommandRouter(),
           taskAssetReadService: missingTaskAssetReadService,
           localAttachments: createLocalAttachmentAdapter(),
           logger: testLogger,
@@ -905,7 +950,6 @@ describe("TypeScript web host backend", () => {
           }),
           sessionCookieSecure: configured.protocol === "https:",
           shutdownStarted: false,
-          isHostShutdownStarted: () => false,
           beginShutdown: () => {},
           stop: async () => {},
         }),
@@ -916,57 +960,50 @@ describe("TypeScript web host backend", () => {
     }
   });
 
-  test("preserves structured host command failure kind in invoke error responses", async () => {
-    const hostCommandRouter = createTestHostCommandRouter((command) =>
-      Effect.fail(
-        new HostOperationError({
-          message: `Failed to invoke ${command}.`,
-          operation: "test.invoke",
-          details: { command, failureKind: "timeout" },
-        }),
-      ),
-    );
+  test("returns successful host command results without changing their shape", async () => {
+    const hostCommandRouter = createTestHostCommandRouter(() => Effect.succeed("linux"));
 
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/invoke/runtime_status", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-        body: JSON.stringify({}),
-      }),
-      { hostCommandRouter },
-    );
-
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      error: "Failed to invoke runtime_status.",
-      failureKind: "timeout",
-      message: "Failed to invoke runtime_status.",
+    expect(await invokeTestCommand(hostCommandRouter, "system_get_platform")).toEqual({
+      result: "linux",
     });
   });
 
-  test("serializes successful host command results without changing their shape", async () => {
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/invoke/system_get_platform", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-        body: JSON.stringify({}),
-      }),
-      {
-        hostCommandRouter: createTestHostCommandRouter(() => Effect.succeed("linux")),
-      },
+  test("interrupts the command and runs its cleanup when the signal aborts", async () => {
+    let cleanedUp = false;
+    const started = createDeferred<void>();
+    const hostCommandRouter = createTestHostCommandRouter(() =>
+      Effect.sync(() => started.resolve()).pipe(
+        Effect.andThen(Effect.never),
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            cleanedUp = true;
+          }),
+        ),
+      ),
     );
+    const cancel = new AbortController();
+    const reply = invokeLocalHostCommand(
+      hostCommandRouter,
+      "workspace_get_git_provider_context",
+      {},
+      cancel.signal,
+    );
+    await started.promise;
+    cancel.abort(new Error("The client cancelled the request."));
+    await reply;
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toBe("linux");
+    expect(cleanedUp).toBe(true);
   });
 
-  test("preserves structured terminal failures in invoke error responses", async () => {
+  test("fails only the command when it dies with a defect", async () => {
+    const hostCommandRouter = createTestHostCommandRouter(() => Effect.die(new Error("boom")));
+
+    expect(await invokeTestCommand(hostCommandRouter, "system_get_platform")).toEqual({
+      error: { kind: "host", response: { message: "boom" } },
+    });
+  });
+
+  test("keeps structured terminal failures of a host command", async () => {
     const hostCommandRouter = createTestHostCommandRouter(() =>
       Effect.fail(
         new TerminalServiceError({
@@ -978,34 +1015,30 @@ describe("TypeScript web host backend", () => {
       ),
     );
 
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/invoke/terminal_create", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-        body: JSON.stringify({ workingDir: "/repo/worktree", context: {} }),
-      }),
-      { hostCommandRouter },
-    );
+    const reply = await invokeTestCommand(hostCommandRouter, "terminal_create", {
+      workingDir: "/repo/worktree",
+      context: {},
+    });
 
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      error: "Interactive terminals are unavailable in this runtime.",
-      message: "Interactive terminals are unavailable in this runtime.",
-      failure: {
-        kind: "terminal",
-        terminalFailure: {
-          code: "unsupported_runtime",
+    expect(reply).toEqual({
+      error: {
+        kind: "host",
+        response: {
           message: "Interactive terminals are unavailable in this runtime.",
-          workingDir: "/repo/worktree",
+          failure: {
+            kind: "terminal",
+            terminalFailure: {
+              code: "unsupported_runtime",
+              message: "Interactive terminals are unavailable in this runtime.",
+              workingDir: "/repo/worktree",
+            },
+          },
         },
       },
     });
   });
 
-  test("preserves workspace write failures in invoke error responses", async () => {
+  test("keeps workspace write failures of a host command", async () => {
     const hostCommandRouter = createTestHostCommandRouter(() =>
       Effect.fail(
         new WorkspaceTextFileWriteError({
@@ -1020,40 +1053,33 @@ describe("TypeScript web host backend", () => {
       ),
     );
 
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/invoke/filesystem_write_text_file", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-        body: JSON.stringify({
-          rootPath: "/repo",
-          relativePath: "src/file.ts",
-          contents: "draft",
-          revision: "sha256:old",
-        }),
-      }),
-      { hostCommandRouter },
-    );
+    const reply = await invokeTestCommand(hostCommandRouter, "filesystem_write_text_file", {
+      rootPath: "/repo",
+      relativePath: "src/file.ts",
+      contents: "draft",
+      revision: "sha256:old",
+    });
 
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      error: "The file changed after it was loaded.",
-      message: "The file changed after it was loaded.",
-      failure: {
-        kind: "workspace_text_file_write",
-        workspaceTextFileWriteFailure: {
-          code: "stale_revision",
+    expect(reply).toEqual({
+      error: {
+        kind: "host",
+        response: {
           message: "The file changed after it was loaded.",
-          rootPath: "/repo",
-          relativePath: "src/file.ts",
+          failure: {
+            kind: "workspace_text_file_write",
+            workspaceTextFileWriteFailure: {
+              code: "stale_revision",
+              message: "The file changed after it was loaded.",
+              rootPath: "/repo",
+              relativePath: "src/file.ts",
+            },
+          },
         },
       },
     });
   });
 
-  test("preserves runtime query identity and history diagnostics in web invoke failures", async () => {
+  test("keeps runtime query identity and history diagnostics of a host command", async () => {
     const failure = {
       code: "invalid_runtime_response" as const,
       operation: "load session history",
@@ -1075,30 +1101,26 @@ describe("TypeScript web host backend", () => {
     const hostCommandRouter = createTestHostCommandRouter(() =>
       Effect.fail(new RuntimeQueryError({ message: failure.detail, failure })),
     );
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/invoke/agent_runtime_load_session_history", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-openducktor-app-token": APP_TOKEN },
-        body: JSON.stringify({
-          input: {
-            repoPath: "/repo",
-            runtimeKind: "codex",
-            workingDirectory: "/repo/worktree",
-            externalSessionId: "thread-1",
-          },
-        }),
-      }),
-      { hostCommandRouter },
-    );
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      error: failure.detail,
-      message: failure.detail,
-      failure: { kind: "runtime_query", runtimeQueryFailure: failure },
+    const reply = await invokeTestCommand(hostCommandRouter, "agent_runtime_load_session_history", {
+      input: {
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "thread-1",
+      },
+    });
+    expect(reply).toEqual({
+      error: {
+        kind: "host",
+        response: {
+          message: failure.detail,
+          failure: { kind: "runtime_query", runtimeQueryFailure: failure },
+        },
+      },
     });
   });
 
-  test("preserves structured task asset failures in invoke error responses", async () => {
+  test("keeps structured task asset failures of a host command", async () => {
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
     const hostCommandRouter = createTestHostCommandRouter(() =>
       Effect.fail(
@@ -1115,344 +1137,22 @@ describe("TypeScript web host backend", () => {
       ),
     );
 
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/invoke/task_update", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-        body: JSON.stringify({}),
-      }),
-      { hostCommandRouter },
-    );
-
-    expect(response.status).toBe(500);
-    expect(await response.json()).toMatchObject({
-      failure: {
-        kind: "task_asset",
-        taskAssetFailure: {
-          code: "partial_state",
-          taskId: "task-1",
-          assetIds: [assetId],
-          retryAllowed: false,
-        },
-      },
-    });
-  });
-
-  test("flushes an initial SSE frame for the shared host event stream", async () => {
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/events", {
-        method: "GET",
-        headers: { "x-openducktor-app-token": APP_TOKEN },
-      }),
-      { eventBus: new BufferedHostEventBus({ report: () => {} }) },
-    );
-
-    expect(response.status).toBe(200);
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("Expected SSE response body.");
-    }
-    try {
-      const chunk = await readImmediateStreamChunk(reader);
-      expect(chunk.done).toBe(false);
-      expect(new TextDecoder().decode(chunk.value)).toBe(": openducktor-ready\n\n");
-    } finally {
-      await reader.cancel();
-    }
-  });
-
-  // A real HTTP stream must return its headers before a quiet resumed workspace publishes a task.
-  test("opens a quiet resumed task stream and releases its lease after cancellation", async () => {
-    const cursor = { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 };
-    const taskEventStream = createTaskEventStream({
-      epochFactory: () => cursor.epoch,
-      reporter: { report: () => {} },
-    });
-    const manager = createTaskEventLeaseManager({
-      encodeFrame: writeTaskFrameSseEvent,
-      reportDeliveryFailure: () => {},
-      taskEventStream,
-    });
-    const requestAborted = Promise.withResolvers<void>();
-    const server = await startNodeFetchServer({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch: (request) => {
-        if (request.url.includes("/stream?")) {
-          request.signal.addEventListener("abort", () => requestAborted.resolve(), { once: true });
-        }
-        return handleTestRequest(request, { taskEventLeaseManager: manager });
-      },
-      onError: (cause) => {
-        throw cause;
-      },
-    });
-    const baseUrl = `http://127.0.0.1:${server.port}/task-events/subscriptions`;
-
-    try {
-      const create = await Bun.fetch(baseUrl, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-        body: JSON.stringify({ cursor }),
-      });
-      expect(create.status).toBe(201);
-      const created = await create.json();
-      const { stream, readyComment } = await new Promise<{
-        stream: IncomingMessage;
-        readyComment: string;
-      }>((resolve, reject) => {
-        const request = get(
-          `${baseUrl}/${created.subscriptionId}/stream?token=${created.streamToken}`,
-          { headers: { cookie: `${APP_SESSION_COOKIE_NAME}=${APP_TOKEN}` } },
-          (response) => {
-            let readyComment = "";
-            const onData = (chunk: Buffer): void => {
-              readyComment += chunk.toString();
-              if (!readyComment.includes("\n\n")) return;
-              response.off("data", onData);
-              resolve({ stream: response, readyComment });
-            };
-            response.on("data", onData);
-            response.once("end", () => reject(new Error("Task stream ended before readiness.")));
-            response.once("error", reject);
+    expect(await invokeTestCommand(hostCommandRouter, "task_update")).toMatchObject({
+      error: {
+        kind: "host",
+        response: {
+          failure: {
+            kind: "task_asset",
+            taskAssetFailure: {
+              code: "partial_state",
+              taskId: "task-1",
+              assetIds: [assetId],
+              retryAllowed: false,
+            },
           },
-        );
-        request.setTimeout(2_000, () =>
-          request.destroy(
-            new Error("Task stream did not return HTTP headers while no task changed."),
-          ),
-        );
-        request.once("error", reject);
-      });
-      expect(stream.statusCode).toBe(200);
-      expect(stream.headers["content-type"]).toContain("text/event-stream");
-      expect(readyComment).toBe(": openducktor-ready\n\n");
-      const lease = manager.get(created.subscriptionId);
-
-      stream.destroy();
-      const abortTimeout = setTimeout(
-        () =>
-          requestAborted.reject(new Error("Task stream request did not abort after disconnect.")),
-        2_000,
-      );
-      try {
-        await requestAborted.promise;
-      } finally {
-        clearTimeout(abortTimeout);
-      }
-      expect(lease?.connection).toBeNull();
-
-      const remove = await Bun.fetch(`${baseUrl}/${created.subscriptionId}`, {
-        method: "DELETE",
-        headers: {
-          "x-openducktor-app-token": APP_TOKEN,
-          "x-openducktor-task-stream-token": created.streamToken,
-        },
-      });
-      expect(remove.status).toBe(204);
-      expect(manager.get(created.subscriptionId)).toBeUndefined();
-    } finally {
-      manager.dispose();
-      await server.stop(true);
-    }
-  }, 5_000);
-
-  test("uses task leases instead of generic event replay and ignores Last-Event-ID", async () => {
-    const subscribeCalls: unknown[] = [];
-    const acknowledged: unknown[] = [];
-    const hostSubscriptionId = "1481b3fa-242a-4baf-a805-c6bc77a2496e";
-    const taskEventStream = createTaskEventStream({
-      epochFactory: () => "fc49d1f9-708c-4198-b56b-f1437b2bbcea",
-      subscriptionIdFactory: () => hostSubscriptionId,
-      reporter: { report: () => {} },
-    });
-    const taskEventLeaseManager = createTaskEventLeaseManager({
-      encodeFrame: writeTaskFrameSseEvent,
-      reportDeliveryFailure: () => {},
-      taskEventStream: {
-        ...taskEventStream,
-        acknowledge: (input) => {
-          taskEventStream.acknowledge(input);
-          acknowledged.push(input);
-        },
-        subscribe: (input, nextSink) => {
-          subscribeCalls.push(input);
-          return taskEventStream.subscribe(input, nextSink);
         },
       },
     });
-    const create = await handleTestRequest(
-      new Request("http://127.0.0.1/task-events/subscriptions", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-        body: JSON.stringify({ cursor: null }),
-      }),
-      { taskEventLeaseManager },
-    );
-    expect(create.status).toBe(201);
-    const created = await create.json();
-    expect(subscribeCalls).toEqual([{ cursor: null }]);
-
-    const stream = await handleTestRequest(
-      new TestServerRequest(
-        `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
-        {
-          headers: new Headers([
-            ["cookie", `openducktor_web_session=${APP_TOKEN}`],
-            ["last-event-id", "999999"],
-          ]),
-        },
-      ),
-      { taskEventLeaseManager },
-    );
-    expect(stream.status).toBe(200);
-    const reader = stream.body?.getReader();
-    if (!reader) throw new Error("Expected task event stream subscription.");
-    const frame: TaskEventStreamFrame = {
-      type: "snapshot_required",
-      cursor: { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 },
-      reason: "buffer_gap",
-    };
-    expect(new TextDecoder().decode((await reader.read()).value)).toBe(": openducktor-ready\n\n");
-    const sse = new TextDecoder().decode((await reader.read()).value);
-    expect(sse).toContain("event: task-frame");
-    expect(sse).toContain(JSON.stringify(frame));
-    await reader.cancel();
-
-    const reconnect = await handleTestRequest(
-      new TestServerRequest(
-        `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
-        {
-          headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
-        },
-      ),
-      { taskEventLeaseManager },
-    );
-    expect(reconnect.status).toBe(200);
-    const reconnectReader = reconnect.body?.getReader();
-    if (!reconnectReader) throw new Error("Expected task event stream reconnection.");
-    expect(new TextDecoder().decode((await reconnectReader.read()).value)).toBe(
-      ": openducktor-ready\n\n",
-    );
-    expect(new TextDecoder().decode((await reconnectReader.read()).value)).toContain(
-      JSON.stringify(frame),
-    );
-    expect(subscribeCalls).toHaveLength(1);
-
-    const acknowledgement = await handleTestRequest(
-      new Request(`http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/ack`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-          "x-openducktor-task-stream-token": created.streamToken,
-        },
-        body: JSON.stringify({ cursor: frame.cursor }),
-      }),
-      { taskEventLeaseManager },
-    );
-    expect(acknowledgement.status).toBe(204);
-    expect(acknowledged).toEqual([{ cursor: frame.cursor, subscriptionId: hostSubscriptionId }]);
-    await reconnectReader.cancel();
-
-    const lease = taskEventLeaseManager.get(created.subscriptionId);
-    if (!lease) throw new Error("Expected task event stream lease.");
-    taskEventLeaseManager.delete(lease);
-    const expired = await handleTestRequest(
-      new TestServerRequest(
-        `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
-        {
-          headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
-        },
-      ),
-      { taskEventLeaseManager },
-    );
-    expect(expired.status).toBe(410);
-    expect(subscribeCalls).toHaveLength(1);
-
-    const tampered = await handleTestRequest(
-      new TestServerRequest(
-        `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=tampered`,
-        {
-          headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
-        },
-      ),
-      { taskEventLeaseManager },
-    );
-    expect(tampered.status).toBe(403);
-    expect(subscribeCalls).toHaveLength(1);
-  });
-
-  test("multiplexes non-task host event channels through the shared SSE endpoint", async () => {
-    const eventBus = new BufferedHostEventBus({ report: () => {} });
-    const events = [
-      { channel: "openducktor://run-event", payload: { type: "autopilot_failure", failure: null } },
-      {
-        channel: "openducktor://agent-session-live-event",
-        payload: {
-          type: "snapshot",
-          messageQueues: [],
-          repoPath: "/repo",
-          sessions: [],
-        },
-      },
-    ] satisfies readonly HostEventEnvelope[];
-    for (const event of events) {
-      eventBus.publish(event);
-    }
-
-    const cursor = {
-      hostEpoch: eventBus.stream().hostEpoch,
-      hostEventId: 0,
-      notificationCursor: null,
-    };
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/events", {
-        method: "GET",
-        headers: {
-          "last-event-id": JSON.stringify(cursor),
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-      }),
-      { eventBus },
-    );
-
-    expect(response.status).toBe(200);
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("Expected SSE response body.");
-    }
-    try {
-      expect(new TextDecoder().decode((await readImmediateStreamChunk(reader)).value)).toBe(
-        ": openducktor-ready\n\n",
-      );
-      const replay = await readStreamUntil(reader, "event: replay-complete");
-      for (const event of events) {
-        expect(replay).toContain(JSON.stringify(event));
-      }
-      expect(replay).toContain(`event: ${liveSessionStreamEventName("/repo")}\ndata: `);
-      eventBus.publish({
-        channel: "openducktor://agent-session-live-event",
-        payload: {
-          type: "snapshot",
-          messageQueues: [],
-          repoPath: "/other",
-          sessions: [],
-        },
-      });
-      await readStreamUntil(reader, `event: ${liveSessionStreamEventName("/other")}\ndata: `);
-    } finally {
-      await reader.cancel();
-    }
   });
 
   test("isolates buffered bus delivery failures after accepting and buffering the event", () => {
@@ -1486,25 +1186,6 @@ describe("TypeScript web host backend", () => {
     expect(observed).toEqual([{ channel: "openducktor://run-event", cause: failure }]);
     stopFailures();
     expect(eventBus.stream().replayAfter(0).events).toHaveLength(1);
-  });
-
-  test("rejects malformed invoke command URI components as typed host request errors", async () => {
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/invoke/%E0%A4%A", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-        body: JSON.stringify({}),
-      }),
-    );
-
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: "Invalid command URI component: %E0%A4%A",
-      message: "Invalid command URI component: %E0%A4%A",
-    });
   });
 
   test("resolves host backend exit after stop server failures", async () => {
@@ -1741,239 +1422,6 @@ describe("TypeScript web host backend", () => {
     expect(stopCalls).toBe(0);
   });
 
-  test("rejects invokes after the shutdown gate while host teardown remains pending", async () => {
-    const disposeStarted = createDeferred();
-    const disposeReleased = createDeferred();
-    let invokeCalls = 0;
-    const teardown = stopHostBackend({
-      disposeHost: () =>
-        Effect.promise(async () => {
-          disposeStarted.resolve();
-          await disposeReleased.promise;
-        }),
-      logger: testLogger,
-      resolveExited: () => {},
-      stopServer: () => {},
-    });
-
-    await disposeStarted.promise;
-    try {
-      const response = await handleTestRequest(
-        new Request("http://127.0.0.1/invoke/runtime_status", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-openducktor-app-token": APP_TOKEN,
-          },
-          body: JSON.stringify({}),
-        }),
-        {
-          hostCommandRouter: createTestHostCommandRouter(() => {
-            invokeCalls += 1;
-            return Effect.succeed(null);
-          }),
-          shutdownStarted: true,
-        },
-      );
-
-      expect(response.status).toBe(503);
-      expect(await response.json()).toEqual({
-        error: "Browser backend is shutting down and is no longer accepting new work.",
-        message: "Browser backend is shutting down and is no longer accepting new work.",
-      });
-      expect(invokeCalls).toBe(0);
-    } finally {
-      disposeReleased.resolve();
-      await teardown;
-    }
-  });
-
-  test("rejects new SSE streams after the shutdown gate without opening a subscription", async () => {
-    const eventBus = new BufferedHostEventBus({ report: () => {} });
-    const stream = eventBus.stream();
-    const originalStream = eventBus.stream.bind(eventBus);
-    const originalSubscribe = stream.subscribe.bind(stream);
-    let streamCalls = 0;
-    let subscribeCalls = 0;
-    eventBus.stream = () => {
-      streamCalls += 1;
-      return originalStream();
-    };
-    stream.subscribe = (listener) => {
-      subscribeCalls += 1;
-      return originalSubscribe(listener);
-    };
-
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/events", {
-        method: "GET",
-        headers: { "x-openducktor-app-token": APP_TOKEN },
-      }),
-      { eventBus, shutdownStarted: true },
-    );
-
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      error: "Browser backend is shutting down and is no longer accepting new work.",
-      message: "Browser backend is shutting down and is no longer accepting new work.",
-    });
-    expect(streamCalls).toBe(0);
-    expect(subscribeCalls).toBe(0);
-  });
-
-  test("keeps active SSE streams open until forced server shutdown", async () => {
-    const eventBus = new BufferedHostEventBus({ report: () => {} });
-    const disposeStarted = createDeferred();
-    const disposeReleased = createDeferred();
-    let shutdownStarted = false;
-    let server!: NodeFetchServer<never>;
-    let stopPromise: Promise<void> | null = null;
-    const stop = (): Promise<void> => {
-      if (stopPromise) {
-        return stopPromise;
-      }
-      shutdownStarted = true;
-      stopPromise = stopHostBackend({
-        disposeHost: () =>
-          Effect.promise(async () => {
-            disposeStarted.resolve();
-            await disposeReleased.promise;
-          }),
-        logger: testLogger,
-        resolveExited: () => {},
-        stopServer: () => server.stop(true),
-      });
-      return stopPromise;
-    };
-    server = await startNodeFetchServer({
-      hostname: "127.0.0.1",
-      port: 0,
-      onError: (cause) => {
-        throw cause;
-      },
-      fetch: (request, requestServer) =>
-        Effect.runPromise(
-          handleTypescriptHostBackendRequest({
-            allowedOrigins: new Set(),
-            appSessionCookieName: APP_SESSION_COOKIE_NAME,
-            appToken: APP_TOKEN,
-            browserPreviews: unexpectedBrowserPreviews,
-            controlToken: CONTROL_TOKEN,
-            eventBus,
-            hostCommandRouter: createTestHostCommandRouter(),
-            notificationStream: createNotificationStream(),
-            taskAssetReadService: missingTaskAssetReadService,
-            localAttachments: createLocalAttachmentAdapter(),
-            logger: testLogger,
-            request,
-            requestTimeouts: requestServer,
-            sessionCookieSecure: false,
-            shutdownStarted,
-            isHostShutdownStarted: () => shutdownStarted,
-            beginShutdown: () => {
-              shutdownStarted = true;
-            },
-            stop,
-          }),
-        ),
-    });
-
-    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-    try {
-      const response = await Bun.fetch(`http://127.0.0.1:${server.port}/events`, {
-        headers: { "x-openducktor-app-token": APP_TOKEN },
-      });
-      expect(response.status).toBe(200);
-      reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("Expected SSE response body.");
-      }
-      expect(await readStreamUntil(reader, "event: replay-complete")).toStartWith(
-        ": openducktor-ready\n\n",
-      );
-
-      const shutdown = stop();
-      await disposeStarted.promise;
-      eventBus.publish({
-        channel: "openducktor://run-event",
-        payload: { type: "autopilot_failure", failure: null },
-      });
-      await readStreamUntil(reader, '"type":"autopilot_failure"');
-
-      disposeReleased.resolve();
-      await shutdown;
-      try {
-        const terminalRead = await reader.read();
-        expect(terminalRead.done).toBe(true);
-      } catch (cause) {
-        expect(cause).toBeInstanceOf(Error);
-      }
-    } finally {
-      disposeReleased.resolve();
-      if (stopPromise) {
-        await stopPromise;
-      } else {
-        await server.stop(true);
-      }
-      try {
-        await reader?.cancel();
-      } catch {
-        // A forced server close can reject an active SSE reader.
-      }
-    }
-  });
-
-  test("applies the SSE no-timeout override to the original request under a base path", async () => {
-    const timeoutRequests: Request[] = [];
-    // SAFETY: the SSE route calls only server.timeout on this fake; the request path is not a terminal upgrade, so server.upgrade is never invoked.
-    const fakeServer = {
-      timeout(request: Request, _seconds: number) {
-        timeoutRequests.push(request);
-      },
-    } as Parameters<typeof handleHostFetch>[0]["server"];
-    const originalRequest = new TestServerRequest(
-      `http://127.0.0.1:1420${TERMINAL_UPGRADE_BASE_PATH}/events`,
-      {
-        headers: {
-          host: "127.0.0.1:1420",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-      },
-    );
-    const response = await handleHostFetch({
-      allowedHostnames: allowedHostnamesFor({
-        bindHost: "127.0.0.1",
-        externalUrl: TERMINAL_UPGRADE_FRONTEND_ORIGIN,
-      }),
-      allowedOrigins: allowedFrontendOrigins(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
-      appSessionCookieName: APP_SESSION_COOKIE_NAME,
-      appToken: APP_TOKEN,
-      browserPreviews: unexpectedBrowserPreviews,
-      controlToken: CONTROL_TOKEN,
-      eventBus: new BufferedHostEventBus({ report: () => {} }),
-      hostCommandRouter: createTestNodeHostCommandRouter(),
-      taskAssetReadService: missingTaskAssetReadService,
-      localAttachments: createLocalAttachmentAdapter(),
-      logger: testLogger,
-      basePath: TERMINAL_UPGRADE_BASE_PATH,
-      onBackgroundFailure: () => {},
-      request: originalRequest,
-      server: fakeServer,
-      sessionCookieSecure: false,
-      shutdownStarted: false,
-      isHostShutdownStarted: () => false,
-      beginShutdown: () => {},
-      stop: () => Promise.resolve(),
-    });
-    expect(response).toBeInstanceOf(Response);
-    if (!(response instanceof Response)) {
-      throw new Error("Expected an SSE response.");
-    }
-    expect(timeoutRequests).toHaveLength(1);
-    expect(timeoutRequests[0]).toBe(originalRequest);
-    await response.body?.cancel();
-  });
-
   test("keeps the backend server alive until host disposal finishes", async () => {
     const calls: string[] = [];
     let releaseDispose: () => void = () => {};
@@ -2009,36 +1457,4 @@ describe("TypeScript web host backend", () => {
     await stopPromise;
     expect(calls).toEqual(["dispose-started", "dispose-finished", "server-stopped", "exited-0"]);
   });
-});
-
-test("unauthenticated generated image invokes never reach the reader or return bytes", async () => {
-  let calls = 0;
-  const hostCommandRouter = createTestHostCommandRouter(() => {
-    calls++;
-    return Effect.die(new Error("unauthorized image read"));
-  });
-  for (const token of [undefined, "invalid"]) {
-    const headers = new Headers({ "content-type": "application/json" });
-    if (token) headers.set("x-openducktor-app-token", token);
-    const response = await handleTestRequest(
-      new Request("http://127.0.0.1/invoke/agent_session_read_generated_image", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          ref: {
-            repoPath: "/repo",
-            runtimeKind: "codex",
-            workingDirectory: "/repo",
-            externalSessionId: "thread",
-          },
-          itemId: "image",
-          revision: "output-v1",
-        }),
-      }),
-      { hostCommandRouter },
-    );
-    expect(response.status).toBe(token ? 403 : 401);
-    expect(await response.text()).not.toContain("base64");
-  }
-  expect(calls).toBe(0);
 });

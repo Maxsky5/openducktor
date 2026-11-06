@@ -4,7 +4,7 @@ export type RemoteHttpResponse = {
   headers: Readonly<Record<string, string>>;
   body: AsyncIterable<Uint8Array>;
 };
-export type RemoteTerminalConnection = { send(frame: Uint8Array): Promise<void>; close(): void };
+export type RemoteSocketConnection = { send(frame: Uint8Array): Promise<void>; close(): void };
 export interface RemoteTransport {
   request(
     method: "GET" | "POST" | "DELETE",
@@ -13,13 +13,15 @@ export interface RemoteTransport {
     signal: AbortSignal,
     body?: string,
   ): Promise<RemoteHttpResponse>;
-  openTerminal(
+  /** Opens a binary WebSocket on the negotiated connection. The host must select `protocol`. */
+  openSocket(
     url: string,
+    protocol: string,
     headers: Readonly<Record<string, string>>,
     signal: AbortSignal,
     onFrame: (frame: Uint8Array) => void,
     onClose: (failure?: RemoteFailure) => void,
-  ): Promise<RemoteTerminalConnection>;
+  ): Promise<RemoteSocketConnection>;
 }
 export class RemoteConnectionError extends Error {
   constructor(readonly failure: RemoteFailure) {

@@ -3,16 +3,7 @@ import type { TerminalBridge } from "@openducktor/frontend-core/terminals/termin
 import { Effect } from "effect";
 import { getBrowserBackendUrlEffect } from "../browser-config";
 import { runWebBoundary } from "@openducktor/remote-host/effect/web-errors";
-import { ensureLocalHostSessionDedupedEffect } from "../local-host-transport";
-
-const terminalSocketUrl = (baseUrl: string): string => {
-  const url = new URL(baseUrl);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  url.pathname = `${url.pathname.replace(/\/$/, "")}/terminal`;
-  url.search = "";
-  url.hash = "";
-  return url.toString();
-};
+import { ensureLocalHostSessionDedupedEffect, hostSocketUrl } from "../local-host-transport";
 
 const readTerminalSocketCloseFailure = (event: CloseEvent): TerminalFailure | null => {
   if (event.code === 1000) return null;
@@ -33,7 +24,7 @@ export const createBrowserTerminalBridge = (): TerminalBridge => ({
           try: () =>
             new Promise<WebSocket>((resolve, reject) => {
               const candidate = new WebSocket(
-                terminalSocketUrl(baseUrl),
+                hostSocketUrl(baseUrl, "terminal"),
                 TERMINAL_PROTOCOL_SUBPROTOCOL,
               );
               candidate.binaryType = "arraybuffer";

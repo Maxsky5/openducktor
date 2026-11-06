@@ -1,4 +1,4 @@
-import { remoteConnectionRequestSchema } from "@openducktor/contracts";
+import { HOST_CHANNEL_SUBPROTOCOL, remoteConnectionRequestSchema } from "@openducktor/contracts";
 import { expect, test } from "bun:test";
 import {
   REMOTE_BASELINE_CAPABILITIES,
@@ -17,6 +17,8 @@ import {
   TEST_CONNECTION_TOKEN,
   savedTestAuthorization,
 } from "./test-support/authorization";
+import { createFakeHostChannel } from "./test-support/host-channel";
+import { openRemoteSocket } from "./socket";
 
 const endpoint = "https://host.test";
 const hello = {
@@ -27,6 +29,9 @@ const hello = {
 };
 const encoder = new TextEncoder();
 const fixture = () => {
+  const channel = createFakeHostChannel({
+    invoke: (command) => ({ result: command === "system_get_platform" ? "linux" : null }),
+  });
   let saved: SavedRemoteAuthorization | null = null;
   let refuseSaved = false;
   let terminals = 0;
@@ -34,7 +39,7 @@ const fixture = () => {
     method: string;
     path: string;
     headers: Readonly<Record<string, string>>;
-    body: { pairingCode?: string };
+    body: { pairingCode?: string | undefined };
   }[] = [];
   const host: RemoteHostDescriptor = {
     shell: "web",
@@ -62,7 +67,7 @@ const fixture = () => {
   const transport: RemoteTransport = {
     async request(method, url, headers, signal, body) {
       const path = new URL(url).pathname;
-      const input: { pairingCode?: string } =
+      const input: { pairingCode?: string | undefined } =
         path === "/connections" && body
           ? remoteConnectionRequestSchema.parse(JSON.parse(body))
           : {};
@@ -103,27 +108,15 @@ const fixture = () => {
           authorization: headers.authorization ? undefined : savedTestAuthorization(),
         });
       }
-      if (path === "/events")
-        return {
-          status: 200,
-          headers: {},
-          body: (async function* () {
-            yield encoder.encode(
-              `event: replay-complete\ndata: {"hostChanged":false,"gaps":[]}\n\nevent: notification-frame\ndata: ${JSON.stringify({ type: "attached", cursor: { epoch: crypto.randomUUID(), sequence: 0 }, reason: "new", health: [] })}\n\n`,
-            );
-            await new Promise<void>((resolve) => {
-              signal.addEventListener("abort", () => resolve(), { once: true });
-              if (signal.aborted) resolve();
-            });
-          })(),
-        };
-      if (path === "/invoke/set_theme") return json(null);
-      if (path === "/invoke/system_get_platform") return json("linux");
       return json(null, 204);
     },
-    openTerminal: async () => {
-      terminals++;
-      throw new Error("No terminal in this fixture.");
+    openSocket: (url, protocol, headers, signal, onFrame, onClose) => {
+      if (protocol !== HOST_CHANNEL_SUBPROTOCOL) {
+        terminals++;
+        return Promise.reject(new Error("No terminal in this fixture."));
+      }
+      requests.push({ method: "GET", path: new URL(url).pathname, headers, body: {} });
+      return openRemoteSocket(channel.createSocket, protocol, headers, signal, onFrame, onClose);
     },
   };
   const create = () =>
@@ -162,11 +155,11 @@ test("code entry saves the grant before work and a new client restores saved acc
     });
     const connecting = first.connect({ pairingCode: "123456" });
     await writing.promise;
-    expect(f.requests.some((request) => request.path === "/events")).toBe(false);
+    expect(f.requests.some((request) => request.path === "/channel")).toBe(false);
     gate.resolve();
     await connecting;
     expect(first.readState().status).toBe("connected");
-    expect(f.requests.find((request) => request.path === "/events")?.headers.authorization).toBe(
+    expect(f.requests.find((request) => request.path === "/channel")?.headers.authorization).toBe(
       `Bearer ${TEST_CONNECTION_TOKEN}`,
     );
     await first.disconnect();
@@ -215,7 +208,7 @@ test.each(["read", "save"] as const)(
         failure: { code: "authorization_storage_failed" },
       });
       expect(remote.readState().status).toBe("failed");
-      expect(f.requests.some((request) => request.path === "/events")).toBe(false);
+      expect(f.requests.some((request) => request.path === "/channel")).toBe(false);
       if (operation === "save")
         expect(
           f.requests.some(
@@ -360,7 +353,7 @@ test("canceling a pending approval releases its late admission without storing o
     await connecting;
     expect(remote.readState().status).toBe("idle");
     expect(f.saved()).toBeNull();
-    expect(f.requests.some((request) => request.path === "/events")).toBe(false);
+    expect(f.requests.some((request) => request.path === "/channel")).toBe(false);
     expect(
       f.requests.some(
         (request) =>

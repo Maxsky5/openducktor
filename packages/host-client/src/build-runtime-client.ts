@@ -42,15 +42,20 @@ import {
   taskStoreCheckSchema,
   taskWorktreeSummarySchema,
 } from "@openducktor/contracts";
-import type { InvokeFn } from "./invoke-utils";
+import type { InvokeFn, InvokeOptions } from "./invoke-utils";
 import { arrayResultSchema, booleanResultSchema, okResultSchema } from "./invoke-utils";
 import { type BuiltinTaskCard as TaskCard, builtinTaskCardSchema } from "@openducktor/workflows";
 
-const taskStoreCheck = async (invokeFn: InvokeFn, scope: WorkspaceRef): Promise<TaskStoreCheck> => {
+const taskStoreCheck = async (
+  invokeFn: InvokeFn,
+  scope: WorkspaceRef,
+  options?: InvokeOptions,
+): Promise<TaskStoreCheck> => {
   return invokeFn(
     "task_store_check",
     { workspaceId: scope.workspaceId, repoPath: scope.repoPath },
     taskStoreCheckSchema,
+    options,
   );
 };
 
@@ -294,18 +299,18 @@ const agentSessionStop = async (
 export class HostAgentClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
-  async pathCheck(force = false): Promise<PathCheck> {
+  async pathCheck(force = false, options?: InvokeOptions): Promise<PathCheck> {
     const invoke = this.invokeFn;
-    return invoke("path_check", { force }, pathCheckSchema);
+    return invoke("path_check", { force }, pathCheckSchema, options);
   }
 
-  async gitCheck(): Promise<GitCheck> {
+  async gitCheck(options?: InvokeOptions): Promise<GitCheck> {
     const invoke = this.invokeFn;
-    return invoke("git_check", {}, gitCheckSchema);
+    return invoke("git_check", {}, gitCheckSchema, options);
   }
 
-  async taskStoreCheck(scope: WorkspaceRef): Promise<TaskStoreCheck> {
-    return taskStoreCheck(this.invokeFn, scope);
+  async taskStoreCheck(scope: WorkspaceRef, options?: InvokeOptions): Promise<TaskStoreCheck> {
+    return taskStoreCheck(this.invokeFn, scope, options);
   }
 
   async runtimeDefinitionsList(): Promise<RuntimeDescriptor[]> {

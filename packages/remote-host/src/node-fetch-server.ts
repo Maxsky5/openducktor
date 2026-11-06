@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { type AddressInfo } from "node:net";
+import { type AddressInfo, type Socket } from "node:net";
 import { Readable, type Duplex } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
@@ -8,11 +8,44 @@ import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { nodeReadableStream } from "./node-readable-stream";
 
 const MIN_GZIP_BYTES = 1024;
+/** The server pings each WebSocket peer at this interval. */
+const PEER_CHECK_INTERVAL_MS = 15_000;
+/** A peer that sends no byte for this many checks went away without a close. */
+const PEER_SILENT_CHECKS = 3;
+
+/**
+ * Ends a socket whose peer went away without a close, as a phone that lost its network does. TCP
+ * keeps such a socket for many minutes, and the host would keep its admission and leases. A live
+ * peer answers each ping, and a peer that uploads a large message sends bytes too, so only a gone
+ * peer reads as silent.
+ */
+const watchPeer = (nativeSocket: WebSocket, connection: Socket): void => {
+  let bytesRead = connection.bytesRead;
+  let silentChecks = 0;
+  const timer = setInterval(() => {
+    if (connection.bytesRead !== bytesRead) {
+      bytesRead = connection.bytesRead;
+      silentChecks = 0;
+    } else if (++silentChecks >= PEER_SILENT_CHECKS) {
+      nativeSocket.terminate();
+      return;
+    }
+    nativeSocket.ping();
+  }, PEER_CHECK_INTERVAL_MS);
+  timer.unref();
+  nativeSocket.once("close", () => clearInterval(timer));
+};
 
 export type NodeServerSocket<Data> = {
   data: Data;
   close(code: number, reason: string): void;
-  send(frame: Uint8Array): number;
+  /**
+   * Queues one binary frame. Returns the frame size, -1 when the socket buffers data, or 0 when the
+   * socket cannot send. `compress` applies per-message deflate when the client negotiated it.
+   */
+  send(frame: Uint8Array, compress?: boolean): number;
+  /** The bytes that the socket queued and did not send yet. */
+  bufferedAmount(): number;
 };
 
 export type NodeWebSocketHandler<Data> = {
@@ -27,7 +60,6 @@ export type NodeWebSocketHandler<Data> = {
 export type NodeFetchServer<Data> = {
   readonly port: number;
   stop(force: boolean): Promise<void>;
-  timeout(request: Request, seconds: number): void;
   /** Ends this HTTP response on abort without stopping the listener or host work. */
   bindResponseLifetime(signal: AbortSignal): void;
   upgrade(options: { data: Data }): boolean;
@@ -97,7 +129,6 @@ export const startNodeFetchServer = async <Data>({
       return (server.address() as AddressInfo).port;
     },
     stop,
-    timeout: (_request, seconds) => outgoing?.setTimeout(seconds * 1000),
     bindResponseLifetime: (signal) => {
       if (!outgoing) return;
       const close = () => outgoing.destroy();
@@ -150,28 +181,38 @@ export const startNodeFetchServer = async <Data>({
         webSocketServer.handleUpgrade(incoming, socket, head, (nativeSocket) => {
           upgraded = true;
           sockets.add(nativeSocket);
+          // SAFETY: an HTTP server emits `upgrade` with the TCP socket of the connection.
+          watchPeer(nativeSocket, socket as Socket);
+          let backpressured = false;
           const wrapped: NodeServerSocket<Data> = {
             data: options.data,
             close: (code, reason) => nativeSocket.close(code, reason),
-            send: (frame) => {
+            bufferedAmount: () => nativeSocket.bufferedAmount,
+            send: (frame, compress = false) => {
               if (nativeSocket.readyState !== WebSocket.OPEN) return 0;
               try {
-                nativeSocket.send(frame, { binary: true, compress: false }, (cause) => {
+                nativeSocket.send(frame, { binary: true, compress }, (cause) => {
                   if (cause) {
                     onError(cause);
                     nativeSocket.terminate();
                     return;
                   }
+                  // Only a socket that reported a buffer waits for its drain.
+                  if (!backpressured) return;
                   queueMicrotask(() => {
                     if (
+                      backpressured &&
                       nativeSocket.readyState === WebSocket.OPEN &&
                       nativeSocket.bufferedAmount === 0
                     ) {
+                      backpressured = false;
                       websocket.drain(wrapped);
                     }
                   });
                 });
-                return nativeSocket.bufferedAmount > 0 ? -1 : frame.byteLength;
+                if (nativeSocket.bufferedAmount === 0) return frame.byteLength;
+                backpressured = true;
+                return -1;
               } catch (cause) {
                 onError(cause);
                 return 0;
@@ -365,6 +406,7 @@ const canCompress = (response: Response): boolean => {
   const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
   return (
     contentType !== undefined &&
+    // Gzip buffers its output, which would hold back the events of a stream.
     contentType !== "text/event-stream" &&
     (contentType.startsWith("text/") ||
       /^(?:application\/(?:json|javascript|[^/]+\+json)|image\/svg\+xml)$/.test(contentType)) &&

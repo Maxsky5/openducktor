@@ -1,34 +1,27 @@
 import { z } from "zod";
-import { taskEventCursorSchema } from "./external-task-sync-schemas";
 
-export const REMOTE_PROTOCOL_VERSION = 5;
+export const REMOTE_PROTOCOL_VERSION = 6;
 export const REMOTE_BASELINE_CAPABILITIES = [
   "host.work.v1",
-  "host.events.v1",
+  "host.channel.v1",
   "agent.live.v1",
   "terminal.v3",
   "work.resources.v1",
 ] as const;
-/**
- * The optional capability of a host that writes a heartbeat comment on each event stream. A
- * network path can drop an idle stream without closing it, so the heartbeat keeps the path busy
- * and lets the client see a silent stream.
- */
-export const REMOTE_STREAM_HEARTBEAT_CAPABILITY = "streams.heartbeat.v1";
 /**
  * The optional capability of a host that reads `toolDetails: "on_demand"` in a session history
  * read and serves `agent_runtime_load_session_tool_part`. A remote client asks for compact history
  * only from such a host, because an older host rejects the unknown input field.
  */
 export const REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY = "history.tool_details.v1";
-/** The host writes a heartbeat comment on each event stream at this interval. */
-export const REMOTE_STREAM_HEARTBEAT_INTERVAL_MS = 15_000;
 export const REMOTE_CONNECTION_HEADER = "x-openducktor-connection-id";
+/** A remote host refuses a command reply that is larger than this limit. */
+export const REMOTE_MAX_REPLY_BYTES = 32 * 1024 * 1024;
 /** The port that remote control offers first. The host keeps the port of each enable. */
 export const DEFAULT_REMOTE_PORT = 14328;
 export const REMOTE_PAIRING_CODE_LIFETIME_MS = 300_000;
-export const REMOTE_TERMINAL_CONNECTION_PREFIX = "openducktor-connection.";
-export const REMOTE_TERMINAL_AUTHORIZATION_PREFIX = "openducktor-authorization.";
+export const REMOTE_SOCKET_CONNECTION_PREFIX = "openducktor-connection.";
+export const REMOTE_SOCKET_AUTHORIZATION_PREFIX = "openducktor-authorization.";
 export const REMOTE_HTTP_WARNING = "HTTP is not encrypted. Use a trusted private network or HTTPS.";
 export const REMOTE_HTTP_DETAILS =
   "Anyone who intercepts a pairing code or access credential can control this host and read its data.";
@@ -269,10 +262,6 @@ export const remoteAccessStateSchema = z.object({
   connectedClients: z.number().int().nonnegative().nullable(),
   failure: remoteFailureSchema.optional(),
 });
-export const remoteTaskLeaseSchema = z.object({
-  subscriptionId: z.string().uuid(),
-  replayBoundary: taskEventCursorSchema,
-});
 export type RemoteHostDescriptor = z.infer<typeof remoteHostDescriptorSchema>;
 export type RemoteAuthorization = z.infer<typeof remoteAuthorizationSchema>;
 export type RemoteClientKind = z.infer<typeof remoteClientKindSchema>;
@@ -310,7 +299,6 @@ export const failedRemoteAccessState = (
 });
 export type RemotePairingEnd = NonNullable<RemoteAccessState["pairingEnd"]>;
 export type RemoteAccessSettings = z.infer<typeof remoteAccessSettingsSchema>;
-export type RemoteTaskLease = z.infer<typeof remoteTaskLeaseSchema>;
 export const remotePairingStartInputSchema = z.strictObject({ renew: z.boolean().optional() });
 export type RemotePairingStartInput = z.infer<typeof remotePairingStartInputSchema>;
 export interface RemoteAccessBridge {

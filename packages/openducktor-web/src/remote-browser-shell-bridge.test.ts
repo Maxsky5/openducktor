@@ -7,6 +7,7 @@ import {
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
 import { expect, test } from "bun:test";
 import {
+  HOST_CHANNEL_SUBPROTOCOL,
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_PROTOCOL_VERSION,
   TERMINAL_PROTOCOL_VERSION,
@@ -17,6 +18,8 @@ import {
   type TerminalServerMessage,
 } from "@openducktor/contracts";
 import type { RemoteHttpResponse, RemoteTransport } from "@openducktor/host-client/remote";
+import { openRemoteSocket } from "@openducktor/host-client/remote/socket";
+import { createFakeHostChannel } from "@openducktor/host-client/remote/test-support/host-channel";
 import { createTerminalTransportController } from "@openducktor/frontend-core/terminals/terminal-transport-controller";
 import { createRemoteShellBridge } from "@openducktor/frontend/lib/remote/shell-bridge";
 import { createUnavailableShellBridge } from "@openducktor/frontend/lib/shell-bridge";
@@ -60,36 +63,32 @@ test.each(["restored", "lost", "failure"])(
     const frames: Uint8Array[] = [];
     let sockets = 0;
     let receive!: (frame: Uint8Array) => void;
+    const channel = createFakeHostChannel();
     const transport: RemoteTransport = {
-      async request(method, url, _headers, signal) {
+      async request(method, url, headers) {
         if (method === "DELETE") return json(null, 204);
         if (url.endsWith("/connections"))
           return json({
             status: "accepted",
             connectionToken: TEST_CONNECTION_TOKEN,
-            authorization: _headers.authorization ? undefined : savedTestAuthorization(),
+            authorization: headers.authorization ? undefined : savedTestAuthorization(),
             host,
             connectionId: crypto.randomUUID(),
             protocolVersion: REMOTE_PROTOCOL_VERSION,
             missingOptionalCapabilities: [],
           });
-        if (url.endsWith("/events"))
-          return {
-            status: 200,
-            headers: {},
-            body: (async function* () {
-              yield new TextEncoder().encode(
-                `event: replay-complete\ndata: ${JSON.stringify({ hostChanged: false, gaps: [] })}\n\nevent: notification-frame\ndata: ${JSON.stringify({ type: "attached", cursor: { epoch: crypto.randomUUID(), sequence: 0 }, reason: "new", health: [] })}\n\n`,
-              );
-              await new Promise<void>((resolve) => {
-                signal.addEventListener("abort", () => resolve(), { once: true });
-                if (signal.aborted) resolve();
-              });
-            })(),
-          };
         return json(host);
       },
-      async openTerminal(_url, _headers, _signal, onFrame) {
+      async openSocket(_url, protocol, headers, signal, onFrame, onClose) {
+        if (protocol === HOST_CHANNEL_SUBPROTOCOL)
+          return openRemoteSocket(
+            channel.createSocket,
+            protocol,
+            headers,
+            signal,
+            onFrame,
+            onClose,
+          );
         sockets += 1;
         receive = onFrame;
         if (sockets === 2) {

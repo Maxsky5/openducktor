@@ -10,6 +10,7 @@ import {
 } from "../../host-client/src/remote/test-support/authorization";
 import assert from "node:assert/strict";
 import {
+  HOST_CHANNEL_SUBPROTOCOL,
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_PROTOCOL_VERSION,
   type ExternalTaskSyncEvent,
@@ -17,6 +18,8 @@ import {
   type RemoteHostDescriptor,
 } from "@openducktor/contracts";
 import type { RemoteTransport } from "@openducktor/host-client/remote";
+import { openRemoteSocket } from "@openducktor/host-client/remote/socket";
+import { createFakeHostChannel } from "@openducktor/host-client/remote/test-support/host-channel";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createHostRuntimeStatusOwner } from "@openducktor/frontend-core/runtime/host-runtime-status-owner";
@@ -67,7 +70,7 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
   let taskSetupFailed = firstFailure !== "task_subscription";
   let runtimeReads = 0;
   let taskSubscriptions = 0;
-  let deliverTask = (_frame: string) => {};
+  let ackedSubscription: string | null = null;
   const taskSnapshotStarted = Promise.withResolvers<void>();
   const taskSnapshotGate = Promise.withResolvers<void>();
   const taskAckStarted = Promise.withResolvers<void>();
@@ -77,8 +80,57 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
   const cursor = { epoch: crypto.randomUUID(), sequence: 0 };
   const runtimeStarted = Promise.withResolvers<void>();
   const runtimeGate = Promise.withResolvers<HostRuntimeSnapshot>();
+  const channel = createFakeHostChannel({
+    taskBoundary: cursor,
+    initialTaskFrames: (boundary) => [
+      { type: "snapshot_required", cursor: boundary, reason: "buffer_gap" },
+    ],
+    invoke: async (command) => {
+      if (command !== "runtime_status") throw new Error(`Unexpected command: ${command}`);
+      runtimeReads += 1;
+      runtimeStarted.resolve();
+      try {
+        return { result: await runtimeGate.promise };
+      } catch {
+        return {
+          error: {
+            kind: "host",
+            response: { error: "host_command_failed", message: "Runtime read failed." },
+          },
+        };
+      }
+    },
+    answer: (request, socket) => {
+      if (request.method === "task_events.subscribe") {
+        if (taskSetupFailed) {
+          taskSubscriptions += 1;
+          return undefined;
+        }
+        taskSetupFailed = true;
+        return {
+          error: {
+            kind: "refused",
+            failure: {
+              code: "unavailable",
+              message: "Task subscription setup failed.",
+              nextAction: "Retry.",
+            },
+          },
+        };
+      }
+      if (request.method === "task_events.ack") {
+        ackedSubscription = request.subscriptionId;
+        taskAckStarted.resolve();
+        void taskAckGate.promise.then(() =>
+          socket.send({ type: "result", id: request.id }, "null"),
+        );
+        return "none";
+      }
+      return undefined;
+    },
+  });
   const transport: RemoteTransport = {
-    async request(method, url, _headers, signal) {
+    async request(method, url, headers) {
       if (method === "DELETE") return json(null, 204);
       if (url.endsWith("/remote")) {
         if (!available)
@@ -99,73 +151,17 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
         return json({
           status: "accepted",
           connectionToken: TEST_CONNECTION_TOKEN,
-          authorization: _headers.authorization ? undefined : savedTestAuthorization(),
+          authorization: headers.authorization ? undefined : savedTestAuthorization(),
           host,
           connectionId: crypto.randomUUID(),
           protocolVersion: REMOTE_PROTOCOL_VERSION,
           missingOptionalCapabilities: [],
         });
-      if (url.endsWith("/events"))
-        return {
-          status: 200,
-          headers: {},
-          body: (async function* () {
-            yield new TextEncoder().encode(
-              `event: replay-complete\ndata: ${JSON.stringify({ hostChanged: false, gaps: [] })}\n\nevent: notification-frame\ndata: ${JSON.stringify({ type: "attached", cursor: { epoch: crypto.randomUUID(), sequence: 0 }, reason: "new", health: [] })}\n\n`,
-            );
-            await new Promise<void>((resolve) => {
-              signal.addEventListener("abort", () => resolve(), { once: true });
-              if (signal.aborted) resolve();
-            });
-          })(),
-        };
-      if (url.endsWith("/invoke/runtime_status")) {
-        runtimeReads += 1;
-        runtimeStarted.resolve();
-        try {
-          return json(await runtimeGate.promise);
-        } catch {
-          return json({ error: "host_command_failed", message: "Runtime read failed." }, 500);
-        }
-      }
-      if (url.endsWith("/task-events/subscriptions")) {
-        if (!taskSetupFailed) {
-          taskSetupFailed = true;
-          return json(
-            { error: "host_command_failed", message: "Task subscription setup failed." },
-            500,
-          );
-        }
-        taskSubscriptions += 1;
-        return json({ subscriptionId: crypto.randomUUID(), replayBoundary: cursor });
-      }
-      if (url.endsWith("/stream"))
-        return {
-          status: 200,
-          headers: {},
-          body: (async function* () {
-            yield new TextEncoder().encode(
-              `event: task-frame\ndata: ${JSON.stringify({ type: "snapshot_required", cursor, reason: "buffer_gap" })}\n\n`,
-            );
-            while (!signal.aborted) {
-              const frame = await new Promise<string>((resolve, reject) => {
-                deliverTask = resolve;
-                signal.addEventListener("abort", () => reject(signal.reason), { once: true });
-                if (signal.aborted) reject(signal.reason);
-              });
-              yield new TextEncoder().encode(frame);
-            }
-          })(),
-        };
-      if (url.endsWith("/ack")) {
-        taskAckStarted.resolve();
-        await taskAckGate.promise;
-        return json(null, 204);
-      }
       throw new Error(`Unexpected request: ${method} ${url}`);
     },
-    openTerminal: async () => {
-      throw new Error("No terminal was selected.");
+    openSocket: (_url, protocol, headers, signal, onFrame, onClose) => {
+      if (protocol !== HOST_CHANNEL_SUBPROTOCOL) throw new Error("No terminal was selected.");
+      return openRemoteSocket(channel.createSocket, protocol, headers, signal, onFrame, onClose);
     },
   };
   const queryClient = createClientQueryClient();
@@ -310,9 +306,12 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
           taskSnapshot: { id: "task", title: "After retry", status: "open" },
           emittedAt: "2026-10-14T12:00:00.000Z",
         };
-        deliverTask(
-          `event: task-frame\ndata: ${JSON.stringify({ type: "change", cursor: { ...cursor, sequence: 1 }, event })}\n\n`,
-        );
+        assert.ok(ackedSubscription);
+        channel.taskFrame(ackedSubscription, {
+          type: "change",
+          cursor: { ...cursor, sequence: 1 },
+          event,
+        });
         await Promise.all([taskChanged.promise, sessionsChanged.promise]);
       }
     }

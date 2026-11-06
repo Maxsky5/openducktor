@@ -1,0 +1,362 @@
+import { describe, expect, test } from "bun:test";
+import {
+  encodeHostChannelBytesFrame,
+  encodeHostChannelFrame,
+  hostChannelClientMessageSchema,
+  type HostChannelMessage,
+  type HostChannelClientMessage,
+  type NotificationStreamFrame,
+  type TaskEventStreamFrame,
+} from "@openducktor/contracts";
+import {
+  createHostChannelSession,
+  HostChannelProtocolError,
+  HostChannelRequestError,
+  openHostChannel,
+  type HostChannelCursors,
+  type HostChannelEvent,
+  type HostChannelHandlers,
+} from "./channel";
+
+const boundary = { epoch: "00000000-0000-4000-8000-000000000002", sequence: 3 };
+const subscriptionId = "00000000-0000-4000-8000-000000000009";
+const snapshot: TaskEventStreamFrame = {
+  type: "snapshot_required",
+  cursor: boundary,
+  reason: "buffer_gap",
+};
+
+const setup = (handlers: Partial<HostChannelHandlers> = {}) => {
+  const sent: HostChannelClientMessage[] = [];
+  const handlerErrors: unknown[] = [];
+  const session = createHostChannelSession({
+    send: (frame) =>
+      sent.push(hostChannelClientMessageSchema.parse(JSON.parse(new TextDecoder().decode(frame)))),
+    handlers: { hostEvent: () => {}, notification: () => {}, ...handlers },
+    onHandlerError: (cause) => handlerErrors.push(cause),
+  });
+  const receive = (header: HostChannelMessage, body?: string | Uint8Array) =>
+    session.receive(
+      body instanceof Uint8Array
+        ? encodeHostChannelBytesFrame(header, body)
+        : encodeHostChannelFrame(header, body),
+    );
+  /** The sent requests, without cancels. */
+  const requests = () => sent.flatMap((message) => (message.type === "request" ? [message] : []));
+  return { session, sent, requests, handlerErrors, receive };
+};
+
+const settled = async <T>(promise: Promise<T>) => {
+  try {
+    return { value: await promise };
+  } catch (cause) {
+    return { cause };
+  }
+};
+
+describe("createHostChannelSession", () => {
+  test("sends a request with a new ID and resolves with the result body", async () => {
+    const { session, requests, receive } = setup();
+    const first = session.request({ method: "invoke", command: "git_check", args: {} });
+    const second = session.request({ method: "remote_access.observe" });
+    expect(requests().map(({ id, method }) => ({ id, method }))).toEqual([
+      { id: 0, method: "invoke" },
+      { id: 1, method: "remote_access.observe" },
+    ]);
+    receive({ type: "result", id: 1 });
+    receive({ type: "result", id: 0 }, JSON.stringify({ gitOk: true }));
+    expect(await first).toEqual({ gitOk: true });
+    expect(await second).toBeNull();
+  });
+
+  test.each([
+    [{ kind: "host", response: { error: "failed", message: "Git failed." } }, "Git failed."],
+    [
+      {
+        kind: "refused",
+        failure: { code: "remote_disabled", message: "Disabled.", nextAction: "Enable it." },
+      },
+      "Disabled. Enable it.",
+    ],
+    [{ kind: "reply_too_large", limitBytes: 32 * 1024 * 1024 }, "larger than 32 MiB"],
+  ] as const)("an error reply rejects with HostChannelRequestError", async (error, message) => {
+    const { session, receive } = setup();
+    const request = session.request({ method: "invoke", command: "git_check", args: {} });
+    receive({ type: "error", id: 0, error });
+    const result = await settled(request);
+    expect(result.cause).toBeInstanceOf(HostChannelRequestError);
+    expect(result.cause).toMatchObject({ error, message: expect.stringContaining(message) });
+  });
+
+  test("an abort rejects at once, tells the host, and drops the later reply", async () => {
+    const { session, receive, sent } = setup();
+    const caller = new AbortController();
+    const request = session.request(
+      { method: "invoke", command: "git_check", args: {} },
+      caller.signal,
+    );
+    const reason = new Error("Timed out.");
+    caller.abort(reason);
+    expect((await settled(request)).cause).toBe(reason);
+    expect(sent.at(-1)).toEqual({ type: "cancel", id: 0 });
+    expect(() => receive({ type: "result", id: 0 }, "true")).not.toThrow();
+  });
+
+  test("joins the parts of a large result before it reads the JSON", async () => {
+    const { session, receive } = setup();
+    const request = session.request({ method: "invoke", command: "read", args: {} });
+    // The cut falls inside the two bytes of "é", so each part alone is no valid UTF-8.
+    const bytes = new TextEncoder().encode(JSON.stringify({ text: "é".repeat(4) }));
+    receive({ type: "result_part", id: 0 }, bytes.subarray(0, 11));
+    receive({ type: "heartbeat" });
+    receive({ type: "result_part", id: 0 }, bytes.subarray(11, 14));
+    receive({ type: "result", id: 0 }, bytes.subarray(14));
+
+    expect(await request).toEqual({ text: "é".repeat(4) });
+  });
+
+  test("drops the later parts of an aborted request", async () => {
+    const { session, receive } = setup();
+    const caller = new AbortController();
+    const request = session.request({ method: "invoke", command: "read", args: {} }, caller.signal);
+    receive({ type: "result_part", id: 0 }, "[1,");
+    caller.abort(new Error("Closed."));
+
+    expect((await settled(request)).cause).toBe(caller.signal.reason);
+    expect(() => receive({ type: "result_part", id: 0 }, "2")).not.toThrow();
+    expect(() => receive({ type: "result", id: 0 }, "]")).not.toThrow();
+  });
+
+  test("an aborted signal sends nothing", async () => {
+    const { session, sent } = setup();
+    const caller = new AbortController();
+    caller.abort(new Error("Closed."));
+    const result = await settled(
+      session.request({ method: "invoke", command: "git_check", args: {} }, caller.signal),
+    );
+    expect(result.cause).toBe(caller.signal.reason);
+    expect(sent).toEqual([]);
+  });
+
+  test("close rejects pending and later requests with its cause", async () => {
+    const { session, sent } = setup();
+    const pending = session.request({ method: "invoke", command: "git_check", args: {} });
+    const lost = new Error("The host channel closed.");
+    session.close(lost);
+    session.close(new Error("A second close is ignored."));
+    expect((await settled(pending)).cause).toBe(lost);
+    expect((await settled(session.request({ method: "remote_access.observe" }))).cause).toBe(lost);
+    expect(sent).toHaveLength(1);
+  });
+
+  test("a send failure rejects the request", async () => {
+    const failure = new Error("The socket is not open.");
+    const session = createHostChannelSession({
+      send: () => {
+        throw failure;
+      },
+      handlers: { hostEvent: () => {}, notification: () => {} },
+      onHandlerError: () => {},
+    });
+    expect((await settled(session.request({ method: "remote_access.observe" }))).cause).toBe(
+      failure,
+    );
+  });
+
+  test("a task lease receives the frames that follow its result in the same turn", async () => {
+    const { session, receive } = setup();
+    const frames: TaskEventStreamFrame[] = [];
+    const lease = session.subscribeTaskEvents({ cursor: null }, (frame) => frames.push(frame));
+    receive(
+      { type: "result", id: 0 },
+      JSON.stringify({ subscriptionId, replayBoundary: boundary }),
+    );
+    receive({ type: "task_frame", subscriptionId, frame: snapshot });
+    expect(frames).toEqual([snapshot]);
+    expect(await lease).toEqual({ subscriptionId, replayBoundary: boundary });
+  });
+
+  test("an invalid task lease fails the subscription and the frame", async () => {
+    const { session, receive } = setup();
+    const lease = session.subscribeTaskEvents({ cursor: null }, () => {});
+    expect(() => receive({ type: "result", id: 0 }, JSON.stringify({ wrong: true }))).toThrow(
+      HostChannelProtocolError,
+    );
+    expect((await settled(lease)).cause).toBeInstanceOf(HostChannelProtocolError);
+  });
+
+  test("an attached lease receives frames, and a release stops local delivery at once", async () => {
+    const { session, requests, receive } = setup();
+    const frames: TaskEventStreamFrame[] = [];
+    const attached = session.attachTaskEvents(subscriptionId, (frame) => frames.push(frame));
+    receive({ type: "result", id: 0 });
+    await attached;
+    receive({ type: "task_frame", subscriptionId, frame: snapshot });
+    const released = session.releaseTaskEvents(subscriptionId);
+    receive({ type: "task_frame", subscriptionId, frame: snapshot });
+    receive({ type: "result", id: 1 });
+    await released;
+    expect(frames).toEqual([snapshot]);
+    expect(requests().map(({ method }) => method)).toEqual([
+      "task_events.attach",
+      "task_events.release",
+    ]);
+  });
+
+  test("a host event decodes its body only when a reader asks for it", () => {
+    const events: HostChannelEvent[] = [];
+    const { session } = setup({ hostEvent: (event) => events.push(event) });
+    const header = encodeHostChannelFrame({ type: "host_event", id: 5, name: "message" });
+    const frame = new Uint8Array([...header, 0x0a, 0xff]);
+    session.receive(frame);
+    expect(events.map(({ id, name }) => ({ id, name }))).toEqual([{ id: 5, name: "message" }]);
+    expect(() => events[0]!.body()).toThrow(HostChannelProtocolError);
+  });
+
+  test("a host event body decodes once", () => {
+    const bodies: string[] = [];
+    const { receive } = setup({
+      hostEvent: (event) => {
+        bodies.push(event.body(), event.body());
+      },
+    });
+    receive({ type: "host_event", id: 1, name: "message" }, '{"channel":"x"}');
+    expect(bodies).toEqual(['{"channel":"x"}', '{"channel":"x"}']);
+  });
+
+  test("handler failures go to onHandlerError and keep the session", async () => {
+    const failure = new Error("The view failed.");
+    const frames: NotificationStreamFrame[] = [];
+    const { session, receive, handlerErrors } = setup({
+      notification: (frame) => {
+        frames.push(frame);
+        throw failure;
+      },
+    });
+    const frame: NotificationStreamFrame = {
+      type: "attached",
+      cursor: { epoch: "00000000-0000-4000-8000-000000000001", sequence: 0 },
+      reason: "new",
+      health: [],
+    };
+    receive({ type: "notification", frame });
+    expect(handlerErrors).toEqual([failure]);
+    const request = session.request({ method: "remote_access.observe" });
+    receive({ type: "result", id: 0 });
+    expect(await request).toBeNull();
+    expect(frames).toEqual([frame]);
+  });
+
+  test.each([
+    ["an invalid header", new TextEncoder().encode("{broken")],
+    ["an unknown message type", new TextEncoder().encode('{"type":"surprise"}')],
+    ["invalid UTF-8", new Uint8Array([0xff])],
+    [
+      "an event without a body",
+      encodeHostChannelFrame({ type: "host_event", id: 1, name: "message" }),
+    ],
+  ])("%s throws HostChannelProtocolError", (_name, frame) => {
+    const { session } = setup();
+    expect(() => session.receive(frame)).toThrow(HostChannelProtocolError);
+  });
+
+  test("an invalid result body fails its request and the frame", async () => {
+    const { session } = setup();
+    const request = session.request({ method: "remote_access.observe" });
+    const header = encodeHostChannelFrame({ type: "result", id: 0 });
+    const frame = new Uint8Array([...header, 0x0a, ...new TextEncoder().encode("{")]);
+    expect(() => session.receive(frame)).toThrow(HostChannelProtocolError);
+    expect((await settled(request)).cause).toBeInstanceOf(HostChannelProtocolError);
+  });
+});
+
+describe("openHostChannel", () => {
+  const notificationCursor = { epoch: "00000000-0000-4000-8000-000000000004", sequence: 4 };
+
+  /** Opens a channel on an in-memory socket. `answer` gets each request that the client sends. */
+  const open = (
+    cursors: HostChannelCursors,
+    answer: (request: HostChannelClientMessage, reply: (frame: Uint8Array) => void) => void,
+  ) => {
+    const hostEvents: number[] = [];
+    const lifetime = new AbortController();
+    const opening = openHostChannel({
+      open: async (onFrame) => ({
+        send: async (frame) =>
+          answer(
+            hostChannelClientMessageSchema.parse(JSON.parse(new TextDecoder().decode(frame))),
+            onFrame,
+          ),
+        close: () => {},
+      }),
+      signal: lifetime.signal,
+      cursors,
+      handlers: { hostEvent: (event) => hostEvents.push(event.id), notification: () => {} },
+      onHandlerError: () => {},
+      onLost: () => {},
+    });
+    return { opening, hostEvents, lifetime };
+  };
+
+  test("replays from the cursors, moves them with each frame, and returns the replay", async () => {
+    const cursors: HostChannelCursors = {
+      hostEvents: { hostEpoch: "epoch-1", hostEventId: 2 },
+      notifications: notificationCursor,
+    };
+    const requests: HostChannelClientMessage[] = [];
+    const { opening, hostEvents, lifetime } = open(cursors, (request, reply) => {
+      requests.push(request);
+      if (request.type !== "request") return;
+      reply(encodeHostChannelFrame({ type: "host_event", id: 3, name: "message" }, "{}"));
+      reply(
+        encodeHostChannelFrame({
+          type: "notification",
+          frame: {
+            type: "attached",
+            cursor: { ...notificationCursor, sequence: 5 },
+            reason: "replay",
+            health: [],
+          },
+        }),
+      );
+      reply(
+        encodeHostChannelFrame(
+          { type: "result", id: request.id },
+          JSON.stringify({ hostEpoch: "epoch-1", hostEventId: 3, hostChanged: false, gaps: ["x"] }),
+        ),
+      );
+    });
+
+    const { replay } = await opening;
+
+    expect(requests).toEqual([
+      {
+        type: "request",
+        id: 0,
+        method: "events.open",
+        cursor: { hostEpoch: "epoch-1", hostEventId: 2 },
+        notificationCursor,
+      },
+    ]);
+    expect(hostEvents).toEqual([3]);
+    expect(replay).toEqual({ hostChanged: false, gaps: ["x"] });
+    expect(cursors).toEqual({
+      hostEvents: { hostEpoch: "epoch-1", hostEventId: 3 },
+      notifications: { ...notificationCursor, sequence: 5 },
+    });
+    lifetime.abort();
+  });
+
+  test("rejects an invalid replay result as a protocol error", async () => {
+    const { opening, lifetime } = open(
+      { hostEvents: null, notifications: null },
+      (request, reply) => {
+        if (request.type === "request")
+          reply(encodeHostChannelFrame({ type: "result", id: request.id }, "{}"));
+      },
+    );
+
+    expect((await settled(opening)).cause).toBeInstanceOf(HostChannelProtocolError);
+    lifetime.abort();
+  });
+});

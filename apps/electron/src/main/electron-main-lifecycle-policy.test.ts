@@ -7,6 +7,7 @@ import {
   checkStartupSettingsEffect,
   findHostStorageStartupError,
   HostStorageStartupError,
+  OpenDucktorLogPersistenceError,
 } from "@openducktor/host";
 import { runElectronEffect } from "../effect/electron-boundary";
 import { causeToElectronBoundaryError, ElectronLifecycleError } from "../effect/electron-errors";
@@ -15,7 +16,7 @@ import {
   createElectronMainShutdownController,
   runElectronMainStartupBoundary,
 } from "./electron-main-lifecycle";
-import { createElectronMainLogger } from "./electron-main-logger";
+import { createElectronMainLogger, type ElectronMainLogger } from "./electron-main-logger";
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 import { renderStartupErrorHtml, startupErrorMessage } from "./electron-startup-windows";
 
@@ -686,8 +687,13 @@ describe("Electron main lifecycle policy", () => {
 
   test("shutdown reports admitted host command log persistence failures before exiting", async () => {
     const commandFailure = new Error("Codex session was released during shutdown");
-    const persistenceFailure = new Error("openducktor.logs.append failed");
-    const logger = {
+    const persistenceFailure = new OpenDucktorLogPersistenceError({
+      message: "openducktor.logs.append failed",
+      operation: "append",
+      path: "/tmp/openducktor.log",
+      cause: null,
+    });
+    const logger: ElectronMainLogger = {
       error: () => Effect.fail(persistenceFailure),
       info: () => Effect.void,
       warn: () => Effect.void,

@@ -6,6 +6,7 @@ import {
   createDefaultNotificationSettings,
   DEFAULT_AGENT_RUNTIMES,
   type GlobalConfig,
+  globalConfigSchema,
   type HostRuntimeStatus,
   hostRuntimeSnapshotSchema,
   type RepoConfig,
@@ -13,7 +14,6 @@ import {
   type RuntimeKind,
   type RuntimeRoute,
   runtimeLifecycleImpactSchema,
-  type TaskCard,
   taskCardSchema,
   type TaskMetadataPayload,
 } from "@openducktor/contracts";
@@ -31,6 +31,7 @@ import {
   type RuntimeStarterPort,
   type SystemCommandPort,
   type TaskStorePort,
+  type TerminalPtyPort,
   type WorktreeFilePort,
 } from "@openducktor/host";
 import {
@@ -40,6 +41,7 @@ import {
 import { createTaskStoreTestDouble } from "../../../../packages/host/src/test-support/task-store-test-double";
 import { createFakeOpenCodeV2 } from "../../../../packages/host/src/test-support/opencode-v2-standalone";
 import { createBrowserEngineTestDouble } from "../../../../packages/host/src/test-support/browser-engine-test-double";
+import { createGitPortTestDouble } from "../../../../packages/host/src/test-support/service-test-doubles";
 
 type ElectronHostCommandRouterInput = Parameters<
   typeof createProductionElectronHostCommandRouter
@@ -142,10 +144,17 @@ const createElectronHostCommandRouter = async ({
     lifecycleLogger: { info: () => Effect.void, error: () => Effect.void },
     runtimeDistribution: testRuntimeDistribution,
     browserEngine: () => Effect.succeed(createBrowserEngineTestDouble().engine),
+    terminalPty: unexpectedTerminalPty,
+    taskEventPublicationReporter: { report: () => Effect.void },
     ...input,
   });
   routers.push(router);
   return router;
+};
+
+/** These router tests open no terminal. */
+const unexpectedTerminalPty: TerminalPtyPort = {
+  start: () => Effect.die(new Error("A terminal PTY is not expected in this test.")),
 };
 
 /** Reads one task from the listed tasks, as the real store does. */
@@ -196,6 +205,11 @@ const createFilesystem = (): FilesystemPort => ({
     const parent = path.split("/").slice(0, -1).join("/");
     return parent.length > 0 ? parent : null;
   },
+  relative: (from, to) => path.relative(from, to),
+  extension: (filePath) => path.extname(filePath),
+  readFileBytes: () => Effect.die(new Error("Unexpected filesystem readFileBytes.")),
+  readFileSnapshot: () => Effect.die(new Error("Unexpected filesystem readFileSnapshot.")),
+  replaceFileBytes: () => Effect.die(new Error("Unexpected filesystem replaceFileBytes.")),
 });
 
 const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
@@ -220,23 +234,28 @@ const agentRuntimes = (
   enabled: Partial<Record<RuntimeKind, boolean>>,
 ): GlobalConfig["agentRuntimes"] => ({
   ...DEFAULT_AGENT_RUNTIMES,
-  opencode: { enabled: enabled.opencode ?? false, executablePath: "opencode" },
+  opencode: {
+    ...DEFAULT_AGENT_RUNTIMES.opencode,
+    enabled: enabled.opencode ?? false,
+    executablePath: "opencode",
+  },
   codex: {
     ...DEFAULT_AGENT_RUNTIMES.codex,
     enabled: enabled.codex ?? false,
     executablePath: "codex",
   },
-  claude: { enabled: enabled.claude ?? false, executablePath: "claude" },
+  claude: {
+    ...DEFAULT_AGENT_RUNTIMES.claude,
+    enabled: enabled.claude ?? false,
+    executablePath: "claude",
+  },
 });
 
+/** A saved config: the schema fills each setting that the test does not set. */
 const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
-  version: 4,
+  ...globalConfigSchema.parse({ version: 4 }),
   theme: "light",
-  git: { defaultMergeMethod: "merge_commit" },
   general: { openAgentStudioTabOnBackgroundSessionStart: true },
-  chat: { showThinkingMessages: false },
-  reusablePrompts: [],
-  kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: {
     alwaysStartQaReviewsFresh: false,
     rules: [
@@ -275,40 +294,28 @@ const createWorktreeFiles = (overrides: Partial<WorktreeFilePort> = {}): Worktre
   ...overrides,
 });
 
-const createGit = (): GitPort => ({
-  releaseReadCaptures: () => Effect.void,
-  canonicalizePath: (path) => Effect.succeed(path),
-  isGitRepository: () => Effect.succeed(true),
-  readCheckout: (directory) =>
-    Effect.succeed({ root: directory, commonDirectory: path.join(repoPath, ".git") }),
-  isRegisteredWorktree: () => Effect.succeed(true),
-  referenceExists: (_workingDir, reference) => Effect.succeed(reference === "origin/main"),
-  configureBranchUpstream: () =>
-    Effect.succeed({
-      createdTrackingRef: "refs/remotes/origin/odt/task-1-task-1",
-    }),
-  deleteReference: () => Effect.succeed(undefined),
-  listRemotes: () =>
-    Effect.succeed([{ name: "origin", url: "git@github.com:openai/openducktor.git" }]),
-  listBranches: () => Effect.succeed([{ name: "main", isCurrent: true, isRemote: false }]),
-  isMergeIncluded: () => Effect.succeed(true),
-  getCurrentBranch: () => Effect.succeed({ name: "main", detached: false, revision: "abc123" }),
-  getStatus: () => Effect.succeed([{ path: "src/main.ts", status: "modified", staged: false }]),
-  getDiff: () =>
-    Effect.succeed([
-      {
-        file: "src/main.ts",
-        type: "modified",
-        additions: 2,
-        deletions: 1,
-        diff: "@@ -1 +1 @@\n-old\n+new\n",
-      },
-    ]),
-  getWorktreeStatusData: () =>
-    Effect.succeed({
-      currentBranch: { name: "main", detached: false, revision: "abc123" },
-      fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
-      fileDiffs: [
+const createGit = (): GitPort =>
+  createGitPortTestDouble({
+    releaseReadCaptures: () => Effect.void,
+    canonicalizePath: (path) => Effect.succeed(path),
+    isGitRepository: () => Effect.succeed(true),
+    readCheckout: (directory) =>
+      Effect.succeed({ root: directory, commonDirectory: path.join(repoPath, ".git") }),
+    isRegisteredWorktree: () => Effect.succeed(true),
+    referenceExists: (_workingDir, reference) => Effect.succeed(reference === "origin/main"),
+    configureBranchUpstream: () =>
+      Effect.succeed({
+        createdTrackingRef: "refs/remotes/origin/odt/task-1-task-1",
+      }),
+    deleteReference: () => Effect.succeed(undefined),
+    listRemotes: () =>
+      Effect.succeed([{ name: "origin", url: "git@github.com:openai/openducktor.git" }]),
+    listBranches: () => Effect.succeed([{ name: "main", isCurrent: true, isRemote: false }]),
+    isMergeIncluded: () => Effect.succeed(true),
+    getCurrentBranch: () => Effect.succeed({ name: "main", detached: false, revision: "abc123" }),
+    getStatus: () => Effect.succeed([{ path: "src/main.ts", status: "modified", staged: false }]),
+    getDiff: () =>
+      Effect.succeed([
         {
           file: "src/main.ts",
           type: "modified",
@@ -316,66 +323,79 @@ const createGit = (): GitPort => ({
           deletions: 1,
           diff: "@@ -1 +1 @@\n-old\n+new\n",
         },
-      ],
-      targetAheadBehind: { ahead: 3, behind: 2 },
-      upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
-    }),
-  getWorktreeStatusSummaryData: () =>
-    Effect.succeed({
-      currentBranch: { name: "main", detached: false, revision: "abc123" },
-      fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
-      fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-      targetAheadBehind: { ahead: 3, behind: 2 },
-      upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
-    }),
-  createWorktree: () => Effect.succeed(undefined),
-  removeWorktree: () => Effect.succeed(undefined),
-  deleteLocalBranch: () => Effect.succeed(undefined),
-  isAncestor: () => Effect.succeed(true),
-  suggestedSquashCommitMessage: () => Effect.succeed("Ship Electron host"),
-  mergeBranch: () =>
-    Effect.succeed({
-      outcome: "merged",
-      output: "Merged",
-    }),
-  switchBranch: () =>
-    Effect.succeed({
-      name: "feature/electron",
-      detached: false,
-      revision: "def456",
-    }),
-  commitsAheadBehind: () => Effect.succeed({ ahead: 3, behind: 2 }),
-  resolveFetchRemotes: () => Effect.succeed(["origin"]),
-  fetchRemote: () => Effect.succeed("Fetched origin"),
-  pullBranch: () => Effect.succeed({ outcome: "pulled", output: "Fast-forward" }),
-  commitAll: () =>
-    Effect.succeed({
-      outcome: "committed",
-      commitHash: "abc123",
-      output: "[feature abc123] Ship Electron host",
-    }),
-  pushBranch: () =>
-    Effect.succeed({
-      outcome: "pushed",
-      remote: "origin",
-      branch: "feature/electron",
-      output: "Pushed",
-    }),
-  rebaseBranch: () =>
-    Effect.succeed({
-      outcome: "rebased",
-      output: "Successfully rebased",
-    }),
-  rebaseAbort: () =>
-    Effect.succeed({
-      outcome: "aborted",
-      output: "Successfully aborted rebase",
-    }),
-  abortConflict: () =>
-    Effect.succeed({
-      output: "Conflict operation aborted",
-    }),
-});
+      ]),
+    getWorktreeStatusData: () =>
+      Effect.succeed({
+        currentBranch: { name: "main", detached: false, revision: "abc123" },
+        fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
+        fileDiffs: [
+          {
+            file: "src/main.ts",
+            type: "modified",
+            additions: 2,
+            deletions: 1,
+            diff: "@@ -1 +1 @@\n-old\n+new\n",
+          },
+        ],
+        targetAheadBehind: { ahead: 3, behind: 2 },
+        upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
+      }),
+    getWorktreeStatusSummaryData: () =>
+      Effect.succeed({
+        currentBranch: { name: "main", detached: false, revision: "abc123" },
+        fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
+        fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
+        targetAheadBehind: { ahead: 3, behind: 2 },
+        upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
+      }),
+    createWorktree: () => Effect.succeed(undefined),
+    removeWorktree: () => Effect.succeed(undefined),
+    deleteLocalBranch: () => Effect.succeed(undefined),
+    isAncestor: () => Effect.succeed(true),
+    suggestedSquashCommitMessage: () => Effect.succeed("Ship Electron host"),
+    mergeBranch: () =>
+      Effect.succeed({
+        outcome: "merged",
+        output: "Merged",
+      }),
+    switchBranch: () =>
+      Effect.succeed({
+        name: "feature/electron",
+        detached: false,
+        revision: "def456",
+      }),
+    commitsAheadBehind: () => Effect.succeed({ ahead: 3, behind: 2 }),
+    resolveFetchRemotes: () => Effect.succeed(["origin"]),
+    fetchRemote: () => Effect.succeed("Fetched origin"),
+    pullBranch: () => Effect.succeed({ outcome: "pulled", output: "Fast-forward" }),
+    commitAll: () =>
+      Effect.succeed({
+        outcome: "committed",
+        commitHash: "abc123",
+        output: "[feature abc123] Ship Electron host",
+      }),
+    pushBranch: () =>
+      Effect.succeed({
+        outcome: "pushed",
+        remote: "origin",
+        branch: "feature/electron",
+        output: "Pushed",
+      }),
+    rebaseBranch: () =>
+      Effect.succeed({
+        outcome: "rebased",
+        output: "Successfully rebased",
+      }),
+    rebaseAbort: () =>
+      Effect.succeed({
+        outcome: "aborted",
+        output: "Successfully aborted rebase",
+      }),
+    abortConflict: () =>
+      Effect.succeed({
+        output: "Conflict operation aborted",
+      }),
+  });
 
 const createOpenInTools = (): OpenInToolsPort => ({
   canonicalizeDirectory: (directoryPath) => Effect.succeed(directoryPath),
@@ -410,6 +430,8 @@ const createLocalAttachments = (): LocalAttachmentPort => ({
     ]),
   modifiedTimeMs: () => Effect.succeed(1),
   exists: () => Effect.succeed(true),
+  fileInfo: () => Effect.die(new Error("Unexpected local attachment fileInfo.")),
+  readFile: () => Effect.die(new Error("Unexpected local attachment readFile.")),
 });
 
 const createSystemCommands = (): SystemCommandPort => ({
@@ -431,11 +453,12 @@ const createSystemCommands = (): SystemCommandPort => ({
 
 const createRuntimeHealth = (): RuntimeHealthPort => ({
   readVersion: () => Effect.succeed("1.0.0"),
-  getRuntimeHealth: (kind) =>
+  getRuntimeHealth: (kind, executablePath) =>
     Effect.succeed({
       kind,
       enabled: true,
       ok: true,
+      executablePath,
       version: `${kind} 1.0.0`,
       error: null,
     }),
@@ -1361,6 +1384,8 @@ describe("createElectronHostCommandRouter", () => {
         createElectronEffectHostCommandRouter({
           isPackaged: false,
           onBackgroundFailure: () => Effect.void,
+          terminalPty: unexpectedTerminalPty,
+          taskEventPublicationReporter: { report: () => Effect.void },
           browserEngine: () => Effect.succeed(createBrowserEngineTestDouble().engine),
           processEnv: {
             OPENDUCKTOR_CONFIG_DIR: configRoot,
@@ -1530,7 +1555,11 @@ describe("createElectronHostCommandRouter", () => {
       config: globalConfig({
         agentRuntimes: {
           ...agentRuntimes({ opencode: true }),
-          opencode: { enabled: true, executablePath: opencode.executablePath },
+          opencode: {
+            ...DEFAULT_AGENT_RUNTIMES.opencode,
+            enabled: true,
+            executablePath: opencode.executablePath,
+          },
         },
       }),
       taskStore: {
@@ -1671,7 +1700,7 @@ describe("createElectronHostCommandRouter", () => {
         ...resetImplementationTaskStore,
         getTask: (input) =>
           resetImplementationTaskStore.getTask(input).pipe(
-            Effect.map((entry): TaskCard => ({
+            Effect.map((entry) => ({
               ...entry,
               status: "ai_review",
               artifactSummary: {

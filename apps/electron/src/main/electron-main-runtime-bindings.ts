@@ -46,6 +46,7 @@ export const createElectronMainRuntimeBindings = (logger: ElectronMainLogger) =>
     runHostCommand<Result, Failure extends Error>(
       command: string,
       operation: Effect.Effect<Result, Failure>,
+      signal?: AbortSignal,
     ): Promise<Result> {
       if (!acceptsHostCommands) {
         return Promise.reject(
@@ -76,7 +77,7 @@ export const createElectronMainRuntimeBindings = (logger: ElectronMainLogger) =>
           ),
         ),
       );
-      const commandPromise = runElectronEffect(hostCommandEffect);
+      const commandPromise = runElectronEffect(hostCommandEffect, signal);
       activeHostCommands.add(commandPromise);
       void commandPromise.then(
         () => activeHostCommands.delete(commandPromise),

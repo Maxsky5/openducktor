@@ -156,7 +156,7 @@ export * from "./workspace-session-command-schemas";
 export * from "./workspace-lifecycle-schemas";
 
 export * from "./notification-stream-schemas";
-export * from "./browser-event-stream-schemas";
+export * from "./host-channel-schemas";
 export * from "./claude-policy-schemas";
 export * from "./opencode-permission-schemas";
 export * from "./workspace-provider-setup-schemas";

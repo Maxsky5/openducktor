@@ -203,6 +203,15 @@ describe("configureElectronAppIdentity", () => {
     ["missing", undefined],
     ["malformed", "electron-invalid"],
   ] as const)("wraps an invalid development instance: %s", (_caseName, developmentInstanceId) => {
+    const options: Parameters<typeof configureElectronAppIdentity>[1] = {
+      appName: customAppName,
+      profileKind: "development",
+      processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
+      createDirectory() {
+        throw new Error("createDirectory must not run for an invalid development instance");
+      },
+    };
+    if (developmentInstanceId !== undefined) options.developmentInstanceId = developmentInstanceId;
     expect(() =>
       configureElectronAppIdentity(
         {
@@ -211,15 +220,7 @@ describe("configureElectronAppIdentity", () => {
             throw new Error("setPath must not run for an invalid development instance");
           },
         },
-        {
-          appName: customAppName,
-          developmentInstanceId,
-          profileKind: "development",
-          processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
-          createDirectory() {
-            throw new Error("createDirectory must not run for an invalid development instance");
-          },
-        },
+        options,
       ),
     ).toThrow(ElectronOperationError);
   });

@@ -1,8 +1,8 @@
 import { afterEach, expect, spyOn, test, type Mock } from "bun:test";
-import { REMOTE_CONNECTION_HEADER } from "@openducktor/contracts";
+import { REMOTE_CONNECTION_HEADER, TERMINAL_PROTOCOL_SUBPROTOCOL } from "@openducktor/contracts";
 import { createBrowserRemoteTransport } from "../../frontend/src/lib/remote/transport";
 
-test("canceling terminal setup closes the pending WebSocket", async () => {
+test("canceling socket setup closes the pending WebSocket", async () => {
   let requestStarted!: () => void;
   const started = new Promise<void>((resolve) => {
     requestStarted = resolve;
@@ -24,8 +24,9 @@ test("canceling terminal setup closes the pending WebSocket", async () => {
   const canceled = new Error("The user changed hosts.");
   try {
     const setup = createBrowserRemoteTransport()
-      .openTerminal(
+      .openSocket(
         `ws://127.0.0.1:${server.port}/terminal`,
+        TERMINAL_PROTOCOL_SUBPROTOCOL,
         {
           [REMOTE_CONNECTION_HEADER]: crypto.randomUUID(),
           authorization: `Bearer ${"c".repeat(43)}`,

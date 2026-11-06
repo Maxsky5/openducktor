@@ -1,17 +1,8 @@
-import {
-  hostInvokeFailureSchema,
-  themePreferenceSchema,
-  type HostEventPayload,
-  type ThemePreference,
-} from "@openducktor/contracts";
+import { themePreferenceSchema, type ThemePreference } from "@openducktor/contracts";
 import type { ShellBridge } from "@openducktor/frontend";
-import { logListenerFailure } from "@openducktor/frontend-core/connection/host-connection";
-import {
-  createAgentSessionLiveAttachment,
-  createHostClient,
-  HostInvokeError,
-  type HostClient,
-} from "@openducktor/host-client";
+import { createLocalHostConnection } from "@openducktor/frontend-core/connection/local-host-connection";
+import type { HostClient } from "@openducktor/host-client";
+import { openWebSocket } from "@openducktor/host-client/remote/socket";
 import {
   type OpenDucktorElectronApi,
   type OpenDucktorElectronTerminalApi,
@@ -19,13 +10,6 @@ import {
 } from "../shared/electron-bridge-contract";
 import { electronBrowserPartition } from "../shared/electron-browser-partitions";
 import { createElectronTaskAssetUrl } from "../shared/electron-task-asset-url";
-
-const RUN_EVENT_CHANNEL = "openducktor://run-event";
-const BROWSER_EVENT_CHANNEL = "openducktor://browser-event";
-const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
-const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
-const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
-const TASK_MERGE_STATUS_EVENT_CHANNEL = "openducktor://task-merge-status-updated";
 
 export function withElectronNativeTheme(
   client: HostClient,
@@ -75,16 +59,6 @@ export const withElectronDesktopShell = (bridge: ShellBridge): ShellBridge => ({
   getArtifactPreviewEnvironment: () => getElectronApi().getArtifactPreviewEnvironment(),
 });
 
-const subscribeElectronEvent =
-  (
-    electronApi: OpenDucktorElectronApi,
-    channel: typeof RUN_EVENT_CHANNEL,
-  ): ShellBridge["subscribeRunEvents"] =>
-  async (listener) =>
-    electronApi.subscribe(channel, (payload: HostEventPayload<typeof RUN_EVENT_CHANNEL>) =>
-      logListenerFailure(listener(payload)),
-    );
-
 /**
  * Opens one client of a frame channel. A channel with a `connect` step must accept the client
  * before the client counts as connected.
@@ -118,39 +92,17 @@ const connectFrameChannel = async (
 
 export const createElectronShellBridge = (): ShellBridge => {
   const electronApi = getElectronApi();
-  const client = createHostClient(async (command, args, resultSchema) => {
-    const response = await electronApi.invoke(command, args);
-    if (response.ok) {
-      return resultSchema.parse(response.value);
-    }
-    const failure = response.error.failure
-      ? hostInvokeFailureSchema.parse(response.error.failure)
-      : null;
-    throw new HostInvokeError(response.error.message, failure);
+  // The desktop host channel. Its per-launch token reaches only OpenDucktor windows.
+  const { observeRemoteAccess, ...hostConnection } = createLocalHostConnection({
+    prepare: () => electronApi.hostChannelEndpoint(),
+    openSocket: (url, protocols, signal, onFrame, onClose) =>
+      openWebSocket((offered) => new WebSocket(url, offered), protocols, signal, onFrame, onClose),
   });
 
   return {
-    remoteAccess: electronApi.remoteAccess,
+    ...hostConnection,
+    remoteAccess: { ...electronApi.remoteAccess, subscribeState: observeRemoteAccess },
     getArtifactPreviewEnvironment: () => electronApi.getArtifactPreviewEnvironment(),
-    client,
-    subscribeWorkspaceSessionUpdates: async (listener) =>
-      electronApi.subscribe(
-        "openducktor://workspace-session-updated",
-        (payload: HostEventPayload<"openducktor://workspace-session-updated">) =>
-          logListenerFailure(listener(payload)),
-      ),
-    subscribeRuntimeChanges: async (listener) =>
-      electronApi.subscribe(
-        RUNTIME_CHANGED_EVENT_CHANNEL,
-        (payload: HostEventPayload<typeof RUNTIME_CHANGED_EVENT_CHANNEL>) =>
-          logListenerFailure(listener(payload)),
-      ),
-    subscribeTaskMergeStatusUpdates: async (listener) =>
-      electronApi.subscribe(
-        TASK_MERGE_STATUS_EVENT_CHANNEL,
-        (payload: HostEventPayload<typeof TASK_MERGE_STATUS_EVENT_CHANNEL>) =>
-          logListenerFailure(listener(payload)),
-      ),
     capabilities: {
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,
@@ -167,38 +119,6 @@ export const createElectronShellBridge = (): ShellBridge => {
       subscribeClicks: (listener) => electronApi.notifications.subscribeClicks(listener),
       dispose: () => {},
     },
-    subscribeRunEvents: subscribeElectronEvent(electronApi, RUN_EVENT_CHANNEL),
-    subscribeStartupProgress: async (listener) =>
-      electronApi.subscribe(
-        "openducktor://session-startup-progress",
-        (payload: HostEventPayload<"openducktor://session-startup-progress">) =>
-          logListenerFailure(
-            listener({ channel: "openducktor://session-startup-progress", payload }),
-          ),
-      ),
-    subscribeWorkspaceProviderSetupUpdates: async (listener) =>
-      electronApi.subscribe("openducktor://workspace-provider-setup-updated", listener),
-    subscribeAzureDevOpsConnectionUpdates: async (listener) =>
-      electronApi.subscribe(AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL, listener),
-    observeAgentSessionLive: async (input, listener) => {
-      const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
-      const unsubscribe = electronApi.subscribe(
-        AGENT_SESSION_LIVE_EVENT_CHANNEL,
-        attachment.accept,
-        input.repoPath,
-      );
-      try {
-        attachment.install(await client.agentSessionLiveAttach(input));
-      } catch (cause) {
-        unsubscribe();
-        throw cause;
-      }
-      return unsubscribe;
-    },
-    subscribeNotificationStream: (input, onFrame, onFailure) =>
-      electronApi.notificationStream.subscribe(input, onFrame, onFailure),
-    subscribeTaskStream: (input, onFrame, onTerminalFailure) =>
-      electronApi.taskStream.subscribe(input, onFrame, onTerminalFailure),
     appUpdates: {
       getState: () => electronApi.appUpdates.getState(),
       check: (input) => electronApi.appUpdates.check(input),
@@ -229,8 +149,6 @@ export const createElectronShellBridge = (): ShellBridge => {
         return electronApi.editorClipboard.readText(type);
       },
     },
-    subscribeBrowserTabEvents: async (listener) =>
-      electronApi.subscribe(BROWSER_EVENT_CHANNEL, listener),
     // Mount each browser tab as `<webview partition={partition(workspaceId)} src="about:blank"
     // allowpopups>`, then call `bindGuest` with its `getWebContentsId()`. The engine takes control
     // of the page first, then loads the tab URL, so the page never runs without the host.

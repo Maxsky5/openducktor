@@ -8,14 +8,12 @@ import {
 import { registerElectronRemoteAccessIpc } from "./electron-remote-access-ipc";
 import { registerElectronHostSelectionIpc } from "./electron-host-selection-ipc";
 import { registerElectronNativeThemeIpc } from "./electron-native-theme-ipc";
-import { registerElectronNotificationStreamIpc } from "./electron-notification-stream-ipc";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   type AppUpdateCommandResult,
   type AppUpdateOperation,
   type AppUpdateState,
-  HOST_EVENT_CHANNELS,
   appPlatformSchema,
   appUpdateCheckInputSchema,
   appUpdateCommandResultSchema,
@@ -74,9 +72,13 @@ import { configureElectronWindowsAppIdentity } from "./electron-app-identity";
 import { prepareElectronDevelopmentInstanceEffect } from "./electron-development-instance";
 import { registerElectronEditorClipboardIpc } from "./electron-editor-clipboard-ipc";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
-import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
-import { createElectronHostInvoke, runElectronHostInvoke } from "./electron-host-invoke";
-import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
+import {
+  startElectronHostChannelServer,
+  type ElectronHostChannelServer,
+} from "./electron-host-channel-server";
+import { createElectronHostInvoke, runElectronHostChannelInvoke } from "./electron-host-invoke";
+import { createHostChannelSocketData } from "@openducktor/remote-host/host-channel";
+import { createTaskEventLeaseManager } from "@openducktor/remote-host/task-event-leases";
 import {
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
   readLocalAttachmentPreviewPathEffect,
@@ -84,6 +86,7 @@ import {
   resolveElectronLocalAttachmentPreview,
 } from "./electron-local-attachment-preview";
 import {
+  resolveElectronRendererSocketOrigins,
   configureElectronLoopbackCorsPolicy,
   resolveElectronLoopbackCorsOrigin,
 } from "./electron-loopback-cors-policy";
@@ -109,8 +112,10 @@ import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protocol";
 import { registerElectronArtifactPreviewProtocol } from "./electron-artifact-preview-protocol";
 import { createMainWindowIpcRegistrar } from "./electron-ipc-admission";
-import { ELECTRON_ARTIFACT_PREVIEW_PROTOCOL } from "../shared/electron-bridge-contract";
-import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
+import {
+  ELECTRON_ARTIFACT_PREVIEW_PROTOCOL,
+  ELECTRON_HOST_CHANNEL_ENDPOINT_CHANNEL,
+} from "../shared/electron-bridge-contract";
 import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
 import { installApplicationMenu } from "./main-menu";
 import { createElectronBrowserRuntime } from "./browser/electron-browser-runtime";
@@ -213,6 +218,7 @@ const ipcMain = createMainWindowIpcRegistrar(nativeIpcMain, (sender) =>
 );
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 let activeAppUpdateService: ElectronAppUpdateService | null = null;
+let activeHostChannelServer: ElectronHostChannelServer | null = null;
 let activeNotificationRuntime: ReturnType<typeof createElectronNotificationRuntime> | null = null;
 let mainWindowCreated = false;
 
@@ -270,6 +276,7 @@ const runElectronMainOperation = async <Result>(operation: Promise<Result>): Pro
 
 type ElectronPreReadyRuntime = {
   hostCommandRouter: EffectNodeHostCommandRouter;
+  hostChannelServer: ElectronHostChannelServer;
 };
 
 type ElectronReadyRuntime = ElectronPreReadyRuntime & {
@@ -418,17 +425,20 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
         reportFailure: (cause) => reportElectronNonFatalFailure("Remote transport failed", cause),
       },
     );
-    remoteAccessOperator = createRemoteAccessOperator(
-      remoteAccess,
-      hostCommandRouter.hostSettings,
-      {
-        reportFailure: (cause) =>
-          reportElectronNonFatalFailure("Remote control could not start", cause),
-      },
-    );
-    yield* remoteAccessOperator.restore(process.env);
+    const operator = createRemoteAccessOperator(remoteAccess, hostCommandRouter.hostSettings, {
+      reportFailure: (cause) =>
+        reportElectronNonFatalFailure("Remote control could not start", cause),
+    });
+    remoteAccessOperator = operator;
+    yield* operator.restore(process.env);
     yield* browserRuntime.start(ipcMain, hostCommandRouter.browserService);
-    return { hostCommandRouter };
+    const hostChannelServer = yield* Effect.tryPromise({
+      try: () => startHostChannelServer(hostCommandRouter, operator),
+      catch: (cause) =>
+        mapStartupPreparationError(cause, "electron.main.start-host-channel", errorMessage(cause)),
+    });
+    activeHostChannelServer = hostChannelServer;
+    return { hostCommandRouter, hostChannelServer };
   });
 
 const getPreloadPath = (): string => path.join(distDirectory, "preload.cjs");
@@ -615,19 +625,6 @@ const createMainWindowEffect = (
 const createMainWindow = (rendererSession: ElectronSession): Promise<ElectronBrowserWindow> =>
   runElectronEffect(createMainWindowEffect(rendererSession));
 
-const registerHostEventForwarding = (): void => {
-  for (const channel of HOST_EVENT_CHANNELS) {
-    hostEventBus.subscribe(channel, (envelope) => {
-      forwardElectronHostEvent(getMainWindows(), envelope, ({ channel: failedChannel, cause }) =>
-        reportElectronNonFatalFailure(
-          `OpenDucktor renderer event delivery failed for channel '${failedChannel}'.`,
-          cause,
-        ),
-      );
-    });
-  }
-};
-
 const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateService): void => {
   appUpdateService.subscribe((state) => {
     let parsedState: AppUpdateState;
@@ -781,20 +778,54 @@ const createRejectedAppUpdateCommandResult = (
   state: appUpdateService.getState(),
 });
 
+/**
+ * Serves the host channel of the desktop windows. Commands run through the Electron invoke, so
+ * they apply the same native effects as remote commands.
+ */
+const startHostChannelServer = (
+  hostCommandRouter: EffectNodeHostCommandRouter,
+  operator: RemoteAccessOperator,
+): Promise<ElectronHostChannelServer> => {
+  const leases = createTaskEventLeaseManager({
+    taskEventStream: hostCommandRouter.taskEventStream,
+    reportDeliveryFailure: ({ cause, subscriptionId }) =>
+      reportElectronNonFatalFailure(
+        `OpenDucktor task stream delivery failed for subscription '${subscriptionId}'.`,
+        cause,
+      ),
+  });
+  // Every desktop window belongs to the local operator, so the windows share their task leases.
+  const ownedLeases = new Set<string>();
+  const shutdownFailure = {
+    code: "unavailable" as const,
+    message: "The desktop host is shutting down.",
+    nextAction: "Reopen OpenDucktor.",
+  };
+  return startElectronHostChannelServer({
+    rendererOrigins: resolveElectronRendererSocketOrigins(rendererDevUrl),
+    onError: (cause) => reportElectronNonFatalFailure("Desktop host channel failed.", cause),
+    createChannel: () =>
+      createHostChannelSocketData({
+        hostEvents: hostEventBus.stream(),
+        notifications: hostCommandRouter.notificationStream,
+        leases,
+        ownedLeases,
+        invoke: (command, args, signal) =>
+          runElectronHostChannelInvoke(hostCommandRouter.invoke(command, args), signal),
+        remoteAccessStates: operator.states,
+        refusal: () => (shutdownController.isHostShutdownStarted() ? shutdownFailure : null),
+        reportFailure: (cause) =>
+          reportElectronNonFatalFailure("Desktop host channel delivery failed.", cause),
+      }),
+  });
+};
+
 const registerIpcHandlers = (
   hostCommandRouter: EffectNodeHostCommandRouter,
   appUpdateService: ElectronAppUpdateService,
+  hostChannelServer: ElectronHostChannelServer,
 ): void => {
-  registerElectronNotificationStreamIpc(
-    ipcMain,
-    hostCommandRouter.notificationStream,
-    ({ cause, subscriptionId }) =>
-      reportElectronNonFatalFailure(
-        `OpenDucktor notification delivery failed for subscription '${subscriptionId}'.`,
-        cause,
-      ),
-    shutdownController.isHostShutdownStarted,
-  );
+  ipcMain.handle(ELECTRON_HOST_CHANNEL_ENDPOINT_CHANNEL, () => hostChannelServer.endpoint);
   if (remoteAccessOperator)
     registerElectronRemoteAccessIpc(
       ipcMain,
@@ -806,15 +837,6 @@ const registerIpcHandlers = (
   registerElectronHostSelectionIpc(ipcMain, shutdownController.isHostShutdownStarted, () =>
     activeNotificationRuntime?.dispose(),
   );
-  registerElectronTaskStreamIpc({
-    ipcMain,
-    reportDeliveryFailure: ({ cause, subscriptionId }) =>
-      reportElectronNonFatalFailure(
-        `OpenDucktor task stream delivery failed for subscription '${subscriptionId}'.`,
-        cause,
-      ),
-    taskEventStream: hostCommandRouter.taskEventStream,
-  });
   registerElectronTerminalIpc({
     ipcMain,
     reportLifecycleFailure: (senderId, cause) =>
@@ -824,14 +846,6 @@ const registerIpcHandlers = (
       ),
     terminalService: hostCommandRouter.terminalService,
   });
-  registerElectronHostInvokeHandler(ipcMain, {
-    isHostShutdownStarted: shutdownController.isHostShutdownStarted,
-    invoke: async (command, args) => {
-      const operation = hostCommandRouter.invoke(command, args);
-      return runElectronHostInvoke(operation);
-    },
-  });
-
   ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url) => {
     await runElectronEffect(openExternalUrlEffect(url));
   });
@@ -897,7 +911,18 @@ const disposeActiveHostEffect = (reason: string): Effect.Effect<void, ElectronLi
     return browserRuntime.stop();
   }
   const host = activeHostCommandRouter;
+  const channelServer = activeHostChannelServer;
+  activeHostChannelServer = null;
   return Effect.gen(function* () {
+    // Desktop windows stop their delivery before the host stops.
+    if (channelServer)
+      yield* Effect.promise(() =>
+        channelServer
+          .stop()
+          .catch((cause: unknown) =>
+            reportElectronNonFatalFailure("Desktop host channel did not stop.", cause),
+          ),
+      );
     const remoteResult = yield* Effect.result(remoteAccess ? remoteAccess.close() : Effect.void);
     const hostResult = yield* Effect.result(disposeHostEffect(host, reason));
     if (remoteResult._tag === "Failure")
@@ -998,6 +1023,7 @@ const waitForElectronReadyEffect = (): Effect.Effect<void, ElectronLifecycleErro
 
 const configureElectronReadyRuntimeEffect = ({
   hostCommandRouter,
+  hostChannelServer,
 }: ElectronPreReadyRuntime): Effect.Effect<ElectronReadyRuntime, ElectronError> =>
   Effect.try({
     try: () => {
@@ -1071,11 +1097,10 @@ const configureElectronReadyRuntimeEffect = ({
           runElectronMainTask(() => appUpdateService.check({ initiator: "menu" }).then(() => {}));
         },
       });
-      registerIpcHandlers(hostCommandRouter, appUpdateService);
-      registerHostEventForwarding();
+      registerIpcHandlers(hostCommandRouter, appUpdateService, hostChannelServer);
       registerAppUpdateStateForwarding(appUpdateService);
       configureElectronDockIcon();
-      return { appUpdateService, hostCommandRouter, rendererSession };
+      return { appUpdateService, hostCommandRouter, hostChannelServer, rendererSession };
     },
     catch: (cause) =>
       mapStartupPreparationError(

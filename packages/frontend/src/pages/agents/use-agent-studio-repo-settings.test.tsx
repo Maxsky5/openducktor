@@ -125,10 +125,10 @@ describe("useAgentStudioRepoSettings", () => {
     await harness.mount();
     await harness.waitFor((state) => state.gitProvider.context !== undefined);
 
-    expect(hostClient.workspaceGetGitProviderContext).toHaveBeenCalledWith({
-      workspaceId: "workspace-repo",
-      repoPath: "/repo",
-    });
+    expect(hostClient.workspaceGetGitProviderContext).toHaveBeenCalledWith(
+      { workspaceId: "workspace-repo", repoPath: "/repo" },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(harness.getLatest().gitProvider.context).toEqual(context);
 
     await harness.unmount();

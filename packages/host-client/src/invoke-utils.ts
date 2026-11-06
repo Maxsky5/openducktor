@@ -15,10 +15,16 @@ export class HostInvokeError extends Error {
   }
 }
 
+export type InvokeOptions = {
+  /** Aborting drops the request at once. The host may still run an accepted command. */
+  signal?: AbortSignal;
+};
+
 export type InvokeFn = <Result>(
   command: HostCommandName,
   args: HostCommandArgs,
   resultSchema: z.ZodType<Result>,
+  options?: InvokeOptions,
 ) => Promise<Result>;
 
 export type OkResult = { ok: boolean };

@@ -1,27 +1,21 @@
-import {
-  savedTestAuthorizationStore,
-  TEST_HOST_ID,
-  TEST_CONNECTION_TOKEN,
-} from "../../../host-client/src/remote/test-support/authorization";
+import { savedTestAuthorizationStore } from "../../../host-client/src/remote/test-support/authorization";
 import { describe, expect, test } from "bun:test";
 import {
-  REMOTE_BASELINE_CAPABILITIES,
-  REMOTE_PROTOCOL_VERSION,
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
   type RemoteFailure,
-  type RemoteHostDescriptor,
+  TERMINAL_PROTOCOL_SUBPROTOCOL,
   TERMINAL_PROTOCOL_VERSION,
   type TerminalFailure,
   type TerminalServerMessage,
 } from "@openducktor/contracts";
-import {
-  RemoteConnectionError,
-  type RemoteHttpResponse,
-  type RemoteTransport,
-} from "@openducktor/host-client/remote";
+import { RemoteConnectionError } from "@openducktor/host-client/remote";
 import { createClientQueryClient } from "../connection/client-query-client";
 import { createRemoteHostConnection } from "../recovery/remote-host-connection";
+import {
+  createChannelTestTransport,
+  testRemoteDescriptor,
+} from "../test-support/remote-channel-transport";
 import { waitForExpectation } from "../test-support/wait-for-expectation";
 import { createRemoteTerminalBridge } from "./remote-terminal-bridge";
 import { createTerminalTransportController } from "./terminal-transport-controller";
@@ -156,37 +150,6 @@ const serverFrame = (message: TerminalServerMessage, payload = new Uint8Array(0)
 
 const createRemoteFixture = () => {
   const encoder = new TextEncoder();
-  const descriptor: RemoteHostDescriptor = {
-    shell: "web",
-    appVersion: "host-release",
-    hostInstanceId: "host-instance-1",
-    hostId: TEST_HOST_ID,
-    accessPolicy: "pairing",
-    protocols: [
-      { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
-    ],
-  };
-  const json = <T>(value: T, status = 200): RemoteHttpResponse => ({
-    status,
-    headers: {},
-    body: (async function* () {
-      if (status !== 204) yield encoder.encode(JSON.stringify(value));
-    })(),
-  });
-  const frame = <T>(event: string, data: T) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  const live = (signal: AbortSignal, prefix: string): RemoteHttpResponse => ({
-    status: 200,
-    headers: {},
-    body: (async function* () {
-      yield encoder.encode(prefix);
-      await new Promise<never>((_resolve, reject) => {
-        const abort = () => reject(signal.reason);
-        signal.addEventListener("abort", abort, { once: true });
-        if (signal.aborted) abort();
-      });
-    })(),
-  });
-  const notificationEpoch = crypto.randomUUID();
   const opened: Array<Readonly<Record<string, string>>> = [];
   let onFrame: ((frame: Uint8Array) => void) | null = null;
   let onClose: ((failure?: RemoteFailure) => void) | null = null;
@@ -194,33 +157,11 @@ const createRemoteFixture = () => {
   let attachments = 0;
   // Each attach gets a snapshot that ends three bytes after the last one.
   let snapshotEnd = 0;
-  const transport: RemoteTransport = {
-    async request(method, url, _headers, signal) {
-      if (url.endsWith("/connections"))
-        return json({
-          status: "accepted",
-          connectionToken: TEST_CONNECTION_TOKEN,
-          host: descriptor,
-          connectionId: crypto.randomUUID(),
-          protocolVersion: REMOTE_PROTOCOL_VERSION,
-          missingOptionalCapabilities: [],
-        });
-      if (url.endsWith("/events"))
-        return live(
-          signal,
-          frame("replay-complete", { hostChanged: false, gaps: [] }) +
-            frame("notification-frame", {
-              type: "attached",
-              cursor: { epoch: notificationEpoch, sequence: 1 },
-              reason: "new",
-              health: [],
-            }),
-        );
-      if (method === "DELETE") return json(null, 204);
-      if (method === "GET") return json(descriptor);
-      throw new Error(`Unexpected request: ${method} ${url}`);
-    },
-    openTerminal: async (_url, headers, _signal, frameListener, closeListener) => {
+  const { transport } = createChannelTestTransport({
+    descriptor: () =>
+      testRemoteDescriptor({ appVersion: "host-release", hostInstanceId: "host-instance-1" }),
+    openTerminal: async (_url, protocol, headers, _signal, frameListener, closeListener) => {
+      expect(protocol).toBe(TERMINAL_PROTOCOL_SUBPROTOCOL);
       opened.push(headers);
       onFrame = frameListener;
       onClose = closeListener;
@@ -263,7 +204,7 @@ const createRemoteFixture = () => {
         close: () => undefined,
       };
     },
-  };
+  });
   const connection = createRemoteHostConnection({
     authorizationStore: savedTestAuthorizationStore(),
     clientKind: "mobile",

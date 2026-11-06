@@ -7,12 +7,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./remote": "./src/remote/index.ts",
-    "./remote/terminal-socket": "./src/remote/terminal-socket.ts",
-    "./remote/test-support": "./src/remote/test-support/authorization.ts"
+    "./remote/socket": "./src/remote/socket.ts",
+    "./channel": "./src/channel.ts",
+    "./remote/test-support": "./src/remote/test-support/authorization.ts",
+    "./remote/test-support/host-channel": "./src/remote/test-support/host-channel.ts"
   },
   "scripts": {
     "build": "bunx tsc -p tsconfig.json",
-    "typecheck": "bun check -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json && bun check -p tsconfig.test.json",
     "test": "bun test --preload ../../tools/bun-test-preload.ts --pass-with-no-tests --timeout 1000",
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
@@ -21,5 +23,8 @@
     "@openducktor/core": "workspace:*",
     "@openducktor/workflows": "workspace:*",
     "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "bun-types": "^1.4.2"
   }
 }

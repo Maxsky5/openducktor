@@ -1,43 +1,35 @@
-import type { NotificationCursor, NotificationStreamFrame } from "@openducktor/contracts";
 import type {
   AppPlatform,
   ArtifactPreviewEnvironment,
   AppUpdateCheckInput,
   AppUpdateCommandResult,
   AppUpdateState,
-  HostEventChannel,
-  HostEventEnvelope,
-  HostEventPayload,
   NotificationClickEvent,
   NotificationDeliveryResult,
   NotificationOsCapability,
   NotificationOsDeliveryRequest,
-  TaskEventCursor,
-  TaskEventStreamAcknowledge,
-  TaskEventStreamFrame,
-  TaskEventStreamSubscribe,
   ThemePreference,
 } from "@openducktor/contracts";
 import {
   browserTabIdSchema,
-  hostInvokeFailureSchema,
-  taskEventStreamAcknowledgeSchema,
-  taskEventStreamFrameSchema,
   notificationClickEventSchema,
   notificationDeliveryResultSchema,
   notificationOsCapabilitySchema,
   notificationOsDeliveryRequestSchema,
 } from "@openducktor/contracts";
-import type { HostCommandName, HostCommandResult } from "@openducktor/host";
 import { z } from "zod";
 
-export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
+export const ELECTRON_HOST_CHANNEL_ENDPOINT_CHANNEL = "openducktor:host-channel:endpoint";
+export const electronHostChannelEndpointSchema = z.strictObject({
+  url: z.string().startsWith("ws://127.0.0.1:"),
+  token: z.string().min(1),
+});
+export type ElectronHostChannelEndpoint = z.output<typeof electronHostChannelEndpointSchema>;
 export const ELECTRON_ARTIFACT_PREVIEW_PROTOCOL = "odt-artifact-preview";
 export const ELECTRON_ARTIFACT_PREVIEW_URL =
   "odt-artifact-preview://bootstrap/artifact-preview-bootstrap";
 export const ELECTRON_HOST_SELECT_CHANNEL = "openducktor:host-select";
 export const ELECTRON_NATIVE_THEME_CHANNEL = "openducktor:native-theme";
-export const ELECTRON_HOST_EVENT_CHANNEL = "openducktor:host-event";
 export const ELECTRON_OPEN_EXTERNAL_URL_CHANNEL = "openducktor:open-external-url";
 export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL = "openducktor:local-attachment-preview-src";
 export const electronLocalAttachmentPreviewResultSchema = z.discriminatedUnion("ok", [
@@ -53,8 +45,6 @@ export const ELECTRON_APP_UPDATE_CHECK_CHANNEL = "openducktor:app-update:check";
 export const ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL = "openducktor:app-update:download";
 export const ELECTRON_APP_UPDATE_INSTALL_CHANNEL = "openducktor:app-update:install";
 export const ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL = "openducktor:app-update:state-changed";
-export const ELECTRON_HOST_SHUTDOWN_MESSAGE =
-  "OpenDucktor is shutting down. The requested command was not run.";
 export const ELECTRON_TERMINAL_SEND_CHANNEL = "openducktor:terminal:send";
 export const PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE =
   "application/vnd.pierre.diffs-selections+json" as const;
@@ -67,12 +57,6 @@ export const ELECTRON_BROWSER_DISCONNECT_CHANNEL = "openducktor:browser:disconne
 export const ELECTRON_BROWSER_EVENT_CHANNEL = "openducktor:browser:event";
 export const ELECTRON_BROWSER_BIND_GUEST_CHANNEL = "openducktor:browser:bind-guest";
 export const ELECTRON_BROWSER_PICK_FILES_CHANNEL = "openducktor:browser:pick-files";
-export const ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL = "openducktor:task-stream:subscribe";
-export const ELECTRON_TASK_STREAM_FRAME_CHANNEL = "openducktor:task-stream:frame";
-export const ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL =
-  "openducktor:task-stream:terminal-failure";
-export const ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL = "openducktor:task-stream:acknowledge";
-export const ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL = "openducktor:task-stream:unsubscribe";
 export const ELECTRON_NOTIFICATION_CLICKED_CHANNEL = "openducktor:notification:clicked";
 export const ELECTRON_NOTIFICATION_GET_CAPABILITY_CHANNEL =
   "openducktor:notification:get-capability";
@@ -82,56 +66,6 @@ export const ELECTRON_NOTIFICATION_OPEN_SETTINGS_CHANNEL = "openducktor:notifica
 export const ELECTRON_NOTIFICATION_GET_APP_FOCUS_CHANNEL = "openducktor:notification:get-app-focus";
 export const ELECTRON_NOTIFICATION_SHOW_CHANNEL = "openducktor:notification:show";
 export const ELECTRON_WINDOW_TITLE_BAR_HEIGHT = 40;
-
-const ipcRecordSchema = z.record(z.string(), z.unknown()).refine((value) => {
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-});
-
-export const electronHostInvokeRequestSchema = ipcRecordSchema.and(
-  z.strictObject({
-    command: z.string(),
-    args: ipcRecordSchema.optional(),
-  }),
-);
-export type ElectronHostInvokeRequest = z.output<typeof electronHostInvokeRequestSchema>;
-
-const electronHostInvokeResultWireSchema = z.discriminatedUnion("ok", [
-  z.strictObject({ ok: z.literal(true), value: z.unknown() }),
-  z.strictObject({
-    ok: z.literal(false),
-    error: z.strictObject({
-      message: z.string(),
-      failure: hostInvokeFailureSchema.optional(),
-    }),
-  }),
-]);
-type ElectronHostInvokeFailureResult = Extract<
-  z.output<typeof electronHostInvokeResultWireSchema>,
-  { ok: false }
->;
-export type ElectronHostInvokeWireResult = z.output<typeof electronHostInvokeResultWireSchema>;
-export type ElectronHostInvokeResult<Command extends HostCommandName = HostCommandName> =
-  | { ok: true; value: HostCommandResult<Command> }
-  | ElectronHostInvokeFailureResult;
-
-export const electronHostInvokeResponseSchema = z.discriminatedUnion("status", [
-  z.strictObject({ status: z.literal("success"), payload: electronHostInvokeResultWireSchema }),
-  z.strictObject({ status: z.literal("shutdown") }),
-]);
-export type ElectronHostInvokeResponseEnvelope = z.output<typeof electronHostInvokeResponseSchema>;
-
-export type ElectronHostEventEnvelope = HostEventEnvelope;
-
-export type ElectronHostEventSubscription = {
-  [Channel in HostEventChannel]: Channel extends "openducktor://agent-session-live-event"
-    ? readonly [
-        channel: Channel,
-        listener: (payload: HostEventPayload<Channel>) => void,
-        repoPath: string,
-      ]
-    : readonly [channel: Channel, listener: (payload: HostEventPayload<Channel>) => void];
-}[HostEventChannel];
 
 export type ElectronTerminalEventEnvelope = {
   clientId: string;
@@ -169,34 +103,6 @@ export const electronBrowserPickFilesRequestSchema = z.strictObject({
 export type ElectronBrowserPickFilesRequest = z.infer<typeof electronBrowserPickFilesRequestSchema>;
 export const electronBrowserPickFilesResultSchema = z.array(z.string().min(1));
 
-export const electronTaskStreamSubscriptionSchema = taskEventStreamAcknowledgeSchema.pick({
-  subscriptionId: true,
-});
-export type ElectronTaskStreamSubscription = Pick<TaskEventStreamAcknowledge, "subscriptionId">;
-
-export const electronTaskStreamUnsubscribeSchema = taskEventStreamAcknowledgeSchema.pick({
-  subscriptionId: true,
-});
-export type ElectronTaskStreamUnsubscribe = Pick<TaskEventStreamAcknowledge, "subscriptionId">;
-
-export const electronTaskStreamFrameEnvelopeSchema = taskEventStreamAcknowledgeSchema
-  .extend({ frame: taskEventStreamFrameSchema })
-  .pick({ frame: true, subscriptionId: true });
-export type ElectronTaskStreamFrameEnvelope = Pick<TaskEventStreamAcknowledge, "subscriptionId"> & {
-  frame: TaskEventStreamFrame;
-};
-
-export const electronTaskStreamTerminalFailureEnvelopeSchema =
-  electronTaskStreamSubscriptionSchema.extend({
-    message: z.string().min(1),
-  });
-export type ElectronTaskStreamTerminalFailureEnvelope = Pick<
-  TaskEventStreamAcknowledge,
-  "subscriptionId"
-> & {
-  message: string;
-};
-
 export type ElectronAppUpdateCheckInput = AppUpdateCheckInput;
 
 export type OpenDucktorElectronAppUpdateApi = {
@@ -223,18 +129,6 @@ export type OpenDucktorElectronBrowserApi = {
   pickFiles(input: { multiple: boolean; accept: readonly string[] }): Promise<string[]>;
 };
 
-export type OpenDucktorElectronTaskStreamApi = {
-  subscribe(
-    input: TaskEventStreamSubscribe,
-    listener: (frame: TaskEventStreamFrame) => void,
-    onTerminalFailure?: (cause: unknown) => void,
-  ): Promise<{
-    subscriptionId: string;
-    acknowledge(cursor: TaskEventCursor): Promise<void>;
-    unsubscribe(): void | Promise<void>;
-  }>;
-};
-
 export const electronNotificationCapabilitySchema = notificationOsCapabilitySchema;
 export const electronNotificationDeliveryRequestSchema = notificationOsDeliveryRequestSchema;
 export const electronNotificationDeliveryResultSchema = notificationDeliveryResultSchema;
@@ -254,30 +148,19 @@ export type OpenDucktorElectronApi = {
   platform: AppPlatform;
   selectHost(): Promise<void>;
   setNativeTheme(theme: ThemePreference): Promise<void>;
-  invoke(
-    command: HostCommandName,
-    args?: ElectronHostInvokeRequest["args"],
-  ): Promise<ElectronHostInvokeWireResult>;
-  subscribe(...subscription: ElectronHostEventSubscription): () => void;
-  remoteAccess: import("@openducktor/contracts").RemoteAccessBridge;
+  /** The address and per-launch token of the desktop host channel. */
+  hostChannelEndpoint(): Promise<ElectronHostChannelEndpoint>;
+  /** Remote control operations. The host channel carries its live state. */
+  remoteAccess: Omit<import("@openducktor/contracts").RemoteAccessBridge, "subscribeState">;
   appUpdates: OpenDucktorElectronAppUpdateApi;
   notifications: OpenDucktorElectronNotificationApi;
   openExternalUrl(url: string): Promise<void>;
   resolveLocalAttachmentPreviewSrc(path: string): Promise<string>;
   terminals: OpenDucktorElectronTerminalApi;
   browser: OpenDucktorElectronBrowserApi;
-  taskStream: OpenDucktorElectronTaskStreamApi;
-  notificationStream: {
-    subscribe(
-      input: { cursor: NotificationCursor | null },
-      onFrame: (frame: NotificationStreamFrame) => void,
-      onFailure: (cause: unknown) => void,
-    ): Promise<() => void>;
-  };
   editorClipboard: {
     readText(type?: EditorClipboardReadType): Promise<string>;
   };
 };
 
 export const ELECTRON_REMOTE_ACCESS_CHANNEL = "openducktor:remote-access";
-export const ELECTRON_REMOTE_ACCESS_STATE_CHANNEL = "openducktor:remote-access:state";

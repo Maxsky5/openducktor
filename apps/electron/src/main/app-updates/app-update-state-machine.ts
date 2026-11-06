@@ -65,7 +65,7 @@ export const createDisabledUpdateState = ({
   code: AppUpdateErrorCode;
   currentVersion: string;
   reason: string;
-}): AppUpdateState => ({
+}): DisabledAppUpdateState => ({
   status: "disabled",
   currentVersion,
   disabledCode: code,
@@ -127,7 +127,7 @@ export const markAvailable = ({
   checkedAt: string;
   currentVersion: string;
   previousState: AppUpdateState;
-}): AppUpdateState => {
+}): Extract<AppUpdateState, { status: "available" }> => {
   const state: Extract<AppUpdateState, { status: "available" }> = {
     status: "available",
     currentVersion,

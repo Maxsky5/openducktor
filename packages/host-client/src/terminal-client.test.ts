@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { HostCommandArgs, HostCommandName } from "@openducktor/contracts";
+import type { HostCommandArgs, HostCommandName, TerminalSummary } from "@openducktor/contracts";
 import { createHostClient } from "./index";
 
-const summary = {
+const summary: TerminalSummary = {
   terminalId: "terminal-1",
   label: "Shell 1",
   context: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },

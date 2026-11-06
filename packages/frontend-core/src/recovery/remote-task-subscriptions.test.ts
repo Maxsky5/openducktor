@@ -1,14 +1,17 @@
+import { createAuthorizedRemoteTestClient as createRemoteHostClient } from "../../../host-client/src/remote/test-support/authorization";
 import {
-  createAuthorizedRemoteTestClient as createRemoteHostClient,
-  TEST_HOST_ID,
-  TEST_CONNECTION_TOKEN,
-} from "../../../host-client/src/remote/test-support/authorization";
+  createFakeHostChannel,
+  type FakeHostChannelSocket,
+} from "../../../host-client/src/remote/test-support/host-channel";
 import { expect, test } from "bun:test";
 import { REMOTE_PROTOCOL_VERSION, type ExternalTaskSyncEvent } from "@openducktor/contracts";
-import { type RemoteTransport, type RemoteHttpResponse } from "@openducktor/host-client/remote";
 import { createTaskStreamController } from "../tasks/task-stream-controller";
 import type { TaskViewSync } from "../queries/task-view-sync";
 import type { AgentSessionViewSync } from "../queries/agent-session-view-sync";
+import {
+  createChannelTestTransport,
+  testRemoteDescriptor,
+} from "../test-support/remote-channel-transport";
 import { createRemoteTaskSubscriptions, type RemoteTaskSubscriptions } from "./task-subscriptions";
 
 const latch = <T>() => {
@@ -18,94 +21,53 @@ const latch = <T>() => {
   });
   return { promise, resolve };
 };
-const encoder = new TextEncoder();
-const json = <T>(value: T, status = 200): RemoteHttpResponse => ({
-  status,
-  headers: {},
-  body: (async function* () {
-    if (status !== 204) yield encoder.encode(JSON.stringify(value));
-  })(),
-});
 
 test("restores task delivery after disconnect during acknowledgement and after inactivity", async () => {
-  const host = {
-    shell: "web",
-    appVersion: "1",
-    hostInstanceId: "host",
-    hostId: TEST_HOST_ID,
-    accessPolicy: "pairing",
-    protocols: [{ version: REMOTE_PROTOCOL_VERSION, capabilities: [] }],
-  };
   const cursor = { epoch: crypto.randomUUID(), sequence: 0 };
   const ackSeen = latch<void>();
   const lost = latch<void>();
-  let deliverTask = (_frame: string) => {};
   const updateApplied = latch<void>();
-  let endEvents = () => {};
   let creates = 0;
   let acknowledgements = 0;
-  const stream = (signal: AbortSignal, prefix: string, events = false): RemoteHttpResponse => ({
-    status: 200,
-    headers: {},
-    body: (async function* () {
-      yield encoder.encode(prefix);
-      while (true) {
-        const next = await new Promise<string>((resolve, reject) => {
-          if (events) endEvents = () => reject(new Error("Host event connection lost."));
-          else deliverTask = resolve;
-          const abort = () => reject(signal.reason);
-          signal.addEventListener("abort", abort, { once: true });
-          if (signal.aborted) abort();
-        });
-        yield encoder.encode(next);
-      }
-    })(),
-  });
-  const transport: RemoteTransport = {
-    async request(method, url, _headers, signal) {
-      if (url.endsWith("/events"))
-        return stream(
-          signal,
-          `event: replay-complete\ndata: {"hostChanged":false,"gaps":[]}\n\nevent: notification-frame\ndata: ${JSON.stringify({ type: "attached", reason: "new", cursor, health: [] })}\n\n`,
-          true,
-        );
-      if (url.endsWith("/connections"))
-        return json({
-          status: "accepted",
-          connectionToken: TEST_CONNECTION_TOKEN,
-          host,
-          connectionId: crypto.randomUUID(),
-          protocolVersion: REMOTE_PROTOCOL_VERSION,
-          missingOptionalCapabilities: [],
-        });
-      if (url.endsWith("/task-events/subscriptions")) {
+  const leases: { socket: FakeHostChannelSocket; subscriptionId: string }[] = [];
+  const channel = createFakeHostChannel({
+    notificationCursor: cursor,
+    answer: (request, socket) => {
+      if (request.method === "task_events.subscribe") {
         creates += 1;
-        return json({ subscriptionId: crypto.randomUUID(), replayBoundary: cursor });
-      }
-      if (url.endsWith("/stream"))
-        return stream(
-          signal,
-          creates >= 3
-            ? ": openducktor-ready\n\n"
-            : `event: task-frame\ndata: ${JSON.stringify({ type: "snapshot_required", cursor, reason: "buffer_gap" })}\n\n`,
+        const subscriptionId = crypto.randomUUID();
+        leases.push({ socket, subscriptionId });
+        socket.send(
+          { type: "result", id: request.id },
+          JSON.stringify({ subscriptionId, replayBoundary: cursor }),
         );
-      if (url.endsWith("/ack")) {
+        if (creates < 3)
+          socket.send({
+            type: "task_frame",
+            subscriptionId,
+            frame: { type: "snapshot_required", cursor, reason: "buffer_gap" },
+          });
+        return "none";
+      }
+      if (request.method === "task_events.ack") {
         acknowledgements += 1;
+        // The first acknowledgement gets no reply before the channel drops.
         if (acknowledgements === 1) {
           ackSeen.resolve();
-          await new Promise<never>((_resolve, reject) =>
-            signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
-          );
+          return "none";
         }
-        return json(null, 204);
       }
-      if (method === "DELETE") return json(null, 204);
-      return json(host);
+      return undefined;
     },
-    openTerminal: async () => {
-      throw new Error("unused");
-    },
-  };
+  });
+  const { transport } = createChannelTestTransport({
+    channel,
+    descriptor: () =>
+      testRemoteDescriptor({
+        hostInstanceId: "host",
+        protocols: [{ version: REMOTE_PROTOCOL_VERSION, capabilities: [] }],
+      }),
+  });
   let subscriptions!: RemoteTaskSubscriptions;
   const remote = createRemoteHostClient(
     "https://host.example/remote",
@@ -160,7 +122,7 @@ test("restores task delivery after disconnect during acknowledgement and after i
     await remote.connect();
     started = controller.start();
     await ackSeen.promise;
-    endEvents();
+    channel.closeAll();
     await lost.promise;
     // The current state owner must finish closing its canceled acknowledgement and reacquire.
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -181,9 +143,13 @@ test("restores task delivery after disconnect during acknowledgement and after i
       taskSnapshot: { id: "task", title: "After foreground", status: "open" },
       emittedAt: "2026-10-13T12:00:00.000Z",
     };
-    deliverTask(
-      `event: task-frame\ndata: ${JSON.stringify({ type: "change", cursor: { ...cursor, sequence: 1 }, event })}\n\n`,
-    );
+    const lease = leases.at(-1);
+    if (!lease) throw new Error("The host created no task lease.");
+    lease.socket.send({
+      type: "task_frame",
+      subscriptionId: lease.subscriptionId,
+      frame: { type: "change", cursor: { ...cursor, sequence: 1 }, event },
+    });
     await updateApplied.promise;
   } finally {
     await controller.stop();

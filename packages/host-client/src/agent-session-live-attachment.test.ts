@@ -27,21 +27,22 @@ const transcriptEvent = (messageId: string): AgentSessionLiveEnvelope => ({
   },
 });
 
-const session = {
+type LiveSession = Extract<AgentSessionLiveEnvelope, { type: "session_upsert" }>["session"];
+
+const session: LiveSession = {
   ref: {
     repoPath: "/repo",
     runtimeKind: "codex",
     workingDirectory: "/repo/worktree",
     externalSessionId: "thread",
   },
-  sessionAssociation: { kind: "unbound" },
   activity: "waiting_for_permission",
   title: "Session",
   startedAt: "2026-07-17T08:00:00.000Z",
   pendingApprovals: [],
   pendingQuestions: [],
   contextUsage: null,
-} as const;
+};
 const upsert = (sequence: number): AgentSessionLiveEnvelope => ({
   type: "session_upsert",
   session,
@@ -173,6 +174,7 @@ describe("agent session live attachment", () => {
     const { attachment, received } = createRecorder();
     const records = (sequence: number): AgentSessionLiveEnvelope => ({
       type: "task_session_records_updated",
+      workspaceId: "workspace-1",
       repoPath: "/repo",
       taskId: "task-1",
       agentSessions: [],
@@ -188,6 +190,7 @@ describe("agent session live attachment", () => {
       { ...snapshot, sequence: 5, isConnectionSnapshot: true },
       {
         type: "task_session_records_updated",
+        workspaceId: "workspace-1",
         repoPath: "/repo",
         taskId: "task-1",
         agentSessions: [],
@@ -208,22 +211,22 @@ describe("agent session live attachment", () => {
     const attachment = createAgentSessionLiveAttachment("/repo", (envelope) => {
       received.push(envelope);
     });
-    const session = {
+    const session: LiveSession = {
       ref: {
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "repository-thread",
       },
-      sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
+      repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
       activity: "idle",
       title: "Repository session",
       startedAt: "2026-07-17T08:00:00.000Z",
       pendingApprovals: [],
       pendingQuestions: [],
       contextUsage: null,
-    } as const;
-    const event = { type: "session_upsert", session } as const;
+    };
+    const event: AgentSessionLiveEnvelope = { type: "session_upsert", session };
     const expectedEvent = structuredClone(event);
 
     attachment.install({ ...snapshot, sequence: 0 });

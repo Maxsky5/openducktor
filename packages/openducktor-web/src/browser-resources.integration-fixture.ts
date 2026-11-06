@@ -31,7 +31,7 @@ import {
 import { createRemoteWorkInterface } from "@openducktor/remote-host";
 import { BufferedHostEventBus } from "@openducktor/remote-host/host-event-bus";
 import { startNodeFetchServer } from "@openducktor/remote-host/node-fetch-server";
-import { terminalWebSocketHandler } from "@openducktor/remote-host/terminals/terminal-websocket-handler";
+import { hostWebSocketHandler } from "@openducktor/remote-host/host-websocket-handler";
 import { createRemoteShellBridge } from "@openducktor/frontend/lib/remote/shell-bridge";
 import { watchClientPage } from "@openducktor/frontend/lib/client-page";
 import { createBrowserRemoteTransport } from "@openducktor/frontend/lib/remote/transport";
@@ -105,13 +105,23 @@ const server = await startNodeFetchServer({
   hostname: "127.0.0.1",
   port: 0,
   fetch: work.handle,
-  websocket: terminalWebSocketHandler,
+  websocket: hostWebSocketHandler,
   onError: (cause) => {
     throw cause;
   },
 });
 const endpoint = `http://machine.test:${server.port}/remote`;
 const nativeFetch = globalThis.fetch;
+// Map the public hostname of each socket to loopback, as the fetch spy does for requests.
+const NativeWebSocket = globalThis.WebSocket;
+class LoopbackWebSocket extends NativeWebSocket {
+  constructor(url: string | URL, protocols?: string | string[]) {
+    const local = new URL(url);
+    if (local.hostname === "machine.test") local.hostname = "127.0.0.1";
+    super(local, protocols);
+  }
+}
+globalThis.WebSocket = LoopbackWebSocket;
 let released = Promise.withResolvers<string>();
 let releases = 0;
 let requests = 0;
@@ -213,11 +223,10 @@ try {
     pages[0]!.dispatchEvent(Object.assign(new Event("pagehide"), { persisted: true }));
     assert.equal(releases - before, 1, "Caching the page must release its admission.");
     const id = await released.promise;
-    const expired = await globalThis.fetch(`${endpoint}/invoke/system_get_platform`, {
-      method: "POST",
-      headers: { "content-type": "application/json", [REMOTE_CONNECTION_HEADER]: id },
-      body: "{}",
-    });
+    const expired = await globalThis.fetch(
+      `${endpoint}/task-assets/workspace/task/description/550e8400-e29b-41d4-a716-446655440000`,
+      { headers: { [REMOTE_CONNECTION_HEADER]: id } },
+    );
     assert.equal(expired.status, 409, "The released admission must not admit work.");
     await expired.body?.cancel();
     assert.equal(a.remoteConnection!.readState().status, "idle");
@@ -299,6 +308,7 @@ try {
   await Effect.runPromise(notifications.dispose());
   await Effect.runPromise(terminal.service.dispose());
   fetch.mockRestore();
+  globalThis.WebSocket = NativeWebSocket;
   await rm(directory, { recursive: true, force: true });
   await rm(staged.path, { force: true });
   await rm(outsidePath, { force: true });

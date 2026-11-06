@@ -40,6 +40,14 @@ export default {
       typescript: { config: ["tsconfig.json", "tsconfig.test.json", "expo-compat/tsconfig.json"] },
     },
     "packages/frontend": frontendKnipConfig,
+    "packages/host-client": {
+      // Knip does not read the configurations that `bun check -p` receives.
+      typescript: { config: ["tsconfig.json", "tsconfig.test.json"] },
+    },
+    "packages/remote-host": {
+      // Knip does not read the configurations that `bun check -p` receives.
+      typescript: { config: ["tsconfig.json", "tsconfig.test.json"] },
+    },
     "packages/host": {
       drizzle: { config: ["drizzle.host.config.ts"] },
       // A Bun macro bundles the page capture code with bippy through `bun build`.

@@ -8,38 +8,22 @@ import {
 
 export type LocalHostErrorPayload = { message: string; payload: HostErrorResponse | null };
 
-type StructuredErrorPayloadResult =
-  | { kind: "parsed"; value: LocalHostErrorPayload }
-  | {
-      kind: "invalid";
-      cause: { readonly issues: readonly { readonly path: readonly PropertyKey[] }[] };
-    }
-  | { kind: "plain-text" };
-
-const parseStructuredErrorPayload = (trimmedText: string): StructuredErrorPayloadResult => {
+/** The structured payload of a JSON error body, or null for another body. */
+const parseStructuredErrorPayload = (trimmedText: string): LocalHostErrorPayload | null => {
   let value: unknown;
   try {
     value = JSON.parse(trimmedText);
   } catch {
-    return { kind: "plain-text" };
+    return null;
   }
-
   const parsed = hostErrorResponseSchema.safeParse(value);
-  if (!parsed.success) {
-    return { kind: "invalid", cause: parsed.error };
-  }
-
-  const message = parsed.data.error ?? parsed.data.message;
-  if (!message) {
-    return { kind: "plain-text" };
-  }
-
-  return { kind: "parsed", value: { message, payload: parsed.data } };
+  const message = parsed.success ? (parsed.data.error ?? parsed.data.message) : undefined;
+  if (!parsed.success || !message) return null;
+  return { message, payload: parsed.data };
 };
 
-const readLocalHostErrorPayloadWithPolicyEffect = (
+export const readLocalHostErrorPayloadEffect = (
   response: Response,
-  rejectInvalidInvokeFailure: boolean,
 ): Effect.Effect<LocalHostErrorPayload, WebDependencyError> =>
   Effect.gen(function* () {
     const text = yield* Effect.tryPromise({
@@ -56,24 +40,7 @@ const readLocalHostErrorPayloadWithPolicyEffect = (
     const trimmedText = text.trim();
 
     if (trimmedText) {
-      const structuredPayload = parseStructuredErrorPayload(trimmedText);
-      if (structuredPayload.kind === "parsed") {
-        return structuredPayload.value;
-      }
-      if (
-        rejectInvalidInvokeFailure &&
-        structuredPayload.kind === "invalid" &&
-        structuredPayload.cause.issues.some((issue) => issue.path[0] === "failure")
-      ) {
-        return yield* new WebDependencyError({
-          dependency: "local-web-host",
-          operation: "parse-invoke-failure",
-          message: "The local host returned an invalid invoke failure envelope.",
-          cause: structuredPayload.cause,
-        });
-      }
-
-      return { message: trimmedText, payload: null };
+      return parseStructuredErrorPayload(trimmedText) ?? { message: trimmedText, payload: null };
     }
 
     return {
@@ -81,16 +48,6 @@ const readLocalHostErrorPayloadWithPolicyEffect = (
       payload: null,
     };
   });
-
-export const readLocalHostErrorPayloadEffect = (
-  response: Response,
-): Effect.Effect<LocalHostErrorPayload, WebDependencyError> =>
-  readLocalHostErrorPayloadWithPolicyEffect(response, false);
-
-export const readLocalHostInvokeErrorPayloadEffect = (
-  response: Response,
-): Effect.Effect<LocalHostErrorPayload, WebDependencyError> =>
-  readLocalHostErrorPayloadWithPolicyEffect(response, true);
 
 export const readLocalHostErrorPayload = (response: Response): Promise<LocalHostErrorPayload> =>
   runWebBoundary(readLocalHostErrorPayloadEffect(response));

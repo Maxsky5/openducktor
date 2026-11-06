@@ -3,7 +3,10 @@ import {
   TEST_CONNECTION_TOKEN,
   savedTestAuthorization,
 } from "@openducktor/host-client/remote/test-support";
+import { createFakeHostChannel } from "@openducktor/host-client/remote/test-support/host-channel";
+import { openRemoteSocket } from "@openducktor/host-client/remote/socket";
 import {
+  HOST_CHANNEL_SUBPROTOCOL,
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_PROTOCOL_VERSION,
   REMOTE_CONNECTION_HEADER,
@@ -27,7 +30,8 @@ export type SimulatedAdmission =
 
 /**
  * A deterministic remote host for tests. It speaks the remote protocol over a fake transport:
- * discovery, negotiation, the combined event stream, and release.
+ * discovery, negotiation, the host channel, and release. Commands fail as unhandled, as the
+ * simulated host runs no work.
  */
 export const createSimulatedRemoteHost = (options?: {
   shell?: RemoteHostDescriptor["shell"];
@@ -37,8 +41,12 @@ export const createSimulatedRemoteHost = (options?: {
   pairingCode?: string;
 }) => {
   let admission: SimulatedAdmission = { kind: "accept" };
-  let openStreams = 0;
-  const notificationEpoch = crypto.randomUUID();
+  const channel = createFakeHostChannel({
+    notificationCursor: { epoch: crypto.randomUUID(), sequence: 0 },
+    invoke: (command) => ({
+      error: { kind: "host", response: { error: `Unhandled command ${command}` } },
+    }),
+  });
   const released: string[] = [];
   const identities = new Map<string, string>();
   const pairedOrigins = new Set<string>();
@@ -68,27 +76,6 @@ export const createSimulatedRemoteHost = (options?: {
     headers: { "content-type": "application/json" },
     body: (async function* () {
       if (status !== 204) yield encoder.encode(JSON.stringify(value));
-    })(),
-  });
-
-  const frame = (event: string, data: string) => `event: ${event}\ndata: ${data}\n\n`;
-
-  /** Sends the initial frames, then stays open until the client aborts the request. */
-  const stream = (signal: AbortSignal, initial: string): RemoteHttpResponse => ({
-    status: 200,
-    headers: { "content-type": "text/event-stream" },
-    body: (async function* () {
-      openStreams += 1;
-      try {
-        yield encoder.encode(initial);
-        await new Promise<never>((_resolve, reject) => {
-          const abort = () => reject(signal.reason);
-          if (signal.aborted) abort();
-          else signal.addEventListener("abort", abort, { once: true });
-        });
-      } finally {
-        openStreams -= 1;
-      }
     })(),
   });
 
@@ -140,25 +127,13 @@ export const createSimulatedRemoteHost = (options?: {
         released.push(headers[REMOTE_CONNECTION_HEADER] ?? "");
         return json(null, 204);
       }
-      if (method === "GET" && path.endsWith("/events")) {
-        return stream(
-          signal,
-          frame("replay-complete", JSON.stringify({ hostChanged: false, gaps: [] })) +
-            frame(
-              "notification-frame",
-              JSON.stringify({
-                type: "attached",
-                cursor: { epoch: notificationEpoch, sequence: 0 },
-                reason: "new",
-                health: [],
-              }),
-            ),
-        );
-      }
       return json({ error: `Unhandled ${method} ${path}` }, 404);
     },
-    openTerminal: async () => {
-      throw new Error("The simulated host opens no terminals.");
+    async openSocket(_url, protocol, headers, signal, onFrame, onClose) {
+      if (admission.kind === "unreachable") throw unreachable();
+      if (protocol !== HOST_CHANNEL_SUBPROTOCOL)
+        throw new Error("The simulated host opens no terminals.");
+      return openRemoteSocket(channel.createSocket, protocol, headers, signal, onFrame, onClose);
     },
   };
 
@@ -169,7 +144,9 @@ export const createSimulatedRemoteHost = (options?: {
     setAdmission(next: SimulatedAdmission) {
       admission = next;
     },
-    /** The event streams that the client reads now. */
-    openStreamCount: () => openStreams,
+    /** The host channels that the client holds open now. */
+    openStreamCount: () => channel.sockets.filter((socket) => !socket.closed).length,
+    /** The fake host channel, to send events and drop channels. */
+    channel,
   };
 };

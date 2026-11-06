@@ -13,6 +13,11 @@ import {
 } from "@openducktor/contracts";
 
 export {
+  BROWSER_EVENT_STREAM_NAME,
+  STARTUP_EVENT_STREAM_NAME,
+  hostEventStreamEventName,
+} from "./host-event-stream-name";
+export {
   createAgentSessionLiveAttachment,
   envelopeRepoPath as agentSessionLiveEnvelopeRepoPath,
   liveSessionStreamEventName,
@@ -31,7 +36,7 @@ import { HostTerminalClient } from "./terminal-client";
 import { HostBrowserClient } from "./browser-client";
 
 export { HostInvokeError } from "./invoke-utils";
-export type { InvokeFn } from "./invoke-utils";
+export type { InvokeFn, InvokeOptions } from "./invoke-utils";
 export { HostTerminalClientError } from "./terminal-client";
 export { HostBrowserClientError } from "./browser-client";
 

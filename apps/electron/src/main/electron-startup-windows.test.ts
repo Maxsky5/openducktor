@@ -114,7 +114,7 @@ describe("data upgrade window", () => {
 describe("startup error window", () => {
   const createErrorWindows = () => {
     const steps: string[] = [];
-    const closedListeners: (() => void)[] = [];
+    const closedListeners: Array<(event: { preventDefault(): void }) => void> = [];
     const window: StartupWindow = {
       destroy: () => {},
       focus: () => steps.push("focus"),
@@ -126,7 +126,7 @@ describe("startup error window", () => {
             : url,
         );
       },
-      on: (event: "close" | "closed", listener: () => void) => {
+      on: (event: "close" | "closed", listener: (event: { preventDefault(): void }) => void) => {
         if (event === "closed") closedListeners.push(listener);
       },
       webContents: { setWindowOpenHandler: () => {}, on: () => {} },
@@ -143,7 +143,7 @@ describe("startup error window", () => {
       whenReady: async () => {},
     });
     const close = () => {
-      for (const listener of closedListeners.splice(0)) listener();
+      for (const listener of closedListeners.splice(0)) listener({ preventDefault: () => {} });
     };
     return { close, steps, windows };
   };

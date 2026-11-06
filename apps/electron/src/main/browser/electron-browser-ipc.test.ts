@@ -85,7 +85,7 @@ describe("Electron browser IPC controller", () => {
       y: 2,
       target: null,
     };
-    service.sessions.get("electron:7:client-a")?.send(reply, new Uint8Array(0));
+    service.sessions.get("electron:7:client-a")?.send(reply);
     expect(sent).toHaveLength(1);
     expect(sent[0]?.clientId).toBe("client-a");
     expect(decodeBrowserServerMessage(sent[0]?.frame ?? new Uint8Array())).toEqual(reply);
@@ -170,8 +170,7 @@ describe("registerElectronBrowserIpc", () => {
     ) => {
       const handler = handlers.get(channel);
       if (!handler) throw new Error(`Missing handler for ${channel}.`);
-      // SAFETY: The handler reads only `sender` from the Electron invoke event.
-      return handler({ sender } as Parameters<ElectronBrowserIpcHandler>[0], arg);
+      return handler({ sender }, arg);
     };
     return { invoke, channels: [...handlers.keys()], binds, picks, service, loaded };
   };

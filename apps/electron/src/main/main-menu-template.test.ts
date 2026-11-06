@@ -54,9 +54,11 @@ describe("main menu template", () => {
       // SAFETY: the click handler passes the window through to `onReloadWindow` only.
       item?.click?.(item as never, window as never, {} as never);
     }
-    expect(onReloadWindow.mock.calls).toEqual([
-      [window, false],
-      [window, true],
+    expect(
+      onReloadWindow.mock.calls.map(([target, ignoreCache]) => [target === window, ignoreCache]),
+    ).toEqual([
+      [true, false],
+      [true, true],
     ]);
     expect(template.some((item) => item.label === "View")).toBe(true);
   });

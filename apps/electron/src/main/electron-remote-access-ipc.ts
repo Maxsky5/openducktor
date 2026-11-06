@@ -1,16 +1,15 @@
 import type { IpcMain } from "electron";
 import {
+  type RemoteAccessNetwork,
+  type RemoteAccessState,
   remoteAccessEnableInputSchema,
   remotePairingStartInputSchema,
   remoteFailureText,
 } from "@openducktor/contracts";
 import { type RemoteAccessOperator } from "@openducktor/remote-host";
-import { Effect, Stream } from "effect";
+import { Effect } from "effect";
 import { z } from "zod";
-import {
-  ELECTRON_REMOTE_ACCESS_CHANNEL,
-  ELECTRON_REMOTE_ACCESS_STATE_CHANNEL,
-} from "../shared/electron-bridge-contract";
+import { ELECTRON_REMOTE_ACCESS_CHANNEL } from "../shared/electron-bridge-contract";
 type RemoteAccessFailure = { failure: { message: string; nextAction: string } };
 
 /** Runs a remote access action and rejects with its message and next action. */
@@ -32,19 +31,15 @@ const remoteAccessRequestSchema = z.discriminatedUnion("action", [
 /** The request that the preload bridge sends. The handler parses it before use. */
 type RemoteAccessIpcRequest = z.input<typeof remoteAccessRequestSchema>;
 
-export const registerElectronRemoteAccessIpc = (
-  ipcMain: Pick<IpcMain, "handle">,
-  controller: RemoteAccessOperator,
-  isShutdown: () => boolean,
-) => {
-  const senders = new Set<Electron.WebContents>();
-  ipcMain.handle(ELECTRON_REMOTE_ACCESS_CHANNEL, async (event, raw: RemoteAccessIpcRequest) => {
+/** The reply of a remote access operation. */
+type RemoteAccessIpcReply = RemoteAccessState | RemoteAccessNetwork[];
+
+/** Runs one remote access operation of the local operator. */
+export const createRemoteAccessIpcHandler =
+  (controller: RemoteAccessOperator, isShutdown: () => boolean) =>
+  async (raw: RemoteAccessIpcRequest): Promise<RemoteAccessIpcReply> => {
     if (isShutdown())
       throw new Error("The host is shutting down. Reopen Electron to use remote access.");
-    if (!senders.has(event.sender)) {
-      senders.add(event.sender);
-      event.sender.once("destroyed", () => senders.delete(event.sender));
-    }
     const request = remoteAccessRequestSchema.parse(raw);
     if (request.action === "revoke") return run(controller.revokeClient(request.clientId));
     if (request.action === "start-pairing") return run(controller.startPairing(request.input));
@@ -57,15 +52,16 @@ export const registerElectronRemoteAccessIpc = (
       );
     if (request.action === "disable") return Effect.runPromise(controller.disable());
     return Effect.runPromise(controller.readState());
-  });
-  return Effect.runFork(
-    controller.states.pipe(
-      Stream.runForEach((state) =>
-        Effect.sync(() => {
-          for (const sender of senders)
-            if (!sender.isDestroyed()) sender.send(ELECTRON_REMOTE_ACCESS_STATE_CHANNEL, state);
-        }),
-      ),
-    ),
+  };
+
+/** The host channel carries the live state, so this handler serves the operations only. */
+export const registerElectronRemoteAccessIpc = (
+  ipcMain: Pick<IpcMain, "handle">,
+  controller: RemoteAccessOperator,
+  isShutdown: () => boolean,
+): void => {
+  const handle = createRemoteAccessIpcHandler(controller, isShutdown);
+  ipcMain.handle(ELECTRON_REMOTE_ACCESS_CHANNEL, (_event, raw: RemoteAccessIpcRequest) =>
+    handle(raw),
   );
 };

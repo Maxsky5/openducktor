@@ -38,7 +38,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and command details.
 
 | Path | Owns |
 |---|---|
-| `apps/electron` | Desktop shell, preload, IPC, and packaging |
+| `apps/electron` | Desktop shell, its host channel listener, preload, shell IPC, and packaging |
 | `apps/marketing-website` | Public Astro website |
 | `apps/mobile` | Expo iOS and Android client of a remote host. Read [its README](apps/mobile/README.md) before you change it |
 | `packages/frontend` | Shared React UI |

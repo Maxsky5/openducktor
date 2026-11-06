@@ -64,9 +64,14 @@ const setup = (answers: Partial<Record<BrowserPermissionKind, boolean>> = {}) =>
     onSchemeRefused: (tabId, scheme) => refusedSchemes.push([tabId, scheme]),
   };
   configureBrowserPartitionSession(input);
-  const request = (permission: string, details: Parameters<RequestHandler>[3], id = 7) =>
+  /** Requests from the main frame unless `details` says otherwise. */
+  const request = (
+    permission: string,
+    details: Omit<Parameters<RequestHandler>[3], "isMainFrame"> & { isMainFrame?: boolean },
+    id = 7,
+  ) =>
     new Promise<boolean>((resolve) =>
-      session.requestHandler?.({ id }, permission, resolve, details),
+      session.requestHandler?.({ id }, permission, resolve, { isMainFrame: true, ...details }),
     );
   const check = (permission: string, origin: string, details: Parameters<CheckHandler>[3] = {}) =>
     session.checkHandler?.({ id: 7 }, permission, origin, details);

@@ -4,6 +4,7 @@ import {
   MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS,
   mcpBridgeDevelopmentDiscoveryPathSegments,
 } from "@openducktor/contracts";
+import { validateDevelopmentInstanceId } from "@openducktor/host";
 import { resolveElectronMcpBridgeDiscoveryMode } from "./electron-host";
 
 describe("Electron host MCP discovery composition", () => {
@@ -19,12 +20,15 @@ describe("Electron host MCP discovery composition", () => {
     {
       descriptorSegments: MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS,
       isPackaged: true,
-      oppositeDescriptorSegments:
-        mcpBridgeDevelopmentDiscoveryPathSegments("electron-0123456789ab"),
+      oppositeDescriptorSegments: mcpBridgeDevelopmentDiscoveryPathSegments(
+        validateDevelopmentInstanceId("electron-0123456789ab"),
+      ),
       title: "packaged Electron owns only production discovery",
     },
     {
-      descriptorSegments: mcpBridgeDevelopmentDiscoveryPathSegments("electron-0123456789ab"),
+      descriptorSegments: mcpBridgeDevelopmentDiscoveryPathSegments(
+        validateDevelopmentInstanceId("electron-0123456789ab"),
+      ),
       isPackaged: false,
       oppositeDescriptorSegments: MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS,
       title: "source Electron owns only development discovery",

@@ -22,9 +22,9 @@ A `read` call for an unknown request ID rejects with `ERR_ODT_CANCELED`.
 - The module uses only the platform certificate trust. It has no custom trust manager, no pinning, and no hostname verifier.
 - The module sends only the headers that the caller supplies. The platform adds its transport headers, such as `Host` and `Accept-Encoding`.
 - Response header names are lowercase. The module joins repeated values with ", ".
-- The body has no request timeout, because event streams stay open for hours.
-- Android uses a 10 second connect timeout and no read timeout.
-- iOS sets a request interval of one day, so idle event streams stay open.
+- The body has no total timeout, because a large file can take a long time on a slow link.
+- A response that sends no byte for 30 seconds has stalled and fails with `ERR_ODT_TIMEOUT`. Live host traffic uses the host channel WebSocket, so no HTTP response stays idle by design.
+- Android uses a 10 second connect timeout and a 30 second read timeout. iOS sets a request interval of 30 seconds.
 - Android tries the next host address after a connect failure. It never sends a request body twice, so a host command never runs twice. It can resend a request with no body, such as a `GET`.
 - Each request reads its body ahead of JavaScript, so one `read` call gets every buffered byte. Above 1 MiB of buffered data, iOS pauses the task and Android stops reading until the next `read` call.
 - On Android, module creation configures the React Native WebSocket client to not follow redirects. A terminal upgrade that does not answer 101 then fails, as it does on iOS.

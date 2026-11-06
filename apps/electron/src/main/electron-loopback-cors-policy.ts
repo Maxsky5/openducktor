@@ -26,6 +26,21 @@ export const ELECTRON_PACKAGED_RENDERER_ORIGIN = "null";
 export const resolveElectronLoopbackCorsOrigin = (rendererDevUrl: string | undefined): string =>
   rendererDevUrl ? new URL(rendererDevUrl).origin : ELECTRON_PACKAGED_RENDERER_ORIGIN;
 
+/**
+ * The WebSocket origin of a packaged window. Electron enables file access from files, so Chromium
+ * keeps the `file://` origin of the window, and the handshake sends it serialized as `file://`.
+ * HTTP fetches from the same window send the `null` origin instead.
+ */
+export const ELECTRON_PACKAGED_RENDERER_SOCKET_ORIGIN = "file://";
+
+/** The origin that a desktop window sends on its host channel socket. */
+export const resolveElectronRendererSocketOrigins = (
+  rendererDevUrl: string | undefined,
+): ReadonlySet<string> =>
+  new Set([
+    rendererDevUrl ? new URL(rendererDevUrl).origin : ELECTRON_PACKAGED_RENDERER_SOCKET_ORIGIN,
+  ]);
+
 export const configureElectronLoopbackCorsPolicy = (
   session: ElectronSession,
   rendererOrigin: string = ELECTRON_PACKAGED_RENDERER_ORIGIN,

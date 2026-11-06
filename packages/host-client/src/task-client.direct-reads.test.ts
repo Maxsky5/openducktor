@@ -141,7 +141,11 @@ describe("host client task reads", () => {
         updatedAt: "2026-07-22T00:00:00Z",
         error: "Failed to decode saved content",
       };
-      await expect(client.workflowArtifactGet(workspace, "task-1", code)).resolves.toEqual(payload);
+      await expect(client.workflowArtifactGet(workspace, "task-1", code)).resolves.toEqual({
+        markdown: "",
+        updatedAt: "2026-07-22T00:00:00Z",
+        error: "Failed to decode saved content",
+      });
       payload = { markdown: "" };
       await expect(client.workflowArtifactGet(workspace, "task-1", code)).resolves.toEqual({
         markdown: "",

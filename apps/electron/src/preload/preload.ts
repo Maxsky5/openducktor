@@ -8,11 +8,11 @@ import {
 import {
   ELECTRON_REMOTE_ACCESS_CHANNEL,
   ELECTRON_ARTIFACT_PREVIEW_URL,
-  ELECTRON_REMOTE_ACCESS_STATE_CHANNEL,
+  ELECTRON_HOST_CHANNEL_ENDPOINT_CHANNEL,
   ELECTRON_HOST_SELECT_CHANNEL,
+  electronHostChannelEndpointSchema,
   ELECTRON_NATIVE_THEME_CHANNEL,
 } from "../shared/electron-bridge-contract";
-import { createElectronNotificationStreamApi } from "./electron-notification-stream-ipc";
 import {
   appPlatformSchema,
   appUpdateCommandResultSchema,
@@ -62,13 +62,8 @@ import {
   electronNotificationDeliveryRequestSchema,
   electronNotificationDeliveryResultSchema,
 } from "../shared/electron-bridge-contract";
-import { createElectronHostInvoke } from "./electron-host-invoke";
-import { subscribeElectronHostEvent } from "./electron-host-events";
-import { createElectronTaskStreamApi } from "./electron-task-stream-ipc";
 
 const { contextBridge, ipcRenderer } = electron;
-const invokeHost = createElectronHostInvoke(ipcRenderer);
-const taskStream = createElectronTaskStreamApi(ipcRenderer);
 
 const appUpdates: OpenDucktorElectronAppUpdateApi = {
   async getState() {
@@ -220,10 +215,10 @@ const electronApi: OpenDucktorElectronApi = {
   selectHost: () => ipcRenderer.invoke(ELECTRON_HOST_SELECT_CHANNEL),
   setNativeTheme: (theme) =>
     ipcRenderer.invoke(ELECTRON_NATIVE_THEME_CHANNEL, themePreferenceSchema.unwrap().parse(theme)),
-  invoke: invokeHost,
-  subscribe(...subscription) {
-    return subscribeElectronHostEvent(ipcRenderer, ...subscription);
-  },
+  hostChannelEndpoint: async () =>
+    electronHostChannelEndpointSchema.parse(
+      await ipcRenderer.invoke(ELECTRON_HOST_CHANNEL_ENDPOINT_CHANNEL),
+    ),
   remoteAccess: {
     readNetworks: async () =>
       remoteAccessNetworksSchema.parse(
@@ -259,14 +254,6 @@ const electronApi: OpenDucktorElectronApi = {
       remoteAccessStateSchema.parse(
         await ipcRenderer.invoke(ELECTRON_REMOTE_ACCESS_CHANNEL, { action: "stop-pairing" }),
       ),
-    subscribeState: async (listener) => {
-      const receive = (
-        _event: Electron.IpcRendererEvent,
-        value: import("@openducktor/contracts").RemoteAccessState,
-      ) => listener(remoteAccessStateSchema.parse(value));
-      ipcRenderer.on(ELECTRON_REMOTE_ACCESS_STATE_CHANNEL, receive);
-      return () => ipcRenderer.off(ELECTRON_REMOTE_ACCESS_STATE_CHANNEL, receive);
-    },
   },
   appUpdates,
   notifications,
@@ -284,8 +271,6 @@ const electronApi: OpenDucktorElectronApi = {
   },
   terminals,
   browser,
-  taskStream,
-  notificationStream: createElectronNotificationStreamApi(ipcRenderer),
   editorClipboard: {
     readText(type) {
       return ipcRenderer.invoke(ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL, type);

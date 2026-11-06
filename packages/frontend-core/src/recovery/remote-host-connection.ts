@@ -2,7 +2,6 @@ import {
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_PROTOCOL_VERSION,
   REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
-  REMOTE_STREAM_HEARTBEAT_CAPABILITY,
   type AgentSessionLiveAttachInput,
   type HostEventEnvelope,
   type RemoteClientKind,
@@ -64,12 +63,8 @@ const remoteClientHello = (version: string) => ({
   appVersion: version,
   supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
   requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
-  // Without heartbeats, the client keeps a silent stream, as an older host sends none. Without
-  // compact history, the client reads full history, as an older host rejects the request.
-  optionalCapabilities: [
-    REMOTE_STREAM_HEARTBEAT_CAPABILITY,
-    REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
-  ],
+  // Without compact history, the client reads full history, as an older host rejects the request.
+  optionalCapabilities: [REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY],
 });
 
 /**

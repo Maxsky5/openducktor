@@ -1,7 +1,7 @@
 import {
   REMOTE_CONNECTION_HEADER,
-  REMOTE_TERMINAL_CONNECTION_PREFIX,
-  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
+  REMOTE_SOCKET_CONNECTION_PREFIX,
+  REMOTE_SOCKET_AUTHORIZATION_PREFIX,
   remoteAccessEnableInputSchema,
   type RemoteAccessEnableInput,
   type RemoteAccessConfiguration,
@@ -20,10 +20,7 @@ import os from "node:os";
 import { RemoteAccessError, createRemoteAdmission, remoteDisabled } from "./remote-admission";
 import { createRemoteWorkInterface, type RemoteHostServices } from "./remote-work-interface";
 import { startNodeFetchServer, type NodeFetchServer } from "./node-fetch-server";
-import {
-  terminalWebSocketHandler,
-  type TerminalWebSocketData,
-} from "./terminals/terminal-websocket-handler";
+import { hostWebSocketHandler, type HostWebSocketData } from "./host-websocket-handler";
 import type { WebLogger } from "./logger";
 
 export { RemoteAccessError };
@@ -46,7 +43,7 @@ export type RemoteAccessController = {
   close(): Effect.Effect<void, RemoteAccessError>;
   handleSharedRequest(
     request: Request,
-    server: NodeFetchServer<TerminalWebSocketData>,
+    server: NodeFetchServer<HostWebSocketData>,
   ): Promise<Response | undefined> | null;
 };
 /** The configuration of a listener on `port`. The default public address uses that port. */
@@ -68,12 +65,9 @@ export const remoteAccessConfiguration = (
 /** Shared listener routes that only remote clients use. */
 const REMOTE_ROUTES = new Set(["/", "/connections"]);
 const REMOTE_REQUEST_HEADERS = ["authorization", REMOTE_CONNECTION_HEADER];
-const REMOTE_SUBPROTOCOLS = [
-  REMOTE_TERMINAL_CONNECTION_PREFIX,
-  REMOTE_TERMINAL_AUTHORIZATION_PREFIX,
-];
+const REMOTE_SUBPROTOCOLS = [REMOTE_SOCKET_CONNECTION_PREFIX, REMOTE_SOCKET_AUTHORIZATION_PREFIX];
 
-/** A remote request header, a remote preflight, or a remote terminal subprotocol. */
+/** A remote request header, a remote preflight, or a remote socket subprotocol. */
 const carriesRemoteHeaders = (request: Request): boolean => {
   const { headers } = request;
   if (REMOTE_REQUEST_HEADERS.some((header) => headers.has(header))) return true;
@@ -121,7 +115,7 @@ export const createRemoteAccessController = (
     pairing: null,
   };
   let connected = new Set<string>();
-  let server: NodeFetchServer<TerminalWebSocketData> | null = null;
+  let server: NodeFetchServer<HostWebSocketData> | null = null;
   let work: ReturnType<typeof createRemoteWorkInterface> | null = null;
   let sharedMountPath = "";
   let sharedWork: ReturnType<typeof createRemoteWorkInterface> | null = null;
@@ -349,7 +343,7 @@ export const createRemoteAccessController = (
                       onListening: (bound) => {
                         current = openWork(configure(bound.port));
                       },
-                      websocket: terminalWebSocketHandler,
+                      websocket: hostWebSocketHandler,
                       onListenerError: (cause) => {
                         options.reportFailure(cause);
                         if (work !== current) return;

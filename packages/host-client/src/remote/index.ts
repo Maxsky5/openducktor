@@ -1,24 +1,18 @@
-import { z, type JSONType } from "zod";
+import type { JSONType } from "zod";
 import { hostCommandInputRecordSchema, type HostCommandArgs } from "@openducktor/contracts";
 import {
   AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS,
-  browserEventCursorSchema,
-  browserReplayCompleteSchema,
+  HOST_CHANNEL_HEARTBEAT_INTERVAL_MS,
+  HOST_CHANNEL_SUBPROTOCOL,
   hostErrorResponseSchema,
   isHostReadCommand,
-  notificationStreamFrameSchema,
   hostEventEnvelopeSchema,
   remoteEndpointSchema,
   remoteHostDescriptorSchema,
   remoteNegotiationResultSchema,
-  remoteTaskLeaseSchema,
-  taskEventStreamFrameSchema,
   REMOTE_CONNECTION_HEADER,
   REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY,
-  REMOTE_STREAM_HEARTBEAT_CAPABILITY,
-  REMOTE_STREAM_HEARTBEAT_INTERVAL_MS,
-  type BrowserEventCursor,
-  type BrowserReplayComplete,
+  TERMINAL_PROTOCOL_SUBPROTOCOL,
   type HostEventEnvelope,
   type NotificationStreamFrame,
   type RemoteClientHello,
@@ -33,17 +27,26 @@ import {
 } from "@openducktor/contracts";
 import { createHostClient, HostInvokeError, type HostClient } from "../index";
 import {
+  hostChannelInvokeError,
+  HostChannelProtocolError,
+  HostChannelRequestError,
+  openHostChannel,
+  type HostChannelCursors,
+  type HostChannelLoss,
+  type HostChannelReplay,
+  type OpenedHostChannel,
+} from "../channel";
+import {
   readBytes,
   RemoteConnectionError,
   RemoteReplyTooLargeError,
   remoteError,
   type RemoteTransport,
   type RemoteHttpResponse,
-  type RemoteTerminalConnection,
+  type RemoteSocketConnection,
 } from "./transport";
 import { acceptedProtocol, createClientAdmission, securePairingHostId } from "./client-admission";
 import { linkSignals } from "./linked-signal";
-import { readSse } from "./sse";
 export * from "./transport";
 export * from "./authorization";
 import {
@@ -52,7 +55,6 @@ import {
   type RemoteAuthorizationStore,
   type RemoteConnectInput,
 } from "./authorization";
-export { readSse, type ReadSseOptions, type SseFrame } from "./sse";
 export type RemoteConnectionState = {
   status: "idle" | "connecting" | "synchronizing" | "connected" | "disconnected" | "failed";
   generation: number;
@@ -66,8 +68,9 @@ export type RemoteSynchronizationContext = {
   previousHostInstanceId: string | null;
   /** Confirmed replacement retained until synchronization reports it. */
   hostChanged: boolean;
-  hostReplay: BrowserReplayComplete;
+  hostReplay: HostChannelReplay;
 };
+/** The end of a host event replay: a host change, and the event names with missed events. */
 export type RemoteSynchronizer = (context: RemoteSynchronizationContext) => Promise<void>;
 export type RemoteTaskSubscription = {
   readonly ready: Promise<void>;
@@ -82,10 +85,10 @@ export interface RemoteHostClient {
   disconnect(): Promise<void>;
   setActive(active: boolean): void;
   /**
-   * Resolves true when the host event stream delivers bytes within the time that its heartbeat
-   * allows, counted from now. Resolves false when the stream stays silent, the connection is not
-   * connected, or the host sends no heartbeat. After a device pause, such as a locked screen, a
-   * dead stream shows no error until a read fails, so the app checks it on return.
+   * Resolves true when the host channel delivers a message within the time that its heartbeat
+   * allows, counted from now. Resolves false when the channel stays silent or the connection is not
+   * connected. After a device pause, such as a locked screen, a dead channel shows no error until a
+   * read fails, so the app checks it on return.
    */
   confirmEventStream(): Promise<boolean>;
   subscribeState(listener: (state: RemoteConnectionState) => void): () => void;
@@ -100,13 +103,15 @@ export interface RemoteHostClient {
     signal: AbortSignal,
     onFrame: (frame: Uint8Array) => void,
     onClose: (failure?: RemoteFailure) => void,
-  ): Promise<RemoteTerminalConnection>;
+  ): Promise<RemoteSocketConnection>;
   readTaskAsset(context: TaskAssetRenderContext, signal: AbortSignal): Promise<Resource>;
   readStagedPreview(path: string, signal: AbortSignal): Promise<Resource>;
 }
 /** How a request proves access: the admitted connection, no proof, or a saved access token. */
 type RequestAuth = "connection" | "none" | { proof: string };
 type RequestOptions = { auth?: RequestAuth; streaming?: boolean };
+/** The host channel of one connection attempt. */
+type Channel = { generation: number; opened: OpenedHostChannel };
 /** The headers that carry an admitted connection. */
 const admissionHeaders = (admission: RemoteAdmission) => ({
   [REMOTE_CONNECTION_HEADER]: admission.connectionId,
@@ -149,12 +154,11 @@ export const createRemoteHostClient = (
   let attempts = 0;
   let pendingHostChanged = false;
   const pendingReplayGaps = new Set<string>();
-  let cursor: BrowserEventCursor | null = null;
-  /** How long a stream of this connection can stay silent, or null for a host without heartbeats. */
-  let streamSilenceLimitMs: number | null = null;
+  const cursors: HostChannelCursors = { hostEvents: null, notifications: null };
+  let channel: Channel | null = null;
   /** The host of this admission cuts long tool details from history on request. */
   let compactHistory = false;
-  /** When the host event stream last delivered bytes, heartbeats included. */
+  /** When the host channel last delivered a message, heartbeats included. */
   let eventStreamBytesAt = 0;
   const eventStreamListeners = new Set<() => void>();
   const stateListeners = new Set<(state: RemoteConnectionState) => void>();
@@ -182,7 +186,7 @@ export const createRemoteHostClient = (
       );
     return admissionHeaders(admission);
   };
-  /** Host commands can outlive setup deadlines. Streams and files only need a setup deadline. */
+  /** Discovery, negotiation, release, and files need only a setup deadline. */
   const request = async (
     method: "GET" | "POST" | "DELETE",
     path: string,
@@ -192,26 +196,23 @@ export const createRemoteHostClient = (
   ): Promise<RemoteHttpResponse> => {
     const admitted = auth === "connection";
     const setup = new AbortController();
-    const timer = path.startsWith("/invoke/")
-      ? undefined
-      : setTimeout(
-          () =>
-            setup.abort(
-              remoteError(
-                "transport_failure",
-                "Remote request setup timed out.",
-                "Check the host and proxy, then retry.",
-              ),
-            ),
-          SETUP_TIMEOUT_MS,
-        );
+    const timer = setTimeout(
+      () =>
+        setup.abort(
+          remoteError(
+            "transport_failure",
+            "Remote request setup timed out.",
+            "Check the host and proxy, then retry.",
+          ),
+        ),
+      SETUP_TIMEOUT_MS,
+    );
     const { signal: combined, unlink } = linkSignals([signal, setup.signal]);
     const requestGeneration = generation;
     try {
       const requestHeaders: Record<string, string> = admitted ? headers() : {};
       if (auth !== "connection" && auth !== "none")
         requestHeaders.authorization = `Bearer ${auth.proof}`;
-      if (cursor && path === "/events") requestHeaders["last-event-id"] = JSON.stringify(cursor);
       if (body !== undefined) requestHeaders["content-type"] = "application/json";
       const response = await waitWithAbort(
         transport.request(
@@ -287,18 +288,6 @@ export const createRemoteHostClient = (
       throw cause;
     }
   };
-  /**
-   * Sends a request whose reply the client does not use. Reading the empty body to its end lets
-   * the transport release the request, as a native transport keeps it until then.
-   */
-  const send = async (
-    method: "POST" | "DELETE",
-    path: string,
-    signal: AbortSignal,
-    body?: RequestBody,
-  ): Promise<void> => {
-    await readBytes(await request(method, path, signal, body), signal);
-  };
   const json = async (
     method: "GET" | "POST" | "DELETE",
     path: string,
@@ -339,6 +328,116 @@ export const createRemoteHostClient = (
     if (previousAdmission) void release(previousAdmission);
     publish(canRetry(error) ? "disconnected" : "failed", error.failure);
     if (canRetry(error)) schedule();
+  };
+  /** The remote error of a lost host channel. */
+  const channelLossError = (loss: HostChannelLoss): RemoteConnectionError => {
+    switch (loss.reason) {
+      case "closed":
+        return remoteError(
+          "transport_failure",
+          "The host channel closed.",
+          "Reconnect to the selected host.",
+        );
+      case "silent":
+        return remoteError(
+          "transport_failure",
+          "The host channel went silent.",
+          "Reconnect to the selected host.",
+        );
+      case "unreadable":
+        return invalidFrame();
+      case "send_failed":
+        return connectionError(loss.cause);
+    }
+  };
+  /** The WebSocket URL of a host route. */
+  const socketUrl = (path: string): string => {
+    const url = new URL(`${base}${path}`);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    return url.href;
+  };
+  /** The host channel of attempt `current`, or a failure when that channel is gone. */
+  const channelOf = (current: number): OpenedHostChannel => {
+    if (!channel || channel.generation !== current)
+      throw remoteError(
+        "connection_expired",
+        "The host channel of this connection is closed.",
+        "Reconnect before using host work.",
+      );
+    return channel.opened;
+  };
+  /**
+   * Opens the host channel of attempt `current`, receives the replay of missed host events, and
+   * waits for notification attachment. A closed or silent channel loses the connection.
+   */
+  const openChannel = async (current: number, signal: AbortSignal): Promise<HostChannelReplay> => {
+    const setup = new AbortController();
+    const setupTimer = setTimeout(
+      () =>
+        setup.abort(
+          remoteError(
+            "transport_failure",
+            "The host channel did not finish setup.",
+            "Check the proxy WebSocket forwarding and retry.",
+          ),
+        ),
+      SETUP_TIMEOUT_MS,
+    );
+    const { signal: setupSignal, unlink } = linkSignals([signal, setup.signal]);
+    const attached = deferred<void>();
+    signal.addEventListener(
+      "abort",
+      () => {
+        if (channel?.generation === current) channel = null;
+      },
+      { once: true },
+    );
+    try {
+      const hostChannel = await waitWithAbort(
+        openHostChannel({
+          cursors,
+          open: (onFrame, onClose) =>
+            transport.openSocket(
+              socketUrl("/channel"),
+              HOST_CHANNEL_SUBPROTOCOL,
+              headers(),
+              signal,
+              onFrame,
+              onClose,
+            ),
+          signal,
+          handlers: {
+            hostEvent: (event) => {
+              let envelope: HostEventEnvelope;
+              try {
+                envelope = hostEventEnvelopeSchema.parse(JSON.parse(event.body()));
+              } catch {
+                lost(current, invalidFrame());
+                return;
+              }
+              deliver(eventListeners, envelope);
+            },
+            notification: (frame) => {
+              deliver(notificationListeners, frame);
+              if (frame.type === "attached") attached.resolve();
+            },
+          },
+          onHandlerError: (cause) => console.error("Remote listener failed", cause),
+          onFrame: () => {
+            eventStreamBytesAt = Date.now();
+            for (const listener of eventStreamListeners) listener();
+          },
+          onLost: (loss) => lost(current, channelLossError(loss)),
+        }),
+        setupSignal,
+      ).catch(throwChannelRequestError);
+      channel = { generation: current, opened: hostChannel };
+      await waitWithAbort(attached.promise, setupSignal);
+      return hostChannel.replay;
+    } finally {
+      clearTimeout(setupTimer);
+      unlink();
+    }
   };
   const connect = (input: RemoteConnectInput = {}): Promise<void> => {
     selected = true;
@@ -401,76 +500,16 @@ export const createRemoteHostClient = (
         };
         pendingAdmission = null;
         // This client uses an optional capability only when it asked for it and the host has it.
-        const uses = (capability: string): boolean =>
-          hello.optionalCapabilities.includes(capability) &&
-          negotiatedProtocol.capabilities.includes(capability);
-        // Three missed heartbeats mean that the network dropped the stream without closing it.
-        streamSilenceLimitMs = uses(REMOTE_STREAM_HEARTBEAT_CAPABILITY)
-          ? 3 * REMOTE_STREAM_HEARTBEAT_INTERVAL_MS
-          : null;
-        compactHistory = uses(REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY);
+        compactHistory =
+          hello.optionalCapabilities.includes(REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY) &&
+          negotiatedProtocol.capabilities.includes(REMOTE_HISTORY_TOOL_DETAILS_CAPABILITY);
         state = { ...state, host: accepted.host };
         if (previousHostInstanceId !== accepted.host.hostInstanceId) {
-          cursor = null;
+          cursors.hostEvents = null;
+          cursors.notifications = null;
           if (previousHostInstanceId !== null) pendingHostChanged = true;
         }
-        const replay = deferred<BrowserReplayComplete>();
-        const attached = deferred<void>();
-        const setupTimer = setTimeout(() => {
-          const error = remoteError(
-            "transport_failure",
-            "Host stream did not finish attachment.",
-            "Check SSE proxy forwarding and retry.",
-          );
-          replay.reject(error);
-          attached.reject(error);
-        }, SETUP_TIMEOUT_MS);
-        const events = await request("GET", "/events", abort.signal, undefined, {
-          streaming: true,
-        });
-        void (async () => {
-          try {
-            for await (const frame of readSse(events.body, abort.signal, {
-              silenceLimitMs: streamSilenceLimitMs,
-              onBytes: () => {
-                if (generation !== current) return;
-                eventStreamBytesAt = Date.now();
-                for (const listener of eventStreamListeners) listener();
-              },
-            })) {
-              if (generation !== current) return;
-              if (frame.event === "replay-complete")
-                replay.resolve(parsePayload(browserReplayCompleteSchema, frame.data));
-              else if (frame.event === "notification-frame") {
-                const notification = parsePayload(notificationStreamFrameSchema, frame.data);
-                deliver(notificationListeners, notification);
-                if (notification.type === "attached") attached.resolve();
-              } else {
-                const event = parsePayload(hostEventEnvelopeSchema, frame.data);
-                deliver(eventListeners, event);
-              }
-              if (frame.id) cursor = parsePayload(browserEventCursorSchema, frame.id);
-            }
-            throw remoteError(
-              "transport_failure",
-              "The host event stream ended.",
-              "Reconnect to the selected host.",
-            );
-          } catch (cause) {
-            replay.reject(cause);
-            attached.reject(cause);
-            lost(current, cause);
-          }
-        })();
-        let hostReplay: BrowserReplayComplete;
-        try {
-          [hostReplay] = await waitWithAbort(
-            Promise.all([replay.promise, attached.promise]),
-            abort.signal,
-          );
-        } finally {
-          clearTimeout(setupTimer);
-        }
+        let hostReplay: HostChannelReplay = await openChannel(current, abort.signal);
         for (const gap of hostReplay.gaps) pendingReplayGaps.add(gap);
         hostReplay = { ...hostReplay, gaps: [...pendingReplayGaps] };
         publish("synchronizing");
@@ -567,33 +606,43 @@ export const createRemoteHostClient = (
       stateListeners.add(check);
       check();
     });
-  const client = createHostClient(async (command, args, resultSchema) => {
+  const client = createHostClient(async (command, args, resultSchema, options) => {
     // A read changes no host state, so it waits for the reconnect and runs again. A mutation is
     // never resent: a lost reply leaves its outcome unknown.
     const read = isHostReadCommand(command);
     const deadline = Date.now() + READ_RECONNECT_WAIT_MS;
+    const callerSignal = options?.signal;
     while (true) {
+      callerSignal?.throwIfAborted();
       const admitted = admission !== null && owner !== null && !owner.signal.aborted;
-      if (read && !admitted) await connected(deadline);
-      else if (!admission && pending) await pending;
-      const { generation: current, signal } = currentConnection();
+      if (read && !admitted) await waitForCaller(connected(deadline), callerSignal);
+      // An admitted attempt still opens its channel. The recovery barrier runs after it opened.
+      else if ((!admission || channel?.generation !== generation) && pending)
+        await waitForCaller(pending, callerSignal);
+      const { generation: current } = currentConnection();
       // Replies have a size limit, so a history read asks a host that can do it for compact history.
       const body = command === LOAD_HISTORY_COMMAND && compactHistory ? compact(args) : args;
       let payload: JSONType;
       try {
-        payload = await json("POST", `/invoke/${encodeURIComponent(command)}`, signal, body ?? {});
+        payload = await channelOf(current).session.request(
+          { method: "invoke", command, args: body ?? {} },
+          callerSignal,
+        );
       } catch (cause) {
-        if (cause instanceof HostInvokeError) throw cause;
-        if (cause instanceof RemoteRefusalError) {
-          // The host ran no work. Its expired admission starts a reconnect.
-          if (read && cause.failure.code === "connection_expired") continue;
-          throw cause;
-        }
-        if (cause instanceof RemoteReplyTooLargeError) {
+        // The caller stopped waiting. The host may still run the command.
+        if (callerSignal?.aborted && cause === callerSignal.reason) throw cause;
+        if (cause instanceof HostChannelRequestError) {
+          const { error } = cause;
+          if (error.kind === "host") throw hostChannelInvokeError(cause);
           // The connection is sound, so only this command fails. A read gets the same reply again.
           // The host ran a mutation, so its outcome is unknown.
-          if (read) throw cause;
-          throw outcomeUnknown(command, "is larger than the limit of this app");
+          if (error.kind === "reply_too_large") {
+            if (read) throw new RemoteReplyTooLargeError(error.limitBytes);
+            throw outcomeUnknown(command, "is larger than the limit of this app");
+          }
+          // The host ran no work. An ended admission also closes the channel, and that loss
+          // starts the reconnect, so the refusal itself is not retried.
+          throw new RemoteRefusalError(error.failure);
         }
         lost(current, cause);
         if (read) {
@@ -657,22 +706,19 @@ export const createRemoteHostClient = (
       // Local cleanup does not depend on the host reply.
     }
   };
-  let disconnects = 0;
   const disconnect = () => {
     selected = false;
-    disconnects += 1;
     return stop();
   };
   return {
     client,
     readState: () => state,
     connect,
-    retry: async () => {
-      // The client stays selected, so reads that wait for a reconnect keep waiting.
-      const disconnectsAtRetry = disconnects;
-      await stop();
-      // A disconnect during the release wait, such as a host switch, keeps the connection closed.
-      if (disconnects !== disconnectsAtRetry) return;
+    retry: () => {
+      // The client stays selected, so reads that wait for a reconnect keep waiting. The old
+      // admission ends in the background: after a network change, its release can wait for the
+      // setup deadline, and the new attempt does not need it.
+      void stop();
       return connect();
     },
     disconnect,
@@ -683,19 +729,14 @@ export const createRemoteHostClient = (
     },
     confirmEventStream() {
       const connection = owner;
-      if (
-        state.status !== "connected" ||
-        !connection ||
-        connection.signal.aborted ||
-        streamSilenceLimitMs === null
-      )
+      if (state.status !== "connected" || !connection || connection.signal.aborted)
         return Promise.resolve(false);
-      // The host writes a heartbeat at each interval, and a live stream also delivers the bytes
-      // that arrived during the pause. So the next bytes are due by the next heartbeat.
+      // The host sends a heartbeat at each interval, and a live channel also delivers the messages
+      // that arrived during the pause. So the next message is due by the next heartbeat.
       const window = Math.max(
         STREAM_PROOF_GRACE_MS,
         eventStreamBytesAt +
-          REMOTE_STREAM_HEARTBEAT_INTERVAL_MS +
+          HOST_CHANNEL_HEARTBEAT_INTERVAL_MS +
           STREAM_PROOF_GRACE_MS -
           Date.now(),
       );
@@ -728,75 +769,47 @@ export const createRemoteHostClient = (
     },
     async subscribeTaskStream(input, onFrame, requestSignal) {
       const { generation: current, signal: hostSignal } = currentConnection();
+      const { session } = channelOf(current);
       const signal = requestSignal ? AbortSignal.any([requestSignal, hostSignal]) : hostSignal;
       signal.throwIfAborted();
-      // Read the lease ID even if the view closes so cleanup can release it.
-      const lease = remoteTaskLeaseSchema.parse(
-        await json("POST", "/task-events/subscriptions", hostSignal, input),
-      );
       const local = new AbortController();
       const combined = AbortSignal.any([signal, local.signal]);
       const ready = deferred<void>();
-      let boundary = lease.replayBoundary;
-      const path = `/task-events/subscriptions/${lease.subscriptionId}`;
+      let boundary: TaskEventCursor | null = null;
+      // Create the lease even if the view closes, so cleanup can release it.
+      const { subscriptionId } = await session
+        .subscribeTaskEvents(input, (frame) => {
+          if (generation !== current || combined.aborted) return;
+          if (frame.type === "snapshot_required") boundary = frame.cursor;
+          onFrame(frame);
+        })
+        .then((lease) => {
+          // A snapshot frame can arrive before this continuation. It moves the boundary on.
+          boundary ??= lease.replayBoundary;
+          return lease;
+        }, throwChannelRequestError);
+      const reachedBoundary = (cursor: TaskEventCursor | null) =>
+        cursor !== null &&
+        boundary !== null &&
+        cursor.epoch === boundary.epoch &&
+        cursor.sequence >= boundary.sequence;
       const fail = () => ready.reject(combined.reason);
       combined.addEventListener("abort", fail, { once: true });
-      if (input.cursor?.epoch === boundary.epoch && input.cursor.sequence >= boundary.sequence)
-        ready.resolve();
+      if (reachedBoundary(input.cursor)) ready.resolve();
       const unsubscribe = async () => {
         local.abort();
         combined.removeEventListener("abort", fail);
-        if (generation === current && !hostSignal.aborted) await send("DELETE", path, hostSignal);
-      };
-      let response: RemoteHttpResponse;
-      try {
-        response = await request("GET", `${path}/stream`, combined, undefined, { streaming: true });
-      } catch (cause) {
+        if (generation !== current || hostSignal.aborted) return;
         try {
-          await unsubscribe();
-        } catch (cleanupFailure) {
-          throw new AggregateError(
-            [cause, cleanupFailure],
-            "Task stream setup failed and its lease could not be released.",
-          );
-        }
-        throw cause;
-      }
-      const setupTimer = setTimeout(() => {
-        const error = remoteError(
-          "transport_failure",
-          "Task stream did not establish delivery.",
-          "Check SSE proxy forwarding and retry.",
-        );
-        ready.reject(error);
-        lost(current, error);
-      }, SETUP_TIMEOUT_MS);
-      combined.addEventListener("abort", () => clearTimeout(setupTimer), { once: true });
-      void (async () => {
-        try {
-          for await (const frame of readSse(response.body, combined, {
-            onReady: () => clearTimeout(setupTimer),
-            silenceLimitMs: streamSilenceLimitMs,
-          })) {
-            clearTimeout(setupTimer);
-            if (generation !== current) return;
-            const parsed = parsePayload(taskEventStreamFrameSchema, frame.data);
-            if (parsed.type === "snapshot_required") boundary = parsed.cursor;
-            onFrame(parsed);
-          }
-          if (!combined.aborted)
-            throw remoteError(
-              "transport_failure",
-              "Task stream ended.",
-              "Reconnect and restore the task subscription.",
-            );
+          await session.releaseTaskEvents(subscriptionId);
         } catch (cause) {
-          clearTimeout(setupTimer);
-          ready.reject(cause);
-          if (!local.signal.aborted && !requestSignal?.aborted && !hostSignal.aborted)
-            lost(current, cause);
+          throwChannelRequestError(cause);
         }
-      })();
+      };
+      if (combined.aborted) {
+        await unsubscribe();
+        combined.throwIfAborted();
+      }
       return {
         ready: ready.promise,
         async acknowledge(cursor) {
@@ -806,9 +819,12 @@ export const createRemoteHostClient = (
               "This task handle belongs to an old connection.",
               "Restore the task subscription on the current connection.",
             );
-          await send("POST", `${path}/ack`, combined, { cursor });
-          if (cursor.epoch === boundary.epoch && cursor.sequence >= boundary.sequence)
-            ready.resolve();
+          try {
+            await session.request({ method: "task_events.ack", subscriptionId, cursor }, combined);
+          } catch (cause) {
+            throwChannelRequestError(cause);
+          }
+          if (reachedBoundary(cursor)) ready.resolve();
         },
         unsubscribe,
       };
@@ -816,8 +832,6 @@ export const createRemoteHostClient = (
     async connectTerminal(signal, onFrame, onClose) {
       const connection = currentConnection();
       const { signal: combined, unlink } = linkSignals([signal, connection.signal]);
-      const wsUrl = new URL(`${base}/terminal`);
-      wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
       const deadline = new AbortController();
       const timer = setTimeout(
         () =>
@@ -845,8 +859,9 @@ export const createRemoteHostClient = (
           nextAction: "Reconnect and attach the surviving terminal. Do not replay input.",
         });
       connection.signal.addEventListener("abort", hostLost, { once: true });
-      const socketPromise = transport.openTerminal(
-        wsUrl.href,
+      const socketPromise = transport.openSocket(
+        socketUrl("/terminal"),
+        TERMINAL_PROTOCOL_SUBPROTOCOL,
         headers(),
         setupSignal,
         (frame) => {
@@ -907,11 +922,7 @@ type RemoteAdmission = {
   connectionToken: string;
 };
 
-type RequestBody =
-  | HostCommandArgs
-  | RemoteConnectionRequest
-  | TaskEventStreamSubscribe
-  | { cursor: TaskEventCursor };
+type RequestBody = RemoteConnectionRequest;
 type Resource = {
   bytes: Uint8Array<ArrayBuffer>;
   headers: Readonly<Record<string, string>>;
@@ -928,18 +939,24 @@ const deliver = <Value>(listeners: Iterable<(value: Value) => void>, value: Valu
   }
 };
 
-const parsePayload = <Value>(schema: z.ZodType<Value>, text: string): Value => {
-  try {
-    return schema.parse(JSON.parse(text));
-  } catch {
-    throw remoteError(
-      "invalid_protocol",
-      "The host stream sent an invalid protocol frame.",
-      "Update the host or correct proxy stream routing, then retry.",
-    );
-  }
-};
+const invalidFrame = (): RemoteConnectionError =>
+  remoteError(
+    "invalid_protocol",
+    "The host channel sent an invalid protocol frame.",
+    "Update the host or correct proxy WebSocket routing, then retry.",
+  );
 class RemoteRefusalError extends RemoteConnectionError {}
+/** Throws the remote error of a failed channel request that is no command. */
+const throwChannelRequestError = (cause: unknown): never => {
+  if (cause instanceof HostChannelProtocolError) throw invalidFrame();
+  if (!(cause instanceof HostChannelRequestError)) throw cause;
+  const { error } = cause;
+  if (error.kind === "refused") throw new RemoteRefusalError(error.failure);
+  throw remoteError("invalid_protocol", cause.message, "Update the host and this app.");
+};
+/** Waits for `operation`, or rejects with the reason of `signal` when the caller stops waiting. */
+const waitForCaller = <T>(operation: Promise<T>, signal: AbortSignal | undefined): Promise<T> =>
+  signal ? waitWithAbort(operation, signal) : operation;
 /** The host may have run `command`. `reason` says why this client has no result. */
 const outcomeUnknown = (command: string, reason: string): RemoteConnectionError =>
   remoteError(

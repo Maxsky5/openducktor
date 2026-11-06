@@ -10,6 +10,9 @@ import {
   errorMessage,
 } from "../../effect/electron-errors";
 
+/** The fetch call that the release source makes. */
+type ReleaseFetch = (input: string, init: RequestInit) => Promise<Response>;
+
 export type GitHubRelease = {
   prerelease: boolean;
   tagName: string;
@@ -21,7 +24,7 @@ export type GitHubReleaseSource = {
 };
 
 type GitHubReleaseSourceOptions = {
-  fetch: typeof globalThis.fetch;
+  fetch: ReleaseFetch;
   owner: string;
   repo: string;
 };
@@ -115,7 +118,7 @@ const parseReleasePage = (
   });
 
 const fetchReleaseJson = (
-  fetch: typeof globalThis.fetch,
+  fetch: ReleaseFetch,
   url: string,
   description: string,
 ): Effect.Effect<{ response: Response; value: unknown }, ElectronOperationErrorAggregate> => {
@@ -172,7 +175,7 @@ const matchesChannel = (release: GitHubRelease, channel: string): boolean => {
 };
 
 const resolvePrerelease = (
-  fetch: typeof globalThis.fetch,
+  fetch: ReleaseFetch,
   releasesUrl: string,
   channel: string,
 ): Effect.Effect<

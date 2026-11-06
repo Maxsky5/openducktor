@@ -53,8 +53,8 @@ Shared code does not prove shared coverage. Trace each changed path from the Ele
 | Path | Electron check | Browser check |
 | --- | --- | --- |
 | Host and runtime adapters | Exercise the desktop host and selected runtime route | Exercise the web host and selected runtime route |
-| Host events | Exercise main-process forwarding, preload validation, context-bridge delivery, and observer cleanup | Exercise server event names, EventSource delivery, validation, and observer cleanup |
-| Task stream | Exercise IPC envelope delivery, acknowledgement, and terminal failure | Exercise stream frames, acknowledgement, reconnect, and terminal failure |
+| Host events | Exercise host event names, host channel delivery, validation, and observer cleanup | Exercise host event names, host channel delivery, validation, and observer cleanup |
+| Task stream | Exercise stream frames, acknowledgement, reconnect, and terminal failure | Exercise stream frames, acknowledgement, reconnect, and terminal failure |
 | Shared UI | Repeat the affected interaction in the Electron renderer | Repeat it in the supported browser |
 
 Verify malformed input, wrong repository scope, removal, and resubscription where they affect the change. Use temporary application state when a check creates records. Keep failures visible. If the test environment denies a required local socket or process operation, obtain that access and rerun the check; changing the assertion or skipping the test does not resolve the failure.

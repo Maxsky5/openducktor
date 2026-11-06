@@ -19,8 +19,8 @@ This guide covers the desktop app, the browser runner, and the mobile app. Read 
 | Clients and runtime adapters | `packages/host-client/src/*`, `packages/adapters-opencode-sdk/src/*`, `packages/adapters-codex-app-server/src/*` | Host client and native runtime protocols | Workflow policy and shell transport |
 | Host | `packages/host/src/*` | Command router, Effect services, live session state, runtime drivers, process, files, Git, task store, and MCP | Frontend cache and public schemas |
 | Runtime orchestration | `packages/runtime-orchestration/src/*` | Shared runtime lifecycle, registry, admission, and lifecycle plans | Platform processes, task policy, and settings persistence |
-| Remote host | `packages/remote-host/src/*` | Remote access, connection lifetime, and shared HTTP, SSE, and WebSocket transport | Workflow policy and runtime lifecycle |
-| Shells | `apps/electron/src/*`, `packages/openducktor-web/src/*` | IPC, preload, HTTP/SSE, renderer start, URLs, and previews | Workflow policy and task-store rules |
+| Remote host | `packages/remote-host/src/*` | Remote access, connection lifetime, the host channel, and shared HTTP and WebSocket transport | Workflow policy and runtime lifecycle |
+| Shells | `apps/electron/src/*`, `packages/openducktor-web/src/*` | The host channel listener, shell IPC, preload, HTTP, renderer start, URLs, and previews | Workflow policy and task-store rules |
 | Mobile client | `apps/mobile/src/*`, `apps/mobile/modules/*` | Native UI, saved hosts, native transport, device storage, app lifecycle | Host work, workflow policy, and shared client behavior |
 | MCP | `packages/openducktor-mcp/src/*` | stdio, schema checks, bridge readiness, and `odt_*` calls | UI state and direct SQLite access |
 
@@ -30,7 +30,7 @@ The host supplies one `RuntimeDriver` per runtime kind to the shared orchestrato
 
 `packages/frontend` exports `bootstrapOpenDucktorShell(...)` and the `ShellBridge` contract. The bootstrap creates one `ClientConnection` for the selected host, reads settings for the theme, selects browser or hash routing, and renders the app under `ClientConnectionProvider`. A host change from a local host first saves drafts and stays on the page when a save fails. A remote host keeps its drafts in page memory, so its host change does not wait for them. Then the host change unmounts the app, disposes the connection, and reloads the document. See [the frontend core](#frontend-core).
 
-`apps/electron` supplies IPC, preload events, context isolation, renderer sandboxing, and host cleanup. `packages/openducktor-web` starts a loopback host, injects config, serves the frontend, and maps HTTP/SSE to the same bridge.
+`apps/electron` supplies a loopback host channel listener for its windows, shell IPC, context isolation, renderer sandboxing, and host cleanup. `packages/openducktor-web` starts a loopback host, injects config, serves the frontend, and maps one host channel WebSocket per tab and HTTP file reads to the same bridge.
 
 `apps/mobile` connects to one saved host at a time. For that host, it builds one `ClientConnection` with `createRemoteHostConnection`, a native transport, and device storage. Under its native UI, it uses the same frontend-core owners as desktop. Read [the mobile app](../apps/mobile/README.md) and [ADR 0012](adr/0012-build-the-mobile-client-as-an-expo-shell-over-frontend-core.md).
 
@@ -92,7 +92,7 @@ Connection rules:
 
 1. `useTaskQueryReadModel` observes `repoTaskDataQueryOptions`. The initial stream snapshot fills the shared query cache. The render query reuses this data without a second request. If the stream cannot start or has not claimed the selected repository, the repository load fills the cache. Manual and event refreshes use `TaskViewSync`.
 2. `repoTaskDataQueryOptions` calls `tasksList({ workspaceId, repoPath })` on the host client of the connection that owns the query client. The host reads `kanban.doneVisibleDays`, and SQLite filters old closed tasks before the host builds task rows.
-3. The host client of the connection delegates to the shell bridge transport: Electron IPC, local HTTP, or the remote work endpoint.
+3. The host client of the connection sends commands over a host channel: the shell's own host channel, or the channel of the remote work endpoint.
 4. `packages/host-client/src/task-client.ts` maps the call to `tasks_list`.
 5. The shell calls the host command router.
 6. The host validates the full workspace identity against `<config-root>/database.sqlite` and reads through the scoped `TaskStorePort`.

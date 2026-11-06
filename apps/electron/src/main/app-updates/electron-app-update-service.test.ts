@@ -6,7 +6,10 @@ import type { AppUpdateState } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { runElectronEffect } from "../../effect/electron-boundary";
 import { createElectronMainLogger } from "../electron-main-logger";
-import { DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS } from "./electron-app-update-service";
+import {
+  type createElectronAppUpdateService,
+  DEFAULT_APP_UPDATE_BACKGROUND_CHECK_INTERVAL_MS,
+} from "./electron-app-update-service";
 import {
   createFakeScheduler,
   createMissingManifestError,
@@ -16,6 +19,9 @@ import {
   flushAsyncWork,
 } from "./electron-app-update-service.test-support";
 import type { ElectronUpdaterCheckResult } from "./electron-app-updater-adapter";
+
+/** Finishes the pending download of a test. */
+type DownloadControl = { finish: (() => void) | null };
 
 describe("electron app update service", () => {
   test("keeps packaged updater initialization off the startup call stack", async () => {
@@ -152,16 +158,18 @@ describe("electron app update service", () => {
         operation: "initialize",
       },
     });
-    expect(service.getState().error?.message).toContain(
-      "Electron update feed configuration is invalid",
-    );
+    const state = service.getState();
+    if (state.status !== "error") throw new Error("Expected an update error state.");
+    expect(state.error.message).toContain("Electron update feed configuration is invalid");
     expect(adapter.configureOptions).toBeNull();
   });
 
   test("does not run checks after initialization failures", async () => {
     const cases: Array<{
       configureAdapter?(adapter: FakeUpdaterAdapter): void;
-      configureService?: Partial<Parameters<typeof createElectronAppUpdateService>[0]>;
+      configureService?: Partial<
+        Omit<Parameters<typeof createElectronAppUpdateService>[0], "adapter">
+      >;
       expectedMessage: string;
     }> = [
       {
@@ -211,7 +219,8 @@ describe("electron app update service", () => {
           },
         },
       });
-      expect(manualResult.state.error?.message).toContain(testCase.expectedMessage);
+      if (manualResult.state.status !== "error") throw new Error("Expected an update error state.");
+      expect(manualResult.state.error.message).toContain(testCase.expectedMessage);
     }
   });
 
@@ -689,14 +698,14 @@ describe("electron app update service", () => {
   test("publishes download progress at most once every 500 milliseconds", async () => {
     const adapter = new FakeUpdaterAdapter();
     const fakeScheduler = createFakeScheduler();
-    let finishDownload: (() => void) | null = null;
+    const downloadControl: DownloadControl = { finish: null };
     adapter.nextCheckResult = {
       isUpdateAvailable: true,
       updateInfo: { version: "0.4.3" },
     };
     adapter.onDownload = () =>
       new Promise<void>((resolve) => {
-        finishDownload = resolve;
+        downloadControl.finish = resolve;
       });
     const { service } = createService({ adapter, scheduler: fakeScheduler.scheduler });
     const states: AppUpdateState[] = [];
@@ -732,6 +741,7 @@ describe("electron app update service", () => {
       states.flatMap((state) => (state.status === "downloading" ? [state.progressPercent] : [])),
     ).toEqual([0, 10, 30]);
 
+    const finishDownload = downloadControl.finish;
     if (!finishDownload) {
       throw new Error("Download did not start.");
     }

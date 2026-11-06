@@ -1,6 +1,7 @@
 import { workspaceScopeValue } from "./workspace-scope";
 import type { GitCheck, PathCheck, TaskStoreCheck, WorkspaceRef } from "@openducktor/contracts";
 import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
+import { waitWithAbort } from "@openducktor/host-client/remote";
 import { errorMessage } from "../lib/errors";
 import { scheduleTask, type ScheduleTask } from "../lib/scheduling";
 import type { DiagnosticsFailureKind } from "../types/diagnostics";
@@ -8,9 +9,9 @@ import { connectionHost } from "../connection/client-connection";
 import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query";
 
 export type ChecksQueryDependencies = {
-  pathCheck: (force?: boolean) => Promise<PathCheck>;
-  gitCheck: () => Promise<GitCheck>;
-  taskStoreCheck: (scope: WorkspaceRef) => Promise<TaskStoreCheck>;
+  pathCheck: (force: boolean, signal: AbortSignal) => Promise<PathCheck>;
+  gitCheck: (signal: AbortSignal) => Promise<GitCheck>;
+  taskStoreCheck: (scope: WorkspaceRef, signal: AbortSignal) => Promise<TaskStoreCheck>;
 };
 
 const HOST_CHECK_STALE_TIME_MS = 5 * 60_000;
@@ -22,9 +23,9 @@ const PATH_CHECK_TIMEOUT_MS = 30_000;
 const hostChecks = (queryClient: QueryClient): ChecksQueryDependencies => {
   const host = connectionHost(queryClient);
   return {
-    pathCheck: (force = false) => host.pathCheck(force),
-    gitCheck: () => host.gitCheck(),
-    taskStoreCheck: (repoPath) => host.taskStoreCheck(repoPath),
+    pathCheck: (force, signal) => host.pathCheck(force, { signal }),
+    gitCheck: (signal) => host.gitCheck({ signal }),
+    taskStoreCheck: (repoPath, signal) => host.taskStoreCheck(repoPath, { signal }),
   };
 };
 
@@ -56,10 +57,11 @@ export const pathCheckQueryOptions = (
 ) =>
   queryOptions({
     queryKey: checksQueryKeys.path(),
-    queryFn: ({ client }): Promise<PathCheck> =>
+    queryFn: ({ client, signal }): Promise<PathCheck> =>
       withDiagnosticsQueryTimeout(
-        (pathCheck ?? hostChecks(client).pathCheck)(force),
+        (timeoutSignal) => (pathCheck ?? hostChecks(client).pathCheck)(force, timeoutSignal),
         scheduler,
+        signal,
         PATH_CHECK_TIMEOUT_MS,
       ),
     staleTime: HOST_CHECK_STALE_TIME_MS,
@@ -71,8 +73,12 @@ export const gitCheckQueryOptions = (
 ) =>
   queryOptions({
     queryKey: checksQueryKeys.git(),
-    queryFn: ({ client }): Promise<GitCheck> =>
-      withDiagnosticsQueryTimeout((gitCheck ?? hostChecks(client).gitCheck)(), scheduler),
+    queryFn: ({ client, signal }): Promise<GitCheck> =>
+      withDiagnosticsQueryTimeout(
+        (timeoutSignal) => (gitCheck ?? hostChecks(client).gitCheck)(timeoutSignal),
+        scheduler,
+        signal,
+      ),
     staleTime: HOST_CHECK_STALE_TIME_MS,
   });
 
@@ -83,10 +89,12 @@ export const taskStoreCheckQueryOptions = (
 ) =>
   queryOptions<TaskStoreCheck, Error, TaskStoreCheck, QueryKey>({
     queryKey: checksQueryKeys.taskStore(repoPath),
-    queryFn: ({ client }): Promise<TaskStoreCheck> =>
+    queryFn: ({ client, signal }): Promise<TaskStoreCheck> =>
       withDiagnosticsQueryTimeout(
-        (taskStoreCheck ?? hostChecks(client).taskStoreCheck)(repoPath),
+        (timeoutSignal) =>
+          (taskStoreCheck ?? hostChecks(client).taskStoreCheck)(repoPath, timeoutSignal),
         scheduler,
+        signal,
       ),
     staleTime: TASK_STORE_CHECK_STALE_TIME_MS,
   });
@@ -168,18 +176,24 @@ export const classifyDiagnosticsQueryError = (cause: unknown): CheckFailure => {
   };
 };
 
+/**
+ * Runs a diagnostics read with a deadline. The timeout aborts the request, so it releases its
+ * resources, and the read fails with `DiagnosticsQueryTimeoutError`. A query cancellation also
+ * aborts the request.
+ */
 export const withDiagnosticsQueryTimeout = async <T>(
-  promise: Promise<T>,
+  run: (signal: AbortSignal) => Promise<T>,
   scheduler: ScheduleTask,
+  querySignal: AbortSignal,
   timeoutMs = DIAGNOSTICS_QUERY_TIMEOUT_MS,
 ): Promise<T> => {
-  const { promise: timeoutPromise, reject: rejectTimeout } = Promise.withResolvers<never>();
+  const timeout = new AbortController();
   const cancelTimeout = scheduler(() => {
-    rejectTimeout(new DiagnosticsQueryTimeoutError(timeoutMs));
+    timeout.abort(new DiagnosticsQueryTimeoutError(timeoutMs));
   }, timeoutMs);
-
+  const signal = AbortSignal.any([querySignal, timeout.signal]);
   try {
-    return await Promise.race([promise, timeoutPromise]);
+    return await waitWithAbort(run(signal), signal);
   } finally {
     cancelTimeout();
   }

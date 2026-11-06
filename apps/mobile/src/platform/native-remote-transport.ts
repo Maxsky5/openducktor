@@ -1,17 +1,14 @@
 /**
  * The `RemoteTransport` of the mobile app.
  * HTTP uses the `OpenDucktorNetwork` native module. It never follows redirects, keeps no cookies or cache, and uses platform certificate trust only.
- * The terminal uses the React Native WebSocket. It offers the connection tag subprotocol and also sends the connection header.
+ * The host channel and terminal sockets use the React Native WebSocket. They offer the connection tag subprotocols and also send the connection header.
  * Create one transport at startup:
  * `createNativeRemoteTransport({ network: OpenDucktorNetwork, createWebSocket: (url, protocols, options) => new WebSocket(url, protocols, options), createRequestId: () => crypto.randomUUID() })`.
  */
 import { z } from "zod";
 import type { RemoteFailure } from "@openducktor/contracts";
 import { RemoteConnectionError, type RemoteTransport } from "@openducktor/host-client/remote";
-import {
-  openRemoteTerminalSocket,
-  type RemoteTerminalSocket,
-} from "@openducktor/host-client/remote/terminal-socket";
+import { openRemoteSocket, type RemoteSocket } from "@openducktor/host-client/remote/socket";
 import type {
   NativeHttpHead,
   NativeNetworkErrorCode,
@@ -24,7 +21,7 @@ export type NativeRemoteTransportDependencies = {
     url: string,
     protocols: string[],
     options: { headers: Record<string, string> },
-  ) => RemoteTerminalSocket;
+  ) => RemoteSocket;
   createRequestId: () => string;
 };
 
@@ -177,9 +174,10 @@ export const createNativeRemoteTransport = ({
       body: { [Symbol.asyncIterator]: () => iterator },
     };
   },
-  openTerminal: (url, headers, signal, onFrame, onClose) =>
-    openRemoteTerminalSocket(
+  openSocket: (url, protocol, headers, signal, onFrame, onClose) =>
+    openRemoteSocket(
       (protocols) => createWebSocket(url, protocols, { headers }),
+      protocol,
       headers,
       signal,
       onFrame,

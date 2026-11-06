@@ -1,6 +1,5 @@
-import type { JSONType } from "zod";
 import {
-  failedRemoteAccessState,
+  type RemoteAccessState,
   remoteAccessStateSchema,
   remoteAccessNetworksSchema,
   type RemoteAccessBridge,
@@ -9,7 +8,10 @@ import {
 } from "@openducktor/contracts";
 import { getBrowserBackendUrl, getBrowserAuthToken } from "./browser-config";
 import { ensureLocalHostSession } from "./local-host-transport";
-export const createBrowserRemoteAccessBridge = (): RemoteAccessBridge => {
+/** `observeState` delivers the live remote access state of the local operator. */
+export const createBrowserRemoteAccessBridge = (
+  observeState: (listener: (state: RemoteAccessState) => void) => Promise<() => void>,
+): RemoteAccessBridge => {
   const request = async (
     path: string,
     body?: RemoteAccessEnableInput | RemotePairingStartInput | Record<string, never>,
@@ -54,43 +56,6 @@ export const createBrowserRemoteAccessBridge = (): RemoteAccessBridge => {
       ),
     stopPairing: async () =>
       remoteAccessStateSchema.parse(await request("/remote-access/pairing/stop", {})),
-    subscribeState: async (listener) => {
-      await ensureLocalHostSession();
-      const events = new EventSource(`${getBrowserBackendUrl()}/remote-access/events`, {
-        withCredentials: true,
-      });
-      events.onmessage = (event) => {
-        let value: JSONType;
-        try {
-          value = JSON.parse(event.data);
-        } catch {
-          value = null;
-        }
-        const state = remoteAccessStateSchema.safeParse(value);
-        if (state.success) {
-          listener(state.data);
-          return;
-        }
-        events.close();
-        listener(
-          failedRemoteAccessState({
-            code: "invalid_protocol",
-            message: "Remote control status could not be read.",
-            nextAction: "Restart the local host and reload this window.",
-          }),
-        );
-      };
-      events.onerror = () => {
-        events.close();
-        listener(
-          failedRemoteAccessState({
-            code: "transport_failure",
-            message: "Remote operator status stream was lost.",
-            nextAction: "Reload the local operator URL.",
-          }),
-        );
-      };
-      return () => events.close();
-    },
+    subscribeState: observeState,
   };
 };

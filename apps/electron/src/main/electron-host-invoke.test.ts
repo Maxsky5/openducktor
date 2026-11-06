@@ -2,18 +2,23 @@ import { describe, expect, test } from "bun:test";
 import { CodexSessionHistoryError, TaskAssetError, TerminalServiceError } from "@openducktor/host";
 import { Cause, Effect, Exit, Option } from "effect";
 import { AgentSessionMessageAcceptedError } from "../../../../packages/host/src/ports/agent-session-send-error";
-import { createElectronHostInvoke, runElectronHostInvoke } from "./electron-host-invoke";
+import { createElectronHostInvoke, runElectronHostChannelInvoke } from "./electron-host-invoke";
 import {
   HostOperationError,
+  OpenDucktorLogPersistenceError,
   RuntimeQueryError,
   hostInvokeFailureFromError,
 } from "@openducktor/host";
 
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
-import { DEFAULT_AGENT_RUNTIMES, settingsSnapshotSchema } from "@openducktor/contracts";
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  hostChannelErrorSchema,
+  settingsSnapshotSchema,
+} from "@openducktor/contracts";
 import { createEffectHostCommandRouter } from "../../../../packages/host/src/interface/router/host-command-router";
 
-describe("runElectronHostInvoke", () => {
+describe("runElectronHostChannelInvoke", () => {
   test("preserves runtime query identity and diagnostics across Electron IPC", async () => {
     const failure = {
       code: "invalid_runtime_response" as const,
@@ -33,19 +38,20 @@ describe("runElectronHostInvoke", () => {
         pageCursor: null,
       },
     };
-    const response = await runElectronHostInvoke(
+    const response = await runElectronHostChannelInvoke(
       Effect.fail(new RuntimeQueryError({ message: failure.detail, failure })),
     );
     expect(response).toEqual({
-      ok: false,
       error: {
-        message: failure.detail,
-        failure: { kind: "runtime_query", runtimeQueryFailure: failure },
+        kind: "host",
+        response: {
+          message: failure.detail,
+          failure: { kind: "runtime_query", runtimeQueryFailure: failure },
+        },
       },
     });
   });
-  test("preserves accepted-message failures through main and preload IPC validation", async () => {
-    const { createElectronHostInvoke } = await import("../preload/electron-host-invoke");
+  test("preserves accepted-message failures through the channel reply", async () => {
     const error = new AgentSessionMessageAcceptedError(
       {
         sessionRef: {
@@ -67,23 +73,87 @@ describe("runElectronHostInvoke", () => {
       },
       new Error("Save failed"),
     );
-    const response = await runElectronHostInvoke(Effect.fail(error));
-    const invoke = createElectronHostInvoke({
-      invoke: async () => ({ status: "success", payload: structuredClone(response) }),
-    });
-    await expect(invoke("agent_session_message_submit")).resolves.toMatchObject({
-      ok: false,
-      error: { message: error.message, failure: error.failure },
+    const response = await runElectronHostChannelInvoke(Effect.fail(error));
+    if (!("error" in response)) throw new Error("Expected a host error reply.");
+    // The reply crosses the socket as JSON, and the client reads it with the channel schema.
+    expect(hostChannelErrorSchema.parse(JSON.parse(JSON.stringify(response.error)))).toMatchObject({
+      kind: "host",
+      response: { message: error.message, failure: error.failure },
     });
   });
-  test("preserves void command results across the Electron boundary", async () => {
-    const response = await runElectronHostInvoke(Effect.void);
 
-    expect(response).toEqual({ ok: true, value: undefined });
+  test("an aborted signal interrupts the command and runs its cleanup", async () => {
+    let cleanedUp = false;
+    let started!: () => void;
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const cancel = new AbortController();
+    const reply = runElectronHostChannelInvoke(
+      Effect.sync(() => started()).pipe(
+        Effect.andThen(Effect.never),
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            cleanedUp = true;
+          }),
+        ),
+      ),
+      cancel.signal,
+    );
+    await running;
+    cancel.abort(new Error("The client cancelled the request."));
+    await reply;
+
+    expect(cleanedUp).toBe(true);
+  });
+
+  test("an aborted signal stops a command that runs through the Electron invoke", async () => {
+    let cleanedUp = false;
+    let started!: () => void;
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const bindings = createElectronMainRuntimeBindings({
+      error: () => Effect.void,
+      info: () => Effect.void,
+      warn: () => Effect.void,
+    });
+    const invoke = createElectronHostInvoke(
+      {
+        invoke: () =>
+          Effect.sync(() => started()).pipe(
+            Effect.andThen(Effect.never),
+            Effect.onInterrupt(() =>
+              Effect.sync(() => {
+                cleanedUp = true;
+              }),
+            ),
+          ),
+      },
+      bindings,
+      { themeSource: "system" },
+    );
+    const cancel = new AbortController();
+    const reply = runElectronHostChannelInvoke(
+      invoke("workspace_get_git_provider_context"),
+      cancel.signal,
+    );
+    await running;
+    cancel.abort(new Error("The client cancelled the request."));
+    await reply;
+    await bindings.drainHostCommands();
+
+    expect(cleanedUp).toBe(true);
+  });
+
+  test("preserves void command results across the Electron boundary", async () => {
+    const response = await runElectronHostChannelInvoke(Effect.void);
+
+    expect(response).toEqual({ result: undefined });
   });
 
   test("serializes terminal failures instead of losing their code across Electron IPC", async () => {
-    const response = await runElectronHostInvoke(
+    const response = await runElectronHostChannelInvoke(
       Effect.fail(
         new TerminalServiceError({
           code: "unsupported_runtime",
@@ -94,14 +164,16 @@ describe("runElectronHostInvoke", () => {
     );
 
     expect(response).toEqual({
-      ok: false,
       error: {
-        message: "Interactive terminals are unavailable in this runtime.",
-        failure: {
-          kind: "terminal",
-          terminalFailure: {
-            code: "unsupported_runtime",
-            message: "Interactive terminals are unavailable in this runtime.",
+        kind: "host",
+        response: {
+          message: "Interactive terminals are unavailable in this runtime.",
+          failure: {
+            kind: "terminal",
+            terminalFailure: {
+              code: "unsupported_runtime",
+              message: "Interactive terminals are unavailable in this runtime.",
+            },
           },
         },
       },
@@ -109,7 +181,7 @@ describe("runElectronHostInvoke", () => {
   });
 
   test("serializes session history failures with diagnostics", async () => {
-    const response = await runElectronHostInvoke(
+    const response = await runElectronHostChannelInvoke(
       Effect.fail(
         new CodexSessionHistoryError({
           message: "Codex thread/turns/list response data[0] must be an object",
@@ -128,18 +200,20 @@ describe("runElectronHostInvoke", () => {
     );
 
     expect(response).toEqual({
-      ok: false,
       error: {
-        message: "Codex thread/turns/list response data[0] must be an object",
-        failure: {
-          kind: "session_history",
-          sessionHistoryFailure: {
-            code: "invalid_runtime_response",
-            summary: "Codex returned invalid conversation history.",
-            detail: "Codex thread/turns/list response data[0] must be an object",
-            diagnosticId: "diagnostic-1",
-            method: "thread/turns/list",
-            pageCursor: null,
+        kind: "host",
+        response: {
+          message: "Codex thread/turns/list response data[0] must be an object",
+          failure: {
+            kind: "session_history",
+            sessionHistoryFailure: {
+              code: "invalid_runtime_response",
+              summary: "Codex returned invalid conversation history.",
+              detail: "Codex thread/turns/list response data[0] must be an object",
+              diagnosticId: "diagnostic-1",
+              method: "thread/turns/list",
+              pageCursor: null,
+            },
           },
         },
       },
@@ -147,7 +221,7 @@ describe("runElectronHostInvoke", () => {
   });
 
   test("serializes task asset partial-state failures for refresh-safe UI handling", async () => {
-    const response = await runElectronHostInvoke(
+    const response = await runElectronHostChannelInvoke(
       Effect.fail(
         new TaskAssetError({
           operation: "create",
@@ -163,14 +237,16 @@ describe("runElectronHostInvoke", () => {
     );
 
     expect(response).toMatchObject({
-      ok: false,
       error: {
-        failure: {
-          kind: "task_asset",
-          taskAssetFailure: {
-            code: "partial_state",
-            taskId: "task-1",
-            retryAllowed: false,
+        kind: "host",
+        response: {
+          failure: {
+            kind: "task_asset",
+            taskAssetFailure: {
+              code: "partial_state",
+              taskId: "task-1",
+              retryAllowed: false,
+            },
           },
         },
       },
@@ -181,9 +257,7 @@ describe("runElectronHostInvoke", () => {
 test.each(["set_theme", "workspace_get_settings_snapshot"] as const)(
   "%s updates the native theme after success",
   async (command) => {
-    const nativeTheme = { themeSource: "light" } satisfies Parameters<
-      typeof createElectronHostInvoke
-    >[2];
+    const nativeTheme: Parameters<typeof createElectronHostInvoke>[2] = { themeSource: "light" };
     const snapshot = settingsSnapshotSchema.parse({
       theme: "dark",
       agentRuntimes: DEFAULT_AGENT_RUNTIMES,
@@ -230,7 +304,12 @@ test.each([false, true])(
       retryAllowed: false,
       message: "Refresh before continuing.",
     });
-    const persistenceFailure = new Error("Log write failed.");
+    const persistenceFailure = new OpenDucktorLogPersistenceError({
+      message: "Log write failed.",
+      operation: "append",
+      path: "/tmp/openducktor.log",
+      cause: null,
+    });
     const bindings = createElectronMainRuntimeBindings({
       error: () => (loggingFails ? Effect.fail(persistenceFailure) : Effect.void),
       info: () => Effect.void,

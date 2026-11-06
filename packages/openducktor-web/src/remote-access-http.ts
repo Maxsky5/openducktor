@@ -5,7 +5,7 @@ import {
 } from "@openducktor/contracts";
 import type { RemoteAccessOperator } from "@openducktor/remote-host";
 import { z } from "zod";
-import { Effect, Fiber, Stream } from "effect";
+import { Effect } from "effect";
 
 const clientIdSchema = z.uuid();
 const NO_STORE = { headers: { "cache-control": "no-store" } };
@@ -32,43 +32,6 @@ export const handleRemoteAccessHttp = async (
   const route = new URL(request.url).pathname;
   if (route === "/remote-access/networks" && request.method === "GET")
     return respond(controller.readNetworks(), 503);
-  if (route === "/remote-access/events" && request.method === "GET") {
-    let delivery: Fiber.Fiber<void> | null = null;
-    const body = new ReadableStream<Uint8Array>({
-      start(output) {
-        const stop = () => {
-          if (delivery) delivery.interruptUnsafe();
-        };
-        request.signal.addEventListener("abort", stop, { once: true });
-        delivery = Effect.runFork(
-          controller.states.pipe(
-            Stream.runForEach((state) =>
-              Effect.sync(() =>
-                output.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(state)}\n\n`)),
-              ),
-            ),
-            Effect.onExit(() =>
-              Effect.sync(() => {
-                request.signal.removeEventListener("abort", stop);
-                try {
-                  output.close();
-                } catch {
-                  /* Client already canceled. */
-                }
-              }),
-            ),
-          ),
-        );
-        if (request.signal.aborted) stop();
-      },
-      cancel() {
-        delivery?.interruptUnsafe();
-      },
-    });
-    return new Response(body, {
-      headers: { "content-type": "text/event-stream", "cache-control": "no-store" },
-    });
-  }
   if (request.method === "POST") {
     if (request.headers.get("content-type")?.split(";")[0] !== "application/json")
       return new Response("Use application/json.", { status: 400 });

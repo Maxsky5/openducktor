@@ -67,7 +67,7 @@ import {
   workspaceRemovalCommandResultSchema,
   workspaceRecordSchema,
 } from "@openducktor/contracts";
-import type { InvokeFn } from "./invoke-utils";
+import type { InvokeFn, InvokeOptions } from "./invoke-utils";
 import { arrayResultSchema, voidResultSchema } from "./invoke-utils";
 import { z } from "zod";
 
@@ -251,11 +251,13 @@ export type AzureDevOpsConnectionInput = WorkspaceRef & {
 const workspaceGetGitProviderContext = async (
   invokeFn: InvokeFn,
   scope: WorkspaceRef,
+  options?: InvokeOptions,
 ): Promise<RepositoryGitProviderContext> => {
   return invokeFn(
     "workspace_get_git_provider_context",
     { workspaceId: scope.workspaceId, repoPath: scope.repoPath },
     repositoryGitProviderContextSchema,
+    options,
   );
 };
 
@@ -579,8 +581,11 @@ export class HostWorkspaceClient {
     return this.invokeFn("gitlab_sign_in_poll", input, gitlabSignInPollResultSchema);
   }
 
-  async workspaceGetGitProviderContext(scope: WorkspaceRef): Promise<RepositoryGitProviderContext> {
-    return workspaceGetGitProviderContext(this.invokeFn, scope);
+  async workspaceGetGitProviderContext(
+    scope: WorkspaceRef,
+    options?: InvokeOptions,
+  ): Promise<RepositoryGitProviderContext> {
+    return workspaceGetGitProviderContext(this.invokeFn, scope, options);
   }
 
   async workspaceStageLocalAttachment(input: {
