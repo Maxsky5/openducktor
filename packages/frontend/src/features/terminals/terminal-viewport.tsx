@@ -1,18 +1,27 @@
 import "@xterm/xterm/css/xterm.css";
 import type { AppPlatform, TerminalFailure, TerminalLifecycle } from "@openducktor/contracts";
-import { type ReactElement, useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  type ReactElement,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import { type TerminalViewportMount, mountTerminalViewport } from "./terminal-viewport-mount";
 import type { TerminalTransportController } from "@openducktor/frontend-core/terminals/terminal-transport-controller";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import { documentVisibility } from "@/features/session-navigation/document-visibility";
 
 type TerminalViewportProps = {
   terminalId: string;
   controller: TerminalTransportController;
   platform: AppPlatform | undefined;
   active: boolean;
+  shown: boolean;
   focusRequest: number;
   onAttention: (message: string | null) => void;
   onLifecycle: (lifecycle: TerminalLifecycle, exit: string | null) => void;
@@ -25,6 +34,7 @@ export function TerminalViewport({
   controller,
   platform,
   active,
+  shown,
   focusRequest,
   onAttention,
   onLifecycle,
@@ -40,6 +50,7 @@ export function TerminalViewport({
   const [isImageDragActive, setIsImageDragActive] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const isActive = useEffectEvent(() => active);
+  const isVisible = useEffectEvent(() => shown && !documentVisibility.isHidden());
 
   useEffect(() => {
     platformRef.current = platform;
@@ -63,6 +74,7 @@ export function TerminalViewport({
         terminalId,
         controller,
         isActive,
+        isVisible,
         getPlatform: () => platformRef.current,
         stageFile: stageAttachment,
         preparePathInput: async (paths) => {
@@ -93,6 +105,22 @@ export function TerminalViewport({
       if (interactionToastShown) toast.dismiss(interactionToastId);
     };
   }, [controller, host, stageAttachment, terminalId]);
+
+  useLayoutEffect(() => {
+    const updateVisibility = (): void => {
+      const mount = mountRef.current;
+      if (!mount) return;
+      try {
+        mount.setVisible(isVisible());
+      } catch (cause) {
+        mount.dispose();
+        mountRef.current = null;
+        setMountError(errorMessage(cause));
+      }
+    };
+    updateVisibility();
+    return documentVisibility.subscribe(updateVisibility);
+  }, [shown]);
 
   useEffect(() => {
     if (!active || !isHydrated) return;
