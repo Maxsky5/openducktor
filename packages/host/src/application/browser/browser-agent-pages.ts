@@ -26,8 +26,6 @@ export type BrowserAgentPagesInput = {
   automation: BrowserAutomationPort;
   registry: Pick<BrowserTabRegistry, "get" | "update" | "subscribe">;
   runJob(job: Effect.Effect<void>): void;
-  /** An agent mouse press starts or ends in the tab. */
-  onPressing(tabId: string, pressing: boolean): void;
 };
 
 /** The automation client of each tab that an agent uses, and the rules of one agent action. */
@@ -36,7 +34,6 @@ export const createBrowserAgentPages = ({
   automation,
   registry,
   runJob,
-  onPressing,
 }: BrowserAgentPagesInput) => {
   const pages = new Map<string, AgentPage>();
   const lanes = createSerialGate();
@@ -62,7 +59,6 @@ export const createBrowserAgentPages = ({
           closeReceiver?.("The page closed.");
           pages.delete(tabId);
         },
-        onPressing: (pressing) => onPressing(tabId, pressing),
       });
       const page = yield* automation
         .connect(

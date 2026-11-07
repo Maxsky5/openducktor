@@ -230,8 +230,6 @@ const connectAgent = async (
       engine: input.engine,
       send: (message) => receiver?.(message),
       onEnded: () => closeReceiver?.("The page closed."),
-      // The suite runs with no app window, so no focus guard waits for agent presses.
-      onPressing: () => {},
     }),
   );
   const page = await run(

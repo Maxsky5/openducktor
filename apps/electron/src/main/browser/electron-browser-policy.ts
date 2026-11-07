@@ -1,8 +1,5 @@
 import { browserUrlScheme, isBrowserTabLoadableUrl } from "@openducktor/contracts";
-import {
-  ELECTRON_DEVTOOLS_PARTITION,
-  workspaceIdOfBrowserPartition,
-} from "../../shared/electron-browser-partitions";
+import { ELECTRON_DEVTOOLS_PARTITION } from "../../shared/electron-browser-partitions";
 
 /** The `Origin` that the bundled DevTools frontend sends. Web pages cannot send it. */
 export const DEVTOOLS_FRONTEND_ORIGIN = "devtools://devtools";
@@ -29,38 +26,36 @@ const isDevToolsFrontendUrl = (url: string): boolean => {
 };
 
 export type WebviewAttachDecision =
-  | { readonly allow: true; readonly kind: "browser"; readonly workspaceId: string }
-  | { readonly allow: true; readonly kind: "devtools" }
+  | { readonly allow: true }
   | { readonly allow: false; readonly reason: string };
 
 /**
- * Decides whether the OpenDucktor window may attach a `<webview>`. Only two guest kinds exist: a
- * browser tab in the partition of its workspace, and the bundled DevTools frontend.
+ * Decides whether the OpenDucktor window may attach a `<webview>`. Browser tabs are
+ * `WebContentsView` pages that the engine creates, so only the bundled DevTools frontend attaches.
  */
 export const decideWebviewAttach = (params: {
   readonly src: string;
   readonly partition: string;
 }): WebviewAttachDecision => {
-  if (params.partition === ELECTRON_DEVTOOLS_PARTITION) {
-    return isDevToolsFrontendUrl(params.src)
-      ? { allow: true, kind: "devtools" }
-      : { allow: false, reason: "A DevTools webview can load only the bundled DevTools frontend." };
-  }
-  const workspaceId = workspaceIdOfBrowserPartition(params.partition);
-  if (workspaceId === null) {
+  if (params.partition !== ELECTRON_DEVTOOLS_PARTITION) {
     return {
       allow: false,
       reason: `A webview cannot use the partition "${params.partition}".`,
     };
   }
-  if (refusedBrowserPageScheme(params.src) !== null) {
-    return {
-      allow: false,
-      reason: "A browser webview can start only with an http, https, or about:blank source.",
-    };
-  }
-  return { allow: true, kind: "browser", workspaceId };
+  return isDevToolsFrontendUrl(params.src)
+    ? { allow: true }
+    : { allow: false, reason: "A DevTools webview can load only the bundled DevTools frontend." };
 };
+
+/** The security preferences of every guest page, webview or native view. */
+export const HARDENED_GUEST_PREFERENCES = {
+  sandbox: true,
+  contextIsolation: true,
+  nodeIntegration: false,
+  nodeIntegrationInSubFrames: false,
+  webSecurity: true,
+} as const;
 
 /** The `<webview>` preferences that the attach hardening changes. */
 export type WebviewPreferences = {
@@ -73,13 +68,9 @@ export type WebviewPreferences = {
   webSecurity?: boolean;
 };
 
-/** Removes preload scripts and forces the sandbox for every guest page. */
+/** Removes preload scripts and forces the hardened guest preferences for every guest page. */
 export const hardenWebviewPreferences = (preferences: WebviewPreferences): void => {
   delete preferences.preload;
   delete preferences.preloadURL;
-  preferences.sandbox = true;
-  preferences.contextIsolation = true;
-  preferences.nodeIntegration = false;
-  preferences.nodeIntegrationInSubFrames = false;
-  preferences.webSecurity = true;
+  Object.assign(preferences, HARDENED_GUEST_PREFERENCES);
 };

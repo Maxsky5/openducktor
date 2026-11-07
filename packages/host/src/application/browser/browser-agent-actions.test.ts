@@ -72,7 +72,6 @@ describe("browser agent actions", () => {
       automation,
       registry: { get: () => undefined, update: () => {}, subscribe: () => () => {} },
       runJob: (job) => void Effect.runFork(job),
-      onPressing: () => {},
     });
     const started = Deferred.makeUnsafe<void>();
     const running = Deferred.makeUnsafe<void>();

@@ -10,9 +10,9 @@ import {
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
 import {
+  type ElectronBrowserBridge,
   type FrameBrowserBridge,
   getShellBridge,
-  type WebviewBrowserBridge,
 } from "@/lib/shell-bridge";
 import { type BrowserChannel, createBrowserChannel } from "./browser-channel";
 import { type BrowserTabRequests, createBrowserTabRequests } from "./browser-tab-requests";
@@ -36,12 +36,12 @@ type BrowserRuntimeBase = {
   readonly requests: BrowserTabRequests;
 };
 
-/** Electron: each tab page is a `<webview>`, with the browser channel and page overlays. */
-export type WebviewBrowserRuntime = BrowserRuntimeBase & {
-  readonly surface: "webview";
-  readonly bridge: WebviewBrowserBridge;
+/** Electron: each tab page is a native view, with the browser channel and host overlays. */
+export type ElectronBrowserRuntime = BrowserRuntimeBase & {
+  readonly surface: "electron";
+  readonly bridge: ElectronBrowserBridge;
   readonly channel: BrowserChannel;
-  /** The overlay element of each surface, for prompts and markers above the page. */
+  /** The overlay element of each surface, above the native page, for host prompts. */
   readonly overlays: BrowserSurfaceRegistry<HTMLElement>;
 };
 
@@ -53,14 +53,14 @@ export type FrameBrowserRuntime = BrowserRuntimeBase & {
   readonly frameControls: BrowserSurfaceRegistry<BrowserFrameControls>;
 };
 
-export type BrowserRuntime = WebviewBrowserRuntime | FrameBrowserRuntime;
+export type BrowserRuntime = ElectronBrowserRuntime | FrameBrowserRuntime;
 
 const BrowserRuntimeContext = createContext<BrowserRuntime | null>(null);
 
 const createBrowserRuntime = (host: HostConnection): BrowserRuntime => {
   const bridge = getShellBridge().browser;
   const hostClient = host.client;
-  const hostPage = bridge.surface === "webview";
+  const hostPage = bridge.surface === "electron";
   // Electron shows host pages. The web runner shows its frame pages: its user tabs. Its agent tabs
   // run in a browser on the host that the user does not watch.
   const store = createBrowserTabsStore({
@@ -81,10 +81,10 @@ const createBrowserRuntime = (host: HostConnection): BrowserRuntime => {
       close: (tabId) => hostClient.browserTabClose({ tabId }),
     }),
   };
-  return bridge.surface === "webview"
+  return bridge.surface === "electron"
     ? {
         ...base,
-        surface: "webview",
+        surface: "electron",
         bridge,
         channel: createBrowserChannel(bridge),
         overlays: createBrowserSurfaceRegistry<HTMLElement>(),
@@ -103,10 +103,10 @@ export function BrowserRuntimeProvider({ children }: { children: ReactNode }) {
   const [runtime] = useState(() => createBrowserRuntime(host));
   useEffect(() => {
     void runtime.store.start();
-    if (runtime.surface === "webview") void runtime.channel.connect();
+    if (runtime.surface === "electron") void runtime.channel.connect();
     return () => {
       runtime.store.stop();
-      if (runtime.surface === "webview") void runtime.channel.stop();
+      if (runtime.surface === "electron") void runtime.channel.stop();
     };
   }, [runtime]);
   return (
@@ -133,7 +133,7 @@ export const useBrowserEngineState = (): BrowserEngineState | null => useBrowser
 export const useBrowserChannelStatus = (channel: BrowserChannel) =>
   useSyncExternalStore(channel.onStatus, channel.status);
 
-/** The overlay element of a surface frame, for prompts and markers above the page. */
+/** The overlay element of a surface frame, for prompts and the comment box above the page. */
 export const useBrowserOverlayHost = (
   overlays: BrowserSurfaceRegistry<HTMLElement>,
   key: string,

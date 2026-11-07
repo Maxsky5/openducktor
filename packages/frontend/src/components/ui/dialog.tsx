@@ -114,6 +114,7 @@ function DialogContent({
       >
         <DialogPrimitive.Content
           data-slot="dialog-content"
+          data-page-occluder=""
           data-motion={motion}
           ref={setContentRef}
           className={cn(

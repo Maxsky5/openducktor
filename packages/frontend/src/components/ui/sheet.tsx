@@ -76,6 +76,7 @@ function SheetContent({
       )}
       <DialogPrimitive.Content
         data-slot="sheet-content"
+        data-page-occluder=""
         data-side={side}
         className={cn(sheetVariants({ side }), className)}
         {...props}

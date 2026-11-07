@@ -2,7 +2,7 @@ import type { BrowserPromptAnswer, BrowserTabSummary } from "@openducktor/contra
 import { type ReactElement, useCallback } from "react";
 import type { HostClient } from "@openducktor/host-client";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
-import type { WebviewBrowserBridge } from "@/lib/shell-bridge";
+import type { ElectronBrowserBridge } from "@/lib/shell-bridge";
 import type { BrowserPromptOf } from "./components/browser-component-types";
 import { BrowserDialogPrompt } from "./components/browser-dialog-prompt";
 import { BrowserFileChooserBar } from "./components/browser-file-chooser-bar";
@@ -16,7 +16,7 @@ export function BrowserTabPromptBars({
   bridge,
 }: {
   tab: BrowserTabSummary;
-  bridge: WebviewBrowserBridge;
+  bridge: ElectronBrowserBridge;
 }): ReactElement {
   const hostClient = useHostClient();
   return (
@@ -84,7 +84,7 @@ function FileChooserBar({
 }: {
   tabId: string;
   prompt: BrowserPromptOf<"file_chooser">;
-  bridge: WebviewBrowserBridge;
+  bridge: ElectronBrowserBridge;
 }): ReactElement {
   const action = useBrowserAsyncAction();
   const hostClient = useHostClient();

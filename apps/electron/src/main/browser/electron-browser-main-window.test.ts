@@ -1,28 +1,55 @@
 import { describe, expect, test } from "bun:test";
 import { EventEmitter } from "node:events";
+import type { ElectronViewOwner } from "./electron-browser-view-port";
 import { attachBrowserMainWindow } from "./electron-browser-main-window";
 import type { WebviewPreferences } from "./electron-browser-policy";
 import { cancelableEvent } from "./electron-browser-engine.test-support";
 
-class FakeMainWindow extends EventEmitter {
-  readonly webContents = Object.assign(new EventEmitter(), { id: 5 });
-}
+type FakeMainWindow = EventEmitter & {
+  webContents: EventEmitter & { readonly id: number; isDestroyed(): boolean };
+  contentView: ElectronViewOwner["contentView"];
+  isDestroyed(): boolean;
+};
+
+const DEVTOOLS_URL =
+  "devtools://devtools/bundled/devtools_app.html?ws=127.0.0.1:4000/secret/devtools/tab";
+
+const fakeMainWindow = (): FakeMainWindow => {
+  // SAFETY: the test fills the view owner fields and the web contents of the window below.
+  const window = new EventEmitter() as FakeMainWindow;
+  const contents = Object.assign(new EventEmitter(), {
+    id: 5,
+    isDestroyed: () => false,
+  });
+  window.webContents = contents;
+  window.contentView = {
+    addChildView: () => {},
+    removeChildView: () => {},
+  };
+  window.isDestroyed = () => false;
+  return window;
+};
 
 const setup = () => {
   const calls: string[] = [];
   const failures: string[] = [];
-  const window = new FakeMainWindow();
+  const window = fakeMainWindow();
+  const viewPort = {
+    registerWindow: (windowId: number, owner: ElectronViewOwner) =>
+      calls.push(`register:${windowId}:${owner === window}`),
+    unregisterWindow: (windowId: number) => calls.push(`unregister:${windowId}`),
+  };
   attachBrowserMainWindow(
     {
       addMainWindow: (id) => calls.push(`add:${id}`),
       setMainWindowLoaded: (id, loaded) => calls.push(`loaded:${id}:${loaded}`),
       removeMainWindow: (id) => calls.push(`remove:${id}`),
-      prepareWorkspace: (workspaceId) => calls.push(`prepare:${workspaceId}`),
     },
+    viewPort,
     window,
     (_operation, cause) => failures.push(cause.message),
   );
-  const attach = (src: string, partition: string) => {
+  const attach = (src = DEVTOOLS_URL, partition = "persist:openducktor-devtools") => {
     const event = cancelableEvent();
     const preferences: WebviewPreferences = { preload: "/evil.js", sandbox: false };
     window.webContents.emit("will-attach-webview", event, preferences, { src, partition });
@@ -32,29 +59,41 @@ const setup = () => {
 };
 
 describe("attachBrowserMainWindow", () => {
-  test("hardens and allows browser webviews in workspace partitions", () => {
+  test("registers the window and lets only the bundled DevTools webview attach, with the sandbox", () => {
     const { calls, attach } = setup();
-    const result = attach("about:blank", "persist:openducktor-browser-repo");
+    const result = attach();
     expect(result.prevented).toBe(false);
     expect(result.preferences.preload).toBeUndefined();
     expect(result.preferences.sandbox).toBe(true);
-    expect(calls).toEqual(["add:5", "prepare:repo"]);
+    expect(calls).toEqual(["add:5", "register:5:true"]);
   });
 
-  test("prevents webviews in the app partition and reports why", () => {
+  test("prevents browser and app webviews, and reports why", () => {
     const { failures, attach } = setup();
-    const result = attach("https://example.com/", "persist:openducktor");
-    expect(result.prevented).toBe(true);
-    expect(failures).toEqual(['A webview cannot use the partition "persist:openducktor".']);
+    const browser = attach("about:blank", "persist:openducktor-browser-repo");
+    const app = attach("https://example.com/", "persist:openducktor");
+    const otherDevTools = attach("https://evil.example/", "persist:openducktor-devtools");
+
+    expect([browser.prevented, app.prevented, otherDevTools.prevented]).toEqual([true, true, true]);
+    expect(failures).toEqual([
+      'A webview cannot use the partition "persist:openducktor-browser-repo".',
+      'A webview cannot use the partition "persist:openducktor".',
+      "A DevTools webview can load only the bundled DevTools frontend.",
+    ]);
   });
 
   test("stops the window at each new document, a renderer loss, and the window close", () => {
     const { calls, window } = setup();
-    // A navigation that `will-navigate` refuses starts but never commits.
-    window.webContents.emit("did-start-navigation", { isMainFrame: true, isSameDocument: false });
     window.webContents.emit("did-navigate");
     window.webContents.emit("render-process-gone");
     window.emit("closed");
-    expect(calls).toEqual(["add:5", "loaded:5:false", "loaded:5:false", "remove:5"]);
+    expect(calls).toEqual([
+      "add:5",
+      "register:5:true",
+      "loaded:5:false",
+      "loaded:5:false",
+      "unregister:5",
+      "remove:5",
+    ]);
   });
 });

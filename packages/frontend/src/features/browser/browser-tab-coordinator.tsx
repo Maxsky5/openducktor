@@ -110,7 +110,7 @@ const useBrowserTabCoordinator = (platform: string): void => {
   );
 
   useEffect(() => {
-    if (runtime.surface !== "webview") return;
+    if (runtime.surface !== "electron") return;
     return runtime.channel.subscribe((message) => {
       if (message.type === "shortcut") dispatchShortcut(message.shortcut, platform);
       if (message.type === "protocol_error") {

@@ -15,12 +15,12 @@ type ConnectedClient = {
 
 export type BrowserClientHubInput = {
   tabs: Pick<BrowserTabService, "live">;
-  picker: Pick<BrowserPicker, "hover">;
+  picker: Pick<BrowserPicker, "clearSelection">;
 };
 
 /**
  * The Electron windows that show browser tabs. Each window gets its own session. The hub sends
- * agent markers and anchor boxes to the windows that need them.
+ * anchor boxes and picker updates to the windows that need them.
  */
 export const createBrowserClientHub = ({ tabs, picker }: BrowserClientHubInput) => {
   const clients = new Map<string, ConnectedClient>();
@@ -46,22 +46,6 @@ export const createBrowserClientHub = ({ tabs, picker }: BrowserClientHubInput) 
   const handle = (client: ConnectedClient, message: BrowserClientMessage): Effect.Effect<void> =>
     Effect.suspend(() => {
       switch (message.type) {
-        case "picker_hover":
-          return request(
-            client,
-            message.tabId,
-            picker.hover(message.tabId, message.x, message.y).pipe(
-              Effect.map((target) =>
-                client.send({
-                  type: "picker_target",
-                  tabId: message.tabId,
-                  x: message.x,
-                  y: message.y,
-                  target,
-                }),
-              ),
-            ),
-          );
         case "anchors": {
           const host = tabs.live(message.tabId);
           if (message.anchors.length === 0) {
@@ -80,6 +64,13 @@ export const createBrowserClientHub = ({ tabs, picker }: BrowserClientHubInput) 
             return Effect.void;
           }
           return request(client, message.tabId, host.revealAnchor(message.annotationId));
+        }
+        case "picker_clear": {
+          const host = tabs.live(message.tabId);
+          if (!host) {
+            return Effect.void;
+          }
+          return request(client, message.tabId, picker.clearSelection(message.tabId));
         }
       }
     });

@@ -10,11 +10,15 @@ const TAB_ID = "10000000-0000-4000-8000-000000000001";
 
 describe("browser channel messages", () => {
   test("round-trips a client message and a server message", () => {
-    const hover = { type: "picker_hover", tabId: TAB_ID, x: 10, y: 20 } as const;
-    const shortcut = { type: "shortcut", shortcut: "command_palette" } as const;
+    const clear = { type: "picker_clear", tabId: TAB_ID } as const;
+    const selection = {
+      type: "picker_selection",
+      tabId: TAB_ID,
+      selection: [{ nodeRef: "3", box: { x: 1, y: 2, width: 30, height: 40 }, label: "Save" }],
+    } as const;
 
-    expect(decodeBrowserClientMessage(encodeBrowserChannelMessage(hover))).toEqual(hover);
-    expect(decodeBrowserServerMessage(encodeBrowserChannelMessage(shortcut))).toEqual(shortcut);
+    expect(decodeBrowserClientMessage(encodeBrowserChannelMessage(clear))).toEqual(clear);
+    expect(decodeBrowserServerMessage(encodeBrowserChannelMessage(selection))).toEqual(selection);
   });
 
   test("refuses a server message as a client message, and text that is not JSON", () => {
@@ -27,6 +31,7 @@ describe("browser channel messages", () => {
   test("refuses a message over the size limit", () => {
     const anchors = Array.from({ length: 200 }, (_, index) => ({
       annotationId: `a${index}`,
+      number: index + 1,
       selectors: ["x".repeat(4_000)],
     }));
 

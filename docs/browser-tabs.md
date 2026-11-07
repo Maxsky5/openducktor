@@ -8,7 +8,7 @@ One host feature layer owns the tabs, their owners, the tab limit, and all page 
 
 | Engine | Shell | Pages |
 |---|---|---|
-| `electron_webview` | Electron | All tabs, each in its own `<webview>` |
+| `electron_webview` | Electron | All tabs, each in its own native page view |
 | `chrome_for_testing` | Web runner | Agent tabs only, in a headless Chrome for Testing on the host |
 
 The web runner shows each user tab in an iframe of the browser of the user, so user tabs there have no engine page. The web runner does not show agent tabs. Agents read their pages with snapshots, screenshots, and console output.
@@ -34,14 +34,14 @@ flowchart TD
 | Path | Holds |
 |---|---|
 | `packages/contracts/src/browser-tab-schemas.ts` | Tab summary, prompts, engine state, host commands, and the `openducktor://browser-event` payload |
-| `packages/contracts/src/browser-channel-protocol.ts` | Messages of the Electron browser channel: picker, annotation anchors, agent markers, wake state, and forwarded shortcuts |
+| `packages/contracts/src/browser-channel-protocol.ts` | Messages of the Electron browser channel: picker selection, annotation anchors, and forwarded shortcuts |
 | `packages/host/src/application/browser/` | Tab registry and service, engine events, prompts, site permissions, CDP proxy, agent tools, picker, and annotation capture |
 | `packages/frontend-core/src/browser/` | Tab store. It subscribes to browser events first, then reads the tab list, and keeps the higher revision of each tab. |
 | `packages/frontend/src/features/browser/` | Browser layer, page surfaces, tab view, browser channel client, and tab coordinator |
 
 Each live tab has one host CDP session. That session keeps the URL, title, favicon, history, and load state current, records console messages, and turns dialogs and file choosers into prompts.
 
-Each shell gives its engine to `createNodeHostDefaultPorts` through the `browserEngine` factory. The web runner gives `createChromeForTestingBrowserEngine` from `@openducktor/host/chrome-for-testing`. Electron gives its `<webview>` engine.
+Each shell gives its engine to `createNodeHostDefaultPorts` through the `browserEngine` factory. The web runner gives `createChromeForTestingBrowserEngine` from `@openducktor/host/chrome-for-testing`. Electron gives its native page view engine.
 
 ## Saved data
 
@@ -92,9 +92,10 @@ A close failure stops the deletion or the archive, like a terminal stop failure.
 `browser` is a panel kind that both panels allow. The browser layer mounts once in `WorkspaceAppShell` and places each page surface over the slot of its tab. A page therefore does not reload when its tab moves, hides, or the user switches pages.
 
 - Every page surface stays mounted. A hidden surface keeps its page.
-- While an agent or DevTools uses a tab, the engine sends `surface_wake`, and the hidden surface keeps drawing. In Electron, the engine also stops the background throttling of the window.
+- In Electron, each panel tab is a native page view that the engine creates and places. While no panel shows a view, the engine keeps it in a one-pixel invisible keeper window. Chromium throttles a hidden or detached view to about two frames per second, so the keeper keeps a page that an agent or DevTools uses at full speed without taking the keyboard focus. When the last OpenDucktor window closes, the engine ends its pages and closes the keeper, so the app can quit.
 - The engine state view, the load error, the certificate warning, and the popup window placeholder replace the page. The page surface then hides, so it never covers them.
-- In Electron, prompts, the picker, and annotation markers draw in an overlay above the page.
+- A native page view draws above every element of the OpenDucktor window. The page script therefore draws the picker highlight, the annotation markers, and the agent marker in a closed shadow root inside the page.
+- A host overlay, such as a dialog, a menu, or the selection comment box, marks its content with `data-page-occluder`. While an overlay box covers a page, the browser layer hides that native page and shows a snapshot in its place, so the overlay stays visible. An overlay elsewhere on the window leaves the page as it is.
 
 The tab coordinator applies each host tab change to the layout of its owner, also when no page shows that owner:
 
@@ -120,15 +121,18 @@ In Electron, the DevTools button shows and hides DevTools in the same panel tab.
 ### Electron
 
 - The loopback CORS rewrite and the custom protocols apply only to `persist:openducktor`, never to browser partitions.
-- `will-attach-webview` removes preloads and forces the sandbox and context isolation. It allows only workspace partitions with `http`, `https`, or `about:blank` sources, and the DevTools partition with the bundled DevTools frontend.
+- Each panel tab is a `WebContentsView` with `focusOnNavigation: false`, the sandbox, context isolation, and no Node integration. The engine creates the view, keeps it in the keeper window, and places it in the OpenDucktor window when a panel shows it.
+- A popup window also sets `focusOnNavigation: false`, because it inherits no other page preference from its opener.
+- `will-attach-webview` removes preloads and forces the sandbox and context isolation. Only the bundled DevTools frontend may still attach a `<webview>`, in the DevTools partition.
 - Popup windows cannot attach a `<webview>`.
-- The engine attaches `webContents.debugger` to each guest and gives each CDP client its own session. It removes the internal `-run-dialog` listener of each guest, so JS dialogs reach CDP. If Electron does not have exactly one such listener, the bind fails with an error that names the Electron change.
+- The engine attaches `webContents.debugger` to each page and gives each CDP client its own session. It removes the internal `-run-dialog` listener of each page, so JS dialogs reach CDP. If Electron does not have exactly one such listener, the attach fails with an error that names the Electron change.
 - Electron does not support `window.prompt()` in a page. `alert`, `confirm`, and Leave page prompts work.
-- The engine reloads a tab with the `reload()` of its guest. CDP `Page.reload` on a guest reloads the whole OpenDucktor window, so no code sends it to an Electron page.
+- The engine reloads a tab with the `reload()` of its page. CDP `Page.reload` on an old `<webview>` reloaded the whole OpenDucktor window, so no code sends it to an Electron page.
 - Page screenshots go to the engine, which cuts a clip from a screenshot of the whole viewport. A CDP clip screenshot moves the shown page for one frame.
 - Electron answers `beforeunload` at once. The page stays, and the tab shows a Leave page prompt. Leave repeats the navigation.
-- A popup with window features (`disposition: "new-window"`) opens in an OpenDucktor popup window that keeps its opener link. It uses `showInactive()` to show without taking focus. On Wayland, the compositor can ignore this focus request. Show window brings it to the front when the user chooses. Other popups open as panel tabs without an opener link, because a `<webview>` cannot adopt a popup page that has an opener.
-- A CDP mouse press on a guest moves the window focus to the `<webview>`. The renderer follows both webview focus and window blur events, because Electron can omit the webview focus event. It restores the field and text selection of the user. Hidden pages stay guarded at all times. Shown pages use the `agent_press` signal while an agent press runs and for 300 ms after it ends.
+- A popup with window features (`disposition: "new-window"`) opens in an OpenDucktor popup window that keeps its opener link. It uses `showInactive()` to show without taking focus. On Wayland, the compositor can ignore this focus request. Show window brings it to the front when the user chooses. Other popups open as panel tabs without an opener link.
+- A native page view never takes the keyboard focus on a navigation or on a CDP input command, because `focusOnNavigation` is false and the engine does not call `webContents.focus()` except when the user asks to enter the page. An agent action in another tab therefore leaves the composer, terminal, or field of the user focused.
+- An old browser tab `<webview>` moved the page focus into the guest on navigation and on CDP keyboard input, also when another window or tab had the focus. The former fix restored the focus after the move, so the user could lose several typed characters before the restore ran. Native views remove the move itself.
 
 ### Chrome for Testing
 
@@ -187,7 +191,6 @@ Every CDP client except the host session of a tab goes through the proxy. Each c
 - Agent clients also cannot set file input files, answer JS dialogs through CDP, bring the page to the front, close the page, use `Fetch`, or use `Emulation` other than focus emulation.
 - Chromium looks up a `targetId` in the whole browser. The proxy therefore refuses a `targetId` other than the tab and the child targets that the client attached.
 - A client gets replies and events in the order that the browser sent them.
-- An Electron guest drops keyboard input until a mouse press reaches its page. Before each agent keyboard command, the proxy sends a mouse press and release with no button at (-1, -1). This press fires no page events.
 
 ## Agent tools
 
@@ -230,7 +233,7 @@ Electron shows these prompts in the tab. In the web runner, the browser of the u
 
 ## Annotations
 
-The picker injects no highlight script. The client sends the pointer position, the host calls `DOM.getNodeForLocation`, and the overlay draws the highlight. While the picker is on, CSS animations and transitions pause.
+The picker runs in the isolated world of the page. The page reports the pointer point, the host calls `DOM.getNodeForLocation`, and the page script draws the highlight and the selection. While the picker is on, CSS animations and transitions pause.
 
 `browser_annotation_capture` reads the page URL and title, the selected text, and for each element its tag, short text, opening tag, CSS selector, accessible role and name, React component chain, and source location.
 
@@ -263,7 +266,7 @@ Text taken from the page is data, not instructions.
 - The Screenshot switch of an annotation decides if the message attaches its screenshot. A model without image input needs the switch off.
 - The chat shows one chip for each annotation of a sent block. A block that does not follow the format shows as text.
 
-The tab view sends the anchors of the annotations of the current page. The host applies them again to each new document, and the page script reports `anchor_boxes` when the page scrolls, resizes, or changes.
+The tab view sends the anchors of the annotations of the current page, with the number that each marker shows. The host applies them again to each new document, and the page script draws the numbered markers and reports `anchor_boxes` when the page scrolls, resizes, or changes.
 
 ## Tests
 

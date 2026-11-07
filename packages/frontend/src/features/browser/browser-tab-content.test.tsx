@@ -29,8 +29,8 @@ import { BrowserLayer } from "./browser-layer";
 import {
   type BrowserRuntime,
   BrowserRuntimeProvider,
+  type ElectronBrowserRuntime,
   useBrowserRuntime,
-  type WebviewBrowserRuntime,
 } from "./browser-runtime";
 import { BROWSER_DEVTOOLS_DEFAULT_SIZE, useBrowserDevToolsStore } from "./browser-devtools-store";
 import { BROWSER_TABS_NEED_LOCAL_APP } from "./browser-frame-display";
@@ -108,10 +108,11 @@ const renderTab = (
   const browser: BrowserBridge =
     options.frames === undefined
       ? {
-          surface: "webview",
+          surface: "electron",
           connect: channel.connect,
-          partition: (workspaceId) => `persist:openducktor-browser-${workspaceId}`,
-          bindGuest: async () => {},
+          setSurface: async () => {},
+          focusPage: async () => {},
+          capturePage: async () => "data:image/png;base64,",
           pickFiles: async () => [],
         }
       : { surface: "frame", frames: options.frames };
@@ -162,9 +163,9 @@ const renderTab = (
     if (runtime === null) throw new Error("The runtime did not render.");
     return runtime;
   };
-  const webviewRuntime = (): WebviewBrowserRuntime => {
+  const electronRuntime = (): ElectronBrowserRuntime => {
     const current = requireRuntime();
-    if (current.surface !== "webview") throw new Error("The runtime is not the Electron one.");
+    if (current.surface !== "electron") throw new Error("The runtime is not the Electron one.");
     return current;
   };
   return {
@@ -177,7 +178,7 @@ const renderTab = (
     annotationCapture,
     openExternalUrl,
     runtime: requireRuntime,
-    webviewRuntime,
+    electronRuntime,
     setInPanel: (inPanel: boolean) => view.rerender(tree(inPanel)),
   };
 };
@@ -317,10 +318,10 @@ describe("BrowserTabContent", () => {
   });
 
   test("shows a channel failure until the channel connects again", async () => {
-    const { webviewRuntime, channel } = renderTab(
+    const { electronRuntime, channel } = renderTab(
       createBrowserTabSummaryFixture({ tabId: TAB_ID }),
     );
-    await waitFor(() => expect(webviewRuntime().channel.status()).toBe("connected"));
+    await waitFor(() => expect(electronRuntime().channel.status()).toBe("connected"));
 
     act(() => channel.fail("The host closed the browser channel."));
 
@@ -333,42 +334,36 @@ describe("BrowserTabContent", () => {
   });
 
   test("picks an element and saves its annotation for the tab owner", async () => {
-    const { webviewRuntime, channel, pickerSet, annotationCapture, connection } = renderTab(
+    const { electronRuntime, channel, pickerSet, annotationCapture, connection } = renderTab(
       createBrowserTabSummaryFixture({ tabId: TAB_ID }),
     );
-    await waitFor(() => expect(webviewRuntime().channel.status()).toBe("connected"));
+    await waitFor(() => expect(electronRuntime().channel.status()).toBe("connected"));
     const overlayHost = document.createElement("div");
     document.body.append(overlayHost);
     act(() => {
-      webviewRuntime().overlays.register(browserSurfaceKey(TAB_ID), overlayHost);
+      electronRuntime().overlays.register(browserSurfaceKey(TAB_ID), overlayHost);
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Annotate" }));
     await waitFor(() => expect(pickerSet).toHaveBeenCalledWith({ tabId: TAB_ID, enabled: true }));
-    const picker = await screen.findByTestId("browser-picker-overlay");
-    const target = (nodeRef: string, x: number) =>
-      act(() =>
-        channel.receive({
-          type: "picker_target",
-          tabId: TAB_ID,
-          x,
-          y: 40,
-          target: { nodeRef, box: { x: 10, y: 20, width: 80, height: 30 }, label: "button" },
-        }),
-      );
-    // The pointer moved on from the last element that the host found, and the click comes first.
-    target("node-6", 15);
-    fireEvent.click(picker, { clientX: 30, clientY: 40 });
-    expect(channel.sent.at(-1)).toEqual({ type: "picker_hover", tabId: TAB_ID, x: 30, y: 40 });
-    expect(screen.queryByRole("textbox", { name: "Annotation comment" })).toBeNull();
-    target("node-7", 30);
+
+    // The page script resolves the pick and the host reports the selection to the window.
+    act(() =>
+      channel.receive({
+        type: "picker_selection",
+        tabId: TAB_ID,
+        selection: [
+          { nodeRef: "7", box: { x: 10, y: 20, width: 80, height: 30 }, label: "button" },
+        ],
+      }),
+    );
     fireEvent.change(await screen.findByRole("textbox", { name: "Annotation comment" }), {
       target: { value: "Make it blue" },
     });
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() =>
-      expect(annotationCapture).toHaveBeenCalledWith({ tabId: TAB_ID, nodeRefs: ["node-7"] }),
+      expect(annotationCapture).toHaveBeenCalledWith({ tabId: TAB_ID, nodeRefs: ["7"] }),
     );
     await waitFor(() =>
       expect(
@@ -377,6 +372,7 @@ describe("BrowserTabContent", () => {
           .map((annotation) => annotation.comment),
       ).toEqual(["Make it blue"]),
     );
+    expect(channel.sent).toContainEqual({ type: "picker_clear", tabId: TAB_ID });
     overlayHost.remove();
   });
 });

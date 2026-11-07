@@ -565,7 +565,7 @@ const createMainWindowEffect = (
             preload: getPreloadPath(),
             sandbox: true,
             session: rendererSession,
-            // Browser tabs use `<webview>`. The browser runtime hardens each webview attach.
+            // Docked DevTools use `<webview>`. The browser runtime hardens each webview attach.
             webviewTag: true,
           },
         }),
