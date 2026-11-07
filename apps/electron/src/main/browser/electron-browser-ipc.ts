@@ -34,6 +34,8 @@ import {
 export type ElectronBrowserSender = {
   readonly id: number;
   isDestroyed(): boolean;
+  /** The zoom factor of the renderer. Its CSS pixels scale by this factor into window DIP. */
+  getZoomFactor(): number;
   send(channel: string, envelope: ElectronBrowserEventEnvelope): void;
 };
 
@@ -176,6 +178,8 @@ type ElectronBrowserIpcMain = {
   handle(channel: string, listener: ElectronBrowserIpcHandler): void;
 };
 
+type ElectronBrowserSurfaceBounds = { x: number; y: number; width: number; height: number };
+
 export type RegisterElectronBrowserIpcInput = {
   ipcMain: ElectronBrowserIpcMain;
   controller: ElectronBrowserIpcController;
@@ -187,7 +191,7 @@ export type RegisterElectronBrowserIpcInput = {
       tabId: string,
       input: {
         visible: boolean;
-        bounds?: { x: number; y: number; width: number; height: number } | undefined;
+        bounds?: ElectronBrowserSurfaceBounds | undefined;
       },
     ): Effect.Effect<void, BrowserEngineError>;
     focusPage(senderId: number, tabId: string): Effect.Effect<void, BrowserEngineError>;
@@ -214,6 +218,17 @@ const parseIpcInput = <Output>(
     details: { issues: jsonIssues(parsed.error.issues) },
   });
 };
+
+/** Maps the CSS pixels of the renderer to the device-independent pixels of the window. */
+const scaleBounds = (
+  bounds: ElectronBrowserSurfaceBounds,
+  zoomFactor: number,
+): ElectronBrowserSurfaceBounds => ({
+  x: bounds.x * zoomFactor,
+  y: bounds.y * zoomFactor,
+  width: bounds.width * zoomFactor,
+  height: bounds.height * zoomFactor,
+});
 
 /** Registers the browser IPC of the OpenDucktor windows. Other senders get a validation error. */
 export const registerElectronBrowserIpc = ({
@@ -291,7 +306,10 @@ export const registerElectronBrowserIpc = ({
     await runElectronEffect(
       engine.setSurface(event.sender.id, parsed.tabId, {
         visible: parsed.visible,
-        bounds: parsed.bounds,
+        bounds:
+          parsed.bounds === undefined
+            ? undefined
+            : scaleBounds(parsed.bounds, event.sender.getZoomFactor()),
       }),
     );
   });

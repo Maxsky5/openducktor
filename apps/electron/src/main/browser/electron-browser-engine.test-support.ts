@@ -113,6 +113,8 @@ export class FakeGuest extends EventEmitter implements ElectronBrowserGuest {
   closed = 0;
   focused = 0;
   backgroundThrottling = true;
+  /** The JPEG bytes that `capturePage` returns for this page. */
+  snapshotJpeg: Buffer = Buffer.from("AAAA", "base64");
   windowOpenHandler: ((details: GuestWindowOpenDetails) => GuestWindowOpenResponse) | null = null;
 
   constructor(
@@ -152,7 +154,7 @@ export class FakeGuest extends EventEmitter implements ElectronBrowserGuest {
   }
 
   capturePage(): Promise<{ toJPEG(quality: number): Buffer }> {
-    return Promise.resolve({ toJPEG: () => Buffer.from("AAAA", "base64") });
+    return Promise.resolve({ toJPEG: () => this.snapshotJpeg });
   }
 
   setBackgroundThrottling(allowed: boolean): void {

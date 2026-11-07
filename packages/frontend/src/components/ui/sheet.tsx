@@ -15,6 +15,7 @@ function SheetOverlay({
   return (
     <DialogPrimitive.Overlay
       data-slot="sheet-overlay"
+      data-page-occluder=""
       className={cn("fixed inset-0 z-50 bg-black/45 backdrop-blur-sm", className)}
       {...props}
     />
@@ -67,6 +68,7 @@ function SheetContent({
             tabIndex={-1}
             aria-label="Close sheet overlay"
             data-slot="sheet-overlay"
+            data-page-occluder=""
             data-state={isOpen ? "open" : "closed"}
             className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm"
           />

@@ -1,5 +1,5 @@
 import { DismissableLayerBranch } from "@radix-ui/react-dismissable-layer";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useEffect, useRef } from "react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 import { ArrowUpRight } from "lucide-react";
 
@@ -10,9 +10,28 @@ const themeStyle: CSSProperties & Record<`--${string}`, string> = {
 };
 
 export function Toaster({ style, ...props }: ToasterProps) {
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // Each toast box covers the page. The list around the toasts has no height, because the toasts
+  // are absolutely positioned inside it.
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (section === null) return;
+    const mark = (): void => {
+      for (const toast of section.querySelectorAll("[data-sonner-toast]")) {
+        toast.setAttribute("data-page-occluder", "");
+      }
+    };
+    mark();
+    const observer = new MutationObserver(mark);
+    observer.observe(section, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <DismissableLayerBranch>
       <Sonner
+        ref={sectionRef}
         position="bottom-right"
         richColors={false}
         closeButton

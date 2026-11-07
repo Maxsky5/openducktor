@@ -235,6 +235,8 @@ Electron shows these prompts in the tab. In the web runner, the browser of the u
 
 The picker runs in the isolated world of the page. The page reports the pointer point, the host calls `DOM.getNodeForLocation`, and the page script draws the highlight and the selection. While the picker is on, CSS animations and transitions pause.
 
+A transparent layer in the top frame captures the pointers that would go to an iframe. The host hides this layer for the hit test, so the hit test finds the page element and not the picker overlay. While the picker is on, the highlight, the selection, and the annotation markers ignore pointer events, so a pick never selects them.
+
 `browser_annotation_capture` reads the page URL and title, the selected text, and for each element its tag, short text, opening tag, CSS selector, accessible role and name, React component chain, and source location.
 
 - The opening tag leaves out the `value` attribute, which can hold a secret.

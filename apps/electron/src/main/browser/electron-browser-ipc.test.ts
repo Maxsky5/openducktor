@@ -41,7 +41,7 @@ const createService = () => {
   };
 };
 
-const createSender = (id = 7) => {
+const createSender = (id = 7, zoomFactor = 1) => {
   const sent: ElectronBrowserEventEnvelope[] = [];
   const listeners = new Map<string, Array<() => void>>();
   return {
@@ -50,6 +50,7 @@ const createSender = (id = 7) => {
     sender: {
       id,
       isDestroyed: () => false,
+      getZoomFactor: () => zoomFactor,
       send: (_channel: string, envelope: ElectronBrowserEventEnvelope) => sent.push(envelope),
       on: (event: string, listener: () => void) =>
         listeners.set(event, [...(listeners.get(event) ?? []), listener]),
@@ -218,6 +219,12 @@ describe("registerElectronBrowserIpc", () => {
       bounds,
     });
     await invoke("openducktor:browser:set-surface", sender, { tabId: TAB_ID, visible: false });
+    const zoomed = createSender(7, 2);
+    await invoke("openducktor:browser:set-surface", zoomed.sender, {
+      tabId: TAB_ID,
+      visible: true,
+      bounds,
+    });
     await expect(
       invoke("openducktor:browser:set-surface", sender, { tabId: "x", visible: true, bounds }),
     ).rejects.toMatchObject({ field: "request" });
@@ -245,6 +252,7 @@ describe("registerElectronBrowserIpc", () => {
     expect(surfaces).toEqual([
       [7, TAB_ID, { visible: true, bounds }],
       [7, TAB_ID, { visible: false }],
+      [7, TAB_ID, { visible: true, bounds: { x: 20, y: 40, width: 1600, height: 1200 } }],
     ]);
     expect(focused).toEqual([[7, TAB_ID]]);
     expect(picks).toEqual([[7, { multiple: true, accept: [".png"] }]]);

@@ -103,4 +103,22 @@ describe("ElectronPageSurface", () => {
       expect(setSurface).toHaveBeenLastCalledWith({ tabId: TAB_ID, visible: false }),
     );
   });
+
+  test("releases its place when the surface unmounts", async () => {
+    const { bridge, setSurface } = createBridge();
+    const { unmount } = renderSurface(bridge, placement(true), false);
+    await waitFor(() =>
+      expect(setSurface).toHaveBeenLastCalledWith({
+        tabId: TAB_ID,
+        visible: true,
+        bounds: { x: 12, y: 24, width: 640, height: 480 },
+      }),
+    );
+
+    unmount();
+
+    await waitFor(() =>
+      expect(setSurface).toHaveBeenLastCalledWith({ tabId: TAB_ID, visible: false }),
+    );
+  });
 });

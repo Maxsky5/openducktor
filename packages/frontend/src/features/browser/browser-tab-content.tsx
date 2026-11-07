@@ -155,7 +155,9 @@ function ElectronTabContent({
       {overlayHost && replacement === null
         ? createPortal(
             <>
-              {picker.state.selection.length > 0 && ownerKey !== null ? (
+              {/* The comment box hides the native page, so it waits until the picker stops.
+                  Otherwise the first pick would block the Shift-clicks that follow it. */}
+              {!picker.state.active && picker.state.selection.length > 0 && ownerKey !== null ? (
                 <BrowserSelectionCommentBox
                   tabId={entry.tabId}
                   ownerKey={ownerKey}

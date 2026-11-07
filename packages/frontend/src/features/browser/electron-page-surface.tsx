@@ -64,6 +64,15 @@ export function ElectronPageSurface({
     };
   }, [bridge, frozen, tabId]);
 
+  // A native page outlives its React component, so an unmounted surface gives up its place. A tab
+  // that closes first has no place left, and a component that unmounts cannot show a failure.
+  useEffect(
+    () => () => {
+      void bridge.setSurface({ tabId, visible: false }).catch(() => undefined);
+    },
+    [bridge, tabId],
+  );
+
   useEffect(() => {
     if (!placement.visible) {
       void bridge
