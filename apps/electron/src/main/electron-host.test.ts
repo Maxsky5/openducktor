@@ -1657,7 +1657,8 @@ describe("createElectronHostCommandRouter", () => {
         revision: 1,
       });
     }
-  });
+    // Creates a real database and commits task and artifact writes to disk.
+  }, 5_000);
 
   test("deletes and resets a task through the host router", async () => {
     const deleteRouter = await createElectronHostCommandRouter({
