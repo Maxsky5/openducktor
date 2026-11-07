@@ -252,6 +252,7 @@
         "@tiptap/react": "3.32.0",
         "@tiptap/starter-kit": "3.32.0",
         "@xterm/addon-fit": "^0.11.0",
+        "@xterm/addon-webgl": "0.19.0",
         "@xterm/xterm": "^6.0.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -1909,6 +1910,8 @@
     "@xterm/addon-fit": ["@xterm/addon-fit@0.11.0", "", {}, "sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g=="],
 
     "@xterm/addon-serialize": ["@xterm/addon-serialize@0.14.0", "", {}, "sha512-uteyTU1EkrQa2Ux6P/uFl2fzmXI46jy5uoQMKEOM0fKTyiW7cSn0WrFenHm5vO5uEXX/GpwW/FgILvv3r0WbkA=="],
+
+    "@xterm/addon-webgl": ["@xterm/addon-webgl@0.19.0", "", {}, "sha512-b3fMOsyLVuCeNJWxolACEUED0vm7qC0cy4wRvf3oURSzDTYVQiGPhTnhWZwIHdvC48Y+oLhvYXnY4XDXPoJo6A=="],
 
     "@xterm/headless": ["@xterm/headless@6.0.0", "", {}, "sha512-5Yj1QINYCyzrZtf8OFIHi47iQtI+0qYFPHmouEfG8dHNxbZ9Tb9YGSuLcsEwj9Z+OL75GJqPyJbyoFer80a2Hw=="],
 

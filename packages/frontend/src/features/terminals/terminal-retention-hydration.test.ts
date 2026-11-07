@@ -121,6 +121,7 @@ const createLightweightBinding = () => {
   };
   const binding = {
     terminal,
+    write: terminal.write,
     fitAddon: {
       fit: mock(() => undefined),
       proposeDimensions: mock(() => ({ cols: 120, rows: 40 })),
@@ -619,8 +620,9 @@ describe("retained terminal rendering", () => {
           onTitleChange: () => undefined,
           onHydrated: finishHydration,
           onImageDragActiveChange: () => undefined,
-          onInteractionFailure: (_title, cause) => {
-            throw cause;
+          onInteractionFailure: (title, cause) => {
+            // Happy DOM has no GPU. The reported standard renderer remains usable.
+            if (title !== "Terminal renderer failed") throw cause;
           },
         });
         retained.push({ container, mount });
