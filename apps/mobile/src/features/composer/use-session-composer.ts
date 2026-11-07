@@ -1,3 +1,4 @@
+import { useSessionGoalRow } from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
 import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -212,6 +213,11 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     sendAgentMessage: operations.sendAgentMessage,
     target: sendTarget,
   });
+  const goalRow = useSessionGoalRow({
+    repoPath: target.repoPath,
+    identity,
+    runtimeDescriptor: descriptor,
+  });
   const inlineCommentOwner = useMemo(() => inlineCommentOwnerOf(target), [target]);
   const reviewComments = useReviewCommentComposer({
     owner: inlineCommentOwner,
@@ -317,6 +323,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     ),
     submit,
     delivery,
+    goalRow,
     promptInput,
     reviewComments,
     /** The task or chat whose Changes hold the review comments of this composer. */

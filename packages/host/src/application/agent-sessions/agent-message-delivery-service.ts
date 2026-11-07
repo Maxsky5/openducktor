@@ -1,7 +1,6 @@
 import { messageSteeringBlock } from "./agent-message-steering";
 import { omittedQueueSessions } from "./omitted-queue-sessions";
 import { createSubmissionReservations } from "./submission-reservations";
-import { endsWithoutTurn } from "./agent-message-goal-release";
 import type {
   AcceptedAgentInput,
   AcceptedAgentUserMessage,
@@ -87,6 +86,11 @@ export type AgentMessageDeliveryDependencies = {
   readonly runInBackground: (effect: Effect.Effect<void>) => void;
   readonly now: () => string;
 };
+
+/** An accepted command that ends no turn, such as `/goal pause`, releases the queue at once. */
+const endsWithoutTurn = (outcome: Extract<SendOutcome, { kind: "accepted" }>): boolean =>
+  outcome.acceptedMessage.type === "command_accepted" &&
+  outcome.acceptedMessage.startsTurn === false;
 
 /** A steer can also find that steering cannot take the message while work runs. */
 type SteerOutcome = SendOutcome | { readonly kind: "blocked"; readonly error: HostValidationError };
@@ -226,7 +230,7 @@ export const createAgentMessageDeliveryService = (
       else if (outcome.kind === "busy") head.state = "queued";
       else failEntry(queue, head, outcome);
       publish(queue);
-      settle(queue, completedTurns, outcome.kind === "accepted" && endsWithoutTurn(head.content));
+      settle(queue, completedTurns, outcome.kind === "accepted" && endsWithoutTurn(outcome));
     });
 
   /** Retains an uncertain message at the front of its queue and blocks repeat delivery. */
@@ -271,7 +275,7 @@ export const createAgentMessageDeliveryService = (
         case "accepted":
           // A message that the agent received ends a pause that has no messages left.
           if (endPauseIfEmpty(queue)) publish(queue);
-          settle(queue, completedTurns, endsWithoutTurn(content));
+          settle(queue, completedTurns, endsWithoutTurn(outcome));
           return { kind: "accepted", acceptedMessage: outcome.acceptedMessage } as const;
         case "busy": {
           // This message came before any message that queued while it was in flight.

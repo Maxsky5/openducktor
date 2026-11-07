@@ -42,7 +42,6 @@ export const createAgentChatSendFixture = (
   overrides: Partial<AgentChatSend> = {},
 ): AgentChatSend => ({
   messageQueue: null,
-  goalRow: null,
   steerBlockedReason: null,
   runningTurnModel: null,
   isSending: false,

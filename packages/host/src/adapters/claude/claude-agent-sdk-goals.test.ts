@@ -8,7 +8,6 @@ import {
   beginClaudeGoalCommand,
   forgetEndedClaudeGoal,
   observeClaudeGoalFrame,
-  readClaudeSessionGoal,
   restoreClaudeGoalFromRecords,
   restoreClaudeSessionGoal,
 } from "./claude-agent-sdk-goals";
@@ -145,7 +144,7 @@ describe("Claude goal commands", () => {
     observe(goalReply(OBJECTIVE, `Goal set: ${OBJECTIVE}`));
     observe(modelFrame);
     await wait.outcome;
-    expect(readClaudeSessionGoal(session)).toEqual({ objective: OBJECTIVE, ended: false });
+    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, ended: false });
     expect(events).toEqual([
       expect.objectContaining({ goal: { objective: OBJECTIVE, ended: false } }),
     ]);
@@ -166,7 +165,7 @@ describe("Claude goal commands", () => {
     const failure = await wait.outcome.then(() => null).catch((error: Error) => error);
     expect(failure).toBeInstanceOf(Error);
     expect(failure).toHaveProperty("message", reason);
-    expect(readClaudeSessionGoal(session)).toBeNull();
+    expect(session.goalTracking?.goal ?? null).toBeNull();
   });
 
   test("a set whose turn ends before the model answers finds its record at the result", async () => {
@@ -176,7 +175,7 @@ describe("Claude goal commands", () => {
     await append(goalRecord("g1", null, { met: false, sentinel: true }));
     observe({ type: "result", subtype: "error_during_execution" });
     await wait.outcome;
-    expect(readClaudeSessionGoal(session)).toEqual({ objective: OBJECTIVE, ended: false });
+    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, ended: false });
   });
 
   test("a clear settles at its reply and removes the goal", async () => {
@@ -192,7 +191,7 @@ describe("Claude goal commands", () => {
     await append(goalRecord("g2", "g1", { met: true, sentinel: true }));
     observe(result);
     await settled();
-    expect(readClaudeSessionGoal(session)).toBeNull();
+    expect(session.goalTracking?.goal ?? null).toBeNull();
   });
 
   test("a turn result reads a met goal as ended", async () => {
@@ -215,7 +214,7 @@ describe("Claude goal commands", () => {
     await append(goalRecord("g2", "g1", { met: true, sentinel: true }));
     observe(result);
     await settled();
-    expect(readClaudeSessionGoal(session)).toEqual({ objective: OBJECTIVE, ended: true });
+    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, ended: true });
   });
 
   test("a live read leaves a line that Claude still writes for the next read", async () => {
@@ -227,11 +226,11 @@ describe("Claude goal commands", () => {
     await appendFile(path, partial.slice(0, 20));
     observe(result);
     await settled();
-    expect(readClaudeSessionGoal(session)).toEqual({ objective: OBJECTIVE, ended: false });
+    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, ended: false });
     await appendFile(path, `${partial.slice(20)}\n`);
     observe(result);
     await settled();
-    expect(readClaudeSessionGoal(session)).toEqual({ objective: OBJECTIVE, ended: true });
+    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, ended: true });
   });
 
   test("refuses a second goal action while one runs", async () => {

@@ -421,7 +421,8 @@ export const createPrepareOpencodeSessionRuntime =
           client.location.get({ location: { directory: binding.ref.workingDirectory } }),
           client.session.inbox.list({ sessionID: binding.detail.id }),
           readOpenCodeTranscript(client, binding.detail),
-          goals.available
+          // A child session starts with no goal, and the plugin reports later changes live.
+          goals.available && parentExternalSessionId === undefined
             ? readOpenCodeGoal(client, binding.detail.id, binding.ref.workingDirectory)
             : undefined,
         ]);
@@ -1127,10 +1128,11 @@ export const createPrepareOpencodeSessionRuntime =
         const working = nativeRunning.has(sessionID) || awaitingTurns.has(sessionID);
         // A new or resumed goal starts work. The session shows it as running until native
         // execution events confirm or end it. Pause and clear start no work.
+        const binding = controller.bindings.get(sessionID);
         const turn: AwaitingTurn | undefined =
           goalCommandStartsWork(goalInput.command) &&
-          controller.bindings.get(sessionID) &&
-          agentSessionRefsEqual(controller.bindings.get(sessionID)!.ref, goalInput)
+          binding &&
+          agentSessionRefsEqual(binding.ref, goalInput)
             ? { ref: goalInput, submitted: false, customCommand: true, consumedInboxIds: new Set() }
             : undefined;
         if (turn) {

@@ -12,8 +12,7 @@ import { hasForegroundTurn, steersRunningTurn } from "./agent-chat-steering";
 import { findRunningTurnModelEntry } from "../model-selection/model-selection-options";
 import { MISSING_RUNTIME_REASON } from "./agent-message-send-policy";
 import type { AsyncActivityTracker } from "../../lib/use-async-activity-tracker";
-import { useAgentMessageQueue, useAgentSessionField } from "../session-store-hooks";
-import { useAgentSessionGoalRow } from "../goals/use-agent-session-goal-row";
+import { useAgentMessageQueue } from "../session-store-hooks";
 import { useAgentOperationsContext, useHostRuntimeStatusContext } from "../session-contexts";
 import type {
   AgentChatMessage,
@@ -114,13 +113,6 @@ export function useAgentChatSend({
     [repoPath, identity],
   );
   const queue = useAgentMessageQueue(sessionRef);
-  const goal = useAgentSessionField(identity, "goal");
-  const sessionAssociation = useAgentSessionField(identity, "sessionAssociation");
-  const goalSession = useMemo(
-    () => (identity && sessionAssociation ? { ...identity, sessionAssociation, goal } : null),
-    [goal, identity, sessionAssociation],
-  );
-  const goalRow = useAgentSessionGoalRow({ repoPath, session: goalSession, runtimeDescriptor });
   const runtimeVersion = identity ? (statusByKind[identity.runtimeKind]?.version ?? null) : null;
 
   const steerBlockedReason = useMemo((): string | null => {
@@ -238,13 +230,12 @@ export function useAgentChatSend({
   return useMemo(
     () => ({
       messageQueue,
-      goalRow,
       steerBlockedReason,
       runningTurnModel,
       isSending,
       canSend,
       onSend,
     }),
-    [canSend, goalRow, isSending, messageQueue, onSend, runningTurnModel, steerBlockedReason],
+    [canSend, isSending, messageQueue, onSend, runningTurnModel, steerBlockedReason],
   );
 }

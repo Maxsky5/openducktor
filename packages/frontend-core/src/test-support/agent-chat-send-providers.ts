@@ -1,16 +1,11 @@
-import { createElement, type PropsWithChildren, type ReactElement, use, useState } from "react";
+import { createElement, type PropsWithChildren, type ReactElement, useState } from "react";
 import {
   type AgentMessageQueuesStore,
   createAgentMessageQueuesStore,
 } from "../sessions/agent-message-queues-store";
 import {
-  type AgentSessionsStore,
-  createAgentSessionsStore,
-} from "../sessions/agent-sessions-store";
-import {
   AgentMessageQueuesContext,
   AgentOperationsContext,
-  AgentSessionsContext,
   HostRuntimeStatusContext,
 } from "../sessions/session-contexts";
 import type {
@@ -24,27 +19,22 @@ type AgentChatSendProvidersProps = PropsWithChildren<{
   operations?: AgentOperationsContextValue;
   runtimeStatus?: HostRuntimeStatusContextValue;
   queues?: AgentMessageQueuesStore;
-  sessions?: AgentSessionsStore;
 }>;
 
 /**
- * Gives the agent operations, runtime status, message queues, and sessions that `useAgentChatSend`
- * reads. A session store of an outer provider stays in use.
+ * Gives the agent operations, runtime status, and message queues that `useAgentChatSend` reads.
  * A value that the test does not give stays the same across renders.
  */
 export function AgentChatSendProviders({
   operations,
   runtimeStatus,
   queues,
-  sessions,
   children,
 }: AgentChatSendProvidersProps): ReactElement {
-  const outerSessions = use(AgentSessionsContext);
   const [defaults] = useState(() => ({
     operations: createAgentOperationsFixture(),
     runtimeStatus: createHostRuntimeStatusContextValue(),
     queues: createAgentMessageQueuesStore(),
-    sessions: createAgentSessionsStore("/repo"),
   }));
   return createElement(
     AgentOperationsContext,
@@ -52,15 +42,7 @@ export function AgentChatSendProviders({
     createElement(
       HostRuntimeStatusContext,
       { value: runtimeStatus ?? defaults.runtimeStatus },
-      createElement(
-        AgentMessageQueuesContext,
-        { value: queues ?? defaults.queues },
-        createElement(
-          AgentSessionsContext,
-          { value: sessions ?? outerSessions ?? defaults.sessions },
-          children,
-        ),
-      ),
+      createElement(AgentMessageQueuesContext, { value: queues ?? defaults.queues }, children),
     ),
   );
 }

@@ -57,7 +57,7 @@ export const createAgentSessionCommandService = ({
     ReturnType<typeof import("./host-approval-policy").createHostApprovalPolicy>,
     "reply"
   >;
-  goalRules: Pick<SessionGoalRules, "blockedReason">;
+  goalRules: SessionGoalRules;
   runtime: Parameters<typeof createTaskWorkflowSessionPolicy>[0]["runtime"] &
     ObservedSessionCommands &
     Pick<

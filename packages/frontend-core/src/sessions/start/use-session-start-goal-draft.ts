@@ -1,4 +1,4 @@
-import { AGENT_SESSION_GOAL_OBJECTIVE_MAX_LENGTH } from "@openducktor/contracts";
+import { goalObjectiveLengthProblem } from "@openducktor/core";
 import { useState } from "react";
 import type { SessionStartGoalMode } from "./session-start-modal-model";
 
@@ -22,10 +22,7 @@ export type SessionStartGoalDraft = {
 
 const goalTextError = (text: string): string | null => {
   const objective = text.trim();
-  if (!objective) return BLANK_GOAL_ERROR;
-  if (objective.length > AGENT_SESSION_GOAL_OBJECTIVE_MAX_LENGTH)
-    return `A goal can have at most ${AGENT_SESSION_GOAL_OBJECTIVE_MAX_LENGTH} characters. This one has ${objective.length}.`;
-  return null;
+  return objective ? goalObjectiveLengthProblem(objective) : BLANK_GOAL_ERROR;
 };
 
 /** Goal mode is off each time the form opens. Turning it on fills the default goal text. */

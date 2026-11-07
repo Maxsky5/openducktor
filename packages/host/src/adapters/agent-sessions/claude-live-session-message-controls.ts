@@ -3,6 +3,7 @@ import {
   type AcceptedAgentUserMessage,
   type AgentSessionControlSendInput,
   acceptedAgentUserMessageSchema,
+  GOAL_COMMAND_ACCEPTED,
   GOAL_SLASH_COMMAND,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -20,6 +21,7 @@ import type {
 import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
 import {
   beginClaudeGoalCommand,
+  type ClaudeGoalCommand,
   forgetEndedClaudeGoal,
   restoreClaudeSessionGoal,
 } from "../claude/claude-agent-sdk-goals";
@@ -31,14 +33,6 @@ import type { createClaudeLiveSessionState } from "./claude-live-session-state";
 
 type SendControls = Pick<AgentSessionSendOptions, "assertCurrent" | "onSent">;
 type GoalTarget = Omit<AgentSessionControlGoalInput, "command">;
-type ClaudeGoalCommand =
-  | { readonly kind: "set"; readonly objective: string }
-  | { readonly kind: "clear" };
-
-const GOAL_ACCEPTED = {
-  type: "command_accepted",
-  commandName: "goal",
-} as const satisfies AcceptedAgentInput;
 
 /** The message and goal controls of the Claude live-session adapter. */
 export const createClaudeMessageControls = ({
@@ -206,7 +200,7 @@ export const createClaudeMessageControls = ({
           }
           return runGoalCommand(input, command, options);
         }),
-        Effect.as(GOAL_ACCEPTED),
+        Effect.as(GOAL_COMMAND_ACCEPTED),
       ),
     /**
      * Publishes the goal that Claude restores for a resumed, continued, or forked session. A

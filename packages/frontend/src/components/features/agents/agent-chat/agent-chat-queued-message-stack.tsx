@@ -443,7 +443,7 @@ function QueuedMessageActions({
 }
 
 /** An icon button whose tooltip names its action. A disabled button explains why. */
-function CardIconButton({
+export function CardIconButton({
   label,
   hint = label,
   describedBy,

@@ -1,4 +1,5 @@
 import { extractPromptTemplatePlaceholders } from "@openducktor/contracts";
+import { fillPromptPlaceholders } from "./task-prompts";
 
 const GOAL_OBJECTIVE_PLACEHOLDERS = new Set(["task.id", "task.title"]);
 
@@ -16,6 +17,11 @@ export const launchGoalObjective = (
   launch: { readonly goal?: { readonly defaultObjective: string } | undefined },
   task: { readonly id: string; readonly title: string },
 ): string | undefined =>
-  launch.goal?.defaultObjective.replace(/{{\s*(task\.id|task\.title)\s*}}/g, (_, name: string) =>
-    name === "task.id" ? task.id : task.title,
+  launch.goal &&
+  fillPromptPlaceholders(
+    launch.goal.defaultObjective,
+    new Map([
+      ["task.id", task.id],
+      ["task.title", task.title],
+    ]),
   );

@@ -35,6 +35,12 @@ const isReservedLookalike = (command: SlashCommandDescriptor): boolean =>
       !matches(command),
   );
 
+/** Why a trimmed goal objective is too long, or `null`. Every goal input uses this limit. */
+export const goalObjectiveLengthProblem = (objective: string): string | null =>
+  objective.length > AGENT_SESSION_GOAL_OBJECTIVE_MAX_LENGTH
+    ? `A goal objective can have at most ${AGENT_SESSION_GOAL_OBJECTIVE_MAX_LENGTH} characters. This one has ${objective.length}.`
+    : null;
+
 export const GOAL_COMMAND_MISSING_OBJECTIVE_MESSAGE =
   "Add an objective, or use pause, resume, or clear.";
 
@@ -52,11 +58,8 @@ const classifyGoalCommand = (normalizedParts: AgentUserMessagePart[]): AgentSess
   if (argument.length === 0) throw new Error(GOAL_COMMAND_MISSING_OBJECTIVE_MESSAGE);
   const keyword = argument.toLowerCase();
   if (keyword === "pause" || keyword === "resume" || keyword === "clear") return { kind: keyword };
-  if (argument.length > AGENT_SESSION_GOAL_OBJECTIVE_MAX_LENGTH) {
-    throw new Error(
-      `A goal objective can have at most ${AGENT_SESSION_GOAL_OBJECTIVE_MAX_LENGTH} characters. This one has ${argument.length}.`,
-    );
-  }
+  const lengthProblem = goalObjectiveLengthProblem(argument);
+  if (lengthProblem) throw new Error(lengthProblem);
   return { kind: "set", objective: argument };
 };
 

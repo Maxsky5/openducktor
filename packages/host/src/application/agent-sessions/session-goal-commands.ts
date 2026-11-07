@@ -8,6 +8,7 @@ import { type AgentSessionGoalCommand, goalCommandStartsWork } from "@openduckto
 import { classifySessionMessageSystemCommand } from "./session-message-system-command";
 import { Effect } from "effect";
 import {
+  errorMessage,
   type HostError,
   HostValidationError,
   toHostOperationError,
@@ -33,7 +34,7 @@ export const createSessionGoalCommands = ({
   canonicalizeRepoPath,
   policyFor,
 }: {
-  goalRules: Pick<SessionGoalRules, "blockedReason">;
+  goalRules: SessionGoalRules;
   owner: ReturnType<typeof createSessionOperationOwner>;
   runtime: Pick<AgentSessionLiveStateService, "controlGoal">;
   turnPreparation: Pick<ReturnType<typeof createSessionTurnPreparation>, "context">;
@@ -51,7 +52,7 @@ export const createSessionGoalCommands = ({
       catch: (cause) =>
         new HostValidationError({
           field: "parts",
-          message: cause instanceof Error ? cause.message : String(cause),
+          message: errorMessage(cause),
           cause,
         }),
     });
@@ -87,7 +88,7 @@ export const createSessionGoalCommands = ({
           : undefined;
       yield* checkPending(content);
       const guarded = yield* owner.options();
-      const accepted = yield* runtime.controlGoal(
+      const native = yield* runtime.controlGoal(
         {
           repoPath: content.repoPath,
           runtimeKind: content.runtimeKind,
@@ -106,6 +107,11 @@ export const createSessionGoalCommands = ({
           },
         },
       );
+      // Pause and clear end no turn, so the queue can send its next message at once.
+      const accepted =
+        native.type === "command_accepted"
+          ? { ...native, startsTurn: goalCommandStartsWork(command) }
+          : native;
       yield* owner
         .accepted(accepted)
         .pipe(Effect.mapError(messageAcceptedFailure(content, accepted, "record_message")));
@@ -139,10 +145,7 @@ export const createSessionGoalCommands = ({
                 catch: (cause) => toHostOperationError(cause, "session.goal"),
               });
             return yield* runtime
-              .controlGoal(
-                { ...ref, command, workStartGuard: guard },
-                { assertCurrent: guard?.assertCurrent },
-              )
+              .controlGoal({ ...ref, command }, { assertCurrent: guard?.assertCurrent })
               .pipe(Effect.asVoid);
           }),
         );

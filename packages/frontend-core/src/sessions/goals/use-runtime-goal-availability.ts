@@ -4,10 +4,11 @@ import { type AgentDeliveryAvailability, resolveRuntimeGoalAvailability } from "
 import { useMemo } from "react";
 import { useRuntimeAvailabilityContext } from "../../app-state/app-state-contexts";
 import { useHostRuntimeStatusContext } from "../session-contexts";
+import { MISSING_RUNTIME_REASON } from "../send/agent-message-send-policy";
 
 const MISSING_RUNTIME: AgentDeliveryAvailability = {
   available: false,
-  reason: "The runtime of this session is not available. Reload the app.",
+  reason: MISSING_RUNTIME_REASON,
 };
 
 /** Tells if the runtime of a kind has native goals, with its read version. */

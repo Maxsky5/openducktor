@@ -6,15 +6,15 @@ import {
 import type { AgentSessionGoalRowModel } from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
 import { ChevronDown, LoaderCircle, Pause, Play, Target, X } from "lucide-react";
 import { type ReactElement, useId, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { CardIconButton } from "./agent-chat-queued-message-stack";
 import { cn } from "@/lib/utils";
 
 const TONE_CLASS_NAMES = {
-  success: "text-emerald-700 dark:text-emerald-400",
-  warning: "text-amber-700 dark:text-amber-400",
-  danger: "text-rose-700 dark:text-rose-400",
-  info: "text-sky-700 dark:text-sky-400",
+  success: "text-success-muted",
+  warning: "text-warning-muted",
+  danger: "text-destructive-muted",
+  info: "text-info-muted",
   muted: "text-muted-foreground",
 } satisfies Record<AgentSessionGoalTone, string>;
 
@@ -67,15 +67,22 @@ export function AgentChatGoalRow({ model }: { model: AgentSessionGoalRowModel })
               />
             </button>
             <div className="-my-0.5 flex shrink-0 items-center gap-0.5">
-              {model.actions.map((action) => (
-                <GoalActionButton
-                  key={action}
-                  action={action}
-                  pending={model.pendingAction === action}
-                  disabled={model.pendingAction !== null}
-                  onClick={() => model.onAction(action)}
-                />
-              ))}
+              {model.actions.map((action) => {
+                const Icon = model.pendingAction === action ? LoaderCircle : ACTION_ICONS[action];
+                return (
+                  <CardIconButton
+                    key={action}
+                    label={`${AGENT_SESSION_GOAL_ACTION_LABELS[action]} goal`}
+                    disabled={model.pendingAction !== null}
+                    onClick={() => model.onAction(action)}
+                  >
+                    <Icon
+                      className={cn("size-3.5", model.pendingAction === action && "animate-spin")}
+                      aria-hidden="true"
+                    />
+                  </CardIconButton>
+                );
+              })}
             </div>
           </div>
           {model.detail ? <p className="mt-0.5 pl-[22px] text-xs">{model.detail}</p> : null}
@@ -87,42 +94,5 @@ export function AgentChatGoalRow({ model }: { model: AgentSessionGoalRowModel })
         </div>
       </section>
     </TooltipProvider>
-  );
-}
-
-function GoalActionButton({
-  action,
-  pending,
-  disabled,
-  onClick,
-}: {
-  action: AgentSessionGoalControlAction;
-  pending: boolean;
-  disabled: boolean;
-  onClick: () => void;
-}): ReactElement {
-  const label = `${AGENT_SESSION_GOAL_ACTION_LABELS[action]} goal`;
-  const Icon = pending ? LoaderCircle : ACTION_ICONS[action];
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {/* A disabled button gets no pointer events, so the wrapper shows the tooltip. */}
-        <span className="inline-flex">
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-6 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label={label}
-            aria-busy={pending ? true : undefined}
-            disabled={disabled}
-            onClick={onClick}
-          >
-            <Icon className={cn("size-3.5", pending && "animate-spin")} aria-hidden="true" />
-          </Button>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
   );
 }

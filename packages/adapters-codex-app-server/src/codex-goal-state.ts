@@ -9,41 +9,64 @@ export const toAgentSessionGoal = (goal: CodexAppServerThreadGoal): AgentSession
       : goal.status,
 });
 
+type ThreadGoalState = {
+  goal: CodexAppServerThreadGoal | null;
+  /** The count of goal updates, so a request can tell if an update came after it. */
+  revision: number;
+  /** An accepted set or resume waits for its goal update. */
+  activating: boolean;
+  /** The thread has no running turn, and Codex starts the next goal turn by itself. */
+  waiting: boolean;
+};
+
 /**
  * The goal that Codex last reported for each thread, and the threads that wait for the goal turn
  * that Codex starts after a turn end.
  *
  * Codex reports the goal of a thread after each change and after each `thread/resume`, also before
  * OpenDucktor registers the resumed session. So the state keeps the goal of every thread of the
- * runtime, and a session that registers later reads its current goal.
+ * runtime until its session is released, and a session that registers later reads its goal.
  */
 export class CodexGoalState {
-  private readonly goalsByRuntimeId = new Map<string, Map<string, CodexAppServerThreadGoal>>();
-  private readonly waitingByRuntimeId = new Map<string, Set<string>>();
-  private readonly revisionsByRuntimeId = new Map<string, Map<string, number>>();
-  /** Threads whose accepted set or resume has no goal update yet. */
-  private readonly activatingByRuntimeId = new Map<string, Set<string>>();
+  private readonly threadsByRuntimeId = new Map<string, Map<string, ThreadGoalState>>();
+
+  private peek(runtimeId: string, threadId: string): ThreadGoalState | undefined {
+    return this.threadsByRuntimeId.get(runtimeId)?.get(threadId);
+  }
+
+  private thread(runtimeId: string, threadId: string): ThreadGoalState {
+    let threads = this.threadsByRuntimeId.get(runtimeId);
+    if (!threads) {
+      threads = new Map();
+      this.threadsByRuntimeId.set(runtimeId, threads);
+    }
+    let state = threads.get(threadId);
+    if (!state) {
+      state = { goal: null, revision: 0, activating: false, waiting: false };
+      threads.set(threadId, state);
+    }
+    return state;
+  }
 
   goal(runtimeId: string, threadId: string): AgentSessionGoal | undefined {
-    const goal = this.goalsByRuntimeId.get(runtimeId)?.get(threadId);
+    const goal = this.peek(runtimeId, threadId)?.goal;
     return goal ? toAgentSessionGoal(goal) : undefined;
   }
 
   /** Codex starts another goal turn after each turn end while the goal is active. */
   isActive(runtimeId: string, threadId: string): boolean {
-    return this.goalsByRuntimeId.get(runtimeId)?.get(threadId)?.status === "active";
+    return this.peek(runtimeId, threadId)?.goal?.status === "active";
   }
 
   /** The goal is active, or an accepted set or resume waits for its goal update. */
   mayBeActive(runtimeId: string, threadId: string): boolean {
     return (
-      this.isActive(runtimeId, threadId) ||
-      this.activatingByRuntimeId.get(runtimeId)?.has(threadId) === true
+      this.isActive(runtimeId, threadId) || this.peek(runtimeId, threadId)?.activating === true
     );
   }
 
   revision(runtimeId: string, threadId: string): number {
-    return this.revisionsByRuntimeId.get(runtimeId)?.get(threadId) ?? 0;
+    return this.peek(runtimeId, threadId)?.revision ?? 0;
   }
 
   /**
@@ -51,62 +74,42 @@ export class CodexGoalState {
    * the current state, so the result is whether the goal is active.
    */
   acceptActivation(runtimeId: string, threadId: string, revisionBefore: number): boolean {
-    if (this.revision(runtimeId, threadId) !== revisionBefore) {
-      return this.isActive(runtimeId, threadId);
-    }
-    let activating = this.activatingByRuntimeId.get(runtimeId);
-    if (!activating) {
-      activating = new Set();
-      this.activatingByRuntimeId.set(runtimeId, activating);
-    }
-    activating.add(threadId);
+    const state = this.thread(runtimeId, threadId);
+    if (state.revision !== revisionBefore) return state.goal?.status === "active";
+    state.activating = true;
     return true;
   }
 
   /** Applies a native goal update. `null` clears the goal. */
   apply(runtimeId: string, threadId: string, goal: CodexAppServerThreadGoal | null): void {
-    let revisions = this.revisionsByRuntimeId.get(runtimeId);
-    if (!revisions) {
-      revisions = new Map();
-      this.revisionsByRuntimeId.set(runtimeId, revisions);
-    }
-    revisions.set(threadId, this.revision(runtimeId, threadId) + 1);
-    this.activatingByRuntimeId.get(runtimeId)?.delete(threadId);
-    let goals = this.goalsByRuntimeId.get(runtimeId);
-    if (goal === null) {
-      goals?.delete(threadId);
-      return;
-    }
-    if (!goals) {
-      goals = new Map();
-      this.goalsByRuntimeId.set(runtimeId, goals);
-    }
-    goals.set(threadId, goal);
+    const state = this.thread(runtimeId, threadId);
+    state.goal = goal;
+    state.revision += 1;
+    state.activating = false;
   }
 
-  /** The thread has no running turn, and Codex starts the next goal turn by itself. */
   isWaitingForGoalTurn(runtimeId: string, threadId: string): boolean {
-    return this.waitingByRuntimeId.get(runtimeId)?.has(threadId) === true;
+    return this.peek(runtimeId, threadId)?.waiting === true;
   }
 
   waitForGoalTurn(runtimeId: string, threadId: string): void {
-    let waiting = this.waitingByRuntimeId.get(runtimeId);
-    if (!waiting) {
-      waiting = new Set();
-      this.waitingByRuntimeId.set(runtimeId, waiting);
-    }
-    waiting.add(threadId);
+    this.thread(runtimeId, threadId).waiting = true;
   }
 
   /** Returns true when the thread waited for a goal turn. */
   stopWaiting(runtimeId: string, threadId: string): boolean {
-    return this.waitingByRuntimeId.get(runtimeId)?.delete(threadId) === true;
+    const state = this.peek(runtimeId, threadId);
+    if (!state?.waiting) return false;
+    state.waiting = false;
+    return true;
+  }
+
+  /** Forgets a released session. A later resume makes Codex report its goal again. */
+  forgetThread(runtimeId: string, threadId: string): void {
+    this.threadsByRuntimeId.get(runtimeId)?.delete(threadId);
   }
 
   clearRuntime(runtimeId: string): void {
-    this.goalsByRuntimeId.delete(runtimeId);
-    this.waitingByRuntimeId.delete(runtimeId);
-    this.revisionsByRuntimeId.delete(runtimeId);
-    this.activatingByRuntimeId.delete(runtimeId);
+    this.threadsByRuntimeId.delete(runtimeId);
   }
 }

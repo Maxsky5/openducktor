@@ -1533,7 +1533,7 @@ describe("createAgentSessionCommandService", () => {
           submissionId: "submission-1",
         }),
       );
-      expect(accepted).toEqual({ type: "command_accepted", commandName: "goal" });
+      expect(accepted).toEqual({ type: "command_accepted", commandName: "goal", startsTurn: true });
       expect(goalInputs).toMatchObject([
         {
           externalSessionId: "session-1",
@@ -1546,9 +1546,10 @@ describe("createAgentSessionCommandService", () => {
 
     test("sends no context with a goal action that starts no work", async () => {
       const { service, goalInputs } = createGoalService();
-      await Effect.runPromise(
+      const accepted = await Effect.runPromise(
         service.sendUserMessage({ ...workflowSend, parts: goalParts("pause") }),
       );
+      expect(accepted).toMatchObject({ startsTurn: false });
       expect(goalInputs[0]?.command).toEqual({ kind: "pause" });
       expect(goalInputs[0]?.systemPrompt).toBeUndefined();
     });

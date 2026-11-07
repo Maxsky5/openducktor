@@ -89,22 +89,23 @@ const findTranscripts = async (
   matches: (filename: string) => boolean,
   recursive: boolean,
 ): Promise<string[]> => {
-  const found: string[] = [];
-  const visit = async (path: string): Promise<void> => {
+  const visit = async (path: string): Promise<string[]> => {
     if (!(await lstat(path)).isDirectory())
       throw new Error("The transcript directory must be a regular directory, not a symbolic link.");
+    const found: string[] = [];
     for (const entry of await readdir(path, { withFileTypes: true })) {
       if (entry.isFile() && matches(entry.name)) found.push(join(path, entry.name));
-      else if (recursive && entry.isDirectory()) await visit(join(path, entry.name));
+      else if (recursive && entry.isDirectory())
+        found.push(...(await visit(join(path, entry.name))));
     }
+    return found;
   };
-  if (recursive) await visit(directory);
-  else {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      if (entry.isDirectory()) await visit(join(directory, entry.name));
-    }
-  }
-  return found;
+  if (recursive) return visit(directory);
+  // Project folders are independent, so they are read at once. The result keeps folder order.
+  const folders = (await readdir(directory, { withFileTypes: true })).filter((entry) =>
+    entry.isDirectory(),
+  );
+  return (await Promise.all(folders.map((entry) => visit(join(directory, entry.name))))).flat();
 };
 
 /** The Claude folder that a Claude process with this environment uses. */

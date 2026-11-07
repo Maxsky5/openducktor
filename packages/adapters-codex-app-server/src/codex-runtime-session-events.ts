@@ -434,7 +434,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   clearSession(externalSessionId: string, runtimeId?: string): void {
-    if (runtimeId !== undefined) this.goals.stopWaiting(runtimeId, externalSessionId);
+    if (runtimeId !== undefined) this.goals.forgetThread(runtimeId, externalSessionId);
     for (const [messageRuntimeId, messageIds] of this.turnMessageIdsByRuntimeId) {
       if (runtimeId === undefined || runtimeId === messageRuntimeId)
         messageIds.delete(externalSessionId);
@@ -554,6 +554,10 @@ export class CodexRuntimeSessionEvents {
   waitForGoalTurn(session: CodexSessionState): void {
     if (!this.isRetainedSession(session)) return;
     if (runningTurnOf(this.deps.activeTurnsBySessionId, session.threadId)) return;
+    this.markWaitingForGoalTurn(session);
+  }
+
+  private markWaitingForGoalTurn(session: CodexSessionState): void {
     this.goals.waitForGoalTurn(session.runtimeId, session.threadId);
     this.setSessionLiveStatus(session, { classification: "running" });
   }
@@ -568,8 +572,7 @@ export class CodexRuntimeSessionEvents {
   private continueGoalAfterTurn(session: CodexSessionState): boolean {
     if (!this.isRetainedSession(session)) return false;
     if (!this.goals.isActive(session.runtimeId, session.threadId)) return false;
-    this.goals.waitForGoalTurn(session.runtimeId, session.threadId);
-    this.setSessionLiveStatus(session, { classification: "running" });
+    this.markWaitingForGoalTurn(session);
     return true;
   }
 

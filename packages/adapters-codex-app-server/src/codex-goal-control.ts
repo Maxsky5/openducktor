@@ -20,13 +20,13 @@ const codexRefusalReason = (cause: unknown): string => {
 /**
  * Sends one goal action of the user to Codex. A new objective replaces the current goal and
  * starts it. Codex keeps the status of a goal when a request names no status, so set and resume
- * name `active`.
+ * name `active`. `failureNote` adds the consequence of a refusal to its message.
  */
 export const runCodexGoalCommand = async (
   client: CodexAppServerClient,
   threadId: string,
   command: AgentSessionGoalCommand,
-  onSent?: () => void,
+  { onSent, failureNote = "" }: { onSent?: () => void; failureNote?: string } = {},
 ): Promise<void> => {
   let request: Promise<unknown>;
   if (command.kind === "clear") {
@@ -44,9 +44,10 @@ export const runCodexGoalCommand = async (
   try {
     await request;
   } catch (cause) {
-    throw new Error(`Codex could not ${command.kind} the goal: ${codexRefusalReason(cause)}`, {
-      cause,
-    });
+    throw new Error(
+      `Codex could not ${command.kind} the goal${failureNote}: ${codexRefusalReason(cause)}`,
+      { cause },
+    );
   }
 };
 
@@ -54,16 +55,12 @@ export const runCodexGoalCommand = async (
  * An interrupt does not pause a Codex goal, and Codex starts a new goal turn when the thread goes
  * idle. Stop pauses the goal first.
  */
-export const pauseCodexGoalForStop = async (
-  client: CodexAppServerClient,
-  threadId: string,
-): Promise<void> => {
-  try {
-    await client.threadGoalSet({ threadId, origin: "user", status: "paused" });
-  } catch (cause) {
-    throw new Error(
-      `Codex could not pause the goal, so the session did not stop: ${codexRefusalReason(cause)}`,
-      { cause },
-    );
-  }
-};
+export const pauseCodexGoalForStop = (client: CodexAppServerClient, threadId: string) =>
+  runCodexGoalCommand(
+    client,
+    threadId,
+    { kind: "pause" },
+    {
+      failureNote: ", so the session did not stop",
+    },
+  );

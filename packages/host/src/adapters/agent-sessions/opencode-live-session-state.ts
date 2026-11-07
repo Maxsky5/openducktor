@@ -386,7 +386,7 @@ export const createOpenCodeLiveSessionState = ({
     refsByExternalSessionId.delete(ref);
     versions.removed(ref);
     contextUsageBySessionId.delete(ref.externalSessionId);
-    goals.remove(ref.externalSessionId);
+    goals.set(ref.externalSessionId, null);
     pendingRequests.removeSession(ref);
     return [{ type: "session_removed", ref: toSessionRef(ref) }];
   };

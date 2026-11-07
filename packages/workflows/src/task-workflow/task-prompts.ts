@@ -159,6 +159,13 @@ const SYSTEM_PROMPT_IDS = [
 const BASE_PROMPT_IDS = new Set<string>(Object.values(WORKFLOW_PROMPT_IDS));
 
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
+
+/** Fills each `{{placeholder}}` of a template. A placeholder without a value becomes empty. */
+export const fillPromptPlaceholders = (
+  template: string,
+  values: ReadonlyMap<string, string>,
+): string =>
+  template.replace(PLACEHOLDER_PATTERN, (_match, token: string) => values.get(token) ?? "");
 const OVERRIDE_FIX = "Edit or disable this prompt override in Settings.";
 
 const compact = (value: string | undefined): string => {
@@ -434,10 +441,7 @@ export const createTaskPrompts = (
       hasStaleOverride: Boolean(
         override && override.baseVersion !== definitionTemplate.builtinVersion,
       ),
-      content: text.replace(
-        PLACEHOLDER_PATTERN,
-        (_match, token: string) => values.get(token) ?? "",
-      ),
+      content: fillPromptPlaceholders(text, values),
     };
     if (override) resolved.overrideBaseVersion = override.baseVersion;
     return resolved;

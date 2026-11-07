@@ -11,6 +11,8 @@ import type {
 } from "./claude-agent-sdk-types";
 import { scanClaudeTranscriptBatches } from "./claude-transcript-file";
 import { findClaudeRootTranscript } from "./claude-transcript-reader";
+import { textFromContentBlocks } from "./claude-agent-sdk-utils";
+import { scanClaudeTranscriptForGoalRecords } from "./claude-goal-transcript-scan";
 
 /**
  * Claude Code 2.1.306 to 2.1.319 keeps the goal of a session in `goal_status` attachment records of
@@ -41,7 +43,7 @@ const readClaudeGoalRecord = (record: ClaudeProtocolObject): ClaudeGoalRecord | 
   const parsed = goalStatusRecordSchema.safeParse(record);
   if (!parsed.success) return null;
   const { condition, met, failed, sentinel } = parsed.data.attachment;
-  const objective = condition.trim();
+  const objective = condition;
   if (sentinel === true) return { kind: met === true ? "clear" : "set", objective };
   if (failed === true) return { kind: "failed", objective };
   return { kind: met === true ? "met" : "not_met", objective };
@@ -94,9 +96,12 @@ export const restoreClaudeGoalFromRecords = (
   return null;
 };
 
-type PendingGoalCommand = {
-  readonly kind: "set" | "clear";
-  readonly objective: string | undefined;
+/** The goal commands that Claude runs. Claude cannot pause or resume a goal. */
+export type ClaudeGoalCommand =
+  | { readonly kind: "set"; readonly objective: string }
+  | { readonly kind: "clear" };
+
+type PendingGoalCommand = ClaudeGoalCommand & {
   /** The text of the goal command reply, which carries the refusal reason. */
   output?: string;
   replied: boolean;
@@ -131,9 +136,6 @@ const trackingOf = (session: ClaudeGoalSession): ClaudeGoalTracking => {
   };
   return session.goalTracking;
 };
-
-export const readClaudeSessionGoal = (session: ClaudeGoalSession): ClaudeNativeGoal | null =>
-  session.goalTracking?.goal ?? null;
 
 const transcriptPath = async (session: ClaudeGoalSession): Promise<string | null> => {
   const tracking = trackingOf(session);
@@ -192,6 +194,12 @@ export const restoreClaudeSessionGoal = async (
   const read = tracking.reads.then(async () => {
     const path = await transcriptPath(session);
     if (!path) return;
+    const scan = await scanClaudeTranscriptForGoalRecords(path, 0);
+    if (!scan.hasGoalRecord) {
+      tracking.goal = null;
+      tracking.offset = scan.end;
+      return;
+    }
     const { records, end } = await readRecords(path, undefined);
     tracking.goal = restoreClaudeGoalFromRecords(records);
     tracking.offset = end;
@@ -199,6 +207,19 @@ export const restoreClaudeSessionGoal = async (
   tracking.reads = read.catch(() => {});
   await read;
   return goalEvent(session, timestamp, tracking.goal);
+};
+
+/** Sets the goal of the session and publishes it when it changed. */
+const publishGoal = (
+  session: ClaudeGoalSession,
+  tracking: ClaudeGoalTracking,
+  goal: ClaudeNativeGoal | null,
+  emit: (event: ClaudeGoalEvent) => void,
+  now: () => string,
+): void => {
+  const before = tracking.goal;
+  tracking.goal = goal;
+  if (!sameGoal(before, goal)) emit(goalEvent(session, now(), goal));
 };
 
 const sameGoal = (left: ClaudeNativeGoal | null, right: ClaudeNativeGoal | null): boolean =>
@@ -245,6 +266,12 @@ const readNewRecords = (
   const read = tracking.reads.then(async () => {
     const path = await transcriptPath(session);
     if (!path) return;
+    // New tool output can be large, and only goal records matter here.
+    const scan = await scanClaudeTranscriptForGoalRecords(path, tracking.offset);
+    if (!scan.hasGoalRecord) {
+      tracking.offset = scan.end;
+      return;
+    }
     const before = tracking.goal;
     const { records, end } = await readRecords(path, tracking.offset);
     tracking.offset = end;
@@ -266,12 +293,6 @@ const goalCommandReplySchema = z.looseObject({
     content: z.array(z.looseObject({ type: z.string(), text: z.string().optional() })),
   }),
 });
-
-const replyText = (content: readonly { type: string; text?: string | undefined }[]): string =>
-  content
-    .flatMap((block) => (block.type === "text" && block.text ? [block.text.trim()] : []))
-    .join("\n")
-    .trim();
 
 const isTurnFrame = (message: SDKMessage): boolean =>
   message.type === "stream_event" ||
@@ -302,15 +323,17 @@ export const observeClaudeGoalFrame = ({
   const tracking = session.goalTracking;
   if (!tracking) return;
   const pending = tracking.pending;
-  const reply = goalCommandReplySchema.safeParse(message);
-  if (reply.success) {
+  // Only a command reply carries `local_command_run`, so other frames skip the schema parse.
+  const reply =
+    message.type === "assistant" && "local_command_run" in message
+      ? goalCommandReplySchema.safeParse(message)
+      : null;
+  if (reply?.success) {
     if (!pending || pending.replied) return;
     pending.replied = true;
-    pending.output = replyText(reply.data.message.content);
+    pending.output = textFromContentBlocks(reply.data.message.content).trim();
     if (pending.kind === "clear") {
-      const before = tracking.goal;
-      tracking.goal = null;
-      if (!sameGoal(before, null)) emit(goalEvent(session, now(), null));
+      publishGoal(session, tracking, null, emit, now);
       pending.settle();
     }
     return;
@@ -326,11 +349,9 @@ export const observeClaudeGoalFrame = ({
       else onFailure(error);
     });
   if (pending?.kind === "set" && pending.replied && !pending.checking) {
-    if (isTurnFrame(message) && pending.objective !== undefined) {
-      const before = tracking.goal;
-      tracking.goal = { objective: pending.objective, ended: false };
+    if (isTurnFrame(message)) {
+      publishGoal(session, tracking, { objective: pending.objective, ended: false }, emit, now);
       tracking.clearsSent = 0;
-      if (!sameGoal(before, tracking.goal)) emit(goalEvent(session, now(), tracking.goal));
       pending.settle();
       return;
     }
@@ -361,7 +382,7 @@ export type ClaudeGoalCommandWait = {
 
 export const beginClaudeGoalCommand = (
   session: ClaudeGoalSession,
-  command: { readonly kind: "set"; readonly objective: string } | { readonly kind: "clear" },
+  command: ClaudeGoalCommand,
 ): ClaudeGoalCommandWait => {
   const tracking = trackingOf(session);
   if (tracking.pending)
@@ -371,8 +392,7 @@ export const beginClaudeGoalCommand = (
     });
   const { promise, resolve, reject } = Promise.withResolvers<void>();
   const pending: PendingGoalCommand = {
-    kind: command.kind,
-    objective: command.kind === "set" ? command.objective : undefined,
+    ...command,
     replied: false,
     checking: false,
     settle: (error) => {

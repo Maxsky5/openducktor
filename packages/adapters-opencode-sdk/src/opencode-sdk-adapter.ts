@@ -113,8 +113,7 @@ export type OpenCodeGoalControlInput = Omit<
   "parts" | "delivery" | "resolvedQuestionRequestIds" | "submissionId"
 > & { command: AgentSessionGoalCommand };
 
-const goalOperation = (command: AgentSessionGoalCommand): string =>
-  command.kind === "set" ? "set the goal" : `${command.kind} the goal`;
+const goalOperation = (command: AgentSessionGoalCommand): string => `${command.kind} the goal`;
 
 /** One controller for an owned authenticated V2 runtime. */
 export class OpencodeSdkAdapter {

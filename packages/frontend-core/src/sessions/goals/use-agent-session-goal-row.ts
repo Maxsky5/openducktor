@@ -2,7 +2,8 @@ import type { AgentSessionGoalControlAction, RuntimeDescriptor } from "@openduck
 import { useCallback, useMemo, useState } from "react";
 import { useHostClient } from "../../connection/client-connection-react";
 import { errorMessage } from "../../lib/errors";
-import type { AgentSessionState } from "../../types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "../../types/agent-orchestrator";
+import { useAgentSessionField } from "../session-store-hooks";
 import { toBoundRuntimeSessionRef } from "../agent-orchestrator/support/session-runtime-ref";
 import { type AgentSessionGoalRow, buildAgentSessionGoalRow } from "./agent-session-goal-row";
 
@@ -80,4 +81,26 @@ export const useAgentSessionGoalRow = ({
         : null,
     [current?.error, current?.pendingAction, onAction, row],
   );
+};
+
+/**
+ * The goal row of the session of a composer. It reads only the goal and the scope of the session,
+ * so streamed text does not render it again.
+ */
+export const useSessionGoalRow = ({
+  repoPath,
+  identity,
+  runtimeDescriptor,
+}: {
+  repoPath: string | null;
+  identity: AgentSessionIdentity | null;
+  runtimeDescriptor: Pick<RuntimeDescriptor, "capabilities"> | null;
+}): AgentSessionGoalRowModel | null => {
+  const goal = useAgentSessionField(identity, "goal");
+  const sessionAssociation = useAgentSessionField(identity, "sessionAssociation");
+  const session = useMemo(
+    () => (identity && sessionAssociation ? { ...identity, sessionAssociation, goal } : null),
+    [goal, identity, sessionAssociation],
+  );
+  return useAgentSessionGoalRow({ repoPath, session, runtimeDescriptor });
 };

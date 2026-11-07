@@ -13,9 +13,6 @@ export const createOpenCodeSessionGoals = () => {
   return {
     /** Applies a reported goal. `null`: the session has no goal. */
     set,
-    remove: (externalSessionId: string): void => {
-      goals.delete(externalSessionId);
-    },
     clear: (): void => goals.clear(),
     /** Gives the snapshot the reported goal, or no goal field. */
     apply: (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveSnapshot => {

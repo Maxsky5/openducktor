@@ -7,10 +7,10 @@ import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { touchSlop } from "@/theme/tokens";
 import { Icon, type IconName } from "@/ui/icon";
-import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { goalActionsOpen, goalToneColor, pressGoalAction } from "./goal-row-state";
+import { CardIconButton } from "./message-queue-panel";
 
 /** The desktop `-mb-1.5`: the row tucks under the composer card. */
 const TUCK = 6;
@@ -60,9 +60,10 @@ export function GoalRow({
         </Touchable>
         <View style={styles.actions}>
           {model.actions.map((action) => (
-            <GoalActionButton
+            <CardIconButton
               key={action}
-              action={action}
+              icon={ACTION_ICONS[action]}
+              accessibilityLabel={`${AGENT_SESSION_GOAL_ACTION_LABELS[action]} goal`}
               pending={model.pendingAction === action}
               disabled={!goalActionsOpen(model, commandsOpen)}
               onPress={() => pressGoalAction(model, commandsOpen, action)}
@@ -81,38 +82,6 @@ export function GoalRow({
         </Text>
       ) : null}
     </View>
-  );
-}
-
-function GoalActionButton({
-  action,
-  pending,
-  disabled,
-  onPress,
-}: {
-  action: AgentSessionGoalControlAction;
-  pending: boolean;
-  disabled: boolean;
-  onPress: () => void;
-}): ReactElement {
-  const theme = useAppTheme();
-  return (
-    <Touchable
-      feedback="opacity"
-      onPress={onPress}
-      disabled={disabled}
-      hitSlop={touchSlop(24)}
-      accessibilityRole="button"
-      accessibilityLabel={`${AGENT_SESSION_GOAL_ACTION_LABELS[action]} goal`}
-      accessibilityState={{ disabled, busy: pending }}
-      style={styles.button}
-    >
-      {pending ? (
-        <LoaderSpinner size={14} color={theme.desktop.mutedForeground} />
-      ) : (
-        <Icon name={ACTION_ICONS[action]} size={14} colorValue={theme.desktop.mutedForeground} />
-      )}
-    </Touchable>
   );
 }
 
@@ -159,14 +128,6 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   // The gaps hold the touch areas of the 24-point actions, so a tap never runs its neighbor.
   actions: { flexDirection: "row", alignItems: "center", gap: 2 * touchSlop(24) },
-  button: {
-    width: 24,
-    height: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.radius.md,
-    borderCurve: "continuous",
-  },
   detail: { marginTop: 2, paddingLeft: 22, color: theme.desktop.mutedForeground },
   error: { marginTop: 2, paddingLeft: 22, color: theme.desktop.destructive },
 }));

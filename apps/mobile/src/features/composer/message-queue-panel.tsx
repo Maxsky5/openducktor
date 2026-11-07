@@ -502,16 +502,21 @@ function QueuedAttachmentChip({
   );
 }
 
-/** The desktop card action: a ghost 24-point square with a muted 14-point icon. */
-function CardIconButton({
+/**
+ * The desktop card action: a ghost 24-point square with a muted 14-point icon. A pending action
+ * shows a spinner in place of its icon.
+ */
+export function CardIconButton({
   icon,
   accessibilityLabel,
   disabled,
+  pending = false,
   onPress,
 }: {
   icon: IconName;
   accessibilityLabel: string;
   disabled: boolean;
+  pending?: boolean;
   onPress: () => void;
 }): ReactElement {
   const theme = useAppTheme();
@@ -523,10 +528,14 @@ function CardIconButton({
       hitSlop={touchSlop(24)}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled, busy: pending }}
       style={styles.cardButton}
     >
-      <Icon name={icon} size={14} colorValue={theme.desktop.mutedForeground} />
+      {pending ? (
+        <LoaderSpinner size={14} color={theme.desktop.mutedForeground} />
+      ) : (
+        <Icon name={icon} size={14} colorValue={theme.desktop.mutedForeground} />
+      )}
     </Touchable>
   );
 }

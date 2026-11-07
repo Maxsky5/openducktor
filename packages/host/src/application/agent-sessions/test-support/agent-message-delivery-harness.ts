@@ -1,4 +1,5 @@
 import type {
+  AcceptedAgentInput,
   AcceptedAgentUserMessage,
   AgentMessageQueueAction,
   AgentMessageSubmitInput,
@@ -40,7 +41,8 @@ export const slashCommand: AgentSessionUserMessagePart = {
 };
 
 type TranscriptEvent = Extract<AgentSessionLiveEnvelope, { type: "transcript_event" }>["event"];
-type SendResult = "accept" | "busy" | "unknown" | HostError;
+/** `command_without_turn`: the runtime accepts a command that ends no turn, like `/goal pause`. */
+type SendResult = "accept" | "command_without_turn" | "busy" | "unknown" | HostError;
 
 const timestamp = "2026-10-08T10:00:00.000Z";
 
@@ -140,7 +142,7 @@ export const failureOf = (promise: Promise<unknown>): Promise<Error | null> =>
   );
 
 const sendFailure = (
-  result: Exclude<SendResult, "accept">,
+  result: Exclude<SendResult, "accept" | "command_without_turn">,
   input: AgentSessionControlSendInput,
 ) => {
   if (result === "busy") {
@@ -186,13 +188,18 @@ export const createHarness = (steering: AgentDeliveryAvailability = { available:
     prepareQueueResume: () => Effect.void,
     prepare: (content) => Effect.succeed(content),
     send: (input) =>
-      Effect.suspend(() => {
+      Effect.suspend((): Effect.Effect<AcceptedAgentInput, HostError> => {
         calls.push({ input });
         onSend?.();
         const result = outcomes.shift() ?? "accept";
-        return result === "accept"
-          ? Effect.succeed(accepted(input))
-          : Effect.fail(sendFailure(result, input));
+        if (result === "accept") return Effect.succeed(accepted(input));
+        if (result === "command_without_turn")
+          return Effect.succeed({
+            type: "command_accepted" as const,
+            commandName: "goal",
+            startsTurn: false,
+          });
+        return Effect.fail(sendFailure(result, input));
       }),
     steeringAvailability: () => Effect.succeed(steering),
     publish: (envelope) => envelopes.push(envelope),

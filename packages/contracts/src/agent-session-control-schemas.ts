@@ -284,7 +284,18 @@ export const acceptedAgentCommandSchema = z.strictObject({
   type: z.literal("command_accepted"),
   commandName: nonEmptyStringSchema,
   inputId: nonEmptyStringSchema.optional(),
+  /**
+   * `false`: the command ends without a turn, such as `/goal pause`, so the next queued message
+   * can go at once. Without the field, the command ends with its turn.
+   */
+  startsTurn: z.boolean().optional(),
 });
+
+/** What a runtime adapter returns when it accepts a goal action. */
+export const GOAL_COMMAND_ACCEPTED = {
+  type: "command_accepted",
+  commandName: "goal",
+} as const satisfies z.infer<typeof acceptedAgentCommandSchema>;
 export const acceptedAgentInputSchema = z.discriminatedUnion("type", [
   acceptedAgentUserMessageSchema,
   acceptedAgentCommandSchema,

@@ -7,6 +7,7 @@ import {
   type AgentSessionUserMessagePart,
   acceptedAgentInputSchema,
   agentSessionTranscriptEventSchema,
+  GOAL_COMMAND_ACCEPTED,
 } from "@openducktor/contracts";
 import type {
   AgentSessionSummary,
@@ -19,7 +20,7 @@ import {
   toStartedSessionRoot,
 } from "../../application/agent-sessions/agent-session-control-summary";
 import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
-import { type HostError, toHostOperationError } from "../../effect/host-errors";
+import { errorMessage, type HostError, toHostOperationError } from "../../effect/host-errors";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import {
   AgentSessionMessageAcceptedError,
@@ -73,8 +74,6 @@ const toOpenCodeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUser
     attachment: converted,
   };
 };
-
-const GOAL_ACCEPTED = { type: "command_accepted", commandName: "goal" } as const;
 
 export const createOpenCodeSessionControlAdapter = ({
   runtime,
@@ -185,7 +184,7 @@ export const createOpenCodeSessionControlAdapter = ({
           { delivery: "steer" },
         ),
       catch: (cause) => {
-        const reason = cause instanceof Error ? cause.message : String(cause);
+        const reason = errorMessage(cause);
         return messageAcceptedFailure(
           toSessionRef(input),
           accepted,
@@ -387,7 +386,7 @@ export const createOpenCodeSessionControlAdapter = ({
               runtimeId: runtime.runtimeId,
               externalSessionId: input.externalSessionId,
             }),
-        }).pipe(Effect.as<AcceptedAgentInput>(GOAL_ACCEPTED)),
+        }).pipe(Effect.as<AcceptedAgentInput>(GOAL_COMMAND_ACCEPTED)),
       );
     },
     updateSessionModel: (input) =>

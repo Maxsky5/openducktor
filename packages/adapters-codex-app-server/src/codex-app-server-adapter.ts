@@ -1,9 +1,11 @@
 import { InterruptedTurnResumeError } from "@openducktor/core";
 import {
   assertAgentWorkStartCurrent,
+  goalCommandStartsWork,
   markAgentWorkIssued,
   markAgentWorkAccepted,
 } from "@openducktor/core";
+import { GOAL_COMMAND_ACCEPTED } from "@openducktor/contracts";
 import { listCodexSessionMetadataPage, getCodexSessionMetadata } from "./codex-session-metadata";
 import type { RuntimeSessionImportSource } from "@openducktor/core";
 import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
@@ -1040,7 +1042,7 @@ export class CodexAppServerAdapter
   async controlGoal(
     input: CodexGoalControlInput,
     options: Pick<CodexSendOptions, "onSent" | "assertCurrent"> = {},
-  ): Promise<{ type: "command_accepted"; commandName: "goal" }> {
+  ): Promise<typeof GOAL_COMMAND_ACCEPTED> {
     const session = this.requireRegisteredSession(input, "change the goal of");
     await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
     (options.assertCurrent ?? input.workStartGuard?.assertCurrent)?.();
@@ -1049,19 +1051,21 @@ export class CodexAppServerAdapter
       this.runtimeClients.clientForRuntime(session.runtimeId),
       session.threadId,
       input.command,
-      () => {
-        markAgentWorkIssued(input);
-        options.onSent?.();
+      {
+        onSent: () => {
+          markAgentWorkIssued(input);
+          options.onSent?.();
+        },
       },
     );
     markAgentWorkAccepted(input);
     if (
-      (input.command.kind === "set" || input.command.kind === "resume") &&
+      goalCommandStartsWork(input.command) &&
       this.runtimeEvents.acceptGoalActivation(session, revisionBefore)
     ) {
       this.runtimeEvents.waitForGoalTurn(session);
     }
-    return { type: "command_accepted", commandName: "goal" };
+    return GOAL_COMMAND_ACCEPTED;
   }
 
   /**
