@@ -9,7 +9,7 @@ import type { SessionStartFlowRequest, ResolvedSessionStartDecision } from "./se
 
 type KickoffPreview = Pick<
   SessionStartFlowRequest,
-  "taskId" | "role" | "launchActionId" | "humanFeedback"
+  "taskId" | "role" | "launchActionId" | "humanFeedback" | "beforeStartAction"
 > &
   Pick<ResolvedSessionStartDecision, "targetBranch" | "kickoffPrompt">;
 
@@ -18,6 +18,16 @@ export type SessionStartKickoffInput = {
   task: TaskCard | null;
   request: KickoffPreview;
 };
+
+/**
+ * The task that a launch runs on. A launch that follows an event runs in the state that the event
+ * gives, so its prompt shows that state.
+ */
+export const sessionLaunchTask = (
+  task: TaskCard,
+  beforeStartAction: SessionStartFlowRequest["beforeStartAction"],
+): TaskCard =>
+  beforeStartAction ? task.taskWorkflow.taskAfterEvent(beforeStartAction.eventId, task) : task;
 
 export const buildSessionStartKickoffPrompt = ({
   intent,
@@ -57,6 +67,7 @@ export const buildSessionStartKickoffPrompt = ({
 
   const promptContext = resolveSessionStartKickoffPromptContext(promptContextInput);
   if (intent.kickoffPrompt !== undefined) return intent.kickoffPrompt;
+  const launchTask = sessionLaunchTask(task, intent.beforeStartAction);
 
   return kickoffPromptForLaunchAction(intent.launchActionId, intent.taskId, {
     overrides,
@@ -64,10 +75,10 @@ export const buildSessionStartKickoffPrompt = ({
     taskWorkflow: task.taskWorkflow,
     ...promptContext,
     task: {
-      title: task.title,
-      issueType: task.issueType,
-      status: task.status,
-      description: task.description,
+      title: launchTask.title,
+      issueType: launchTask.issueType,
+      status: launchTask.status,
+      description: launchTask.description,
     },
   });
 };
@@ -110,15 +121,16 @@ export const prepareSessionStartInstruction = async ({
   if (effectiveTargetBranch) contextInput.taskTargetBranch = effectiveTargetBranch;
   if (request.humanFeedback !== undefined) contextInput.message = request.humanFeedback;
   const context = resolveSessionStartKickoffPromptContext(contextInput);
+  const launchTask = sessionLaunchTask(task, request.beforeStartAction);
   const message = workflow.prompts.messagePrompt({
     launchActionId: launch.id,
     role: request.role,
     task: {
-      taskId: task.id,
-      title: task.title,
-      issueType: task.issueType,
-      status: task.status,
-      description: task.description,
+      taskId: launchTask.id,
+      title: launchTask.title,
+      issueType: launchTask.issueType,
+      status: launchTask.status,
+      description: launchTask.description,
     },
     humanFeedback: context.extraPlaceholders?.humanFeedback,
     targetBranch: context.git?.targetBranch,

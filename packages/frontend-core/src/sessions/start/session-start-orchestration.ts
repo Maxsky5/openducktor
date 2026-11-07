@@ -5,6 +5,7 @@ import { agentSessionIdentityKey, toAgentSessionIdentity } from "../../lib/agent
 import type { AgentSessionSummary } from "../agent-sessions-store";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import type { SessionStartModalSource } from "./session-start-modal-types";
+import { sessionLaunchTask } from "./session-start-kickoff";
 import {
   buildPullRequestSessionOptions,
   buildReusableSessionOptions,
@@ -210,20 +211,21 @@ export const buildSessionStartModalRequest = ({
 }: BuildSessionStartModalRequestArgs): SessionStartModalOpenRequest => {
   if (!selectedTask)
     throw new Error("Task workflow is unavailable. Reload the task before starting a session.");
-  const launch = selectedTask.taskWorkflow.launchAction(request.launchActionId, request.role);
+  const { taskWorkflow } = selectedTask;
+  const launch = taskWorkflow.launchAction(request.launchActionId, request.role);
+  const launchTask = sessionLaunchTask(selectedTask, request.beforeStartAction);
   if (isPullRequestLaunch(launch.id)) {
-    if (!selectedTask.taskWorkflow.pullRequestLaunchAvailable(selectedTask))
+    if (!taskWorkflow.pullRequestLaunchAvailable(launchTask))
       throw new Error(
         `Pull request generation is not available for task "${selectedTask.id}" now.`,
       );
-  } else {
-    const step = selectedTask.workflowSteps.find(
-      (step) => step.kind === "agent" && step.roleId === request.role,
+  } else if (
+    !taskWorkflow.project(launchTask).agentWorkflows[request.role]?.available ||
+    launch.role !== request.role
+  ) {
+    throw new Error(
+      `Workflow step for role "${request.role}" is unavailable for task "${selectedTask.id}".`,
     );
-    if (!step?.available || launch.role !== request.role)
-      throw new Error(
-        `Workflow step for role "${request.role}" is unavailable for task "${selectedTask.id}".`,
-      );
   }
   const existingSessionOptions = resolveExistingSessionOptions(request, taskSessions, selectedTask);
   const initialSourceSession = resolveInitialSourceSession({

@@ -724,3 +724,43 @@ test.each([
     expect(result).toMatchObject({ status: "completed", role: "editor", startMode });
   },
 );
+
+test("a feedback launch runs when its step is available in the state that its event gives", async () => {
+  const definition = reviewTaskDefinition();
+  const write = definition.steps.find(({ id }) => id === "write")!;
+  write.availableWhen = { stateIn: ["open", "writing", "paused"] };
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
+  const launchFeedback = async (status: string, eventId: string) => {
+    const h = await createLaunchHarness("codex", {
+      taskWorkflows: singleTaskWorkflow(workflow),
+      task: { issueType: "feature", status },
+    });
+    const result = await Effect.runPromise(
+      h.service.launch({
+        ...requestFor("codex"),
+        policy: {
+          kind: "manual",
+          actionId: "write_feedback",
+          decision: { startMode: "fresh", selectedModel: modelFor("codex") },
+        },
+        instruction: { kind: "kickoff", feedback: "Shorten the intro" },
+        beforeStartAction: { eventId },
+      }),
+    );
+    return { h, result };
+  };
+
+  const accepted = await launchFeedback("approval", "request-rewrite");
+  expect(accepted.result).toMatchObject({ status: "completed", role: "writer" });
+  expect(accepted.h.appliedEvents).toEqual(["request-rewrite"]);
+  expect(accepted.h.getTask().status).toBe("writing");
+
+  const rejected = await launchFeedback("reviewing", "accept-review");
+  expect(rejected.result).toMatchObject({
+    status: "failed",
+    failure: { message: "writer workflow is not available for task task." },
+  });
+  expect(rejected.h.appliedEvents).toEqual([]);
+  expect(rejected.h.getTask().status).toBe("reviewing");
+  expect(rejected.h.starts).toHaveLength(0);
+});

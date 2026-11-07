@@ -57,7 +57,21 @@ export const prepareWorkflowLaunch = (
     const { action } = launch;
     const actionId = action.id;
     const roleLabel = workflow.role(action.role).label;
-    yield* validateLaunchAvailable(workflow, task, action, repoPath);
+    if (request.beforeStartAction && action.context !== "human_feedback")
+      return yield* launchValidationError(
+        `Action '${actionId}' collects no human feedback, so it cannot commit event '${request.beforeStartAction.eventId}' before its start. Start the launch without that event.`,
+      );
+    // A launch that follows an event runs in the state that the event gives. The event must be
+    // allowed now; the host commits it below, after runtime admission.
+    const beforeStartEventId = request.beforeStartAction?.eventId;
+    const launchTask =
+      beforeStartEventId === undefined
+        ? task
+        : yield* Effect.try({
+            try: () => workflow.taskAfterEvent(beforeStartEventId, task),
+            catch: (cause) => launchValidationError(errorMessage(cause)),
+          });
+    yield* validateLaunchAvailable(workflow, launchTask, action, repoPath);
     const settings = yield* deps.settingsConfig.readGlobalConfig();
     const overrides = workflow.prompts.mergeOverrides({
       globalOverrides: settings.globalPromptOverrides,
@@ -83,10 +97,6 @@ export const prepareWorkflowLaunch = (
           `Action '${actionId}' does not define a kickoff prompt.`,
         );
     }
-    if (request.beforeStartAction && action.context !== "human_feedback")
-      return yield* launchValidationError(
-        `Action '${actionId}' collects no human feedback, so it cannot commit event '${request.beforeStartAction.eventId}' before its start. Start the launch without that event.`,
-      );
     const targetBranch = request.targetBranch ?? task.targetBranch ?? config.defaultTargetBranch;
     if (isPullRequestLaunch(action.id)) {
       const unavailable = yield* pullRequestUnavailableReason(deps, {

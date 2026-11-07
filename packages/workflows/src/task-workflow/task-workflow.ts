@@ -150,6 +150,11 @@ export type TaskWorkflow = {
   agentEvent(eventId: string): TaskWorkflowAgentEventDefinition | undefined;
   decide(eventId: string, task: TaskFacts): TaskEventDecision;
   /**
+   * The task as the event leaves it: the task in the state that the event gives. A launch that
+   * follows the event is assessed against this task. Throws when the event is unavailable now.
+   */
+  taskAfterEvent<Task extends TaskFacts>(eventId: string, task: Task): Task;
+  /**
    * The launch that follows an event, selected in the state that the event gives. A client starts
    * that launch before the host commits the event, so a canceled start leaves the task unchanged.
    */
@@ -391,6 +396,14 @@ export const createTaskWorkflow = (
       evaluator.isEventAvailable({ ...input, state: status }, eventId),
     );
   };
+  const taskAfterEvent = <Task extends TaskFacts>(eventId: string, task: Task): Task => {
+    const decision = evaluator.decide(inputs.input(task), eventId);
+    if (decision.kind === "denied")
+      throw new Error(
+        `Event "${eventId}" is unavailable in state "${task.status}". Reload the task.`,
+      );
+    return decision.kind === "transition" ? { ...task, status: decision.to } : task;
+  };
   const notifications = new Map(
     definition.states.flatMap(({ id, notification }) =>
       notification ? [[id, notification] as const] : [],
@@ -432,15 +445,9 @@ export const createTaskWorkflow = (
     eventEffects: (eventId) => event(eventId).effects ?? [],
     agentEvents,
     agentEvent: (eventId) => agentEventsById.get(eventId),
-    launchAfterEvent: (eventId, task, launchActionIds) => {
-      const decision = evaluator.decide(inputs.input(task), eventId);
-      if (decision.kind === "denied")
-        throw new Error(
-          `Event "${eventId}" is unavailable in state "${task.status}". Reload the task.`,
-        );
-      const status = decision.kind === "transition" ? decision.to : task.status;
-      return evaluator.selectLaunchAction(inputs.input({ ...task, status }), launchActionIds);
-    },
+    taskAfterEvent,
+    launchAfterEvent: (eventId, task, launchActionIds) =>
+      evaluator.selectLaunchAction(inputs.input(taskAfterEvent(eventId, task)), launchActionIds),
     decide: (eventId, task) => {
       const decision = evaluator.decide(inputs.input(task), eventId);
       if (decision.kind === "unchanged") return { kind: "unchanged", status: task.status };

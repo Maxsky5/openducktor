@@ -117,6 +117,28 @@ describe("createTaskWorkflow", () => {
     ).toThrow("unavailable");
   });
 
+  test("assesses a step against the task as the event leaves it", () => {
+    const definition = reviewTaskDefinition();
+    const write = definition.steps.find((step) => step.id === "write")!;
+    write.availableWhen = { stateIn: ["open", "writing", "paused"] };
+    const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
+    const writerAvailable = (task: TaskFacts) =>
+      workflow.project(task).agentWorkflows.writer!.available;
+    const approval = reviewTask({ status: "approval" });
+    const reviewing = reviewTask({ status: "reviewing" });
+
+    expect(writerAvailable(approval)).toBe(false);
+    expect(workflow.taskAfterEvent("request-rewrite", approval)).toEqual({
+      ...approval,
+      status: "writing",
+    });
+    expect(writerAvailable(workflow.taskAfterEvent("request-rewrite", approval))).toBe(true);
+    expect(writerAvailable(workflow.taskAfterEvent("accept-review", reviewing))).toBe(false);
+    expect(() => workflow.taskAfterEvent("request-rewrite", reviewing)).toThrow(
+      'Event "request-rewrite" is unavailable in state "reviewing". Reload the task.',
+    );
+  });
+
   test("projects role states and actions from the definition", () => {
     const projection = review.project(reviewTask({ status: "reviewing" }));
 
