@@ -42,9 +42,15 @@ const sameBoxes = (a: readonly PageOccluderBox[], b: readonly PageOccluderBox[])
     );
   });
 
-/** Reads the open overlays. It runs only when an overlay appears, leaves, or moves. */
+/**
+ * Reads the open overlays that a user can see. A hidden browser surface keeps its portals
+ * mounted, and a portal that inherits `visibility: hidden` still has a box that would cover the
+ * page of another tab. It runs only when an overlay appears, leaves, or moves.
+ */
 const refreshOccluders = (): void => {
-  const next = Array.from(document.querySelectorAll(OCCLUDER_SELECTOR), boxOf);
+  const next = Array.from(document.querySelectorAll(OCCLUDER_SELECTOR))
+    .filter((element) => element.checkVisibility({ visibilityProperty: true }))
+    .map(boxOf);
   if (sameBoxes(occluders, next)) {
     startTicking();
     return;
@@ -52,6 +58,15 @@ const refreshOccluders = (): void => {
   occluders = next;
   startTicking();
   for (const listener of listeners) listener();
+};
+
+/**
+ * Reads the overlays again, such as when a browser surface that holds one shows or hides. A
+ * surface that becomes visible again must let its overlay cover its page.
+ */
+export const refreshPageOccluders = (): void => {
+  if (listeners.size === 0) return;
+  refreshOccluders();
 };
 
 /** Re-measures an open overlay every frame, because animations, scroll, and resize move it. */

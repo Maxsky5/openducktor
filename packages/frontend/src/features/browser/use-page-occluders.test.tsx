@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { pageIsOccluded, usePageOccluders } from "./use-page-occluders";
+import { pageIsOccluded, refreshPageOccluders, usePageOccluders } from "./use-page-occluders";
 
 describe("usePageOccluders", () => {
   test("follows host overlays as they open and close", async () => {
@@ -48,6 +48,35 @@ describe("usePageOccluders", () => {
 
     act(() => {
       overlay.remove();
+    });
+    await waitFor(() => expect(result.current).toEqual([]));
+  });
+
+  test("ignores an overlay that a hidden ancestor hides, and reads it again when it shows", async () => {
+    const { result } = renderHook(() => usePageOccluders());
+    const surface = document.createElement("div");
+    const overlay = document.createElement("div");
+    overlay.setAttribute("data-page-occluder", "");
+    surface.append(overlay);
+    act(() => {
+      document.body.append(surface);
+    });
+    await waitFor(() => expect(result.current).toHaveLength(1));
+
+    act(() => {
+      surface.style.visibility = "hidden";
+      refreshPageOccluders();
+    });
+    await waitFor(() => expect(result.current).toEqual([]));
+
+    act(() => {
+      surface.style.visibility = "visible";
+      refreshPageOccluders();
+    });
+    await waitFor(() => expect(result.current).toHaveLength(1));
+
+    act(() => {
+      surface.remove();
     });
     await waitFor(() => expect(result.current).toEqual([]));
   });
