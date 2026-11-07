@@ -22,6 +22,8 @@ export type ElectronCapturedImage = {
 /** Makes an image from PNG bytes, as `nativeImage.createFromBuffer` does. */
 export type ElectronPngDecoder = (png: Buffer) => ElectronCapturedImage;
 
+type ScreenshotFormat = "png" | "jpeg";
+
 /** A `Page.captureScreenshot` request for a clip that a viewport screenshot can hold. */
 const viewportClipRequestSchema = z.object({
   format: z.enum(["png", "jpeg"]).default("png"),
@@ -34,6 +36,15 @@ const viewportClipRequestSchema = z.object({
     scale: z.number().positive(),
   }),
   captureBeyondViewport: z.literal(false).optional(),
+});
+
+/**
+ * A `Page.captureScreenshot` request without a clip: the whole viewport. A request with another
+ * key, such as `captureBeyondViewport`, goes to CDP as it is.
+ */
+const viewportRequestSchema = z.strictObject({
+  format: z.enum(["png", "jpeg"]).default("png"),
+  quality: z.number().int().min(0).max(100).default(CDP_DEFAULT_JPEG_QUALITY),
 });
 
 const layoutMetricsSchema = z.object({
@@ -53,8 +64,49 @@ const layoutMetricsSchema = z.object({
 
 const screenshotResultSchema = z.object({ data: z.string() });
 
-type ViewportClip = z.infer<typeof viewportClipRequestSchema>["clip"];
 type CssViewport = z.infer<typeof layoutMetricsSchema>["cssVisualViewport"];
+type LayoutMetrics = z.infer<typeof layoutMetricsSchema>;
+type ViewportClip = z.infer<typeof viewportClipRequestSchema>["clip"];
+
+/**
+ * Takes a screenshot of a page viewport through CDP. A request without a clip always becomes a
+ * clip of the whole viewport, because a viewport screenshot waits for a compositor frame and a
+ * page that no window shows draws none.
+ */
+const captureViewport = async (
+  connection: Pick<CdpConnection, "request">,
+  viewport: CssViewport,
+  params: { format: ScreenshotFormat; quality: number },
+): Promise<string> => {
+  const { data } = screenshotResultSchema.parse(
+    await connection.request(
+      "Page.captureScreenshot",
+      {
+        format: params.format,
+        quality: params.quality,
+        clip: viewportClipOf(viewport),
+        captureBeyondViewport: false,
+      },
+      "",
+    ),
+  );
+  if (data.length === 0) {
+    throw new Error("The page snapshot is empty.");
+  }
+  return data;
+};
+
+/**
+ * A JPEG data URL of the page as it shows. A CDP screenshot draws the page at once, while
+ * `webContents.capturePage` can fail with `UnknownVizError` until the view has painted a frame.
+ */
+export const capturePageImage = async (
+  connection: Pick<CdpConnection, "request">,
+  quality: number,
+): Promise<string> => {
+  const { viewport } = await readLayoutMetrics(connection);
+  return `data:image/jpeg;base64,${await captureViewport(connection, viewport, { format: "jpeg", quality })}`;
+};
 
 /**
  * Runs CDP `Page.captureScreenshot` on a guest page. For a clip, Chromium draws the shown page at
@@ -71,19 +123,23 @@ export const captureGuestScreenshot = async (
   const captureWithCdp = () => connection.request("Page.captureScreenshot", params, "");
   const request = viewportClipRequestSchema.safeParse(params);
   if (!request.success) {
-    return captureWithCdp();
+    const viewportRequest = viewportRequestSchema.safeParse(params);
+    if (!viewportRequest.success) {
+      return captureWithCdp();
+    }
+    const { viewport } = await readLayoutMetrics(connection);
+    const data = await captureViewport(connection, viewport, viewportRequest.data);
+    return { data };
   }
-  const metrics = layoutMetricsSchema.parse(
-    await connection.request("Page.getLayoutMetrics", undefined, ""),
-  );
-  const viewport = metrics.cssVisualViewport;
+  const { metrics, viewport } = await readLayoutMetrics(connection);
   const { clip, format, quality } = request.data;
   if (!insideViewport(clip, viewport)) {
     return captureWithCdp();
   }
-  const { data } = screenshotResultSchema.parse(
-    await connection.request("Page.captureScreenshot", { format: "png" }, ""),
-  );
+  const data = await captureViewport(connection, viewport, {
+    format: "png",
+    quality: CDP_DEFAULT_JPEG_QUALITY,
+  });
   const image = decodePng(Buffer.from(data, "base64"));
   const devicePixelsPerCssPixel = metrics.visualViewport.clientWidth / viewport.clientWidth;
   const clipped = image.crop(imageRect(clip, viewport, devicePixelsPerCssPixel, image.getSize()));
@@ -101,6 +157,23 @@ export const captureGuestScreenshot = async (
   const encoded = format === "jpeg" ? scaled.toJPEG(quality) : scaled.toPNG();
   return { data: encoded.toString("base64") };
 };
+
+const readLayoutMetrics = async (
+  connection: Pick<CdpConnection, "request">,
+): Promise<{ metrics: LayoutMetrics; viewport: CssViewport }> => {
+  const metrics = layoutMetricsSchema.parse(
+    await connection.request("Page.getLayoutMetrics", undefined, ""),
+  );
+  return { metrics, viewport: metrics.cssVisualViewport };
+};
+
+const viewportClipOf = (viewport: CssViewport): ViewportClip => ({
+  x: viewport.pageX,
+  y: viewport.pageY,
+  width: viewport.clientWidth,
+  height: viewport.clientHeight,
+  scale: 1,
+});
 
 const insideViewport = (clip: ViewportClip, viewport: CssViewport): boolean =>
   clip.x >= viewport.pageX - VIEWPORT_TOLERANCE &&

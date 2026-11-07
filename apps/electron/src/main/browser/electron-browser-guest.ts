@@ -72,7 +72,6 @@ export type ElectronBrowserGuest = {
   reloadIgnoringCache(): void;
   close(): void;
   focus(): void;
-  capturePage(): Promise<{ toJPEG(quality: number): Buffer }>;
   setBackgroundThrottling(allowed: boolean): void;
   setWindowOpenHandler(handler: (details: GuestWindowOpenDetails) => GuestWindowOpenResponse): void;
   listenerCount(eventName: typeof RUN_DIALOG_EVENT): number;

@@ -25,6 +25,8 @@ type SentCommand = {
 export class FakeDebugger extends EventEmitter {
   readonly sent: SentCommand[] = [];
   attached = false;
+  /** The base64 data that `Page.captureScreenshot` returns. */
+  pageScreenshotData = "AAAA";
   private nextSession = 1;
 
   constructor(private readonly targetId: string) {
@@ -46,6 +48,22 @@ export class FakeDebugger extends EventEmitter {
     }
     if (method === "Target.attachToTarget") {
       return Promise.resolve({ sessionId: `${this.targetId}-session-${this.nextSession++}` });
+    }
+    if (method === "Page.getLayoutMetrics") {
+      return Promise.resolve({
+        visualViewport: { clientWidth: 800 },
+        cssVisualViewport: {
+          pageX: 0,
+          pageY: 0,
+          clientWidth: 800,
+          clientHeight: 600,
+          scale: 1,
+          zoom: 1,
+        },
+      });
+    }
+    if (method === "Page.captureScreenshot") {
+      return Promise.resolve({ data: this.pageScreenshotData });
     }
     return Promise.resolve({});
   }
@@ -107,14 +125,14 @@ export class FakeGuest extends EventEmitter implements ElectronBrowserGuest {
   readonly debugger: FakeDebugger;
   url = "about:blank";
   loaded: string[] = [];
+  /** True for each load when the debugger was attached already. */
+  debuggerAttachedAtLoad: boolean[] = [];
   /** One entry for each reload: true when it ignored the cache. */
   reloads: boolean[] = [];
   destroyed = false;
   closed = 0;
   focused = 0;
   backgroundThrottling = true;
-  /** The JPEG bytes that `capturePage` returns for this page. */
-  snapshotJpeg: Buffer = Buffer.from("AAAA", "base64");
   windowOpenHandler: ((details: GuestWindowOpenDetails) => GuestWindowOpenResponse) | null = null;
 
   constructor(
@@ -137,6 +155,7 @@ export class FakeGuest extends EventEmitter implements ElectronBrowserGuest {
 
   loadURL(url: string): Promise<void> {
     this.loaded.push(url);
+    this.debuggerAttachedAtLoad.push(this.debugger.attached);
     this.url = url;
     return Promise.resolve();
   }
@@ -151,10 +170,6 @@ export class FakeGuest extends EventEmitter implements ElectronBrowserGuest {
 
   focus(): void {
     this.focused += 1;
-  }
-
-  capturePage(): Promise<{ toJPEG(quality: number): Buffer }> {
-    return Promise.resolve({ toJPEG: () => this.snapshotJpeg });
   }
 
   setBackgroundThrottling(allowed: boolean): void {
@@ -223,7 +238,7 @@ export class FakeView implements ElectronBrowserView {
 export class FakeViewPort implements ElectronBrowserViewPort {
   readonly views: FakeView[] = [];
   readonly placed: Array<{ view: FakeView; windowId: number; box: ElectronViewBox }> = [];
-  readonly kept: Array<{ view: FakeView; visible: boolean }> = [];
+  readonly kept: FakeView[] = [];
   readonly closed: FakeView[] = [];
   keeperCloses = 0;
 
@@ -250,9 +265,9 @@ export class FakeViewPort implements ElectronBrowserViewPort {
     return true;
   }
 
-  showInKeeper(view: ElectronBrowserView, visible: boolean): void {
+  keepInKeeper(view: ElectronBrowserView): void {
     // SAFETY: the engine keeps only views that this port created, which are FakeView values.
-    this.kept.push({ view: view as FakeView, visible });
+    this.kept.push(view as FakeView);
   }
 
   close(view: ElectronBrowserView): void {
