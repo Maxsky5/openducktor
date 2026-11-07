@@ -54,11 +54,31 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
   overlayHost.style.setProperty("pointer-events", "none", "important");
   overlayHost.style.setProperty("z-index", "2147483647", "important");
   overlayHost.style.setProperty("overflow", "hidden", "important");
-  if (document.documentElement) {
+  // A top-layer element, such as a modal dialog or a popover of the page, paints above any
+  // z-index. A manual popover puts the overlay in the same top layer, so draw above those too.
+  overlayHost.setAttribute("popover", "manual");
+  const showOverlay = () => {
+    try { overlayHost.showPopover(); } catch (error) {}
+  };
+  const raiseOverlay = () => {
+    if (!overlayHost.isConnected) return;
+    try { overlayHost.hidePopover(); } catch (error) {}
+    showOverlay();
+  };
+  const attachOverlay = () => {
     document.documentElement.appendChild(overlayHost);
+    showOverlay();
+  };
+  if (document.documentElement) {
+    attachOverlay();
   } else {
-    document.addEventListener("DOMContentLoaded", () => document.documentElement.appendChild(overlayHost), { once: true });
+    document.addEventListener("DOMContentLoaded", attachOverlay, { once: true });
   }
+  // A page that opens a dialog or a popover after the overlay takes the top layer gains the top
+  // layer above the overlay. Raise the overlay again so the picker and the markers stay above.
+  addEventListener("toggle", (event) => {
+    if (event.target !== overlayHost && event.newState === "open") raiseOverlay();
+  }, true);
   const overlay = overlayHost.attachShadow({ mode: "closed" });
   const layer = document.createElement("div");
   layer.style.setProperty("position", "absolute", "important");
@@ -166,6 +186,7 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
   globalThis.__odtPickerActive = (active) => {
     if (pickerActive === active) return;
     pickerActive = active;
+    if (active) raiseOverlay();
     syncPickerListeners();
     // The capture layer keeps the pointers that would go to an iframe. The hit test hides it, and
     // the markers ignore pointer events, so Chromium finds the page element under the pointer.
@@ -291,6 +312,7 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
   new MutationObserver(scheduleAnchors).observe(document, { subtree: true, childList: true, attributes: true });
   globalThis.__odtSetAnchors = (next) => {
     anchors = next;
+    raiseOverlay();
     // Report the boxes of a new anchor set even when they match the last report, so a client that
     // just asked for anchors receives them.
     lastAnchorReport = "";
@@ -315,6 +337,7 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
 
   /* A short pulse where an agent clicks, hovers, or types. */
   globalThis.__odtAgentMarker = (action, x, y) => {
+    raiseOverlay();
     const marker = document.createElement("span");
     marker.setAttribute("aria-hidden", "true");
     marker.style.setProperty("position", "absolute", "important");
