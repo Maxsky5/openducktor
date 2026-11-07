@@ -1,3 +1,4 @@
+import type { BrowserPickedElement } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import {
   type BrowserAnnotationChanges,
@@ -10,7 +11,6 @@ import {
   commentBoxPosition,
   selectionBox,
 } from "./browser-comment-box-position";
-import type { BrowserPickedElement } from "./use-browser-picker";
 
 /**
  * The comment box of a picker selection. Save captures the selected elements on the host and
@@ -46,6 +46,7 @@ export function BrowserSelectionCommentBox({
   return (
     <div
       className="pointer-events-auto absolute z-30"
+      data-page-occluder=""
       style={{ left: position.left, top: position.top, width: BROWSER_COMMENT_BOX_WIDTH }}
     >
       <BrowserAnnotationCommentBox

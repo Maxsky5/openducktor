@@ -32,7 +32,10 @@ import {
 import { createTaskStreamController } from "@openducktor/frontend-core/tasks/task-stream-controller";
 import type { TaskSnapshotResult } from "@openducktor/frontend-core/queries/task-view-sync";
 import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
-import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
+import type {
+  ElectronBrowserSetSurfaceRequest,
+  OpenDucktorElectronApi,
+} from "../shared/electron-bridge-contract";
 import {
   createElectronShellBridge,
   withElectronDesktopShell,
@@ -215,7 +218,9 @@ const createElectronApi = () => {
       disconnect: mock(async (_clientId: string) => {}),
       send: mock(async (_clientId: string, _frame: Uint8Array) => {}),
       subscribe: mock((_clientId: string, _listener: (frame: Uint8Array) => void) => unsubscribe),
-      bindGuest: mock(async (_tabId: string, _webContentsId: number) => {}),
+      setSurface: mock(async (_input: ElectronBrowserSetSurfaceRequest) => {}),
+      focusPage: mock(async (_tabId: string) => {}),
+      capturePage: mock(async (_tabId: string) => "data:image/png;base64,AAAA"),
       pickFiles: mock(async (_input: { multiple: boolean; accept: readonly string[] }) => [
         "/tmp/photo.png",
       ]),
@@ -601,12 +606,12 @@ describe("electron shell bridge", () => {
     expect(unsubscribeAppUpdates).toHaveBeenCalled();
   });
 
-  test("uses the preload bridge for webview browser tabs", async () => {
+  test("uses the preload bridge for native browser pages", async () => {
     const { electronApi, unsubscribe } = createElectronApi();
     setElectronApi(electronApi);
     const bridge = createElectronShellBridge();
-    if (bridge.browser.surface !== "webview") {
-      throw new Error("Expected the webview browser bridge.");
+    if (bridge.browser.surface !== "electron") {
+      throw new Error("Expected the Electron browser bridge.");
     }
     const onFrame = mock(() => {});
     const onStateChange = mock((_state: "connected" | "disconnected") => {});
@@ -617,10 +622,13 @@ describe("electron shell bridge", () => {
     const clientId = electronApi.browser.connect.mock.calls[0]?.[0];
     await connection.send(new Uint8Array([1]));
     await connection.close();
-    await bridge.browser.bindGuest("11111111-1111-4111-8111-111111111111", 42);
+    const tabId = "11111111-1111-4111-8111-111111111111";
+    const bounds = { x: 1, y: 2, width: 300, height: 200 };
+    await bridge.browser.setSurface({ tabId, visible: true, bounds });
+    await bridge.browser.focusPage(tabId);
+    const snapshot = await bridge.browser.capturePage(tabId);
     const paths = await bridge.browser.pickFiles({ multiple: true, accept: [".png"] });
 
-    expect(bridge.browser.partition("my-repo")).toBe("persist:openducktor-browser-my-repo");
     expect(host.requests.map((request) => request.method)).toEqual(["events.open"]);
     stopTabEvents();
     expect(electronApi.browser.subscribe).toHaveBeenCalledWith(clientId, onFrame);
@@ -628,10 +636,10 @@ describe("electron shell bridge", () => {
     expect(electronApi.browser.disconnect).toHaveBeenCalledWith(clientId);
     expect(unsubscribe).toHaveBeenCalledTimes(1);
     expect(onStateChange.mock.calls).toEqual([["connected"], ["disconnected"]]);
-    expect(electronApi.browser.bindGuest).toHaveBeenCalledWith(
-      "11111111-1111-4111-8111-111111111111",
-      42,
-    );
+    expect(electronApi.browser.setSurface).toHaveBeenCalledWith({ tabId, visible: true, bounds });
+    expect(electronApi.browser.focusPage).toHaveBeenCalledWith(tabId);
+    expect(electronApi.browser.capturePage).toHaveBeenCalledWith(tabId);
+    expect(snapshot).toBe("data:image/png;base64,AAAA");
     expect(paths).toEqual(["/tmp/photo.png"]);
   });
 

@@ -94,6 +94,7 @@ export function BrowserDialogPrompt({
     <div
       ref={cardRef}
       className="pointer-events-auto absolute inset-0 z-20 flex items-start justify-center overflow-y-auto bg-background/60 p-4 pt-[10%]"
+      data-page-occluder=""
     >
       {/* A non-modal dialog: it blocks only the page area of its tab, not the app. */}
       <dialog

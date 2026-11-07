@@ -55,7 +55,9 @@ export const ELECTRON_BROWSER_CONNECT_CHANNEL = "openducktor:browser:connect";
 export const ELECTRON_BROWSER_SEND_CHANNEL = "openducktor:browser:send";
 export const ELECTRON_BROWSER_DISCONNECT_CHANNEL = "openducktor:browser:disconnect";
 export const ELECTRON_BROWSER_EVENT_CHANNEL = "openducktor:browser:event";
-export const ELECTRON_BROWSER_BIND_GUEST_CHANNEL = "openducktor:browser:bind-guest";
+export const ELECTRON_BROWSER_SET_SURFACE_CHANNEL = "openducktor:browser:set-surface";
+export const ELECTRON_BROWSER_FOCUS_PAGE_CHANNEL = "openducktor:browser:focus-page";
+export const ELECTRON_BROWSER_CAPTURE_PAGE_CHANNEL = "openducktor:browser:capture-page";
 export const ELECTRON_BROWSER_PICK_FILES_CHANNEL = "openducktor:browser:pick-files";
 export const ELECTRON_NOTIFICATION_CLICKED_CHANNEL = "openducktor:notification:clicked";
 export const ELECTRON_NOTIFICATION_GET_CAPABILITY_CHANNEL =
@@ -92,10 +94,26 @@ export const electronBrowserSendRequestSchema = z.strictObject({
   clientId: electronBrowserClientIdSchema,
   frame: z.instanceof(Uint8Array),
 });
-export const electronBrowserBindGuestRequestSchema = z.strictObject({
+export const electronBrowserSetSurfaceRequestSchema = z.strictObject({
   tabId: browserTabIdSchema,
-  webContentsId: z.number().int().positive(),
+  visible: z.boolean(),
+  bounds: z
+    .strictObject({
+      x: z.number(),
+      y: z.number(),
+      width: z.number().positive(),
+      height: z.number().positive(),
+    })
+    .optional(),
 });
+export type ElectronBrowserSetSurfaceRequest = z.infer<
+  typeof electronBrowserSetSurfaceRequestSchema
+>;
+export const electronBrowserTabRequestSchema = z.strictObject({
+  tabId: browserTabIdSchema,
+});
+export const electronBrowserCapturePageResultSchema = z.string().startsWith("data:image/");
+
 export const electronBrowserPickFilesRequestSchema = z.strictObject({
   multiple: z.boolean(),
   accept: z.array(z.string().max(256)).max(200),
@@ -119,13 +137,15 @@ export type OpenDucktorElectronTerminalApi = {
   subscribe(clientId: string, listener: (frame: Uint8Array) => void): () => void;
 };
 
-/** The browser channel of each renderer client, and the Electron `<webview>` helpers. */
+/** The browser channel of each renderer client, and the Electron page view of each tab. */
 export type OpenDucktorElectronBrowserApi = {
   connect(clientId: string): Promise<void>;
   send(clientId: string, frame: Uint8Array): Promise<void>;
   disconnect(clientId: string): Promise<void>;
   subscribe(clientId: string, listener: (frame: Uint8Array) => void): () => void;
-  bindGuest(tabId: string, webContentsId: number): Promise<void>;
+  setSurface(input: ElectronBrowserSetSurfaceRequest): Promise<void>;
+  focusPage(tabId: string): Promise<void>;
+  capturePage(tabId: string): Promise<string>;
   pickFiles(input: { multiple: boolean; accept: readonly string[] }): Promise<string[]>;
 };
 

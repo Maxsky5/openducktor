@@ -1,8 +1,10 @@
 import {
+  BROWSER_ANNOTATION_MAX_ELEMENTS,
   type BrowserAnnotationCapture,
   type BrowserAnnotationElement,
   type BrowserBox,
   browserAnnotationElementSchema,
+  type BrowserPickedElement,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -23,6 +25,7 @@ import {
   screenshotResultSchema,
 } from "../../ports/browser-cdp-schemas";
 import { BROWSER_PAGE_CAPTURE_BUNDLE } from "./page-capture/browser-page-capture.generated";
+import type { BrowserPagePickerMessage } from "./browser-host-tab-session";
 import { BrowserServiceError } from "./browser-service-error";
 import type { BrowserTabRegistry } from "./browser-tab-registry";
 import type { BrowserTabService } from "./browser-tab-service";
@@ -69,19 +72,41 @@ export type BrowserPickerInput = {
   registry: Pick<BrowserTabRegistry, "get">;
   requireLive: BrowserTabService["requireLive"];
   stageImage(base64Png: string, name: string): Effect.Effect<{ path: string }, BrowserServiceError>;
+  reportFailure(operation: string, cause: unknown): void;
 };
 
+/** What a picker message of the page means for the client that follows the picker. */
+export type BrowserPickerPageResult =
+  | { readonly kind: "none" }
+  | { readonly kind: "selection"; readonly selection: BrowserPickedElement[] }
+  | { readonly kind: "cancelled" };
+
 /**
- * The element picker. It injects no highlight script: the host finds the element under the
- * pointer with CDP, and the OpenDucktor overlay draws the highlight over the page surface.
+ * The element picker. The page script reports the pointer and the picks, and this picker resolves
+ * the element under the point with CDP. The page script draws the highlight and the selection,
+ * because a native page view draws above every element of the OpenDucktor window.
  */
 export const createBrowserPicker = ({
   engine,
   registry,
   requireLive,
   stageImage,
+  reportFailure,
 }: BrowserPickerInput) => {
   const enabledTabs = new Set<string>();
+  /** The picked elements of each tab. The page draws them and the client shows the comment box. */
+  const selections = new Map<string, BrowserPickedElement[]>();
+
+  const evaluate = (
+    host: { evaluate(expression: string): Effect.Effect<unknown, BrowserServiceError> },
+    expression: string,
+  ) => host.evaluate(expression).pipe(Effect.asVoid);
+
+  const targetExpression = (target: BrowserPickedElement | null): string =>
+    `globalThis.__odtPickerTarget(${JSON.stringify(target)})`;
+
+  const selectionExpression = (selection: readonly BrowserPickedElement[]): string =>
+    `globalThis.__odtPickerSelection(${JSON.stringify(selection.map((element) => element.box))})`;
 
   const setEnabled = (tabId: string, enabled: boolean) =>
     Effect.gen(function* () {
@@ -90,45 +115,81 @@ export const createBrowserPicker = ({
       if (enabled) {
         yield* cdp("Animation.enable");
         yield* cdp("Animation.setPlaybackRate", { playbackRate: 0 });
+        // A failed page setup must not leave the page picker on, because the host would report the
+        // picker as off while the page still captures its pointers.
+        yield* Effect.gen(function* () {
+          yield* evaluate(host, "globalThis.__odtPickerActive(true)");
+          yield* evaluate(host, selectionExpression([]));
+        }).pipe(
+          Effect.onError(() =>
+            Effect.gen(function* () {
+              // A repeated enable can fail after an earlier one succeeded, so clear host state too.
+              enabledTabs.delete(tabId);
+              selections.delete(tabId);
+              yield* evaluate(host, targetExpression(null)).pipe(Effect.ignore);
+              yield* evaluate(host, "globalThis.__odtPickerActive(false)").pipe(Effect.ignore);
+              yield* cdp("Animation.setPlaybackRate", { playbackRate: 1 }).pipe(Effect.ignore);
+              yield* cdp("Animation.disable").pipe(Effect.ignore);
+            }),
+          ),
+        );
         enabledTabs.add(tabId);
-      } else {
-        enabledTabs.delete(tabId);
-        yield* cdp("Animation.setPlaybackRate", { playbackRate: 1 });
-        yield* cdp("Animation.disable");
+        selections.set(tabId, []);
+        return;
+      }
+      const wasEnabled = enabledTabs.delete(tabId);
+      selections.delete(tabId);
+      // The page can be gone while the picker still shows, so turning it off never fails.
+      yield* evaluate(host, "globalThis.__odtPickerActive(false)").pipe(Effect.ignore);
+      yield* evaluate(host, targetExpression(null)).pipe(Effect.ignore);
+      // Animation cleanup runs only when this picker turned animation off. It must not keep the
+      // picker on, and a failure must not hide the user's cancel.
+      const cleanup = (
+        command: Effect.Effect<CdpPayload, BrowserServiceError>,
+      ): Effect.Effect<void> =>
+        command.pipe(
+          Effect.tapError((cause) =>
+            Effect.sync(() => reportFailure("browser.picker.cleanup", cause)),
+          ),
+          Effect.ignore,
+        );
+      if (wasEnabled) {
+        yield* cleanup(cdp("Animation.setPlaybackRate", { playbackRate: 1 }));
+        yield* cleanup(cdp("Animation.disable"));
       }
     });
 
-  /**
-   * The element under a point in CSS pixels of the viewport, with its box and label, or null when
-   * no element is there. `DOM.getNodeForLocation` takes document points, so the point gets the
-   * scroll offset. The box of `DOM.getBoxModel` is already in viewport points.
-   */
-  const hover = (tabId: string, x: number, y: number) =>
+  /** The element under a point in CSS pixels of the viewport, with its box and label. */
+  const targetAt = (tabId: string, x: number, y: number, operation: string) =>
     Effect.gen(function* () {
-      if (!enabledTabs.has(tabId)) {
-        return null;
-      }
-      const operation = "browser.picker.hover";
       const host = yield* requireLive(tabId, operation);
       const cdp = cdpFor(host.session, tabId, operation);
       const viewport = layoutMetricsResultSchema.parse(
         yield* cdp("Page.getLayoutMetrics"),
       ).cssVisualViewport;
-      const located = yield* host.session
-        .send("DOM.getNodeForLocation", {
-          x: Math.round(x + viewport.pageX),
-          y: Math.round(y + viewport.pageY),
-          includeUserAgentShadowDOM: false,
-          ignorePointerEventsNone: true,
-        })
-        .pipe(
-          Effect.map((result) => nodeForLocationResultSchema.parse(result)),
-          // The pointer can be over no element, or over one that has no box or just left the page.
-          Effect.catchIf(isMissingNodeError, () => Effect.succeed(null)),
-          Effect.mapError(actionFailure(tabId, operation)),
-        );
+      // The visuals of the picker ignore pointer events, so Chromium finds the page element under
+      // them. Only the transparent capture layer needs hiding. It covers the frame to keep the
+      // pointer events that would go to an iframe.
+      const located = yield* Effect.gen(function* () {
+        yield* evaluate(host, "globalThis.__odtPickerHitTest(true)");
+        return yield* host.session
+          .send("DOM.getNodeForLocation", {
+            x: Math.round(x + viewport.pageX),
+            y: Math.round(y + viewport.pageY),
+            includeUserAgentShadowDOM: false,
+            ignorePointerEventsNone: false,
+          })
+          .pipe(
+            Effect.map((result) => nodeForLocationResultSchema.parse(result)),
+            // The pointer can be over no element, or over one that has no box or just left the page.
+            Effect.catchIf(isMissingNodeError, () => Effect.succeed(null)),
+            Effect.mapError(actionFailure(tabId, operation)),
+          );
+      }).pipe(
+        Effect.ensuring(evaluate(host, "globalThis.__odtPickerHitTest(false)").pipe(Effect.ignore)),
+      );
       if (located === null) {
-        return null;
+        return { host, target: null };
       }
       const box = yield* host.session
         .send("DOM.getBoxModel", { backendNodeId: located.backendNodeId })
@@ -138,7 +199,7 @@ export const createBrowserPicker = ({
           Effect.mapError(actionFailure(tabId, operation)),
         );
       if (box === null) {
-        return null;
+        return { host, target: null };
       }
       const objectId = yield* nodeObject(cdp, tabId, located.backendNodeId, operation);
       const label = evaluateResultSchema.parse(
@@ -150,10 +211,74 @@ export const createBrowserPicker = ({
       );
       yield* cdp("Runtime.releaseObject", { objectId });
       return {
-        nodeRef: String(located.backendNodeId),
-        box,
-        label: z.string().min(1).catch("element").parse(label.result.value),
+        host,
+        target: {
+          nodeRef: String(located.backendNodeId),
+          box,
+          label: z.string().min(1).catch("element").parse(label.result.value),
+        },
       };
+    });
+
+  /** Draws the element under a point, or no highlight when no element is there. */
+  const hover = (tabId: string, x: number, y: number) =>
+    Effect.gen(function* () {
+      const { host, target } = yield* targetAt(tabId, x, y, "browser.picker.hover");
+      // The picker can turn off while the lookup runs, so a late hover must not draw again.
+      if (!enabledTabs.has(tabId)) return;
+      yield* evaluate(host, targetExpression(target));
+    });
+
+  /** Runs one picker message of the page and returns what the client must follow. */
+  const handlePageMessage = (
+    tabId: string,
+    message: BrowserPagePickerMessage,
+  ): Effect.Effect<BrowserPickerPageResult, BrowserServiceError> =>
+    Effect.gen(function* () {
+      if (!enabledTabs.has(tabId)) {
+        return { kind: "none" };
+      }
+      if (message.type === "picker_cancel") {
+        // Escape must close the picker in the client, even when the page is gone.
+        yield* setEnabled(tabId, false).pipe(Effect.ignore);
+        return { kind: "cancelled" };
+      }
+      if (message.type === "picker_hover") {
+        yield* hover(tabId, message.x, message.y);
+        return { kind: "none" };
+      }
+
+      const operation = "browser.picker.pick";
+      const { host, target } = yield* targetAt(tabId, message.x, message.y, operation);
+      // The picker can turn off while the lookup runs, so a late pick must select nothing.
+      if (target === null || !enabledTabs.has(tabId)) {
+        return { kind: "none" };
+      }
+      const selection = nextPickerSelection(selections.get(tabId) ?? [], target, message.shiftKey);
+      selections.set(tabId, selection);
+      yield* evaluate(host, targetExpression(target));
+      yield* evaluate(host, selectionExpression(selection));
+      return { kind: "selection", selection };
+    });
+
+  /** Draws the picker again after a document change. A failure leaves the picker off. */
+  const restore = (tabId: string) =>
+    Effect.gen(function* () {
+      if (!enabledTabs.has(tabId)) {
+        return;
+      }
+      const host = yield* requireLive(tabId, "browser.picker.restore");
+      yield* evaluate(host, "globalThis.__odtPickerActive(true)");
+      yield* evaluate(host, targetExpression(null));
+      yield* evaluate(host, selectionExpression(selections.get(tabId) ?? []));
+    });
+
+  /** Ends the picker selection after the user saved or canceled the comment. */
+  const clearSelection = (tabId: string) =>
+    Effect.gen(function* () {
+      selections.set(tabId, []);
+      const host = yield* requireLive(tabId, "browser.picker.clear");
+      yield* evaluate(host, selectionExpression([]));
     });
 
   const capture = (
@@ -227,13 +352,31 @@ export const createBrowserPicker = ({
 
   return {
     setEnabled,
-    hover,
+    handlePageMessage,
+    restore,
+    clearSelection,
     capture,
-    forget: (tabId: string) => enabledTabs.delete(tabId),
+    forget: (tabId: string) => {
+      enabledTabs.delete(tabId);
+      selections.delete(tabId);
+    },
   };
 };
 
 export type BrowserPicker = ReturnType<typeof createBrowserPicker>;
+
+/** Applies one pick: a click replaces the selection, and Shift-click adds or removes an element. */
+export const nextPickerSelection = (
+  selection: readonly BrowserPickedElement[],
+  target: BrowserPickedElement,
+  shiftKey: boolean,
+): BrowserPickedElement[] => {
+  if (!shiftKey) return [target];
+  if (selection.some((element) => element.nodeRef === target.nodeRef)) {
+    return selection.filter((element) => element.nodeRef !== target.nodeRef);
+  }
+  return [...selection, target].slice(0, BROWSER_ANNOTATION_MAX_ELEMENTS);
+};
 
 /** CDP calls of one picker operation. A CDP failure becomes an action failure of the tab. */
 const cdpFor =

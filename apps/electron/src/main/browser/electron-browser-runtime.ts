@@ -14,26 +14,28 @@ import {
   registerElectronBrowserIpc,
 } from "./electron-browser-ipc";
 import { attachBrowserMainWindow } from "./electron-browser-main-window";
+import { createElectronBrowserViewPort } from "./electron-browser-view-port";
 
 export type ElectronBrowserRuntimeInput = {
   reportFailure(operation: string, cause: unknown): void;
 };
 
 /**
- * The Electron browser feature: the `<webview>` engine, the webview hardening of each
- * OpenDucktor window, the browser IPC, and the DevTools endpoint.
+ * The Electron browser feature: the native page views, the webview hardening of each OpenDucktor
+ * window, the browser IPC, and the DevTools endpoint.
  */
 export const createElectronBrowserRuntime = ({ reportFailure }: ElectronBrowserRuntimeInput) => {
   const { app, BrowserWindow, dialog, nativeImage, session, shell, webContents } = electron;
   let ipcController: ElectronBrowserIpcController | null = null;
 
+  const viewPort = createElectronBrowserViewPort();
   const devTools = createElectronDevToolsEndpoint({
     hasLiveTab: (tabId) => engine.hasLiveTab(tabId),
     reportFailure,
   });
   const engine = createElectronBrowserEngine({
     platform: process.platform,
-    findWebContents: (id) => webContents.fromId(id) ?? null,
+    viewPort,
     partitionSession: (partition) => session.fromPartition(partition),
     downloadsDirectory: () => app.getPath("downloads"),
     fileExists: existsSync,
@@ -84,7 +86,7 @@ export const createElectronBrowserRuntime = ({ reportFailure }: ElectronBrowserR
     isMainWindow: (window: BrowserWindow): boolean => engine.isMainWindow(window.webContents.id),
     /** Adds an OpenDucktor window before it loads its renderer. */
     attachMainWindow: (window: BrowserWindow): void =>
-      attachBrowserMainWindow(engine, window, reportFailure),
+      attachBrowserMainWindow(engine, viewPort, window, reportFailure),
     /** Starts the DevTools endpoint and the browser IPC for the host browser service. */
     start: (ipcMain: Pick<IpcMain, "handle">, browserService: BrowserService) =>
       devTools.start(browserService).pipe(

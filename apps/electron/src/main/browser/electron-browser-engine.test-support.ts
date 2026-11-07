@@ -1,16 +1,20 @@
 import { EventEmitter } from "node:events";
-import type { BrowserEngineEvent, CdpPayload } from "@openducktor/host";
 import type { BrowserServerMessage } from "@openducktor/contracts";
-import { Effect } from "effect";
+import type { BrowserEngineEvent, CdpPayload } from "@openducktor/host";
 import { createElectronBrowserEngine, type ElectronBrowserEngine } from "./electron-browser-engine";
 import type {
   ElectronBrowserGuest,
-  ElectronGuestHost,
   ElectronPopupWindow,
   GuestWindowOpenDetails,
   GuestWindowOpenResponse,
 } from "./electron-browser-guest";
 import type { ElectronBrowserPartitionSession } from "./electron-browser-session";
+import type {
+  ElectronBrowserView,
+  ElectronBrowserViewPort,
+  ElectronViewBox,
+  ElectronViewOwner,
+} from "./electron-browser-view-port";
 
 type SentCommand = {
   method: string;
@@ -21,6 +25,8 @@ type SentCommand = {
 export class FakeDebugger extends EventEmitter {
   readonly sent: SentCommand[] = [];
   attached = false;
+  /** The base64 data that `Page.captureScreenshot` returns. */
+  pageScreenshotData = "AAAA";
   private nextSession = 1;
 
   constructor(private readonly targetId: string) {
@@ -38,10 +44,26 @@ export class FakeDebugger extends EventEmitter {
   sendCommand(method: string, params?: CdpPayload, sessionId?: string): Promise<CdpPayload> {
     this.sent.push({ method, params, sessionId });
     if (method === "Target.getTargetInfo") {
-      return Promise.resolve({ targetInfo: { targetId: this.targetId, type: "webview" } });
+      return Promise.resolve({ targetInfo: { targetId: this.targetId, type: "page" } });
     }
     if (method === "Target.attachToTarget") {
       return Promise.resolve({ sessionId: `${this.targetId}-session-${this.nextSession++}` });
+    }
+    if (method === "Page.getLayoutMetrics") {
+      return Promise.resolve({
+        visualViewport: { clientWidth: 800 },
+        cssVisualViewport: {
+          pageX: 0,
+          pageY: 0,
+          clientWidth: 800,
+          clientHeight: 600,
+          scale: 1,
+          zoom: 1,
+        },
+      });
+    }
+    if (method === "Page.captureScreenshot") {
+      return Promise.resolve({ data: this.pageScreenshotData });
     }
     return Promise.resolve({});
   }
@@ -99,54 +121,28 @@ export const cancelableEvent = (): CancelableEvent => {
   return event;
 };
 
-/** The OpenDucktor window page of a guest. It records its background throttling. */
-export class FakeGuestHost implements ElectronGuestHost {
-  throttling: boolean[] = [];
-
-  constructor(readonly id: number) {}
-
-  isDestroyed(): boolean {
-    return false;
-  }
-
-  setBackgroundThrottling(allowed: boolean): void {
-    this.throttling.push(allowed);
-  }
-}
-
 export class FakeGuest extends EventEmitter implements ElectronBrowserGuest {
   readonly debugger: FakeDebugger;
-  private readonly host: FakeGuestHost | null;
   url = "about:blank";
   loaded: string[] = [];
+  /** True for each load when the debugger was attached already. */
+  debuggerAttachedAtLoad: boolean[] = [];
   /** One entry for each reload: true when it ignored the cache. */
   reloads: boolean[] = [];
   destroyed = false;
   closed = 0;
-  throttling: boolean[] = [];
+  focused = 0;
+  backgroundThrottling = true;
   windowOpenHandler: ((details: GuestWindowOpenDetails) => GuestWindowOpenResponse) | null = null;
 
   constructor(
     readonly id: number,
     readonly session: ElectronBrowserPartitionSession,
-    hostId: number | null,
-    private readonly type = "webview",
   ) {
     super();
     this.debugger = new FakeDebugger(`target-${id}`);
-    this.host = hostId === null ? null : new FakeGuestHost(hostId);
     // Electron registers one internal dialog listener on each page.
     this.on("-run-dialog", () => {});
-  }
-
-  /** Electron throws on the host of a destroyed page. */
-  get hostWebContents(): FakeGuestHost | null {
-    if (this.destroyed) throw new TypeError("Object has been destroyed");
-    return this.host;
-  }
-
-  getType(): string {
-    return this.type;
   }
 
   getURL(): string {
@@ -159,6 +155,7 @@ export class FakeGuest extends EventEmitter implements ElectronBrowserGuest {
 
   loadURL(url: string): Promise<void> {
     this.loaded.push(url);
+    this.debuggerAttachedAtLoad.push(this.debugger.attached);
     this.url = url;
     return Promise.resolve();
   }
@@ -171,6 +168,14 @@ export class FakeGuest extends EventEmitter implements ElectronBrowserGuest {
     this.reloads.push(true);
   }
 
+  focus(): void {
+    this.focused += 1;
+  }
+
+  setBackgroundThrottling(allowed: boolean): void {
+    this.backgroundThrottling = allowed;
+  }
+
   close(): void {
     this.closed += 1;
     this.destroy();
@@ -181,10 +186,6 @@ export class FakeGuest extends EventEmitter implements ElectronBrowserGuest {
     this.destroyed = true;
     this.debugger.emit("detach", { preventDefault() {} }, "target closed");
     this.emit("destroyed");
-  }
-
-  setBackgroundThrottling(allowed: boolean): void {
-    this.throttling.push(allowed);
   }
 
   setWindowOpenHandler(handler: (details: GuestWindowOpenDetails) => GuestWindowOpenResponse) {
@@ -225,36 +226,91 @@ export class FakePopupWindow implements ElectronPopupWindow {
   }
 }
 
+/** One page view that the engine created through the port. */
+export class FakeView implements ElectronBrowserView {
+  constructor(
+    readonly partition: string,
+    readonly webContents: FakeGuest,
+  ) {}
+}
+
+/** The view port of a test: it records each placement instead of showing a window. */
+export class FakeViewPort implements ElectronBrowserViewPort {
+  readonly views: FakeView[] = [];
+  readonly placed: Array<{ view: FakeView; windowId: number; box: ElectronViewBox }> = [];
+  readonly kept: FakeView[] = [];
+  readonly closed: FakeView[] = [];
+  keeperCloses = 0;
+
+  constructor(
+    private readonly partitionSession: (partition: string) => ElectronBrowserPartitionSession,
+    private readonly nextId: () => number,
+  ) {}
+
+  registerWindow(_windowId: number, _window: ElectronViewOwner): void {}
+
+  unregisterWindow(_windowId: number): void {}
+
+  create(partition: string): ElectronBrowserView {
+    const guest = new FakeGuest(this.nextId(), this.partitionSession(partition));
+    const view = new FakeView(partition, guest);
+    this.views.push(view);
+    return view;
+  }
+
+  showInWindow(view: ElectronBrowserView, windowId: number, box: ElectronViewBox): boolean {
+    // SAFETY: the engine places only views that this port created, which are FakeView values.
+    const own = view as FakeView;
+    this.placed.push({ view: own, windowId, box });
+    return true;
+  }
+
+  keepInKeeper(view: ElectronBrowserView): void {
+    // SAFETY: the engine keeps only views that this port created, which are FakeView values.
+    this.kept.push(view as FakeView);
+  }
+
+  close(view: ElectronBrowserView): void {
+    // SAFETY: the engine closes only views that this port created, which are FakeView values.
+    const own = view as FakeView;
+    this.closed.push(own);
+    own.webContents.close();
+  }
+
+  closeKeeper(): void {
+    this.keeperCloses += 1;
+  }
+}
+
 export const MAIN_WINDOW_ID = 1;
 export const WORKSPACE_ID = "repo";
 export const TAB_ID = "11111111-1111-4111-8111-111111111111";
 
 export type EngineHarness = {
   engine: ElectronBrowserEngine;
+  viewPort: FakeViewPort;
   events: BrowserEngineEvent[];
   rendererMessages: Array<{ hostId: number; message: BrowserServerMessage }>;
   revealed: string[];
   failures: string[];
-  guests: Map<number, FakeGuest>;
   sessions: Map<string, FakePartitionSession>;
   workspaceSession: FakePartitionSession;
-  addGuest(
-    id: number,
-    options?: { hostId?: number | null; session?: FakePartitionSession },
-  ): FakeGuest;
-  bind(tabId?: string, guestId?: number): Promise<FakeGuest>;
+  /** The most recent page view. */
+  view(): FakeView;
+  /** The page of the most recent panel tab. */
+  page(): FakeGuest;
   flush(): Promise<void>;
 };
 
-/** An engine with one loaded OpenDucktor window and fake guests. */
+/** An engine with one loaded OpenDucktor window and a view port that records placements. */
 export const createEngineHarness = (devToolsUrl: string | null = null): EngineHarness => {
   const events: BrowserEngineEvent[] = [];
   const rendererMessages: EngineHarness["rendererMessages"] = [];
   const revealed: string[] = [];
   const failures: string[] = [];
-  const guests = new Map<number, FakeGuest>();
   const sessions = new Map<string, FakePartitionSession>();
   let nextId = 1;
+  let nextGuestId = 1_000;
   const partitionSession = (partition: string) => {
     let session = sessions.get(partition);
     if (!session) {
@@ -264,9 +320,10 @@ export const createEngineHarness = (devToolsUrl: string | null = null): EngineHa
     return session;
   };
   const workspaceSession = partitionSession(`persist:openducktor-browser-${WORKSPACE_ID}`);
+  const viewPort = new FakeViewPort(partitionSession, () => nextGuestId++);
   const engine = createElectronBrowserEngine({
     platform: "darwin",
-    findWebContents: (id) => guests.get(id) ?? null,
+    viewPort,
     partitionSession,
     downloadsDirectory: () => "/downloads",
     fileExists: () => false,
@@ -283,33 +340,26 @@ export const createEngineHarness = (devToolsUrl: string | null = null): EngineHa
   engine.addMainWindow(MAIN_WINDOW_ID);
   engine.setMainWindowLoaded(MAIN_WINDOW_ID, true);
 
-  const addGuest: EngineHarness["addGuest"] = (id, options = {}) => {
-    const guest = new FakeGuest(
-      id,
-      options.session ?? workspaceSession,
-      options.hostId === undefined ? MAIN_WINDOW_ID : options.hostId,
-    );
-    guests.set(id, guest);
-    return guest;
+  const view = (): FakeView => {
+    const found = viewPort.views.at(-1);
+    if (found === undefined) throw new Error("The engine created no page view yet.");
+    return found;
   };
+  const page = (): FakeGuest => view().webContents;
 
   const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
   return {
     engine,
+    viewPort,
     events,
     rendererMessages,
     revealed,
     failures,
-    guests,
     sessions,
     workspaceSession,
-    addGuest,
+    view,
+    page,
     flush,
-    async bind(tabId = TAB_ID, guestId = 100) {
-      const guest = guests.get(guestId) ?? addGuest(guestId);
-      await Effect.runPromise(engine.bindGuest(MAIN_WINDOW_ID, tabId, guestId));
-      return guest;
-    },
   };
 };

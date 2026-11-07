@@ -15,6 +15,7 @@ export function PopoverContent({
     <PopoverPrimitive.Portal container={portalContainer ?? undefined}>
       <PopoverPrimitive.Content
         data-slot="popover-content"
+        data-page-occluder=""
         align={align}
         sideOffset={sideOffset}
         className={cn(

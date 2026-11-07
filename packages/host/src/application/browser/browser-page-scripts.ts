@@ -6,8 +6,9 @@ export const BROWSER_HOST_WORLD = "__openducktor_host";
 export const BROWSER_HOST_BINDING = "__openducktorHost";
 
 /**
- * Reports the title and icon link and the anchor boxes of annotations. It installs once in the top
- * document of each page, so a frame never changes the tab title.
+ * Reports the title, the icon link, and the boxes of annotated elements. It draws the markers of
+ * the annotations, the picker, and the agent marker in a closed shadow root over the page, because
+ * a native page view draws above every element of the OpenDucktor window.
  */
 export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
   if (window !== window.top || globalThis.__odtHostInstalled) return;
@@ -45,8 +46,222 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
     observeHead();
   }
 
+  /* The overlay host. Inline important styles keep page CSS out of the page furniture. */
+  const overlayHost = document.createElement("div");
+  overlayHost.style.setProperty("all", "initial", "important");
+  overlayHost.style.setProperty("position", "fixed", "important");
+  overlayHost.style.setProperty("inset", "0", "important");
+  overlayHost.style.setProperty("pointer-events", "none", "important");
+  overlayHost.style.setProperty("z-index", "2147483647", "important");
+  overlayHost.style.setProperty("overflow", "hidden", "important");
+  // A top-layer element, such as a modal dialog or a popover of the page, paints above any
+  // z-index. A manual popover puts the overlay in the same top layer, so draw above those too.
+  overlayHost.setAttribute("popover", "manual");
+  const showOverlay = () => {
+    try { overlayHost.showPopover(); } catch (error) {}
+  };
+  const raiseOverlay = () => {
+    if (!overlayHost.isConnected) return;
+    try { overlayHost.hidePopover(); } catch (error) {}
+    showOverlay();
+  };
+  const attachOverlay = () => {
+    document.documentElement.appendChild(overlayHost);
+    showOverlay();
+  };
+  if (document.documentElement) {
+    attachOverlay();
+  } else {
+    document.addEventListener("DOMContentLoaded", attachOverlay, { once: true });
+  }
+  // A page that opens a dialog or a popover after the overlay takes the top layer gains the top
+  // layer above the overlay. Raise the overlay again so the picker and the markers stay above.
+  addEventListener("toggle", (event) => {
+    if (event.target !== overlayHost && event.newState === "open") raiseOverlay();
+  }, true);
+  const overlay = overlayHost.attachShadow({ mode: "closed" });
+  const layer = document.createElement("div");
+  layer.style.setProperty("position", "absolute", "important");
+  layer.style.setProperty("inset", "0", "important");
+  layer.style.setProperty("pointer-events", "none", "important");
+  layer.style.setProperty("overflow", "hidden", "important");
+  overlay.appendChild(layer);
+
+  /* A transparent layer captures every pointer of the top frame, also over an iframe. */
+  const pickerCapture = document.createElement("div");
+  pickerCapture.style.setProperty("position", "absolute", "important");
+  pickerCapture.style.setProperty("inset", "0", "important");
+  pickerCapture.style.setProperty("pointer-events", "none", "important");
+  pickerCapture.style.setProperty("cursor", "crosshair", "important");
+  overlay.appendChild(pickerCapture);
+
+  const boxElement = () => {
+    const element = document.createElement("div");
+    element.style.setProperty("position", "absolute", "important");
+    element.style.setProperty("pointer-events", "none", "important");
+    element.style.setProperty("box-sizing", "border-box", "important");
+    return element;
+  };
+  const setBox = (element, box) => {
+    element.style.setProperty("left", box.x + "px", "important");
+    element.style.setProperty("top", box.y + "px", "important");
+    element.style.setProperty("width", box.width + "px", "important");
+    element.style.setProperty("height", box.height + "px", "important");
+  };
+
+  /* Picker. */
+  const pickerTarget = boxElement();
+  pickerTarget.style.setProperty("border", "1px solid #0ea5e9", "important");
+  pickerTarget.style.setProperty("background", "rgba(56, 189, 248, 0.25)", "important");
+  pickerTarget.style.setProperty("border-radius", "2px", "important");
+  pickerTarget.hidden = true;
+  layer.appendChild(pickerTarget);
+  const pickerLabel = document.createElement("span");
+  pickerLabel.style.setProperty("position", "absolute", "important");
+  pickerLabel.style.setProperty("left", "0", "important");
+  pickerLabel.style.setProperty("max-width", "16rem", "important");
+  pickerLabel.style.setProperty("overflow", "hidden", "important");
+  pickerLabel.style.setProperty("text-overflow", "ellipsis", "important");
+  pickerLabel.style.setProperty("white-space", "nowrap", "important");
+  pickerLabel.style.setProperty("border-radius", "2px", "important");
+  pickerLabel.style.setProperty("background", "#7dd3fc", "important");
+  pickerLabel.style.setProperty("padding", "0 6px", "important");
+  pickerLabel.style.setProperty("color", "#0a0a0a", "important");
+  pickerLabel.style.setProperty("font", "500 11px/20px system-ui, sans-serif", "important");
+  pickerTarget.appendChild(pickerLabel);
+  const selectionLayer = document.createElement("div");
+  selectionLayer.style.setProperty("position", "absolute", "important");
+  selectionLayer.style.setProperty("inset", "0", "important");
+  selectionLayer.style.setProperty("pointer-events", "none", "important");
+  layer.appendChild(selectionLayer);
+
+  let pickerActive = false;
+  let hoverFrame = 0;
+  let hoverPoint = null;
+  const flushHover = () => {
+    hoverFrame = 0;
+    if (!pickerActive || hoverPoint === null) return;
+    const point = hoverPoint;
+    hoverPoint = null;
+    send({ type: "picker_hover", x: point.x, y: point.y });
+  };
+  const onPointerMove = (event) => {
+    if (!pickerActive) return;
+    hoverPoint = { x: event.clientX, y: event.clientY };
+    if (hoverFrame === 0) hoverFrame = requestAnimationFrame(flushHover);
+  };
+  const stopPageEvent = (event) => {
+    if (!pickerActive) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  const onPick = (event) => {
+    if (!pickerActive) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    send({ type: "picker_pick", x: event.clientX, y: event.clientY, shiftKey: event.shiftKey });
+  };
+  const onPickerKey = (event) => {
+    if (!pickerActive || event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    send({ type: "picker_cancel" });
+  };
+  const pickerListeners = [
+    ["pointermove", onPointerMove, true],
+    ["pointerdown", stopPageEvent, true],
+    ["mousedown", stopPageEvent, true],
+    ["click", onPick, true],
+    ["dblclick", stopPageEvent, true],
+    ["contextmenu", stopPageEvent, true],
+    ["keydown", onPickerKey, true],
+  ];
+  const syncPickerListeners = () => {
+    for (const [name, listener, capture] of pickerListeners) {
+      if (pickerActive) addEventListener(name, listener, capture);
+      else removeEventListener(name, listener, capture);
+    }
+  };
+
+  globalThis.__odtPickerActive = (active) => {
+    if (pickerActive === active) return;
+    pickerActive = active;
+    if (active) raiseOverlay();
+    syncPickerListeners();
+    // The capture layer keeps the pointers that would go to an iframe. The hit test hides it, and
+    // the markers ignore pointer events, so Chromium finds the page element under the pointer.
+    pickerCapture.style.setProperty("pointer-events", active ? "auto" : "none", "important");
+    for (const marker of markers.values()) {
+      marker.style.setProperty("pointer-events", active ? "none" : "auto", "important");
+    }
+    if (!active) {
+      hoverPoint = null;
+      pickerTarget.hidden = true;
+      selectionLayer.replaceChildren();
+    }
+  };
+  globalThis.__odtPickerHitTest = (hidden) => {
+    // Only the transparent capture layer hides. The highlight and the markers stay visible.
+    pickerCapture.style.setProperty("visibility", hidden ? "hidden" : "visible", "important");
+  };
+  globalThis.__odtPickerTarget = (target) => {
+    if (!pickerActive || !target) {
+      pickerTarget.hidden = true;
+      return;
+    }
+    pickerTarget.hidden = false;
+    setBox(pickerTarget, target.box);
+    pickerLabel.textContent = target.label;
+    pickerLabel.style.setProperty("top", target.box.y >= 21 ? "-21px" : "0", "important");
+  };
+  globalThis.__odtPickerSelection = (boxes) => {
+    if (!pickerActive) return;
+    const elements = boxes.map((box) => {
+      const element = boxElement();
+      element.style.setProperty("border-radius", "2px", "important");
+      element.style.setProperty("background", "rgba(56, 189, 248, 0.15)", "important");
+      element.style.setProperty("outline", "2px solid #0284c7", "important");
+      setBox(element, box);
+      return element;
+    });
+    selectionLayer.replaceChildren(...elements);
+  };
+
+  /* Annotation markers. */
   let anchors = [];
   let anchorFrame = 0;
+  let lastAnchorReport = "";
+  const markers = new Map();
+  const markerOf = (annotationId, number) => {
+    let marker = markers.get(annotationId);
+    if (marker && marker.textContent === String(number)) return marker;
+    marker?.remove();
+    marker = document.createElement("button");
+    marker.type = "button";
+    marker.textContent = String(number);
+    marker.setAttribute("aria-label", "Annotation " + number);
+    marker.style.setProperty("position", "absolute", "important");
+    marker.style.setProperty("pointer-events", pickerActive ? "none" : "auto", "important");
+    marker.style.setProperty("cursor", "pointer", "important");
+    marker.style.setProperty("box-sizing", "border-box", "important");
+    marker.style.setProperty("width", "20px", "important");
+    marker.style.setProperty("height", "20px", "important");
+    marker.style.setProperty("border", "0", "important");
+    marker.style.setProperty("border-radius", "9999px", "important");
+    marker.style.setProperty("background", "#7dd3fc", "important");
+    marker.style.setProperty("box-shadow", "0 1px 3px rgba(0, 0, 0, 0.4)", "important");
+    marker.style.setProperty("color", "#0a0a0a", "important");
+    marker.style.setProperty("font", "600 11px/20px system-ui, sans-serif", "important");
+    marker.style.setProperty("text-align", "center", "important");
+    marker.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      globalThis.__odtRevealAnchor(annotationId);
+    });
+    markers.set(annotationId, marker);
+    layer.appendChild(marker);
+    return marker;
+  };
   const boxOf = (selectors) => {
     let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
     for (const selector of selectors) {
@@ -62,10 +277,31 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
   };
   const reportAnchors = () => {
     anchorFrame = 0;
-    send({
-      type: "anchor_boxes",
-      boxes: anchors.map((anchor) => ({ annotationId: anchor.annotationId, box: boxOf(anchor.selectors) })),
-    });
+    const boxes = anchors.map((anchor) => ({
+      annotationId: anchor.annotationId,
+      box: boxOf(anchor.selectors),
+    }));
+    const shown = new Set();
+    for (let index = 0; index < anchors.length; index += 1) {
+      const anchor = anchors[index];
+      const box = boxes[index].box;
+      if (!box) continue;
+      shown.add(anchor.annotationId);
+      const marker = markerOf(anchor.annotationId, anchor.number);
+      const left = Math.max(0, box.x - 10) + "px";
+      const top = Math.max(0, box.y - 10) + "px";
+      if (marker.style.left !== left) marker.style.setProperty("left", left, "important");
+      if (marker.style.top !== top) marker.style.setProperty("top", top, "important");
+    }
+    for (const [annotationId, marker] of markers) {
+      if (shown.has(annotationId)) continue;
+      marker.remove();
+      markers.delete(annotationId);
+    }
+    const report = JSON.stringify(boxes);
+    if (report === lastAnchorReport) return;
+    lastAnchorReport = report;
+    send({ type: "anchor_boxes", boxes });
   };
   const scheduleAnchors = () => {
     if (anchors.length === 0 || anchorFrame !== 0) return;
@@ -76,6 +312,10 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
   new MutationObserver(scheduleAnchors).observe(document, { subtree: true, childList: true, attributes: true });
   globalThis.__odtSetAnchors = (next) => {
     anchors = next;
+    raiseOverlay();
+    // Report the boxes of a new anchor set even when they match the last report, so a client that
+    // just asked for anchors receives them.
+    lastAnchorReport = "";
     reportAnchors();
   };
   globalThis.__odtRevealAnchor = (annotationId) => {
@@ -93,5 +333,37 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
     }
     const text = String(getSelection() || "");
     return text.length > 0 ? text : null;
+  };
+
+  /* A short pulse where an agent clicks, hovers, or types. */
+  globalThis.__odtAgentMarker = (action, x, y) => {
+    raiseOverlay();
+    const marker = document.createElement("span");
+    marker.setAttribute("aria-hidden", "true");
+    marker.style.setProperty("position", "absolute", "important");
+    marker.style.setProperty("left", x + "px", "important");
+    marker.style.setProperty("top", y + "px", "important");
+    marker.style.setProperty("width", "28px", "important");
+    marker.style.setProperty("height", "28px", "important");
+    marker.style.setProperty("border", "2px solid #0ea5e9", "important");
+    marker.style.setProperty("border-radius", "9999px", "important");
+    marker.style.setProperty("pointer-events", "none", "important");
+    marker.style.setProperty("transform", "translate(-50%, -50%)", "important");
+    marker.style.setProperty(
+      "background",
+      action === "click" ? "rgba(56, 189, 248, 0.4)" : action === "type" ? "rgba(56, 189, 248, 0.25)" : "transparent",
+      "important",
+    );
+    layer.appendChild(marker);
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const frames = reduced
+      ? [{ opacity: 1 }, { opacity: 0 }]
+      : [
+          { opacity: 1, scale: 0.5 },
+          { opacity: 1, scale: 1.5, offset: 0.35 },
+          { opacity: 0, scale: 1.5 },
+        ];
+    const animation = marker.animate(frames, { duration: reduced ? 1000 : 700, easing: "ease-out" });
+    animation.onfinish = () => marker.remove();
   };
 })();`;

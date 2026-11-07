@@ -2,32 +2,39 @@ import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { browserDevToolsUrlQueryOptions } from "@/state/queries/browser";
-import type { BrowserChannel } from "./browser-channel";
 import { useBrowserDevToolsStore } from "./browser-devtools-store";
 import {
+  type ElectronBrowserRuntime,
   type FrameBrowserRuntime,
   useBrowserRuntime,
   useBrowserTabs,
-  type WebviewBrowserRuntime,
 } from "./browser-runtime";
 import type { BrowserSlot, BrowserSurfaceRegistry } from "./browser-surface-registry";
 import { browserSurfaceKey, devToolsSurfaceKey } from "./browser-surface-registry";
+import { ElectronPageSurface } from "./electron-page-surface";
 import { FrameBrowserSurface } from "./frame-surface";
 import { useBrowserSurfacePlacement } from "./use-browser-surface-placement";
-import { DevToolsWebviewSurface, WebviewBrowserSurface } from "./webview-surface";
+import {
+  NO_PAGE_OCCLUDERS,
+  type PageOccluderBox,
+  pageIsOccluded,
+  refreshPageOccluders,
+  usePageOccluders,
+} from "./use-page-occluders";
+import { DevToolsWebviewSurface } from "./devtools-webview-surface";
 
 /**
  * The page surfaces of all browser tabs, mounted once in the app shell. Panels render only slots,
  * and this layer places each surface over its slot. A page thus survives panel moves, owner
- * switches, and route changes: Electron keeps the `<webview>` of each started tab mounted, and the
+ * switches, and route changes: Electron keeps the native view of each started tab alive, and the
  * web runner keeps the iframe of each user tab mounted.
  */
 export function BrowserLayer() {
   const runtime = useBrowserRuntime();
   return (
     <div className="pointer-events-none fixed inset-0 z-10" data-testid="browser-layer">
-      {runtime.surface === "webview" ? (
-        <WebviewSurfaces runtime={runtime} />
+      {runtime.surface === "electron" ? (
+        <ElectronSurfaces runtime={runtime} />
       ) : (
         <FrameSurfaces runtime={runtime} />
       )}
@@ -35,11 +42,11 @@ export function BrowserLayer() {
   );
 }
 
-/** The `<webview>` of each started panel tab, and the docked DevTools that show. */
-function WebviewSurfaces({ runtime }: { runtime: WebviewBrowserRuntime }) {
+/** The native page view of each started panel tab, and the docked DevTools that show. */
+function ElectronSurfaces({ runtime }: { runtime: ElectronBrowserRuntime }) {
   const { tabs } = useBrowserTabs();
-  const { bridge, channel, overlays, slots } = runtime;
-  const awake = useAwakeTabs(channel);
+  const { bridge, focus, overlays, slots } = runtime;
+  const occluders = usePageOccluders();
   const devToolsDocks = useBrowserDevToolsStore((state) => state.docks);
   const devToolsTabIds = Object.keys(devToolsDocks).filter(
     (tabId) => devToolsDocks[tabId]?.open && tabs.get(tabId)?.live,
@@ -54,18 +61,17 @@ function WebviewSurfaces({ runtime }: { runtime: WebviewBrowserRuntime }) {
           <SurfaceFrame
             key={key}
             slots={slots}
-            overlays={overlays}
+            overlaps={overlays}
             surfaceKey={key}
-            awake={awake.has(tab.tabId)}
+            occluders={occluders}
           >
-            {(isShown) => (
-              <WebviewBrowserSurface
+            {(placement, occluded) => (
+              <ElectronPageSurface
                 bridge={bridge}
-                channel={channel}
-                focus={runtime.focus}
-                isShown={isShown}
+                focus={focus}
+                occluded={occluded}
+                placement={placement}
                 tabId={tab.tabId}
-                workspaceId={tab.owner.workspaceId}
               />
             )}
           </SurfaceFrame>
@@ -92,7 +98,13 @@ function FrameSurfaces({ runtime }: { runtime: FrameBrowserRuntime }) {
     const key = browserSurfaceKey(tab.tabId);
     if (!placed.has(key)) return null;
     return (
-      <SurfaceFrame key={key} slots={runtime.slots} overlays={null} surfaceKey={key} awake={false}>
+      <SurfaceFrame
+        key={key}
+        slots={runtime.slots}
+        overlaps={null}
+        surfaceKey={key}
+        occluders={NO_PAGE_OCCLUDERS}
+      >
         {() => (
           <FrameBrowserSurface
             frames={frames}
@@ -108,36 +120,45 @@ function FrameSurfaces({ runtime }: { runtime: FrameBrowserRuntime }) {
 }
 
 /**
- * Places one surface over its panel slot. `overlays` gets the overlay element above the page, where
- * a tab view draws prompts and markers. Frame tabs draw none.
+ * Places one surface over its panel slot. A native page view draws above the host page, so a
+ * surface gives its place to an overlay when the overlay box covers the page box.
  */
 function SurfaceFrame({
   slots,
-  overlays,
   surfaceKey,
-  awake,
+  occluders,
+  overlaps,
   children,
 }: {
   slots: BrowserSurfaceRegistry<BrowserSlot>;
-  overlays: BrowserSurfaceRegistry<HTMLElement> | null;
   surfaceKey: string;
-  awake: boolean;
-  children: (isShown: boolean) => ReactNode;
+  occluders: readonly PageOccluderBox[];
+  /** The registry of host overlay elements, or null for a surface that draws no overlays. */
+  overlaps: BrowserSurfaceRegistry<HTMLElement> | null;
+  children: (
+    placement: ReturnType<typeof useBrowserSurfacePlacement>,
+    occluded: boolean,
+  ) => ReactNode;
 }) {
   const placement = useBrowserSurfacePlacement(slots, surfaceKey);
   const hidden = !placement.visible;
+  const occluded = pageIsOccluded(occluders, placement);
+  // A hidden surface keeps its overlays mounted, so a shown surface must read them again.
+  useEffect(() => {
+    refreshPageOccluders();
+  }, [hidden]);
   const overlayRef = useCallback(
-    (element: HTMLElement | null) =>
-      element && overlays ? overlays.register(surfaceKey, element) : undefined,
-    [overlays, surfaceKey],
+    (element: HTMLElement | null) => {
+      if (element === null || overlaps === null) return;
+      return overlaps.register(surfaceKey, element);
+    },
+    [overlaps, surfaceKey],
   );
   return (
     <div
       className={cn(
         "absolute overflow-hidden",
-        hidden ? "pointer-events-none" : "pointer-events-auto",
-        hidden && !awake && "invisible",
-        hidden && awake && "opacity-0",
+        hidden ? "pointer-events-none invisible" : "pointer-events-auto",
       )}
       data-browser-surface={surfaceKey}
       style={{
@@ -147,8 +168,10 @@ function SurfaceFrame({
         height: placement.height,
       }}
     >
-      {children(placement.visible)}
-      {overlays ? <div ref={overlayRef} className="pointer-events-none absolute inset-0" /> : null}
+      {children(placement, occluded)}
+      {overlaps ? (
+        <div ref={overlayRef} className="pointer-events-none absolute inset-0 z-10" />
+      ) : null}
     </div>
   );
 }
@@ -164,9 +187,9 @@ function DevToolsSurface({
   return (
     <SurfaceFrame
       slots={slots}
-      overlays={null}
       surfaceKey={devToolsSurfaceKey(browserTabId)}
-      awake={false}
+      occluders={NO_PAGE_OCCLUDERS}
+      overlaps={null}
     >
       {() =>
         frontendUrl === undefined ? null : <DevToolsWebviewSurface frontendUrl={frontendUrl} />
@@ -188,26 +211,4 @@ const usePlacedSurfaceKeys = (slots: BrowserSurfaceRegistry<BrowserSlot>): Reado
     return slots.subscribe(update);
   }, [slots]);
   return placed;
-};
-
-/** Tabs that an agent or DevTools uses now. Their hidden `<webview>` must stay drawn. */
-const useAwakeTabs = (channel: BrowserChannel): ReadonlySet<string> => {
-  const [awake, setAwake] = useState<ReadonlySet<string>>(new Set());
-  useEffect(
-    () =>
-      channel.subscribe((message) => {
-        if (message.type !== "surface_wake") return;
-        setAwake((current) => {
-          const next = new Set(current);
-          if (message.awake) {
-            next.add(message.tabId);
-          } else {
-            next.delete(message.tabId);
-          }
-          return next;
-        });
-      }),
-    [channel],
-  );
-  return awake;
 };

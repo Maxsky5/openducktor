@@ -76,6 +76,33 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
     runJob,
     // The hub needs the tab service. A page reports anchor boxes only after this setup ends.
     onAnchorBoxes: (tabId, boxes) => hub.sendAnchorBoxes(tabId, boxes),
+    onPickerMessage: (tabId, message) =>
+      runJob(
+        picker.handlePageMessage(tabId, message).pipe(
+          Effect.tap((result) =>
+            Effect.sync(() => {
+              if (result.kind === "selection") {
+                hub.broadcast({ type: "picker_selection", tabId, selection: result.selection });
+              } else if (result.kind === "cancelled") {
+                hub.broadcast({ type: "picker_off", tabId });
+              }
+            }),
+          ),
+          Effect.catch((cause) =>
+            Effect.sync(() => input.reportFailure("browser.picker.page_message", cause)),
+          ),
+        ),
+      ),
+    onHostWorldReady: (tabId) =>
+      runJob(
+        picker
+          .restore(tabId)
+          .pipe(
+            Effect.catch((cause) =>
+              Effect.sync(() => input.reportFailure("browser.picker.restore", cause)),
+            ),
+          ),
+      ),
   });
   const engineEvents = createBrowserEngineEvents({
     engine,
@@ -91,6 +118,7 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
     registry,
     requireLive: tabs.requireLive,
     stageImage: input.stageImage,
+    reportFailure: input.reportFailure,
   });
   const hub = createBrowserClientHub({ tabs, picker });
   const pages = createBrowserAgentPages({
@@ -98,7 +126,6 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
     automation: input.automation,
     registry,
     runJob,
-    onPressing: (tabId, pressing) => hub.broadcast({ type: "agent_press", tabId, pressing }),
   });
   // The picker and the agent pages of a tab end with its page. The agent pages also end when the
   // user stops sharing the tab.
@@ -120,7 +147,19 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
     screenshots: input.screenshots,
     newTabId: newId,
     mark: (tabId, action, point) =>
-      hub.broadcast({ type: "agent_marker", tabId, action, x: point.x, y: point.y }),
+      runJob(
+        tabs.requireLive(tabId, "browser.agent.marker").pipe(
+          Effect.flatMap((host) =>
+            host.evaluate(
+              `globalThis.__odtAgentMarker(${JSON.stringify(action)}, ${point.x}, ${point.y})`,
+            ),
+          ),
+          Effect.asVoid,
+          Effect.catch((cause) =>
+            Effect.sync(() => input.reportFailure("browser.agent.marker", cause)),
+          ),
+        ),
+      ),
   });
 
   const unsubscribeEngine = engine.subscribe(engineEvents.handle);

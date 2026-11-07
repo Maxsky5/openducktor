@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { decodeBrowserClientMessage } from "@openducktor/contracts";
-import type { BrowserChannelConnection, WebviewBrowserBridge } from "@/lib/shell-bridge";
+import type { BrowserChannelConnection, ElectronBrowserBridge } from "@/lib/shell-bridge";
 import { createBrowserChannel } from "./browser-channel";
 
 /** A bridge whose connects settle when the test resolves them. */
 const createBridgeFixture = () => {
   const pending: Array<{ connect: () => void; drop: () => void; closed: () => boolean }> = [];
   const sent: Uint8Array[] = [];
-  const bridge: Pick<WebviewBrowserBridge, "connect"> = {
+  const bridge: Pick<ElectronBrowserBridge, "connect"> = {
     // Like the real bridge, `connected` comes before `connect` returns the connection.
     connect: (_onMessage, onStateChange) =>
       new Promise<BrowserChannelConnection>((resolve) => {

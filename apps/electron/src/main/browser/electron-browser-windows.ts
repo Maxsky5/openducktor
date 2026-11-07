@@ -35,6 +35,7 @@ export const createElectronMainWindows = (onStateChanged: (state: BrowserEngineS
       windows.delete(webContentsId);
       publish();
     },
+    size: (): number => windows.size,
     has: (webContentsId: number): boolean => windows.has(webContentsId),
   };
 };
