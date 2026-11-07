@@ -34,6 +34,8 @@ import { taskWorktreeQueryOptions } from "../../queries/build-runtime";
 import { terminalQueryKeys } from "../../queries/terminals";
 import type { AgentOperationsContextValue } from "../../types/session-slices";
 import { useSessionStartWorkflowRunner } from "./use-session-start-workflow-runner";
+import { useSessionStartContext } from "./use-session-start-context";
+import type { SessionStartNotificationPublisher } from "./session-start-orchestration";
 import { createAgentOperationsFixture } from "../../test-support/agent-operations-fixture";
 import { createStartupLiveSourceFake } from "../../test-support/startup-live-source-fake";
 import type { AgentMessageSendReceipt } from "../../types/agent-orchestrator";
@@ -707,3 +709,83 @@ test.each([
     }
   },
 );
+
+test.each([
+  { change: "owner unmounts", launches: true },
+  { change: "workspace changes", launches: false },
+] as const)("a background start after its $change", async ({ change, launches }) => {
+  const agentSessionWorkflowLaunch = mock(
+    async (request: WorkflowLaunchRequest): Promise<WorkflowLaunchResult> => ({
+      workspaceId: request.workspaceId,
+      repoPath: request.repoPath,
+      taskId: request.taskId,
+      role: "build",
+      status: "completed",
+      startMode: "fresh",
+      session: {
+        externalSessionId: "native",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/task-worktree",
+        startedAt: "2026-10-08T00:00:00Z",
+        status: "idle",
+      },
+    }),
+  );
+  const notifications: SessionStartNotificationPublisher = {
+    publishSessionStarted: mock(() => {}),
+    publishSessionError: mock(async () => true),
+    markInAppFeedbackHandled: mock(() => {}),
+    reportFailure: mock(() => {}),
+  };
+  const connection = createConnection({ agentSessionWorkflowLaunch });
+  const wrapper = createWrapper(connection);
+  const runnerView = renderHook(
+    () => useSessionStartWorkflowRunner({ ...workspace, notifications }),
+    { wrapper },
+  );
+  // The start form owns the context, as on mobile, where a background start closes its sheet.
+  const owner = renderHook(({ key }) => useSessionStartContext(key), {
+    initialProps: { key: workspace.workspaceId },
+  });
+  // The confirmation of the form calls the check of the render that showed it.
+  const isCurrent = owner.result.current;
+  if (change === "workspace changes") owner.rerender({ key: "other-workspace" });
+  let error: unknown;
+  try {
+    await act(async () => {
+      const start = runnerView.result.current({
+        task: createTaskCardFixture({ id: "task" }),
+        request: {
+          taskId: "task",
+          role: "build",
+          launchActionId: "build_implementation_start",
+          postStartAction: "none",
+        },
+        decision: {
+          startMode: "fresh",
+          selectedModel: { runtimeKind: "codex", providerId: "provider", modelId: "model" },
+        },
+        isCurrent,
+      });
+      if (change === "owner unmounts") owner.unmount();
+      await start.catch((cause: unknown) => {
+        error = cause;
+      });
+    });
+    if (launches) {
+      expect(error).toBeUndefined();
+      expect(agentSessionWorkflowLaunch).toHaveBeenCalledTimes(1);
+      expect(notifications.publishSessionStarted).toHaveBeenCalledTimes(1);
+    } else {
+      expect(error).toMatchObject({
+        message: "The session start context changed. Start again in the current workspace.",
+      });
+      expect(agentSessionWorkflowLaunch).not.toHaveBeenCalled();
+      expect(notifications.publishSessionStarted).not.toHaveBeenCalled();
+    }
+  } finally {
+    if (change === "workspace changes") owner.unmount();
+    runnerView.unmount();
+    await connection.dispose();
+  }
+});

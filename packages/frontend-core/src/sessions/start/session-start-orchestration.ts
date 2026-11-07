@@ -122,6 +122,11 @@ type CreateSessionStartWorkflowRunnerArgs = {
   sendAgentMessage: SendAgentMessage;
   notifications?: SessionStartNotificationPublisher | undefined;
   launchAttemptId: string;
+  /**
+   * Completes the request before the launch, as with a message from its template. It runs after
+   * the context check, because the owner of a background start can unmount during this work.
+   */
+  prepareRequest?: (input: RunSessionStartWorkflowInput) => Promise<SessionStartFlowRequest>;
 };
 
 export const createSessionStartWorkflowRunner = ({
@@ -131,6 +136,7 @@ export const createSessionStartWorkflowRunner = ({
   sendAgentMessage,
   notifications,
   launchAttemptId,
+  prepareRequest,
 }: CreateSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow => {
   return async (input) => {
     if (!input.task)
@@ -164,8 +170,9 @@ export const createSessionStartWorkflowRunner = ({
         throw new Error("The session start context changed. Start again in the current workspace.");
       if (!workspaceId || !repoPath)
         throw new Error("Session start requires an explicit workspace and repository.");
+      const request = prepareRequest ? await prepareRequest(input) : input.request;
       result = await startSessionWorkflow({
-        request: input.request,
+        request,
         decision: input.decision,
         workspaceId,
         repoPath,

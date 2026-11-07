@@ -81,6 +81,14 @@ export function useSessionStartWorkflowRunner({
         sendAgentMessage,
         notifications,
         launchAttemptId: id,
+        prepareRequest: ({ task, request, decision }) =>
+          prepareSessionStartInstruction({
+            queryClient,
+            workspaceId,
+            task,
+            request,
+            targetBranch: decision.targetBranch,
+          }),
         client: {
           agentSessionWorkflowLaunch: withWorktreeRefresh(queryClient, async (request) => {
             launchRequest = request;
@@ -112,14 +120,7 @@ export function useSessionStartWorkflowRunner({
         },
       });
       try {
-        const request = await prepareSessionStartInstruction({
-          queryClient,
-          workspaceId,
-          task: input.task,
-          request: input.request,
-          targetBranch: input.decision.targetBranch,
-        });
-        const result = await runner({ ...input, request });
+        const result = await runner(input);
         if (
           result.postStartActionError &&
           startupAttempts.getAttempt(id)?.status.phase !== "canceled"
