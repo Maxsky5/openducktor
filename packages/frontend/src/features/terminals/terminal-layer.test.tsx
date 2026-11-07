@@ -35,7 +35,7 @@ test("offers Retry and Dismiss for a discovery failure and Dismiss for a transpo
   expect(markup).toContain('aria-label="Dismiss terminal transport error"');
 });
 
-test("keeps a shown read-only terminal accessible and suspends only its hidden accessibility tree", async () => {
+test("keeps a read-only terminal's screen-reader DOM and removes it while hidden", async () => {
   const terminalId = "read-only-terminal";
   const tab: TerminalTab = {
     tabId: terminalId,
