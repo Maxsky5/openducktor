@@ -75,8 +75,17 @@ describe("Electron browser engine pages", () => {
         ?.params,
     ).toEqual({ source: PAGE_NOTIFICATION_SCRIPT, runImmediately: true });
     expect(guest.debugger.sent.at(-1)?.params).toEqual({ color: { r: 255, g: 255, b: 255, a: 1 } });
-    expect(guest.loaded).toEqual(["http://localhost:3000/"]);
+    expect(guest.loaded).toEqual(["about:blank", "http://localhost:3000/"]);
     expect(harness.engine.hasLiveTab(TAB_ID)).toBe(true);
+  });
+
+  test("starts the page before it attaches the debugger", async () => {
+    const harness = createEngineHarness();
+    await createTab(harness);
+    const guest = harness.page();
+
+    expect(guest.loaded[0]).toBe("about:blank");
+    expect(guest.debuggerAttachedAtLoad).toEqual([false, true]);
   });
 
   test("keeps a page that no panel shows in the keeper", async () => {
@@ -84,7 +93,7 @@ describe("Electron browser engine pages", () => {
     await createTab(harness);
 
     expect(harness.viewPort.views).toHaveLength(1);
-    expect(harness.viewPort.kept).toEqual([{ view: harness.view(), visible: false }]);
+    expect(harness.viewPort.kept).toEqual([harness.view()]);
     expect(harness.viewPort.placed).toEqual([]);
   });
 
@@ -105,7 +114,7 @@ describe("Electron browser engine pages", () => {
     ]);
 
     await Effect.runPromise(harness.engine.setSurface(MAIN_WINDOW_ID, TAB_ID, surface(false)));
-    expect(harness.viewPort.kept.at(-1)).toEqual({ view, visible: false });
+    expect(harness.viewPort.kept.at(-1)).toBe(view);
   });
 
   test("keeps the pages in the keeper while its window has no renderer", async () => {
@@ -118,7 +127,7 @@ describe("Electron browser engine pages", () => {
     harness.engine.setMainWindowLoaded(MAIN_WINDOW_ID, false);
 
     expect(harness.viewPort.kept).toHaveLength(kept + 1);
-    expect(harness.viewPort.kept.at(-1)).toEqual({ view, visible: false });
+    expect(harness.viewPort.kept.at(-1)).toBe(view);
     harness.engine.setMainWindowLoaded(MAIN_WINDOW_ID, true);
     expect(harness.viewPort.kept).toHaveLength(kept + 1);
   });
@@ -185,13 +194,23 @@ describe("Electron browser engine pages", () => {
   test("refuses an empty page snapshot", async () => {
     const harness = createEngineHarness();
     await createTab(harness);
-    harness.page().snapshotJpeg = Buffer.alloc(0);
+    harness.page().debugger.pageScreenshotData = "";
 
     const exit = await Effect.runPromiseExit(harness.engine.capturePage(TAB_ID));
 
     expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain(
       "The page snapshot is empty.",
     );
+  });
+
+  test("takes a screenshot of a hidden page without showing it", async () => {
+    const harness = createEngineHarness();
+    await createTab(harness);
+    harness.viewPort.kept.length = 0;
+
+    await Effect.runPromise(harness.engine.captureScreenshot(TAB_ID, { format: "png" }));
+
+    expect(harness.viewPort.kept).toEqual([]);
   });
 
   test("ends the tab when its page closes", async () => {
@@ -267,7 +286,7 @@ describe("Electron browser engine pages", () => {
     expect(guest.debugger.sent.some((command) => command.method === "Page.reload")).toBe(false);
   });
 
-  test("captures a screenshot through the page CDP session", async () => {
+  test("captures a screenshot through the page CDP session as a viewport clip", async () => {
     const harness = createEngineHarness();
     await createTab(harness);
     const guest = harness.page();
@@ -276,7 +295,12 @@ describe("Electron browser engine pages", () => {
 
     expect(guest.debugger.sent.at(-1)).toEqual({
       method: "Page.captureScreenshot",
-      params: { format: "png" },
+      params: {
+        format: "png",
+        quality: 80,
+        clip: { x: 0, y: 0, width: 800, height: 600, scale: 1 },
+        captureBeyondViewport: false,
+      },
       sessionId: undefined,
     });
   });
@@ -371,19 +395,22 @@ describe("Electron browser engine page events", () => {
     expect([allowed.prevented, heldAgain.prevented]).toEqual([true, false]);
   });
 
-  test("shows a page in the keeper while any wake hold is open", async () => {
+  test("keeps a page unthrottled while any wake hold is open", async () => {
     const harness = createEngineHarness();
     await createTab(harness);
     const view = harness.view();
+    const guest = harness.page();
     const first = await Effect.runPromise(Scope.make());
     const second = await Effect.runPromise(Scope.make());
     await Effect.runPromise(harness.engine.holdWake(TAB_ID).pipe(Scope.provide(first)));
     await Effect.runPromise(harness.engine.holdWake(TAB_ID).pipe(Scope.provide(second)));
+    expect(guest.backgroundThrottling).toBe(false);
     await Effect.runPromise(Scope.close(first, Exit.void));
-    expect(harness.viewPort.kept.at(-1)).toEqual({ view, visible: true });
+    expect(guest.backgroundThrottling).toBe(false);
     await Effect.runPromise(Scope.close(second, Exit.void));
 
-    expect(harness.viewPort.kept.at(-1)).toEqual({ view, visible: false });
+    expect(guest.backgroundThrottling).toBe(true);
+    expect(harness.viewPort.kept.at(-1)).toBe(view);
   });
 
   test("a hold taken before the tab exists does not end a later hold", async () => {
@@ -396,9 +423,10 @@ describe("Electron browser engine page events", () => {
     await Effect.runPromise(harness.engine.holdWake(TAB_ID).pipe(Scope.provide(late)));
 
     await Effect.runPromise(Scope.close(early, Exit.void));
-    expect(harness.viewPort.kept.at(-1)).toEqual({ view, visible: true });
+    expect(harness.viewPort.kept.at(-1)).toBe(view);
+    expect(harness.page().backgroundThrottling).toBe(false);
     await Effect.runPromise(Scope.close(late, Exit.void));
-    expect(harness.viewPort.kept.at(-1)).toEqual({ view, visible: false });
+    expect(harness.page().backgroundThrottling).toBe(true);
   });
 
   test("reports granted page notifications only", async () => {
@@ -687,7 +715,7 @@ describe("Electron browser engine popups", () => {
     });
 
     await harness.flush();
-    expect(harness.page().loaded).toEqual(["https://docs.example/"]);
+    expect(harness.page().loaded).toEqual(["about:blank", "https://docs.example/"]);
   });
 
   test("places a panel popup when its surface request comes before its view", async () => {

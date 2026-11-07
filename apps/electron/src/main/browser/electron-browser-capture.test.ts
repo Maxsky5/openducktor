@@ -65,13 +65,15 @@ const fakeConnection = (viewport: Partial<Record<string, number>> = {}) => {
           cssVisualViewport: css,
         });
       }
-      return Promise.resolve({ data: params?.clip ? "CDP clip" : "VIEWPORT" });
+      return Promise.resolve({
+        data: Buffer.from(params?.clip ? "CDP clip" : "VIEWPORT").toString("base64"),
+      });
     },
   };
 };
 
 const decodePng = (png: Buffer): FakeImage => {
-  expect(png.toString("base64")).toBe("VIEWPORT");
+  expect(png.toString()).toBe("CDP clip");
   return new FakeImage({ width: 780, height: 1600 });
 };
 
@@ -90,7 +92,38 @@ describe("captureGuestScreenshot", () => {
     expect(decode(result)).toBe("png crop 21,80,200,101 size 200x101");
     expect(connection.sent).toEqual([
       { method: "Page.getLayoutMetrics", params: undefined },
-      { method: "Page.captureScreenshot", params: { format: "png" } },
+      {
+        method: "Page.captureScreenshot",
+        params: {
+          format: "png",
+          quality: 80,
+          clip: { x: 0, y: 300, width: 390, height: 800, scale: 1 },
+          captureBeyondViewport: false,
+        },
+      },
+    ]);
+  });
+
+  test("takes a request without a clip as a viewport clip, which a hidden page can draw", async () => {
+    const connection = fakeConnection();
+
+    const result = await captureGuestScreenshot(connection, decodePng, {
+      format: "jpeg",
+      quality: 70,
+    });
+
+    expect(decode(result)).toBe("CDP clip");
+    expect(connection.sent).toEqual([
+      { method: "Page.getLayoutMetrics", params: undefined },
+      {
+        method: "Page.captureScreenshot",
+        params: {
+          format: "jpeg",
+          quality: 70,
+          clip: { x: 0, y: 300, width: 390, height: 800, scale: 1 },
+          captureBeyondViewport: false,
+        },
+      },
     ]);
   });
 
@@ -114,7 +147,6 @@ describe("captureGuestScreenshot", () => {
 
   test("leaves other screenshots to CDP", async () => {
     const requests: CdpPayload[] = [
-      { format: "png" },
       { format: "webp", clip: { x: 0, y: 300, width: 10, height: 10, scale: 1 } },
       { captureBeyondViewport: true, clip: { x: 0, y: 300, width: 10, height: 10, scale: 1 } },
       { clip: { x: 0, y: 0, width: 100, height: 100, scale: 1 } },
@@ -124,7 +156,7 @@ describe("captureGuestScreenshot", () => {
       const connection = fakeConnection();
       const result = await captureGuestScreenshot(connection, decodePng, params);
       expect(connection.sent.at(-1)).toEqual({ method: "Page.captureScreenshot", params });
-      expect(result.data).toBe(params.clip ? "CDP clip" : "VIEWPORT");
+      expect(decode(result)).toBe("CDP clip");
     }
   });
 });

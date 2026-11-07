@@ -1,4 +1,4 @@
-import type { BrowserServerMessage } from "@openducktor/contracts";
+import { BROWSER_BLANK_URL, type BrowserServerMessage } from "@openducktor/contracts";
 import {
   answerOnce,
   BrowserEngineError,
@@ -9,7 +9,11 @@ import {
 import { Effect } from "effect";
 import { electronBrowserPartition } from "../../shared/electron-browser-partitions";
 import { errorMessage } from "../../effect/electron-errors";
-import { captureGuestScreenshot, type ElectronPngDecoder } from "./electron-browser-capture";
+import {
+  captureGuestScreenshot,
+  capturePageImage,
+  type ElectronPngDecoder,
+} from "./electron-browser-capture";
 import type { EngineTab } from "./electron-browser-engine-tab";
 import { createElectronPermissionRequests } from "./electron-browser-permission-requests";
 import { createElectronMainWindows } from "./electron-browser-windows";
@@ -191,9 +195,8 @@ export const createElectronBrowserEngine = (
   /** Shows a view in its window, or keeps it in the keeper while no panel shows it. */
   const applyView = (tab: EngineTab): void => {
     const view = tab.view;
-    // An agent action keeps its page unthrottled while it runs. A page that no agent uses runs
-    // normally, and Chromium throttles it only while the user does not see it. A popup window has
-    // its page in the binding, not in a view.
+    // An agent action keeps its page unthrottled while it runs. A popup window has its page in
+    // the binding, not in a view.
     const guest = view?.webContents ?? tab.binding?.guest ?? null;
     if (guest !== null && !guest.isDestroyed()) {
       guest.setBackgroundThrottling(tab.wakeHolds === 0);
@@ -212,7 +215,9 @@ export const createElectronBrowserEngine = (
       // The window closed while the renderer still listed its tabs.
       tab.viewWindowId = null;
     }
-    input.viewPort.showInKeeper(view, tab.wakeHolds > 0);
+    // A hidden view draws no frame, and a CDP screenshot waits for one. Keep the page visible in
+    // the keeper window while no panel shows it.
+    input.viewPort.keepInKeeper(view);
   };
 
   /** Moves the pages of a window to the keeper, so a window that lost its renderer shows none. */
@@ -353,6 +358,10 @@ export const createElectronBrowserEngine = (
       // A surface request can arrive before the view exists, from a popup tab that the renderer
       // learned about first. The request waits in the tab until the view is here.
       applyView(tab);
+      // A new `WebContentsView` has no renderer until a navigation starts, and a CDP command that
+      // needs the renderer waits for one. Load a blank page first: it starts the renderer and
+      // leaves the notification script installed before the page of the tab loads.
+      view.webContents.loadURL(BROWSER_BLANK_URL).catch(() => undefined);
       const attached = yield* attachGuest(tab, view.webContents);
       if (!attached) {
         yield* Effect.fail(
@@ -571,35 +580,24 @@ export const createElectronBrowserEngine = (
         }
         tab.view.webContents.focus();
       }),
-    capturePage: (tabId) =>
-      Effect.gen(function* () {
-        const operation = "electron.browser.capture_page";
-        const tab = tabs.get(tabId);
-        if (!tab) {
-          return yield* tabNotFound(operation, tabId);
-        }
-        const guest = tab.view?.webContents ?? tab.binding?.guest ?? null;
-        if (guest === null || guest.isDestroyed()) {
-          return yield* pageNotReady(operation, tabId);
-        }
-        return yield* Effect.tryPromise({
-          try: async () => {
-            const image = await guest.capturePage();
-            const jpeg = image.toJPEG(PAGE_SNAPSHOT_JPEG_QUALITY);
-            // A page that has not painted yet returns an empty image, which is no snapshot.
-            if (jpeg.length === 0) throw new Error("The page snapshot is empty.");
-            return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
-          },
-          catch: (cause) =>
-            new BrowserEngineError({
-              code: "operation_failed",
-              operation,
-              message: `OpenDucktor could not capture the page: ${errorMessage(cause)}`,
-              tabId,
-              cause,
-            }),
-        });
-      }),
+    capturePage: (tabId) => {
+      const operation = "electron.browser.capture_page";
+      return pageBinding(tabId, operation).pipe(
+        Effect.flatMap(({ connection }) =>
+          Effect.tryPromise({
+            try: () => capturePageImage(connection, PAGE_SNAPSHOT_JPEG_QUALITY),
+            catch: (cause) =>
+              new BrowserEngineError({
+                code: "operation_failed",
+                operation,
+                message: `OpenDucktor could not capture the page: ${errorMessage(cause)}`,
+                tabId,
+                cause,
+              }),
+          }),
+        ),
+      );
+    },
     openSession: (tabId) =>
       Effect.gen(function* () {
         const operation = "electron.browser.open_session";

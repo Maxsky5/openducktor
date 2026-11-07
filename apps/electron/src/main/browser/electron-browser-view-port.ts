@@ -28,9 +28,9 @@ export type ElectronBrowserView = {
  * Places the pages of panel tabs. Each page is a `WebContentsView`, not a `<webview>` guest, so a
  * CDP input command never moves the keyboard focus of the window that shows the page.
  *
- * A view draws only while it is in a shown window. The port keeps the views that no panel shows in
- * an invisible keeper window: a hidden or detached view falls to about two frames per second, and
- * an agent action or a screenshot must not wait for that.
+ * A view draws only while it is attached to a shown window and visible. A hidden view produces no
+ * compositor frames, so a CDP screenshot waits for a frame that never comes. The port keeps a page
+ * that no panel shows visible in the keeper window: one pixel, no opacity, no focus, no pointer.
  */
 export type ElectronBrowserViewPort = {
   /** Remembers the window of an OpenDucktor renderer, so the engine can place views in it. */
@@ -39,8 +39,8 @@ export type ElectronBrowserViewPort = {
   create(partition: string): ElectronBrowserView;
   /** Shows the view in the window at the box, or returns false when the window is gone. */
   showInWindow(view: ElectronBrowserView, windowId: number, box: ElectronViewBox): boolean;
-  /** Keeps the view in the keeper window. A hidden view draws no frame. */
-  showInKeeper(view: ElectronBrowserView, visible: boolean): void;
+  /** Keeps the view visible in the keeper window, which no user sees or reaches. */
+  keepInKeeper(view: ElectronBrowserView): void;
   /** Removes the view from its window and ends its page. */
   close(view: ElectronBrowserView): void;
   /**
@@ -56,13 +56,33 @@ export const DEFAULT_VIEW_BOX: ElectronViewBox = { x: 0, y: 0, width: 1280, heig
 /** The keeper window is one pixel, so a user never sees it or reaches it with the pointer. */
 const KEEPER_SIZE = 1;
 
+/**
+ * The options of the keeper window: no frame, no shadow, and never focusable. The keeper holds
+ * pages that no panel shows, so it must never become the key window and take the keyboard focus
+ * from the composer or the terminal. A non-focusable window still draws.
+ */
+export const keeperWindowOptions = (
+  platform: NodeJS.Platform,
+): electron.BaseWindowConstructorOptions => ({
+  width: KEEPER_SIZE,
+  height: KEEPER_SIZE,
+  // Linux ignores window opacity, so keep its keeper outside every screen.
+  x: platform === "linux" ? -KEEPER_SIZE : 0,
+  y: platform === "linux" ? -KEEPER_SIZE : 0,
+  show: false,
+  frame: false,
+  skipTaskbar: true,
+  hasShadow: false,
+  focusable: false,
+});
+
 type Placement = {
   readonly owner: ElectronViewOwner;
   readonly native: electron.WebContentsView;
 };
 
 /**
- * The Electron view port. The keeper window shows no frame, takes no focus, and ignores the
+ * The Electron view port. The keeper window is invisible, takes no focus, and ignores the
  * pointer. Chromium still counts it as visible, so the pages in it keep drawing at full speed.
  */
 export const createElectronBrowserViewPort = (): ElectronBrowserViewPort => {
@@ -75,20 +95,7 @@ export const createElectronBrowserViewPort = (): ElectronBrowserViewPort => {
       return keeper;
     }
     const linux = process.platform === "linux";
-    const window = new electron.BaseWindow({
-      width: KEEPER_SIZE,
-      height: KEEPER_SIZE,
-      // Linux ignores window opacity, so keep its keeper outside every screen.
-      x: linux ? -KEEPER_SIZE : 0,
-      y: linux ? -KEEPER_SIZE : 0,
-      show: false,
-      frame: false,
-      skipTaskbar: true,
-      hasShadow: false,
-      // A non-focusable window lost the host focus in a probe. The keeper never calls `focus()`,
-      // so a focusable keeper still gives the focus to no one.
-      focusable: true,
-    });
+    const window = new electron.BaseWindow(keeperWindowOptions(process.platform));
     if (process.platform === "darwin") {
       window.setHiddenInMissionControl(true);
     }
@@ -152,9 +159,9 @@ export const createElectronBrowserViewPort = (): ElectronBrowserViewPort => {
       native.setVisible(true);
       return true;
     },
-    showInKeeper(view, visible) {
+    keepInKeeper(view) {
       const native = place(view, keeperWindow());
-      native.setVisible(visible);
+      native.setVisible(true);
     },
     close(view) {
       const current = placements.get(view);
