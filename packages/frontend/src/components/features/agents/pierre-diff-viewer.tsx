@@ -88,6 +88,7 @@ type PierreDiffViewerProps = {
 type PierreDiffPreloaderProps = {
   patch: string;
   filePath: string;
+  onComplete?: () => void;
 };
 
 type PierreFileViewerProps = {
@@ -275,29 +276,46 @@ const getContentMetrics = (value: string) => {
 export const PierreDiffPreloader = memo(function PierreDiffPreloader({
   patch,
   filePath,
+  onComplete,
 }: PierreDiffPreloaderProps): null {
   const workerPool = useWorkerPool();
   const { fileDiff } = useMemo(() => getRenderableFileDiff(patch, filePath), [filePath, patch]);
 
   useEffect(() => {
     if (workerPool == null || !workerPool.isWorkingPool() || fileDiff == null) {
+      onComplete?.();
+      return;
+    }
+    if (
+      fileDiff.lang === "text" ||
+      Math.max(fileDiff.additionLines.length, fileDiff.deletionLines.length) >
+        PIERRE_HIGHLIGHT_LINE_LIMIT
+    ) {
+      onComplete?.();
       return;
     }
     if (workerPool.getDiffResultCache(fileDiff) != null) {
+      onComplete?.();
       return;
     }
 
     let disposed = false;
-    void workerPool.primeDiffHighlightCache(fileDiff).catch((cause: unknown) => {
-      if (disposed) return;
-      toast.error("Could not prepare syntax highlighting", {
-        description: `${filePath}: ${errorMessage(cause)}. Open the diff to try again.`,
-      });
-    });
+    void workerPool.primeDiffHighlightCache(fileDiff).then(
+      () => {
+        if (!disposed) onComplete?.();
+      },
+      (cause: unknown) => {
+        if (disposed) return;
+        toast.error("Could not prepare syntax highlighting", {
+          description: `${filePath}: ${errorMessage(cause)}. Open the diff to try again.`,
+        });
+        onComplete?.();
+      },
+    );
     return () => {
       disposed = true;
     };
-  }, [fileDiff, filePath, workerPool]);
+  }, [fileDiff, filePath, onComplete, workerPool]);
 
   return null;
 });

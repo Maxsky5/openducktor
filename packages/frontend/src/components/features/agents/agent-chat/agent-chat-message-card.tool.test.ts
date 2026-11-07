@@ -328,7 +328,7 @@ describe("AgentChatMessageCard tool presentation", () => {
       expect(summary?.textContent).not.toContain("Returned artifact body");
       expect(html.includes('aria-label="Running tool"')).toBe(status === "running");
       expect(html).toContain("Output");
-      expect(html).toContain("Returned artifact body");
+      expect(html).not.toContain("Returned artifact body");
     },
   );
 
@@ -575,7 +575,7 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).not.toContain("/repo/apps/web/src/contexts/AuthContext.tsx");
   });
 
-  test("shows the written-file expand control and keeps the native write result and arguments", () => {
+  test("shows the written-file expand control and its Input and Output boxes", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
@@ -609,7 +609,7 @@ describe("AgentChatMessageCard tool presentation", () => {
     );
     expect(html).toContain("lucide-chevron-right");
     expect(html).toContain(">Input</summary>");
-    expect(html).toContain("Created file successfully: src/example.ts");
+    expect(html).toContain(">Output</summary>");
   });
 
   test("renders one file edit card per file in a multi-file apply_patch result without a summary description", () => {
