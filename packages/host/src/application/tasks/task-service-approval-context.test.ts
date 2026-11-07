@@ -1,6 +1,7 @@
 import { builtinTaskWorkflows, reviewTaskWorkflows } from "../../test-support/task-workflows";
 import { Effect } from "effect";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
 import type { GitProviderResolver } from "../git/git-provider-resolver";
@@ -246,126 +247,6 @@ describe("createTaskService approval context", () => {
       targetBranch: "origin/release",
     });
   });
-  test("reports a missing task worktree for approval context", async () => {
-    const taskStore: TaskStorePort = {
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            return task({ status: "ai_review" });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTaskMetadata() {
-        return Effect.tryPromise({
-          try: async () => {
-            return {
-              artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
-              agentSessions: [],
-            };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected transition");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      listTasks() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected list");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    await expect(
-      Effect.runPromise(
-        createTaskService({
-          taskWorkflows: builtinTaskWorkflows,
-          gitProviderResolver: unusedGitProviderResolver,
-          gitPort: createDirectMergeGitPort({ calls: [] }),
-          settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-          systemCommands: createApprovalSystemCommands(),
-          taskStore,
-          taskWorktreeService: createDirectMergeTaskWorktreeService(null),
-          workspaceSettingsService: createBuildWorkspaceSettingsService({
-            workspaceId: "repo",
-            repoPath: "/repo",
-            hooks: { postComplete: [] },
-          }),
-        }).getApprovalContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
-      ),
-    ).resolves.toEqual({
-      outcome: "missing_builder_worktree",
-      taskId: "task-1",
-      taskStatus: "ai_review",
-    });
-  });
   test("loads approval context from recorded direct merge metadata", async () => {
     const calls: unknown[] = [];
     const directMerge = {
@@ -511,159 +392,151 @@ describe("createTaskService approval context", () => {
   });
 });
 
-describe.each(["getApprovalContext", "upsertPullRequest"] as const)(
-  "%s approval preparation failures",
-  (entryPoint) => {
-    test.each([
-      ["workflow", "task"],
-      ["repo", "repo"],
-      ["default", "default"],
-      ["missing", "worktree"],
-      ["branch", "branch"],
-      ["detached", "branch"],
-      ["unnamed", "branch"],
-      ["targetError", "branch"],
-      ["target", "target"],
-      ["status", "status"],
-      ["message", "message"],
-    ])("preserves %s failure and read order", async (scenario, lastRead) => {
-      const calls: string[] = [];
-      const failure = new HostOperationError({
-        operation: scenario,
-        message: `${scenario} failed`,
-      });
-      const read = <T>(stage: string, value: T) =>
-        Effect.gen(function* () {
-          calls.push(stage);
-          if (scenario === stage) return yield* failure;
-          return value;
-        });
-      const repoConfig = await Effect.runPromise(
-        createBuildWorkspaceSettingsService({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          hooks: { postComplete: [] },
-        }).getRepoConfig("repo"),
-      );
-      let repoReads = 0;
-      const service = createTaskService({
-        gitProviderResolver: unusedGitProviderResolver,
-        taskStore: {
-          getTask: () =>
-            read("task", {
-              ...task({ status: scenario === "workflow" ? "open" : "human_review" }),
-              targetBranchError: ["detached", "unnamed", "targetError"].includes(scenario)
-                ? "Repair the target branch."
-                : undefined,
-            }),
-          getTaskMetadata: () => read("metadata", { artifacts: {}, agentSessions: [] }),
-        },
-        workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
-          getRepoConfig: () => {
-            repoReads += 1;
-            return read(repoReads === 1 ? "repo" : "target", repoConfig);
-          },
-        }),
-        settingsConfig: extendSettingsConfigPort(createBuildSettingsConfig(new Set(["/repo"])), {
-          readConfig: () => read("default", createDefaultGlobalConfig()),
-        }),
-        taskWorktreeService: {
-          getTaskWorktree: () =>
-            read(
-              "worktree",
-              scenario === "missing" ? null : { workingDirectory: "/worktrees/repo/task-1" },
-            ),
-        },
-        gitPort: extendGitPort(createDirectMergeGitPort({ calls: [] }), {
-          getCurrentBranch: () =>
-            read("branch", {
-              name: scenario === "unnamed" ? "  " : "odt/task-1",
-              detached: scenario === "detached",
-            }),
-          getWorktreeStatusSummaryData: () =>
-            read("status", {
-              currentBranch: { name: "odt/task-1", detached: false },
-              fileStatuses: [],
-              fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-              targetAheadBehind: { ahead: 1, behind: 0 },
-              upstreamAheadBehind: { outcome: "untracked" as const, ahead: 1 },
-            }),
-          suggestedSquashCommitMessage: () => read("message", undefined),
-        }),
-      });
-      const input = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" };
-      const run = <A, E>(operation: Effect.Effect<A, E>) => {
-        expect(calls).toEqual([]);
-        return Effect.runPromise(Effect.result(operation));
-      };
-      const result = await (entryPoint === "getApprovalContext"
-        ? run(service.getApprovalContext(input))
-        : run(service.upsertPullRequest({ ...input, content: { title: "Task", body: "Body" } })));
-      const reads = [
-        "task",
-        "repo",
-        "metadata",
-        "default",
-        "worktree",
-        "branch",
-        "target",
-        "status",
-        "message",
-      ];
-      const lastIndex =
-        scenario === "workflow" && entryPoint === "upsertPullRequest"
-          ? reads.indexOf("metadata")
-          : reads.indexOf(lastRead);
-      expect(calls).toEqual(reads.slice(0, lastIndex + 1));
-      if (scenario === "missing" && entryPoint === "getApprovalContext") {
-        expect(result).toMatchObject({
-          _tag: "Success",
-          success: {
-            outcome: "missing_builder_worktree",
-            taskId: "task-1",
-            taskStatus: "human_review",
-          },
-        });
-        return;
-      }
-      if (result._tag !== "Failure") throw new Error("Expected approval preparation failure");
-      if (["repo", "default", "branch", "target", "status", "message"].includes(scenario)) {
-        expect(result.failure).toBe(failure);
-      } else if (scenario === "workflow") {
-        expect(result.failure).toMatchObject({
-          _tag: "HostValidationError",
-          message: "Human approval is only allowed from ai_review or human_review.",
-        });
-      } else if (scenario === "missing") {
-        expect(result.failure).toMatchObject({
-          _tag: "HostValidationError",
-          field: "taskId",
-          message:
-            "Human approval requires a task worktree for task task-1. Start a Builder or QA session first.",
-          details: { repoPath: "/repo", taskId: "task-1" },
-        });
-      } else if (scenario === "targetError") {
-        expect(result.failure).toMatchObject({
-          _tag: "HostValidationError",
-          field: "targetBranch",
-          message: "Repair the target branch.",
-          details: { repoPath: "/repo", taskId: "task-1" },
-        });
-      } else {
-        const branchError =
-          scenario === "detached"
-            ? "Human approval requires a task branch, but the task worktree is detached."
-            : "Human approval requires a task branch name.";
-        expect(result.failure).toMatchObject({
-          _tag: "HostValidationError",
-          field: "workingDirectory",
-          message: branchError,
-          details: { workingDirectory: "/worktrees/repo/task-1" },
-        });
-      }
+describe("approval preparation", () => {
+  test.each([
+    ["getApprovalContext", "workflow", "task", "open"],
+    ["getApprovalContext", "repo", "repo", "human_review"],
+    ["getApprovalContext", "default", "default", "human_review"],
+    ["getApprovalContext", "missing", "worktree", "ai_review"],
+    ["getApprovalContext", "missing", "worktree", "human_review"],
+    ["getApprovalContext", "branch", "branch", "human_review"],
+    ["getApprovalContext", "detached", "branch", "human_review"],
+    ["getApprovalContext", "unnamed", "branch", "human_review"],
+    ["getApprovalContext", "targetError", "branch", "human_review"],
+    ["getApprovalContext", "target", "target", "human_review"],
+    ["getApprovalContext", "status", "status", "human_review"],
+    ["getApprovalContext", "message", "message", "human_review"],
+    ["upsertPullRequest", "workflow", "metadata", "open"],
+    ["upsertPullRequest", "repo", "repo", "human_review"],
+    ["upsertPullRequest", "default", "default", "human_review"],
+    ["upsertPullRequest", "missing", "worktree", "human_review"],
+    ["upsertPullRequest", "detached", "branch", "human_review"],
+    ["upsertPullRequest", "message", "message", "human_review"],
+  ] as const)("%s handles %s at %s from %s", async (entryPoint, scenario, lastRead, taskStatus) => {
+    const calls: string[] = [];
+    const failure = new HostOperationError({
+      operation: scenario,
+      message: `${scenario} failed`,
     });
-  },
-);
+    const read = <T>(stage: string, value: T) =>
+      Effect.gen(function* () {
+        calls.push(stage);
+        if (scenario === stage) return yield* failure;
+        return value;
+      });
+    const repoConfig = repoConfigFixture();
+    let repoReads = 0;
+    const service = createTaskService({
+      gitProviderResolver: unusedGitProviderResolver,
+      taskStore: {
+        getTask: () =>
+          read("task", {
+            ...task({ status: taskStatus }),
+            targetBranchError: ["detached", "unnamed", "targetError"].includes(scenario)
+              ? "Repair the target branch."
+              : undefined,
+          }),
+        getTaskMetadata: () => read("metadata", { artifacts: {}, agentSessions: [] }),
+      },
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getRepoConfig: () => {
+          repoReads += 1;
+          return read(repoReads === 1 ? "repo" : "target", repoConfig);
+        },
+      }),
+      settingsConfig: extendSettingsConfigPort(createBuildSettingsConfig(new Set(["/repo"])), {
+        readConfig: () => read("default", createDefaultGlobalConfig()),
+      }),
+      taskWorktreeService: {
+        getTaskWorktree: () =>
+          read(
+            "worktree",
+            scenario === "missing" ? null : { workingDirectory: "/worktrees/repo/task-1" },
+          ),
+      },
+      gitPort: extendGitPort(createDirectMergeGitPort({ calls: [] }), {
+        getCurrentBranch: () =>
+          read("branch", {
+            name: scenario === "unnamed" ? "  " : "odt/task-1",
+            detached: scenario === "detached",
+          }),
+        getWorktreeStatusSummaryData: () =>
+          read("status", {
+            currentBranch: { name: "odt/task-1", detached: false },
+            fileStatuses: [],
+            fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
+            targetAheadBehind: { ahead: 1, behind: 0 },
+            upstreamAheadBehind: { outcome: "untracked" as const, ahead: 1 },
+          }),
+        suggestedSquashCommitMessage: () => read("message", undefined),
+      }),
+    });
+    const input = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" };
+    const run = <A, E>(operation: Effect.Effect<A, E>) => {
+      expect(calls).toEqual([]);
+      return Effect.runPromise(Effect.result(operation));
+    };
+    const result = await (entryPoint === "getApprovalContext"
+      ? run(service.getApprovalContext(input))
+      : run(service.upsertPullRequest({ ...input, content: { title: "Task", body: "Body" } })));
+    const reads = [
+      "task",
+      "repo",
+      "metadata",
+      "default",
+      "worktree",
+      "branch",
+      "target",
+      "status",
+      "message",
+    ];
+    expect(calls).toEqual(reads.slice(0, reads.indexOf(lastRead) + 1));
+    if (scenario === "missing" && entryPoint === "getApprovalContext") {
+      if (result._tag !== "Success") throw new Error("Expected missing-worktree result");
+      expect(result.success).toEqual({
+        outcome: "missing_builder_worktree",
+        taskId: "task-1",
+        taskStatus,
+      });
+      return;
+    }
+    if (result._tag !== "Failure") throw new Error("Expected approval preparation failure");
+    if (["repo", "default", "branch", "target", "status", "message"].includes(scenario)) {
+      expect(result.failure).toBe(failure);
+    } else if (scenario === "workflow") {
+      expect(result.failure).toMatchObject({
+        _tag: "HostValidationError",
+        message: "Human approval is only allowed from ai_review or human_review.",
+      });
+    } else if (scenario === "missing") {
+      expect(result.failure).toMatchObject({
+        _tag: "HostValidationError",
+        field: "taskId",
+        message:
+          "Human approval requires a task worktree for task task-1. Start a Builder or QA session first.",
+        details: { repoPath: "/repo", taskId: "task-1" },
+      });
+    } else if (scenario === "targetError") {
+      expect(result.failure).toMatchObject({
+        _tag: "HostValidationError",
+        field: "targetBranch",
+        message: "Repair the target branch.",
+        details: { repoPath: "/repo", taskId: "task-1" },
+      });
+    } else {
+      const branchError =
+        scenario === "detached"
+          ? "Human approval requires a task branch, but the task worktree is detached."
+          : "Human approval requires a task branch name.";
+      expect(result.failure).toMatchObject({
+        _tag: "HostValidationError",
+        field: "workingDirectory",
+        message: branchError,
+        details: { workingDirectory: "/worktrees/repo/task-1" },
+      });
+    }
+  });
+});
 
 test.each([
   ["built-in", builtinTaskWorkflows, "human_review", "task"],
@@ -672,13 +545,7 @@ test.each([
   "approval context rereads the target and keeps the publication snapshot (%s)",
   async (_label, taskWorkflows, status, issueType) => {
     const calls: unknown[] = [];
-    const repoConfig = await Effect.runPromise(
-      createBuildWorkspaceSettingsService({
-        workspaceId: "repo",
-        repoPath: "/repo",
-        hooks: { postComplete: [] },
-      }).getRepoConfig("repo"),
-    );
+    const repoConfig = repoConfigFixture();
     let repoReads = 0;
     const service = createTaskService({
       taskWorkflows,
