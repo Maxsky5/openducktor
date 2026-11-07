@@ -101,6 +101,7 @@ const renderTab = (
     frames?: BrowserFrameBridge | null;
     listed?: boolean;
     inPanel?: boolean;
+    shown?: boolean;
   } = {},
 ) => {
   const channel = createChannelFixture();
@@ -138,7 +139,7 @@ const renderTab = (
     return null;
   }
   /** `inPanel` false leaves the tab out of the panels, as for an owner that no panel shows. */
-  const tree = (inPanel: boolean) => (
+  const tree = (inPanel: boolean, shown = options.shown ?? true) => (
     <QueryProvider connection={connection}>
       <BrowserRuntimeProvider>
         <Probe />
@@ -151,7 +152,7 @@ const renderTab = (
               tabId: TAB_ID,
             }}
             tab={options.listed === false ? null : tab}
-            isShown
+            isShown={shown}
             addressFocusRequest={0}
           />
         ) : null}
@@ -180,6 +181,7 @@ const renderTab = (
     runtime: requireRuntime,
     electronRuntime,
     setInPanel: (inPanel: boolean) => view.rerender(tree(inPanel)),
+    setShown: (shown: boolean) => view.rerender(tree(options.inPanel ?? true, shown)),
   };
 };
 
@@ -393,6 +395,27 @@ describe("BrowserTabContent", () => {
 
     fireEvent.keyDown(window, { key: "Escape" });
 
+    await waitFor(() =>
+      expect(pickerSet).toHaveBeenLastCalledWith({ tabId: TAB_ID, enabled: false }),
+    );
+  });
+
+  test("leaves Escape to the tab that the user shows", async () => {
+    const { electronRuntime, pickerSet, setShown } = renderTab(
+      createBrowserTabSummaryFixture({ tabId: TAB_ID }),
+      READY,
+      { shown: false },
+    );
+    await waitFor(() => expect(electronRuntime().channel.status()).toBe("connected"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Annotate" }));
+    await waitFor(() => expect(pickerSet).toHaveBeenCalledWith({ tabId: TAB_ID, enabled: true }));
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(pickerSet).not.toHaveBeenCalledWith({ tabId: TAB_ID, enabled: false });
+
+    setShown(true);
+    fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() =>
       expect(pickerSet).toHaveBeenLastCalledWith({ tabId: TAB_ID, enabled: false }),
     );

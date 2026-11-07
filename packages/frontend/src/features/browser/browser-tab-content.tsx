@@ -91,7 +91,7 @@ function ElectronTabContent({
   const engine = useBrowserEngineState();
   const overlayHost = useBrowserOverlayHost(runtime.overlays, browserSurfaceKey(entry.tabId));
   const { live } = tab;
-  const picker = useBrowserPicker(channel, entry.tabId, live);
+  const picker = useBrowserPicker(channel, entry.tabId, live, isShown);
   // A browser tab owner is also the owner of its pending annotations.
   const { ownerKey, annotations } = useBrowserAnnotations(tab.owner);
   const anchors = useBrowserAnchors(channel, entry.tabId, live, tab.url, annotations);
