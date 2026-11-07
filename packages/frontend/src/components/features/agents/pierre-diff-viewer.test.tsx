@@ -5,6 +5,7 @@ import { Plus, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
+import { DiffPreloadQueue } from "./agent-studio-git-panel/diff-preload-queue";
 import {
   withCapturedConsoleMethods,
   withCapturedOutputStreams,
@@ -411,6 +412,110 @@ describe("PierreDiffViewer", () => {
     expect(subscribeToStatChanges).not.toHaveBeenCalled();
   });
 
+  test("preloads one file at a time and advances past skipped, cached, and failed files", async () => {
+    const first = createDeferred<void>();
+    const failed = createDeferred<void>();
+    const last = createDeferred<void>();
+    const pendingByFile = new Map([
+      ["first.ts", first],
+      ["failed.ts", failed],
+      ["last.ts", last],
+    ]);
+    const primeDiffHighlightCache = mock<PierreDiffViewerWorkerPool["primeDiffHighlightCache"]>(
+      async (diff) => {
+        const pending = pendingByFile.get(diff.name);
+        if (!pending) throw new Error(`Unexpected preload of ${diff.name}`);
+        await pending.promise;
+      },
+    );
+    const reportError = spyOn(toast, "error").mockImplementation(() => "preload-error");
+    workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
+      isWorkingPool: mock(() => true),
+      getDiffResultCache: mock((diff) =>
+        diff.name === "cached.ts" ? CACHED_DIFF_RESULT : undefined,
+      ),
+      primeDiffHighlightCache,
+    };
+    const fileDiff = (file: string, patch?: string) => ({
+      file,
+      diff:
+        patch ??
+        [
+          `diff --git a/${file} b/${file}`,
+          `--- a/${file}`,
+          `+++ b/${file}`,
+          "@@ -1 +1 @@",
+          "-old",
+          "+new",
+          "",
+        ].join("\n"),
+      type: "modified" as const,
+      additions: 1,
+      deletions: 1,
+    });
+    try {
+      render(
+        <DiffPreloadQueue
+          fileDiffs={[
+            fileDiff("invalid.ts", "not a patch"),
+            fileDiff("notes.txt"),
+            fileDiff("cached.ts"),
+            fileDiff("first.ts"),
+            fileDiff("failed.ts"),
+            fileDiff("last.ts"),
+          ]}
+          expandedFiles={new Set()}
+          limit={12}
+        />,
+      );
+      expect(primeDiffHighlightCache.mock.calls.map(([diff]) => diff.name)).toEqual(["first.ts"]);
+
+      await act(async () => first.resolve());
+      expect(primeDiffHighlightCache.mock.calls.map(([diff]) => diff.name)).toEqual([
+        "first.ts",
+        "failed.ts",
+      ]);
+
+      await act(async () => failed.reject(new Error("Worker failed")));
+      expect(primeDiffHighlightCache.mock.calls.map(([diff]) => diff.name)).toEqual([
+        "first.ts",
+        "failed.ts",
+        "last.ts",
+      ]);
+
+      await act(async () => last.resolve());
+      expect(primeDiffHighlightCache).toHaveBeenCalledTimes(3);
+      expect(reportError).toHaveBeenCalledTimes(1);
+    } finally {
+      reportError.mockRestore();
+    }
+  });
+
+  test("does not preload a diff whose context exceeds the highlight line limit", () => {
+    const patch = [
+      "--- a/src/context.ts",
+      "+++ b/src/context.ts",
+      "@@ -1,1001 +1,1001 @@",
+      ...Array(1000).fill(" context"),
+      "-old",
+      "+new",
+      "",
+    ].join("\n");
+    const primeDiffHighlightCache = mock<PierreDiffViewerWorkerPool["primeDiffHighlightCache"]>(
+      async () => {},
+    );
+    workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
+      isWorkingPool: mock(() => true),
+      primeDiffHighlightCache,
+    };
+
+    render(<pierreViewerModule.PierreDiffPreloader patch={patch} filePath="src/context.ts" />);
+
+    expect(primeDiffHighlightCache).not.toHaveBeenCalled();
+  });
+
   test("preloads parsed diffs by priming the worker cache", async () => {
     const { PierreDiffPreloader } = pierreViewerModule;
     const primeDiffHighlightCache = mock<PierreDiffViewerWorkerPool["primeDiffHighlightCache"]>(
@@ -437,7 +542,8 @@ describe("PierreDiffViewer", () => {
     expect(workerPoolMock?.getDiffResultCache).toHaveBeenCalledWith(fileDiff);
   });
 
-  test("handles a pending diff preload being cancelled after its view closes", async () => {
+  test("does not advance or report a late preload failure after its view closes", async () => {
+    const onComplete = mock();
     const pending = createDeferred<void>();
     const reportError = spyOn(toast, "error").mockImplementation(() => "preload-error");
     workerPoolMock = {
@@ -447,7 +553,11 @@ describe("PierreDiffViewer", () => {
     };
     try {
       const view = render(
-        <pierreViewerModule.PierreDiffPreloader patch={selectionPatch} filePath="src/app.ts" />,
+        <pierreViewerModule.PierreDiffPreloader
+          patch={selectionPatch}
+          filePath="src/app.ts"
+          onComplete={onComplete}
+        />,
       );
       view.unmount();
       await act(async () => {
@@ -455,6 +565,7 @@ describe("PierreDiffViewer", () => {
         await Promise.resolve();
       });
       expect(reportError).not.toHaveBeenCalled();
+      expect(onComplete).not.toHaveBeenCalled();
     } finally {
       reportError.mockRestore();
     }

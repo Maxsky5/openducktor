@@ -1,5 +1,5 @@
 import type { GitFileDiff } from "@openducktor/contracts";
-import { memo, type ReactElement, useMemo } from "react";
+import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
 import { PierreDiffPreloader } from "@/components/features/agents/pierre-diff-viewer";
 import { buildDiffPreloadEntries } from "./diff-preload-queue-model";
 
@@ -18,20 +18,30 @@ export const DiffPreloadQueue = memo(function DiffPreloadQueue({
     () => buildDiffPreloadEntries(fileDiffs, expandedFiles, limit),
     [expandedFiles, fileDiffs, limit],
   );
+  const [progress, setProgress] = useState(() => ({ entries: preloadEntries, index: 0 }));
+  const index = progress.entries === preloadEntries ? progress.index : 0;
+  if (progress.entries !== preloadEntries) {
+    setProgress({ entries: preloadEntries, index: 0 });
+  }
+  const onComplete = useCallback(() => {
+    setProgress((current) =>
+      current.entries === preloadEntries && current.index === index
+        ? { ...current, index: index + 1 }
+        : current,
+    );
+  }, [index, preloadEntries]);
+  const entry = preloadEntries[index];
 
-  if (preloadEntries.length === 0) {
+  if (!entry) {
     return null;
   }
 
   return (
-    <>
-      {preloadEntries.map((entry) => (
-        <PierreDiffPreloader
-          key={`preload:${entry.file}`}
-          patch={entry.diff}
-          filePath={entry.file}
-        />
-      ))}
-    </>
+    <PierreDiffPreloader
+      key={`preload:${entry.file}`}
+      patch={entry.diff}
+      filePath={entry.file}
+      onComplete={onComplete}
+    />
   );
 });

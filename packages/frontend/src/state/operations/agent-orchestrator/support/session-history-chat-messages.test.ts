@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { canResumeInterruptedTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
@@ -1164,15 +1164,32 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
     },
   );
 
-  test("uses explicit history-loaded assistant turn duration when provided", () => {
-    const messages = historyToChatMessages(
-      [
+  test.each([0, 12_345])(
+    "uses native duration %s without reading prior tool timestamps",
+    (durationMs) => {
+      const history: AgentSessionHistoryMessage[] = [
+        {
+          messageId: "codex-tools",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:20.000Z",
+          text: "",
+          parts: Array.from({ length: 8 }, (_, index) => ({
+            kind: "tool",
+            messageId: "codex-tools",
+            partId: `tool-${index}`,
+            callId: `call-${index}`,
+            tool: "read",
+            toolType: "read",
+            status: "completed",
+            startedAtMs: 1_000,
+          })),
+        },
         {
           messageId: "codex-agent-final",
           role: "assistant",
           timestamp: "2026-02-22T08:00:30.000Z",
           text: "Done.",
-          durationMs: 12_345,
+          durationMs,
           parts: [
             {
               kind: "step",
@@ -1183,20 +1200,26 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
             },
           ],
         },
-      ],
-      {
-        role: "spec",
-      },
-    );
+      ];
+      const parseTimestamp = spyOn(Date, "parse");
+      let messages: AgentChatMessage[];
+      let timestampReads: number;
+      try {
+        messages = historyToChatMessages(history, { role: "spec" });
+        timestampReads = parseTimestamp.mock.calls.length;
+      } finally {
+        parseTimestamp.mockRestore();
+      }
+      const assistant = messages.find((message) => message.id === "codex-agent-final");
+      if (assistant?.meta?.kind !== "assistant") {
+        throw new Error("Expected assistant message with assistant meta");
+      }
 
-    const assistant = sessionMessageAt(historyOwner(messages), 0);
-    if (assistant?.meta?.kind !== "assistant") {
-      throw new Error("Expected assistant message with assistant meta");
-    }
-
-    expect(assistant.meta.isFinal).toBe(true);
-    expect(assistant.meta.durationMs).toBe(12_345);
-  });
+      expect(assistant.meta.isFinal).toBe(true);
+      expect(assistant.meta.durationMs).toBe(durationMs);
+      expect(timestampReads).toBeLessThanOrEqual(history.length);
+    },
+  );
 
   test("loads Codex command and file-change history parts as visible tool messages", () => {
     const messages = historyToChatMessages(
