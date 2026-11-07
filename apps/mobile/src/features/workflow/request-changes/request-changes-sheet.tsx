@@ -55,7 +55,13 @@ function RequestChangesContent({
   const task = tasks.find((entry) => entry.id === taskId) ?? null;
   const feedback = flow.humanReviewFeedbackModal;
   const start = flow.sessionStartModal;
-  const closeFeedback = useFeedbackSheetClose(feedback, start, backgroundAttemptId !== null);
+  // The feedback form is the first step of this sheet, so its Cancel closes the sheet.
+  const closeFeedback = useFeedbackSheetClose(
+    feedback,
+    start,
+    backgroundAttemptId !== null,
+    navigation.close,
+  );
   // The sheet closes when neither step is open: after a start that stays, or a cancel.
   useWorkflowSheetLifecycle({
     ready: task !== null,

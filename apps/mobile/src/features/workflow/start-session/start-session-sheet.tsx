@@ -14,6 +14,7 @@ import { useConfirmDiscard } from "@/ui/confirm-discard";
 import { EmptyState } from "@/ui/states";
 import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
+import { startChoicesCancel } from "../sheet-cancel";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { useWorkflowSheetParams, WorkflowSheetFrame } from "../workflow-sheet-frame";
 import { RepoSettingsNotice } from "./repo-settings-notice";
@@ -111,7 +112,7 @@ function StartSessionContent({
     close: navigation.close,
   });
 
-  const choicesClose = useStartChoicesClose(modal);
+  const choicesClose = useStartChoicesClose(modal, navigation.close);
 
   if (!task) {
     return (
@@ -145,7 +146,12 @@ function StartSessionContent({
   );
 }
 
-const useStartChoicesClose = (modal: SessionStartModalModel | null) => {
+/**
+ * Cancel leaves the start choices as Back does: the route closes at once, with the form in place
+ * during the exit, and the unmount cancels the pending start. Closing the choices first would
+ * render the sheet without its form and close the route one effect later.
+ */
+const useStartChoicesClose = (modal: SessionStartModalModel | null, closeSheet: () => void) => {
   const confirmDiscard = useConfirmDiscard();
   const [edited, setEdited] = useState(false);
   const markEdited = useCallback(() => setEdited(true), []);
@@ -153,9 +159,13 @@ const useStartChoicesClose = (modal: SessionStartModalModel | null) => {
     modal?.phase.kind !== "progress" && edited && modal?.open === true && !modal.isStarting;
   // oxlint-disable-next-line react-compiler/immutability -- usePreventRemove calls back into the close that needs its result; the hook memoizes by hand
   const allowRemoval = usePreventRemove(asksBeforeClose, () => close());
+  const leave = () => {
+    if (modal && startChoicesCancel(modal.phase) === "close_step") modal.onOpenChange(false);
+    else closeSheet();
+  };
   const close = () => {
     if (!asksBeforeClose) {
-      modal?.onOpenChange(false);
+      leave();
       return;
     }
     void confirmDiscard({
@@ -164,7 +174,7 @@ const useStartChoicesClose = (modal: SessionStartModalModel | null) => {
     }).then((confirmed) => {
       if (!confirmed) return;
       allowRemoval();
-      modal?.onOpenChange(false);
+      leave();
     });
   };
   return { close, markEdited };

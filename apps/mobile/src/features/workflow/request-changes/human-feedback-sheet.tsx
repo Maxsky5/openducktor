@@ -5,7 +5,7 @@ import {
   isHumanReviewFeedbackConfirmDisabled,
 } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-state";
 import { usePreventRemove } from "expo-router";
-import type { ReactElement } from "react";
+import { type ReactElement, useEffect, useRef } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/ui/button";
@@ -17,29 +17,49 @@ import { FormBody, FormLead } from "@/ui/form-rows";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { requestChangesRemove } from "./request-changes-remove";
 
-/** Keeps typed feedback when a sheet or its start form is dismissed. */
+/**
+ * Keeps typed feedback when a sheet or its start form is dismissed. `leaveSheet` closes a sheet
+ * whose only step is the feedback form: Cancel then closes the route at once, as Back does, with
+ * the form in place during the exit. Without it, Cancel closes the form and the sheet shows its
+ * previous step.
+ */
 export function useFeedbackSheetClose(
   feedback: HumanReviewFeedbackModalModel | null,
   start: SessionStartModalModel | null,
   transferredToBackground = false,
+  leaveSheet?: () => void,
 ) {
   const confirmDiscard = useConfirmDiscard();
   const remove = requestChangesRemove(feedback, start, transferredToBackground);
   const hasUnsentFeedback = remove === "confirm_discard";
+  // The removal guard is read through a ref, because the dismiss that lifts it also runs from it.
+  const allowRemovalRef = useRef<() => void>(() => {});
+  const dismissFeedback = () => {
+    if (!leaveSheet) {
+      feedback?.onOpenChange(false);
+      return;
+    }
+    allowRemovalRef.current();
+    leaveSheet();
+  };
   const discardFeedback = () => {
     void confirmDiscard({
       title: "Discard the Feedback?",
       message: "Your feedback is not sent.",
     }).then((confirmed) => {
-      if (confirmed) feedback?.onOpenChange(false);
+      if (confirmed) dismissFeedback();
     });
   };
-  usePreventRemove(remove !== "leave", () => {
+  const preventedRemove = () => {
     if (remove === "back_to_feedback") start?.onOpenChange(false);
     else discardFeedback();
-  });
+  };
+  const allowRemoval = usePreventRemove(remove !== "leave", preventedRemove);
+  useEffect(() => {
+    allowRemovalRef.current = allowRemoval;
+  }, [allowRemoval]);
 
-  return hasUnsentFeedback ? discardFeedback : () => feedback?.onOpenChange(false);
+  return hasUnsentFeedback ? discardFeedback : dismissFeedback;
 }
 
 /** The feedback form also serves following launches in the approval sheet. */

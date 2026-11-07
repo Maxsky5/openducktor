@@ -25,6 +25,7 @@ import { RepoSettingsNotice } from "../start-session/repo-settings-notice";
 import { SessionStartSheet } from "../start-session/session-start-sheet";
 import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
+import { approvalCancel } from "../sheet-cancel";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { useWorkflowSheetParams, WorkflowSheetFrame } from "../workflow-sheet-frame";
 import { ApprovalStep, CompletionStep, ConflictStep, MissingWorktreeStep } from "./approval-views";
@@ -181,6 +182,7 @@ function ApproveTaskContent({
     <ApprovalFlowSheet
       conflict={conflict}
       modal={modal}
+      leaveSheet={close}
       notice={
         <>
           <RepoSettingsNotice
@@ -210,10 +212,12 @@ function ApprovalFlowSheet({
   conflict,
   modal,
   notice,
+  leaveSheet,
 }: {
   conflict: ApprovalFlow["taskGitConflictDialog"];
   modal: ApprovalFlow["taskApprovalModal"];
   notice: ReactElement | null;
+  leaveSheet: () => void;
 }): ReactElement {
   if (conflict?.open && conflict.conflict) {
     return (
@@ -229,16 +233,24 @@ function ApprovalFlowSheet({
   if (!modal) {
     return <GroupedSheet title={TITLE} />;
   }
-  return <ApprovalStage modal={modal} notice={notice} />;
+  // The approval is the last open step here, so its Cancel closes the sheet at once, as Back does,
+  // with the step in place during the exit. An open conflict keeps the sheet.
+  const close =
+    approvalCancel(conflict?.open === true) === "close_step"
+      ? () => modal.onOpenChange(false)
+      : leaveSheet;
+  return <ApprovalStage modal={modal} notice={notice} onClose={close} />;
 }
 
 /** The open step of the approval: the approval, a missing worktree, or the completion. */
 function ApprovalStage({
   modal,
   notice,
+  onClose,
 }: {
   modal: NonNullable<ApprovalFlow["taskApprovalModal"]>;
   notice: ReactElement | null;
+  onClose: () => void;
 }): ReactElement {
   const { impact, isPreparing, mergeCheck } = useTaskApprovalReads(modal);
   const header = getTaskApprovalModalHeader(modal);
@@ -272,7 +284,7 @@ function ApprovalStage({
   return (
     <GroupedSheet
       title={header.title}
-      onClose={() => modal.onOpenChange(false)}
+      onClose={onClose}
       closable={!modal.isSubmitting}
       intro={
         <>
