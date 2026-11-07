@@ -791,8 +791,32 @@ const checkDefinition = (definition: WorkflowDefinition): void => {
     invalid(
       `The approval actions at ${approvalPaths.join(" and ")} open the same approval. Keep one approval action.`,
     );
+  // The host commits these events inside a running session, where worktree.reset would stop it.
+  const sessionEventSenders = new Map<string, string>();
+  definition.artifacts.forEach((artifact) => {
+    if (artifact.kind === "document") {
+      if (artifact.saveEventId !== undefined)
+        sessionEventSenders.set(artifact.saveEventId, `the ${artifact.id} artifact save`);
+      return;
+    }
+    artifact.verdicts.forEach((verdict) =>
+      sessionEventSenders.set(
+        verdict.eventId,
+        `the ${artifact.id} artifact save with verdict "${verdict.id}"`,
+      ),
+    );
+  });
+  definition.steps.forEach((step) => {
+    if (step.kind === "agent" && step.startEventId !== undefined)
+      sessionEventSenders.set(step.startEventId, `the start of the ${step.roleId} step`);
+  });
   definition.events.forEach((event, index) => {
     const path = `events[${index}]`;
+    const sender = sessionEventSenders.get(event.id);
+    if (sender !== undefined && event.effects !== undefined && event.effects.length > 0)
+      invalid(
+        `Event "${event.id}" is sent by ${sender}, so it cannot declare host effects. Move the effect to a task action event.`,
+      );
     if (event.agent !== undefined) {
       if (event.effects !== undefined && event.effects.length > 0)
         invalid(

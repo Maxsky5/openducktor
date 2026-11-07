@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { workflowDefinitionSchema } from "@openducktor/contracts";
+import { BUILTIN_ROLES, createTaskWorkflow, specPlanBuildWorkflow } from "@openducktor/workflows";
 import { Effect, Result } from "effect";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import { builtinTaskWorkflows, singleTaskWorkflow } from "../../test-support/task-workflows";
 import type { WorkflowArtifactSaveInput } from "./task-inputs";
 import {
   createAgentSessionRecord,
@@ -20,12 +24,22 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  options = {};
   await harness.cleanup();
 });
+
+type ServiceOptions = {
+  readonly taskWorkflows?: TaskWorkflowResolver;
+  /** Runs when the reset stops the task sessions, after the host admitted the event. */
+  readonly onSessionCleanup?: () => Promise<void>;
+};
+
+let options: ServiceOptions = {};
 
 const service = () =>
   createTaskService({
     atomicTaskStore: harness.store,
+    taskWorkflows: options.taskWorkflows ?? builtinTaskWorkflows,
     gitPort: createDirectMergeGitPort({
       calls: [],
       branches: { [harness.repoPath]: [{ name: "main", isCurrent: true, isRemote: false }] },
@@ -33,7 +47,11 @@ const service = () =>
     settingsConfig: createBuildSettingsConfig(new Set([harness.repoPath]), harness.repoPath),
     taskActivityGuard: {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
+      cleanupTaskSessions: () =>
+        Effect.promise(async () => {
+          await options.onSessionCleanup?.();
+          return { stoppedSessionCount: 0 };
+        }),
     },
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       ...harness.scope,
@@ -150,5 +168,61 @@ describe("reset implementation with the SQLite task store", () => {
 
     expect(task.status).toBe("open");
     expect(await storedState(taskId)).toEqual({ artifacts: [], sessionRoles: [] });
+  });
+});
+
+/** The built-in workflow, with a reset that needs the QA report that the reset itself clears. */
+const qaReportResetWorkflows = (): TaskWorkflowResolver => {
+  const definition = workflowDefinitionSchema.parse(specPlanBuildWorkflow.definition);
+  const reset = definition.events.find(({ id }) => id === "reset-implementation");
+  if (!reset) throw new Error("The built-in workflow has no reset-implementation event.");
+  reset.guards = [
+    {
+      id: "qa-reviewed",
+      when: { artifact: "qaReport", present: true },
+      message: "Save a QA report first",
+    },
+  ];
+  return singleTaskWorkflow(
+    createTaskWorkflow(definition, specPlanBuildWorkflow.workflowTemplates, BUILTIN_ROLES),
+  );
+};
+
+describe("reset implementation whose guard needs a review artifact", () => {
+  beforeEach(async () => {
+    const taskWorkflows = qaReportResetWorkflows();
+    await harness.cleanup();
+    harness = await createSqliteTaskStoreHarness({ taskWorkflows });
+    options = { taskWorkflows };
+  });
+
+  test("commits the admitted reset after the reset clears the QA report", async () => {
+    const taskId = await reviewedTask([]);
+
+    const task = await resetImplementation(taskId);
+
+    expect(task.status).toBe("open");
+    expect(task.artifactSummary).toMatchObject({ qaReport: { present: false } });
+    expect(await storedState(taskId)).toEqual({ artifacts: [], sessionRoles: [] });
+  });
+
+  test("does not commit when another change moves the task while the reset runs", async () => {
+    const taskId = await reviewedTask([]);
+    options = {
+      ...options,
+      onSessionCleanup: async () => {
+        await moveTo(taskId, "ai_review");
+      },
+    };
+
+    const exit = await Effect.runPromiseExit(
+      service().applyTaskEvent({ ...harness.scope, taskId, eventId: "reset-implementation" }),
+    );
+
+    expect(String(exit)).toContain(
+      `Another change moved task ${taskId} from human_review to ai_review while reset-implementation ran its host effects, so reset-implementation did not commit. Check the task, then apply reset-implementation again if it still applies.`,
+    );
+    const card = await Effect.runPromise(service().findTask({ ...harness.scope, taskId }));
+    expect(card?.status).toBe("ai_review");
   });
 });

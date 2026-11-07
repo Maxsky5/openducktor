@@ -6,7 +6,7 @@ import {
   HostValidationError,
   type HostValidationErrorAggregate,
 } from "../../../effect/host-errors";
-import type { TaskRecord } from "../../../ports/task-repository-ports";
+import type { DecideTaskTransition, TaskRecord } from "../../../ports/task-repository-ports";
 import {
   createHostEffectRegistry,
   type HostEffectError,
@@ -50,9 +50,35 @@ const decideEventAction = (
 };
 
 /**
- * Applies a workflow event by its ID. The host runs the host effects of the event in order, then
- * commits the event through the one workflow event commit. When an effect fails, the event does
- * not commit.
+ * The store decision of an admitted event. An event without host effects decides again against the
+ * locked task row. An event with host effects commits the decision that admitted it, because its
+ * effects can change the data that its action and guards read. It fails when another change moved
+ * the task from the state that the decision used.
+ */
+const commitDecision = (
+  workflow: TaskWorkflow,
+  taskWorkflows: TaskServiceUseCaseInput["taskWorkflows"],
+  admittedOn: TaskRecord,
+  admitted: TaskTransition,
+  request: ApplyTaskEventInput,
+): DecideTaskTransition<TaskPolicyError | HostValidationErrorAggregate> => {
+  if (workflow.eventEffects(request.eventId).length === 0)
+    return (task) => decideEventAction(taskWorkflows.forTask(task), task, request);
+  return (task) =>
+    task.status === admittedOn.status
+      ? Result.succeed(admitted)
+      : Result.fail(
+          TaskPolicyError.policy(
+            `Another change moved task ${request.taskId} from ${admittedOn.status} to ${task.status} while ${request.eventId} ran its host effects, so ${request.eventId} did not commit. Check the task, then apply ${request.eventId} again if it still applies.`,
+            { reason: "task_state_changed", taskId: request.taskId },
+          ),
+        );
+};
+
+/**
+ * Applies a workflow event by its ID. The host decides the event against the task as the user saw
+ * it, runs the host effects of the event in order, then commits that decision through the one
+ * workflow event commit. When an effect fails, the event does not commit.
  */
 export const createTaskEventUseCase = (
   input: TaskServiceUseCaseInput,
@@ -64,12 +90,12 @@ export const createTaskEventUseCase = (
       return Effect.gen(function* () {
         const current = yield* taskStore.getTask(request);
         const workflow = taskWorkflows.forTask(current);
-        yield* Effect.fromResult(decideEventAction(workflow, current, request));
+        const admitted = yield* Effect.fromResult(decideEventAction(workflow, current, request));
         const artifactChanges: TaskArtifactChange[] = [];
         const commit: Effect.Effect<TaskCard, HostEffectError, Scope.Scope> = commitWorkflowEvent(
           taskStore,
           request,
-          (task) => decideEventAction(taskWorkflows.forTask(task), task, request),
+          commitDecision(workflow, taskWorkflows, current, admitted, request),
         ).pipe(
           Effect.map((updated) => enrichTask(taskWorkflows.forTask(updated), updated)),
           mapTaskMutationProgressErrors,

@@ -6,6 +6,7 @@ import {
   reviewTaskPromptTemplates,
   reviewTaskRoles,
 } from "../../test-support/review-task-workflow";
+import { BUILTIN_ROLES } from "../builtin/roles/roles";
 import { specPlanBuildWorkflow } from "../builtin/spec-plan-build/workflow";
 import type { TaskFacts } from "./task-input";
 import { createTaskWorkflow } from "./task-workflow";
@@ -294,6 +295,36 @@ describe("createTaskWorkflow", () => {
     expect(
       review.prompts.systemPrompt({ role: "editor", task: { taskId: "task-1" } }).prompt,
     ).not.toContain("Workflow events for odt_apply_workflow_event");
+  });
+
+  test("rejects host effects on an event that an artifact save or a step start sends", () => {
+    const withEffects = (eventId: string) =>
+      withChange((definition) => {
+        const event = definition.events.find(({ id }) => id === eventId);
+        if (!event) throw new Error(`Missing event ${eventId}.`);
+        event.effects = ["worktree.reset"];
+      });
+    expect(withEffects("submit-draft")).toThrow(
+      'Workflow "review" is invalid. Event "submit-draft" is sent by the draft artifact save, so it cannot declare host effects. Move the effect to a task action event.',
+    );
+    expect(withEffects("revise-review")).toThrow(
+      'Event "revise-review" is sent by the review artifact save with verdict "revise", so it cannot declare host effects. Move the effect to a task action event.',
+    );
+    expect(withEffects("start-writing")).toThrow(
+      'Event "start-writing" is sent by the start of the writer step, so it cannot declare host effects. Move the effect to a task action event.',
+    );
+    expect(withEffects("request-rewrite")).not.toThrow();
+  });
+
+  test("compiles the built-in Spec, Plan, Build workflow with its host effects", () => {
+    expect(() =>
+      createTaskWorkflow(
+        specPlanBuildWorkflow.definition,
+        specPlanBuildWorkflow.workflowTemplates,
+        BUILTIN_ROLES,
+      ),
+    ).not.toThrow();
+    expect(specPlanBuildWorkflow.eventEffects("reset-implementation")).toEqual(["worktree.reset"]);
   });
 
   test("rejects an agent event that an agent cannot send", () => {
