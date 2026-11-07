@@ -41,6 +41,237 @@ const fakeWebglRenderer = (initializationFailure?: Error) => {
 };
 
 describe("shared terminal binding", () => {
+  test("bounds native cursor-redraw announcements while retaining accessible rows", async () => {
+    const renderer = fakeWebglRenderer();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const binding = createTerminalBinding(container, { screenReaderMode: true }, () => undefined);
+    const row = "x".repeat(70);
+    try {
+      await new Promise<void>((resolve) =>
+        binding.write(new TextEncoder().encode(("\u001b[H" + row).repeat(120)), resolve),
+      );
+      await Bun.sleep(1_100);
+      const liveRegion = container.querySelector(".xterm-accessibility .live-region");
+      expect(liveRegion?.textContent).toBe(
+        "x".repeat(8_192) + "\n" + Terminal.strings.tooMuchOutput,
+      );
+      expect(liveRegion?.getAttribute("aria-live")).toBe("assertive");
+      expect(binding.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(row);
+      expect(
+        container.querySelector(".xterm-accessibility-tree [role=listitem]")?.textContent,
+      ).toBe(row);
+      await new Promise<void>((resolve) =>
+        binding.write(new TextEncoder().encode("\u001b[H" + "y".repeat(70)), resolve),
+      );
+      await Bun.sleep(1_100);
+      expect(liveRegion?.textContent).toBe(
+        "x".repeat(8_192) + "\n" + Terminal.strings.tooMuchOutput,
+      );
+      expect(binding.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(
+        "y".repeat(70),
+      );
+      expect(
+        container.querySelector(".xterm-accessibility-tree [role=listitem]")?.textContent,
+      ).toBe("y".repeat(70));
+    } finally {
+      binding.dispose();
+      container.remove();
+      renderer.activate.mockRestore();
+    }
+    // xterm batches native screen-reader announcements with a one-second debounce.
+  }, 3_000);
+
+  test("suspends hidden speech and restores current rows with a fresh budget", async () => {
+    const renderer = fakeWebglRenderer();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const binding = createTerminalBinding(container, { screenReaderMode: false }, () => undefined);
+    const terminal = binding.terminal;
+    try {
+      expect(container.querySelectorAll(".xterm-accessibility")).toHaveLength(0);
+      await new Promise<void>((resolve) =>
+        binding.write(new TextEncoder().encode(("\u001b[H" + "x".repeat(70)).repeat(120)), resolve),
+      );
+      binding.setVisible(true);
+      await Bun.sleep(1_100);
+      const firstRegion = container.querySelector<HTMLElement>(".live-region")!;
+      expect(firstRegion.textContent).toBe("");
+      expect(
+        container.querySelector(".xterm-accessibility-tree [role=listitem]")?.textContent,
+      ).toBe("x".repeat(70));
+      terminal.select(0, 0, 4);
+      firstRegion.textContent = "x".repeat(8_193);
+      binding.setVisible(false);
+      await Bun.sleep(0);
+      expect(firstRegion.textContent).toBe("x".repeat(8_193));
+      expect(terminal.options.screenReaderMode).toBe(false);
+      expect(container.querySelectorAll(".xterm-accessibility")).toHaveLength(0);
+      binding.setVisible(true);
+      expect(terminal.getSelection()).toBe("xxxx");
+      binding.setVisible(false);
+      await new Promise<void>((resolve) =>
+        binding.write(new TextEncoder().encode(("\u001b[H" + "y".repeat(70)).repeat(120)), resolve),
+      );
+      expect(terminal.buffer.active.getLine(0)?.translateToString(true)).toBe("y".repeat(70));
+      binding.setVisible(true);
+      const nextRegion = container.querySelector<HTMLElement>(".live-region")!;
+      expect(nextRegion === firstRegion).toBe(false);
+      expect(nextRegion.getAttribute("aria-live")).toBe("assertive");
+      expect(nextRegion.textContent).toBe("");
+      expect(
+        container.querySelector(".xterm-accessibility-tree [role=listitem]")?.textContent,
+      ).toBe("y".repeat(70));
+      nextRegion.textContent = "z".repeat(8_193);
+      await Bun.sleep(0);
+      expect(nextRegion.textContent).toBe(
+        "z".repeat(8_192) + "\n" + Terminal.strings.tooMuchOutput,
+      );
+      expect(binding.terminal).toBe(terminal);
+    } finally {
+      binding.dispose();
+      container.remove();
+      renderer.activate.mockRestore();
+    }
+    // xterm batches the restored accessible rows with a one-second debounce.
+  }, 3_000);
+
+  test.each([
+    ["below the limit", "x".repeat(8_191), undefined],
+    ["at the limit", "x".repeat(8_192), "x".repeat(8_192)],
+    ["above the limit", "x".repeat(8_193), "x".repeat(8_192)],
+    ["a Unicode pair inside the limit", "x".repeat(8_190) + "🐤Z", "x".repeat(8_190) + "🐤"],
+    ["a Unicode pair across the limit", "x".repeat(8_191) + "🐤", "x".repeat(8_191)],
+  ])("preserves announcement history %s", async (_name, input, prefix) => {
+    const renderer = fakeWebglRenderer();
+    const container = document.createElement("div");
+    const binding = createTerminalBinding(container, { screenReaderMode: true }, () => undefined);
+    const liveRegion = container.querySelector<HTMLElement>(".live-region")!;
+    try {
+      liveRegion.textContent = input;
+      await Bun.sleep(0);
+      const expected =
+        prefix === undefined ? input : prefix + "\n" + Terminal.strings.tooMuchOutput;
+      expect(liveRegion.textContent).toBe(expected);
+      if (prefix !== undefined) {
+        liveRegion.textContent += "more output";
+        await Bun.sleep(0);
+        expect(liveRegion.textContent).toBe(expected);
+      }
+    } finally {
+      binding.dispose();
+      renderer.activate.mockRestore();
+    }
+  });
+
+  test.each(["keypress", "blur"] as const)(
+    "starts a fresh announcement budget after native %s and same-task output",
+    async (reset) => {
+      const renderer = fakeWebglRenderer();
+      const container = document.createElement("div");
+      document.body.append(container);
+      const binding = createTerminalBinding(container, { screenReaderMode: true }, () => undefined);
+      const liveRegion = container.querySelector<HTMLElement>(".live-region")!;
+      try {
+        liveRegion.textContent = "x".repeat(8_193);
+        await Bun.sleep(0);
+        expect(liveRegion.textContent).toEndWith(Terminal.strings.tooMuchOutput);
+        liveRegion.textContent += "pending output";
+        if (reset === "keypress") {
+          binding.terminal.textarea!.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true }),
+          );
+        } else {
+          binding.terminal.focus();
+          binding.terminal.blur();
+        }
+        expect(liveRegion.textContent).toBe("");
+        liveRegion.textContent += "x".repeat(100);
+        await Bun.sleep(0);
+        expect(liveRegion.textContent).toBe("x".repeat(100));
+        liveRegion.textContent += "z".repeat(8_100);
+        await Bun.sleep(0);
+        expect(liveRegion.textContent).toBe(
+          "x".repeat(100) + "z".repeat(8_092) + "\n" + Terminal.strings.tooMuchOutput,
+        );
+      } finally {
+        binding.dispose();
+        container.remove();
+        renderer.activate.mockRestore();
+      }
+    },
+  );
+
+  test("stops pending announcement mutations when the binding is disposed", async () => {
+    const renderer = fakeWebglRenderer();
+    const container = document.createElement("div");
+    const binding = createTerminalBinding(container, { screenReaderMode: true }, () => undefined);
+    const liveRegion = container.querySelector<HTMLElement>(".live-region")!;
+    try {
+      liveRegion.textContent = "x".repeat(8_193);
+      binding.dispose();
+      await Bun.sleep(0);
+      expect(liveRegion.textContent).toBe("x".repeat(8_193));
+    } finally {
+      binding.dispose();
+      renderer.activate.mockRestore();
+    }
+  });
+
+  test("cleans up pending announcements when later binding setup fails", async () => {
+    const renderer = fakeWebglRenderer();
+    const container = document.createElement("div");
+    const failure = new Error("theme observer unavailable");
+    const originalObserve = MutationObserver.prototype.observe;
+    let liveRegion: HTMLElement | null = null;
+    const observe = spyOn(MutationObserver.prototype, "observe").mockImplementation(function (
+      this: MutationObserver,
+      target,
+      options,
+    ) {
+      if (target === document.documentElement) {
+        liveRegion = container.querySelector<HTMLElement>(".live-region");
+        liveRegion!.textContent = "x".repeat(8_193);
+        throw failure;
+      }
+      originalObserve.call(this, target, options);
+    });
+    try {
+      expect(() =>
+        createTerminalBinding(container, { screenReaderMode: true }, () => undefined),
+      ).toThrow(failure);
+    } finally {
+      observe.mockRestore();
+      renderer.activate.mockRestore();
+    }
+    await Bun.sleep(0);
+    expect(liveRegion!.textContent).toBe("x".repeat(8_193));
+    expect(renderer.events).toEqual(["unsubscribe", "dispose", "release"]);
+  });
+
+  test("reports missing native accessibility DOM and releases initialized resources", () => {
+    const renderer = fakeWebglRenderer();
+    const originalOpen = Terminal.prototype.open;
+    const open = spyOn(Terminal.prototype, "open").mockImplementation(function (
+      this: Terminal,
+      container,
+    ) {
+      originalOpen.call(this, container);
+      this.element?.querySelector(".live-region")?.remove();
+    });
+    const container = document.createElement("div");
+    try {
+      expect(() =>
+        createTerminalBinding(container, { screenReaderMode: true }, () => undefined),
+      ).toThrow("Terminal screen-reader support did not initialize. Restart OpenDucktor");
+      expect(container.querySelectorAll(".xterm")).toHaveLength(0);
+      expect(renderer.events).toEqual(["unsubscribe", "dispose", "release"]);
+    } finally {
+      open.mockRestore();
+      renderer.activate.mockRestore();
+    }
+  });
+
   test("reports a WebGL constructor failure while keeping the standard terminal usable", async () => {
     const NativeWebglAddon = WebglAddon;
     const failure = new Error("Webgl2 is only supported on Safari 16 and above");
@@ -185,7 +416,7 @@ describe("shared terminal binding", () => {
     const report = mock((_cause: Error) => undefined);
     const container = document.createElement("div");
     document.body.append(container);
-    const binding = createTerminalBinding(container, {}, report);
+    const binding = createTerminalBinding(container, { screenReaderMode: true }, report);
     try {
       expect(report).toHaveBeenCalledTimes(1);
       expect(renderer.events).toEqual(["release"]);
@@ -196,6 +427,12 @@ describe("shared terminal binding", () => {
       );
       expect(binding.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe(
         "clean terminal",
+      );
+      const liveRegion = container.querySelector<HTMLElement>(".live-region")!;
+      liveRegion.textContent = "x".repeat(8_193);
+      await Bun.sleep(0);
+      expect(liveRegion.textContent).toBe(
+        "x".repeat(8_192) + "\n" + Terminal.strings.tooMuchOutput,
       );
     } finally {
       binding.dispose();

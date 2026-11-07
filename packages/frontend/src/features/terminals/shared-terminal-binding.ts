@@ -12,11 +12,59 @@ export type TerminalBinding = {
   fitAddon: Pick<FitAddon, "fit" | "proposeDimensions">;
   /** Queues binary output in parser chunks while GPU rendering is active. */
   write(payload: Uint8Array, parsed: () => void): void;
+  setVisible(visible: boolean): void;
   dispose(): void;
   resetLinkState(): void;
 };
 
 const WRITE_CHUNK_BYTES = 16 * 1024;
+const ANNOUNCEMENT_HISTORY_UNITS = 8_192;
+
+const bindAnnouncementBudget = (terminal: Terminal): (() => void) | undefined => {
+  if (!terminal.options.screenReaderMode) return;
+  const liveRegion = terminal.element?.querySelector<HTMLElement>(
+    ".xterm-accessibility .live-region",
+  );
+  const textarea = terminal.textarea;
+  if (!liveRegion || !textarea) {
+    throw new Error(
+      "Terminal screen-reader support did not initialize. Restart OpenDucktor and reopen this terminal.",
+    );
+  }
+
+  let cappedText: string | undefined;
+  const reset = (): void => {
+    cappedText = undefined;
+  };
+  const observer = new MutationObserver(() => {
+    const text = liveRegion.textContent ?? "";
+    if (text.length === 0) {
+      reset();
+      return;
+    }
+    if (cappedText === undefined) {
+      if (text.length < ANNOUNCEMENT_HISTORY_UNITS) return;
+      let end = ANNOUNCEMENT_HISTORY_UNITS;
+      const last = text.charCodeAt(end - 1);
+      const next = text.charCodeAt(end);
+      if (last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) end--;
+      cappedText = text.slice(0, end) + "\n" + Terminal.strings.tooMuchOutput;
+    }
+    if (text !== cappedText) {
+      liveRegion.textContent = cappedText;
+      observer.takeRecords();
+    }
+  });
+  observer.observe(liveRegion, { childList: true });
+  // xterm clears its announcements before these public key and blur handlers run.
+  const keySubscription = terminal.onKey(reset);
+  textarea.addEventListener("blur", reset);
+  return () => {
+    observer.disconnect();
+    keySubscription.dispose();
+    textarea.removeEventListener("blur", reset);
+  };
+};
 
 const createTerminalRenderer = (terminal: Terminal, reportFailure: (cause: Error) => void) => {
   let addon: WebglAddon | undefined;
@@ -99,6 +147,7 @@ export const createTerminalBinding = (
 ): TerminalBinding => {
   let resources = createTerminalResources(container, options);
   let disposeRenderer: (() => void) | undefined;
+  let disposeAnnouncementBudget: (() => void) | undefined;
   let webglActive = false;
   let disposed = false;
   const themeObserver = new MutationObserver(() => {
@@ -123,12 +172,14 @@ export const createTerminalBinding = (
         ),
       );
     }
+    disposeAnnouncementBudget = bindAnnouncementBudget(resources.terminal);
     themeObserver.observe(container.ownerDocument.documentElement, {
       attributes: true,
       attributeFilter: ["class", "style"],
     });
   } catch (cause) {
     themeObserver.disconnect();
+    disposeAnnouncementBudget?.();
     disposeRenderer?.();
     resources.terminal.dispose();
     throw cause;
@@ -137,6 +188,13 @@ export const createTerminalBinding = (
 
   return {
     terminal,
+    setVisible: (visible) => {
+      if (disposed || terminal.options.screenReaderMode === visible) return;
+      disposeAnnouncementBudget?.();
+      disposeAnnouncementBudget = undefined;
+      terminal.options.screenReaderMode = visible;
+      if (visible) disposeAnnouncementBudget = bindAnnouncementBudget(terminal);
+    },
     write: (payload, parsed) => {
       // Splitting standard-renderer writes would draw expensive intermediate restore screens.
       if (!webglActive || payload.byteLength <= WRITE_CHUNK_BYTES) {
@@ -169,6 +227,7 @@ export const createTerminalBinding = (
       if (disposed) return;
       disposed = true;
       themeObserver.disconnect();
+      disposeAnnouncementBudget?.();
       disposeRenderer?.();
       terminal.dispose();
     },
