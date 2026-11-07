@@ -186,7 +186,13 @@ The frontend gets the platform from the host and applies terminal shortcuts. It 
 
 Image paste sends the terminal's native paste control so a compatible TUI can read the OS clipboard. Image drag and drop stages each image, asks the host for shell-safe paths, and pastes those paths into xterm. It does not send image bytes through the terminal protocol.
 
-Drag and drop accepts at most eight images, 20 MiB each, and 40 MiB total. An interaction error does not replace the terminal screen. xterm or WebGL startup failure blocks that emulator and appears in its body.
+Drag and drop accepts at most eight images, 20 MiB each, and 40 MiB total. An interaction error does not replace the terminal screen. An xterm startup failure blocks that emulator and appears in its body.
+
+## Rendering
+
+Desktop terminals and startup output use the official WebGL addon through the shared xterm binding. With GPU rendering active, the binding splits binary output into 16 KiB parser writes. Only the final write receives the parsed callback, so restore barriers and output acknowledgements keep their existing order. Standard rendering keeps one write per payload because splitting its writes increases intermediate screen redraws.
+
+A GPU initialization failure shows an actionable error and keeps output available with the standard renderer. Before the binding admits output, it releases the partial GPU context and replaces the failed emulator with one clean standard emulator. It does not retry GPU initialization. A later GPU context loss shows an error and returns the same emulator to standard rendering, preserving its output and transport. Binding disposal releases the GPU context through public DOM APIs.
 
 ## Viewport
 

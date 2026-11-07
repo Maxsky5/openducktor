@@ -75,6 +75,7 @@ export const mountTerminalViewport = ({
   const binding = createTerminalBinding(
     container,
     createTerminalOptions(container, { cursorBlink: true, screenReaderMode: true }),
+    (cause) => reportFailure("Terminal renderer failed", cause),
   );
   const { fitAddon, terminal } = binding;
   // An exited terminal keeps its output for reading, but its process can no longer take input.
@@ -114,7 +115,7 @@ export const mountTerminalViewport = ({
     cancelFrame: (frameId) => cancelAnimationFrame(frameId),
   });
   const outputSequencer = createTerminalOutputSequencer({
-    write: (payload, parsed) => terminal.write(payload, parsed),
+    write: binding.write,
     onConsumed: (sequenceEnd) => {
       if (disposed) return;
       void controller
