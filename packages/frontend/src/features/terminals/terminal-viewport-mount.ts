@@ -30,6 +30,7 @@ import { createTerminalOutputSequencer } from "@openducktor/frontend-core/termin
 
 export type TerminalViewportMount = {
   activate(focus: boolean): void;
+  setVisible(visible: boolean): void;
   dispose(): void;
 };
 
@@ -38,6 +39,7 @@ type MountTerminalViewportInput = {
   terminalId: string;
   controller: TerminalTransportController;
   isActive: () => boolean;
+  isVisible: () => boolean;
   getPlatform: () => AppPlatform | undefined;
   stageFile: (file: File) => Promise<string>;
   preparePathInput: (paths: readonly string[]) => Promise<string>;
@@ -56,6 +58,7 @@ export const mountTerminalViewport = ({
   terminalId,
   controller,
   isActive,
+  isVisible,
   getPlatform,
   stageFile,
   preparePathInput,
@@ -74,7 +77,8 @@ export const mountTerminalViewport = ({
   };
   const binding = createTerminalBinding(
     container,
-    createTerminalOptions(container, { cursorBlink: true, screenReaderMode: true }),
+    createTerminalOptions(container, { cursorBlink: true, screenReaderMode: isVisible() }),
+    (cause) => reportFailure("Terminal renderer failed", cause),
   );
   const { fitAddon, terminal } = binding;
   // An exited terminal keeps its output for reading, but its process can no longer take input.
@@ -114,7 +118,7 @@ export const mountTerminalViewport = ({
     cancelFrame: (frameId) => cancelAnimationFrame(frameId),
   });
   const outputSequencer = createTerminalOutputSequencer({
-    write: (payload, parsed) => terminal.write(payload, parsed),
+    write: binding.write,
     onConsumed: (sequenceEnd) => {
       if (disposed) return;
       void controller
@@ -278,6 +282,7 @@ export const mountTerminalViewport = ({
   if (isActive()) fitViewport();
 
   return {
+    setVisible: binding.setVisible,
     activate: (focus) => {
       binding.resetLinkState();
       activateViewport(focus ? () => terminal.focus() : null);

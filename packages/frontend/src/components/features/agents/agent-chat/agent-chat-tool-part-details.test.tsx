@@ -7,7 +7,7 @@ import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-su
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { AgentOperationsContextValue } from "@openducktor/frontend-core/types/session-slices";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { RegularToolMessage } from "./agent-chat-regular-tool-message";
@@ -61,11 +61,14 @@ const renderTool = (
     </QueryProvider>,
   );
 
-const renderCall = (readSessionToolPart: AgentOperationsContextValue["readSessionToolPart"]) =>
+const renderCall = (
+  readSessionToolPart: AgentOperationsContextValue["readSessionToolPart"],
+  meta: ToolMeta = cutCall,
+) =>
   renderTool(
     readSessionToolPart,
     <RegularToolMessage
-      meta={cutCall}
+      meta={meta}
       messageContent="Tool bash completed"
       messageTimestamp="2026-10-30T08:00:00.000Z"
       timeLabel="08:00"
@@ -78,11 +81,50 @@ const openDetails = (container: HTMLElement, label?: string): void => {
     (element) => label === undefined || element.querySelector("summary")?.textContent === label,
   );
   if (!details) throw new Error("The tool row has no details.");
-  details.open = true;
-  fireEvent(details, new Event("toggle"));
+  act(() => {
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+  });
 };
 
-describe("RegularToolMessage with cut details", () => {
+describe("RegularToolMessage details", () => {
+  test("mounts output only while both disclosures are open and keeps the Output box open", () => {
+    const meta = { ...cutCall, output: fullCall.output! };
+    delete meta.detailsOmitted;
+    const view = renderCall(
+      mock(async () => fullCall),
+      meta,
+    );
+    try {
+      expect(view.queryByText(fullCall.output!) === null).toBe(true);
+      openDetails(view.container);
+      expect(view.queryByText(fullCall.output!) === null).toBe(true);
+      openDetails(view.container, "Output");
+      expect(view.getByText(fullCall.output!)).toBeTruthy();
+
+      const outer = view.container.querySelector<HTMLDetailsElement>("details.group")!;
+      const output = [...outer.querySelectorAll("details")].find(
+        (details) => details.querySelector("summary")?.textContent === "Output",
+      )!;
+      act(() => {
+        outer.open = false;
+        fireEvent(outer, new Event("toggle"));
+      });
+      expect(view.queryByText(fullCall.output!) === null).toBe(true);
+      expect(output.open).toBe(true);
+
+      openDetails(view.container);
+      expect(view.getByText(fullCall.output!)).toBeTruthy();
+      act(() => {
+        output.open = false;
+        fireEvent(output, new Event("toggle"));
+      });
+      expect(view.queryByText(fullCall.output!) === null).toBe(true);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("reads the full call when the user opens its Output box", async () => {
     const read = mock(async () => fullCall);
     const view = renderCall(read);
