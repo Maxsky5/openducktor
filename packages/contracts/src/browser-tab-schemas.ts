@@ -428,6 +428,14 @@ export const BROWSER_ANNOTATION_MAX_ELEMENTS = 20;
 
 export const browserNodeRefSchema = withMaxUtf16Length(nonBlankString, 128);
 
+/** One element that the user picked on a page, as the host resolved it. */
+export const browserPickedElementSchema = z.strictObject({
+  nodeRef: browserNodeRefSchema,
+  box: browserBoxSchema,
+  label: nonBlankString,
+});
+export type BrowserPickedElement = z.infer<typeof browserPickedElementSchema>;
+
 export const browserAnnotationCaptureRequestSchema = z.strictObject({
   tabId: browserTabIdSchema,
   nodeRefs: z.array(browserNodeRefSchema).min(1).max(BROWSER_ANNOTATION_MAX_ELEMENTS),

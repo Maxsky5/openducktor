@@ -1,8 +1,10 @@
 import {
+  BROWSER_ANNOTATION_MAX_ELEMENTS,
   type BrowserAnnotationCapture,
   type BrowserAnnotationElement,
   type BrowserBox,
   browserAnnotationElementSchema,
+  type BrowserPickedElement,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -23,6 +25,7 @@ import {
   screenshotResultSchema,
 } from "../../ports/browser-cdp-schemas";
 import { BROWSER_PAGE_CAPTURE_BUNDLE } from "./page-capture/browser-page-capture.generated";
+import type { BrowserPagePickerMessage } from "./browser-host-tab-session";
 import { BrowserServiceError } from "./browser-service-error";
 import type { BrowserTabRegistry } from "./browser-tab-registry";
 import type { BrowserTabService } from "./browser-tab-service";
@@ -71,9 +74,16 @@ export type BrowserPickerInput = {
   stageImage(base64Png: string, name: string): Effect.Effect<{ path: string }, BrowserServiceError>;
 };
 
+/** What a picker message of the page means for the client that follows the picker. */
+export type BrowserPickerPageResult =
+  | { readonly kind: "none" }
+  | { readonly kind: "selection"; readonly selection: BrowserPickedElement[] }
+  | { readonly kind: "cancelled" };
+
 /**
- * The element picker. It injects no highlight script: the host finds the element under the
- * pointer with CDP, and the OpenDucktor overlay draws the highlight over the page surface.
+ * The element picker. The page script reports the pointer and the picks, and this picker resolves
+ * the element under the point with CDP. The page script draws the highlight and the selection,
+ * because a native page view draws above every element of the OpenDucktor window.
  */
 export const createBrowserPicker = ({
   engine,
@@ -82,6 +92,19 @@ export const createBrowserPicker = ({
   stageImage,
 }: BrowserPickerInput) => {
   const enabledTabs = new Set<string>();
+  /** The picked elements of each tab. The page draws them and the client shows the comment box. */
+  const selections = new Map<string, BrowserPickedElement[]>();
+
+  const evaluate = (
+    host: { evaluate(expression: string): Effect.Effect<unknown, BrowserServiceError> },
+    expression: string,
+  ) => host.evaluate(expression).pipe(Effect.asVoid);
+
+  const targetExpression = (target: BrowserPickedElement | null): string =>
+    `globalThis.__odtPickerTarget(${JSON.stringify(target)})`;
+
+  const selectionExpression = (selection: readonly BrowserPickedElement[]): string =>
+    `globalThis.__odtPickerSelection(${JSON.stringify(selection.map((element) => element.box))})`;
 
   const setEnabled = (tabId: string, enabled: boolean) =>
     Effect.gen(function* () {
@@ -91,24 +114,23 @@ export const createBrowserPicker = ({
         yield* cdp("Animation.enable");
         yield* cdp("Animation.setPlaybackRate", { playbackRate: 0 });
         enabledTabs.add(tabId);
-      } else {
-        enabledTabs.delete(tabId);
-        yield* cdp("Animation.setPlaybackRate", { playbackRate: 1 });
-        yield* cdp("Animation.disable");
+        selections.set(tabId, []);
+        yield* evaluate(host, "globalThis.__odtPickerActive(true)");
+        yield* evaluate(host, selectionExpression([]));
+        return;
       }
+      enabledTabs.delete(tabId);
+      selections.delete(tabId);
+      // The page can be gone while the picker still shows, so turning it off never fails.
+      yield* evaluate(host, "globalThis.__odtPickerActive(false)").pipe(Effect.ignore);
+      yield* evaluate(host, targetExpression(null)).pipe(Effect.ignore);
+      yield* cdp("Animation.setPlaybackRate", { playbackRate: 1 });
+      yield* cdp("Animation.disable");
     });
 
-  /**
-   * The element under a point in CSS pixels of the viewport, with its box and label, or null when
-   * no element is there. `DOM.getNodeForLocation` takes document points, so the point gets the
-   * scroll offset. The box of `DOM.getBoxModel` is already in viewport points.
-   */
-  const hover = (tabId: string, x: number, y: number) =>
+  /** The element under a point in CSS pixels of the viewport, with its box and label. */
+  const targetAt = (tabId: string, x: number, y: number, operation: string) =>
     Effect.gen(function* () {
-      if (!enabledTabs.has(tabId)) {
-        return null;
-      }
-      const operation = "browser.picker.hover";
       const host = yield* requireLive(tabId, operation);
       const cdp = cdpFor(host.session, tabId, operation);
       const viewport = layoutMetricsResultSchema.parse(
@@ -128,7 +150,7 @@ export const createBrowserPicker = ({
           Effect.mapError(actionFailure(tabId, operation)),
         );
       if (located === null) {
-        return null;
+        return { host, target: null };
       }
       const box = yield* host.session
         .send("DOM.getBoxModel", { backendNodeId: located.backendNodeId })
@@ -138,7 +160,7 @@ export const createBrowserPicker = ({
           Effect.mapError(actionFailure(tabId, operation)),
         );
       if (box === null) {
-        return null;
+        return { host, target: null };
       }
       const objectId = yield* nodeObject(cdp, tabId, located.backendNodeId, operation);
       const label = evaluateResultSchema.parse(
@@ -150,10 +172,70 @@ export const createBrowserPicker = ({
       );
       yield* cdp("Runtime.releaseObject", { objectId });
       return {
-        nodeRef: String(located.backendNodeId),
-        box,
-        label: z.string().min(1).catch("element").parse(label.result.value),
+        host,
+        target: {
+          nodeRef: String(located.backendNodeId),
+          box,
+          label: z.string().min(1).catch("element").parse(label.result.value),
+        },
       };
+    });
+
+  /** Draws the element under a point, or no highlight when no element is there. */
+  const hover = (tabId: string, x: number, y: number) =>
+    Effect.gen(function* () {
+      const { host, target } = yield* targetAt(tabId, x, y, "browser.picker.hover");
+      yield* evaluate(host, targetExpression(target));
+    });
+
+  /** Runs one picker message of the page and returns what the client must follow. */
+  const handlePageMessage = (
+    tabId: string,
+    message: BrowserPagePickerMessage,
+  ): Effect.Effect<BrowserPickerPageResult, BrowserServiceError> =>
+    Effect.gen(function* () {
+      if (!enabledTabs.has(tabId)) {
+        return { kind: "none" };
+      }
+      if (message.type === "picker_cancel") {
+        yield* setEnabled(tabId, false);
+        return { kind: "cancelled" };
+      }
+      if (message.type === "picker_hover") {
+        yield* hover(tabId, message.x, message.y);
+        return { kind: "none" };
+      }
+
+      const operation = "browser.picker.pick";
+      const { host, target } = yield* targetAt(tabId, message.x, message.y, operation);
+      if (target === null) {
+        return { kind: "none" };
+      }
+      const selection = nextPickerSelection(selections.get(tabId) ?? [], target, message.shiftKey);
+      selections.set(tabId, selection);
+      yield* evaluate(host, targetExpression(target));
+      yield* evaluate(host, selectionExpression(selection));
+      return { kind: "selection", selection };
+    });
+
+  /** Draws the picker again after a document change. A failure leaves the picker off. */
+  const restore = (tabId: string) =>
+    Effect.gen(function* () {
+      if (!enabledTabs.has(tabId)) {
+        return;
+      }
+      const host = yield* requireLive(tabId, "browser.picker.restore");
+      yield* evaluate(host, "globalThis.__odtPickerActive(true)");
+      yield* evaluate(host, targetExpression(null));
+      yield* evaluate(host, selectionExpression(selections.get(tabId) ?? []));
+    });
+
+  /** Ends the picker selection after the user saved or canceled the comment. */
+  const clearSelection = (tabId: string) =>
+    Effect.gen(function* () {
+      selections.set(tabId, []);
+      const host = yield* requireLive(tabId, "browser.picker.clear");
+      yield* evaluate(host, selectionExpression([]));
     });
 
   const capture = (
@@ -227,13 +309,31 @@ export const createBrowserPicker = ({
 
   return {
     setEnabled,
-    hover,
+    handlePageMessage,
+    restore,
+    clearSelection,
     capture,
-    forget: (tabId: string) => enabledTabs.delete(tabId),
+    forget: (tabId: string) => {
+      enabledTabs.delete(tabId);
+      selections.delete(tabId);
+    },
   };
 };
 
 export type BrowserPicker = ReturnType<typeof createBrowserPicker>;
+
+/** Applies one pick: a click replaces the selection, and Shift-click adds or removes an element. */
+export const nextPickerSelection = (
+  selection: readonly BrowserPickedElement[],
+  target: BrowserPickedElement,
+  shiftKey: boolean,
+): BrowserPickedElement[] => {
+  if (!shiftKey) return [target];
+  if (selection.some((element) => element.nodeRef === target.nodeRef)) {
+    return selection.filter((element) => element.nodeRef !== target.nodeRef);
+  }
+  return [...selection, target].slice(0, BROWSER_ANNOTATION_MAX_ELEMENTS);
+};
 
 /** CDP calls of one picker operation. A CDP failure becomes an action failure of the tab. */
 const cdpFor =

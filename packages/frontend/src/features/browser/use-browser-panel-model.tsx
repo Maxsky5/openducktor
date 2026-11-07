@@ -118,7 +118,7 @@ const browserStartBlockedReason = (
   if (snapshot.status === "loading" || engine === null) {
     return "Browser tabs are loading.";
   }
-  if (bridge.surface === "webview" && engine.kind !== "ready") {
+  if (bridge.surface === "electron" && engine.kind !== "ready") {
     return browserEngineNotReadyMessage(engine);
   }
   if (ownerTabCount >= BROWSER_TAB_LIMIT) {

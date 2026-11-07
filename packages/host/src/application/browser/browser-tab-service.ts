@@ -14,6 +14,7 @@ import type { BrowserSavedTab } from "../../ports/browser-tab-store-port";
 import {
   type BrowserAnchorBoxes,
   type BrowserHostTabSession,
+  type BrowserPagePickerMessage,
   startBrowserHostTabSession,
 } from "./browser-host-tab-session";
 import type { BrowserOwnerAccess } from "./browser-owner-access";
@@ -32,6 +33,10 @@ export type BrowserTabServiceInput = {
   runJob(job: Effect.Effect<void>): void;
   /** The page script reported where the annotated elements of a tab are. */
   onAnchorBoxes(tabId: string, boxes: BrowserAnchorBoxes): void;
+  /** The page script reported a picker point, a pick, or a cancel. */
+  onPickerMessage(tabId: string, message: BrowserPagePickerMessage): void;
+  /** A new document of a tab has its isolated world, so the host can draw its page furniture. */
+  onHostWorldReady(tabId: string): void;
 };
 
 /** What happened to a popup that the engine opened. */
@@ -48,6 +53,8 @@ export const createBrowserTabService = ({
   prompts,
   runJob,
   onAnchorBoxes,
+  onPickerMessage,
+  onHostWorldReady,
 }: BrowserTabServiceInput) => {
   const gate = createSerialGate();
   const liveTabs = new Map<string, LiveTab>();
@@ -120,6 +127,8 @@ export const createBrowserTabService = ({
                 isAgentActing: () => registry.get(tabId)?.summary.agentActive ?? false,
                 runJob,
                 onAnchorBoxes: (boxes) => onAnchorBoxes(tabId, boxes),
+                onPickerMessage: (message) => onPickerMessage(tabId, message),
+                onHostWorldReady: () => onHostWorldReady(tabId),
                 onNavigated: (failedUrl) => {
                   prompts.removeKind(tabId, "permission");
                   // Another navigation replaces the refused load of a certificate warning. Only

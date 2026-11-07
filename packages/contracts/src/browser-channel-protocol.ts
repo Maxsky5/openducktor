@@ -3,7 +3,7 @@ import { browserForwardedShortcutIdSchema } from "./browser-shortcuts";
 import {
   browserBoxSchema,
   browserFailureSchema,
-  browserNodeRefSchema,
+  browserPickedElementSchema,
   browserTabIdSchema,
 } from "./browser-tab-schemas";
 import { withMaxUtf16Length } from "./string-schemas";
@@ -11,10 +11,10 @@ import { withMaxUtf16Length } from "./string-schemas";
 /** The largest encoded message, in bytes, in each direction. */
 const BROWSER_CHANNEL_MAX_MESSAGE_BYTES = 256 * 1024;
 
-const coordinateSchema = z.number();
-
 const browserAnnotationAnchorSchema = z.strictObject({
   annotationId: z.string().min(1).max(128),
+  /** The number that the page marker shows. */
+  number: z.number().int().min(1),
   selectors: z
     .array(withMaxUtf16Length(z.string().min(1), 4_096))
     .min(1)
@@ -23,12 +23,6 @@ const browserAnnotationAnchorSchema = z.strictObject({
 export type BrowserAnnotationAnchor = z.infer<typeof browserAnnotationAnchorSchema>;
 
 const browserClientMessageSchema = z.discriminatedUnion("type", [
-  z.strictObject({
-    type: z.literal("picker_hover"),
-    tabId: browserTabIdSchema,
-    x: coordinateSchema,
-    y: coordinateSchema,
-  }),
   z.strictObject({
     type: z.literal("anchors"),
     tabId: browserTabIdSchema,
@@ -40,26 +34,25 @@ const browserClientMessageSchema = z.discriminatedUnion("type", [
     tabId: browserTabIdSchema,
     annotationId: browserAnnotationAnchorSchema.shape.annotationId,
   }),
+  /** Stops the picker after the user saved or canceled the selection comment. */
+  z.strictObject({
+    type: z.literal("picker_clear"),
+    tabId: browserTabIdSchema,
+  }),
 ]);
 export type BrowserClientMessage = z.infer<typeof browserClientMessageSchema>;
 
-const browserAgentMarkerActionSchema = z.enum(["click", "hover", "type"]);
-export type BrowserAgentMarkerAction = z.infer<typeof browserAgentMarkerActionSchema>;
-
 const browserServerMessageSchema = z.discriminatedUnion("type", [
-  /** The element at the point of a `picker_hover`, which names the same point. */
+  /** The elements that the user picked in the page, after each pick and each clear. */
   z.strictObject({
-    type: z.literal("picker_target"),
+    type: z.literal("picker_selection"),
     tabId: browserTabIdSchema,
-    x: coordinateSchema,
-    y: coordinateSchema,
-    target: z
-      .strictObject({
-        nodeRef: browserNodeRefSchema,
-        box: browserBoxSchema,
-        label: z.string().min(1),
-      })
-      .nullable(),
+    selection: z.array(browserPickedElementSchema),
+  }),
+  /** The page ended the picker, for example with Escape. */
+  z.strictObject({
+    type: z.literal("picker_off"),
+    tabId: browserTabIdSchema,
   }),
   z.strictObject({
     type: z.literal("anchor_boxes"),
@@ -71,33 +64,7 @@ const browserServerMessageSchema = z.discriminatedUnion("type", [
       }),
     ),
   }),
-  z.strictObject({
-    type: z.literal("agent_marker"),
-    tabId: browserTabIdSchema,
-    action: browserAgentMarkerActionSchema,
-    x: coordinateSchema,
-    y: coordinateSchema,
-  }),
-  /**
-   * Electron only. While `pressing` is true, an agent mouse press runs in the tab. A press moves
-   * the window focus to its `<webview>`, so the renderer gives the focus back to the element that
-   * the user had focused.
-   */
-  z.strictObject({
-    type: z.literal("agent_press"),
-    tabId: browserTabIdSchema,
-    pressing: z.boolean(),
-  }),
   z.strictObject({ type: z.literal("shortcut"), shortcut: browserForwardedShortcutIdSchema }),
-  /**
-   * Electron only. While `awake` is true, an agent or DevTools uses the tab, so a hidden
-   * `<webview>` must stay drawn (for example with `opacity: 0`) instead of `visibility: hidden`.
-   */
-  z.strictObject({
-    type: z.literal("surface_wake"),
-    tabId: browserTabIdSchema,
-    awake: z.boolean(),
-  }),
   z.strictObject({
     type: z.literal("protocol_error"),
     tabId: browserTabIdSchema.optional(),

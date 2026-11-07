@@ -44,9 +44,6 @@ export const useBrowserAnchors = (
 
   const onPage = useMemo(() => new Set(anchors.map((anchor) => anchor.annotationId)), [anchors]);
   return {
-    /** The box of an annotation on this page, or null when its element is not on screen. */
-    boxOf: (annotationId: string): BrowserBox | null =>
-      onPage.has(annotationId) ? (boxes.get(annotationId) ?? null) : null,
     /** Annotations whose elements are not on the current page. */
     offPageIds: new Set(
       annotations
@@ -69,6 +66,7 @@ export const browserAnnotationAnchors = (
     .slice(0, MAX_ANCHORS)
     .map((annotation) => ({
       annotationId: annotation.id,
+      number: annotation.number,
       selectors: annotation.elements.map((element) => element.selector),
     }));
 

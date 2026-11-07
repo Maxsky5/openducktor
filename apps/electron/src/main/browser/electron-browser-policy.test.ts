@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   ELECTRON_DEVTOOLS_PARTITION,
   electronBrowserPartition,
-  workspaceIdOfBrowserPartition,
 } from "../../shared/electron-browser-partitions";
 import {
   decideWebviewAttach,
@@ -15,17 +14,8 @@ const DEVTOOLS_URL =
   "devtools://devtools/bundled/devtools_app.html?ws=127.0.0.1:4000/secret/devtools/tab";
 
 describe("browser partitions", () => {
-  test("round-trips the workspace of a browser partition", () => {
+  test("names the session partition of a workspace", () => {
     expect(electronBrowserPartition("my-repo")).toBe("persist:openducktor-browser-my-repo");
-    expect(workspaceIdOfBrowserPartition("persist:openducktor-browser-my-repo")).toBe("my-repo");
-  });
-
-  test("rejects partitions that are not workspace browser partitions", () => {
-    expect(workspaceIdOfBrowserPartition("persist:openducktor")).toBeNull();
-    expect(workspaceIdOfBrowserPartition(ELECTRON_DEVTOOLS_PARTITION)).toBeNull();
-    expect(workspaceIdOfBrowserPartition("persist:openducktor-browser-")).toBeNull();
-    expect(workspaceIdOfBrowserPartition("persist:openducktor-browser-../x")).toBeNull();
-    expect(workspaceIdOfBrowserPartition("openducktor-browser-my-repo")).toBeNull();
   });
 });
 
@@ -49,25 +39,19 @@ describe("refusedBrowserPageScheme", () => {
 });
 
 describe("decideWebviewAttach", () => {
-  test("allows a browser tab in the partition of its workspace", () => {
+  test("allows only the bundled DevTools frontend, in the DevTools partition", () => {
+    expect(
+      decideWebviewAttach({ src: DEVTOOLS_URL, partition: ELECTRON_DEVTOOLS_PARTITION }),
+    ).toEqual({ allow: true });
+  });
+
+  test("prevents browser tabs, because the engine creates their views", () => {
     expect(
       decideWebviewAttach({
         src: "about:blank",
         partition: electronBrowserPartition("repo-1"),
-      }),
-    ).toEqual({ allow: true, kind: "browser", workspaceId: "repo-1" });
-    expect(
-      decideWebviewAttach({
-        src: "https://example.com/",
-        partition: electronBrowserPartition("repo-1"),
-      }),
-    ).toEqual({ allow: true, kind: "browser", workspaceId: "repo-1" });
-  });
-
-  test("allows the bundled DevTools frontend in the DevTools partition", () => {
-    expect(
-      decideWebviewAttach({ src: DEVTOOLS_URL, partition: ELECTRON_DEVTOOLS_PARTITION }),
-    ).toEqual({ allow: true, kind: "devtools" });
+      }).allow,
+    ).toBe(false);
   });
 
   test("prevents other partitions, including the OpenDucktor app partition", () => {
@@ -76,11 +60,7 @@ describe("decideWebviewAttach", () => {
     }
   });
 
-  test("prevents other sources in browser and DevTools partitions", () => {
-    const browserPartition = electronBrowserPartition("repo-1");
-    for (const src of ["", "file:///etc/hosts", "data:text/html,x", DEVTOOLS_URL]) {
-      expect(decideWebviewAttach({ src, partition: browserPartition }).allow).toBe(false);
-    }
+  test("prevents other sources in the DevTools partition", () => {
     for (const src of [
       "https://example.com/",
       "devtools://devtools/bundled/inspector.html",

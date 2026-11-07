@@ -9,18 +9,22 @@ import type { z } from "zod";
 import { runElectronEffect } from "../../effect/electron-boundary";
 import { ElectronValidationError, jsonIssues } from "../../effect/electron-errors";
 import {
-  ELECTRON_BROWSER_BIND_GUEST_CHANNEL,
+  ELECTRON_BROWSER_CAPTURE_PAGE_CHANNEL,
   ELECTRON_BROWSER_CONNECT_CHANNEL,
   ELECTRON_BROWSER_DISCONNECT_CHANNEL,
   ELECTRON_BROWSER_EVENT_CHANNEL,
+  ELECTRON_BROWSER_FOCUS_PAGE_CHANNEL,
   ELECTRON_BROWSER_PICK_FILES_CHANNEL,
   ELECTRON_BROWSER_SEND_CHANNEL,
+  ELECTRON_BROWSER_SET_SURFACE_CHANNEL,
   type ElectronBrowserEventEnvelope,
   type ElectronBrowserPickFilesRequest,
-  electronBrowserBindGuestRequestSchema,
+  electronBrowserCapturePageResultSchema,
   electronBrowserClientIdSchema,
   electronBrowserPickFilesRequestSchema,
   electronBrowserSendRequestSchema,
+  electronBrowserSetSurfaceRequestSchema,
+  electronBrowserTabRequestSchema,
 } from "../../shared/electron-bridge-contract";
 import {
   createRendererClientCleanup,
@@ -166,7 +170,7 @@ export type ElectronBrowserIpcHandler = (
   event: { sender: ElectronBrowserLifecycleSender },
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This IPC boundary parses each renderer request before use.
   request: unknown,
-) => Promise<void | string[]>;
+) => Promise<void | string | string[]>;
 
 type ElectronBrowserIpcMain = {
   handle(channel: string, listener: ElectronBrowserIpcHandler): void;
@@ -178,11 +182,16 @@ export type RegisterElectronBrowserIpcInput = {
   engine: {
     isMainWindow(webContentsId: number): boolean;
     setMainWindowLoaded(webContentsId: number, loaded: boolean): void;
-    bindGuest(
+    setSurface(
       senderId: number,
       tabId: string,
-      webContentsId: number,
+      input: {
+        visible: boolean;
+        bounds?: { x: number; y: number; width: number; height: number } | undefined;
+      },
     ): Effect.Effect<void, BrowserEngineError>;
+    focusPage(senderId: number, tabId: string): Effect.Effect<void, BrowserEngineError>;
+    capturePage(tabId: string): Effect.Effect<string, BrowserEngineError>;
   };
   /** Opens the OS file dialog over the window of the sender. An empty list means cancel. */
   pickFiles(senderId: number, request: ElectronBrowserPickFilesRequest): Promise<string[]>;
@@ -271,15 +280,44 @@ export const registerElectronBrowserIpc = ({
     );
   });
 
-  ipcMain.handle(ELECTRON_BROWSER_BIND_GUEST_CHANNEL, async (event, request) => {
-    requireMainWindow(event.sender, "electron.browser.bind_guest");
+  ipcMain.handle(ELECTRON_BROWSER_SET_SURFACE_CHANNEL, async (event, request) => {
+    requireMainWindow(event.sender, "electron.browser.set_surface");
     const parsed = parseIpcInput(
-      "electron.browser.bind_guest",
+      "electron.browser.set_surface",
       "request",
-      "Bind requests must contain a browser tab ID and a webview webContents ID.",
-      electronBrowserBindGuestRequestSchema.safeParse(request),
+      "Surface requests must contain a browser tab ID, a visibility, and a box for a shown page.",
+      electronBrowserSetSurfaceRequestSchema.safeParse(request),
     );
-    await runElectronEffect(engine.bindGuest(event.sender.id, parsed.tabId, parsed.webContentsId));
+    await runElectronEffect(
+      engine.setSurface(event.sender.id, parsed.tabId, {
+        visible: parsed.visible,
+        bounds: parsed.bounds,
+      }),
+    );
+  });
+
+  ipcMain.handle(ELECTRON_BROWSER_FOCUS_PAGE_CHANNEL, async (event, request) => {
+    requireMainWindow(event.sender, "electron.browser.focus_page");
+    const parsed = parseIpcInput(
+      "electron.browser.focus_page",
+      "request",
+      "Focus requests must contain a browser tab ID.",
+      electronBrowserTabRequestSchema.safeParse(request),
+    );
+    await runElectronEffect(engine.focusPage(event.sender.id, parsed.tabId));
+  });
+
+  ipcMain.handle(ELECTRON_BROWSER_CAPTURE_PAGE_CHANNEL, async (event, request) => {
+    requireMainWindow(event.sender, "electron.browser.capture_page");
+    const parsed = parseIpcInput(
+      "electron.browser.capture_page",
+      "request",
+      "Capture requests must contain a browser tab ID.",
+      electronBrowserTabRequestSchema.safeParse(request),
+    );
+    return electronBrowserCapturePageResultSchema.parse(
+      await runElectronEffect(engine.capturePage(parsed.tabId)),
+    );
   });
 
   ipcMain.handle(ELECTRON_BROWSER_PICK_FILES_CHANNEL, async (event, request) => {
