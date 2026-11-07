@@ -18,6 +18,7 @@ import {
   NO_PAGE_OCCLUDERS,
   type PageOccluderBox,
   pageIsOccluded,
+  refreshPageOccluders,
   usePageOccluders,
 } from "./use-page-occluders";
 import { DevToolsWebviewSurface } from "./devtools-webview-surface";
@@ -142,6 +143,10 @@ function SurfaceFrame({
   const placement = useBrowserSurfacePlacement(slots, surfaceKey);
   const hidden = !placement.visible;
   const occluded = pageIsOccluded(occluders, placement);
+  // A hidden surface keeps its overlays mounted, so a shown surface must read them again.
+  useEffect(() => {
+    refreshPageOccluders();
+  }, [hidden]);
   const overlayRef = useCallback(
     (element: HTMLElement | null) => {
       if (element === null || overlaps === null) return;
