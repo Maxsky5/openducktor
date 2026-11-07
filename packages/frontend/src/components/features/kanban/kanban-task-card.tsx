@@ -312,10 +312,10 @@ function sameProps(previous: CardProps, next: CardProps): boolean {
 
 const getSessionChipClassName = (isWaitingInput: boolean): string => {
   if (isWaitingInput) {
-    return "border-warning-border bg-warning-surface text-warning-muted hover:border-warning-border hover:bg-warning-surface";
+    return "border-warning-border bg-warning-surface text-warning-surface-foreground hover:border-warning-border hover:bg-warning-surface";
   }
 
-  return "border-info-border bg-info-surface text-info-muted hover:border-info-border hover:bg-info-surface";
+  return "border-info-border bg-info-surface text-info-surface-foreground hover:border-info-border hover:bg-info-surface";
 };
 
 const getSessionStatusTextClassName = (isWaitingInput: boolean): string => {
