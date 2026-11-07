@@ -1,11 +1,8 @@
 ---
+import Scene from "@openducktor/product-scenes/astro";
 import { links } from "../content/site";
 import FeatureTile from "../ui/FeatureTile.astro";
 import SectionHead from "../ui/SectionHead.astro";
-import ChatView from "../views/chat/ChatView.astro";
-import McpView from "../views/mcp/McpView.astro";
-import PromptsView from "../views/prompts/PromptsView.astro";
-import ActionsView from "../views/actions/ActionsView.astro";
 import "./Features.css";
 ---
 
@@ -30,7 +27,7 @@ import "./Features.css";
         A session can work outside a task. Give it a custom role and a reusable prompt. The agent
         searches your tasks and creates the missing ones. Open a new task from the session, and
         start its Builder without leaving the session.
-        <ChatView slot="view" />
+        <Scene name="chat" slot="view" />
       </FeatureTile>
       <FeatureTile
         id="feature-mcp"
@@ -41,7 +38,7 @@ import "./Features.css";
         Add <a class="text-link" href={links.mcp}><code>@openducktor/mcp</code></a> to another agent.
         It can search, read, create, and update your tasks. It sends each call to the running app, so
         the board shows a new task at once.
-        <McpView slot="view" />
+        <Scene name="mcp" slot="view" />
       </FeatureTile>
       <FeatureTile
         id="feature-prompts"
@@ -52,7 +49,7 @@ import "./Features.css";
         The settings show each built-in prompt that OpenDucktor sends to an agent. Replace a prompt
         for all repositories or for one repository. OpenDucktor checks the placeholders of each
         active override, and it does not save until they are valid.
-        <PromptsView slot="view" />
+        <Scene name="prompts" slot="view" />
       </FeatureTile>
       <FeatureTile
         id="feature-actions"
@@ -64,7 +61,7 @@ import "./Features.css";
         it from the top bar of a session: each run opens a new terminal in the worktree of the task,
         or in the folder of a session without a task. An action can also run when OpenDucktor
         creates a worktree, and the agent can wait until it finishes.
-        <ActionsView slot="view" />
+        <Scene name="actions" slot="view" />
       </FeatureTile>
     </div>
   </div>

@@ -1,0 +1,254 @@
+@layer replica {
+  :where(.stage) {
+    /* The open sidebar of workspace-sidebar.tsx: w-80. On macOS the hide button sits in the 40
+       pixel title bar, and the brand row comes under it. */
+    .sidebar {
+      display: flex;
+      flex: 0 0 calc(320 * var(--u));
+      flex-direction: column;
+      width: calc(320 * var(--u));
+      min-height: 0;
+      border-right: calc(1 * var(--u)) solid var(--sidebar-border);
+      background: var(--sidebar);
+      color: var(--sidebar-foreground);
+    }
+    .sb-head {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+      padding: 0 calc(16 * var(--u)) calc(16 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--sidebar-border);
+    }
+    .sb-heading {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: calc(40 * var(--u)) auto;
+      align-items: center;
+    }
+    .sb-hide {
+      display: grid;
+      grid-column: 2;
+      grid-row: 1;
+      place-items: center;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      margin-top: calc(2 * var(--u));
+      color: var(--sidebar-muted-foreground);
+    }
+    .sb-brand {
+      display: flex;
+      grid-column: 1 / -1;
+      grid-row: 2;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+    }
+    .sb-brand .mark {
+      flex: 0 0 auto;
+      width: calc(40 * var(--u));
+      height: calc(40 * var(--u));
+      background: url("./openducktor-mark.svg") center / contain no-repeat;
+    }
+    .sb-brand strong {
+      display: block;
+      color: var(--sidebar-foreground);
+      font-size: calc(16 * var(--u));
+      font-weight: 600;
+      letter-spacing: calc(-0.4 * var(--u));
+      line-height: calc(24 * var(--u));
+    }
+    .sb-brand small {
+      display: block;
+      color: var(--sidebar-muted-foreground);
+      font-size: calc(11 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* CommandPaletteTrigger: an outline button with the search icon and the shortcut. */
+    .sb-search {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      height: calc(32 * var(--u));
+      margin-left: auto;
+      padding: 0 calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--sidebar-border);
+      border-radius: calc(10 * var(--u));
+      color: var(--sidebar-muted-foreground);
+    }
+    .sb-actions {
+      display: flex;
+      flex-direction: column;
+      gap: calc(6 * var(--u));
+    }
+    .sb-kanban {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(36 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--sidebar-foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+    }
+    .sb-kanban[aria-current="true"] {
+      background: var(--sidebar-accent);
+      color: var(--sidebar-accent-foreground);
+      box-shadow: var(--shadow-sm);
+    }
+    /* SessionCreateSplitAction: two primary halves joined by a light rule. */
+    .sb-create {
+      display: flex;
+      color: var(--primary-foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+    }
+    .sb-create > span {
+      display: flex;
+      align-items: center;
+      height: calc(36 * var(--u));
+      background: var(--primary);
+    }
+    .sb-create-main {
+      flex: 1;
+      gap: calc(8 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border-radius: calc(10 * var(--u)) 0 0 calc(10 * var(--u));
+    }
+    .sb-create-menu {
+      padding: 0 calc(10 * var(--u));
+      border-left: calc(1 * var(--u)) solid
+        color-mix(in oklch, var(--primary-foreground) 25%, transparent);
+      border-radius: 0 calc(10 * var(--u)) calc(10 * var(--u)) 0;
+    }
+    .sb-controls {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      padding: calc(12 * var(--u)) calc(12 * var(--u)) calc(8 * var(--u));
+    }
+    /* SessionScopeSwitch: a segmented radio group. */
+    .sb-scope {
+      display: grid;
+      flex: 1;
+      grid-template-columns: 1fr 1fr;
+      gap: calc(4 * var(--u));
+      height: calc(32 * var(--u));
+      padding: calc(4 * var(--u));
+      border-radius: calc(12 * var(--u));
+      background: var(--muted);
+    }
+    .sb-scope span {
+      display: grid;
+      place-items: center;
+      height: calc(24 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: color-mix(in oklch, var(--foreground) 70%, transparent);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .sb-scope span[data-checked] {
+      background: var(--segmented-selected);
+      box-shadow:
+        0 0 0 calc(1 * var(--u)) var(--input),
+        var(--shadow-sm);
+      color: var(--foreground);
+    }
+    .sb-grouping,
+    .sb-diagnostics {
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      color: var(--sidebar-muted-foreground);
+    }
+    .sb-sessions {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+      min-height: 0;
+      padding: 0 calc(12 * var(--u)) calc(12 * var(--u));
+      overflow: hidden;
+    }
+    .sb-group {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+      padding-bottom: calc(16 * var(--u));
+    }
+    /* A group that the view leaves out stays hidden while the scene shows and hides it. */
+    .sb-group[data-omitted] {
+      display: none;
+    }
+    .sb-group-head {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(32 * var(--u));
+      padding: 0 calc(10 * var(--u));
+      border-radius: calc(10 * var(--u));
+      background: color-mix(in oklch, var(--muted) 60%, transparent);
+      color: var(--sidebar-foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 600;
+    }
+    .sb-group-icon {
+      flex: 0 0 auto;
+      color: var(--sidebar-muted-foreground);
+    }
+    [data-nav-group="needs_you"] .sb-group-icon {
+      color: var(--warning-accent);
+    }
+    [data-nav-group="running"] .sb-group-icon {
+      color: var(--info-accent);
+    }
+    .sb-group-head b {
+      min-width: calc(20 * var(--u));
+      margin-left: auto;
+      padding: 0 calc(6 * var(--u));
+      border-radius: 999px;
+      background: var(--muted);
+      color: var(--sidebar-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      line-height: calc(16 * var(--u));
+      text-align: center;
+    }
+    .sb-group-chevron {
+      flex: 0 0 auto;
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+      color: var(--sidebar-muted-foreground);
+    }
+    .sb-group[data-collapsed] .sb-group-chevron {
+      rotate: -90deg;
+    }
+    .sb-footer {
+      display: flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      padding: calc(8 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--sidebar-border);
+    }
+    .sb-settings {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(36 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      color: var(--sidebar-foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+    }
+    .sb-diagnostics {
+      color: var(--success-accent);
+    }
+  }
+}

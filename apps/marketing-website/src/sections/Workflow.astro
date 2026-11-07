@@ -1,6 +1,7 @@
 ---
+import Scene from "@openducktor/product-scenes/astro";
 import SectionHead from "../ui/SectionHead.astro";
-import WorkflowView from "../views/workflow/WorkflowView.astro";
+import "./Workflow.css";
 ---
 
 <section id="workflow" class="section workflow" aria-labelledby="workflow-title">
@@ -13,5 +14,5 @@ import WorkflowView from "../views/workflow/WorkflowView.astro";
       Autopilot start it. You answer questions, approve commands, and review the diff.
     </p>
   </SectionHead>
-  <WorkflowView />
+  <Scene name="workflow" />
 </section>

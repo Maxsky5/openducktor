@@ -11,6 +11,8 @@ This guide covers the desktop app, the browser runner, and the mobile app. Read 
 | Layer | Main code | Owns | Does not own |
 |---|---|---|---|
 | UI | `packages/frontend/src/pages`, `packages/frontend/src/components` | Rendered state and local interaction | Workflow rules and status transitions |
+| Theme | `packages/theme/src/*` | The desktop theme tokens that the app and the product scenes share | Components and page styles |
+| Product scenes | `packages/product-scenes/src/*`, `packages/product-scenes/styles/*` | Stateless copies of the product UI, scene timelines, and their players, for the website and the app tour | Host data, live state, and app stores |
 | Frontend state | `packages/frontend/src/state/app-state-provider.tsx`, `packages/frontend/src/state/operations/*` | UI state, task and workspace operations, provider composition | Schemas, task mutations, source live runtime state |
 | Frontend core | `packages/frontend-core/src/*` | Host connection lifetime, query caches, live session projection, history merge, notification policy, connection recovery, drafts | Presentation, device APIs, workflow policy, source live runtime state |
 | Contracts | `packages/contracts/src/*` | Zod schemas for tasks, sessions, workflows, host commands, and MCP data | Runtime control and workflow policy |

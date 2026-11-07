@@ -1,0 +1,16 @@
+@layer views {
+  :where(.stage) {
+    /* The Diagnostics sheet at the scale of the stage. The panel scrolls to the workspace checks. */
+    .diag-sheet {
+      --design-width: 576;
+      height: calc(720 * var(--u));
+    }
+    /* Narrow stages show the sheet at the width of a phone. */
+    @container stage (width <= 440px) {
+      .diag-sheet {
+        --design-width: 420;
+        height: calc(820 * var(--u));
+      }
+    }
+  }
+}

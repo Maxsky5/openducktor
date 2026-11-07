@@ -1,7 +1,8 @@
 ---
+import Scene from "@openducktor/product-scenes/astro";
+import { release } from "../content/release";
 import ProductFigure from "../ui/ProductFigure.astro";
 import SectionHead from "../ui/SectionHead.astro";
-import PaletteView from "../views/palette/PaletteView.astro";
 import "./Palette.css";
 ---
 
@@ -15,7 +16,7 @@ import "./Palette.css";
   </SectionHead>
   <div class="wrap-wide palette-figure">
     <ProductFigure caption={["Kanban Board", "Command palette"]}>
-      <PaletteView />
+      <Scene name="palette" options={{ version: release.version }} />
     </ProductFigure>
   </div>
 </section>

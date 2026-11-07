@@ -1,7 +1,7 @@
 // The duck of the brand links. CSS plays its motion: this script only starts it, so a page
 // without product views, such as the 404 page, loads no animation library.
-import { all, must } from "../motion/dom";
-import { isPausedByVisitor, MOTION_QUERY } from "../motion/preference";
+import { all, must } from "./dom";
+import { isPausedByVisitor, MOTION_QUERY } from "@openducktor/product-scenes/motion/preference";
 
 /**
  * The duck of the header brand link hops once when the page opens. Each brand duck bobs on the

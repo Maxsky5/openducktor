@@ -1,0 +1,82 @@
+@layer replica {
+  :where(.stage) {
+    /* The header of the Document tab: the document menu on the left, the date and the full screen
+       button on the right. */
+    .st-doc-head {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u)) calc(8 * var(--u)) calc(8 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .st-doc-title {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+      height: calc(32 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      font-size: calc(16 * var(--u));
+      font-weight: 600;
+      letter-spacing: -0.025em;
+    }
+    .st-doc-title .lucide {
+      flex: 0 0 auto;
+      color: var(--muted-foreground);
+    }
+    .st-doc-meta {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+    .st-doc-meta time {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      white-space: nowrap;
+    }
+    .st-doc-expand {
+      display: grid;
+      place-items: center;
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+      color: var(--foreground);
+    }
+    /* The copy button: a small icon button. */
+    .st-doc-button {
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+      color: var(--foreground);
+    }
+    .st-doc-body {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      padding: calc(16 * var(--u));
+    }
+    .st-doc-copy {
+      position: absolute;
+      top: calc(8 * var(--u));
+      right: calc(8 * var(--u));
+      z-index: 1;
+    }
+    .st-doc-empty {
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+    }
+    /* Document panel states. */
+    .st-document {
+      display: flex;
+      flex-direction: column;
+    }
+    .st-document[data-document="empty"] .st-doc-copy,
+    .st-document[data-document="empty"] .st-doc-expand,
+    .st-document[data-document="empty"] .st-doc-scroll,
+    .st-document[data-document="filled"] .st-doc-empty {
+      display: none;
+    }
+  }
+}

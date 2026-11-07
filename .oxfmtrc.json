@@ -10,6 +10,7 @@
     "**/*.toml",
     "**/*.yaml",
     "**/*.yml",
-    "tools/oxlint/anti-slop/**"
+    "tools/oxlint/anti-slop/**",
+    "packages/product-scenes/styles/theme.css"
   ]
 }

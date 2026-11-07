@@ -3,7 +3,7 @@ import { AppWindow, Check, MonitorDown } from "@lucide/astro";
 import { desktopInstalls, links } from "../content/site";
 import IconBadge from "../ui/IconBadge.astro";
 import SectionHead from "../ui/SectionHead.astro";
-import WebRunnerView from "../views/web-runner/WebRunnerView.astro";
+import WebRunner from "../ui/WebRunner.astro";
 import InstallMethod from "../ui/InstallMethod.astro";
 import ArrowLink from "../ui/ArrowLink.astro";
 import "./Install.css";
@@ -61,7 +61,7 @@ import "./Install.css";
             your computer. Then you open the Local address.
           </p>
         </div>
-        <WebRunnerView />
+        <WebRunner />
         <p class="install-links">
           <ArrowLink href={links.webRunner}>Browser version guide</ArrowLink>
         </p>

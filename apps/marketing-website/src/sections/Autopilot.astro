@@ -1,7 +1,7 @@
 ---
+import Scene from "@openducktor/product-scenes/astro";
 import ProductFigure from "../ui/ProductFigure.astro";
 import SectionHead from "../ui/SectionHead.astro";
-import AutopilotView from "../views/autopilot/AutopilotView.astro";
 import "./Autopilot.css";
 ---
 
@@ -19,7 +19,7 @@ import "./Autopilot.css";
       </p>
     </div>
     <ProductFigure caption={["Kanban Board", "Autopilot rules on"]}>
-      <AutopilotView />
+      <Scene name="autopilot" />
     </ProductFigure>
   </div>
 </section>

@@ -1,4 +1,4 @@
-import { all } from "../motion/dom";
+import { all } from "./dom";
 
 export function bindCopyCommands(root: Document): void {
   for (const block of all(root, "[data-command]")) {

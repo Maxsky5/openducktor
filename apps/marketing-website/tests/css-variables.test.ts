@@ -2,14 +2,15 @@ import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { productTheme } from "../scripts/product-theme";
 
 const SOURCE = fileURLToPath(new URL("../src", import.meta.url));
-const THEME = fileURLToPath(new URL("../../../packages/frontend/src/styles.css", import.meta.url));
+/** The product scenes define the replica tokens, which the views of the site also read. */
+const SCENES = fileURLToPath(new URL("../../../packages/product-scenes", import.meta.url));
 
 function files(directory: string, extensions: string[]): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
+    if (entry.name === "node_modules") return [];
     if (entry.isDirectory()) return files(path, extensions);
     return extensions.some((extension) => entry.name.endsWith(extension)) ? [path] : [];
   });
@@ -23,15 +24,12 @@ function captures(text: string, pattern: RegExp): string[] {
 /** The custom properties that a stylesheet declares, or that markup and scripts set by name. */
 function definitions(): Set<string> {
   const names = new Set<string>();
-  const sources = [
-    productTheme(readFileSync(THEME, "utf8")),
-    ...files(SOURCE, [".css"]).map((path) => readFileSync(path, "utf8")),
-  ];
-  for (const css of sources) {
+  for (const path of [...files(SOURCE, [".css"]), ...files(SCENES, [".css"])]) {
+    const css = readFileSync(path, "utf8");
     for (const name of captures(css, /(--[\w-]+)\s*:/g)) names.add(name);
     for (const name of captures(css, /@property\s+(--[\w-]+)/g)) names.add(name);
   }
-  for (const path of files(SOURCE, [".astro", ".ts"])) {
+  for (const path of [...files(SOURCE, [".astro", ".ts"]), ...files(SCENES, [".ts", ".tsx"])]) {
     const code = readFileSync(path, "utf8");
     for (const name of captures(code, /["'`](--[\w-]+)["'`]/g)) names.add(name);
     for (const name of captures(code, /(--[\w-]+)\s*:/g)) names.add(name);

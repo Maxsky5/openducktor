@@ -57,8 +57,8 @@ const sections = Astro.url.pathname === "/" ? "" : "/";
   </div>
 </header>
 <script>
-  import { must } from "../motion/dom";
-  import { bindMotionControl } from "../motion/preference";
+  import { must } from "../ui/dom";
+  import { bindMotionControl } from "@openducktor/product-scenes/motion/preference";
   import { bindThemeToggle } from "../ui/theme";
 
   const header = must(document, "[data-site-header]");

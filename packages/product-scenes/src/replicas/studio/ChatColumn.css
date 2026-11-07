@@ -1,0 +1,10 @@
+@layer replica {
+  :where(.stage) {
+    .st-chat {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--chat-background);
+    }
+  }
+}

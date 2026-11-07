@@ -26,7 +26,7 @@ Read [the TanStack Query cache strategy](tanstack-query-cache-strategy.md) befor
 
 ## Components and themes
 
-The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `packages/frontend/src/styles.css`. Motion tokens are in `packages/frontend/src/components/ui/motion.css` and `motion.ts`. Dialog motion rules are in `packages/frontend/src/components/ui/dialog.css`.
+The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `packages/theme/src/tokens.css`, which `packages/frontend/src/styles.css` imports. Motion tokens are in `packages/frontend/src/components/ui/motion.css` and `motion.ts`. Dialog motion rules are in `packages/frontend/src/components/ui/dialog.css`.
 
 - Use a component from `packages/frontend/src/components/ui` when one exists.
 - Use semantic tokens for structural UI.

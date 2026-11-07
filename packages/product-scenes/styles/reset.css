@@ -1,0 +1,71 @@
+@layer product {
+  :where(.stage) {
+    /*
+     * The base styles of the scenes, so a scene looks the same on every host page. A host page can
+     * reset elements in its own base layer, as Tailwind Preflight does in the app. These rules
+     * come first in the lowest layer of the scenes, with no specificity, so they replace the base
+     * rules of the host and every rule of the scenes replaces them. They give back the browser
+     * styles, and then they set the few base values that the replicas expect. An unlayered rule of
+     * the host still wins over every layer of the scenes.
+     */
+    /* The text values that the stage gives to the scene, and that a host page can change. */
+    line-height: normal;
+    text-rendering: auto;
+    font-synthesis: none;
+    font-feature-settings: normal;
+    font-variation-settings: normal;
+    tab-size: 8;
+
+    :where(*),
+    :where(*)::before,
+    :where(*)::after {
+      margin: revert;
+      padding: revert;
+      border: revert;
+      box-sizing: revert;
+    }
+    :where(*) {
+      box-sizing: border-box;
+    }
+    :where(h1, h2, h3, h4, h5, h6) {
+      font-size: revert;
+      font-weight: revert;
+    }
+    :where(small) {
+      font-size: revert;
+    }
+    :where(code, kbd, samp, pre) {
+      font-size: revert;
+    }
+    :where(code, pre) {
+      font-family: "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    }
+    :where(ol, ul, menu) {
+      list-style: revert;
+    }
+    :where(table) {
+      border-collapse: revert;
+      border-color: revert;
+      text-indent: revert;
+    }
+    :where(hr) {
+      height: revert;
+      color: revert;
+    }
+    :where(h1, h2, h3, h4, h5, p, ul, figure) {
+      margin: 0;
+    }
+    :where(ul) {
+      padding: 0;
+    }
+    :where(h1, h2, h3) {
+      overflow-wrap: anywhere;
+    }
+    :where(svg) {
+      display: revert;
+      vertical-align: revert;
+      flex-shrink: 0;
+      stroke-width: 1.8;
+    }
+  }
+}
