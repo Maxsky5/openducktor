@@ -4,7 +4,7 @@ import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openClickedLink } from "@/lib/link-open";
-import { createLinkController } from "./terminal-link-controller";
+import { type LinkController, createLinkController } from "./terminal-link-controller";
 import { createTerminalTheme } from "./terminal-xterm-options";
 
 export type TerminalBinding = {
@@ -15,6 +15,12 @@ export type TerminalBinding = {
   setVisible(visible: boolean): void;
   dispose(): void;
   resetLinkState(): void;
+};
+
+type TerminalResources = {
+  terminal: Terminal;
+  fitAddon: FitAddon;
+  links: LinkController;
 };
 
 const WRITE_CHUNK_BYTES = 16 * 1024;
@@ -66,8 +72,11 @@ const bindAnnouncementBudget = (terminal: Terminal): (() => void) | undefined =>
   };
 };
 
-const createTerminalRenderer = (terminal: Terminal, reportFailure: (cause: Error) => void) => {
-  let addon: WebglAddon | undefined;
+const createTerminalRenderer = (
+  terminal: Terminal,
+  reportFailure: (cause: Error) => void,
+): (() => void) => {
+  const addon = new WebglAddon();
   let canvas: HTMLCanvasElement | null = null;
   let subscription: { dispose(): void } | undefined;
   let releaseContext: WEBGL_lose_context | null = null;
@@ -77,14 +86,13 @@ const createTerminalRenderer = (terminal: Terminal, reportFailure: (cause: Error
     disposed = true;
     subscription?.dispose();
     try {
-      addon?.dispose();
+      addon.dispose();
     } finally {
       // addon-webgl 0.19 removes its canvas without releasing its context (xterm.js #6068).
       releaseContext?.loseContext();
     }
   };
   try {
-    addon = new WebglAddon();
     try {
       terminal.loadAddon(addon);
     } finally {
@@ -118,7 +126,10 @@ const reportOpenError = (_url: string, cause: unknown): void => {
   });
 };
 
-const createTerminalResources = (container: HTMLElement, options: ITerminalOptions) => {
+const createTerminalResources = (
+  container: HTMLElement,
+  options: ITerminalOptions,
+): TerminalResources => {
   const links = createLinkController({
     container,
     openUrl: (url, click) =>
