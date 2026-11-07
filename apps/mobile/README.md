@@ -35,7 +35,7 @@ flowchart TD
 | Rich content | `src/rich-content/` | Markdown, code, diffs, images, isolated WebView pages |
 | UI kit and theme | `src/ui/`, `src/theme/` | Components, semantic colors, the type ramp, motion tokens, light and dark themes |
 | Native modules | `modules/` | `openducktor-network` (HTTP), `openducktor-keyboard` (hardware Enter), `openducktor-scroll` (Android scroll redraw) |
-| Config plugins | `plugins/` | Android network security, Android release signing, iOS release signing |
+| Config plugins | `plugins/` | Android network security, Android release signing, Android bundle inputs, iOS release signing |
 
 ### Design system
 
@@ -231,6 +231,7 @@ Run these commands in `apps/mobile`. `bun run ios`, `bun run android`, and `bun 
 - `metro.config.js` turns on `inlineRequires`, so a module runs when the app first uses one of its imports. The first frame then runs only the modules that it needs. Imports only for their effects keep their place and order.
 - `metro.config.js` resolves three imports to empty modules, because the app never runs them on the device: `katex` from `micromark-extension-math`, `expo-symbols` from Expo Router, and the locale index of Zod. The isolated pages, which render math, build with Bun.
 - `package.json` sets the Reanimated static flags `ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS` and `IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS`. An animation of a transform, an opacity, or a color then updates the native view directly, without a React Native commit on each frame. A change of these flags needs a native build.
+- The React Native Gradle task that makes the Android release bundle tracks only the sources of `apps/mobile`. `plugins/with-android-workspace-bundle-inputs.js` adds the `packages/*` sources as inputs, so a change in a shared package makes a new bundle. An `android/` folder from before this plugin needs `bun run native`, or the release build can ship an old bundle.
 
 ## Testing
 
