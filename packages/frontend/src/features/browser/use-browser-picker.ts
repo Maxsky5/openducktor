@@ -18,7 +18,12 @@ const IDLE: BrowserPickerState = { active: false, selection: [] };
  * host, and the host resolves the element and draws the highlight in the page. React only follows
  * the picker state and shows the comment box of a selection.
  */
-export const useBrowserPicker = (channel: BrowserChannel, tabId: string, live: boolean) => {
+export const useBrowserPicker = (
+  channel: BrowserChannel,
+  tabId: string,
+  live: boolean,
+  isShown: boolean,
+) => {
   const hostClient = useHostClient();
   const [state, setState] = useState<BrowserPickerState>(IDLE);
   const [pickerLive, setPickerLive] = useState(live);
@@ -63,8 +68,9 @@ export const useBrowserPicker = (channel: BrowserChannel, tabId: string, live: b
 
   // The toolbar keeps the keyboard focus, so Escape never reaches the page script. Stop the
   // picker from the window too, where the toolbar and every other host control can cancel it.
+  // A hidden tab keeps its content mounted, so only the shown tab may take this key.
   useEffect(() => {
-    if (!state.active) return;
+    if (!state.active || !isShown) return;
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       event.preventDefault();
@@ -73,7 +79,7 @@ export const useBrowserPicker = (channel: BrowserChannel, tabId: string, live: b
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [hostClient, tabId, state.active]);
+  }, [hostClient, isShown, tabId, state.active]);
 
   useEffect(
     () => () => {
