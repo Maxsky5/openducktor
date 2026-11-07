@@ -231,29 +231,30 @@ describe("FeatureTourDialog", () => {
     }
   });
 
-  test("each pin of a picture has the number of its line in the list of parts", async () => {
-    const view = renderTour();
-    try {
-      const tour = await openTour();
-      for (const name of [
-        "Slide 2: Workspaces hold your work",
-        "Slide 3: Features, bugs, and tasks",
-        "Slide 4: You decide when the next role starts",
-        "Slide 7: Control it from your phone",
-        "Slide 8: You stay in control",
-      ]) {
+  test.each([
+    "Slide 2: Workspaces hold your work",
+    "Slide 3: Features, bugs, and tasks",
+    "Slide 4: You decide when the next role starts",
+    "Slide 7: Control it from your phone",
+    "Slide 8: You stay in control",
+  ])(
+    "each pin of the picture on %s has the number of its line in the list of parts",
+    async (name) => {
+      const view = renderTour();
+      try {
+        const tour = await openTour();
         await openStep(tour, name);
         const picture = visiblePicture();
         const numbers = (selector: string): (string | null)[] =>
           Array.from(picture.querySelectorAll(selector), (element) => element.textContent);
         const parts = numbers("[data-tour-parts] > li > span:first-child");
-        expect({ name, pins: numbers("[data-tour-pin]") }).toEqual({ name, pins: parts });
+        expect(numbers("[data-tour-pin]")).toEqual(parts);
         expect(parts.length).toBeGreaterThan(0);
+      } finally {
+        view.unmount();
       }
-    } finally {
-      view.unmount();
-    }
-  });
+    },
+  );
 
   test("screen readers get the parts of the hidden picture", async () => {
     const view = renderTour();

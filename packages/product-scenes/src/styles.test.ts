@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PACKAGE = fileURLToPath(new URL("..", import.meta.url));
@@ -15,6 +15,9 @@ const MAX_LINES = 400;
  * order and size the scene root, and the generated theme scopes its own selectors.
  */
 const UNSCOPED = new Set(["styles/index.css", "styles/state.css", "styles/theme.css"]);
+
+/** The path of `path` from the package root, with `/` on every platform. */
+const packagePath = (path: string): string => relative(PACKAGE, path).split(sep).join("/");
 
 function files(extensions: string[]): string[] {
   const walk = (directory: string): string[] =>
@@ -46,14 +49,14 @@ describe("styles", () => {
     const missing = files([".css"]).flatMap((path) =>
       captures(readFileSync(path, "utf8"), /var\(\s*(--[\w-]+)/g)
         .filter((name) => !defined.has(name))
-        .map((name) => `${relative(PACKAGE, path)} reads ${name}, which nothing defines.`),
+        .map((name) => `${packagePath(path)} reads ${name}, which nothing defines.`),
     );
     expect([...new Set(missing)]).toEqual([]);
   });
 
   test("each stylesheet keeps its rules in one layer and scopes them to the stage", () => {
     const loose = files([".css"])
-      .map((path) => relative(PACKAGE, path))
+      .map(packagePath)
       .filter((path) => !UNSCOPED.has(path))
       .filter((path) => {
         const css = readFileSync(join(PACKAGE, path), "utf8");
@@ -68,6 +71,6 @@ test(`every stylesheet of the package has ${MAX_LINES} lines or fewer`, () => {
   const long = files([".css"])
     .map((path) => ({ path, lines: readFileSync(path, "utf8").trimEnd().split("\n").length }))
     .filter(({ lines }) => lines > MAX_LINES)
-    .map(({ path, lines }) => `${relative(PACKAGE, path)}: ${lines} lines. Split the file.`);
+    .map(({ path, lines }) => `${packagePath(path)}: ${lines} lines. Split the file.`);
   expect(long).toEqual([]);
 });
