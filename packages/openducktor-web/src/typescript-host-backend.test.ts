@@ -1,4 +1,6 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { WebSocket as NodeWebSocket } from "ws";
 import * as host from "@openducktor/host";
 import {
@@ -8,7 +10,9 @@ import {
   REMOTE_PROTOCOL_VERSION,
   splitHostChannelFrame,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
+  type TaskEventStreamFrame,
 } from "@openducktor/contracts";
+import { createHostChannelSession } from "@openducktor/host-client/channel";
 import {
   RuntimeQueryError,
   createLocalAttachmentAdapter,
@@ -52,6 +56,8 @@ import {
 } from "@openducktor/remote-host/host-websocket-handler";
 import { allowedFrontendOrigins, validateFrontendOriginEffect } from "./frontend-origin";
 import { stopHostBackend } from "./host-backend-lifecycle";
+import { createTaskEventStream } from "../../host/src/events/task-event-stream";
+import type { TypescriptHostBackendOptions } from "./typescript-host-backend";
 
 const nativeResponse = await Bun.fetch("data:,");
 Object.defineProperty(globalThis, "Response", {
@@ -297,6 +303,119 @@ const invokeTestCommand = (
   args: HostCommandInputRecord = {},
 ): Promise<HostChannelReply> => invokeLocalHostCommand(hostCommandRouter, command, args);
 
+const createProductionCookieTestHarness = () => {
+  const router = spyOn(host, "createNodeEffectHostCommandRouter").mockImplementation(() => {
+    const baseRouter = createTestNodeHostCommandRouter();
+    const nodeRouter: EffectNodeHostCommandRouter = {
+      ...baseRouter,
+      taskEventStream: createTaskEventStream({ reporter: { report: () => {} } }),
+      notificationStream: { ...baseRouter.notificationStream, subscribe: () => Stream.never },
+      taskAssetReadService: {
+        ...missingTaskAssetReadService,
+        read: () =>
+          Effect.succeed({
+            bytes: new TextEncoder().encode("task asset"),
+            mediaType: "image/png",
+            headers: {
+              "Cache-Control": "private, no-store",
+              "Content-Disposition": 'inline; filename="asset.png"',
+              "Content-Type": "image/png",
+              "X-Content-Type-Options": "nosniff",
+            },
+          }),
+      },
+    };
+    return Effect.succeed(nodeRouter);
+  });
+  const backends: Awaited<ReturnType<typeof startTypescriptHostBackend>>[] = [];
+  const failures: unknown[] = [];
+  return {
+    async start(options: Partial<TypescriptHostBackendOptions> = {}) {
+      const input: TypescriptHostBackendOptions = {
+        port: 0,
+        host: "127.0.0.1",
+        frontendOrigin: "http://127.0.0.1:1420",
+        appToken: crypto.randomUUID(),
+        controlToken: CONTROL_TOKEN,
+        configDirScope: "test",
+        mcpBridgeDiscoveryMode: "production",
+        runtimeDistribution: { mode: "source", workspaceRoot: "/repo" },
+        deferRemoteStartup: true,
+        logger: testLogger,
+        onBackgroundFailure: (failure) => failures.push(failure),
+        ...options,
+      };
+      const backend = await startTypescriptHostBackend(input);
+      backends.push(backend);
+      const url = `http://127.0.0.1:${backend.port}${input.basePath ?? ""}`;
+      return {
+        ...backend,
+        url,
+        appToken: input.appToken,
+        origin: input.frontendOrigin,
+        async establish(cookie = "") {
+          const response = await Bun.fetch(`${url}/session`, {
+            method: "POST",
+            headers: {
+              cookie,
+              origin: input.frontendOrigin,
+              "x-openducktor-app-token": input.appToken,
+            },
+          });
+          expect(response.status).toBe(200);
+          const header = response.headers.get("set-cookie")!;
+          expect(header).toContain("; HttpOnly; SameSite=Strict; Path=/");
+          expect(header).not.toContain("Domain=");
+          await response.text();
+          return header.split(";")[0]!;
+        },
+      };
+    },
+    async close() {
+      try {
+        await Promise.all(backends.map((backend) => backend.stop()));
+        expect(failures).toEqual([]);
+      } finally {
+        router.mockRestore();
+      }
+    },
+  };
+};
+
+const checkCookieChannelStreams = async (url: string, origin: string, cookie: string) => {
+  const socket = new NodeWebSocket(
+    url.replace(/^http/, "ws") + "/channel",
+    [HOST_CHANNEL_SUBPROTOCOL],
+    {
+      headers: { origin, cookie },
+    },
+  );
+  const session = createHostChannelSession({
+    send: (frame) => socket.send(frame),
+    handlers: { hostEvent: () => {}, notification: () => {} },
+    onHandlerError: (cause) => {
+      throw cause;
+    },
+  });
+  socket.on("message", (data: Buffer) => session.receive(new Uint8Array(data)));
+  socket.on("close", () => session.close(new Error("Test channel closed.")));
+  try {
+    await new Promise<void>((resolve, reject) => {
+      socket.once("open", resolve);
+      socket.once("error", reject);
+    });
+    expect(
+      await session.request({ method: "events.open", cursor: null, notificationCursor: null }),
+    ).toMatchObject({ hostChanged: false, gaps: [] });
+    const received = createDeferred<TaskEventStreamFrame>();
+    const lease = await session.subscribeTaskEvents({ cursor: null }, received.resolve);
+    expect(await received.promise).toMatchObject({ type: "snapshot_required" });
+    await session.releaseTaskEvents(lease.subscriptionId);
+  } finally {
+    socket.terminate();
+  }
+};
+
 describe("TypeScript web host backend", () => {
   const TERMINAL_UPGRADE_FRONTEND_ORIGIN = "http://127.0.0.1:1420";
   const TERMINAL_UPGRADE_BASE_PATH = "/api";
@@ -403,6 +522,7 @@ describe("TypeScript web host backend", () => {
       const assetPath = `${base}/task-assets/workspace-1/task-1/description/550e8400-e29b-41d4-a716-446655440000`;
       const remoteWork = await Bun.fetch(assetPath, {
         headers: {
+          cookie: `${APP_SESSION_COOKIE_NAME}_other-runner=other-token`,
           "x-openducktor-connection-id": connection.connectionId,
           authorization: `Bearer ${connection.connectionToken}`,
         },
@@ -489,21 +609,174 @@ describe("TypeScript web host backend", () => {
 
   test("uses one session cookie name per development instance", () => {
     expect(
-      resolveAppSessionCookieName("development", {
+      resolveAppSessionCookieName("development", "/config", "http://127.0.0.1:1430", {
         OPENDUCKTOR_DEV_INSTANCE: DEVELOPMENT_INSTANCE_ID,
       }),
     ).toBe(DEVELOPMENT_APP_SESSION_COOKIE_NAME);
     expect(
-      resolveAppSessionCookieName("development", {
+      resolveAppSessionCookieName("development", "/config", "http://127.0.0.1:1430", {
         OPENDUCKTOR_DEV_INSTANCE: "browser-fedcba987654",
       }),
     ).toBe(`${APP_SESSION_COOKIE_NAME}_browser-fedcba987654`);
     expect(
-      resolveAppSessionCookieName("production", {
+      resolveAppSessionCookieName("production", "/config", "http://127.0.0.1:1430", {
         OPENDUCKTOR_DEV_INSTANCE: DEVELOPMENT_INSTANCE_ID,
       }),
-    ).toBe(APP_SESSION_COOKIE_NAME);
+    ).toMatch(/^openducktor_web_session_[a-f0-9]{24}$/);
   });
+
+  test("scopes production cookie names to the resolved root and browser endpoint", async () => {
+    const harness = createProductionCookieTestHarness();
+    try {
+      const root = path.join(process.cwd(), "cookie-test-root");
+      const config = { processEnv: { OPENDUCKTOR_CONFIG_DIR: root }, basePath: "/one" };
+      const first = await harness.start(config);
+      const cookieName = async (runner: typeof first) => (await runner.establish()).split("=")[0]!;
+      const original = await cookieName(first);
+      const sameEndpoint = await harness.start({
+        ...config,
+        processEnv: { OPENDUCKTOR_CONFIG_DIR: `${root}/../cookie-test-root` },
+      });
+      expect(await cookieName(sameEndpoint)).toBe(original);
+      const otherRoot = await harness.start({
+        ...config,
+        processEnv: { OPENDUCKTOR_CONFIG_DIR: `${root}-other` },
+      });
+      const otherPath = await harness.start({ ...config, basePath: "/two" });
+      const otherOrigin = await harness.start({
+        ...config,
+        frontendOrigin: "https://127.0.0.1:1420",
+      });
+      const names = [
+        original,
+        await cookieName(otherRoot),
+        await cookieName(otherPath),
+        await cookieName(otherOrigin),
+      ];
+      expect(new Set(names).size).toBe(4);
+      const secure = await Bun.fetch(`${otherOrigin.url}/session`, {
+        method: "POST",
+        headers: { "x-openducktor-app-token": otherOrigin.appToken },
+      });
+      expect(secure.headers.get("set-cookie")).toContain("; Secure");
+      await secure.text();
+    } finally {
+      await harness.close();
+    }
+  });
+
+  test.each([false, true])(
+    "keeps production cookies independent with base paths %s",
+    async (prefixed) => {
+      const harness = createProductionCookieTestHarness();
+      const stageDirectory = createLocalAttachmentAdapter().stageDirectory();
+      await mkdir(stageDirectory, { recursive: true });
+      const directory = await mkdtemp(path.join(stageDirectory, "cookie-test-"));
+      const preview = path.join(directory, "preview.txt");
+      await writeFile(preview, "attachment preview");
+      try {
+        const first = await harness.start(prefixed ? { basePath: "/one" } : {});
+        const second = await harness.start(prefixed ? { basePath: "/two" } : {});
+        const runners = [first, second];
+        const jar = new Map<string, string>();
+        const cookieHeader = () => [...jar].map(([name, value]) => `${name}=${value}`).join("; ");
+        const establish = async (runner: typeof first) => {
+          const cookie = await runner.establish(cookieHeader());
+          const separator = cookie.indexOf("=");
+          jar.set(cookie.slice(0, separator), cookie.slice(separator + 1));
+          return cookie;
+        };
+        const checkRunner = async (runner: typeof first) => {
+          for (const prefix of new Set(["", new URL(runner.url).pathname.replace(/\/$/, "")])) {
+            const base = `http://127.0.0.1:${runner.port}${prefix}`;
+            for (const [route, body] of [
+              [
+                "/task-assets/workspace-1/task-1/description/550e8400-e29b-41d4-a716-446655440000",
+                "task asset",
+              ],
+              [
+                `/local-attachment-preview?path=${encodeURIComponent(preview)}`,
+                "attachment preview",
+              ],
+            ] as const) {
+              const response = await Bun.fetch(`${base}${route}`, {
+                headers: { cookie: cookieHeader() },
+              });
+              expect(response.status).toBe(200);
+              expect(await response.text()).toBe(body);
+            }
+            const state = await Bun.fetch(`${base}/remote-access`, {
+              headers: { cookie: cookieHeader(), "x-openducktor-app-token": runner.appToken },
+            });
+            expect(state.status).toBe(200);
+            expect(await state.json()).toMatchObject({ status: "disabled" });
+            expect(
+              await performWebSocketUpgrade(runner.port, `${prefix}/terminal`, runner.origin, {
+                cookie: cookieHeader(),
+              }),
+            ).toContain("101 Switching Protocols");
+            await checkCookieChannelStreams(base, runner.origin, cookieHeader());
+          }
+        };
+        for (const order of [runners, [...runners].reverse()]) {
+          jar.clear();
+          for (const runner of [...order, ...order]) await establish(runner);
+          expect(jar.size).toBe(2);
+          for (const runner of runners) await checkRunner(runner);
+        }
+        const oldCookie = await establish(first);
+        const name = oldCookie.split("=")[0]!;
+        expect(name).toMatch(/^openducktor_web_session_[a-f0-9]{24}$/);
+        expect(name).not.toContain(first.appToken);
+        for (const [cookie, status] of [
+          ["", 401],
+          [await second.establish(), 401],
+          [`${APP_SESSION_COOKIE_NAME}=${first.appToken}`, 401],
+          [`${name}=stale-token`, 403],
+          [`${name}=${second.appToken}`, 403],
+        ] as const) {
+          for (const route of [
+            "/remote-access",
+            "/local-attachment-preview",
+            "/task-assets/workspace-1/task-1/description/550e8400-e29b-41d4-a716-446655440000",
+          ]) {
+            const response = await Bun.fetch(`${first.url}${route}`, { headers: { cookie } });
+            expect(response.status).toBe(status);
+            await response.text();
+          }
+          for (const [route, protocol] of [
+            ["/terminal", TERMINAL_PROTOCOL_SUBPROTOCOL],
+            ["/channel", HOST_CHANNEL_SUBPROTOCOL],
+          ] as const) {
+            expect(
+              await performWebSocketUpgrade(first.port, route, first.origin, { cookie, protocol }),
+            ).toContain("401");
+          }
+        }
+        const invalidCookieWithHeader = await Bun.fetch(`${first.url}/remote-access`, {
+          headers: { cookie: `${name}=wrong`, "x-openducktor-app-token": first.appToken },
+        });
+        expect(invalidCookieWithHeader.status).toBe(403);
+        await invalidCookieWithHeader.text();
+        await first.stop();
+        const restartOptions: Partial<TypescriptHostBackendOptions> = { port: first.port };
+        if (prefixed) restartOptions.basePath = "/one";
+        const restarted = await harness.start(restartOptions);
+        const stale = await Bun.fetch(`${restarted.url}/remote-access`, {
+          headers: { cookie: cookieHeader() },
+        });
+        expect(stale.status).toBe(403);
+        await stale.text();
+        await checkRunner(second);
+        expect((await establish(restarted)).split("=")[0]).toBe(name);
+        expect(restarted.appToken).not.toBe(first.appToken);
+        for (const runner of [restarted, second]) await checkRunner(runner);
+      } finally {
+        await harness.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   test("serves health and development session routes without opening a server", async () => {
     const health = await handleTestRequest(new Request("http://127.0.0.1/health"));

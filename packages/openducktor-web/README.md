@@ -8,6 +8,8 @@ npx @openducktor/web
 
 The runner needs Node.js 24.14 or later. It uses Node and `node-pty` for the host and terminal processes. The CLI starts the host on `127.0.0.1`, waits for readiness, serves the bundled frontend, and shuts the host down when the process exits. The browser shell receives an app token and opens an HttpOnly host session cookie through `/session`.
 
+Production session cookie names include a hash of the resolved configuration root and browser backend endpoint, including its base path. Runners on one hostname can use separate ports or base paths without replacing each other's cookie. A restart at the same root and endpoint reuses the name with a fresh token. Reload the browser page to establish the new session. A change to the root or endpoint can leave an old cookie, which the runner does not clear.
+
 ## Development
 
 From the OpenDucktor repository root:

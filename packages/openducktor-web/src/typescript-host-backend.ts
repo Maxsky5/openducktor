@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import path from "node:path";
 import { gitProviderFetch } from "./system-trust-store";
 import { createHostCommandLifetime } from "@openducktor/remote-host/host-command-lifetime";
 import {
@@ -71,6 +73,7 @@ import { createSocketData } from "@openducktor/remote-host/terminals/terminal-we
 import { BufferedHostEventBus } from "@openducktor/remote-host/host-event-bus";
 import { allowedFrontendOrigins, validateFrontendOriginEffect } from "./frontend-origin";
 import { stopHostBackend } from "./host-backend-lifecycle";
+import { buildBrowserBackendUrl } from "./launcher-support";
 
 export type TypescriptHostBackendOptions = {
   port: number;
@@ -124,11 +127,16 @@ const SHUTDOWN_MESSAGE = "Browser backend is shutting down and is no longer acce
 
 export const resolveAppSessionCookieName = (
   mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode,
+  configRoot: string,
+  browserBackendUrl: string,
   processEnv: NodeJS.ProcessEnv = process.env,
 ): string =>
   mcpBridgeDiscoveryMode === "development"
     ? `${APP_SESSION_COOKIE_NAME}_${resolveDevelopmentInstanceIdFromEnvironment(processEnv)}`
-    : APP_SESSION_COOKIE_NAME;
+    : `${APP_SESSION_COOKIE_NAME}_${createHash("sha256")
+        .update(JSON.stringify([configRoot, browserBackendUrl]))
+        .digest("hex")
+        .slice(0, 24)}`;
 
 type SocketUpgradeResult = { handled: false } | { handled: true; response: Response | undefined };
 
@@ -625,7 +633,10 @@ export const startTypescriptHostBackendEffect = ({
   deferRemoteStartup,
 }: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebOperationError> =>
   Effect.gen(function* () {
-    const appSessionCookieName = resolveAppSessionCookieName(mcpBridgeDiscoveryMode, processEnv);
+    const configRoot = path.resolve(
+      resolveOpenDucktorBaseDir(configDirScope, processEnv ?? process.env),
+    );
+    let appSessionCookieName: string;
     const validatedFrontendOrigin = yield* validateFrontendOriginEffect(frontendOrigin).pipe(
       Effect.mapError((cause) => toWebOperationError(cause, "web.host.validate-frontend-origin")),
     );
@@ -715,9 +726,9 @@ export const startTypescriptHostBackendEffect = ({
       {
         shell: "web",
         appVersion: webPackage.version,
-        approvalStore: createFilesystemRemoteApprovalStore(
-          resolveOpenDucktorBaseDir(configDirScope, processEnv ?? process.env),
-        ).open(remoteHostOwnerFromEnvironment("web", processEnv ?? process.env)),
+        approvalStore: createFilesystemRemoteApprovalStore(configRoot).open(
+          remoteHostOwnerFromEnvironment("web", processEnv ?? process.env),
+        ),
         frontendOrigins: remoteFrontendOrigins,
         sharedListener: {
           listenHost: host ?? LOCALHOST,
@@ -837,6 +848,21 @@ export const startTypescriptHostBackendEffect = ({
               idleTimeoutSeconds: HOST_IDLE_TIMEOUT_SECONDS,
               port,
               onError: onBackgroundFailure,
+              onListening(server) {
+                const { browserUrl } = buildBrowserBackendUrl(
+                  basePath,
+                  validatedFrontendOrigin,
+                  validatedFrontendOrigin,
+                  host ?? LOCALHOST,
+                  server.port,
+                );
+                appSessionCookieName = resolveAppSessionCookieName(
+                  mcpBridgeDiscoveryMode,
+                  configRoot,
+                  browserUrl,
+                  processEnv,
+                );
+              },
               fetch(request, server) {
                 const remote = remoteAccess.handleSharedRequest(request, server);
                 if (remote !== null) return remote;
