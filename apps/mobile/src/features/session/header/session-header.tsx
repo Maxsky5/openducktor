@@ -115,7 +115,7 @@ const useSessionMenu = (
       });
     }
     if (chatId) {
-      menu.push({ id: ARCHIVE_CHAT_ID, title: "Archive Chat", icon: "archive", command: true });
+      menu.push({ id: ARCHIVE_CHAT_ID, title: "Archive Session", icon: "archive", command: true });
     }
     return menu;
   }, [chatId, links, pullRequest, subagents, taskId]);

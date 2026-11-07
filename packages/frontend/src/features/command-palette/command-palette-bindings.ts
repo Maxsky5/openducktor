@@ -98,7 +98,7 @@ export const mainListEnterHint = ({
       return enterHint(label, () => openTask(entry.item));
     }
     case "chat":
-      return enterHint("Open chat", () => openChat(entry.item));
+      return enterHint("Open session", () => openChat(entry.item));
     case "action":
       return enterHint("Run", () => runAction(entry.item));
     case undefined:

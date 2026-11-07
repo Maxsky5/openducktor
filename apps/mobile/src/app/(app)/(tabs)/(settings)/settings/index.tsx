@@ -77,7 +77,7 @@ export default function SettingsScreen(): ReactElement {
           </DividedCard>
         </SettingsSection>
         <SettingsSection
-          title="Chat"
+          title="Sessions"
           description="Display settings for session transcripts on this device."
         >
           <DividedCard>

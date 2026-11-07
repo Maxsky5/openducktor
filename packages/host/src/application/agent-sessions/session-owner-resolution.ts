@@ -33,13 +33,13 @@ export const resolveOwnedSessionRoot = ({
         if (!ref.sessionScope || agentSessionScopesEqual(root.sessionScope, ref.sessionScope))
           return root;
         return yield* invalid(
-          "This session belongs to another task, role, or workspace chat. Reload the chat before continuing.",
+          "This agent session belongs to another task, role, or workspace session. Reload the session before continuing.",
         );
       }
       const session = sessions.find((value) => agentSessionRefKey(value.ref) === key);
       if (!session?.parentExternalSessionId)
         return yield* invalid(
-          `Session '${ref.externalSessionId}' has no verified saved owner. Reopen its task or workspace chat.`,
+          `Session '${ref.externalSessionId}' has no verified saved owner. Reopen its task or workspace session.`,
         );
       const parent = sessions.filter(
         (value) =>

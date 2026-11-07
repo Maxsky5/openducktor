@@ -113,7 +113,7 @@ function ArchivedChatList({
   if (archived.data === undefined) {
     return (
       <ErrorState
-        title="Archived chats did not load"
+        title="Archived sessions did not load"
         message={errorMessage(archived.error)}
         onRetry={() => void refetch()}
       />
@@ -123,7 +123,7 @@ function ArchivedChatList({
     <View style={styles.notice}>
       <Callout
         tone="warning"
-        title="Archived chats could not refresh"
+        title="Archived sessions could not refresh"
         message={errorMessage(archived.error)}
         action={
           <Button
@@ -145,14 +145,14 @@ function ArchivedChatList({
         {archived.data.length === 0 ? (
           <EmptyState
             icon="archive"
-            title="No archived chats"
-            message={`Chats that you archive in ${workspace.workspaceName} show here. Restore one to use it again.`}
+            title="No archived sessions"
+            message={`Sessions that you archive in ${workspace.workspaceName} show here. Restore one to use it again.`}
           />
         ) : (
           <EmptyState
             icon="search-x"
             title="No results"
-            message={`No archived chat of ${workspace.workspaceName} matches “${filter.trim()}”.`}
+            message={`No archived session of ${workspace.workspaceName} matches “${filter.trim()}”.`}
           />
         )}
       </View>
@@ -214,10 +214,10 @@ export function ArchivedChatsScreen(): ReactElement {
   const searchColors = useSearchBarColors();
   const options = useMemo(
     (): NativeStackNavigationOptions => ({
-      title: "Archived chats",
+      title: "Archived sessions",
       headerSearchBarOptions: {
         ...searchColors,
-        placeholder: "Search archived chats",
+        placeholder: "Search archived sessions",
         autoCapitalize: "none",
         onChangeText: (event) => setFilter(event.nativeEvent.text),
         onCancelButtonPress: () => setFilter(""),

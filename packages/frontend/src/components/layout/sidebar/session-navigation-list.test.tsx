@@ -335,7 +335,7 @@ describe("SessionNavigationList", () => {
       </SessionNavigationTestProvider>,
     );
     expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.getByText("No sessions yet. Start with New task or New chat.")).toBeTruthy();
+    expect(screen.getByText("No sessions yet. Start with New task or New session.")).toBeTruthy();
   });
 
   test("a failed source keeps the list incomplete instead of claiming there are no sessions", () => {
@@ -354,7 +354,7 @@ describe("SessionNavigationList", () => {
       ),
     );
 
-    expect(screen.queryByText("No sessions yet. Start with New task or New chat.")).toBeNull();
+    expect(screen.queryByText("No sessions yet. Start with New task or New session.")).toBeNull();
     expect(screen.getByText("Session list is incomplete.")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("Workspace is closed.");
   });

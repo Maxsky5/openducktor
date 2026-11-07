@@ -34,12 +34,12 @@ export const describeWorktreeOwners = (owners: WorktreeOwners): WorktreeOwnerLin
     });
   if (owners.chats.length > 0)
     lines.push({
-      text: `Saved chats work in a removed worktree: ${chatTitles(owners.chats)}. Archive these chats first.`,
+      text: `Saved sessions work in a removed worktree: ${chatTitles(owners.chats)}. Archive these sessions first.`,
       blocking: true,
     });
   if (owners.historyChats.length > 0)
     lines.push({
-      text: `Saved Claude chats keep their native history in a removed worktree: ${chatTitles(owners.historyChats)}. These chats cannot resume after this.`,
+      text: `Saved Claude sessions keep their native history in a removed worktree: ${chatTitles(owners.historyChats)}. These sessions cannot resume after this.`,
       blocking: false,
     });
   return lines;

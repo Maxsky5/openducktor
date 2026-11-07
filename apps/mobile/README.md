@@ -48,7 +48,7 @@ flowchart TD
 - A value outside styles, such as the color of a spinner or an SVG, comes from `useAppTheme` of `src/theme/app-theme-context.tsx`. Only `AppThemeProvider` calls `useUnistyles`, because each call adds a native listener and builds new proxies on each render. The `no-restricted-imports` lint rule rejects `useUnistyles` and `withUnistyles` in other files.
 - A list view with many color variants, such as a badge tone or a task chip paint, takes plain styles from `themeStyleCache` of `src/theme/theme-style-cache.ts` and the theme of `useAppTheme`. A stylesheet function runs native code on each call, so a list row calls none.
 - Each screen copies its desktop component. The first tab, Sessions, is the session list of the desktop sidebar.
-- `scripts/desktop-theme-tokens.ts` generates `src/theme/desktop-colors.ts` from the desktop `styles.css`. A test fails when the two differ.
+- `scripts/desktop-theme-tokens.ts` generates `src/theme/desktop-colors.ts` from the desktop theme tokens in `packages/theme/src/tokens.css`. It reads the theme blocks with `@openducktor/theme/blocks` and resolves each color to sRGB with `@openducktor/theme/colors`. A test fails when the two differ.
 - Icons use the Lucide font, as the desktop does. `src/ui/icon-names.ts` maps each app icon to a Lucide name. `src/ui/brand-icons.tsx` draws the desktop role icons and the runtime brand marks.
 - `Touchable` gives each control its press feedback on the UI thread: rows highlight, cards and buttons scale, and text controls dim.
 - `ActionMenu` is the one dropdown menu. Overflow controls show a plain horizontal ellipsis. A menu choice runs after the menu has closed, because iOS cannot show a dialog or a picker over an open menu.

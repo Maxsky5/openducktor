@@ -39,7 +39,7 @@ export function WorkOwnerScreen({
         <EmptyState
           icon="link-off"
           title="Incomplete Link"
-          message="It does not name a task or chat. Open the view again from its task or chat."
+          message="It does not name a task or session. Open the view again from its task or session."
         />
       </Screen>
     );

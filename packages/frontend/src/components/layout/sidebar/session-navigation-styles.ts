@@ -1,6 +1,7 @@
 import { AGENT_WORKFLOW_TONE_ICON_CLASSES } from "@/lib/agent-workflow-styles";
 import { cn } from "@/lib/utils";
 import {
+  type SessionEntryDotTone,
   type SessionEntryTitleTone,
   sessionEntryIconTone,
 } from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
@@ -20,6 +21,15 @@ export const SESSION_GROUP_COUNT_CLASSES = {
   running: "bg-info-surface text-info-muted",
   recent: "bg-muted text-sidebar-foreground",
 } satisfies Record<SessionNavigationGroupId, string>;
+
+/** The read state dots. A running session shows the running dot instead. */
+export const SESSION_DOT_CLASSES = {
+  input_unread: "bg-status-input-unread",
+  input_read: "bg-status-input-read",
+  running: "bg-status-running",
+  unread: "bg-status-unread",
+  read: "bg-status-read",
+} satisfies Record<SessionEntryDotTone, string>;
 
 /** The title shows attention when the session needs you, and dims when it is read and settled. */
 export const SESSION_TITLE_CLASSES = {
@@ -68,3 +78,10 @@ export const sessionEntrySurfaceClassName = (
       : "bg-sidebar ring-1 ring-sidebar-border hover:bg-muted",
   );
 };
+
+/** The surface classes of a session row. */
+export const sessionRowClassName = (entry: SessionNavigationEntry, isSelected: boolean): string =>
+  cn(
+    "relative flex w-full min-w-0 flex-col rounded-md px-2.5 py-1.5 text-left outline-none",
+    sessionEntrySurfaceClassName(entry, isSelected),
+  );

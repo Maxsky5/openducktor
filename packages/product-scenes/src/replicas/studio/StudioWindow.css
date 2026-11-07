@@ -1,0 +1,143 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * The session page replica. Values copy the classes of agents-page-layout.tsx and
+     * features/session-panels at 1:1 in design pixels.
+     */
+    .studio {
+      height: calc(780 * var(--u));
+    }
+    /* The main area over the bottom panel, which shows only when a terminal runs. */
+    .st-area {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+    }
+    /* The main column and the right panel: 63% and 37%. */
+    .st-body {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+    .st-main {
+      display: flex;
+      flex: 0 0 63%;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .st-main > .st-chat {
+      flex: 1;
+      min-height: 0;
+    }
+    .st-handle {
+      background: var(--card);
+    }
+    .st-panel {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--card);
+    }
+    /* Bottom stack: pending questions and approvals dock above the composer. */
+    .st-stack {
+      display: grid;
+      flex: 0 0 auto;
+      gap: calc(8 * var(--u));
+      padding: calc(12 * var(--u)) calc(16 * var(--u)) 0;
+    }
+    .st-stack:empty {
+      display: none;
+    }
+    /* The panel body shows the panel of the selected tab. */
+    .st-panel-body:not([data-active-panel="document"]) > [data-panel="document"],
+    .st-panel-body:not([data-active-panel="diffs"]) > [data-panel="diffs"],
+    .st-panel-body:not([data-active-panel="ci_checks"]) > [data-panel="ci_checks"] {
+      display: none;
+    }
+    .st-panel-body {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .st-panel-body > [data-panel] {
+      flex: 1;
+      min-height: 0;
+    }
+    /* A resized split: the review chapter gives the diff more room. */
+    .studio[data-panel-size="wide"] .st-main {
+      flex-basis: 54%;
+    }
+    /*
+     * Narrow stages show one column at a time, as a phone-width window would. The scene
+     * switches data-focus between the chat and the panel when the panel changes.
+     */
+    @container stage (width <= 699px) {
+      .studio {
+        --design-width: 440;
+        height: calc(820 * var(--u));
+      }
+      .studio .rail,
+      .studio .sb-collapsed,
+      .studio .st-handle,
+      .studio .ra,
+      .studio .pt-bottom {
+        display: none;
+      }
+      .studio .app-body {
+        padding-top: calc(34 * var(--u));
+        background: var(--card);
+      }
+      .studio .st-body {
+        position: relative;
+      }
+      /* Opacity only: the scene measures cursor targets, and a CSS transform would move them. */
+      .studio .st-main,
+      .studio .st-panel {
+        position: absolute;
+        inset: 0;
+        transition: opacity 250ms ease;
+      }
+      .studio[data-focus="chat"] .st-panel,
+      .studio[data-focus="panel"] .st-main {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .studio .st-track {
+        padding: calc(12 * var(--u)) calc(12 * var(--u)) calc(6 * var(--u));
+      }
+      .studio .st-agent-body {
+        padding-right: 0;
+      }
+      .studio .st-stack {
+        padding: calc(10 * var(--u)) calc(12 * var(--u)) 0;
+      }
+      .studio .st-composer {
+        padding: calc(10 * var(--u)) calc(12 * var(--u)) calc(12 * var(--u));
+      }
+    }
+    /* A small tablet stage shows the one-column layout at the scale of the app. */
+    @container stage (521px <= width <= 699px) {
+      .studio {
+        --design-width: 620;
+        height: calc(700 * var(--u));
+      }
+    }
+    /* A tablet stage shows the chat next to the panel, without the workspace rail and the sidebar. */
+    @container stage (700px <= width <= 1100px) {
+      .studio {
+        --design-width: 960;
+      }
+      .studio .rail,
+      .studio .sb-collapsed {
+        display: none;
+      }
+      .studio .app-body {
+        padding-top: calc(34 * var(--u));
+        background: var(--card);
+      }
+    }
+  }
+}

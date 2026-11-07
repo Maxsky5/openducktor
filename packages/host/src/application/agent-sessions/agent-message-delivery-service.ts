@@ -450,7 +450,7 @@ export const createAgentMessageDeliveryService = (
           // The queue key names only the runtime session, so the action must also name its owner.
           if (queue && !agentSessionScopesEqual(queue.target.sessionScope, input.sessionScope)) {
             return yield* actionError(
-              "This queue belongs to another chat. Reload the chat and try again.",
+              "This queue belongs to another session. Reload the session and try again.",
             );
           }
           return yield* applyAction(queue, input.action);

@@ -1,7 +1,0 @@
-@layer replica {
-  .badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: calc(6 * var(--u));
-  }
-}

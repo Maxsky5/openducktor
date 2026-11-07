@@ -63,7 +63,7 @@ The first title is the canonical start directory. The host then reads bounded OS
 
 A command terminal runs commands, then leaves an interactive shell under the same terminal ID, byte stream, and headless screen. The terminal module exposes it through `TerminalCommandService` in `terminal-command.ts`. The terminal module does not read repository settings and does not know about actions.
 
-`startCommand` resolves the owner target as `terminal_create` does. `startCommandInPreparedTarget` starts in a target that the caller already validated, because a new chat has no saved record yet. Each request has a label, one or more command lines, and a `startedBy` value.
+`startCommand` resolves the owner target as `terminal_create` does. `startCommandInPreparedTarget` starts in a target that the caller already validated, because a new workspace session has no saved record yet. Each request has a label, one or more command lines, and a `startedBy` value.
 
 For zsh, the host sends each original command line through ZLE after an authenticated ready marker. It waits up to 10 seconds and rejects a prompt that contains text. zsh owns execution, history, and cursor movement. The host sends no subshell, `eval`, status check, or directory command. It sends the next Action line only after success. Failure, Ctrl+C, or Restart stops the remaining lines. Directory and environment changes stay in the shell. `exec`, `exit`, and `logout` have their normal shell effects.
 
@@ -132,9 +132,9 @@ The runner waits up to 5 minutes for each waiting action. Each failure has its o
 | Terminal process failed | `WorktreeActionTerminalFailedError` |
 | Terminal did not start | `WorktreeActionStartError` |
 
-The task start, chat create, and chat restore callers create the run for the new worktree and branch before the setup starts. The run records each terminal in the same step that starts it. Each rollback, also after an interruption, calls `stopTerminals` before it removes the new worktree. A terminal that already exited counts as stopped.
+The task start, workspace session create, and workspace session restore callers create the run for the new worktree and branch before the setup starts. The run records each terminal in the same step that starts it. Each rollback, also after an interruption, calls `stopTerminals` before it removes the new worktree. A terminal that already exited counts as stopped.
 
-When a terminal cannot stop, the rollback keeps the worktree and branch and fails with `WorktreeKeptForRunningActionsError`. Its message tells the user to close the terminal or restart OpenDucktor, then remove the worktree and the branch. Task and chat rollbacks show the same message.
+When a terminal cannot stop, the rollback keeps the worktree and branch and fails with `WorktreeKeptForRunningActionsError`. Its message tells the user to close the terminal or restart OpenDucktor, then remove the worktree and the branch. Task and workspace session rollbacks show the same message.
 
 A task rollback runs each Git step also after an earlier step fails. When a step fails, the rollback fails with `TaskWorktreeRollbackError`, which lists each failed step. The task start adds the rollback message to the start failure and keeps both errors in the cause.
 

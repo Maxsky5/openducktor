@@ -40,6 +40,19 @@ export default {
       typescript: { config: ["tsconfig.json", "tsconfig.test.json", "expo-compat/tsconfig.json"] },
     },
     "packages/frontend": frontendKnipConfig,
+    "packages/product-scenes": {
+      // Knip adds the files of the package.json exports. It does not read `Scene.astro`, because the
+      // package has no Astro dependency, so the modules that it imports are entries too.
+      entry: [
+        "src/astro/{render,mount-page}.ts",
+        "src/**/*.test.{ts,tsx}",
+        "scripts/*.ts",
+        "video/{main,render}.ts",
+      ],
+      project: ["src/**/*.{ts,tsx}", "scripts/**/*.ts", "video/**/*.ts"],
+      // video/page.css loads the font files by path.
+      ignoreDependencies: ["@fontsource-variable/space-grotesk", "@fontsource/ibm-plex-mono"],
+    },
     "packages/host-client": {
       // Knip does not read the configurations that `bun check -p` receives.
       typescript: { config: ["tsconfig.json", "tsconfig.test.json"] },

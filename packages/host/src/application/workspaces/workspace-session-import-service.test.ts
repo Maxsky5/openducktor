@@ -376,7 +376,7 @@ describe("external workspace session import", () => {
       }),
     );
     await expect(Effect.runPromise(h.service.importSession(h.input))).rejects.toThrow(
-      "archived chat",
+      "archived session",
     );
   });
 

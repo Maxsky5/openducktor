@@ -33,7 +33,7 @@ export const prepareWorktreeAliasRemoval: WorktreeFilePort["prepareWorktreeAlias
     if (resolved !== canonicalWorktreePath) {
       return yield* new HostValidationError({
         field: "workingDirectory",
-        message: `Worktree alias ${aliasPath} changed. Reopen Archive chat before removing it.`,
+        message: `Worktree alias ${aliasPath} changed. Reopen Archive session before removing it.`,
       });
     }
     return {

@@ -82,7 +82,7 @@ describe("AgentsPageShell", () => {
       }),
     );
 
-    expect(html).toContain("Task sessions couldn&#x27;t load chat settings.");
+    expect(html).toContain("Task sessions couldn&#x27;t load session settings.");
     expect(html).toContain("settings read failed");
     expect(html).toContain("Retry load");
     expect(html).toContain("workspace");

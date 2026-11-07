@@ -41,12 +41,12 @@ describe("paletteChatActions", () => {
     const actions = paletteChatActions(chatWith("native-1"), false, handlers());
 
     expect(actions.map((action) => action.label)).toEqual([
-      "Open chat",
+      "Open session",
       "Mark as unread",
-      "Rename chat",
+      "Rename session",
       "Copy working directory",
       "Copy external session ID",
-      "Archive chat",
+      "Archive session",
     ]);
     expect(actions.filter((action) => action.destructive).map((action) => action.key)).toEqual([
       "archive",

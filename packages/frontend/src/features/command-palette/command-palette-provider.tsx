@@ -64,7 +64,7 @@ export function CommandPaletteProvider({
   const recentLoadError = useRecentItems((state) => state.loadError);
   useEffect(() => {
     if (recentLoadError === null) return;
-    toast.error("Could not restore recent tasks and chats.", {
+    toast.error("Could not restore recent tasks and sessions.", {
       description: `The Recent list starts empty. ${recentLoadError}`,
     });
   }, [recentLoadError]);

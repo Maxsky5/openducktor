@@ -1,11 +1,11 @@
 ---
+import Scene from "@openducktor/product-scenes/astro";
 import { Database, Download, FolderGit2, Scale } from "@lucide/astro";
 import { links } from "../content/site";
 import IconItem from "../ui/IconItem.astro";
 import IconList from "../ui/IconList.astro";
 import ProductFigure from "../ui/ProductFigure.astro";
 import SectionHead from "../ui/SectionHead.astro";
-import LocalView from "../views/local/LocalView.astro";
 import Split from "./Split.astro";
 ---
 
@@ -43,7 +43,7 @@ import Split from "./Split.astro";
       </IconList>
     </Fragment>
     <ProductFigure caption={["Sidebar", "Diagnostics"]}>
-      <LocalView />
+      <Scene name="local" />
     </ProductFigure>
   </Split>
 </section>

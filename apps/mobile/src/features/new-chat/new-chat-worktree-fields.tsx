@@ -154,7 +154,7 @@ function ExistingBranchField({
       <BranchPickerSheet
         visible={open}
         title="Branch"
-        hint="The chat works on this branch. It must not be checked out elsewhere."
+        hint="The session works on this branch. It must not be checked out elsewhere."
         choices={toBranchChoices(form.branches.data)}
         error={form.branches.error}
         onRetry={() => void form.branches.refetch()}

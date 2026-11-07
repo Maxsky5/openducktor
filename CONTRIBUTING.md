@@ -64,6 +64,8 @@ Notes:
 
 For the public Astro website, see [the marketing website guide](apps/marketing-website/README.md). Its build and type checks run through the workspace commands. Root formatting also checks Astro templates with the website's Prettier plugin.
 
+The product scenes of the website and the tour are in `packages/product-scenes`. Read [its conventions](packages/product-scenes/CONVENTIONS.md) before you change a scene. After a change to `packages/theme/src/tokens.css`, run `bun run build:theme` in `packages/product-scenes` and commit `packages/product-scenes/styles/theme.css`. A test fails when the file does not match its source.
+
 The development commands need no port, channel, or config-directory environment variable. The OS assigns unused ports, and each command prints its resolved URL and development instance ID. Development hosts publish `runtime/dev-instances/<instanceId>/mcp-bridge.json`; packaged and installed production hosts publish `runtime/mcp-bridge.json`.
 
 Electron desktop:

@@ -119,6 +119,37 @@ test("shows an actionable error without falling back when the shell rejects a li
   }
 });
 
+test("shows each GFM task item as a read-only app checkbox with its state", () => {
+  const view = render(
+    createElement(MarkdownRenderer, {
+      markdown: "- [x] Typing works\n- [ ] Sorting works",
+      variant: "document",
+    }),
+  );
+  const boxes = view.getAllByRole("checkbox");
+  expect(boxes.map((box) => box.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+  expect(boxes.every((box) => box.getAttribute("aria-disabled") === "true")).toBe(true);
+  expect(view.container.querySelector("input[type=checkbox]")).toBeNull();
+});
+
+test("puts a top-level task list directly in the Markdown root, so only its padding resets", () => {
+  for (const variant of ["compact", "document"] as const) {
+    const view = render(
+      createElement(MarkdownRenderer, {
+        markdown: "- [ ] Build the list\n  - [x] Keep the indent\n- [ ] Ship it",
+        variant,
+      }),
+    );
+    const [topLevel, nested] = view.container.querySelectorAll("ul.contains-task-list");
+    if (!topLevel || !nested) throw new Error("The Markdown has no nested task list.");
+    // The root holds the `[&>.contains-task-list]:pl-0` rule. A nested list is not its child, so it
+    // keeps the list indent of the prose styles.
+    expect(topLevel.parentElement?.className).toContain("[&>.contains-task-list]:pl-0");
+    expect(nested.parentElement?.closest("ul") === topLevel).toBe(true);
+    view.unmount();
+  }
+});
+
 describe("rich task description rendering", () => {
   const intersections = createIntersectionObserverTestDriver();
   beforeEach(() => intersections.install());

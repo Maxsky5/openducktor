@@ -1,0 +1,30 @@
+@layer site {
+  /* The fills of agent-runtime-icon.tsx, for the runtime logos of the page. */
+  .codex-logo {
+    color: #0d0d0d;
+  }
+  :root[data-theme="dark"] .codex-logo {
+    color: #fff;
+  }
+  .claude-logo {
+    color: #d97757;
+  }
+  .opencode-logo {
+    color: #131010;
+  }
+  :root[data-theme="dark"] .opencode-logo {
+    color: #f1ecec;
+  }
+  .opencode-center {
+    fill: #5a5858;
+  }
+  :root[data-theme="dark"] .opencode-center {
+    fill: #b7b1b1;
+  }
+  .opencode-outline {
+    fill: #fff;
+  }
+  :root[data-theme="dark"] .opencode-outline {
+    fill: #211e1e;
+  }
+}

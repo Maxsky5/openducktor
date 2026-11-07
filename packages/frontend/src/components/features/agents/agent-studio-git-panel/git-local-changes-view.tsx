@@ -455,7 +455,7 @@ function GroupTitle({
     <h3 className="min-w-0">
       <button
         type="button"
-        className="flex cursor-pointer items-center gap-1.5 px-1 py-0.5 text-xs font-semibold outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
+        className="flex items-center gap-1.5 px-1 py-0.5 text-xs font-semibold outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
         aria-expanded={isOpen}
         aria-controls={bodyId}
         onClick={onToggle}

@@ -147,7 +147,7 @@ const SessionRailIcon = memo(function SessionRailIcon({
         onClick={() => onOpen(entry)}
         className={cn(
           // The margin keeps the group label in view when the rail scrolls to this icon.
-          "relative flex size-9 shrink-0 cursor-pointer scroll-mt-8 items-center justify-center rounded-md outline-none",
+          "relative flex size-9 shrink-0 scroll-mt-8 items-center justify-center rounded-md outline-none",
           sessionEntrySurfaceClassName(entry, isSelected),
         )}
       >

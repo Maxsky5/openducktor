@@ -132,7 +132,7 @@ test("a worktree chat with no saved target cannot use a Tracked upstream default
   try {
     await waitFor(() =>
       expect(view.result.current.targetError).toBe(
-        "The repository default target branch is Tracked upstream, which a worktree chat cannot use. Choose a target branch.",
+        "The repository default target branch is Tracked upstream, which a worktree session cannot use. Choose a target branch.",
       ),
     );
     expect(view.result.current.target).toBeNull();

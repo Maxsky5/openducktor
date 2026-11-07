@@ -73,7 +73,7 @@ export const ArchivedChatRow = memo(function ArchivedChatRow({
         <View style={styles.failure}>
           <Callout
             tone={unknown ? "warning" : "destructive"}
-            title={unknown ? RESULT_UNKNOWN_TITLE : "The chat was not restored"}
+            title={unknown ? RESULT_UNKNOWN_TITLE : "The session was not restored"}
             message={errorMessage(failure)}
           />
         </View>

@@ -117,7 +117,7 @@ describe("worktreeArchiveNotice", () => {
     expect(
       worktreeArchiveNotice(false, settled({ worktreeExists: false, branchName: null })),
     ).toMatchObject({
-      text: "The worktree is missing. Restore the worktree at this path before restoring the chat.",
+      text: "The worktree is missing. Restore the worktree at this path before restoring the session.",
     });
   });
 
@@ -166,7 +166,7 @@ test("keeps a worktree that other saved chats need and names them", () => {
   });
   expect(effectiveWorktreeRemoval(true, shared)).toBe(false);
   expect(sharedWorktreeNotice(shared)).toBe(
-    "This worktree stays because these saved chats need it for files or history: Login fix, Docs.",
+    "This worktree stays because these saved sessions need it for files or history: Login fix, Docs.",
   );
   expect(effectiveWorktreeRemoval(true, settled())).toBe(true);
   expect(sharedWorktreeNotice(settled())).toBeNull();
@@ -186,6 +186,6 @@ test("keeps a worktree that open tasks need and names them", () => {
 test("a missing worktree with a branch restores from the default branch", () => {
   expect(worktreeArchiveNotice(false, settled({ worktreeExists: false }))).toEqual({
     kind: "keep",
-    text: "The worktree is missing. Restoring this chat creates a new worktree from the chat's target branch.",
+    text: "The worktree is missing. Restoring this session creates a new worktree from its target branch.",
   });
 });

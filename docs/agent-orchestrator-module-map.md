@@ -61,7 +61,7 @@ Rules:
 - A later connection snapshot can follow missed `task_session_records_updated` envelopes. It makes the cached task session lists of its repository read again.
 - Treat each later snapshot as a full collection reset.
 - Commit a snapshot once so rows, activity, pending input, context, and counters use the same state.
-- Per-task session-list queries own workflow records. Workspace session-list queries own repository records. The first live projection waits for task records and for the workspace record query to settle. A workspace record failure blocks chat actions, not healthy task sessions.
+- Per-task session-list queries own workflow records. Workspace session-list queries own repository records. The first live projection waits for task records and for the workspace record query to settle. A workspace record failure blocks workspace session actions, not healthy task sessions.
 - Use `session-read-model/agent-session-workflow-records.ts` to project durable ownership into the collection. The host workflow launch service resolves source records when it prepares a launch.
 
 This owner does not load catalogs, file status, diff, selected history, or page navigation. It does not select a native runtime protocol.
@@ -70,7 +70,7 @@ This owner does not load catalogs, file status, diff, selected history, or page 
 
 Files: `history/session-history-loader.ts`, `history/session-history-load-policy.ts`, `history/session-history-freshness.ts`, `history/use-selected-session-history-load.ts`, `history/active-session-history-keeper.ts`, and `packages/frontend-core/src/queries/agent-session-history.ts`.
 
-Task chats, workspace chats, and dialogs for registered sessions share one history loader and one store transcript. Selection does not make loaded history stale. Live events keep the transcript current while its repository stream stays connected.
+Task sessions, workspace sessions, and dialogs for registered sessions share one history loader and one store transcript. Selection does not make loaded history stale. Live events keep the transcript current while its repository stream stays connected.
 
 Each open workspace keeps its own attachment and transcript projection while another workspace is selected. Returning to that workspace uses its current history without another attachment. A connection snapshot checks history coverage against the observation epoch and session revision. A recorded change that a transcript misses, an observation failure, or a scoped runtime fault makes affected history stale. Cancel older query reads before an open transcript can refresh. Hidden sessions stay stale until opened. Do not reload every retained transcript after a gap.
 
@@ -127,11 +127,11 @@ The host owns each message queue, its order, its pause, and its automatic delive
 - `agent-chat-user-message-reference-chip.tsx` owns the reference kinds of a user message and their chips. The transcript and the queue both use it, so a new reference kind needs one display change there. The queue shows the chips at a compact size.
 - An edit lifts its message out of the stack into an edit card below the stack. The edit card uses the composer surface and controls. Enter saves the edit, and Escape cancels it. The composer shows a paused queue at its top, with the Resume button.
 - The unsaved edit of a queued message stays in the memory of its host connection (`connection.drafts.queuedMessageEdits`), keyed by session and `editId`. Save, Cancel, and Remove clear it.
-- By default, Enter and Send use ordinary delivery. Command+Enter on macOS or Control+Enter on Windows and Linux steers. The global Settings > Chat switch, "Steer messages by default", swaps these actions after a successful save. Task and workspace chats use the saved choice without a restart. While ordinary delivery goes to the queue, the placeholder adds the current keys after the reference keys. A blocked steer keeps the draft and shows its reason.
-- A confirmed settings save publishes its parsed Chat section into the existing settings query before the canonical refresh. A failed refresh keeps that choice and shows the error. Until the first successful settings read, new-message submission stays blocked. Stop, pending input, and explicit queue actions keep their existing rules.
-- The config remains version `4`. Valid older Chat settings default `steerMessagesByDefault` to `false`. A config written by this version includes the field. An older app with a strict Chat schema can reject that config during a downgrade.
-- `useAgentChatSend` sends the messages of task and workspace chats. It owns the queue panel, the steering availability, the running turn model, the busy-send rule, the sends in progress, the attachment check, and the send mode.
-- Each chat kind gives `useAgentChatSend` one memoized `AgentChatSendTarget`. The target checks the prepared session and can turn a failure into a composer result. `useChatSessionPreparation` creates or reattaches the selected session before enabling Send.
+- By default, Enter and Send use ordinary delivery. Command+Enter on macOS or Control+Enter on Windows and Linux steers. The global Settings > Sessions switch, "Steer messages by default", swaps these actions after a successful save. Task and workspace sessions use the saved choice without a restart. While ordinary delivery goes to the queue, the placeholder adds the current keys after the reference keys. A blocked steer keeps the draft and shows its reason.
+- A confirmed settings save publishes its parsed `chat` section into the existing settings query before the canonical refresh. A failed refresh keeps that choice and shows the error. Until the first successful settings read, new-message submission stays blocked. Stop, pending input, and explicit queue actions keep their existing rules.
+- The config remains version `4`. Valid older `chat` settings default `steerMessagesByDefault` to `false`. A config written by this version includes the field. An older app with a strict `chat` schema can reject that config during a downgrade.
+- `useAgentChatSend` sends the messages of task and workspace sessions. It owns the queue panel, the steering availability, the running turn model, the busy-send rule, the sends in progress, the attachment check, and the send mode.
+- Each session kind gives `useAgentChatSend` one memoized `AgentChatSendTarget`. The target checks the prepared session and can turn a failure into a composer result. `useChatSessionPreparation` creates or reattaches the selected session before enabling Send.
 - A prepared session takes several sends at once, because the host queues them.
 - `resolveRuntimeSteeringAvailability` in core owns the steering rule. The host enforces it, and the renderer uses the same reason to block a steer early.
 - The host checks steer content with `steeringPartsBlockedReason` before it dispatches a steer, so runtime adapters do not check it again. The composer uses `draftSteerBlockedReason` and the queue card uses `queuedMessageSteerBlockedReason`. Both check the runtime steering limit first, then the content.
@@ -289,7 +289,7 @@ Task and workspace wrappers use this hook for Claude skill mentions, child pendi
 
 Files: `packages/frontend-core/src/sessions/transcript/use-agent-chat-transcript-model.ts`, `agent-chat-transcript-model-cache.ts`, `agent-chat-transcript-model-build.ts`, `agent-chat-transcript-cache-keeper.ts`, and `agent-chat-transcript-cache-provider.ts`.
 
-The app shell owns `AgentChatTranscriptCacheProvider`. Task and workspace chats share up to six rendered transcript models across page and workspace switches, keyed by full session identity and thinking-message preference. Unregistered Query-owned runtime history keeps its own rendered model. The cache retains the skill references used to display Claude skill mentions. Row keys use native message identity, so older history rows do not change the keys of visible rows.
+The app shell owns `AgentChatTranscriptCacheProvider`. Task and workspace sessions share up to six rendered transcript models across page and workspace switches, keyed by full session identity and thinking-message preference. Unregistered Query-owned runtime history keeps its own rendered model. The cache retains the skill references used to display Claude skill mentions. Row keys use native message identity, so older history rows do not change the keys of visible rows.
 
 A change updates a model at once when at most 100 messages at the end changed. An append adds rows. Other changes cut the rows at the first changed message and build the rows from there. That message must keep its ID and its row, and the cut must not pass the system prompt row, which shows out of message order. Other changes need a full build in short slices.
 
@@ -318,7 +318,7 @@ Files: `components/features/agents/agent-chat/use-agent-chat-transcript-navigati
 - The minimap owns only UI state: hover, keyboard focus, the preview card, and the tick wave. Its rail stays outside the scroll container, so rail focus and keys never reach the scroll controller.
 - The scroll controller owns wheel input from a control outside the transcript, such as the rail. It applies the same upward-wheel rule as a wheel over the transcript.
 - Inside a dialog, the preview card goes into the dialog content, so it shows above the dialog layer.
-- Settings > Chat has the "Show conversation minimap" switch, saved as `showConversationMinimap`. Valid older Chat settings default it to `true`, and the config remains version `4`. An older app with a strict Chat schema can reject a config written by this version during a downgrade.
+- Settings > Sessions has the "Show conversation minimap" switch, saved as `showConversationMinimap`. Valid older `chat` settings default it to `true`, and the config remains version `4`. An older app with a strict `chat` schema can reject a config written by this version during a downgrade.
 
 ## Session navigation
 
@@ -371,7 +371,7 @@ The page shell owns the build-tools snapshot and the git actions. The right pane
 
 Rules:
 
-- The chat header reads the git conflict from the page shell. Do not send right panel state to the page shell from an effect.
+- The session header reads the git conflict from the page shell. Do not send right panel state to the page shell from an effect.
 - The workflow model builds the git conflict quick action. The header model hook adds it while the git actions report a conflict.
 - Show the git conflict quick action only while the right panel is open. Git data does not refresh while the panel is closed.
 - Keep git state through a right panel toggle or a Diffs tab close, so a running git action keeps its result. Both session kinds use `pages/agents/use-agent-studio-git-actions.ts`. Task workflow policy stays in the task adapter.
@@ -383,7 +383,7 @@ Deferred refreshes check the current view before each read. Branch and settings 
 
 Keep this hook in the session shell. Closing or hiding the Diffs tab only unmounts its view. Conflict assistance uses the same controller and keeps task workflow policy in the task adapter.
 
-`frontend-core/src/git/conflicts` shares the conflict copy, the actions model, and the conflict requests. `features/git-conflict-resolution` keeps the desktop conflict controls. The task adapter retains the permitted Builder launch. The workspace adapter uses the existing saved-chat action owner through `use-workspace-conflict-chat-actions.ts`. A draft starts the same saved chat, and a direct request leaves the composer draft intact. Selection guards cancel an unsent request after a context change, while an accepted startup stays in its original workspace cache.
+`frontend-core/src/git/conflicts` shares the conflict copy, the actions model, and the conflict requests. `features/git-conflict-resolution` keeps the desktop conflict controls. The task adapter retains the permitted Builder launch. The workspace adapter uses the existing action owner of saved workspace sessions through `use-workspace-conflict-chat-actions.ts`. A draft starts the same saved session, and a direct request leaves the composer draft intact. Selection guards cancel an unsent request after a context change, while an accepted startup stays in its original workspace cache.
 
 Git status supplies the effective conflict directory but uses the comparison branch as its target. The frontend marks that target unavailable. The retained conflict controller keeps operation and branch facts from the original command and updates its file paths from Git status.
 
@@ -396,10 +396,10 @@ Owns the tabs of the right panel and the bottom panel of task and Workspace Sess
 Rules:
 
 - `PANEL_TAB_KIND_RULES` is the only place that names a tab kind. It holds the label, launcher description, icon, number of tabs, allowed panels, allowed owners, and default state of each kind. A later kind adds a rule and a content renderer. A page names only the kinds that it cannot show now, such as CI Checks without a linked pull request.
-- One layout belongs to each task, for all its role sessions, and one to each Workspace Session. Each role and each chat remembers its selected right panel tab. A role without a selection starts on its default tab. When the remembered tab closes or moves away, the panel selects its first tab, also after a restart.
+- One layout belongs to each task, for all its role sessions, and one to each Workspace Session. Each role and each workspace session remembers its selected right panel tab. A role without a selection starts on its default tab. When the remembered tab closes or moves away, the panel selects its first tab, also after a restart.
 - `reconcileSessionPanelLayout` applies the rules to a layout on each input change. It keeps the position of a kind that is not available, so CI Checks gets its position back. It drops a terminal tab only when the terminal list proves that its terminal ended.
 - `canPlacePanelTab` is the one placement check for the launcher and moves. `canMovePanelTab` is the one move check for drag and drop and the move action. The launcher shows no card for a unique kind that is already open.
-- Each client connection has one layout store. It keeps the layouts of all owners while the connection lives and saves tool tabs in the connection storage, one record for each owner. It does not save terminal tabs or the New tab. The sessions page removes the records of tasks, chats, and workspaces that no longer exist. It removes the records of a workspace only when the open and the closed workspace lists are both current. It reads the IDs of all tasks from `task_ids_list`, because the Kanban task list hides old closed tasks.
+- Each client connection has one layout store. It keeps the layouts of all owners while the connection lives and saves tool tabs in the connection storage, one record for each owner. It does not save terminal tabs or the New tab. The sessions page removes the records of tasks, workspace sessions, and workspaces that no longer exist. It removes the records of a workspace only when the open and the closed workspace lists are both current. It reads the IDs of all tasks from `task_ids_list`, because the Kanban task list hides old closed tasks.
 - The right panel open state is global. The bottom panel visibility belongs to the selected owner and resets when the owner changes. The bottom panel hides when it loses its last tab, by a close, a move, or a terminal list without its terminals. An empty bottom panel that the user opens stays open.
 - Each panel has one presence: `opening`, `open`, `closing`, or `closed`. A panel is visible in all states except `closed`, so its content does not change while it slides out. The Ctrl+` shortcut, an owner change, and the first render go to `open` or `closed` at once. A hidden session view has no size and runs no transition, so its panels go to `open` or `closed` at once and it keeps no terminal focus request.
 - `SessionPanelSplit` places the main area and one panel. While the panel opens or closes, both change size together with the sheet motion tokens, and the panel content keeps its open size at the outer edge. The size transition is on only during that move, so a drag on the separator stays direct. The split calls `onSettled` when the move ends. It calls it at once when no transition runs, as with reduced motion or a panel that a drag made zero wide. When the user makes an open panel zero in size with its separator, the split calls `onCollapsed`, and the panel hides at once. The separator stays mounted, and it is hidden and disabled while the panel is closed. An open or a close then does not register the resizable group again, because a group that registers in a hidden kept view ignores sizes until the view shows.
@@ -513,15 +513,15 @@ Rules:
 - The property test in `session-view-resolution.test.ts` checks the two rules above.
 - A view takes each address that it shows. When its content shows more than the address names, the view holds what the content shows.
 - The active view stays while the address names less than its selection. It also takes an address that adds to an empty selection or to a task without a session.
-- A task address without a session goes back to the last view of its task. A chat address without a chat goes back to the last chat view of the workspace.
+- A task address without a session goes back to the last view of its task. A workspace session address without a session goes back to the last workspace session view of the workspace.
 - Content publishes the visible target after its own selection commits. The session list marks that target as selected. When a kept view shows, `SessionViews` publishes the target that the view last published. The list thus marks it in the paint that shows the view. That publish has no read key. Only active content marks its session as read. A pending, cancelled, or failed navigation never marks another entry.
 - The session list reveals the selected entry before paint when it opens or the sidebar expands or collapses. Status, group, recency, and record updates keep the user's scroll position.
 - Entry keys and the selected key both come from `sessionNavigationTargetKey`.
-- A requested workspace session that is missing shows as unavailable. Only a restored selection without an explicit request can fall back to the first chat.
+- A requested workspace session that is missing shows as unavailable. Only a restored selection without an explicit request can fall back to the first workspace session.
 - Task and workspace content use `features/session-navigation/use-session-navigation-recovery.ts` and `session-navigation-error.tsx` for scoped navigation failures and explicit retries. Each scope keeps its storage and selection policy. A storage failure blocks content. A workspace selection-storage failure also blocks address normalization, including an explicit workspace session address.
 - Task and workspace transcripts use `components/features/agents/agent-chat/use-failed-transcript-action.ts`. A loaded history failure retries history. A missing session with a failed observation reloads the read model. A workspace target mismatch also reloads the read model. Rejected retries remain visible in the selected content.
-- A failed chat-list refresh keeps the chats and their content, and shows the error with Retry beside them. Only a failed first read replaces the chats with an error.
-- Content asks about unsaved edits before its own selection changes. A sidebar entry and a created chat ask before they navigate. A notification asks only when its target replaces the content with another workspace, another content kind, or another page.
+- A failed refresh of the workspace session list keeps the sessions and their content, and shows the error with Retry beside them. Only a failed first read replaces the sessions with an error.
+- Content asks about unsaved edits before its own selection changes. A sidebar entry and a created workspace session ask before they navigate. A notification asks only when its target replaces the content with another workspace, another content kind, or another page.
 - The session list reads tasks, task session records, workspace session records, and native activity times through their shared Query keys. `useAgentSessionListQueries` is the one fan-out for task session records.
 - A task session list without data reports its repository's batch read until that read succeeds. A list with data keeps it while the batch read for other tasks loads or fails.
 - Live facts come from the snapshot of the workspace activity observer that also feeds the workspace rail. Do not attach another live observer for navigation.

@@ -294,7 +294,7 @@ async function renderCreation(...args: Parameters<typeof mountCreation>) {
 }
 
 test.each(["roles", "branches", "defaults", "models"] as const)(
-  "New chat opens immediately and keeps the draft while %s load",
+  "New session opens immediately and keeps the draft while %s load",
   async (read) => {
     const pending = Promise.withResolvers<void>();
     const close = mock(() => {});
@@ -339,7 +339,7 @@ test.each(["roles", "branches", "defaults", "models"] as const)(
         : {},
     );
     try {
-      const dialog = view.getByRole("dialog", { name: "New chat" });
+      const dialog = view.getByRole("dialog", { name: "New session" });
       expect(dialog.hasAttribute("aria-busy")).toBe(false);
       const name = view.getByRole("textbox", { name: /^Name/ });
       fireEvent.change(name, { target: { value: "My new chat" } });
@@ -350,7 +350,9 @@ test.each(["roles", "branches", "defaults", "models"] as const)(
         await waitFor(() => expect(document.activeElement === picker).toBe(true), { timeout: 800 });
       }
       name.focus();
-      expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(true);
+      expect(view.getByRole("button", { name: "Create session" }).hasAttribute("disabled")).toBe(
+        true,
+      );
       expect(view.getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(false);
       await act(async () => pending.resolve());
       await waitFor(() => expect(view.queryClient.isFetching()).toBe(0), { timeout: 800 });
@@ -433,7 +435,7 @@ test("opening a saved failed current-checkout creation retains feedback and sess
   );
   try {
     await selectModel(view);
-    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Create session" }));
     const open = await view.findByRole("button", { name: "Open session" }, { timeout: 800 });
     const original = view.connection.startupAttempts.getSnapshot()[0];
     if (!original) throw new Error("Creation attempt is missing.");
@@ -482,7 +484,7 @@ async function selectModel(view: Awaited<ReturnType<typeof renderCreation>>) {
   fireEvent.click(choice);
   await waitFor(
     () =>
-      expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(
+      expect(view.getByRole("button", { name: "Create session" }).hasAttribute("disabled")).toBe(
         false,
       ),
     { timeout: 800 },
@@ -520,7 +522,7 @@ test("preselects the repository default target, marks it, and sends it", async (
         expect(view.getByRole("option", { name: /^Tracked upstream/ })).toBeTruthy();
       }),
     );
-    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Create session" }));
     await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
     expect(requests[0]?.targetBranch).toEqual({ remote: "origin", branch: "main" });
   } finally {
@@ -543,12 +545,12 @@ test("New worktree hides Tracked upstream and returns an upstream pick to the de
       expect(view.queryByRole("option", { name: /^Tracked upstream/ })).toBeNull(),
     );
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
-    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Create session" }));
     await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
     expect(requests[0]?.targetBranch).toEqual({ remote: "origin", branch: "main" });
     fireEvent.click(await view.findByRole("button", { name: "Edit choices" }));
     fireEvent.click(view.getByRole("radio", { name: /Current checkout/ }));
-    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Create session" }));
     await waitFor(() => expect(requests).toHaveLength(2), { timeout: 800 });
     expect(requests[1]?.location).toBe("local_repo_root");
     expect(requests[1]?.targetBranch).toEqual({ remote: "origin", branch: "main" });
@@ -568,7 +570,7 @@ test("sends a picked local target and keeps it across a location change", async 
     await selectTarget(view, /^feature\/existing/);
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
-    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Create session" }));
     await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
     expect(requests[0]?.targetBranch).toEqual({ branch: "feature/existing" });
   } finally {
@@ -584,7 +586,7 @@ test("matches the task modal width and footer surface, separates actions and dis
     expect(view.getByRole("dialog").classList.contains("sm:max-w-2xl")).toBe(true);
     expect(view.getByLabelText("Name optional").getAttribute("autocomplete")).toBe("off");
     const cancel = view.getByRole("button", { name: "Cancel" });
-    const create = view.getByRole("button", { name: "Create chat" });
+    const create = view.getByRole("button", { name: "Create session" });
     expect(cancel.parentElement).toBe(create.parentElement);
     expect(cancel.parentElement?.firstElementChild).toBe(cancel);
     expect(cancel.parentElement?.classList.contains("justify-between")).toBe(true);
@@ -661,14 +663,14 @@ test("a current-checkout creation keeps disabled choices pending and failure fee
   try {
     await selectModel(view);
     const name = view.getByLabelText("Name optional");
-    const submit = view.getByRole("button", { name: "Create chat" });
+    const submit = view.getByRole("button", { name: "Create session" });
     const form = submit.closest("form");
     fireEvent.change(name, { target: { value: "Retained session" } });
     await act(async () => {
       fireEvent.click(submit);
     });
     expect(view.getByLabelText("Name optional")).toBe(name);
-    expect(view.getByRole("button", { name: "Creating chat…" })).toBe(submit);
+    expect(view.getByRole("button", { name: "Creating session…" })).toBe(submit);
     expect(submit.closest("form")).toBe(form);
     expect(submit.hasAttribute("disabled")).toBe(true);
     expect(submit.querySelector("svg")).not.toBeNull();
@@ -682,11 +684,13 @@ test("a current-checkout creation keeps disabled choices pending and failure fee
     await view.findByRole("alert", {}, { timeout: 800 });
     expect(view.getByRole("alert").textContent).toBe("Runtime startup failed: executable missing");
     expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
-    expect(view.queryByRole("button", { name: "Create chat" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Create session" })).toBeNull();
     fireEvent.click(view.getByRole("button", { name: "Edit choices" }));
     expect(view.getByDisplayValue("Retained session") !== null).toBe(true);
     expect(view.getByLabelText("Name optional").closest("fieldset")?.disabled).toBe(false);
-    expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(false);
+    expect(view.getByRole("button", { name: "Create session" }).hasAttribute("disabled")).toBe(
+      false,
+    );
     expect(
       view
         .getByRole("button", { name: "Select model, OpenCode, Test model" })
@@ -749,7 +753,7 @@ test("retries preparation of the saved draft and waits for native live evidence 
   );
   try {
     await selectModel(view);
-    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Create session" }));
     const retry = await view.findByRole(
       "button",
       { name: "Retry session preparation" },
@@ -858,7 +862,7 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
     await act(async () => {
-      fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+      fireEvent.click(view.getByRole("button", { name: "Create session" }));
     });
     await waitFor(() => expect(requests.length).toBe(1), { timeout: 800 });
     expect(requests[0]?.input).toEqual({
@@ -878,7 +882,7 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
       targetBranch: { remote: "origin", branch: "main" },
     });
     expect(view.getByLabelText("Name optional").closest("fieldset")?.disabled).toBe(true);
-    expect(view.getByRole("button", { name: "Creating chat…" }).hasAttribute("disabled")).toBe(
+    expect(view.getByRole("button", { name: "Creating session…" }).hasAttribute("disabled")).toBe(
       true,
     );
     expect(view.queryByRole("region", { name: "Session startup details" })).toBeNull();
@@ -997,7 +1001,7 @@ test("creates a worktree chat with one request and no confirmation step", async 
     await selectModel(view);
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
-    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Create session" }));
     await waitFor(() => expect(created).toBe(1), { timeout: 800 });
     expect(requests).toHaveLength(1);
     expect(requests[0]).not.toHaveProperty("confirmUncommittedChanges");
@@ -1023,7 +1027,7 @@ test("requires a safe worktree name and sends an optional custom branch from Adv
   try {
     await selectModel(view);
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
-    const create = view.getByRole("button", { name: "Create chat" });
+    const create = view.getByRole("button", { name: "Create session" });
     expect(create.hasAttribute("disabled")).toBe(true);
     expect(view.queryByLabelText("Branch name optional")).toBeNull();
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "../escape" } });
@@ -1077,7 +1081,9 @@ test("Existing branch accepts slash-separated worktree names and submits a safe 
       const option = view.getByRole("option", { name });
       expect(option.getAttribute("aria-disabled")).toBe("true");
       fireEvent.click(option);
-      expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(true);
+      expect(view.getByRole("button", { name: "Create session" }).hasAttribute("disabled")).toBe(
+        true,
+      );
     }
     fireEvent.click(view.getByRole("option", { name: /feature\/existing/ }));
     expect(view.getByDisplayValue("feature-existing")).not.toBeNull();
@@ -1085,9 +1091,11 @@ test("Existing branch accepts slash-separated worktree names and submits a safe 
     fireEvent.change(view.getByLabelText("Worktree name"), {
       target: { value: "feat/add-facebook-login" },
     });
-    expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(false);
+    expect(view.getByRole("button", { name: "Create session" }).hasAttribute("disabled")).toBe(
+      false,
+    );
     expect(view.getByText("feat-add-facebook-login")).not.toBeNull();
-    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Create session" }));
     await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
     expect(worktreeOf(requests[0])).toEqual({
       mode: "from_branch",
@@ -1117,7 +1125,7 @@ test("blocks submission when refreshed data shows the selected branch is now che
     await waitFor(() => expect(selector.hasAttribute("disabled")).toBe(false));
     fireEvent.click(selector);
     fireEvent.click(view.getByRole("option", { name: /feature\/existing/ }));
-    const create = view.getByRole("button", { name: "Create chat" });
+    const create = view.getByRole("button", { name: "Create session" });
     expect(create.hasAttribute("disabled")).toBe(false);
     await act(async () => {
       view.queryClient.setQueryData(gitQueryKeys.branches("/repo"), [
@@ -1159,7 +1167,7 @@ test.each(["worktree.name", "worktree.branchName"] as const)(
       fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
       const name = view.getByLabelText("Worktree name");
       fireEvent.change(name, { target: { value: "collision" } });
-      fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+      fireEvent.click(view.getByRole("button", { name: "Create session" }));
       fireEvent.click(await view.findByRole("button", { name: "Edit choices" }));
       const alert = await view.findByRole("alert");
       expect(alert.textContent).toBe(message);
@@ -1172,7 +1180,7 @@ test.each(["worktree.name", "worktree.branchName"] as const)(
         expect(view.getByLabelText("Worktree name").getAttribute("aria-invalid")).toBe("true");
       fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "another-name" } });
       expect(view.queryByRole("alert")).toBeNull();
-      expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(
+      expect(view.getByRole("button", { name: "Create session" }).hasAttribute("disabled")).toBe(
         false,
       );
       expect(requests).toHaveLength(1);
@@ -1193,7 +1201,7 @@ test("returning to Current checkout omits all worktree options", async () => {
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
     fireEvent.click(view.getByRole("radio", { name: /Current checkout/ }));
-    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Create session" }));
     await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
     expect(requests[0]?.location).toBe("local_repo_root");
     expect(requests[0]).not.toHaveProperty("worktree");
@@ -1233,7 +1241,9 @@ test("Existing worktree requires an explicit pick and sends only the selected di
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "unused" } });
     expect(reads).toBe(0);
     fireEvent.click(view.getByRole("radio", { name: /Existing worktree/ }));
-    expect(view.getByText("Chats that use this worktree share its files and branch.")).toBeTruthy();
+    expect(
+      view.getByText("Sessions that use this worktree share its files and branch."),
+    ).toBeTruthy();
     expect(view.queryByLabelText("Worktree name")).toBeNull();
     inTargetOptions(view, () =>
       expect(view.queryByRole("option", { name: /^Tracked upstream/ })).toBeNull(),
@@ -1241,7 +1251,7 @@ test("Existing worktree requires an explicit pick and sends only the selected di
     const selector = view.getByRole("button", { name: "Worktree" });
     await waitFor(() => expect(selector.hasAttribute("disabled")).toBe(false), { timeout: 800 });
     expect(reads).toBe(1);
-    const create = view.getByRole("button", { name: "Create chat" });
+    const create = view.getByRole("button", { name: "Create session" });
     expect(create.hasAttribute("disabled")).toBe(true);
     fireEvent.click(selector);
     expect(view.getByRole("option", { name: /\/worktrees\/one/ }).textContent).toContain(
@@ -1313,7 +1323,9 @@ test("Existing worktree shows the loading, failed, and empty states, and retries
     await act(async () => reads[0]?.reject(new Error("git worktree list failed")));
     const alert = await view.findByRole("alert", {}, { timeout: 800 });
     expect(alert.textContent).toContain("Could not load worktrees. git worktree list failed");
-    expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(true);
+    expect(view.getByRole("button", { name: "Create session" }).hasAttribute("disabled")).toBe(
+      true,
+    );
     fireEvent.click(view.getByRole("button", { name: "Retry worktrees" }));
     await waitFor(() => expect(reads).toHaveLength(2), { timeout: 800 });
     await act(async () => reads[1]?.resolve([]));
@@ -1324,7 +1336,9 @@ test("Existing worktree shows the loading, failed, and empty states, and retries
     );
     expect(view.queryByRole("alert")).toBeNull();
     expect(selector.hasAttribute("disabled")).toBe(true);
-    expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(true);
+    expect(view.getByRole("button", { name: "Create session" }).hasAttribute("disabled")).toBe(
+      true,
+    );
   } finally {
     view.unmount();
   }
@@ -1361,7 +1375,7 @@ test("a failed creation reads the worktrees again and marks a removed choice as 
     await waitFor(() => expect(selector.hasAttribute("disabled")).toBe(false), { timeout: 800 });
     fireEvent.click(selector);
     fireEvent.click(view.getByRole("option", { name: /\/worktrees\/one/ }));
-    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Create session" }));
     fireEvent.click(await view.findByRole("button", { name: "Edit choices" }));
     await view.findByText(
       "The selected worktree is no longer available. Select another worktree.",
@@ -1378,7 +1392,9 @@ test("a failed creation reads the worktrees again and marks a removed choice as 
     expect(
       view.getByRole("radio", { name: /Existing worktree/ }).getAttribute("aria-checked"),
     ).toBe("true");
-    expect(view.getByRole("button", { name: "Create chat" }).hasAttribute("disabled")).toBe(true);
+    expect(view.getByRole("button", { name: "Create session" }).hasAttribute("disabled")).toBe(
+      true,
+    );
   } finally {
     view.unmount();
   }

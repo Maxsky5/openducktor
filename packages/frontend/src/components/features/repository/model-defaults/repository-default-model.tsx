@@ -97,7 +97,7 @@ export function RepositoryDefaultModelBlock({
         <div className="grid gap-1">
           <h3 className="text-sm font-semibold text-foreground">Default model</h3>
           <p className="text-xs text-muted-foreground">
-            Used for new chats and for workflow sessions that have no role default.
+            Used for new sessions and for task sessions that have no role default.
           </p>
         </div>
         <Button

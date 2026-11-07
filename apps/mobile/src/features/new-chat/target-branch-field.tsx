@@ -12,7 +12,7 @@ import { FormField, SelectTrigger } from "@/ui/form-rows";
 
 type CreateForm = ReturnType<typeof useWorkspaceSessionCreate>;
 
-const HINT = "Compare this chat's changes with this branch.";
+const HINT = "Compare this session's changes with this branch.";
 
 const targetLabel = (target: GitTargetBranch): string =>
   target.branch === UPSTREAM_TARGET_BRANCH ? "Tracked upstream" : canonicalTargetBranch(target);

@@ -491,7 +491,7 @@ describe("settings modal content", () => {
       }),
     );
 
-    expect(html).toContain("Chat settings");
+    expect(html).toContain("Session settings");
     expect(html).toContain("Show thinking messages");
     expect(html).not.toContain("Reusable prompts");
   });

@@ -39,7 +39,7 @@ export function WorkspaceSessionExistingWorktreeField({
           onValueChange={onChange}
         />
         <p id="workspace-session-existing-worktree-hint" className="text-xs text-muted-foreground">
-          Chats that use this worktree share its files and branch.
+          Sessions that use this worktree share its files and branch.
         </p>
       </div>
       <ExistingWorktreeStatus

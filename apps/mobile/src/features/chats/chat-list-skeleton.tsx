@@ -42,7 +42,7 @@ export function ChatListSkeleton({ header }: { header: ReactNode }): ReactElemen
       contentContainerStyle={styles.content}
     >
       {header}
-      <SkeletonFrame label="Loading chats">
+      <SkeletonFrame label="Loading sessions">
         {SECTIONS.map((section, index) => (
           <Fragment key={section.id}>
             <ChatSectionHeaderPlaceholder first={index === 0} />

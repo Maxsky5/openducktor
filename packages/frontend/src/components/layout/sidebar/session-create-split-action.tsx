@@ -86,7 +86,7 @@ function SessionCreateMenuItems({
     <>
       <MenuItem
         icon={<MessageCirclePlus />}
-        label="New chat"
+        label="New session"
         onSelect={() => onOpenDialog({ kind: "chat", workspace })}
       />
       <MenuItem
@@ -103,12 +103,12 @@ function SessionCreateMenuItems({
       />
       <MenuItem
         icon={<Archive />}
-        label="Archived chats"
+        label="Archived sessions"
         onSelect={() => onOpenDialog({ kind: "archived_chats", workspace })}
       />
       <MenuItem
         icon={<Import />}
-        label="Import chat from an external runtime"
+        label="Import session from an external runtime"
         onSelect={() => onOpenDialog({ kind: "import_chat", workspace })}
       />
     </>

@@ -96,6 +96,6 @@ function defaultTargetError(
   if (repoConfig.isError)
     return `Could not read the default target branch: ${errorMessage(repoConfig.error)}`;
   if (repoConfig.isSuccess && !target)
-    return "The repository default target branch is Tracked upstream, which a worktree chat cannot use. Choose a target branch.";
+    return "The repository default target branch is Tracked upstream, which a worktree session cannot use. Choose a target branch.";
   return null;
 }

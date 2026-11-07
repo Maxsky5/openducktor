@@ -90,7 +90,7 @@ export function SettingsReusablePromptsSection({
   return (
     <SettingsListEditor
       title="Reusable prompts"
-      description="Reusable slash commands for chats."
+      description="Reusable slash commands for sessions."
       items={reusablePrompts.map((prompt) => {
         const count = countPromptErrors(validationErrors[prompt.id]);
         return {
@@ -142,7 +142,7 @@ function ReusablePromptsEmptyState({
       onAdd={onAddReusablePrompt}
     >
       <p className="text-sm text-muted-foreground">
-        Save reusable markdown prompts and invoke them in chat with a slash command like
+        Save reusable markdown prompts and invoke them in a session with a slash command like
         <span className="font-medium text-foreground"> /review</span>.
       </p>
       <p className="text-xs text-muted-foreground">
@@ -196,7 +196,7 @@ function ReusablePromptEditorCard({
       title={getPromptTabLabel(prompt)}
       description={
         <>
-          This prompt appears in chat as
+          This prompt appears in sessions as
           <span className="font-medium text-foreground"> {promptTriggerPreview}</span>.
         </>
       }

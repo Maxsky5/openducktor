@@ -1176,7 +1176,9 @@ describe("host-owned Workspace Session lifecycle", () => {
 
     await expect(
       Effect.runPromise(h.service.rename({ ...ref, manualTitle: null })),
-    ).rejects.toThrow("This chat has no generated title. Send a message first, or enter a name.");
+    ).rejects.toThrow(
+      "This session has no generated title. Send a message first, or enter a name.",
+    );
     expect(h.titles).toEqual([]);
     expect(h.calls).not.toContain("rename");
     expect((await Effect.runPromise(h.service.get(ref))).manualTitle).toBe("My session");
@@ -1545,7 +1547,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     h.calls.length = 0;
     const error = await Effect.runPromise(Effect.flip(h.service.restore(ref)));
     expect(error).toMatchObject({ field: "targetBranch" });
-    expect(error.message).toContain("Choose a target branch for this chat");
+    expect(error.message).toContain("Choose a target branch for this session");
     expect(h.calls).toEqual([]);
     expect((await Effect.runPromise(h.service.get(ref))).archivedAt).not.toBeNull();
   });
@@ -2011,7 +2013,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: false }));
 
     await expect(archive()).rejects.toThrow(
-      "Could not close the browser tabs of this chat: The engine did not close the page.",
+      "Could not close the browser tabs of this session: The engine did not close the page.",
     );
     expect((await Effect.runPromise(h.service.get(ref))).archivedAt).toBeNull();
 
@@ -2362,7 +2364,7 @@ describe("host-owned Workspace Session lifecycle", () => {
           ? "not a registered worktree"
           : conflict === "branch"
             ? "Cannot restore because branch odt/my-feature already exists"
-            : "Target branch origin/main is unavailable. Fetch it, or choose another target branch for this chat.",
+            : "Target branch origin/main is unavailable. Fetch it, or choose another target branch for this session.",
       );
       expect(await Effect.runPromise(h.service.get(ref))).toEqual(archived);
       expect(h.calls).toEqual([]);

@@ -39,7 +39,6 @@ describe("AgentChatComposerSlashMenu", () => {
     const activeCommand = screen.getByRole("option", { name: /first command/i });
 
     expect(listbox.id).toBe(LISTBOX_ID);
-    expect(activeCommand.className).toContain("cursor-pointer");
     expect(activeCommand.className).toContain("bg-selected-surface");
     expect(activeCommand.className).not.toContain("bg-primary/20");
     expect(activeCommand.id).toBe(`${LISTBOX_ID}-option-0`);

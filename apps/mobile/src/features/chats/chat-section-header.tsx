@@ -31,7 +31,7 @@ export const ChatSectionHeader = memo(function ChatSectionHeader({
       style={[styles.header, first && styles.headerFirst]}
       accessible
       accessibilityRole="header"
-      accessibilityLabel={`${label}, ${count} ${count === 1 ? "chat" : "chats"}`}
+      accessibilityLabel={`${label}, ${count} ${count === 1 ? "session" : "sessions"}`}
     >
       <Icon name={SECTION_ICONS[sectionId]} size={14} colorValue={theme.colors.tertiaryLabel} />
       <Text variant="caption2" overline style={[styles.label, styles.accent]}>

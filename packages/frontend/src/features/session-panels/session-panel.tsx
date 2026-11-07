@@ -487,7 +487,7 @@ function SessionPanelTabTrigger({
           value={entryId}
           {...tabLinkIds(idBase, entryId).trigger}
           aria-label={showsPromptMark ? `${ariaLabel}, ${PROMPTS_DESCRIPTION}` : ariaLabel}
-          className="h-7 min-w-0 flex-1 cursor-pointer justify-start gap-1.5 rounded-md border-0 bg-transparent py-0 pr-7 pl-2 text-xs font-medium text-inherit shadow-none outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:border-transparent data-[state=active]:bg-transparent data-[state=active]:text-inherit data-[state=active]:shadow-none"
+          className="h-7 min-w-0 flex-1 justify-start gap-1.5 rounded-md border-0 bg-transparent py-0 pr-7 pl-2 text-xs font-medium text-inherit shadow-none outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:border-transparent data-[state=active]:bg-transparent data-[state=active]:text-inherit data-[state=active]:shadow-none"
         >
           <PanelTabIcon presentation={presentation} showsPromptMark={showsPromptMark}>
             {view?.indicator}

@@ -35,7 +35,7 @@ export function CreateButton({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={open ? "Close the create menu" : "Create"}
-      accessibilityHint={open ? undefined : "Opens New Task, New Chat, and Import."}
+      accessibilityHint={open ? undefined : "Opens New Task, New Session, and Import."}
       accessibilityState={{ expanded: open }}
       style={styles.create}
     >

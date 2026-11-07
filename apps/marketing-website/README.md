@@ -104,7 +104,7 @@ The browser suite owns a temporary preview server on port 4398 and fails if that
 
 The page shows the product with copies of its UI and fictional data. Read [the design and asset record](ASSETS.md) before you change a product claim, a view, or a scene.
 
-The page sections are in `src/sections/`. Each animated view has a folder in `src/views/` with its markup and its scene script. The copied product UI is in `src/replica/`, the fictional data is in `src/sample/`, and the shared motion code is in `src/motion/`. The site UI, such as the brand mark and the command blocks, is in `src/ui/`.
+The page sections are in `src/sections/`. The product scenes are in [`packages/product-scenes`](../../packages/product-scenes/CONVENTIONS.md). A section shows a scene of the package with its `Scene.astro` entry: the build renders the React view of the scene to static HTML, and the page loads no React. The package holds the motion code, the copied product UI, and the fictional data. The site UI, such as the brand mark, the command blocks, the browser version terminal, and the styles of the workflow tabs, is in `src/ui/` and `src/sections/`.
 
 The static markup of a view is the last frame of its scene, except for the views that [the design and asset record](ASSETS.md) names. Visitors without JavaScript or with reduced motion see that frame. Change the markup and the scene together.
 
@@ -112,7 +112,7 @@ Each product view has `role="img"` and a text alternative. Keep `aria-hidden="tr
 
 The copied UI uses the product colors, so some of its text is below a contrast of 4.5:1, as in the product. The text alternative carries the meaning of the view. The page text outside the product views must reach 4.5:1, and the browser suite checks it.
 
-`scripts/product-theme.ts` reads the desktop theme at build time. `src/replica/Replica.astro`, the root of each copied UI, imports it as the CSS module `virtual:openducktor/product-theme.css`. The product tokens apply only inside that root, so they do not change the page tokens. The page starts in light mode. Its header switch changes the page and the product views together without storing data.
+The root of each copied UI imports `@openducktor/product-scenes/styles.css`. It holds the desktop theme of `@openducktor/theme`, which applies only inside that root, so it does not change the page tokens. The page starts in light mode. Its header switch changes the page and the product views together without storing data.
 
 ## Styles
 
@@ -122,14 +122,14 @@ Each stylesheet puts its rules in one cascade layer. The layout declares the lay
 
 1. `base`: the page tokens, the element defaults, and the page layout.
 2. `site`: the components in `src/ui/` and the sections in `src/sections/`.
-3. `product`: the product theme, the base of the copied UI in `src/replica/replica.css`, and the shared product controls in `src/replica/ui/`.
-4. `replica`: the copied product components in `src/replica/`.
-5. `views`: the views in `src/views/`, which size the copied UI for each scene.
+3. `product`: the product theme, the base of the copied UI in `packages/product-scenes/styles/`, and the shared product controls in `packages/product-scenes/src/replicas/ui/`.
+4. `replica`: the copied product components in `packages/product-scenes/src/replicas/`.
+5. `views`: the scenes in `packages/product-scenes/src/scenes/`, which size the copied UI for each scene, the browser version terminal, and the workflow tabs.
 6. `state`: `[hidden]` and the motion preference, which win over every other rule.
 
-A shared product control, such as `src/replica/ui/Button.astro`, takes the variant and the size of the product component as props. It writes them as `data-variant` and `data-size`. A component that uses the control changes it with its own class, as the product does with `className`.
+A shared product control, such as `packages/product-scenes/src/replicas/ui/Button.tsx`, takes the variant and the size of the product component as props. It writes them as `data-variant` and `data-size`. A component that uses the control changes it with its own class, as the product does with `className`.
 
-A class only styles an element. Scripts find elements by their `data-*` hooks, and they show a state with a `data-*` attribute, such as `data-active` or `data-activity="working"`. The markup sets the state of the static frame with the same attributes. In the markup, `src/replica/flag.ts` writes a boolean state, and a script sets it with `toggleAttribute`. A script never adds or removes a class.
+A class only styles an element. Scripts find elements by their `data-*` hooks, and they show a state with a `data-*` attribute, such as `data-active` or `data-activity="working"`. The markup sets the state of the static frame with the same attributes. In the markup, `packages/product-scenes/src/replicas/flag.ts` writes a boolean state, and a script sets it with `toggleAttribute`. A script never adds or removes a class.
 
 Keep code snippets in frontmatter strings, so template formatting cannot change their whitespace.
 

@@ -30,14 +30,14 @@ describe("workspaceSessionTerminalScope", () => {
         repoPath: "/repos/alpha",
       },
       workingDirectory: "/repos/alpha",
-      workingDirectoryError: "This chat has no saved directory. Reopen or restore the chat.",
+      workingDirectoryError: "This session has no saved directory. Reopen or restore it.",
     });
   });
 
   test("blocks archived chats and chats with a removed worktree", () => {
     expect(chatScope(workspaceSessionRecord("chat-1", { archivedAt: 5 }))).toMatchObject({
       workingDirectory: null,
-      workingDirectoryError: "This chat is archived. Restore the chat to use terminals.",
+      workingDirectoryError: "This session is archived. Restore it to use terminals.",
     });
     const removed = workspaceSessionRecord("chat-1", {
       executionTarget: worktreeExecutionTarget({ worktreeState: "removed" }),
@@ -45,7 +45,7 @@ describe("workspaceSessionTerminalScope", () => {
     expect(chatScope(removed)).toMatchObject({
       workingDirectory: null,
       workingDirectoryError:
-        "The worktree of this chat was removed. Restore the chat to create the worktree again.",
+        "The worktree of this session was removed. Restore it to create the worktree again.",
     });
   });
 });

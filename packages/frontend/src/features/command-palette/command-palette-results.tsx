@@ -87,7 +87,7 @@ export function MainResults({
       {hasQuery && !hasMatches ? (
         // A workspace that is still loading can have matches, so show Loading, not No results.
         <p className={NOTE_CLASS_NAME}>
-          {data.isLoading ? "Loading tasks and chats…" : "No results"}
+          {data.isLoading ? "Loading tasks and sessions…" : "No results"}
         </p>
       ) : null}
       {createFromQuery ? (
@@ -117,7 +117,7 @@ export function RowActionResults({
     <>
       {note ? <p className="px-4 pb-1 pt-2 text-xs text-muted-foreground">{note}</p> : null}
       <CommandGroup
-        heading={list.entry.kind === "task" ? "Task actions" : "Chat actions"}
+        heading={list.entry.kind === "task" ? "Task actions" : "Session actions"}
         className={GROUP_CLASS_NAME}
       >
         {actions.map((action) => (

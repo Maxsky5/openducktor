@@ -26,7 +26,7 @@ export function TaskSourceIssueLink({
       }}
       className={cn(
         badgeVariants({ variant: "outline" }),
-        "inline-flex cursor-pointer items-center gap-1.5 rounded-full border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-muted",
+        "inline-flex items-center gap-1.5 rounded-full border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-muted",
         className,
       )}
     >

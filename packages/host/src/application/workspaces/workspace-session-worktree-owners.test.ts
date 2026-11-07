@@ -189,7 +189,7 @@ describe("workspace session worktree owners", () => {
         history,
       });
     const message =
-      "Cannot check the native history of saved chat “unreadable” in workspace workspace. Cannot read Claude session native-unreadable. Restore access and retry.";
+      "Cannot check the native history of saved session “unreadable” in workspace workspace. Cannot read Claude session native-unreadable. Restore access and retry.";
 
     expect(await Effect.runPromise(read("report"))).toEqual({
       owners: {
@@ -274,7 +274,7 @@ describe("workspace session worktree owners", () => {
 
     const failure = await Effect.runPromise(Effect.flip(chatOwners(dependencies, source)));
     expect(failure.message).toBe(
-      "Cannot remove this worktree because workspace Other workspace uses it as its repository checkout. Turn off worktree removal to archive this chat.",
+      "Cannot remove this worktree because workspace Other workspace uses it as its repository checkout. Turn off worktree removal to archive this session.",
     );
   });
 
@@ -485,7 +485,7 @@ describe("workspace session worktree task owners", () => {
     expect(await read("report")).toEqual({
       owners: { checkoutWorkspaces: [], tasks: [], chats: [], historyChats: [] },
       historyReadErrors: [
-        "Cannot check the native history of saved Claude chats. Cannot list the Claude transcripts: EACCES.",
+        "Cannot check the native history of saved Claude sessions. Cannot list the Claude transcripts: EACCES.",
       ],
     });
     await expect(read("required")).rejects.toThrow("Cannot list the Claude transcripts: EACCES.");
@@ -502,7 +502,7 @@ describe("workspace session worktree task owners", () => {
     await expect(
       Effect.runPromise(requireNoWorktreeOwners(dependencies, scope, source)),
     ).rejects.toThrow(
-      "Cannot remove this worktree. Open tasks use a removed worktree: Task shared (shared). Close these tasks first. Saved chats work in a removed worktree: “sibling”. Archive these chats first. Turn off worktree removal to archive this chat.",
+      "Cannot remove this worktree. Open tasks use a removed worktree: Task shared (shared). Close these tasks first. Saved sessions work in a removed worktree: “sibling”. Archive these sessions first. Turn off worktree removal to archive this session.",
     );
   });
 });

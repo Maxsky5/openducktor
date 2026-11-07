@@ -14,7 +14,7 @@ export function AgentChatForkButton({
   if (!actions) return null;
   const pending = actions.isPending(point);
   const disabled = pending || actions.disabledReason !== null;
-  const label = pending ? "Forking chat…" : (actions.disabledReason ?? "Fork from this reply");
+  const label = pending ? "Forking session…" : (actions.disabledReason ?? "Fork from this reply");
   return (
     <TooltipProvider>
       <Tooltip>

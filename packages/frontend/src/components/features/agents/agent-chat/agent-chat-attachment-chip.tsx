@@ -144,7 +144,7 @@ export function AgentChatAttachmentChip(
         {previewable ? (
           <button
             type="button"
-            className="flex w-full cursor-pointer flex-col text-left"
+            className="flex w-full flex-col text-left"
             onClick={handleOpenPreview}
           >
             <div className="flex h-24 max-h-24 items-center justify-center overflow-hidden bg-muted">

@@ -62,8 +62,8 @@ jobs:
           # Git checks the complete diff, without GitHub's event path-filter file limit.
           if git diff --quiet --no-renames "${comparison[@]}" -- \
             apps/marketing-website/ \
-            packages/frontend/src/styles.css \
-            packages/frontend/src/assets/openducktor-mark.svg \
+            packages/product-scenes/ \
+            packages/theme/ \
             packages/openducktor-web/package.json \
             .github/actions/ \
             .github/workflows/ci.yml \

@@ -1,0 +1,45 @@
+@layer state {
+  :where(.stage) {
+    /* A host page can lack this rule, and a class that sets `display` wins over the browser rule. */
+    [hidden] {
+      display: none;
+    }
+    /* A part of a product view that a scene grows or shrinks shows only its visible height. */
+    .replica [data-resizing] {
+      overflow: hidden;
+    }
+    /* The window of a framed scene fills its container, over the size that its view gives it. */
+    :where([data-framed]) & > .app-window {
+      height: 100%;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    /* A framed scene shows no pointer and no click ring. The scene still moves them. */
+    :where([data-framed]) & :is(.cursor, .click-ring) {
+      display: none;
+    }
+  }
+  /* A framed scene takes the size of its container. */
+  .scene[data-framed],
+  .scene[data-framed] > .stage {
+    height: 100%;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :where(.stage) *,
+    :where(.stage) *::before,
+    :where(.stage) *::after {
+      animation: none;
+      transition: none;
+    }
+  }
+  /* animation-play-state does not inherit, so the pseudo-elements, such as the dot rings, need it too. */
+  [data-motion="paused"] .replica *,
+  [data-motion="paused"] .replica *::before,
+  [data-motion="paused"] .replica *::after,
+  .scene[data-motion="paused"] *,
+  .scene[data-motion="paused"] *::before,
+  .scene[data-motion="paused"] *::after {
+    animation-play-state: paused;
+  }
+}

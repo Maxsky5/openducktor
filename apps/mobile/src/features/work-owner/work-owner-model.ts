@@ -142,19 +142,19 @@ export const resolveChatOwner = (
     if (records.error) {
       return {
         status: "error",
-        title: "Could Not Load the Chat",
+        title: "Could Not Load the Session",
         message: errorMessage(records.error),
         canRetry: true,
       };
     }
-    return { status: "loading", label: "Loading the chat" };
+    return { status: "loading", label: "Loading the session" };
   }
   const record = findChatRecord(records.data, ref);
   if (!record) {
     return {
       status: "error",
-      title: "Chat Not Found",
-      message: "The chat is archived or no longer saved in this workspace. Go back to Chats.",
+      title: "Session Not Found",
+      message: "The session is archived or no longer saved in this workspace. Go back to Sessions.",
       canRetry: true,
     };
   }

@@ -337,7 +337,7 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-stretch">
         <button
           type="button"
-          className="group/comment grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2 text-left outline-none transition hover:bg-accent/40 focus-visible:bg-accent/50"
+          className="group/comment grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2 text-left outline-none transition hover:bg-accent/40 focus-visible:bg-accent/50"
           aria-expanded={isOpen}
           aria-label={`${isOpen ? "Collapse" : "Expand"} ${activityName} from ${author}`}
           data-state={isOpen ? "open" : "closed"}

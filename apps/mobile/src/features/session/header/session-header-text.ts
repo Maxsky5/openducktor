@@ -15,7 +15,7 @@ export type SessionHeaderText = {
 
 const ownerKindLabel = (owner: SessionOwner, readOnly: boolean): string => {
   if (owner.kind === "task") return "Task session";
-  if (owner.kind === "chat") return "Chat";
+  if (owner.kind === "chat") return "Session";
   return readOnly ? "Subagent session, read only" : "Session";
 };
 
@@ -27,7 +27,7 @@ const roleLabel = (
 ): string | null => {
   if (owner.kind === "task")
     return task?.taskWorkflow.roles.find(({ id }) => id === owner.role)?.label ?? null;
-  if (owner.kind === "chat") return owner.record.roleSnapshot?.name ?? "Chat";
+  if (owner.kind === "chat") return owner.record.roleSnapshot?.name ?? "Session";
   return readOnly ? "Read only" : null;
 };
 

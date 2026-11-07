@@ -26,7 +26,7 @@ describe("deriveRuntimeTranscriptSurfaceState", () => {
         chatSettingsError: new Error("settings unavailable"),
       }).emptyState,
     ).toEqual({
-      title: "Failed to load conversation: Failed to load chat settings: settings unavailable",
+      title: "Failed to load conversation: Failed to load session settings: settings unavailable",
     });
   });
 

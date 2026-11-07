@@ -34,7 +34,7 @@ export function BrowserAnnotationMarkers({
             data-annotation-id={annotationId}
             className={cn(
               BROWSER_ANNOTATION_NUMBER_CLASS_NAME,
-              "pointer-events-auto absolute cursor-pointer shadow-md ring-2 ring-white outline-none focus-visible:ring-sky-600",
+              "pointer-events-auto absolute shadow-md ring-2 ring-white outline-none focus-visible:ring-sky-600",
             )}
             style={{
               left: Math.max(0, box.x - MARKER_OFFSET),

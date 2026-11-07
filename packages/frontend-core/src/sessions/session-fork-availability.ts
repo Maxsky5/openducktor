@@ -23,7 +23,7 @@ export function sessionForkDisabledReason({
   if (runtimeReadiness.state !== "ready")
     return runtimeReadiness.message ?? "Start the runtime before forking this reply.";
   if (waitsForMergePublication) return "Publish or close the local merge before you fork a reply.";
-  if (readOnly) return readOnlyReason ?? "Reopen this chat before forking a reply.";
+  if (readOnly) return readOnlyReason ?? "Reopen this session before forking a reply.";
   if (error) return error;
-  return interactionEnabled ? null : "Load this chat before forking a reply.";
+  return interactionEnabled ? null : "Load this session before forking a reply.";
 }

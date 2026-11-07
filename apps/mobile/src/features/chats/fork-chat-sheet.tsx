@@ -55,7 +55,7 @@ import { useStartupSheetClose } from "@/features/session-startup/startup-present
 import { useRepairedStartupHandoff } from "@/features/session-startup/use-repaired-startup-handoff";
 import { closeScreen } from "@/navigation/close-screen";
 
-const TITLE = "Fork chat";
+const TITLE = "Fork session";
 
 /**
  * Forks a chat after a completed reply, as the desktop Fork chat dialog: the fork works in the
@@ -69,7 +69,7 @@ export function ForkChatSheet({ params }: { params: ForkChatSheetParams | null }
         content={
           <EmptyState
             icon="circle-alert"
-            title="Invalid chat link"
+            title="Invalid session link"
             message="Close this sheet and select the reply again."
           />
         }
@@ -85,19 +85,23 @@ function ForkChatRead({ params }: { params: ForkChatSheetParams }): ReactElement
       <ForkChatForm workspace={read.workspace} record={read.record} messageId={params.messageId} />
     );
   if (read.status === "loading")
-    return <ForkChatState content={<LoadingState label="Loading chat" />} />;
+    return <ForkChatState content={<LoadingState label="Loading session" />} />;
   if (read.status === "error")
     return (
       <ForkChatState
         content={
-          <ErrorState title="The chat did not load" message={read.message} onRetry={read.retry} />
+          <ErrorState
+            title="The session did not load"
+            message={read.message}
+            onRetry={read.retry}
+          />
         }
       />
     );
   return (
     <ForkChatState
       content={
-        <EmptyState icon="message-square-off" title="Chat unavailable" message={read.reason} />
+        <EmptyState icon="message-square-off" title="Session unavailable" message={read.reason} />
       }
     />
   );
@@ -155,13 +159,13 @@ function ForkChatForm({
           note={note}
           primary={
             <Button
-              label={running ? "Forking chat…" : "Fork chat"}
+              label={running ? "Forking session…" : "Fork session"}
               icon="git-fork"
               size="lg"
               loading={running}
               command
               disabled={running || blockedReason !== null || input === null}
-              accessibilityHint="Creates the chat and opens it."
+              accessibilityHint="Creates the session and opens it."
               onPress={() => {
                 if (input && !blockedReason) command.submit(input);
               }}
@@ -173,7 +177,7 @@ function ForkChatForm({
             <View style={styles.notice}>
               <Callout
                 tone="destructive"
-                title="Could not fork the chat"
+                title="Could not fork the session"
                 message={failure.message}
               />
             </View>
@@ -300,8 +304,8 @@ const useForkChatCommand = (
 };
 
 const forkBlockedReason = (gateOpen: boolean, hasSource: boolean): string | null => {
-  if (!gateOpen) return "Reconnect to the host to fork this chat.";
-  if (!hasSource) return "This chat has no session to fork.";
+  if (!gateOpen) return "Reconnect to the host to fork this session.";
+  if (!hasSource) return "You cannot fork this session before it starts.";
   return null;
 };
 

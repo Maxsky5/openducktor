@@ -10,16 +10,16 @@ import type {
  * and words with its own controls.
  */
 export const ARCHIVE_CHAT_TEXT = {
-  title: "Archive chat",
-  description: "Move this chat to Archived chats. You can restore it later.",
+  title: "Archive session",
+  description: "Move this session to Archived sessions. You can restore it later.",
   stopsWork:
-    "Archiving stops this chat's terminals, development servers, and its running session. Your chat history stays available in Archived chats.",
+    "Archiving stops the terminals, development servers, and running agent of this session. Its history stays available in Archived sessions.",
   repositoryFilesStay: "Your repository files will stay on disk.",
   removeWorktree: "Remove worktree and branch",
   checkingChanges: "Loading worktree details…",
   checkingWorktree: "Loading worktree details…",
   retryCheck: "Retry check",
-  confirm: "Archive chat",
+  confirm: "Archive session",
   confirming: "Archiving…",
 } as const;
 
@@ -62,7 +62,7 @@ export const sharedWorktreeNotice = (
 ): string | null => {
   const sharedWith = worktreeSharedWith(preview);
   if (sharedWith.length === 0) return null;
-  return `This worktree stays because these saved chats need it for files or history: ${sharedWith.map((owner) => owner.title).join(", ")}.`;
+  return `This worktree stays because these saved sessions need it for files or history: ${sharedWith.map((owner) => owner.title).join(", ")}.`;
 };
 
 /** Names the open tasks that keep the worktree, or null when no task needs it. */
@@ -121,22 +121,22 @@ export const worktreeArchiveNotice = (
     if (preview.data?.worktreeExists === false) {
       text =
         preview.data.branchName === null
-          ? "The worktree is missing. Restore the worktree at this path before restoring the chat."
-          : "The worktree is missing. Restoring this chat creates a new worktree from the chat's target branch.";
+          ? "The worktree is missing. Restore the worktree at this path before restoring the session."
+          : "The worktree is missing. Restoring this session creates a new worktree from its target branch.";
     }
     return { kind: "keep", text };
   }
   if (preview.isSuccess && preview.data?.branchName === null) {
     return {
       kind: "no_branch",
-      text: "No branch is attached. Turn off worktree removal to archive this chat.",
+      text: "No branch is attached. Turn off worktree removal to archive this session.",
     };
   }
   return {
     kind: "delete_branch",
     branchName: preview.data?.branchName ?? null,
     consequence:
-      "will be deleted. Commits that exist only on this branch may be lost. Restoring this chat creates a fresh worktree from the chat's target branch. It does not recover deleted changes.",
+      "will be deleted. Commits that exist only on this branch may be lost. Restoring this session creates a fresh worktree from its target branch. It does not recover deleted changes.",
   };
 };
 

@@ -143,7 +143,7 @@ export function PromptOverrideCard({
           <CollapsibleTrigger asChild>
             <button
               type="button"
-              className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/80"
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/80"
             >
               <p className="text-xs font-medium text-foreground">
                 Inherited prompt in use: {inheritedPreview.sourceLabel}

@@ -57,7 +57,7 @@ export const updateClaudeSessionModel = (
       if (!session)
         throw new HostValidationError({
           field: "externalSessionId",
-          message: `Claude session '${input.externalSessionId}' closed before its model could be changed. Reopen the chat and retry.`,
+          message: `Claude session '${input.externalSessionId}' closed before its model could be changed. Reopen the session and retry.`,
         });
       assertClaudeSessionRef(session, input, "update session model");
       const model =

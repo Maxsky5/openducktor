@@ -5,7 +5,7 @@ import { useSingleFlightMutation } from "../lib/use-single-flight";
 import { updateWorkspaceSessionQueries } from "../queries/workspace-sessions";
 
 export const RENAME_CHAT_TEXT = {
-  title: "Rename chat",
+  title: "Rename session",
   description: "Leave the name blank to use the generated title.",
   nameLabel: "Name",
   save: "Save",

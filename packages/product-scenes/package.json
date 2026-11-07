@@ -1,0 +1,49 @@
+{
+  "name": "@openducktor/product-scenes",
+  "version": "1.1.0",
+  "type": "module",
+  "exports": {
+    "./react": "./src/react/Scene.tsx",
+    "./astro": "./src/astro/Scene.astro",
+    "./styles.css": "./styles/index.css",
+    "./keys": "./src/replicas/keys.ts",
+    "./motion/gsap": "./src/motion/gsap.ts",
+    "./motion/once": "./src/motion/once.ts",
+    "./motion/player": "./src/motion/player.ts",
+    "./motion/preference": "./src/motion/preference.ts",
+    "./motion/text": "./src/motion/text.ts",
+    "./motion/tokens": "./src/motion/tokens.ts",
+    "./sample/chats": "./src/sample/chats.ts",
+    "./sample/tasks": "./src/sample/tasks.ts",
+    "./sample/workspace": "./src/sample/workspace.ts"
+  },
+  "scripts": {
+    "build": "bunx tsc -p tsconfig.json",
+    "build:theme": "bun scripts/build-theme.ts",
+    "typecheck": "bun check -p tsconfig.json && bun check -p video/tsconfig.json",
+    "test": "bun test --preload ../../tools/bun-test-preload.ts --timeout 1000",
+    "lint": "oxlint -c ../../.oxlintrc.json src scripts video",
+    "render:video": "bun video/render.ts"
+  },
+  "dependencies": {
+    "@openducktor/theme": "workspace:*",
+    "gsap": "^3.15.0",
+    "lucide-react": "1.59.0"
+  },
+  "devDependencies": {
+    "@fontsource-variable/space-grotesk": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@happy-dom/global-registrator": "^21.0.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "bun-types": "^1.4.2",
+    "playwright-core": "1.64.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "vite": "^8.3.4"
+  },
+  "peerDependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}

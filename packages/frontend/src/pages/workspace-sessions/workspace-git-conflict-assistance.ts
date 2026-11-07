@@ -24,7 +24,7 @@ export const requestWorkspaceGitConflictAssistance = async (input: {
     actions.workspace.repoPath !== workspace.repoPath ||
     actions.record.id !== record.id
   )
-    throw new Error("The selected chat is not ready. Wait for session data or reload the chat.");
+    throw new Error("The selected session is not ready. Wait for its data to load, or reload it.");
   if (actions.blockedReason) throw new Error(actions.blockedReason);
   const recipientBlocker = chatConflictBlockedReason(record, conflict);
   if (recipientBlocker) throw new Error(recipientBlocker);

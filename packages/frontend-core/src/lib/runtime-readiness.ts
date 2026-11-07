@@ -61,7 +61,7 @@ export const deriveRuntimeReadiness = ({
   runtimeTarget = allRuntimeReadinessTarget,
 }: DeriveRuntimeReadinessArgs): RuntimeReadinessSnapshot => {
   if (!hasWorkspace) {
-    return { state: "blocked", message: "Select a repository to use agent chat." };
+    return { state: "blocked", message: "Select a repository to use agent sessions." };
   }
   if (runtimeTarget.kind === "inactive") {
     return { state: "ready", message: null };
@@ -82,7 +82,7 @@ export const deriveRuntimeReadiness = ({
     if (!definition) {
       return {
         state: "blocked",
-        message: `Runtime '${runtimeTarget.runtimeKind}' is not available for agent chat.`,
+        message: `Runtime '${runtimeTarget.runtimeKind}' is not available for agent sessions.`,
       };
     }
     definitions = [definition];

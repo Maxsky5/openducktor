@@ -54,7 +54,7 @@ export function TaskPullRequestLink({
       onClick={openPullRequest}
       className={cn(
         badgeVariants({ variant: "outline" }),
-        "inline-flex text-muted-foreground cursor-pointer items-center gap-1.5 rounded-full border-border bg-card px-2.5 py-1 text-[11px] font-semibold hover:bg-muted",
+        "inline-flex text-muted-foreground items-center gap-1.5 rounded-full border-border bg-card px-2.5 py-1 text-[11px] font-semibold hover:bg-muted",
         className,
       )}
     >

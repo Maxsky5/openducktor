@@ -549,7 +549,7 @@ describe("task worktree cleanup", () => {
 
     // No user confirms a pull request sync close, so it cannot warn about native history.
     expect(failure.message).toBe(
-      "Cannot close task task-1 because others still need its worktree. Saved Claude chats keep their native history in a removed worktree: “Fork”. These chats cannot resume after this. Close the task yourself to confirm the removal.",
+      "Cannot close task task-1 because others still need its worktree. Saved Claude sessions keep their native history in a removed worktree: “Fork”. These sessions cannot resume after this. Close the task yourself to confirm the removal.",
     );
     expect(reads).toEqual([
       {

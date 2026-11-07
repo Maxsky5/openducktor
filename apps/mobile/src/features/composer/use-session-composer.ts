@@ -256,7 +256,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     // Reusable prompts of the host settings are slash commands too, as on desktop.
     supportsSlashCommands: promptInput.slashCommands.supportsSlashCommands,
     supportsSkillReferences: promptInput.support.supportsSkillReferences,
-    readOnlyReason: archived ? "This chat is archived. Restore it to send messages." : null,
+    readOnlyReason: archived ? "This session is archived. Restore it to send messages." : null,
     waitingInputPlaceholder: composerFacts.waitingInputPlaceholder,
     messageQueue: delivery.messageQueue,
   };

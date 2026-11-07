@@ -11,6 +11,8 @@ This guide covers the desktop app, the browser runner, and the mobile app. Read 
 | Layer | Main code | Owns | Does not own |
 |---|---|---|---|
 | UI | `packages/frontend/src/pages`, `packages/frontend/src/components` | Rendered state and local interaction | Workflow rules and status transitions |
+| Theme | `packages/theme/src/*` | The desktop theme tokens that the app and the product scenes share | Components and page styles |
+| Product scenes | `packages/product-scenes/src/*`, `packages/product-scenes/styles/*` | Stateless copies of the product UI, scene timelines, and their players, for the website and the app tour | Host data, live state, and app stores |
 | Frontend state | `packages/frontend/src/state/app-state-provider.tsx`, `packages/frontend/src/state/operations/*` | UI state, task and workspace operations, provider composition | Schemas, task mutations, source live runtime state |
 | Frontend core | `packages/frontend-core/src/*` | Host connection lifetime, query caches, live session projection, history merge, notification policy, connection recovery, drafts | Presentation, device APIs, workflow policy, source live runtime state |
 | Contracts | `packages/contracts/src/*` | Zod schemas for tasks, sessions, workflows, host commands, and MCP data | Runtime control and workflow policy |
@@ -78,7 +80,7 @@ Connection rules:
 
 - A `ClientConnection` binds one host connection to one query client, one device storage scope, and its draft stores. `connectionHost(queryClient)` returns the host client of the connection that owns a query client, so a late response stays in its own cache. Query options and loaders take no host override, so one cache key always reads the host of its own connection. Named session ports, such as `AgentSessionReadPort`, stay explicit.
 - Code outside React receives the connection, its query client, or its host client as a parameter. Code in React reads it with `useClientConnection`, `useHostClient`, or `useHostConnection`. Module-level tables key each entry by query client, so each entry belongs to one connection.
-- Frontend stores that keep host state, such as the command palette Recent list, session panel layouts, and the selected workspace chat, read `ClientConnection` storage. `perConnection` in `packages/frontend-core/src/lib/per-connection.ts` gives each connection its own store. The mobile app uses it too.
+- Frontend stores that keep host state, such as the command palette Recent list, session panel layouts, and the selected workspace session, read `ClientConnection` storage. `perConnection` in `packages/frontend-core/src/lib/per-connection.ts` gives each connection its own store. The mobile app uses it too.
 - React effects under `ClientConnectionProvider` own the event subscriptions. A platform unmounts that tree before it disposes the connection. The frontend uses `releaseShellConnection` for this order.
 - `saveDrafts()` writes every unsaved draft now. It rejects with an actionable message when a draft could not be saved, and that draft stays in memory.
 - `dispose()` starts `saveDrafts()` before its first `await`, cancels local reads, clears the cache, and releases the host transport. It rejects when a step failed, including a draft save. It sends no command that stops or changes host work, so admitted host work continues. Only the draft save can stage the attachments of an unsaved draft.

@@ -59,7 +59,7 @@ export function WorkspaceSessionHistoryDialog({
     >
       <DialogContent
         loading={archived.isPending}
-        loadingLabel="Loading archived chats…"
+        loadingLabel="Loading archived sessions…"
         onCloseAutoFocus={onCloseAutoFocus}
       >
         <DialogHeader>

@@ -71,7 +71,7 @@ function UnlistedWorkspacesNote({
             .join(", ")}.`}{" "}
           <button
             type="button"
-            className="cursor-pointer font-medium text-sidebar-foreground underline underline-offset-2"
+            className="font-medium text-sidebar-foreground underline underline-offset-2"
             onClick={onOpenRepositoryModal}
           >
             Reopen a workspace

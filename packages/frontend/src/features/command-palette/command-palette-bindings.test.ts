@@ -259,7 +259,7 @@ describe("mainListEnterHint", () => {
     expect(enterLabel({ kind: "task", item: task }, taskView({ open: { kind: "details" } }))).toBe(
       "Open details",
     );
-    expect(enterLabel({ kind: "chat", item: chat })).toBe("Open chat");
+    expect(enterLabel({ kind: "chat", item: chat })).toBe("Open session");
     expect(enterLabel({ kind: "action", item: action })).toBe("Run");
     expect(enterLabel(undefined, null, createFromQuery.key)).toBe("Run");
   });

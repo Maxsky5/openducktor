@@ -42,7 +42,7 @@ export function startupActivity(attempt: StartupAttempt): string | undefined {
 
 export function startupTitle(attempt: StartupAttempt): string {
   const scope = attempt.origin.scope;
-  const subject = scope.kind === "task" ? `${attempt.roleLabel ?? "Task"} session` : "Chat";
+  const subject = scope.kind === "task" ? `${attempt.roleLabel ?? "Task"} session` : "Session";
   switch (attempt.status.phase) {
     case "ready":
       return startupCurrentStep(attempt)
@@ -53,14 +53,16 @@ export function startupTitle(attempt: StartupAttempt): string {
     case "canceled":
       return `${subject} start canceled`;
     default:
-      return scope.kind === "task" ? `Starting ${subject}` : "Starting chat";
+      return scope.kind === "task" ? `Starting ${subject}` : "Starting session";
   }
 }
 
 export function startupOrigin(attempt: StartupAttempt): string {
   const scope = attempt.origin.scope;
   const workspace = basenameForPath(attempt.origin.repoPath) || attempt.origin.repoPath;
-  return scope.kind === "task" ? `${workspace} · ${scope.taskId}` : `${workspace} · Workspace chat`;
+  return scope.kind === "task"
+    ? `${workspace} · ${scope.taskId}`
+    : `${workspace} · Workspace session`;
 }
 
 export function startupCurrentStep(attempt: StartupAttempt): StartupStep | undefined {

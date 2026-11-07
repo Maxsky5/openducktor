@@ -83,7 +83,7 @@ describe("recent items", () => {
     storage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify([{ kind: "page" }]));
     expect(readRecentItems(storage)).toEqual({
       items: [],
-      error: "The saved list of recent tasks and chats is invalid.",
+      error: "The saved list of recent tasks and sessions is invalid.",
     });
 
     storage.setItem(RECENT_ITEMS_STORAGE_KEY, "{");

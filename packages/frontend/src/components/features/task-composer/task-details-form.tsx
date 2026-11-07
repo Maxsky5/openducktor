@@ -84,13 +84,7 @@ export function TaskDetailsForm({
             </div>
           </div>
           {mode === "create" ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={onRequestTypeChange}
-            >
+            <Button type="button" size="sm" variant="outline" onClick={onRequestTypeChange}>
               Change
             </Button>
           ) : null}

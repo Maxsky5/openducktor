@@ -1,0 +1,19 @@
+{
+  "name": "@openducktor/theme",
+  "version": "1.1.0",
+  "type": "module",
+  "exports": {
+    "./tokens.css": "./src/tokens.css",
+    "./blocks": "./src/blocks.ts",
+    "./colors": "./src/colors.ts"
+  },
+  "scripts": {
+    "build": "bunx tsc -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --preload ../../tools/bun-test-preload.ts --timeout 1000",
+    "lint": "oxlint -c ../../.oxlintrc.json src"
+  },
+  "devDependencies": {
+    "bun-types": "^1.4.2"
+  }
+}

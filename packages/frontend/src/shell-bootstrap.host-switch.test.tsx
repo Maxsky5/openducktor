@@ -135,7 +135,7 @@ test("a host switch saves drafts, unmounts the app, and releases the host before
     mounted.drafts.chat.set(draftIdentity, null, oversizedDraft());
     await switchHost();
 
-    expect(await screen.findByText(/Could not save a chat draft\./)).toBeDefined();
+    expect(await screen.findByText(/Could not save a message draft\./)).toBeDefined();
     expect(events).toEqual([]);
     expect(navigate).not.toHaveBeenCalled();
     expect(currentTarget()).toEqual({ kind: "local" });

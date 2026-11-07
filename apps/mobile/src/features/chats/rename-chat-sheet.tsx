@@ -30,7 +30,7 @@ import { ChatSheetStateScreen } from "./chat-sheet-states";
 import { useChatRecord } from "./use-chat-record";
 import { closeScreen } from "@/navigation/close-screen";
 
-const TITLE = "Rename chat";
+const TITLE = "Rename session";
 
 function RenameChatForm({
   workspaceId,
@@ -50,7 +50,7 @@ function RenameChatForm({
     workspaceId,
     sessionId: record.id,
     onRenamed: () => {
-      feedback.show("success", "Chat renamed.");
+      feedback.show("success", "Session renamed.");
       if (mounted.current) closeScreen(navigation);
     },
   });

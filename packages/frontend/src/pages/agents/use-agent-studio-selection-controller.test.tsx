@@ -829,7 +829,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.view.selectedSession.loadedSession).toBeNull();
       expect(latest.view.selectedSession.runtimeReadiness.state).toBe("blocked");
       expect(latest.view.selectedSession.runtimeReadiness.message).toBe(
-        "Runtime 'codex' is not available for agent chat.",
+        "Runtime 'codex' is not available for agent sessions.",
       );
       expect(latest.view.selectedSession.transcriptState).toEqual({
         kind: "runtime_waiting",

@@ -89,19 +89,19 @@ describe("Workspace Session file access", () => {
       name: "a root outside the chat directory",
       change: () => {},
       rootPath: "/worktrees/other",
-      message: "/worktrees/other is not the directory of this chat",
+      message: "/worktrees/other is not the directory of this session",
     },
     {
       name: "a missing directory",
       change: (h: ReturnType<typeof setup>) => h.state.existing.delete(worktree),
       rootPath: worktree,
-      message: `The directory of this chat is missing: ${worktree}. Recreate the worktree at this path, or archive this chat.`,
+      message: `The directory of this session is missing: ${worktree}. Recreate the worktree at this path, or archive this session.`,
     },
     {
       name: "a directory that is no longer a registered worktree",
       change: (h: ReturnType<typeof setup>) => h.state.registered.delete(worktree),
       rootPath: worktree,
-      message: `The directory of this chat is not a registered worktree of ${repoPath}: ${worktree}. If you moved this worktree, run git worktree repair in it.`,
+      message: `The directory of this session is not a registered worktree of ${repoPath}: ${worktree}. If you moved this worktree, run git worktree repair in it.`,
     },
   ])("rejects $name before any file I/O", async ({ change, rootPath, message }) => {
     const h = setup();
@@ -130,7 +130,7 @@ describe("Workspace Session file access", () => {
     h.state.existing.delete(repoPath);
     const failure = await Effect.runPromise(Effect.flip(h.access(ref, repoPath, Effect.void)));
     expect(failure.message).toBe(
-      `The repository of this chat is missing: ${repoPath}. Restore the repository at this path, or archive this chat.`,
+      `The repository of this session is missing: ${repoPath}. Restore the repository at this path, or archive this session.`,
     );
   });
 
@@ -160,7 +160,7 @@ describe("Workspace Session file access", () => {
     await Effect.runPromise(Deferred.succeed(removing, undefined));
     await Effect.runPromise(Fiber.join(archive));
     const failure = await Effect.runPromise(Effect.flip(Fiber.join(read)));
-    expect(failure.message).toContain("The directory of this chat is missing");
+    expect(failure.message).toContain("The directory of this session is missing");
     expect(ran).toBe(false);
   });
 });
@@ -190,7 +190,7 @@ describe("Workspace files scoped to chats", () => {
     );
     expect(failure).toBeInstanceOf(HostValidationError);
     expect(failure.message).toBe(
-      `The directory of this chat is missing: ${worktree}. Recreate the worktree at this path, or archive this chat.`,
+      `The directory of this session is missing: ${worktree}. Recreate the worktree at this path, or archive this session.`,
     );
   });
 });

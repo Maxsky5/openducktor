@@ -141,7 +141,7 @@ describe("conflict assistance", () => {
     };
     expect(workspaceConflictRecipientBlockedReason(record)).toBeNull();
     expect(workspaceConflictRecipientBlockedReason({ ...record, archivedAt: 2 })).toBe(
-      "Restore the saved workspace chat before asking for assistance.",
+      "Restore the saved workspace session before asking for assistance.",
     );
     expect(
       workspaceConflictRecipientBlockedReason({
@@ -153,7 +153,7 @@ describe("conflict assistance", () => {
           worktreeState: "removed",
         },
       }),
-    ).toBe("Restore this chat's saved working directory before asking for assistance.");
+    ).toBe("Restore this session's saved working directory before asking for assistance.");
     expect(chatConflictBlockedReason(record, conflict)).toBe(
       CHAT_CONFLICT_DIRECTORY_MISMATCH_REASON,
     );
@@ -161,7 +161,7 @@ describe("conflict assistance", () => {
       chatConflictBlockedReason(record, { ...conflict, workingDir: "/repo/worktrees/chat/" }),
     ).toBeNull();
     expect(chatConflictBlockedReason({ ...record, archivedAt: 2 }, conflict)).toBe(
-      "Restore the saved workspace chat before asking for assistance.",
+      "Restore the saved workspace session before asking for assistance.",
     );
   });
 });
