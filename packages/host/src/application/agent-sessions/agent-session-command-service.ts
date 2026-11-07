@@ -9,7 +9,6 @@ import type {
   AgentWorkflowSessionForkInput,
   AgentSessionControlForkInput,
 } from "@openducktor/contracts";
-import { BLOCKED_ON_INPUT_REASON } from "@openducktor/core";
 import { Effect } from "effect";
 import {
   type HostError,
@@ -28,8 +27,11 @@ import type { AgentSessionLiveStateService } from "./agent-session-live-state-se
 import { createSessionOperationOwner } from "./session-operation-owner";
 import { resolveOwnedSessionRoot } from "./session-owner-resolution";
 import type { createSessionTurnPreparation } from "./session-turn-preparation";
-import { hasForegroundTurn, hasBlockingInput } from "./session-foreground-readiness";
+import { hasForegroundTurn } from "./session-foreground-readiness";
 import { startupStep, completeStartupSession } from "./session-startup-progress";
+import type { SessionGoalRules } from "./session-goal-rules";
+import { createSessionGoalCommands } from "./session-goal-commands";
+import { createSessionCommandReadiness } from "./session-command-readiness";
 
 type ObservedSessionCommands = Pick<
   AgentSessionLiveStateService,
@@ -42,6 +44,7 @@ export const createAgentSessionCommandService = ({
   turnPreparation,
   readSessionRootRefs,
   approvalPolicy,
+  goalRules,
   ...dependencies
 }: Omit<Parameters<typeof createTaskWorkflowSessionPolicy>[0], "resolveRoot"> & {
   repositoryPolicy: AgentSessionOperationPolicy;
@@ -54,9 +57,13 @@ export const createAgentSessionCommandService = ({
     ReturnType<typeof import("./host-approval-policy").createHostApprovalPolicy>,
     "reply"
   >;
+  goalRules: Pick<SessionGoalRules, "blockedReason">;
   runtime: Parameters<typeof createTaskWorkflowSessionPolicy>[0]["runtime"] &
     ObservedSessionCommands &
-    Pick<AgentSessionLiveStateService, "read" | "list" | "publishOperation" | "retainOperation">;
+    Pick<
+      AgentSessionLiveStateService,
+      "read" | "list" | "publishOperation" | "retainOperation" | "controlGoal"
+    >;
 }) => {
   const { runtime, canonicalizeRepoPath } = dependencies;
   const creation = createSessionCreationPreparation({
@@ -86,33 +93,8 @@ export const createAgentSessionCommandService = ({
     publish: runtime.publishOperation,
     retain: runtime.retainOperation,
   });
-  const readAvailableSession = (ref: AgentSessionLiveRef) =>
-    Effect.gen(function* () {
-      const { repoPath, runtimeKind, workingDirectory, externalSessionId } = ref;
-      const live = yield* runtime.read({
-        repoPath,
-        runtimeKind,
-        workingDirectory,
-        externalSessionId,
-      });
-      if (live.type === "live" && live.session.statusUnavailableReason)
-        return yield* new HostOperationError({
-          operation: "session.prepare",
-          message: live.session.statusUnavailableReason,
-        });
-      return live;
-    });
-  const checkPending = (ref: AgentSessionLiveRef) =>
-    readAvailableSession(ref).pipe(
-      Effect.flatMap((live) => {
-        if (live.type === "live" && hasBlockingInput(live.session))
-          return new HostOperationError({
-            operation: "session.prepare",
-            message: BLOCKED_ON_INPUT_REASON,
-          });
-        return Effect.succeed(live);
-      }),
-    );
+  const { readAvailableSession, checkPending, requireReadySession } =
+    createSessionCommandReadiness(runtime);
   const {
     continuationModel,
     updateModel,
@@ -124,16 +106,15 @@ export const createAgentSessionCommandService = ({
     runtime,
     turnPreparation,
   });
-  const requireReadySession = (ref: AgentSessionLiveRef) =>
-    Effect.gen(function* () {
-      const live = yield* checkPending(ref);
-      if (live.type !== "live")
-        return yield* new HostValidationError({
-          field: "externalSessionId",
-          message: "The session is not attached to its runtime. Reopen the session before sending.",
-        });
-      return live;
-    });
+  const goals = createSessionGoalCommands({
+    goalRules,
+    owner,
+    runtime,
+    turnPreparation,
+    checkPending,
+    canonicalizeRepoPath,
+    policyFor,
+  });
 
   return {
     ...runtime,
@@ -382,7 +363,10 @@ export const createAgentSessionCommandService = ({
           "submission",
           Effect.gen(function* () {
             yield* requireReadySession(ref);
-            return yield* policy.prepareSend(ref);
+            const prepared = yield* policy.prepareSend(ref);
+            const goalCommand = yield* goals.commandOf(prepared.parts);
+            if (goalCommand) yield* goals.requireAllowed(ref, goalCommand);
+            return prepared;
           }),
           input.submissionId,
         );
@@ -409,6 +393,8 @@ export const createAgentSessionCommandService = ({
                   "The running turn ended before steering. Send a new message with current context.",
               });
             const content = yield* policy.prepareSend(ref);
+            const goalCommand = yield* goals.commandOf(content.parts);
+            if (goalCommand) return yield* goals.send(content, goalCommand, steering, options);
             const systemPrompt = steering ? undefined : yield* turnPreparation.context(ref);
             const current = yield* checkPending(ref);
             if (steering && (current.type !== "live" || !hasForegroundTurn(current.session)))
@@ -435,6 +421,7 @@ export const createAgentSessionCommandService = ({
                 guarded.onSent();
                 options?.onSent?.();
               },
+              goal: options?.goal,
             });
             yield* owner
               .accepted(accepted)
@@ -449,6 +436,7 @@ export const createAgentSessionCommandService = ({
           options?.assertCurrent,
         );
       }),
+    applyGoalAction: goals.applyAction,
     updateSessionModel: (input: Parameters<typeof runtime.updateSessionModel>[0]) =>
       Effect.gen(function* () {
         const repoPath = yield* canonicalizeRepoPath(input.repoPath);

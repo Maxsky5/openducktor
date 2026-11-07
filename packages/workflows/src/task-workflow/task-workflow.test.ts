@@ -7,8 +7,10 @@ import {
   reviewTaskRoles,
 } from "../../test-support/review-task-workflow";
 import { BUILTIN_ROLES } from "../builtin/roles/roles";
+import { SPEC_PLAN_BUILD_DEFINITION } from "../builtin/spec-plan-build/definition";
 import { specPlanBuildWorkflow } from "../builtin/spec-plan-build/workflow";
 import type { TaskFacts } from "./task-input";
+import { launchGoalObjective } from "./launch-goal";
 import { createTaskWorkflow } from "./task-workflow";
 
 const review = createReviewTaskWorkflow();
@@ -28,6 +30,38 @@ const withChange = (change: (definition: WorkflowDefinition) => void) => {
 };
 
 describe("createTaskWorkflow", () => {
+  test("declares Goal mode only for the implementation and rework launches", () => {
+    const task = { id: "task-7", title: "Add goals" };
+    const goals = Object.fromEntries(
+      SPEC_PLAN_BUILD_DEFINITION.steps.flatMap((step) =>
+        step.kind === "agent"
+          ? step.launchActions.flatMap((launch) => {
+              const objective = launchGoalObjective(launch, task);
+              return objective === undefined ? [] : [[launch.id, objective]];
+            })
+          : [],
+      ),
+    );
+    expect(goals).toEqual({
+      build_implementation_start: 'Implement task task-7 "Add goals".',
+      build_after_qa_rejected:
+        'Fix the findings of the latest QA report for task task-7 "Add goals".',
+      build_after_human_request_changes: 'Apply the requested changes for task task-7 "Add goals".',
+    });
+  });
+
+  test("rejects a default goal with a placeholder other than the task ID and title", () => {
+    const create = withChange((definition) => {
+      const step = definition.steps.find((candidate) => candidate.kind === "agent");
+      if (step?.kind !== "agent") throw new Error("The review workflow has no agent step.");
+      step.launchActions[0] = {
+        ...step.launchActions[0]!,
+        goal: { defaultObjective: "Finish {{task.description}}" },
+      };
+    });
+    expect(create).toThrow('uses placeholder "task.description"');
+  });
+
   test("reads states, roles, artifacts, and issue types from the definition", () => {
     expect(review.issueTypes).toEqual(["feature", "bug"]);
     expect(review.detectsMerge("approval")).toBe(true);

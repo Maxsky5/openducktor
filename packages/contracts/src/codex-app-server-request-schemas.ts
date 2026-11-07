@@ -17,6 +17,16 @@ export type CodexAppServerRequestReasoningEffort = z.output<
 const nullableString = z.string().nullable().optional();
 const nullableBoolean = z.boolean().nullable().optional();
 const nullableUint32 = codexUint32Schema.nullable().optional();
+export const codexAppServerThreadGoalStatusSchema = z.enum([
+  "active",
+  "paused",
+  "blocked",
+  "usageLimited",
+  "budgetLimited",
+  "complete",
+]);
+/** Missing provenance does not supply user authorization. */
+const threadGoalMutationOriginSchema = z.enum(["user", "automatic"]);
 export const codexAppServerApprovalsReviewerSchema = z.enum([
   "auto_review",
   "guardian_subagent",
@@ -432,6 +442,17 @@ export const codexAppServerRequestParamsSchemas = {
   }),
   "thread/name/set": z.strictObject({ threadId: z.string(), name: z.string() }),
   "thread/compact/start": z.strictObject({ threadId: z.string() }),
+  "thread/goal/set": z.strictObject({
+    threadId: z.string(),
+    origin: threadGoalMutationOriginSchema.nullable().optional(),
+    objective: nullableString,
+    status: codexAppServerThreadGoalStatusSchema.nullable().optional(),
+    tokenBudget: codexUint64Schema.nullable().optional(),
+  }),
+  "thread/goal/clear": z.strictObject({
+    threadId: z.string(),
+    origin: threadGoalMutationOriginSchema.nullable().optional(),
+  }),
   "thread/turns/list": z.strictObject({
     threadId: z.string(),
     cursor: nullableString,
@@ -524,6 +545,14 @@ export const codexAppServerClientRequestSchema = z.discriminatedUnion("method", 
     params: codexAppServerRequestParamsSchemas["thread/compact/start"],
   }),
   z.strictObject({
+    method: z.literal("thread/goal/set"),
+    params: codexAppServerRequestParamsSchemas["thread/goal/set"],
+  }),
+  z.strictObject({
+    method: z.literal("thread/goal/clear"),
+    params: codexAppServerRequestParamsSchemas["thread/goal/clear"],
+  }),
+  z.strictObject({
     method: z.literal("thread/turns/list"),
     params: codexAppServerRequestParamsSchemas["thread/turns/list"],
   }),
@@ -588,6 +617,10 @@ export type CodexAppServerThreadForkParams = CodexAppServerRequestParamsMap["thr
 export type CodexAppServerThreadSetNameParams = CodexAppServerRequestParamsMap["thread/name/set"];
 export type CodexAppServerThreadCompactStartParams =
   CodexAppServerRequestParamsMap["thread/compact/start"];
+export type CodexAppServerThreadGoalSetParams = CodexAppServerRequestParamsMap["thread/goal/set"];
+export type CodexAppServerThreadGoalClearParams =
+  CodexAppServerRequestParamsMap["thread/goal/clear"];
+export type CodexAppServerThreadGoalStatus = z.output<typeof codexAppServerThreadGoalStatusSchema>;
 export type CodexAppServerThreadListParams = CodexAppServerRequestParamsMap["thread/list"];
 export type CodexAppServerThreadLoadedListParams =
   CodexAppServerRequestParamsMap["thread/loaded/list"];

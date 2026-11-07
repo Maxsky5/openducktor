@@ -1,3 +1,4 @@
+import { allowAllGoalCommands } from "../../test-support/service-test-doubles";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
@@ -101,7 +102,9 @@ const setup = (
           }),
       },
     }),
+    goalRules: allowAllGoalCommands,
     runtime: {
+      controlGoal: () => Effect.die(new Error("unexpected goal action")),
       list: () => Effect.succeed(snapshots),
       read: (ref) =>
         Effect.succeed(

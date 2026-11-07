@@ -30,7 +30,7 @@ type ClientResult<Method extends keyof HostClientType> = Awaited<
 type HostWirePayload = ClientResult<keyof HostClientType> | JSONType | undefined;
 
 const makeTaskCardPayload = () => ({
-  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflow: { id: "openducktor-spec-plan-build", revision: 3 },
   workflowSteps: [],
   id: "task-1",
   title: "Task",
@@ -519,7 +519,7 @@ describe("HostClient", () => {
       ) {
         return summary;
       }
-      if (command === "agent_session_control_stop") {
+      if (command === "agent_session_control_stop" || command === "agent_session_goal_control") {
         return undefined;
       }
       throw new Error(`Unexpected command: ${command}`);
@@ -573,6 +573,14 @@ describe("HostClient", () => {
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
+    });
+    await client.agentSessionGoalControl({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      sessionScope: { kind: "repository", workspaceId: "workspace-1" },
+      action: "pause",
     });
 
     expect(calls).toEqual([
@@ -630,6 +638,17 @@ describe("HostClient", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktree",
           externalSessionId: "session-1",
+        },
+      },
+      {
+        command: "agent_session_goal_control",
+        args: {
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+          sessionScope: { kind: "repository", workspaceId: "workspace-1" },
+          action: "pause",
         },
       },
     ]);

@@ -553,3 +553,15 @@ test("a transport error does not launch again or resend", async () => {
   expect(launch).toHaveBeenCalledTimes(1);
   expect(sendAgentMessage).not.toHaveBeenCalled();
 });
+
+test("sends the goal of Goal mode with the launch", async () => {
+  const launch = createLaunch();
+  await start(launch, { decision: { ...freshDecision, goalObjective: "Implement task task." } });
+  expect(sentRequest(launch).goal).toEqual({ objective: "Implement task task." });
+});
+
+test("sends no goal with Goal mode off", async () => {
+  const launch = createLaunch();
+  await start(launch);
+  expect(sentRequest(launch)).not.toHaveProperty("goal");
+});

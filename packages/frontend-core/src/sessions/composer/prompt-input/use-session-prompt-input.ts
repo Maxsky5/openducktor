@@ -10,6 +10,7 @@ import { useChatComposerCatalogRefresh } from "./use-chat-composer-catalog-refre
 import { useChatComposerSkills } from "./use-chat-composer-skills";
 import { useChatComposerSlashCommands } from "./use-chat-composer-slash-commands";
 import { useChatComposerSubagents } from "./use-chat-composer-subagents";
+import { useRuntimeGoalAvailability } from "../../goals/use-runtime-goal-availability";
 
 /**
  * The prompt input catalogs of one chat: slash commands, skills, subagents, and file search. They
@@ -54,11 +55,13 @@ export function useSessionPromptInput({
     runtimeDefinitions: runtime.allRuntimeDefinitions,
     runtimeKind,
   });
+  const goals = useRuntimeGoalAvailability(runtimeKind);
   const slashCommands = useChatComposerSlashCommands({
     promptInputRuntime,
     runtimeSupportsSlashCommands: support.runtimeSupportsSlashCommands,
     reusablePrompts,
     loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
+    goalsAvailable: goals?.available === true,
   });
   const skills = useChatComposerSkills({
     promptInputRuntime,

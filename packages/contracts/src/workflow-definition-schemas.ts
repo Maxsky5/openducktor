@@ -182,6 +182,8 @@ export const workflowLaunchActionDefinitionSchema = z.strictObject({
   /** When the extra control shows. The default is always. */
   showWhen: workflowConditionSchema.optional(),
   description: z.string().optional(),
+  /** The launch offers Goal mode. The text can use `{{task.id}}` and `{{task.title}}`. */
+  goal: z.strictObject({ defaultObjective: z.string().trim().min(1) }).optional(),
 });
 export type WorkflowLaunchActionDefinition = z.infer<typeof workflowLaunchActionDefinitionSchema>;
 

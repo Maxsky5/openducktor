@@ -48,6 +48,7 @@ export type AgentChatComposerConfig = {
   steerBlockedReason: string | null;
   runningTurnModel: AgentChatComposerModel["runningTurnModel"];
   messageQueue: AgentChatComposerModel["messageQueue"];
+  goalRow: AgentChatComposerModel["goalRow"];
   isSending: boolean;
   isStarting: boolean;
   isSavingModel?: boolean;
@@ -144,6 +145,7 @@ export function useAgentChatComposerModel({
       steerBlockedReason: composer.steerBlockedReason,
       runningTurnModel: composer.runningTurnModel,
       messageQueue: composer.messageQueue,
+      goalRow: composer.goalRow,
       isSending: composer.isSending,
       isStarting: composer.isStarting,
       isSavingModel: composer.isSavingModel ?? false,

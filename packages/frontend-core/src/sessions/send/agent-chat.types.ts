@@ -122,6 +122,8 @@ export type AgentChatMessageQueueModel = {
 /** The send state and actions that a chat composer reads. */
 export type AgentChatSend = {
   messageQueue: AgentChatMessageQueueModel | null;
+  /** The goal row of the session, or null when the session has no goal. */
+  goalRow: import("../goals/use-agent-session-goal-row").AgentSessionGoalRowModel | null;
   /** Why the session cannot steer the running turn now, or null when it can. */
   steerBlockedReason: string | null;
   runningTurnModel: AgentModelCatalog["models"][number] | null;

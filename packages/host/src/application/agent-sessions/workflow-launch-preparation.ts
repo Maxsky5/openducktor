@@ -17,6 +17,7 @@ import {
   type TaskWorkflow,
   type TaskWorkflowLaunchAction,
 } from "@openducktor/workflows";
+import { resolveRuntimeGoalAvailability } from "@openducktor/core";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import { errorMessage, HostValidationError, toHostOperationError } from "../../effect/host-errors";
@@ -226,6 +227,21 @@ export const prepareWorkflowLaunch = (
         `Runtime '${runtimeKind}' does not support '${decision.startMode}'. Select a supported launch mode.`,
       );
     yield* deps.registry.requireReady(runtimeKind);
+    if (request.goal) {
+      if (request.policy.kind === "automatic")
+        return yield* launchValidationError("Automatic starts cannot use Goal mode.");
+      if (!action.goal)
+        return yield* launchValidationError(
+          `Action '${actionId}' does not offer Goal mode. Start it without a goal.`,
+        );
+      if (request.instruction.kind === "none")
+        return yield* launchValidationError(
+          "Goal mode needs a first message. Start the session with its first message.",
+        );
+      const { version } = yield* deps.registry.status(runtimeKind);
+      const goals = resolveRuntimeGoalAvailability(descriptor, version);
+      if (!goals.available) return yield* launchValidationError(goals.reason);
+    }
     // The event commits through the workflow event path, so its host effects run first.
     if (request.beforeStartAction) {
       yield* deps.tasks.applyTaskEvent({

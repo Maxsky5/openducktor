@@ -50,6 +50,7 @@ import { ComposerSuggestionList } from "./composer-suggestion-list";
 import { ComposerTextField } from "./composer-text-field";
 import { resolveHardwareEnter } from "./hardware-enter";
 import { ContextUsageIndicator, useContextUsage } from "./context-usage-indicator";
+import { GoalRow } from "./goal-row";
 import { MessageQueuePanel, QueuePauseNotice } from "./message-queue-panel";
 import { PendingCommentsNotice } from "./pending-comments-notice";
 import { useAttachmentPickers } from "./use-attachment-pickers";
@@ -198,6 +199,7 @@ function SessionComposerView({ composer }: { composer: SessionComposerModel }): 
             pickers={pickers}
           />
         ) : null}
+        {delivery.goalRow ? <GoalRow model={delivery.goalRow} /> : null}
         <View style={cardStyleOf(cardState)}>
           {composer.isWorking && !composer.isWaitingInput ? (
             <BorderRay

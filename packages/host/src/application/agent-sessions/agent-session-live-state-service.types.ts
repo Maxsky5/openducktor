@@ -37,6 +37,7 @@ import type {
   AgentSessionLiveAdapterBinding,
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterRegistryPort,
+  AgentSessionControlAdapterPort,
   AgentSessionControlContinueInterruptedTurnInput,
   AgentSessionSendOptions,
   AgentSessionTitleUpdateOutcome,
@@ -141,6 +142,7 @@ export type AgentSessionLiveStateService = {
     input: AgentSessionControlSendInput & AgentWorkStartOptions,
     options?: AgentSessionSendOptions,
   ) => Effect.Effect<AcceptedAgentInput, HostError>;
+  readonly controlGoal: AgentSessionControlAdapterPort["controlGoal"];
   readonly updateSessionModel: (
     input: AgentSessionControlUpdateModelInput & AgentWorkStartOptions,
   ) => Effect.Effect<void, HostError>;

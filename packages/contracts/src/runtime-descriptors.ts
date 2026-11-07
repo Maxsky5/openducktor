@@ -58,6 +58,10 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
   messageDelivery: {
     minimumSteeringRuntimeVersion: "2.0.24",
   },
+  goals: {
+    minimumRuntimeVersion: "2.2.1",
+    supportsPauseResume: true,
+  },
   history: {
     loadable: true,
     fidelity: "message",
@@ -141,6 +145,10 @@ export const CODEX_RUNTIME_CAPABILITIES = {
   },
   messageDelivery: {
     minimumSteeringRuntimeVersion: "0.106.0",
+  },
+  goals: {
+    minimumRuntimeVersion: "0.166.0",
+    supportsPauseResume: true,
   },
   history: {
     loadable: true,
@@ -240,6 +248,10 @@ export const CLAUDE_RUNTIME_CAPABILITIES = {
   messageDelivery: {
     minimumSteeringRuntimeVersion: "2.1.286",
   },
+  goals: {
+    minimumRuntimeVersion: "2.1.306",
+    supportsPauseResume: false,
+  },
   history: {
     loadable: true,
     fidelity: "message",
@@ -304,6 +316,7 @@ export const OPENCODE_RUNTIME_DESCRIPTOR = {
   readOnlyRoleBlockedTools: [...OPENCODE_READ_ONLY_ROLE_BLOCKED_TOOLS],
   workflowToolAliasesByCanonical: createOpencodeWorkflowToolAliasesByCanonical(),
   capabilities: OPENCODE_RUNTIME_CAPABILITIES,
+  updateAction: "Run `opencode upgrade`.",
   capabilityLimits: [
     {
       scope: "runtime",
@@ -328,6 +341,8 @@ export const CODEX_RUNTIME_DESCRIPTOR = {
   readOnlyRoleBlockedTools: [...CODEX_READ_ONLY_ROLE_BLOCKED_TOOLS],
   workflowToolAliasesByCanonical: {},
   capabilities: CODEX_RUNTIME_CAPABILITIES,
+  updateAction:
+    "Update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest`.",
 } as const satisfies RuntimeDescriptor;
 
 export const CLAUDE_RUNTIME_DESCRIPTOR = {
@@ -338,6 +353,7 @@ export const CLAUDE_RUNTIME_DESCRIPTOR = {
   readOnlyRoleBlockedTools: [...CLAUDE_READ_ONLY_ROLE_BLOCKED_TOOLS],
   workflowToolAliasesByCanonical: createClaudeWorkflowToolAliasesByCanonical(),
   capabilities: CLAUDE_RUNTIME_CAPABILITIES,
+  updateAction: "Run `claude update`.",
 } as const satisfies RuntimeDescriptor;
 
 export const RUNTIME_DESCRIPTORS_BY_KIND = {

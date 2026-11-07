@@ -138,6 +138,19 @@ const findClaudeSessionTranscripts = (
 ): Promise<string[]> =>
   findRootTranscripts(environment, (filename) => filename === `${sessionId}.jsonl`);
 
+/** The root transcript of one Claude session, or `null` when Claude has not written it yet. */
+export const findClaudeRootTranscript = async (
+  environment: NodeJS.ProcessEnv,
+  sessionId: string,
+): Promise<string | null> => {
+  const roots = await findClaudeSessionTranscripts(environment, sessionId);
+  if (roots.length > 1)
+    throw new Error(
+      "Multiple Claude transcripts have this session ID. Remove the duplicate native transcript.",
+    );
+  return roots[0] ?? null;
+};
+
 /**
  * Lists the session IDs that have a root transcript in the Claude folder. One scan serves the
  * metadata reads of many sessions.

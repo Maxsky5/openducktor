@@ -169,7 +169,11 @@ export const createWorkflowLaunchService = (
   return createSessionLaunchService<WorkflowLaunchAttemptRequest, WorkflowLaunchResult>({
     runtime: deps.runtime,
     send: (request, input, options) => {
-      if (request.policy.kind !== "automatic") return deps.runtime.sendUserMessage(input, options);
+      if (request.policy.kind !== "automatic")
+        return deps.runtime.sendUserMessage(
+          input,
+          request.goal ? { ...options, goal: request.goal } : options,
+        );
       return deps.messageDelivery
         .submit(
           {

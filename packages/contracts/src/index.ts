@@ -5,6 +5,7 @@ export * from "./agent-speed-schemas";
 export * from "./agent-runtime-schemas";
 export * from "./agent-session-control-schemas";
 export * from "./agent-session-event-schemas";
+export * from "./agent-session-goal-schemas";
 export * from "./agent-session-live-schemas";
 export * from "./workflow-operation-schemas";
 export {

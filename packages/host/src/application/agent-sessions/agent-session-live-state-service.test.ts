@@ -109,6 +109,7 @@ const titleControlAdapter = (
   forkSession: () => Effect.die(new Error("unexpected fork")),
   sendUserMessage: () => Effect.die(new Error("unexpected send")),
   updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+  controlGoal: () => Effect.die(new Error("unexpected goal action")),
   updateSessionTitle: updateTitle,
   stopSession: () => Effect.die(new Error("unexpected stop")),
   releaseSession: () => Effect.die(new Error("unexpected release")),
@@ -2208,6 +2209,7 @@ describe("createAgentSessionLiveStateService", () => {
       forkSession: () => Effect.die(new Error("unexpected fork")),
       sendUserMessage: () => Effect.die(new Error("unexpected send")),
       updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+      controlGoal: () => Effect.die(new Error("unexpected goal action")),
       updateSessionTitle: () => Effect.die(new Error("unexpected title update")),
       stopSession: () => Effect.die(new Error("unexpected stop")),
       releaseSession: () => Effect.die(new Error("unexpected release")),
@@ -2263,6 +2265,7 @@ describe("createAgentSessionLiveStateService", () => {
       forkSession: () => Effect.die(new Error("unexpected fork")),
       sendUserMessage: () => Effect.die(new Error("unexpected send")),
       updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+      controlGoal: () => Effect.die(new Error("unexpected goal action")),
       updateSessionTitle: () => Effect.die(new Error("unexpected title update")),
       stopSession: () => Effect.die(new Error("unexpected stop")),
       releaseSession: () => Effect.die(new Error("unexpected release")),
@@ -2383,6 +2386,7 @@ describe("createAgentSessionLiveStateService", () => {
         Effect.sync(() => {
           calls.push({ operation: "model", input });
         }),
+      controlGoal: () => Effect.die(new Error("unexpected goal action")),
       updateSessionTitle: (input) =>
         Effect.sync(() => {
           calls.push({ operation: "title", input });

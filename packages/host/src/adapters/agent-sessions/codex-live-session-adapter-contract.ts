@@ -54,6 +54,8 @@ export type CodexSessionController = Pick<
   | "continueInterruptedTurn"
   | "forkSession"
   | "sendUserMessage"
+  | "controlGoal"
+  | "pauseGoalForStop"
   | "updateSessionModel"
   | "updateSessionTitle"
   | "stopSession"

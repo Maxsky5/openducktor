@@ -65,6 +65,7 @@ import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agen
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioSelectedSessionState } from "../selected-session/selected-session-state";
 import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
+import { useSessionGoalsAvailable } from "@openducktor/frontend-core/sessions/goals/use-runtime-goal-availability";
 
 type UseAgentStudioChatComposerArgs = {
   workspaceRepoPath: string | null;
@@ -183,6 +184,7 @@ export function useAgentStudioChatComposer({
     [role, availableRuntimeDefinitions, draftSelection, defaultSelection, selectedSessionModel],
   );
   const selectedTargetRuntimeKind = selectedSessionIdentity?.runtimeKind ?? selectedRuntimeKind;
+  const goalsAvailable = useSessionGoalsAvailable(selectedSessionIdentity);
   const draftRuntimeReadiness = useRuntimeReadiness({
     hasWorkspace: workspaceRepoPath !== null,
     runtimeTarget: role
@@ -349,6 +351,7 @@ export function useAgentStudioChatComposer({
     runtimeSupportsSlashCommands,
     reusablePrompts,
     loadRuntimeCatalog,
+    goalsAvailable,
   });
   const { skillCatalog, skills, skillsError, isSkillsLoading, retrySkills } = useChatComposerSkills(
     {

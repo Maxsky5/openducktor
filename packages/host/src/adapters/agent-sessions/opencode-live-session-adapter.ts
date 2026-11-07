@@ -220,6 +220,13 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                 changes: state.setContext(signal.externalSessionId, signal.contextUsage),
               })),
             );
+          case "goal_updated":
+            return serializeRuntime(
+              commit("opencode-live-session.commit-goal", () => ({
+                value: undefined,
+                changes: state.setGoal(signal.externalSessionId, signal.goal),
+              })),
+            );
           case "session_event":
             return serializeRuntime(
               commit("opencode-live-session.commit-transcript-event", () => {

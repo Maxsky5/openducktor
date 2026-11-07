@@ -35,6 +35,7 @@ import type {
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
+  SessionRef,
   StartAgentSessionInput,
 } from "@openducktor/core";
 import {
@@ -199,7 +200,10 @@ type ControllerHarnessOptions = {
   persistedContextUsage?: CodexSessionContextUsage | null;
   sessionDiffs?: FileDiff[];
   continueInterruptedTurnError?: Error;
+  pauseGoalForStopError?: Error;
 };
+
+type CodexGoalControlCall = Parameters<CodexSessionController["controlGoal"]>[0];
 
 type AgentControlInputs = {
   starts: StartAgentSessionInput[];
@@ -217,6 +221,7 @@ const createControllerHarness = ({
   persistedContextUsage = { totalTokens: 456, contextWindow: 2_000 },
   sessionDiffs = [],
   continueInterruptedTurnError,
+  pauseGoalForStopError,
 }: ControllerHarnessOptions = {}) => {
   let options: CodexAppServerAdapterOptions | null = null;
   let snapshots = initialSnapshots;
@@ -232,6 +237,9 @@ const createControllerHarness = ({
     forks: [],
     sends: [],
   };
+  const goalControls: CodexGoalControlCall[] = [];
+  const goalPausesForStop: SessionRef[] = [];
+  const goalInputs = { controls: goalControls, pausesForStop: goalPausesForStop };
   const controlSummary = {
     externalSessionId: "thread-1",
     runtimeKind: "codex" as const,
@@ -395,6 +403,18 @@ const createControllerHarness = ({
             state: "queued" as const,
           };
         },
+        controlGoal: async (input: CodexGoalControlCall) => {
+          goalInputs.controls.push(input);
+          snapshots = snapshots.map((snapshot) => ({
+            ...snapshot,
+            goal: { objective: "Ship the release", status: "active" },
+          }));
+          return { type: "command_accepted" as const, commandName: "goal" as const };
+        },
+        pauseGoalForStop: async (input: SessionRef) => {
+          goalInputs.pausesForStop.push(input);
+          if (pauseGoalForStopError) throw pauseGoalForStopError;
+        },
         updateSessionModel: async (
           input: Parameters<CodexAppServerAdapter["updateSessionModel"]>[0],
         ) => {
@@ -440,6 +460,7 @@ const createControllerHarness = ({
     policyBoundContextLoads,
     sessionDiffLoads,
     controlInputs,
+    goalInputs,
     sendOptions,
   };
 };
@@ -955,6 +976,99 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       },
     ]);
     await expect(Effect.runPromise(prepared.adapter.listSnapshots())).resolves.toEqual([]);
+  });
+
+  test("pauses an active goal before it interrupts the turn, and a failed pause fails Stop", async () => {
+    const calls: string[] = [];
+    const recordingCodexAppServer = {
+      ...codexAppServer,
+      request: (input: Parameters<CodexAppServerPort["request"]>[0]) => {
+        calls.push(input.method);
+        return input.method === "thread/read"
+          ? Effect.succeed(threadReadResult("thread-1", "/repo/worktree"))
+          : Effect.succeed(
+              codexResult("thread/turns/list", {
+                data: [],
+                nextCursor: null,
+                backwardsCursor: null,
+              }),
+            );
+      },
+    } satisfies CodexAppServerPort &
+      import("../../ports/codex-session-history-port").CodexSessionHistoryPort;
+    const prepare = (harness: ReturnType<typeof createControllerHarness>) =>
+      Effect.runPromise(
+        createCodexLiveSessionAdapterPreparer({
+          resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+          directoriesMatch,
+          resolveMcpServerConfig,
+          prepareImageGenerations: async () => {
+            throw new Error("Unexpected image preparation");
+          },
+          liveSessionLifecycle: createLifecycle([]),
+          codexAppServer: recordingCodexAppServer,
+          onBackgroundFailure: noBackgroundFailure,
+          resolveRuntimePolicy,
+          createController: harness.createController,
+        })(runtime),
+      );
+
+    const harness = createControllerHarness();
+    const prepared = await prepare(harness);
+    await Effect.runPromise(prepared.adapter.stopSession(ref));
+    expect(harness.goalInputs.pausesForStop).toEqual([ref]);
+    expect(calls).toEqual(["thread/read", "thread/turns/list"]);
+
+    calls.length = 0;
+    const refusing = createControllerHarness({
+      pauseGoalForStopError: new Error(
+        "Codex could not pause the goal, so the session did not stop: goals feature is disabled",
+      ),
+    });
+    const refusingAdapter = await prepare(refusing);
+    const stopped = await Effect.runPromise(Effect.flip(refusingAdapter.adapter.stopSession(ref)));
+    expect(stopped.message).toContain("goals feature is disabled");
+    expect(calls).toEqual([]);
+  });
+
+  test("runs a goal action through the controller and publishes the reported goal", async () => {
+    const harness = createControllerHarness();
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
+        resolveMcpServerConfig,
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    const sessionScope = {
+      kind: "workflow" as const,
+      workspaceId: "repo",
+      taskId: "task-1",
+      role: "build" as const,
+    };
+    const onSent = () => undefined;
+
+    const accepted = await Effect.runPromise(
+      prepared.adapter.controlGoal(
+        { ...ref, sessionScope, command: { kind: "set", objective: "Ship the release" } },
+        { onSent },
+      ),
+    );
+
+    expect(accepted).toEqual({ type: "command_accepted", commandName: "goal" });
+    expect(harness.goalInputs.controls).toMatchObject([
+      { ...ref, command: { kind: "set", objective: "Ship the release" } },
+    ]);
+    const [snapshot] = await Effect.runPromise(prepared.adapter.listSnapshots());
+    expect(snapshot?.goal).toEqual({ objective: "Ship the release", status: "active" });
   });
 
   test("retains acceptance when the live projection cannot publish", async () => {

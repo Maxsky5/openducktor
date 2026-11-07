@@ -73,6 +73,7 @@ type ControlCall = {
       | "title"
       | "stop"
       | "release"
+      | "goal"
   ]: {
     operation: Operation;
     input: Parameters<
@@ -86,10 +87,21 @@ type ControlCall = {
         title: "updateSessionTitle";
         stop: "stopSession";
         release: "releaseSession";
+        goal: "controlGoal";
       }[Operation]]
     >[0];
   };
-}["start" | "resume" | "continue" | "fork" | "send" | "model" | "title" | "stop" | "release"];
+}[
+  | "start"
+  | "resume"
+  | "continue"
+  | "fork"
+  | "send"
+  | "model"
+  | "title"
+  | "stop"
+  | "release"
+  | "goal"];
 
 type RuntimeHarness = {
   readonly prepareRuntime: PrepareOpencodeSessionRuntime;
@@ -115,6 +127,7 @@ export const createRuntimeHarness = (
     readonly readSessionSources?: OpencodeSessionRuntimeConnection["readSessionSources"];
     /** Replaces the native runtime release after it records the call. */
     readonly release?: () => Promise<void>;
+    readonly controlGoalError?: Error;
   } = {},
 ): RuntimeHarness => {
   let listener: ((signal: OpencodeSessionRuntimeSignal) => void | Promise<void>) | null = null;
@@ -210,6 +223,11 @@ export const createRuntimeHarness = (
           title: input.title,
         },
       };
+    },
+    controlGoal: async (input, goalOptions) => {
+      controlCalls.push({ operation: "goal", input });
+      if (options.controlGoalError) throw options.controlGoalError;
+      goalOptions?.onSent?.();
     },
     stopSession: async (input) => {
       controlCalls.push({ operation: "stop", input });

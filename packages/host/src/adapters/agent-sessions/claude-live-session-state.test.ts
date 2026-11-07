@@ -64,6 +64,56 @@ const ref = {
 };
 
 describe("Claude host live-session state", () => {
+  test("projects the native goal from the session activity", () => {
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
+    const timestamp = "2026-11-07T10:00:00.000Z";
+    const goal = (value: { objective: string; ended: boolean } | null) =>
+      state.applyEvent(session, {
+        type: "session_goal_updated",
+        externalSessionId: ref.externalSessionId,
+        timestamp,
+        goal: value,
+      });
+    goal({ objective: "Ship it", ended: false });
+    expect(state.listSnapshots()[0]?.goal).toEqual({
+      objective: "Ship it",
+      status: "waiting_for_message",
+    });
+    state.applyEvent(session, {
+      type: "session_status",
+      externalSessionId: ref.externalSessionId,
+      timestamp,
+      status: { type: "busy", message: null },
+    });
+    expect(state.listSnapshots()[0]?.goal).toEqual({ objective: "Ship it", status: "active" });
+    // A control summary rebuilds the snapshot and keeps the goal.
+    state.applyControlSummary("/repo", summary, { keepActivity: true });
+    expect(state.listSnapshots()[0]?.goal?.status).toBe("active");
+    goal({ objective: "Ship it", ended: true });
+    expect(state.listSnapshots()[0]?.goal).toEqual({ objective: "Ship it", status: "ended" });
+    goal(null);
+    expect(state.listSnapshots()[0]?.goal).toBeUndefined();
+  });
+
+  test("keeps a restored goal that arrives before the resume summary", () => {
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
+    state.removeSession(ref);
+    state.applyEvent(session, {
+      type: "session_goal_updated",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-11-07T10:00:00.000Z",
+      goal: { objective: "Ship it", ended: false },
+    });
+    expect(state.listSnapshots()).toEqual([]);
+    state.applyControlSummary("/repo", summary);
+    expect(state.listSnapshots()[0]?.goal).toEqual({
+      objective: "Ship it",
+      status: "waiting_for_message",
+    });
+  });
+
   test("retains permission notices across control summaries until retraction or removal", () => {
     const state = createClaudeLiveSessionState();
     state.applyControlSummary("/repo", summary);

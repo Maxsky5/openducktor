@@ -23,6 +23,7 @@ import { type HostError, toHostOperationError } from "../../effect/host-errors";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import {
   AgentSessionMessageAcceptedError,
+  messageAcceptedFailure,
   toAgentSessionSendError,
 } from "../../ports/agent-session-send-error";
 import type {
@@ -72,6 +73,8 @@ const toOpenCodeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUser
     attachment: converted,
   };
 };
+
+const GOAL_ACCEPTED = { type: "command_accepted", commandName: "goal" } as const;
 
 export const createOpenCodeSessionControlAdapter = ({
   runtime,
@@ -147,6 +150,49 @@ export const createOpenCodeSessionControlAdapter = ({
         ),
       ),
     );
+
+  const goalRequest = (
+    input: Parameters<AgentSessionControlAdapterPort["controlGoal"]>[0],
+    assertCurrent: (() => void) | undefined,
+  ): Parameters<typeof connection.controlGoal>[0] => {
+    const request: Parameters<typeof connection.controlGoal>[0] = {
+      ...toSessionRef(input),
+      runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
+      sessionScope: input.sessionScope,
+      command: input.command,
+      workStartGuard: assertCurrent ? { assertCurrent } : input.workStartGuard,
+      onWorkIssued: input.onWorkIssued,
+      onWorkAccepted: input.onWorkAccepted,
+    };
+    if (input.systemPrompt) request.systemPrompt = input.systemPrompt;
+    return request;
+  };
+
+  /**
+   * Goal mode of a launch: the goal kickoff joins the turn that the first message started. A
+   * failure keeps the accepted message, so the user sets the goal with `/goal` instead.
+   */
+  const setLaunchGoal = (
+    input: Parameters<AgentSessionControlAdapterPort["sendUserMessage"]>[0],
+    accepted: AcceptedAgentInput,
+    objective: string,
+  ): Effect.Effect<AcceptedAgentInput, HostError> =>
+    Effect.tryPromise({
+      try: () =>
+        connection.controlGoal(
+          goalRequest({ ...input, command: { kind: "set", objective } }, undefined),
+          { delivery: "steer" },
+        ),
+      catch: (cause) => {
+        const reason = cause instanceof Error ? cause.message : String(cause);
+        return messageAcceptedFailure(
+          toSessionRef(input),
+          accepted,
+          "live_update",
+        )(new Error(`OpenCode did not set the goal: ${reason} Send /goal ${objective} to set it.`));
+      },
+    }).pipe(Effect.as(accepted));
 
   const controls: AgentSessionControlAdapterPort = {
     startSession: (input) => {
@@ -318,7 +364,30 @@ export const createOpenCodeSessionControlAdapter = ({
                   ),
                 ),
           ),
+          Effect.flatMap((accepted) =>
+            options?.goal
+              ? setLaunchGoal(input, accepted, options.goal.objective)
+              : Effect.succeed(accepted),
+          ),
         ),
+      );
+    },
+    controlGoal: (input, options) => {
+      const sessionRef = toSessionRef(input);
+      return sendGate.run(
+        refKey(sessionRef),
+        Effect.tryPromise({
+          try: () =>
+            connection.controlGoal(goalRequest(input, options?.assertCurrent), {
+              onSent: options?.onSent,
+            }),
+          catch: (cause) =>
+            toAgentSessionSendError(cause) ??
+            toHostOperationError(cause, "opencode-live-session.control-goal", {
+              runtimeId: runtime.runtimeId,
+              externalSessionId: input.externalSessionId,
+            }),
+        }).pipe(Effect.as<AcceptedAgentInput>(GOAL_ACCEPTED)),
       );
     },
     updateSessionModel: (input) =>

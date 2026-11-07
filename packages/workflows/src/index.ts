@@ -38,6 +38,7 @@ export {
 } from "./task-workflow/task-workflow";
 export type { TaskFacts } from "./task-workflow/task-input";
 export { requirePullRequestTarget } from "./task-workflow/task-prompts";
+export { launchGoalObjective } from "./task-workflow/launch-goal";
 export { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./task-workflow/pull-request-launch";
 export type {
   PromptTemplate as TaskPromptTemplate,

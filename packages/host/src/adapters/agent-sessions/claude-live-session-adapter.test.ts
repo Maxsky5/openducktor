@@ -1,9 +1,13 @@
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
-import type { AgentSessionSummary } from "@openducktor/core";
+import type { AgentSessionGoalCommand, AgentSessionSummary } from "@openducktor/core";
 import { interruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
@@ -18,6 +22,8 @@ import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-f
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
+import { observeClaudeGoalFrame } from "../claude/claude-agent-sdk-goals";
+import type { ClaudeProtocolObject } from "../claude/claude-agent-sdk-ingress-schemas";
 import { consumeClaudeSession, sendClaudeUserMessage } from "../claude/claude-agent-sdk-session-io";
 import {
   claudeQueryWithMessages,
@@ -116,6 +122,8 @@ const session: ClaudeSessionContext = {
   toolNamesByCallId: new Map(),
   toolStartedAtMsByCallId: new Map(),
   todosById: new Map(),
+  // Goal restores read no transcript of the host user.
+  transcriptEnvironment: { CLAUDE_CONFIG_DIR: join(tmpdir(), "openducktor-missing-claude-config") },
 };
 
 const otherSummary = {
@@ -2510,5 +2518,198 @@ describe("Claude host live-session adapter", () => {
       expect(disposeCalls).toBe(1);
       await expect(Effect.runPromise(harness.adapter.listSnapshots())).resolves.toEqual([]);
     });
+  });
+});
+
+describe("Claude host live-session adapter goals", () => {
+  const OBJECTIVE = "All tests pass";
+  const setRecord = {
+    type: "attachment",
+    uuid: "g1",
+    parentUuid: null,
+    attachment: { type: "goal_status", met: false, sentinel: true, condition: OBJECTIVE },
+  };
+  const directories: string[] = [];
+  afterEach(async () => {
+    await Promise.all(
+      directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
+    );
+  });
+
+  const goalHarness = async (records: object[] = []) => {
+    const configDirectory = await mkdtemp(join(tmpdir(), "claude-goal-adapter-"));
+    directories.push(configDirectory);
+    const projectDirectory = join(configDirectory, "projects", "-repo");
+    await mkdir(projectDirectory, { recursive: true });
+    const transcript = join(projectDirectory, `${session.externalSessionId}.jsonl`);
+    await writeFile(transcript, records.map((record) => `${JSON.stringify(record)}\n`).join(""));
+    const { goalTracking: _sharedTracking, ...base } = session;
+    const goalSession: ClaudeSessionContext = {
+      ...base,
+      acceptedUserMessages: [],
+      transcriptEnvironment: { CLAUDE_CONFIG_DIR: configDirectory },
+    };
+    const harness = await createHarness(workingDirectoryDependencies, {
+      get: (externalSessionId) =>
+        externalSessionId === goalSession.externalSessionId ? goalSession : undefined,
+      isLatest: (candidate) => candidate === goalSession,
+    });
+    harness.setStartSession(() => Effect.succeed(summary));
+    harness.setLoadSessionContextUsage(() => Effect.succeed(null));
+    const sent: Parameters<ClaudeAgentSdkService["sendUserMessage"]>[0][] = [];
+    const observe = (frame: ClaudeProtocolObject) =>
+      observeClaudeGoalFrame({
+        session: goalSession,
+        // SAFETY: The observer reads frames through its own schemas, like live SDK frames.
+        message: frame as SDKMessage,
+        now: () => "2026-11-07T10:00:01.000Z",
+        emit: (event) => harness.eventHub.emit(goalSession, event),
+        onFailure: () => {},
+      });
+    const reply = (args: string, text: string) =>
+      observe({
+        type: "assistant",
+        parent_tool_use_id: null,
+        local_command_run: { command: "goal", args },
+        message: { model: "<synthetic>", content: [{ type: "text", text }] },
+      });
+    const accept = (messageId: string, text: string) =>
+      Effect.succeed({
+        type: "user_message" as const,
+        externalSessionId: session.externalSessionId,
+        timestamp: "2026-11-07T10:00:00.000Z",
+        messageId,
+        message: text,
+        parts: [{ kind: "text" as const, text }],
+        state: "read" as const,
+      });
+    const snapshotGoal = async () => {
+      await Effect.runPromise(harness.adapter.loadContext(sessionRef));
+      const snapshots = await Effect.runPromise(harness.adapter.listSnapshots());
+      return snapshots[0]?.goal;
+    };
+    return { harness, goalSession, sent, reply, observe, accept, snapshotGoal, transcript };
+  };
+
+  const goalInput = (command: AgentSessionGoalCommand) => ({
+    ...sessionRef,
+    sessionScope: startInput.sessionScope,
+    command,
+  });
+
+  test("refuses to pause a goal", async () => {
+    const { harness } = await goalHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    const result = await Effect.runPromise(
+      Effect.result(harness.adapter.controlGoal(goalInput({ kind: "pause" }))),
+    );
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure")
+      expect(result.failure.message).toBe("Claude cannot pause a goal.");
+  });
+
+  test("restores the goal of a resumed session as waiting for a message", async () => {
+    const { harness, snapshotGoal } = await goalHarness([
+      { type: "user", uuid: "u0", parentUuid: null, message: { content: "Hi" } },
+      { ...setRecord, parentUuid: "u0" },
+    ]);
+    await Effect.runPromise(
+      harness.adapter.resumeSession({
+        ...startInput,
+        resumeMode: "reattach",
+        externalSessionId: "session-1",
+      }),
+    );
+    expect(await snapshotGoal()).toEqual({ objective: OBJECTIVE, status: "waiting_for_message" });
+  });
+
+  test("clears the goal with /goal clear and removes it at the command reply", async () => {
+    const { harness, sent, reply, accept, snapshotGoal } = await goalHarness([setRecord]);
+    await Effect.runPromise(
+      harness.adapter.resumeSession({
+        ...startInput,
+        resumeMode: "reattach",
+        externalSessionId: "session-1",
+      }),
+    );
+    expect(await snapshotGoal()).toMatchObject({ objective: OBJECTIVE });
+    harness.setSendUserMessage((input) => {
+      sent.push(input);
+      setTimeout(() => reply("clear", `Goal cleared: ${OBJECTIVE}`), 0);
+      return accept("clear-1", "/goal clear");
+    });
+    await expect(
+      Effect.runPromise(harness.adapter.controlGoal(goalInput({ kind: "clear" }))),
+    ).resolves.toEqual({ type: "command_accepted", commandName: "goal" });
+    expect(sent).toMatchObject([
+      {
+        delivery: "new_turn",
+        parts: [
+          { kind: "slash_command", command: { trigger: "goal" } },
+          { kind: "text", text: " clear" },
+        ],
+      },
+    ]);
+    expect(await snapshotGoal()).toBeUndefined();
+  });
+
+  test("removes an ended goal without a native command", async () => {
+    const { harness, goalSession, snapshotGoal, observe, transcript } = await goalHarness([
+      setRecord,
+    ]);
+    await Effect.runPromise(
+      harness.adapter.resumeSession({
+        ...startInput,
+        resumeMode: "reattach",
+        externalSessionId: "session-1",
+      }),
+    );
+    await appendFile(
+      transcript,
+      `${JSON.stringify({ ...setRecord, uuid: "g2", parentUuid: "g1", attachment: { type: "goal_status", met: true, condition: OBJECTIVE } })}\n`,
+    );
+    observe({ type: "result", subtype: "success" });
+    await goalSession.goalTracking?.reads;
+    expect(await snapshotGoal()).toEqual({ objective: OBJECTIVE, status: "ended" });
+    harness.setSendUserMessage(() => Effect.die("Claude needs no command for an ended goal."));
+    await Effect.runPromise(harness.adapter.controlGoal(goalInput({ kind: "clear" })));
+    expect(await snapshotGoal()).toBeUndefined();
+  });
+
+  test("sets the goal before the first message of a launch", async () => {
+    const { harness, sent, reply, observe, accept, transcript, snapshotGoal } = await goalHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.setSendUserMessage((input) => {
+      sent.push(input);
+      if (sent.length === 1) {
+        setTimeout(async () => {
+          reply(OBJECTIVE, `Goal set: ${OBJECTIVE}`);
+          await appendFile(transcript, `${JSON.stringify(setRecord)}\n`);
+          observe({ type: "assistant", parent_tool_use_id: null, message: { content: [] } });
+        }, 0);
+        return accept("goal-1", `/goal ${OBJECTIVE}`);
+      }
+      return accept("message-1", "Start the build");
+    });
+    const accepted = await Effect.runPromise(
+      harness.adapter.sendUserMessage(
+        {
+          ...sessionRef,
+          sessionScope: startInput.sessionScope,
+          delivery: "new_turn",
+          parts: [{ kind: "text", text: "Start the build" }],
+          submissionId: "submission-1",
+        },
+        { goal: { objective: OBJECTIVE } },
+      ),
+    );
+    expect(accepted).toMatchObject({ messageId: "message-1" });
+    expect(sent.map((input) => input.parts.at(-1))).toEqual([
+      { kind: "text", text: ` ${OBJECTIVE}` },
+      { kind: "text", text: "Start the build" },
+    ]);
+    expect(sent[0]?.submissionId).toBeUndefined();
+    expect(sent[1]?.submissionId).toBe("submission-1");
+    expect(await snapshotGoal()).toEqual({ objective: OBJECTIVE, status: "waiting_for_message" });
   });
 });

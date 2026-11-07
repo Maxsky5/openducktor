@@ -24,6 +24,7 @@ import {
   type WorkflowPredicate,
 } from "../evaluate";
 import { workflowNotificationDefaults } from "../notification-defaults";
+import { unsupportedGoalObjectivePlaceholder } from "./launch-goal";
 import { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./pull-request-launch";
 import { createTaskInputs, taskIssueTypes, type TaskFacts } from "./task-input";
 import {
@@ -277,6 +278,15 @@ export const createTaskWorkflow = (
       "invalid_definition",
       `Task workflow "${definition.id}" gives a role two agent steps. Give each role one agent step.`,
     );
+  }
+  for (const launch of agentSteps.flatMap((step) => step.launchActions)) {
+    const placeholder =
+      launch.goal && unsupportedGoalObjectivePlaceholder(launch.goal.defaultObjective);
+    if (placeholder)
+      throw new WorkflowEvaluationError(
+        "invalid_definition",
+        `The default goal of launch action "${launch.id}" in task workflow "${definition.id}" uses placeholder "${placeholder}". Use only {{task.id}} and {{task.title}}.`,
+      );
   }
   const workflowLaunchAction = lookup(
     definition.id,

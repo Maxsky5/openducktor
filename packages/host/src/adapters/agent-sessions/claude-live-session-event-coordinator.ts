@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { type HostError, HostOperationError } from "../../effect/host-errors";
-import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import type { ClaudeRuntimeEventListener } from "./claude-live-session-event-hub";
 import { createSerialLane } from "../../effect/serial-gate";
 
@@ -8,12 +8,12 @@ type CreateClaudeLiveSessionEventCoordinatorInput = {
   readonly runtimeId: string;
   readonly acceptsEvent: (
     session: ClaudeSessionContext,
-    event: ClaudeAgentSdkEvent,
+    event: ClaudeLiveEvent,
     phase: "accept" | "deliver",
   ) => boolean;
   readonly processEvent: (
     session: ClaudeSessionContext,
-    event: ClaudeAgentSdkEvent,
+    event: ClaudeLiveEvent,
   ) => Effect.Effect<void, HostError>;
 };
 
@@ -24,7 +24,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
 }: CreateClaudeLiveSessionEventCoordinatorInput) => {
   const queuedEvents: Array<{
     session: ClaudeSessionContext;
-    event: ClaudeAgentSdkEvent;
+    event: ClaudeLiveEvent;
   }> = [];
   const operations = createSerialLane();
   let backgroundDrainScheduled = false;
@@ -61,7 +61,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
     });
 
   const drainMatchingEvents = (
-    matches: (event: ClaudeAgentSdkEvent) => boolean,
+    matches: (event: ClaudeLiveEvent) => boolean,
   ): Effect.Effect<void, HostError> =>
     Effect.gen(function* () {
       for (let index = 0; index < queuedEvents.length;) {
@@ -175,7 +175,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
             event.type === "transcript_retracted" ||
             event.type === "session_error" ||
             event.type === "session_finished" ||
-            event.statusUnavailable === true,
+            ("statusUnavailable" in event && event.statusUnavailable === true),
         );
         if (result._tag === "Failure") {
           forwarding = true;

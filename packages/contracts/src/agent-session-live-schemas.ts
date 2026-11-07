@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { agentMessageQueueSnapshotSchema } from "./agent-message-delivery-schemas";
+import { agentSessionGoalSchema } from "./agent-session-goal-schemas";
 import { isoTimestampSchema } from "./string-schemas";
 import {
   runtimeApprovalReplyOutcomeSchema,
@@ -131,6 +132,8 @@ export const agentSessionLiveSnapshotSchema = z
      * runs, so a new attachment shows it. The next accepted message clears it.
      */
     launchFailure: agentSessionLiveNoticeSchema.optional(),
+    /** The goal that the runtime reports. No field: the session has no goal. */
+    goal: agentSessionGoalSchema.optional(),
     /**
      * Why `activity` is not current. A failed status read sets it on the kept snapshot, and
      * the next status update clears it. Other updates keep it.

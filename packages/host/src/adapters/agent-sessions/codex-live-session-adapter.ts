@@ -28,7 +28,6 @@ import {
 import type { HostError, HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import type { CodexAppServerRespondInput } from "../../ports/codex-app-server-port";
-import { stopCodexSession } from "../codex/codex-session-stop";
 import type {
   CodexLiveSessionAdapterPreparer,
   CodexSessionController,
@@ -37,6 +36,7 @@ import type {
 } from "./codex-live-session-adapter-contract";
 import { createCodexLiveSessionEventHub } from "./codex-live-session-event-hub";
 import { createCodexControlRunner } from "./codex-live-session-control-runner";
+import { createCodexGoalControls } from "./codex-live-session-goals";
 import {
   publishAcceptedCodexMessage,
   refreshAfterAcceptedCodexMessage,
@@ -210,6 +210,12 @@ export const createCodexLiveSessionAdapterPreparer = ({
         toCodexMessageSendError(cause, toCodexLiveSessionRef(input)) ??
         sessionError(operation, input.externalSessionId)(cause);
 
+      const goals = createCodexGoalControls({
+        controller,
+        refreshProjection,
+        sessionError,
+        stopTarget: { codexAppServer, directoriesMatch, runtimeId: runtime.runtimeId },
+      });
       const queries = createRuntimeQueryAdapter(controller);
       const loadRuntimeCatalog: typeof queries.loadRuntimeCatalog = (input) => {
         projection.recordCatalogRepository(input.repoPath);
@@ -457,6 +463,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
               publishAcceptedCodexMessage(value, toCodexLiveSessionRef(input), refreshProjection),
             ),
           ),
+        controlGoal: goals.controlGoal,
         updateSessionModel: (input) =>
           Effect.tryPromise({
             try: async () => {
@@ -478,13 +485,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
             () => controller.updateSessionTitle(input),
           ),
         stopSession: (input) =>
-          stopCodexSession({
-            codexAppServer,
-            directoriesMatch,
-            runtimeId: runtime.runtimeId,
-            externalSessionId: input.externalSessionId,
-            workingDirectory: input.workingDirectory,
-          }).pipe(Effect.flatMap(() => finishSession(input, "stop"))),
+          goals.stopTurn(input).pipe(Effect.flatMap(() => finishSession(input, "stop"))),
         releaseSession: (input) => finishSession(input, "release"),
       };
 

@@ -254,6 +254,19 @@ export type AgentSessionControlUpdateTitleInput = z.infer<
 export const agentSessionControlStopInputSchema = agentSessionLiveRefSchema;
 export type AgentSessionControlStopInput = z.infer<typeof agentSessionControlStopInputSchema>;
 
+const agentSessionGoalControlActionValues = ["pause", "resume", "clear"] as const;
+export const agentSessionGoalControlActionSchema = z.enum(agentSessionGoalControlActionValues);
+export type AgentSessionGoalControlAction = z.infer<typeof agentSessionGoalControlActionSchema>;
+
+/** A goal row action. The runtime owns the goal, so the result carries no goal state. */
+export const agentSessionGoalControlInputSchema = agentSessionLiveRefSchema
+  .extend({
+    sessionScope: agentSessionScopeSchema,
+    action: agentSessionGoalControlActionSchema,
+  })
+  .strict();
+export type AgentSessionGoalControlInput = z.infer<typeof agentSessionGoalControlInputSchema>;
+
 export const agentSessionControlReleaseInputSchema = agentSessionLiveRefSchema;
 export type AgentSessionControlReleaseInput = z.infer<typeof agentSessionControlReleaseInputSchema>;
 

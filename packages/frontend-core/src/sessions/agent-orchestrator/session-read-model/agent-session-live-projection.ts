@@ -404,6 +404,17 @@ const sameContextUsage = (
   );
 };
 
+const sameGoal = (
+  left: AgentSessionLiveSnapshot["goal"],
+  right: AgentSessionLiveSnapshot["goal"],
+): boolean =>
+  left === right ||
+  (left !== undefined &&
+    right !== undefined &&
+    left.objective === right.objective &&
+    left.status === right.status &&
+    left.reason === right.reason);
+
 const toLiveSessionAssociation = (snapshot: AgentSessionLiveSnapshot): AgentSessionAssociation =>
   snapshot.repositoryScope ?? { kind: "unbound" };
 
@@ -460,6 +471,7 @@ const applyDirectSnapshot = (
     pendingApprovals,
     pendingQuestions,
     contextUsage,
+    goal: sameGoal(current.goal, snapshot.goal) ? current.goal : snapshot.goal,
   };
 };
 
@@ -518,6 +530,7 @@ const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionSta
     livePresence: "absent",
     foregroundTurnActive: undefined,
     statusUnavailableReason: null,
+    goal: undefined,
     pendingApprovals: session.pendingApprovals.filter((request) => request.source !== undefined),
     pendingQuestions: session.pendingQuestions.filter((request) => request.source !== undefined),
     contextUsage: null,
@@ -550,6 +563,7 @@ const resetSessionLiveStateForSnapshot = (
     livePresence: hasLiveSnapshot ? "present" : "absent",
     foregroundTurnActive: undefined,
     statusUnavailableReason: null,
+    goal: undefined,
     pendingApprovals: [],
     pendingQuestions: [],
     contextUsage: null,

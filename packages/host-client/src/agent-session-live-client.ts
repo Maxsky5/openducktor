@@ -36,6 +36,7 @@ import {
   type AgentSessionControlReleaseInput,
   type AgentSessionResumeIntent,
   type AgentSessionControlStopInput,
+  type AgentSessionGoalControlInput,
   type AgentSessionStartupResult,
   type AgentSessionControlUpdateModelInput,
   type AgentSessionLiveListInput,
@@ -59,6 +60,7 @@ import {
   agentSessionResumeIntentSchema,
   agentRepositorySessionStartInputSchema,
   agentSessionControlStopInputSchema,
+  agentSessionGoalControlInputSchema,
   agentSessionStartupResultSchema,
   agentSessionControlUpdateModelInputSchema,
   agentSessionLiveListInputSchema,
@@ -197,6 +199,15 @@ export class HostAgentSessionLiveClient {
     await this.invokeFn(
       "agent_session_control_stop",
       agentSessionControlStopInputSchema.parse(input),
+      voidResultSchema,
+    );
+  }
+
+  /** Pauses, resumes, or clears the native goal of a session. */
+  async agentSessionGoalControl(input: AgentSessionGoalControlInput): Promise<void> {
+    await this.invokeFn(
+      "agent_session_goal_control",
+      agentSessionGoalControlInputSchema.parse(input),
       voidResultSchema,
     );
   }

@@ -1,7 +1,6 @@
 import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent } from "@openducktor/core";
 import { Effect } from "effect";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
@@ -10,7 +9,7 @@ import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
 import { createClaudeQueryFixture } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
-import type { CreateClaudeAgentSdkServiceInput } from "./claude-agent-sdk-types";
+import type { ClaudeLiveEvent, CreateClaudeAgentSdkServiceInput } from "./claude-agent-sdk-types";
 
 const deferred = <Value>() => {
   let resolve!: (value: Value) => void;
@@ -142,7 +141,7 @@ describe("createClaudeAgentSdkSession", () => {
 
       try {
         const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
-        const events: AgentEvent[] = [];
+        const events: ClaudeLiveEvent[] = [];
         const sessionStore = createClaudeAgentSdkSessionStore();
         const serviceInput: CreateClaudeAgentSdkServiceInput = {
           resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
@@ -245,7 +244,7 @@ describe("createClaudeAgentSdkSession", () => {
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
-      const events: AgentEvent[] = [];
+      const events: ClaudeLiveEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
@@ -444,7 +443,7 @@ describe("createClaudeAgentSdkSession", () => {
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
-      const events: AgentEvent[] = [];
+      const events: ClaudeLiveEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
@@ -544,7 +543,7 @@ describe("createClaudeAgentSdkSession", () => {
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
-      const events: AgentEvent[] = [];
+      const events: ClaudeLiveEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
@@ -655,7 +654,7 @@ describe("createClaudeAgentSdkSession", () => {
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
-      const events: AgentEvent[] = [];
+      const events: ClaudeLiveEvent[] = [];
       const onContinuationAdmission = mock(() => {});
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
@@ -764,7 +763,7 @@ describe("createClaudeAgentSdkSession", () => {
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
-      const events: AgentEvent[] = [];
+      const events: ClaudeLiveEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
@@ -870,7 +869,7 @@ describe("createClaudeAgentSdkSession", () => {
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
-      const events: AgentEvent[] = [];
+      const events: ClaudeLiveEvent[] = [];
       const priorSession = createEventTestSession();
       priorSession.externalSessionId = "session-continuation";
       priorSession.requestedPermissionMode = "auto";
@@ -997,7 +996,7 @@ describe("createClaudeAgentSdkSession", () => {
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
-      const events: AgentEvent[] = [];
+      const events: ClaudeLiveEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
@@ -1113,7 +1112,7 @@ describe("createClaudeAgentSdkSession", () => {
 
       try {
         const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
-        const events: AgentEvent[] = [];
+        const events: ClaudeLiveEvent[] = [];
         const sessionStore = createClaudeAgentSdkSessionStore();
         const serviceInput: CreateClaudeAgentSdkServiceInput = {
           resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,

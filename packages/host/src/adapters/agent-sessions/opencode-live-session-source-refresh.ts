@@ -25,6 +25,7 @@ import {
   withStatusUnavailable,
 } from "./opencode-live-session-state-policy";
 import type { OpenCodeReadScope } from "./opencode-live-session-versions";
+import type { OpenCodeSessionGoals } from "./opencode-live-session-goals";
 
 type ApplyOpenCodeSessionSourcesInput = {
   /** The refreshed repository. Snapshots of other repositories stay unchanged. */
@@ -34,6 +35,8 @@ type ApplyOpenCodeSessionSourcesInput = {
   failures: ReadonlyArray<OpencodeRuntimeSnapshotFailure>;
   sessions: ReadonlyMap<string, OpenCodeLiveSession>;
   contextUsageBySessionId: ReadonlyMap<string, AgentSessionContextUsage>;
+  /** A full session read replaces the goal, because no newer goal change arrived during it. */
+  goals: Pick<OpenCodeSessionGoals, "set">;
   pendingRequests: OpenCodePendingRequestRouter;
   readScope: (ref: AgentSessionLiveRef) => OpenCodeReadScope;
   /** Saves a status that the read confirmed, so an older read in progress cannot replace it. */
@@ -61,6 +64,7 @@ export const applyOpenCodeSessionSources = ({
   failures,
   sessions,
   contextUsageBySessionId,
+  goals,
   pendingRequests,
   readScope,
   commitStatus,
@@ -90,6 +94,7 @@ export const applyOpenCodeSessionSources = ({
       });
       continue;
     }
+    if (source.goal !== undefined) goals.set(source.externalSessionId, source.goal);
     const approvals = source.pendingApprovals.map((request) =>
       pendingRequests.stageApproval(ref, request),
     );

@@ -60,6 +60,8 @@ import {
   codexSubagentRouteEventFields,
 } from "./codex-subagent-link-state";
 import { createCodexEventMappers } from "./event-mappers";
+import { CodexGoalState } from "./codex-goal-state";
+import { createActiveCodexTurn, runningTurnOf } from "./codex-turn-lifecycle";
 import type {
   CodexAppServerAdapterOptions,
   CodexAppServerEventSubscriber,
@@ -201,6 +203,9 @@ export class CodexRuntimeSessionEvents {
     Map<string, Promise<string | undefined>>
   >();
   private readonly contextUsage: CodexContextUsageTracker;
+  private readonly goals = new CodexGoalState();
+  /** The user messages of the current turn of each session, by runtime and thread. */
+  private readonly turnMessageIdsByRuntimeId = new Map<string, Map<string, string[]>>();
 
   constructor(private readonly deps: CodexRuntimeSessionEventsDeps) {
     this.liveImages = new CodexLiveImagePreparation(deps.prepareImageGenerations);
@@ -253,6 +258,8 @@ export class CodexRuntimeSessionEvents {
   }
 
   clearRuntime(runtimeId: string): void {
+    this.goals.clearRuntime(runtimeId);
+    this.turnMessageIdsByRuntimeId.delete(runtimeId);
     this.liveImages.cancel(runtimeId);
     this.imageGenerations.clearRuntime(runtimeId);
     this.runtimeEventGenerationByRuntimeId.delete(runtimeId);
@@ -427,6 +434,11 @@ export class CodexRuntimeSessionEvents {
   }
 
   clearSession(externalSessionId: string, runtimeId?: string): void {
+    if (runtimeId !== undefined) this.goals.stopWaiting(runtimeId, externalSessionId);
+    for (const [messageRuntimeId, messageIds] of this.turnMessageIdsByRuntimeId) {
+      if (runtimeId === undefined || runtimeId === messageRuntimeId)
+        messageIds.delete(externalSessionId);
+    }
     this.liveImages.cancel(runtimeId, externalSessionId);
     this.imageGenerations.clearSession(externalSessionId, runtimeId);
     const routedDescendantThreadIds =
@@ -502,6 +514,115 @@ export class CodexRuntimeSessionEvents {
 
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void {
     this.deps.pendingInput.bindActiveTurn(externalSessionId, activeTurn);
+  }
+
+  /** The goal that Codex last reported for the thread. */
+  goal(runtimeId: string, threadId: string) {
+    return this.goals.goal(runtimeId, threadId);
+  }
+
+  /** The goal is active, or Codex accepted a set or resume whose update has not arrived yet. */
+  mayHaveActiveGoal(runtimeId: string, threadId: string): boolean {
+    return this.goals.mayBeActive(runtimeId, threadId);
+  }
+
+  /** The count of goal updates of the thread, read before a goal request. */
+  goalRevision(session: CodexSessionState): number {
+    return this.goals.revision(session.runtimeId, session.threadId);
+  }
+
+  /**
+   * Records that Codex accepted a set or resume. Returns false when a goal update came after the
+   * request and says that the goal is not active, so Codex starts no goal turn.
+   */
+  acceptGoalActivation(session: CodexSessionState, revisionBefore: number): boolean {
+    return this.goals.acceptActivation(session.runtimeId, session.threadId, revisionBefore);
+  }
+
+  /** The session has no running turn and waits for the goal turn that Codex starts by itself. */
+  isWaitingForGoalTurn(session: CodexSessionState): boolean {
+    return (
+      this.goals.isWaitingForGoalTurn(session.runtimeId, session.threadId) &&
+      runningTurnOf(this.deps.activeTurnsBySessionId, session.threadId) === null
+    );
+  }
+
+  /**
+   * After Codex accepts a goal that starts work, the session reports running work until Codex
+   * starts the goal turn or the goal stops being active.
+   */
+  waitForGoalTurn(session: CodexSessionState): void {
+    if (!this.isRetainedSession(session)) return;
+    if (runningTurnOf(this.deps.activeTurnsBySessionId, session.threadId)) return;
+    this.goals.waitForGoalTurn(session.runtimeId, session.threadId);
+    this.setSessionLiveStatus(session, { classification: "running" });
+  }
+
+  /** Ends the wait for a goal turn, for example before Stop. */
+  stopWaitingForGoalTurn(session: CodexSessionState): void {
+    if (this.goals.stopWaiting(session.runtimeId, session.threadId)) {
+      this.markSnapshotChanged(session.runtimeId, session.threadId);
+    }
+  }
+
+  private continueGoalAfterTurn(session: CodexSessionState): boolean {
+    if (!this.isRetainedSession(session)) return false;
+    if (!this.goals.isActive(session.runtimeId, session.threadId)) return false;
+    this.goals.waitForGoalTurn(session.runtimeId, session.threadId);
+    this.setSessionLiveStatus(session, { classification: "running" });
+    return true;
+  }
+
+  private observeTurnStarted(session: CodexSessionState, turnId: string, startedAtMs: number) {
+    if (!this.isRetainedSession(session)) return;
+    this.stopWaitingForGoalTurn(session);
+    // Only a goal turn starts without a request of OpenDucktor.
+    if (!this.goals.isActive(session.runtimeId, session.threadId)) return;
+    if (this.deps.activeTurnsBySessionId.has(session.threadId) || !session.model) return;
+    const turn = createActiveCodexTurn(this.deps.activeTurnsBySessionId, session, session.model);
+    turn.turnId = turnId;
+    turn.startedAtMs = startedAtMs;
+    this.modelByTurnKey.set(codexTurnKey(session.threadId, turnId), turn.model);
+  }
+
+  /** Codex reports the goal of every loaded thread, also before its session registers. */
+  private applyGoalNotification(
+    runtimeId: string,
+    notification: Extract<
+      CodexNotificationRecord,
+      { method: "thread/goal/updated" | "thread/goal/cleared" }
+    >,
+  ): void {
+    const { threadId } = notification.params;
+    this.goals.apply(
+      runtimeId,
+      threadId,
+      notification.method === "thread/goal/updated" ? notification.params.goal : null,
+    );
+    this.markSnapshotChanged(runtimeId, threadId);
+    if (this.goals.isActive(runtimeId, threadId)) return;
+    if (!this.goals.stopWaiting(runtimeId, threadId)) return;
+    // Codex starts no further goal turn, so the waiting session becomes idle.
+    const session = this.deps.sessions.get(threadId);
+    if (!session || session.runtimeId !== runtimeId) return;
+    if (runningTurnOf(this.deps.activeTurnsBySessionId, threadId)) return;
+    this.setSessionLiveStatus(session, { classification: "idle" });
+    this.publishSessionEvent(session, {
+      type: "session_idle",
+      externalSessionId: threadId,
+      timestamp: notification.receivedAt,
+    });
+  }
+
+  private isRetainedSession(session: CodexSessionState): boolean {
+    return this.deps.sessions.get(session.threadId) === session;
+  }
+
+  private takeTurnMessageIds(session: CodexSessionState): string[] {
+    const messageIds = this.turnMessageIdsByRuntimeId.get(session.runtimeId);
+    const turnMessageIds = messageIds?.get(session.threadId) ?? [];
+    messageIds?.delete(session.threadId);
+    return turnMessageIds;
   }
 
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void {
@@ -622,6 +743,13 @@ export class CodexRuntimeSessionEvents {
       event.kind === "notification" ? { ...event.message, receivedAt: event.receivedAt } : null;
     if (notification) {
       this.observeCatalogInvalidation(event.runtimeId, notification);
+    }
+    if (
+      notification?.method === "thread/goal/updated" ||
+      notification?.method === "thread/goal/cleared"
+    ) {
+      this.applyGoalNotification(event.runtimeId, notification);
+      return;
     }
     if (notification?.method === "thread/tokenUsage/updated") {
       this.contextUsage.observeNotification(event.runtimeId, notification);
@@ -1072,6 +1200,12 @@ export class CodexRuntimeSessionEvents {
       bindActiveTurnId: (activeTurn, turnId, startedAtMs) =>
         this.bindActiveTurnId(activeTurn, turnId, startedAtMs),
       setSessionLiveStatus: (session, liveStatus) => this.setSessionLiveStatus(session, liveStatus),
+      continueGoalAfterTurn: (session) => this.continueGoalAfterTurn(session),
+      isWaitingForGoalTurn: (session) => this.isWaitingForGoalTurn(session),
+      stopWaitingForGoalTurn: (session) => this.stopWaitingForGoalTurn(session),
+      observeTurnStarted: (session, turnId, startedAtMs) =>
+        this.observeTurnStarted(session, turnId, startedAtMs),
+      takeTurnMessageIds: (session) => this.takeTurnMessageIds(session),
       failUnlinkedSubagentSpawns: (parentThreadId, runtimeId, error) =>
         this.deps.subagents.failUnlinkedSpawnsForParent(parentThreadId, runtimeId, error),
     };
@@ -1327,6 +1461,17 @@ export class CodexRuntimeSessionEvents {
 
   private publishSessionEvent(session: CodexSessionState, event: AgentEvent): AgentEvent {
     const sessionEvent = this.deps.sessionEvents.publish(session, event);
+    if (sessionEvent.type === "user_message" && this.isRetainedSession(session)) {
+      let messageIds = this.turnMessageIdsByRuntimeId.get(session.runtimeId);
+      if (!messageIds) {
+        messageIds = new Map();
+        this.turnMessageIdsByRuntimeId.set(session.runtimeId, messageIds);
+      }
+      messageIds.set(session.threadId, [
+        ...(messageIds.get(session.threadId) ?? []),
+        sessionEvent.messageId,
+      ]);
+    }
     if (isAgentSessionTranscriptEventType(sessionEvent.type)) {
       this.activeMutationByRuntimeId
         .get(session.runtimeId)

@@ -71,6 +71,8 @@ import type {
   SessionRef,
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
+  AgentSessionGoalCommand,
+  AgentWorkStartOptions,
 } from "@openducktor/core";
 import {
   agentSessionRefsEqual,
@@ -122,6 +124,7 @@ import {
   requireCodexRuntimePolicy,
 } from "./codex-session-policy";
 import { codexSessionRef } from "./codex-session-ref";
+import { pauseCodexGoalForStop, runCodexGoalCommand } from "./codex-goal-control";
 import {
   listCodexSessionRuntimeSnapshots,
   readCodexSessionRuntimeSnapshot,
@@ -256,7 +259,15 @@ const toLivePendingQuestion = (
   return liveRequest;
 };
 
-type CodexSendOptions = { onSent?: () => void; assertCurrent?: (() => void) | undefined };
+type CodexSendOptions = {
+  onSent?: () => void;
+  assertCurrent?: (() => void) | undefined;
+  /** Goal mode of a launch. Codex sets the goal after it starts the turn of the message. */
+  goal?: { readonly objective: string } | undefined;
+};
+
+export type CodexGoalControlInput = SessionRef &
+  AgentWorkStartOptions & { readonly command: AgentSessionGoalCommand };
 
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
@@ -988,7 +999,99 @@ export class CodexAppServerAdapter
       false,
     );
     if (!session) throw new Error("The Codex session closed before sending. Reopen the chat.");
-    return this.sendUserMessageFromBoundSession(input, session, systemInvocation, options);
+    const accepted = await this.sendUserMessageFromBoundSession(
+      input,
+      session,
+      systemInvocation,
+      options,
+    );
+    if (options.goal) await this.setLaunchGoal(session, accepted, options.goal.objective);
+    return accepted;
+  }
+
+  /** Sets the goal of a launch while the turn of its first message runs. */
+  private async setLaunchGoal(
+    session: CodexSessionState,
+    accepted: AcceptedAgentUserMessage,
+    objective: string,
+  ): Promise<void> {
+    const revisionBefore = this.runtimeEvents.goalRevision(session);
+    try {
+      await runCodexGoalCommand(
+        this.runtimeClients.clientForRuntime(session.runtimeId),
+        session.threadId,
+        { kind: "set", objective },
+      );
+      this.runtimeEvents.acceptGoalActivation(session, revisionBefore);
+    } catch (cause) {
+      const reason = cause instanceof Error ? cause.message : String(cause);
+      throw new CodexMessageAcceptedError(
+        accepted,
+        new Error(`${reason}. Send /goal ${objective} to set the goal.`, { cause }),
+      );
+    }
+  }
+
+  /**
+   * Runs one goal action of the user. Codex reports the new goal state on its event stream, so
+   * this sets no goal state. A goal that starts work keeps the session running until Codex starts
+   * the goal turn.
+   */
+  async controlGoal(
+    input: CodexGoalControlInput,
+    options: Pick<CodexSendOptions, "onSent" | "assertCurrent"> = {},
+  ): Promise<{ type: "command_accepted"; commandName: "goal" }> {
+    const session = this.requireRegisteredSession(input, "change the goal of");
+    await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
+    (options.assertCurrent ?? input.workStartGuard?.assertCurrent)?.();
+    const revisionBefore = this.runtimeEvents.goalRevision(session);
+    await runCodexGoalCommand(
+      this.runtimeClients.clientForRuntime(session.runtimeId),
+      session.threadId,
+      input.command,
+      () => {
+        markAgentWorkIssued(input);
+        options.onSent?.();
+      },
+    );
+    markAgentWorkAccepted(input);
+    if (
+      (input.command.kind === "set" || input.command.kind === "resume") &&
+      this.runtimeEvents.acceptGoalActivation(session, revisionBefore)
+    ) {
+      this.runtimeEvents.waitForGoalTurn(session);
+    }
+    return { type: "command_accepted", commandName: "goal" };
+  }
+
+  /**
+   * An interrupt does not pause a Codex goal, so Stop pauses an active goal first. Otherwise Codex
+   * starts the next goal turn when the thread goes idle.
+   */
+  async pauseGoalForStop(input: SessionRef): Promise<void> {
+    const session = this.requireRegisteredSession(input, "stop");
+    if (!this.runtimeEvents.mayHaveActiveGoal(session.runtimeId, session.threadId)) return;
+    await pauseCodexGoalForStop(
+      this.runtimeClients.clientForRuntime(session.runtimeId),
+      session.threadId,
+    );
+    this.runtimeEvents.stopWaitingForGoalTurn(session);
+  }
+
+  private requireRegisteredSession(input: SessionRef, action: string): CodexSessionState {
+    const session = this.localSessions.get(input.externalSessionId);
+    if (!session) {
+      throw new Error(
+        `The Codex session '${input.externalSessionId}' is not attached, so OpenDucktor cannot ${action} it. Reopen the chat.`,
+      );
+    }
+    const sessionRef = codexSessionRef(session);
+    if (!agentSessionRefsEqual(sessionRef, input)) {
+      throw new Error(
+        `Cannot ${action} Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${sessionRef.repoPath}' and working directory '${sessionRef.workingDirectory}'.`,
+      );
+    }
+    return session;
   }
 
   private async sendUserMessageFromBoundSession(
@@ -1908,6 +2011,14 @@ export class CodexAppServerAdapter
     }
     if (session.model) {
       snapshot.model = session.model;
+    }
+    const goal = this.runtimeEvents.goal(session.runtimeId, session.threadId);
+    if (goal) {
+      snapshot.goal = goal;
+    }
+    // Between goal turns, Codex runs no turn that a message can join.
+    if (this.runtimeEvents.isWaitingForGoalTurn(session)) {
+      snapshot.foregroundTurnActive = false;
     }
     return agentSessionLiveSnapshotSchema.parse(snapshot);
   }

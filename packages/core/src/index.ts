@@ -14,6 +14,7 @@ export * from "./services/agent-session-scope";
 export * from "./services/agent-session-title";
 export * from "./services/worktree-owner-lines";
 export * from "./services/agent-session-todos";
+export * from "./services/agent-session-goals";
 export * from "./services/agent-system-slash-commands";
 export * from "./services/agent-attachment-validation";
 export * from "./services/agent-user-message-parts";

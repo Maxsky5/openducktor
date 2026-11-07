@@ -1,4 +1,8 @@
 import {
+  type SessionStartGoalDraft,
+  useSessionStartGoalDraft,
+} from "@openducktor/frontend-core/sessions/start/use-session-start-goal-draft";
+import {
   buildSessionStartConfirmDraft,
   resolveSessionStartAvailability,
   type SessionStartModalModel,
@@ -192,7 +196,15 @@ export function SessionStartForm({
     open: model.open,
     prompt: model.kickoffPrompt,
   });
-  const availability = resolveSessionStartAvailability(model, { kickoffInvalid: kickoff.invalid });
+  const goal = useSessionStartGoalDraft({
+    requestId: model.requestId,
+    open: model.open,
+    goalMode: model.goalMode,
+  });
+  const availability = resolveSessionStartAvailability(model, {
+    kickoffInvalid: kickoff.invalid,
+    goalError: goal.error,
+  });
 
   const sections = startFormSections(model);
   const modes = startModeOptions(model);
@@ -209,6 +221,7 @@ export function SessionStartForm({
         requiresExistingSession: availability.requiresExistingSession,
         speedChange: speed.change,
         kickoffPrompt: kickoff.value,
+        goalObjective: goal.value,
       }),
     });
   };
@@ -303,6 +316,7 @@ export function SessionStartForm({
         {kickoff.hasPrompt ? (
           <KickoffPromptField kickoff={kickoff} busy={busy} onEdit={onEdit} />
         ) : null}
+        <GoalModeField goal={goal} busy={busy} onEdit={onEdit} />
       </FormBody>
     </ActionForm>
   );
@@ -506,6 +520,54 @@ function KickoffPromptField({
   );
 }
 
+/** The Goal mode switch of a launch that offers it, and the goal field while it is on. */
+function GoalModeField({
+  goal,
+  busy,
+  onEdit,
+}: {
+  goal: SessionStartGoalDraft;
+  busy: boolean;
+  onEdit: () => void;
+}): ReactElement | null {
+  if (!goal.offered) return null;
+  return (
+    <View style={styles.kickoff}>
+      <View style={styles.switch}>
+        <SwitchRow
+          label="Goal mode"
+          description={
+            goal.unavailableReason ??
+            "The agent keeps working until the runtime finds the goal met."
+          }
+          value={goal.enabled}
+          onValueChange={(enabled) => {
+            onEdit();
+            goal.setEnabled(enabled);
+          }}
+          disabled={busy || goal.unavailableReason !== null}
+        />
+      </View>
+      {goal.enabled ? (
+        <Animated.View entering={FadeIn.duration(motion.base)}>
+          <TextField
+            label="Goal"
+            value={goal.text}
+            onChangeText={(text) => {
+              onEdit();
+              goal.setText(text);
+            }}
+            multiline
+            editable={!busy}
+            error={goal.error}
+            style={styles.goalInput}
+          />
+        </Animated.View>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create((theme) => ({
   backgroundActionContainer: { flexGrow: 1, flexShrink: 1 },
   backgroundAction: {
@@ -536,4 +598,5 @@ const styles = StyleSheet.create((theme) => ({
     overflow: "hidden",
   },
   promptInput: { minHeight: 180, maxHeight: 360, textAlignVertical: "top" },
+  goalInput: { minHeight: 88, maxHeight: 240, textAlignVertical: "top" },
 }));

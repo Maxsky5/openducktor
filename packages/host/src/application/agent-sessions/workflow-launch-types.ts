@@ -42,7 +42,7 @@ export type WorkflowLaunchPreparationDependencies = {
   startPreparation: Pick<TaskSessionStartPreparationService, "validateTarget">;
   git: Pick<GitPort, "canonicalizePath">;
   definitions: RuntimeDefinitionsService;
-  registry: Pick<RuntimeRegistryPort, "requireReady">;
+  registry: Pick<RuntimeRegistryPort, "requireReady" | "status">;
   queries: Pick<AgentRuntimeQueryPort, "loadRuntimeCatalog">;
   provider: Pick<GitProviderService, "getContext">;
   runtime: Pick<SessionLaunchRuntimePort, "read">;

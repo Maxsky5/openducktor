@@ -1,4 +1,4 @@
-import type { AgentWorkStartOptions } from "@openducktor/core";
+import type { AgentSessionGoalCommand, AgentWorkStartOptions } from "@openducktor/core";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentGeneratedImageSource } from "@openducktor/core";
 import type {
@@ -44,6 +44,21 @@ export type AgentSessionSendOptions = {
    * fails before this call, the runtime did not get the message.
    */
   readonly onSent?: () => void;
+  /**
+   * Goal mode of a workflow launch. The adapter sets this goal with the message, in the order
+   * that its runtime needs. A goal failure after the runtime accepted the message raises
+   * `AgentSessionMessageAcceptedError`.
+   */
+  readonly goal?: { readonly objective: string } | undefined;
+};
+
+/** One native goal action for a session. */
+export type AgentSessionControlGoalInput = AgentSessionLiveRef & {
+  readonly sessionScope: import("@openducktor/contracts").AgentSessionScope;
+  readonly command: AgentSessionGoalCommand;
+  /** New-turn context for `set`. An adapter that writes context before a turn uses it. */
+  readonly systemPrompt?: string | undefined;
+  readonly submissionId?: string | undefined;
 };
 export type ApprovalReplyOptions = { onIssued?: (() => void) | undefined };
 
@@ -211,6 +226,15 @@ export type AgentSessionControlAdapterPort = {
   readonly sendUserMessage: (
     input: AgentSessionControlSendInput & AgentWorkStartOptions,
     options?: AgentSessionSendOptions,
+  ) => Effect.Effect<AcceptedAgentInput, HostError>;
+  /**
+   * Runs one native goal action. It returns `command_accepted` with `commandName: "goal"` after
+   * the runtime accepts the action, and fails with the runtime reason when the runtime refuses.
+   * It never writes the goal of the snapshot; the runtime reports the goal state.
+   */
+  readonly controlGoal: (
+    input: AgentSessionControlGoalInput & AgentWorkStartOptions,
+    options?: Pick<AgentSessionSendOptions, "assertCurrent" | "onSent">,
   ) => Effect.Effect<AcceptedAgentInput, HostError>;
   readonly updateSessionModel: (
     input: AgentSessionControlUpdateModelInput & AgentWorkStartOptions,

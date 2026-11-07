@@ -76,6 +76,7 @@ export const startSessionWorkflow = async ({
     if (request.humanFeedback) launch.instruction.feedback = request.humanFeedback;
   }
   if (decision.targetBranch) launch.targetBranch = decision.targetBranch;
+  if (decision.goalObjective !== undefined) launch.goal = { objective: decision.goalObjective };
   if (request.beforeStartAction) launch.beforeStartAction = request.beforeStartAction;
   const outcome = await client.agentSessionWorkflowLaunch(launch);
   if (!outcome.session) throw new WorkflowLaunchFailure(outcome);

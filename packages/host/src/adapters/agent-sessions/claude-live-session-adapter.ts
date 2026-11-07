@@ -9,17 +9,11 @@ import {
   unsupportedGeneratedImageSource,
   unsupportedGeneratedImageOperations,
 } from "./generated-image-unsupported";
-import {
-  type AcceptedAgentUserMessage,
-  acceptedAgentUserMessageSchema,
-  agentSessionContextUsageSchema,
-  type RuntimeKind,
-} from "@openducktor/contracts";
+import { agentSessionContextUsageSchema, type RuntimeKind } from "@openducktor/contracts";
 import {
   AgentSessionResumeError,
   toAgentSessionResumeError,
 } from "../../ports/agent-session-resume-error";
-import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
 import { Effect } from "effect";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
 import {
@@ -35,8 +29,9 @@ import type {
   AgentSessionLiveAdapterMutation,
   AgentSessionRuntimeAdapterPort,
 } from "../../ports/agent-session-live-adapter-port";
+import { createClaudeMessageControls } from "./claude-live-session-message-controls";
 import { parseClaudeTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
-import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import type {
   ClaudeRuntimeSessionAdapterPreparer,
   CreateClaudeLiveSessionAdapterPreparerInput,
@@ -55,7 +50,6 @@ import {
   toClaudeReplyApprovalInput,
   toClaudeReplyQuestionInput,
   toClaudeResumeInput,
-  toClaudeRuntimeUserMessageEvent,
   toClaudeSendInput,
   toClaudeStartInput,
 } from "./claude-live-session-service-inputs";
@@ -110,7 +104,7 @@ export const createClaudeLiveSessionAdapterPreparer =
 
       const processEvent = (
         session: ClaudeSessionContext,
-        event: ClaudeAgentSdkEvent,
+        event: ClaudeLiveEvent,
       ): Effect.Effect<void, HostError> =>
         commit("claude-live-session.process-event", () => ({
           value: undefined,
@@ -213,6 +207,21 @@ export const createClaudeLiveSessionAdapterPreparer =
         requireClaudePolicy(input.runtimeKind, operation).pipe(
           Effect.flatMap(() => requireRuntimeWorkingDirectory(workingDirectoryDependencies, input)),
         );
+
+      const messages = createClaudeMessageControls({
+        commit,
+        runControlMutation: eventCoordinator.runControlMutation,
+        requireSessionContext,
+        send: (input, options) =>
+          service
+            .sendUserMessage(toClaudeSendInput(input), runtime.runtimeId, options)
+            .pipe(
+              Effect.mapError(
+                sessionError("claude-live-session.send-user-message", input.externalSessionId),
+              ),
+            ),
+        state,
+      });
 
       const adapter: AgentSessionRuntimeAdapterPort = {
         claudeToolCatalog: { load: (input) => service.loadToolCatalog(input) },
@@ -340,6 +349,9 @@ export const createClaudeLiveSessionAdapterPreparer =
                 { keepActivity: true },
               ),
             ),
+            Effect.tap((summary) =>
+              messages.restoreGoal(input.repoPath, summary.externalSessionId),
+            ),
           ),
         continueInterruptedTurn: (input) =>
           Effect.suspend(() => {
@@ -362,6 +374,9 @@ export const createClaudeLiveSessionAdapterPreparer =
                     },
                   ),
                 ),
+              ),
+              Effect.tap((summary) =>
+                messages.restoreGoal(input.repoPath, summary.externalSessionId),
               ),
               Effect.mapError((cause) =>
                 continuationAdmitted
@@ -407,51 +422,18 @@ export const createClaudeLiveSessionAdapterPreparer =
                 ),
               ),
             ),
+            Effect.tap((summary) =>
+              messages.restoreGoal(input.repoPath, summary.externalSessionId),
+            ),
           ),
         sendUserMessage: (input, options) =>
-          Effect.suspend(() => {
-            let acceptedMessage: AcceptedAgentUserMessage | null = null;
-            return requireSessionWorkingDirectory(input, "send-user-message").pipe(
-              Effect.flatMap(() =>
-                eventCoordinator.runControlMutation(
-                  Effect.gen(function* () {
-                    const output = yield* service
-                      .sendUserMessage(toClaudeSendInput(input), runtime.runtimeId, options)
-                      .pipe(
-                        Effect.mapError(
-                          sessionError(
-                            "claude-live-session.send-user-message",
-                            input.externalSessionId,
-                          ),
-                        ),
-                      );
-                    const accepted = yield* parseClaudeLiveSessionOutput(
-                      acceptedAgentUserMessageSchema,
-                      output,
-                      "claude-live-session.normalize-user-message",
-                    );
-                    acceptedMessage = accepted;
-                    const session = yield* requireSessionContext(input.externalSessionId);
-                    return yield* commit("claude-live-session.publish-user-message", () => {
-                      state.reactivateSession(input);
-                      return {
-                        value: accepted,
-                        changes: state.applyEvent(
-                          session,
-                          toClaudeRuntimeUserMessageEvent(accepted),
-                        ),
-                      };
-                    });
-                  }),
-                ),
-              ),
-              Effect.mapError((cause) =>
-                acceptedMessage
-                  ? messageAcceptedFailure(input, acceptedMessage, "live_update")(cause)
-                  : cause,
-              ),
-            );
-          }),
+          requireSessionWorkingDirectory(input, "send-user-message").pipe(
+            Effect.andThen(messages.sendUserMessage(input, options)),
+          ),
+        controlGoal: (input, options) =>
+          requireSessionWorkingDirectory(input, "control-goal").pipe(
+            Effect.andThen(messages.controlGoal(input, options)),
+          ),
         updateSessionModel: (input) =>
           eventCoordinator.runControlMutation(
             service

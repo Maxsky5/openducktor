@@ -1,3 +1,4 @@
+import { SessionStartGoalField } from "./session-start-goal-field";
 import { SessionStartKickoffField } from "./session-start-kickoff-field";
 import { SpeedSelect } from "./speed-select";
 import type { SpeedControlModel } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
@@ -41,6 +42,10 @@ import {
 } from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
 import { useSessionStartSpeed } from "@openducktor/frontend-core/sessions/start/use-session-start-speed";
 import {
+  type SessionStartGoalDraft,
+  useSessionStartGoalDraft,
+} from "@openducktor/frontend-core/sessions/start/use-session-start-goal-draft";
+import {
   useStartupDialogAttempt,
   useStartupDialogClose,
 } from "@/features/session-startup/use-startup-dialog-attempt";
@@ -57,6 +62,11 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     requestId: model.requestId,
     open,
     prompt: model.kickoffPrompt,
+  });
+  const goalDraft = useSessionStartGoalDraft({
+    requestId: model.requestId,
+    open,
+    goalMode: model.goalMode,
   });
   const speed = useSessionStartSpeed(model);
   const startup = useStartupDialogAttempt(
@@ -108,7 +118,12 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
             onEditChoices={model.onEditChoices}
           />
         ) : (
-          <SessionStartForm model={model} kickoffDraft={kickoffDraft} speed={speed} />
+          <SessionStartForm
+            model={model}
+            kickoffDraft={kickoffDraft}
+            goalDraft={goalDraft}
+            speed={speed}
+          />
         )}
       </DialogContent>
     </Dialog>
@@ -118,10 +133,12 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
 function SessionStartForm({
   model,
   kickoffDraft,
+  goalDraft,
   speed,
 }: {
   model: SessionStartModalModel;
   kickoffDraft: SessionStartKickoffDraft;
+  goalDraft: SessionStartGoalDraft;
   speed: ReturnType<typeof useSessionStartSpeed>;
 }): ReactElement {
   const {
@@ -156,6 +173,7 @@ function SessionStartForm({
   const selectedVariant = selectedModelSelection?.variant ?? "";
   const availability = resolveSessionStartAvailability(model, {
     kickoffInvalid: kickoffDraft.invalid,
+    goalError: goalDraft.error,
   });
   const {
     hasExistingSessionOptions,
@@ -170,6 +188,7 @@ function SessionStartForm({
     requiresExistingSession,
     speedChange: speed.change,
     kickoffPrompt: kickoffDraft.value,
+    goalObjective: goalDraft.value,
   });
   const handleConfirm = (): void => {
     if (isStarting || confirmDisabled) {
@@ -252,6 +271,8 @@ function SessionStartForm({
             error={model.kickoffPromptError}
             onRetry={model.onRetryKickoffPrompt}
           />
+
+          <SessionStartGoalField draft={goalDraft} disabled={isStarting} />
         </fieldset>
       </DialogBody>
 

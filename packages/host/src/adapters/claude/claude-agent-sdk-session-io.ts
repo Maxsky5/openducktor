@@ -11,6 +11,7 @@ import {
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { beginClaudeManualCompaction } from "./claude-agent-sdk-compaction";
+import { observeClaudeGoalFrame, rejectPendingClaudeGoalCommand } from "./claude-agent-sdk-goals";
 import { isClaudeForegroundTurnActive } from "./claude-agent-sdk-activity";
 import {
   flushClaudeLiveContextUsageRefresh,
@@ -41,7 +42,9 @@ import type {
   ClaudeAcceptedUserMessage,
   ClaudeAgentSdkEvent,
   ClaudeAgentSdkEventEmitter,
+  ClaudeGoalEvent,
   ClaudeSession,
+  ClaudeSessionContext,
   ClaudeSessionStore,
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
@@ -131,6 +134,8 @@ export const applyClaudeSessionModel = async (
 /** Own the native stream through cleanup and report unhandled failures to startup and the background hook. */
 export const consumeClaudeSession = (input: {
   emit: ClaudeAgentSdkEventEmitter;
+  /** Receives the goal changes that the adapter reads from the transcript. */
+  emitGoal?: (session: ClaudeSessionContext, event: ClaudeGoalEvent) => void;
   now: () => string;
   onBackgroundFailure: CreateClaudeAgentSdkServiceInput["onBackgroundFailure"];
   onContinuationAdmission?: () => void;
@@ -176,6 +181,13 @@ export const consumeClaudeSession = (input: {
         if (applyClaudeUserMessageSignal({ emit: emitEvent, message, session, timestamp }))
           continue;
         handleClaudeSdkMessage({ session, message, timestamp, emit: emitEvent, modelSelection });
+        observeClaudeGoalFrame({
+          session,
+          message,
+          now,
+          emit: (event) => input.emitGoal?.(session, event),
+          onFailure: (error) => Effect.runFork(onBackgroundFailure(error)),
+        });
         if (shouldRefreshClaudeContextUsageForMessage(message)) {
           scheduleClaudeLiveContextUsageRefresh({ emit, onBackgroundFailure, session, timestamp });
         }
@@ -229,6 +241,14 @@ export const consumeClaudeSession = (input: {
             rejectPendingAdmissions(
               session,
               new Error("The Claude Agent SDK stream ended before it acknowledged the message."),
+            ),
+          catch: wrapError,
+        }),
+        Effect.try({
+          try: () =>
+            rejectPendingClaudeGoalCommand(
+              session,
+              new Error("The Claude Agent SDK stream ended before Claude reported the goal."),
             ),
           catch: wrapError,
         }),

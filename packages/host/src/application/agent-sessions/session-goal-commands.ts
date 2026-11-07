@@ -1,0 +1,135 @@
+import type {
+  AgentSessionGoalControlInput,
+  AgentSessionLiveRef,
+  AgentSessionScope,
+  AgentSessionUserMessagePart,
+} from "@openducktor/contracts";
+import {
+  type AgentSessionGoalCommand,
+  type AgentUserMessagePart,
+  classifySystemSlashCommandInvocation,
+} from "@openducktor/core";
+import { Effect } from "effect";
+import { type HostError, HostValidationError } from "../../effect/host-errors";
+import type { AgentSessionSendOptions } from "../../ports/agent-session-live-adapter-port";
+import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
+import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
+import type {
+  AgentSessionOperationPolicy,
+  AgentSessionSendContent,
+} from "./agent-session-operation-policy";
+import type { SessionGoalRules } from "./session-goal-rules";
+import type { createSessionOperationOwner } from "./session-operation-owner";
+import type { createSessionTurnPreparation } from "./session-turn-preparation";
+
+/** The `/goal` messages and the goal row actions of the session command service. */
+export const createSessionGoalCommands = ({
+  goalRules,
+  owner,
+  runtime,
+  turnPreparation,
+  checkPending,
+  canonicalizeRepoPath,
+  policyFor,
+}: {
+  goalRules: Pick<SessionGoalRules, "blockedReason">;
+  owner: ReturnType<typeof createSessionOperationOwner>;
+  runtime: Pick<AgentSessionLiveStateService, "controlGoal">;
+  turnPreparation: Pick<ReturnType<typeof createSessionTurnPreparation>, "context">;
+  checkPending: (ref: AgentSessionLiveRef) => Effect.Effect<unknown, HostError>;
+  canonicalizeRepoPath: (repoPath: string) => Effect.Effect<string, HostError>;
+  policyFor: (scope: AgentSessionScope) => AgentSessionOperationPolicy;
+}) => {
+  /** The goal command of a `/goal` message, or `null` for another message. */
+  const commandOf = (parts: AgentSessionUserMessagePart[]) =>
+    Effect.try({
+      try: () => {
+        // SAFETY: Parsed parts never hold an explicit undefined field, which is the only
+        // difference between the contract parts and the core parts.
+        const invocation = classifySystemSlashCommandInvocation(parts as AgentUserMessagePart[]);
+        return invocation.kind === "goal" ? invocation.command : null;
+      },
+      catch: (cause) =>
+        new HostValidationError({
+          field: "parts",
+          message: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+    });
+
+  const requireAllowed = (ref: AgentSessionLiveRef, command: AgentSessionGoalCommand) =>
+    goalRules
+      .blockedReason(ref.runtimeKind, command)
+      .pipe(
+        Effect.flatMap((reason) =>
+          reason === null
+            ? Effect.void
+            : Effect.fail(new HostValidationError({ field: "parts", message: reason })),
+        ),
+      );
+
+  /** Runs a `/goal` message as a native goal action inside its submission. */
+  const send = (
+    content: AgentSessionSendContent,
+    command: AgentSessionGoalCommand,
+    steering: boolean,
+    options?: Pick<AgentSessionSendOptions, "onSent">,
+  ) =>
+    Effect.gen(function* () {
+      if (steering)
+        return yield* new HostValidationError({
+          field: "delivery",
+          message: "A slash command cannot join running work.",
+        });
+      yield* requireAllowed(content, command);
+      const systemPrompt =
+        command.kind === "set"
+          ? ((yield* turnPreparation.context(content)) ?? content.systemPrompt)
+          : undefined;
+      yield* checkPending(content);
+      const guarded = yield* owner.options();
+      const accepted = yield* runtime.controlGoal(
+        {
+          repoPath: content.repoPath,
+          runtimeKind: content.runtimeKind,
+          workingDirectory: content.workingDirectory,
+          externalSessionId: content.externalSessionId,
+          sessionScope: content.sessionScope,
+          command,
+          systemPrompt,
+          submissionId: content.submissionId,
+        },
+        {
+          assertCurrent: guarded.assertCurrent,
+          onSent: () => {
+            guarded.onSent();
+            options?.onSent?.();
+          },
+        },
+      );
+      yield* owner
+        .accepted(accepted)
+        .pipe(Effect.mapError(messageAcceptedFailure(content, accepted, "record_message")));
+      return accepted;
+    });
+
+  /** A goal row action. It neither holds the submission nor changes the message queue. */
+  const applyAction = (input: AgentSessionGoalControlInput) =>
+    owner.supervise(
+      Effect.gen(function* () {
+        const repoPath = yield* canonicalizeRepoPath(input.repoPath);
+        const { action, ...target } = input;
+        const ref = { ...target, repoPath };
+        const root = yield* owner.root(ref);
+        const command: AgentSessionGoalCommand = { kind: action };
+        yield* requireAllowed(ref, command);
+        return yield* policyFor(root.sessionScope).run(
+          ref,
+          `${action} goal`,
+          runtime.controlGoal({ ...ref, command }).pipe(Effect.asVoid),
+        );
+      }),
+    );
+
+  return { commandOf, requireAllowed, send, applyAction };
+};

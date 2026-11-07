@@ -22,7 +22,7 @@ import {
 } from "./claude-agent-sdk-session-policy";
 import { createClaudeSessionSummary } from "./claude-agent-sdk-session-shape";
 import type {
-  ClaudeAgentSdkEventEmitter,
+  ClaudeLiveEventEmitter,
   ClaudeSession,
   ClaudeSessionContext,
   ClaudeSessionInput,
@@ -40,7 +40,7 @@ import {
 } from "./claude-session-title-update";
 
 export type CreateClaudeAgentSdkSessionInput = {
-  emit: ClaudeAgentSdkEventEmitter;
+  emit: ClaudeLiveEventEmitter;
   input: ClaudeSessionInput;
   now: () => string;
   onContinuationAdmission?: () => void;
@@ -101,6 +101,7 @@ export const createClaudeAgentSdkSession = async ({
     todosById: new Map(initialTodos.map((todo) => [todo.id, todo])),
     pendingUserMessageAdmissions: new Map(),
     unreadSteeredUserMessages: new Map(),
+    transcriptEnvironment: serviceInput.processEnv ?? process.env,
   };
   if (sessionInput.parentExternalSessionId) {
     sessionContext.parentExternalSessionId = sessionInput.parentExternalSessionId;
@@ -149,6 +150,7 @@ export const createClaudeAgentSdkSession = async ({
     sessionStore,
     now,
     emit,
+    emitGoal: emit,
     onBackgroundFailure: serviceInput.onBackgroundFailure,
     startupValidation: startupValidation.promise,
   };

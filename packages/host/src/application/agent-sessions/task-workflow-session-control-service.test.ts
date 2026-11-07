@@ -15,6 +15,8 @@ import { Deferred, Effect, Exit, Fiber } from "effect";
 import { z } from "zod";
 import { HostOperationError } from "../../effect/host-errors";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
+import { allowAllGoalCommands } from "../../test-support/service-test-doubles";
+import { GOAL_SLASH_COMMAND } from "@openducktor/contracts";
 import {
   createBuildSettingsConfig,
   createBuildStartGitPort,
@@ -44,9 +46,11 @@ type TestControlServiceInput = Omit<
   | "readSessionRootRefs"
   | "approvalPolicy"
   | "taskWorkflows"
+  | "goalRules"
 > & {
   runtime: Omit<
     ControlServiceInput["runtime"],
+    | "controlGoal"
     | "loadContext"
     | "loadSessionDiff"
     | "replyApproval"
@@ -56,17 +60,19 @@ type TestControlServiceInput = Omit<
     | "publishOperation"
     | "retainOperation"
   > &
-    Partial<Pick<ControlServiceInput["runtime"], "read">>;
+    Partial<Pick<ControlServiceInput["runtime"], "read" | "controlGoal">>;
   taskSessionStart?: ControlServiceInput["taskSessionStart"];
   tasks: Omit<ControlServiceInput["tasks"], "applyStartEvent"> &
     Partial<Pick<ControlServiceInput["tasks"], "applyStartEvent">>;
   recordAcceptedMessage?: ControlServiceInput["repositoryPolicy"]["recordAcceptedMessage"];
   pauseForStop?: ControlServiceInput["pauseForStop"];
+  goalRules?: ControlServiceInput["goalRules"];
 };
 
 const createAgentSessionCommandService = ({
   recordAcceptedMessage = () => Effect.void,
   pauseForStop = () => Effect.void,
+  goalRules = allowAllGoalCommands,
   ...input
 }: TestControlServiceInput) =>
   createControlService({
@@ -79,6 +85,7 @@ const createAgentSessionCommandService = ({
       model: (_target, selection) => Effect.succeed(selection),
     },
     approvalPolicy: { reply: () => Effect.die(new Error("unexpected approval reply")) },
+    goalRules,
     readSessionRootRefs: (repoPath) =>
       input.tasks.agentSessionsList({ workspaceId: "repo", repoPath, taskId: "task-1" }).pipe(
         Effect.map((records) =>
@@ -120,6 +127,7 @@ const createAgentSessionCommandService = ({
       list: () => Effect.succeed([]),
       publishOperation: () => Effect.void,
       retainOperation: () => Effect.void,
+      controlGoal: () => Effect.die(new Error("unexpected goal action")),
       loadContext: () => Effect.die(new Error("unexpected context read")),
       loadSessionDiff: () => Effect.die(new Error("unexpected diff read")),
       replyApproval: () => Effect.die(new Error("unexpected approval reply")),
@@ -193,7 +201,7 @@ const task = (status: TaskCard["status"]): TaskCard => ({
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
-  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflow: { id: "openducktor-spec-plan-build", revision: 3 },
   workflowSteps: [],
   availableActions: [],
   labels: [],
@@ -1476,6 +1484,98 @@ describe("createAgentSessionCommandService", () => {
         systemPrompt: "Current host context",
       },
     ]);
+  });
+
+  describe("/goal", () => {
+    const goalParts = (text: string): AgentSessionControlSendInput["parts"] => [
+      { kind: "slash_command", command: { ...GOAL_SLASH_COMMAND, hints: [] } },
+      { kind: "text", text },
+    ];
+    const createGoalService = (
+      goalRules: ControlServiceInput["goalRules"] = allowAllGoalCommands,
+    ) => {
+      const goalInputs: Parameters<ControlServiceInput["runtime"]["controlGoal"]>[0][] = [];
+      const service = createAgentSessionCommandService({
+        ...createControlDeps(),
+        goalRules,
+        runtime: {
+          startSession: () => Effect.die(new Error("unexpected start")),
+          resumeSession: () => Effect.die(new Error("unexpected resume")),
+          continueInterruptedTurn: () => Effect.die(new Error("unexpected continue")),
+          forkSession: () => Effect.die(new Error("unexpected fork")),
+          sendUserMessage: unexpectedSend,
+          controlGoal: (input) =>
+            Effect.sync(() => {
+              goalInputs.push(input);
+              return { type: "command_accepted" as const, commandName: "goal" };
+            }),
+          updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+          stopSession: () => Effect.die(new Error("unexpected stop")),
+          releaseSession: () => Effect.die(new Error("unexpected release")),
+        },
+        tasks: {
+          agentSessionsList: () =>
+            Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
+          agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
+          agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
+        },
+      });
+      return { service, goalInputs };
+    };
+
+    test("routes a goal message to the native goal action with current context", async () => {
+      const { service, goalInputs } = createGoalService();
+      const accepted = await Effect.runPromise(
+        service.sendUserMessage({
+          ...workflowSend,
+          parts: goalParts(" Ship the feature "),
+          submissionId: "submission-1",
+        }),
+      );
+      expect(accepted).toEqual({ type: "command_accepted", commandName: "goal" });
+      expect(goalInputs).toMatchObject([
+        {
+          externalSessionId: "session-1",
+          command: { kind: "set", objective: "Ship the feature" },
+          systemPrompt: "Current host context",
+          submissionId: "submission-1",
+        },
+      ]);
+    });
+
+    test("sends no context with a goal action that starts no work", async () => {
+      const { service, goalInputs } = createGoalService();
+      await Effect.runPromise(
+        service.sendUserMessage({ ...workflowSend, parts: goalParts("pause") }),
+      );
+      expect(goalInputs[0]?.command).toEqual({ kind: "pause" });
+      expect(goalInputs[0]?.systemPrompt).toBeUndefined();
+    });
+
+    test("refuses a blocked or malformed goal command before it enters the queue", async () => {
+      const { service, goalInputs } = createGoalService({
+        blockedReason: () => Effect.succeed("Claude cannot pause a goal."),
+      });
+      const { delivery: _delivery, ...content } = workflowSend;
+      await expect(
+        Effect.runPromise(service.prepareUserMessage({ ...content, parts: goalParts("pause") })),
+      ).rejects.toThrow("Claude cannot pause a goal.");
+      await expect(
+        Effect.runPromise(
+          createGoalService().service.prepareUserMessage({ ...content, parts: goalParts(" ") }),
+        ),
+      ).rejects.toThrow("Add an objective, or use pause, resume, or clear.");
+      expect(goalInputs).toEqual([]);
+    });
+
+    test("runs a goal row action on the owned session", async () => {
+      const { service, goalInputs } = createGoalService();
+      const { parts: _parts, delivery: _delivery, ...target } = workflowSend;
+      await Effect.runPromise(service.applyGoalAction({ ...target, action: "clear" }));
+      expect(goalInputs).toMatchObject([
+        { externalSessionId: "session-1", command: { kind: "clear" } },
+      ]);
+    });
   });
 
   test("keeps settings out of new turns and steering", async () => {

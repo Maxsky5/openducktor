@@ -57,6 +57,18 @@ Autopilot submits its first instruction through the host message queue. If the s
 
 Stop also cancels Autopilot submissions that are still being prepared. A canceled submission cannot send its instruction or add it to the queue.
 
+### Goal mode
+
+A launch action that declares `goal` shows a Goal mode switch in its start form, in the desktop app, the browser runner, and the mobile app. The built-in Spec, Plan, Build workflow declares it for Start Implementation, Fix QA Rejection, and Apply Human Changes.
+
+- The switch is off each time the form opens. When it is on, the Goal field shows the default goal text of the launch with the task ID and title.
+- An empty goal or a goal over 4000 characters disables the start and shows the reason.
+- A runtime without goals, such as OpenCode older than 2.2.1, disables the switch and shows the reason with its update action.
+- The launch request carries `goal` only when the switch is on. The host accepts it only for a manual launch whose action declares `goal`, that sends a first message, and whose runtime has goals.
+- The runtime adapter sets the goal with the first message, in the order that its runtime needs. The agent receives the same first message as without Goal mode.
+- After the start, the goal is a normal session goal. Workflow events and task status changes do not end, pause, or clear it.
+- Autopilot starts never use Goal mode.
+
 ## Artifact actions
 
 `set_spec` writes or revises the specification. From `open`, it moves the task to `spec_ready`. In any other allowed status, it changes only the artifact.

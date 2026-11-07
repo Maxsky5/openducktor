@@ -388,6 +388,20 @@ const registerActiveTurn = (
   session: CodexSessionState,
   model: AgentModelSelection,
 ): ActiveCodexTurn => {
+  const turn = createActiveCodexTurn(context.activeTurnsBySessionId, session, model);
+  context.setSessionLiveStatus(session, { classification: "running" });
+  return turn;
+};
+
+/**
+ * Registers the active turn of a session. A turn that Codex starts by itself, such as a goal
+ * turn, also becomes the active turn, so steering and the busy refusal see it.
+ */
+export const createActiveCodexTurn = (
+  activeTurnsBySessionId: Map<string, ActiveCodexTurn>,
+  session: CodexSessionState,
+  model: AgentModelSelection,
+): ActiveCodexTurn => {
   let settled = false;
   const turn: ActiveCodexTurn = {
     session,
@@ -397,15 +411,14 @@ const registerActiveTurn = (
     isTurnSettled: () => settled,
     markTurnSettled: () => {
       settled = true;
-      if (context.activeTurnsBySessionId.get(session.threadId) === turn) {
-        context.activeTurnsBySessionId.delete(session.threadId);
+      if (activeTurnsBySessionId.get(session.threadId) === turn) {
+        activeTurnsBySessionId.delete(session.threadId);
       }
     },
     handledRequestKeys: new Set<string>(),
     model,
   };
-  context.activeTurnsBySessionId.set(session.threadId, turn);
-  context.setSessionLiveStatus(session, { classification: "running" });
+  activeTurnsBySessionId.set(session.threadId, turn);
   return turn;
 };
 

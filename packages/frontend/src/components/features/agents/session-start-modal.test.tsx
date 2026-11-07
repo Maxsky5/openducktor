@@ -350,6 +350,53 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
+  test("Goal mode is off on open and submits the edited goal when the user turns it on", () => {
+    const onConfirm = mock(() => {});
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          onConfirm,
+          goalMode: { defaultObjective: 'Implement task T-1 "Goals".', unavailableReason: null },
+        }),
+      }),
+    );
+    const goalSwitch = screen.getByRole("switch", { name: "Goal mode" });
+    expect(goalSwitch.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(goalSwitch);
+    const goal = screen.getByRole("textbox", { name: "Goal" });
+    expect(goal).toHaveProperty("value", 'Implement task T-1 "Goals".');
+    fireEvent.change(goal, { target: { value: " " } });
+    expect(screen.getByRole("alert").textContent).toBe("Enter a goal.");
+    expect(screen.getByRole("button", { name: /start session/i })).toHaveProperty("disabled", true);
+
+    fireEvent.change(goal, { target: { value: "Implement task T-1 with tests." } });
+    fireEvent.click(screen.getByRole("button", { name: /start session/i }));
+    expect(onConfirm).toHaveBeenCalledWith({
+      runInBackground: false,
+      startMode: "fresh",
+      sourceSessionOptionValue: null,
+      goalObjective: "Implement task T-1 with tests.",
+    });
+    unmount();
+  });
+
+  test("Goal mode stays off with the reason when the runtime has no goals", () => {
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          goalMode: {
+            defaultObjective: "Implement it.",
+            unavailableReason: "Goals need OpenCode 2.2.1 or later. Run `opencode upgrade`.",
+          },
+        }),
+      }),
+    );
+    expect(screen.getByRole("switch", { name: "Goal mode" })).toHaveProperty("disabled", true);
+    expect(screen.getByText(/Goals need OpenCode 2.2.1 or later/)).toBeTruthy();
+    unmount();
+  });
+
   test("starts a reused session from its speed and submits the changed speed", async () => {
     const onConfirm = mock(() => {});
     const claudeModel = { runtimeKind: "claude" as const, providerId: "claude", modelId: "opus" };

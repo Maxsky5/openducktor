@@ -34,6 +34,20 @@ export const isManualSessionCompactionSlashCommand = (command: SlashCommandDescr
   command.source === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.source &&
   command.trigger.toLowerCase() === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger;
 
+export const GOAL_SLASH_COMMAND = {
+  id: "system:goal",
+  trigger: "goal",
+  title: "Set goal",
+  description: "Keep working until the objective is met",
+  source: "system",
+  hints: ["<objective> | pause | resume | clear"],
+} as const satisfies SlashCommandDescriptor;
+
+export const isGoalSlashCommand = (command: SlashCommandDescriptor): boolean =>
+  command.id === GOAL_SLASH_COMMAND.id &&
+  command.source === GOAL_SLASH_COMMAND.source &&
+  command.trigger.toLowerCase() === GOAL_SLASH_COMMAND.trigger;
+
 export const slashCommandCatalogSchema = z
   .object({
     commands: z.array(slashCommandDescriptorSchema),

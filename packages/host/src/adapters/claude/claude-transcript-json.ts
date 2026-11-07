@@ -10,10 +10,10 @@ import {
   isClaudeTranscriptSummaryTextPath,
   retainClaudeTranscriptRecord,
   retainParsedClaudeTranscriptRecord,
-  selectClaudeTranscriptPath,
-  selectClaudeTranscriptMetadataPath,
-  selectClaudeTranscriptSummaryPath,
+  isClaudeTranscriptProjection,
+  selectClaudeTranscriptProjectionPath,
   type ClaudeTranscriptPath,
+  type ClaudeTranscriptProjection,
 } from "./claude-transcript-retention";
 
 export class ClaudeTranscriptJsonError extends Error {
@@ -173,7 +173,7 @@ const createJsonLexicalCheck = () => {
 };
 
 const createStreamingClaudeTranscriptJsonReader = (
-  options: { metadataOnly?: boolean; summaryOnly?: boolean } = {},
+  options: ClaudeTranscriptProjection = {},
   hints: { collect?: TypeHints; known?: ReadonlyMap<number, ClaudeProtocolValue | undefined> } = {},
 ) => {
   // SAFETY: stream-json 3.6.0 exports this synchronous tokenizer; its declaration only lists the async wrapper.
@@ -184,11 +184,7 @@ const createStreamingClaudeTranscriptJsonReader = (
   };
   const tokenize = jsonParser({ packValues: false });
   const checkLexical = createJsonLexicalCheck();
-  const selectPath = options.metadataOnly
-    ? selectClaudeTranscriptMetadataPath
-    : options.summaryOnly
-      ? selectClaudeTranscriptSummaryPath
-      : selectClaudeTranscriptPath;
+  const selectPath = selectClaudeTranscriptProjectionPath(options);
   const stack: Frame[] = [];
   let root: ClaudeProtocolObject = {};
   let complete = false;
@@ -364,9 +360,7 @@ const createStreamingClaudeTranscriptJsonReader = (
       if (!hasInput) return null;
       consume(none);
       if (!complete || stack.length !== 0) throw new ClaudeTranscriptJsonError("incomplete");
-      return options.metadataOnly || options.summaryOnly
-        ? root
-        : retainClaudeTranscriptRecord(root);
+      return isClaudeTranscriptProjection(options) ? root : retainClaudeTranscriptRecord(root);
     },
   };
 };
@@ -381,7 +375,7 @@ export type ClaudeTranscriptJsonReader = {
 };
 
 const createClaudeTranscriptJsonPass = (
-  options: { metadataOnly?: boolean; summaryOnly?: boolean } = {},
+  options: ClaudeTranscriptProjection = {},
   replay?: { types: TypeHints; digest: string },
 ): ClaudeTranscriptJsonReader => {
   let chunks: string[] = [];
@@ -460,5 +454,5 @@ const createClaudeTranscriptJsonPass = (
 };
 
 export const createClaudeTranscriptJsonReader = (
-  options: { metadataOnly?: boolean; summaryOnly?: boolean } = {},
+  options: ClaudeTranscriptProjection = {},
 ): ClaudeTranscriptJsonReader => createClaudeTranscriptJsonPass(options);

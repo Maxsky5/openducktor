@@ -51,6 +51,7 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
       steerBlockedReason: null,
       runningTurnModel: null,
       messageQueue: null,
+      goalRow: null,
       draftScope: { key: "task-1", persistence: null },
       onSend: async () => false,
       isSending: false,

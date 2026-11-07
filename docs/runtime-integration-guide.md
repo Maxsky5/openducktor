@@ -21,7 +21,7 @@ Each adapter keeps its native protocol inside the adapter and exposes OpenDuckto
 | `AgentSessionRecord` | Durable data used to reopen a session | Durable |
 | Live-session adapter | Normalized state for running sessions | Runtime process |
 
-`RuntimeDescriptor` contains `kind`, `label`, `description`, `readOnlyRoleBlockedTools`, `workflowToolAliasesByCanonical`, `capabilities`, and `capabilityLimits`. Shared code reads the descriptor instead of testing the runtime kind.
+`RuntimeDescriptor` contains `kind`, `label`, `description`, `readOnlyRoleBlockedTools`, `workflowToolAliasesByCanonical`, `capabilities`, `capabilityLimits`, and `updateAction`. `updateAction` is one sentence that tells the user how to update the runtime, for example "Run `opencode upgrade`.". Shared code reads the descriptor instead of testing the runtime kind.
 
 `RuntimeInstanceSummary` contains the runtime kind and ID, route, start time, and descriptor. It contains no repository or working directory, because one instance serves every workspace. Keep it at registry and adapter boundaries. A replacement instance receives a new runtime ID.
 
@@ -148,6 +148,27 @@ Send messages only to an existing prepared session using its current settings. K
 
 A runtime without steering can still use the host queue. See [Queue and steering](#queue-and-steering).
 
+### Goals
+
+| Field | Meaning |
+|---|---|
+| `goals.minimumRuntimeVersion` | Lowest runtime version with native goals. Use `null` when the runtime has none. |
+| `goals.supportsPauseResume` | The runtime can pause and resume a goal. Every runtime with goals can clear one. |
+
+The runtime owns the goal state. OpenDucktor stores no goal data and runs no goal loop.
+
+- The adapter reports the native goal in the `goal` field of the live snapshot. No field means no goal. Statuses are `active`, `paused`, `blocked`, `limit_reached`, `complete`, `waiting_for_message`, and `ended`, with an optional runtime `reason`.
+- `controlGoal` runs one native goal action: set, pause, resume, or clear. It returns `command_accepted` with `commandName: "goal"` after the runtime accepts the action. It fails with the runtime reason when the runtime refuses. It never writes the snapshot goal.
+- A `sendUserMessage` call with the `goal` send option sets that goal with the first message of a workflow launch. A goal failure after the runtime accepted the message raises `AgentSessionMessageAcceptedError`, which tells the user to send `/goal <objective>`.
+- At resume, the adapter publishes the goal that its runtime restores.
+- When the runtime starts the next goal turn by itself, the adapter emits `session_turn_finished` at each turn end. It keeps `activity: "running"` with `foregroundTurnActive: false` until the next turn starts. It emits `session_idle` only when the goal can no longer continue.
+
+| Runtime | Native goal | Stop | Restore |
+|---|---|---|---|
+| Codex | `thread/goal/*` requests and notifications | Pauses the goal, then interrupts the turn | Codex sends the goal after `thread/resume` |
+| OpenCode 2.2.1 or later | `opencode.goal` plugin, `/goal` command, `rpc.opencode.goal.changed` event | OpenCode pauses the goal with "Stopped by the user" | Plugin `get` |
+| Claude | `/goal` input and `goal_status` transcript records | Keeps the goal; the next message continues it | Last `goal_status` record of the resumed chain |
+
 ### History
 
 | Field | Meaning |
@@ -235,13 +256,14 @@ A prompt cannot mix a slash command and attachments because a slash command uses
 - Live pending-input visibility requires pending-input snapshots.
 - Slash command, file search, skill, and subagent flags agree with `supportedParts`.
 - A runtime without subagents has no subagent execution modes.
+- A runtime without goals cannot pause or resume a goal.
 
 `runtimeCapabilityKeyValues` defines product gates.
 
 | Policy | Capability keys |
 |---|---|
 | Required | ODT workflow tools, read-only auto-reject, start modes, and prompt parts |
-| Optional | Steering, history, approvals, questions, attachments, slash commands, file search, skill and subagent references, profiles, variants, todos, diff, file status, MCP status, generated images, and subagents |
+| Optional | Steering, goals, history, approvals, questions, attachments, slash commands, file search, skill and subagent references, profiles, variants, todos, diff, file status, MCP status, generated images, and subagents |
 
 Capability classes record why a gate exists.
 

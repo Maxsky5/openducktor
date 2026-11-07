@@ -470,6 +470,10 @@ export const createAgentSessionLiveStateService = ({
           return acceptedMessage;
         }),
       )(input),
+    controlGoal: (input, options) =>
+      withStartAdmission((input: Parameters<AgentSessionLiveStateService["controlGoal"]>[0]) =>
+        runControl(input, (adapter) => adapter.controlGoal(input, options)),
+      )(input),
     updateSessionModel: (input) =>
       runAdmittedControl(input, (adapter) => adapter.updateSessionModel(input)),
     updateSessionTitle: (input) =>

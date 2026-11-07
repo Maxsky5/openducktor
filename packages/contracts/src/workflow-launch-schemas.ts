@@ -6,6 +6,7 @@ import { sessionLaunchResultSchema } from "./session-launch-schemas";
 import { agentRoleSchema, agentSessionStartModeSchema } from "./agent-workflow-schemas";
 import { agentSessionControlSendInputSchema } from "./agent-session-control-schemas";
 import { gitTargetBranchSchema } from "./git-schemas";
+import { agentSessionGoalObjectiveSchema } from "./agent-session-goal-schemas";
 import { workflowIdSchema } from "./workflow-condition-schemas";
 
 /** A launch action of the task workflow. */
@@ -74,6 +75,11 @@ export const workflowLaunchRequestSchema = z
         .strict(),
     ]),
     targetBranch: gitTargetBranchSchema.optional(),
+    /**
+     * Goal mode. The host sets this goal with the first instruction. Only a launch action that
+     * declares `goal` accepts it.
+     */
+    goal: z.strictObject({ objective: agentSessionGoalObjectiveSchema }).optional(),
     /**
      * A workflow event that the host commits before the session starts. Only a launch with the
      * `human_feedback` context accepts it. The note is the feedback of the person.

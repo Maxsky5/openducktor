@@ -468,6 +468,7 @@ const specPlanBuildSteps = [
         ...fresh(),
         template: { kind: "kickoff", id: "messages.build_start" },
         targetBranch: true,
+        goal: { defaultObjective: 'Implement task {{task.id}} "{{task.title}}".' },
       },
       {
         id: "build_after_qa_rejected",
@@ -476,6 +477,10 @@ const specPlanBuildSteps = [
         template: { kind: "kickoff", id: "messages.build_after_qa_rejection" },
         selectWhen: qaRejected,
         requiresWorktree: true,
+        goal: {
+          defaultObjective:
+            'Fix the findings of the latest QA report for task {{task.id}} "{{task.title}}".',
+        },
       },
       {
         id: "build_after_human_request_changes",
@@ -488,6 +493,9 @@ const specPlanBuildSteps = [
         surface: "studio",
         showWhen: false,
         description: "Address human review feedback.",
+        goal: {
+          defaultObjective: 'Apply the requested changes for task {{task.id}} "{{task.title}}".',
+        },
       },
       {
         id: "build_rebase_conflict_resolution",
@@ -764,7 +772,7 @@ const secondaryActions: SpecPlanBuildActionId[] = [
 export const SPEC_PLAN_BUILD_DEFINITION = {
   schemaVersion: 1,
   id: "openducktor-spec-plan-build",
-  revision: 2,
+  revision: 3,
   label: "Spec, Plan, Build",
   facts: [],
   issueTypes: specPlanBuildIssueTypes,

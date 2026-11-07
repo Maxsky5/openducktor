@@ -48,7 +48,7 @@ export type ClaudeMcpBridgeConnectionResolver = (
 export type CreateClaudeAgentSdkServiceInput = {
   claudeExecutablePath: string;
   launchPolicy: ClaudeLaunchPolicyPort;
-  emit?: (session: ClaudeSessionContext, event: ClaudeAgentSdkEvent) => void;
+  emit?: ClaudeLiveEventEmitter;
   fileSearch?: ClaudeWorkspaceFileSearch;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
@@ -63,7 +63,25 @@ export type CreateClaudeAgentSdkServiceInput = {
   randomId?: () => string;
 };
 
+/** A goal that Claude reports. `ended`: Claude ended it, and the next message does not continue it. */
+export type ClaudeNativeGoal = { readonly objective: string; readonly ended: boolean };
+
+/** The adapter read a new goal state of the session from its transcript. `null`: no goal. */
+export type ClaudeGoalEvent = {
+  readonly type: "session_goal_updated";
+  readonly externalSessionId: string;
+  readonly timestamp: string;
+  readonly goal: ClaudeNativeGoal | null;
+};
+
 export type ClaudeAgentSdkEvent = AgentEvent & { readonly statusUnavailable?: true };
+
+/** An event that the Claude service publishes to the live session adapter. */
+export type ClaudeLiveEvent = ClaudeAgentSdkEvent | ClaudeGoalEvent;
+export type ClaudeLiveEventEmitter = (
+  session: ClaudeSessionContext,
+  event: ClaudeLiveEvent,
+) => void;
 export type ClaudeToolInput = ClaudeProtocolObject;
 
 export type ClaudeAgentSdkEventEmitter = (
@@ -172,6 +190,10 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     pendingUserMessageAdmissions: Map<string, ClaudePendingUserMessageAdmission>;
     /** Steered messages that no turn has read yet, by message UUID. */
     unreadSteeredUserMessages: Map<string, ClaudeAcceptedUserMessage>;
+    /** The goal state that the adapter read. It exists after a restore or a goal command. */
+    goalTracking?: import("./claude-agent-sdk-goals").ClaudeGoalTracking;
+    /** The environment of the Claude process, which locates its transcript. */
+    transcriptEnvironment?: NodeJS.ProcessEnv;
   };
 
 export type ClaudeSessionContext = Omit<ClaudeSession, "query">;

@@ -98,6 +98,10 @@
     "messageDelivery": {
       "minimumSteeringRuntimeVersion": "2.0.24"
     },
+    "goals": {
+      "minimumRuntimeVersion": "2.2.1",
+      "supportsPauseResume": true
+    },
     "history": {
       "loadable": true,
       "fidelity": "message",
@@ -158,6 +162,7 @@
       "support": "none"
     }
   },
+  "updateAction": "Run `opencode upgrade`.",
   "capabilityLimits": [
     {
       "scope": "runtime",

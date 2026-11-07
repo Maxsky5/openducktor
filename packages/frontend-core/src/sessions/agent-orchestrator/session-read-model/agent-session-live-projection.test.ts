@@ -1011,6 +1011,26 @@ describe("agent session live projection", () => {
     });
   });
 
+  test("copies the runtime goal, keeps an equal goal, and clears a removed goal", () => {
+    const goal = { objective: "Ship the feature", status: "paused" as const, reason: "Stopped" };
+    const initial = build({ snapshots: [snapshot("root", { goal })] });
+    expect(getAgentSession(initial, identity("root"))?.goal).toEqual(goal);
+
+    const repeated = delta(initial, {
+      type: "session_upsert",
+      session: snapshot("root", { goal: { ...goal } }),
+    });
+    expect(getAgentSession(repeated, identity("root"))?.goal).toBe(
+      getAgentSession(initial, identity("root"))?.goal,
+    );
+
+    const cleared = delta(repeated, { type: "session_upsert", session: snapshot("root") });
+    expect(getAgentSession(cleared, identity("root"))?.goal).toBeUndefined();
+
+    const removed = delta(initial, { type: "session_removed", ref: snapshot("root").ref });
+    expect(getAgentSession(removed, identity("root"))?.goal).toBeUndefined();
+  });
+
   test("settles a removed live child without dropping its transcript", () => {
     const initial = build({
       snapshots: [

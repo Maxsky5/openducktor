@@ -4,14 +4,14 @@ import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribut
 import { createClaudeAgentSdkService } from "./claude-agent-sdk-service";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import type {
-  ClaudeAgentSdkEventEmitter,
+  ClaudeLiveEventEmitter,
   ClaudeSession,
   ClaudeSessionStore,
 } from "./claude-agent-sdk-types";
 
 export const createClaudeServiceFixture = (
   session: ClaudeSession | null,
-  emit?: ClaudeAgentSdkEventEmitter,
+  emit?: ClaudeLiveEventEmitter,
   existingSessionStore?: ClaudeSessionStore,
   overrides: Partial<Parameters<typeof createClaudeAgentSdkService>[0]> = {},
 ) => {

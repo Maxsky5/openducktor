@@ -1331,3 +1331,56 @@ test("shutdown during a failed ownership save stops the native session once", as
   expect(h.sends).toHaveLength(0);
   expect(h.records).toHaveLength(0);
 });
+
+test("Goal mode passes the goal with the first instruction", async () => {
+  const h = await createLaunchHarness("codex");
+  const result = await Effect.runPromise(
+    h.service.launch({ ...requestFor("codex"), goal: { objective: "Implement task task." } }),
+  );
+  expect(result).toMatchObject({ status: "completed" });
+  expect(h.sendOptions).toHaveLength(1);
+  expect(h.sendOptions[0]?.goal).toEqual({ objective: "Implement task task." });
+});
+
+test("a launch without Goal mode sends no goal", async () => {
+  const h = await createLaunchHarness("codex");
+  await Effect.runPromise(h.service.launch(requestFor("codex")));
+  expect(h.sendOptions[0]?.goal).toBeUndefined();
+});
+
+test.each([
+  {
+    name: "a launch action without Goal mode",
+    runtimeVersion: "9.9.9",
+    request: (): WorkflowLaunchRequest => ({
+      ...requestFor("codex"),
+      policy: {
+        kind: "manual",
+        actionId: "build_rebase_conflict_resolution",
+        decision: { startMode: "fresh", selectedModel: modelFor("codex") },
+      },
+      instruction: { kind: "message", parts: [{ kind: "text", text: "Resolve it." }] },
+      goal: { objective: "Resolve it." },
+    }),
+    message: "does not offer Goal mode",
+  },
+  {
+    name: "a runtime version without goals",
+    runtimeVersion: "0.150.0",
+    request: (): WorkflowLaunchRequest => ({
+      ...requestFor("codex"),
+      goal: { objective: "Implement it." },
+    }),
+    message: "Goals need Codex 0.166.0 or later.",
+  },
+])(
+  "Goal mode refuses $name before the session starts",
+  async ({ runtimeVersion, request, message }) => {
+    const h = await createLaunchHarness("codex", { runtimeVersion });
+    const result = await Effect.runPromise(h.service.launch(request()));
+    expect(result.status).toBe("failed");
+    expect(JSON.stringify(result)).toContain(message);
+    expect(h.starts).toEqual([]);
+    expect(h.sends).toEqual([]);
+  },
+);

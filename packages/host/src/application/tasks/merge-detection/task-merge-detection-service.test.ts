@@ -25,7 +25,7 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
-  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflow: { id: "openducktor-spec-plan-build", revision: 3 },
   workflowSteps: [],
   availableActions: [],
   labels: [],

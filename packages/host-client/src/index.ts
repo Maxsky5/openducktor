@@ -319,6 +319,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentSessionLiveClient.agentSessionWorkflowStart.bind(agentSessionLiveClient),
     agentSessionControlStop:
       agentSessionLiveClient.agentSessionControlStop.bind(agentSessionLiveClient),
+    agentSessionGoalControl:
+      agentSessionLiveClient.agentSessionGoalControl.bind(agentSessionLiveClient),
     agentSessionControlUpdateModel:
       agentSessionLiveClient.agentSessionControlUpdateModel.bind(agentSessionLiveClient),
     agentSessionLiveList: agentSessionLiveClient.agentSessionLiveList.bind(agentSessionLiveClient),

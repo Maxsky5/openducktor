@@ -1,3 +1,4 @@
+import { allowAllGoalCommands } from "../../../test-support/service-test-doubles";
 import {
   workspaceSessionCatalog,
   workspaceSessionOwnership,
@@ -418,6 +419,7 @@ export const createPersistenceHarness = async (
   events.length = 0;
   const commands = createAgentSessionCommandService({
     taskWorkflows: builtinTaskWorkflows,
+    goalRules: allowAllGoalCommands,
     turnPreparation: commandPreparationFixture,
     readSessionRootRefs: () =>
       Effect.succeed([

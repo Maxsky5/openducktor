@@ -390,7 +390,7 @@ test("records QA transitions only after the entire SQLite transaction commits", 
       {
         previousStatus: "open",
         task: {
-          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          workflow: { id: "openducktor-spec-plan-build", revision: 3 },
           id: task.id,
           title: "Task",
           status: "human_review",

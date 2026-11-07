@@ -9,6 +9,7 @@ import {
 import { codexAppServerCommandActionSchema } from "./codex-app-server-permission-schemas";
 import {
   codexAppServerReasoningEffortSchema,
+  codexAppServerThreadGoalStatusSchema,
   codexAppServerUserInputSchema,
 } from "./codex-app-server-request-schemas";
 const codexAppServerJsonValueSchema = z.json();
@@ -376,6 +377,19 @@ export const codexAppServerTurnSchema = z.object({
 });
 
 export type CodexAppServerTurn = z.output<typeof codexAppServerTurnSchema>;
+
+export const codexAppServerThreadGoalSchema = z.object({
+  threadId: z.string(),
+  objective: z.string(),
+  status: codexAppServerThreadGoalStatusSchema,
+  tokenBudget: codexInt64Schema.nullable(),
+  tokensUsed: codexInt64Schema,
+  timeUsedSeconds: codexInt64Schema,
+  createdAt: codexInt64Schema,
+  updatedAt: codexInt64Schema,
+});
+
+export type CodexAppServerThreadGoal = z.output<typeof codexAppServerThreadGoalSchema>;
 
 export const codexAppServerThreadSchema = z.object({
   id: z.string(),

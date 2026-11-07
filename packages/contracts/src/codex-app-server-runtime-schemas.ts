@@ -8,6 +8,7 @@ import {
   codexAppServerPermissionsRequestApprovalParamsSchema,
 } from "./codex-app-server-permission-schemas";
 import {
+  codexAppServerThreadGoalSchema,
   codexAppServerThreadItemSchema,
   codexAppServerThreadStatusSchema,
   codexAppServerTurnSchema,
@@ -127,6 +128,15 @@ export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUn
     z.object({ status: codexAppServerThreadStatusSchema, threadId: z.string() }),
   ),
   notification(
+    "thread/goal/updated",
+    z.object({
+      threadId: z.string(),
+      turnId: z.string().nullable(),
+      goal: codexAppServerThreadGoalSchema,
+    }),
+  ),
+  notification("thread/goal/cleared", z.object({ threadId: z.string() })),
+  notification(
     "model/safetyBuffering/updated",
     z.object({
       fasterModel: z.string().nullable(),
@@ -179,6 +189,8 @@ const consumedRuntimeNotificationMethods = new Set([
   "turn/started",
   "turn/completed",
   "thread/status/changed",
+  "thread/goal/updated",
+  "thread/goal/cleared",
   "model/safetyBuffering/updated",
   "turn/plan/updated",
   "turn/diff/updated",

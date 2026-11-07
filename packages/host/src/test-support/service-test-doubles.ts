@@ -49,6 +49,7 @@ export const createAgentSessionRuntimeAdapterTestDouble = <
           Effect.map(mutation, ({ value }) => value),
         ),
   continueInterruptedTurn: unexpectedEffectCall("live session adapter", "continueInterruptedTurn"),
+  controlGoal: unexpectedEffectCall("live session adapter", "controlGoal"),
   forkSession: unexpectedEffectCall("live session adapter", "forkSession"),
   listSnapshots: unexpectedEffectCall("live session adapter", "listSnapshots"),
   loadContext: unexpectedEffectCall("live session adapter", "loadContext"),
@@ -273,3 +274,11 @@ export const createClaudeSessionMetadataTestDouble = (
         ).pipe(Effect.map((entries) => new Map(entries)))
     : unexpectedEffectCall("Claude session metadata", "readWorkingDirectories"),
 });
+
+/** Goal rules that allow every goal command, for tests that do not check runtime versions. */
+export const allowAllGoalCommands = {
+  blockedReason: () => Effect.succeed(null),
+} satisfies Pick<
+  import("../application/agent-sessions/session-goal-rules").SessionGoalRules,
+  "blockedReason"
+>;

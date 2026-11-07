@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
+import { type AgentSessionLiveEnvelope, GOAL_SLASH_COMMAND } from "@openducktor/contracts";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   acceptedThenFailed,
@@ -150,6 +150,37 @@ describe("agent message delivery: submit and drain", () => {
     await harness.runBackground();
 
     expect(harness.sentTexts()).toEqual(["first:new_turn", "first:new_turn", "second:new_turn"]);
+    expect(harness.service.listQueues("/repo")).toEqual([]);
+  });
+
+  test("delivers the next message at once after a goal command that starts no work", async () => {
+    const harness = createHarness();
+    const goal = (text: string) => [
+      { kind: "slash_command" as const, command: { ...GOAL_SLASH_COMMAND, hints: [] } },
+      { kind: "text" as const, text },
+    ];
+    harness.outcomes.push("busy");
+    await harness.submit("first");
+    await harness.submitParts("goal-pause", goal("pause"));
+    await harness.submit("second");
+
+    harness.idle();
+    await harness.runBackground();
+
+    expect(harness.calls.map(({ input }) => input.parts.at(-1))).toEqual([
+      { kind: "text", text: "first" },
+      { kind: "text", text: "first" },
+    ]);
+    harness.idle();
+    await harness.runBackground();
+
+    // The pause ends no turn, so its acceptance releases "second" without a turn end.
+    expect(harness.calls.map(({ input }) => input.parts.at(-1))).toEqual([
+      { kind: "text", text: "first" },
+      { kind: "text", text: "first" },
+      { kind: "text", text: "pause" },
+      { kind: "text", text: "second" },
+    ]);
     expect(harness.service.listQueues("/repo")).toEqual([]);
   });
 

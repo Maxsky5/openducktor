@@ -66,6 +66,7 @@ const createHarness = async (
   const sends: AgentSessionControlSendInput[] = [];
   const submits: AgentMessageSubmitInput[] = [];
   const queueActions: AgentMessageQueueManageInput[] = [];
+  const goalActions: unknown[] = [];
   const diffLoads: unknown[] = [];
   const starts: AgentSessionControlStartInput[] = [];
   const adapter: AgentSessionRuntimeAdapterPort = {
@@ -154,6 +155,7 @@ const createHarness = async (
         };
       }),
     updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+    controlGoal: () => Effect.die(new Error("unexpected goal action")),
     updateSessionTitle: () => Effect.die(new Error("unexpected title update")),
     stopSession: () => Effect.die(new Error("unexpected stop")),
     releaseSession: () => Effect.die(new Error("unexpected release")),
@@ -179,6 +181,10 @@ const createHarness = async (
           ...service,
           forkWorkflowSession: () => Effect.die(new Error("unexpected workflow fork")),
           startWorkflowSession,
+          applyGoalAction: (input) =>
+            Effect.sync(() => {
+              goalActions.push(input);
+            }),
         },
         {
           submit: (input) =>
@@ -195,6 +201,7 @@ const createHarness = async (
       ),
     }),
     queueActions,
+    goalActions,
     sends,
     starts,
     submits,
@@ -323,6 +330,26 @@ describe("createAgentSessionLiveCommandHandlers", () => {
       ),
     ).rejects.toThrow();
     expect(starts).toEqual([]);
+  });
+
+  test("routes a goal row action and rejects an unknown action", async () => {
+    const { router, goalActions } = await createHarness();
+    const target = {
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      sessionScope: { kind: "workflow", workspaceId: "repo", taskId: "task-1", role: "build" },
+    };
+
+    await Effect.runPromise(
+      router.invoke("agent_session_goal_control", { ...target, action: "pause" }),
+    );
+    await expect(
+      Effect.runPromise(router.invoke("agent_session_goal_control", { ...target, action: "set" })),
+    ).rejects.toThrow();
+
+    expect(goalActions).toEqual([{ ...target, action: "pause" }]);
   });
 
   test("rejects native routing fields before invoking an adapter", async () => {

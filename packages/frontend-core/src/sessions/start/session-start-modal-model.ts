@@ -24,6 +24,8 @@ export type SessionStartModalConfirmInput =
       sourceSessionOptionValue: string | null;
       targetBranch?: string;
       kickoffPrompt?: string | undefined;
+      /** Goal mode: the goal that the start sets with its first message. */
+      goalObjective?: string | undefined;
       speed?: string;
     };
 
@@ -33,6 +35,14 @@ export type SessionStartModalConfirmDraft = Omit<
   SessionStartModalConfirmPayload,
   "runInBackground"
 >;
+
+/** Goal mode of a launch that declares it. */
+export type SessionStartGoalMode = {
+  /** The default goal text, with the task ID and title filled in. */
+  defaultObjective: string;
+  /** Why the selected runtime cannot use Goal mode, or null. */
+  unavailableReason: string | null;
+};
 
 /** The state and handlers that a session start view shows. */
 export type SessionStartModalModel = {
@@ -45,6 +55,8 @@ export type SessionStartModalModel = {
   isKickoffPromptLoading?: boolean;
   kickoffPromptError?: string | null;
   onRetryKickoffPrompt?: () => void;
+  /** Present only when the launch offers Goal mode. */
+  goalMode?: SessionStartGoalMode | undefined;
   title: string;
   description: string;
   confirmLabel: string;
@@ -113,6 +125,7 @@ const selectedRuntimeCatalog = (model: SessionStartModalModel) =>
 const sessionStartBlockedReason = (
   model: SessionStartModalModel,
   kickoffInvalid: boolean,
+  goalError: string | null,
 ): string | null => {
   if (model.isStarting) return null;
   const reuse = model.selectedStartMode === "reuse";
@@ -147,16 +160,17 @@ const sessionStartBlockedReason = (
     return "Choose a source session to start.";
   }
   if (kickoffInvalid) return "Write the custom instructions, or turn them off.";
-  return null;
+  return goalError;
 };
 
 /**
  * Which fields of a start are usable, and whether the start can be confirmed. `kickoffInvalid` is
- * true when the custom instructions are on and blank.
+ * true when the custom instructions are on and blank. `goalError` is why the goal text of Goal
+ * mode cannot start.
  */
 export const resolveSessionStartAvailability = (
   model: SessionStartModalModel,
-  { kickoffInvalid }: { kickoffInvalid: boolean },
+  { kickoffInvalid, goalError = null }: { kickoffInvalid: boolean; goalError?: string | null },
 ): SessionStartAvailability => {
   const {
     existingSessionOptions,
@@ -171,7 +185,7 @@ export const resolveSessionStartAvailability = (
   const hasExistingSessionOptions = existingSessionOptions.length > 0;
   const isReuseMode = selectedStartMode === "reuse";
   const requiresExistingSession = selectedStartMode === "reuse" || selectedStartMode === "fork";
-  const blockedReason = sessionStartBlockedReason(model, kickoffInvalid);
+  const blockedReason = sessionStartBlockedReason(model, kickoffInvalid, goalError);
   const confirmDisabled = isStarting || blockedReason !== null;
   const runtimeProfileDisabled =
     isStarting ||
@@ -204,6 +218,7 @@ export const buildSessionStartConfirmDraft = ({
   requiresExistingSession,
   speedChange,
   kickoffPrompt,
+  goalObjective,
 }: {
   model: Pick<
     SessionStartModalModel,
@@ -215,6 +230,7 @@ export const buildSessionStartConfirmDraft = ({
   requiresExistingSession: boolean;
   speedChange: string | undefined;
   kickoffPrompt: string | undefined;
+  goalObjective?: string | undefined;
 }): SessionStartModalConfirmDraft => {
   const confirmInput: SessionStartModalConfirmDraft = {
     startMode: model.selectedStartMode,
@@ -222,6 +238,7 @@ export const buildSessionStartConfirmDraft = ({
   };
   if (speedChange !== undefined) confirmInput.speed = speedChange;
   if (kickoffPrompt !== undefined) confirmInput.kickoffPrompt = kickoffPrompt;
+  if (goalObjective !== undefined) confirmInput.goalObjective = goalObjective;
   if (model.showTargetBranchSelector) {
     confirmInput.targetBranch = model.selectedTargetBranch ?? "";
   }

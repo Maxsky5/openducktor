@@ -143,6 +143,38 @@ export const selectClaudeTranscriptSummaryPath = (path: ClaudeTranscriptPath): b
   return path.length === 3 || (path.length === 4 && summaryBlockFields.has(String(path[3])));
 };
 
+const goalFields = new Set(["type", "subtype", "uuid", "parentUuid", "isSidechain"]);
+const goalAttachmentFields = new Set(["type", "met", "failed", "sentinel", "condition"]);
+
+/** Keeps the graph fields and the `goal_status` attachment fields of a record. */
+export const selectClaudeTranscriptGoalPath = (path: ClaudeTranscriptPath): boolean => {
+  if (path.length === 0) return true;
+  if (goalFields.has(String(path[0]))) return path.length === 1;
+  return (
+    path[0] === "attachment" &&
+    (path.length === 1 || (path.length === 2 && goalAttachmentFields.has(String(path[1]))))
+  );
+};
+
+/** A projection keeps only some fields of each record. Without one, a read keeps history fields. */
+export type ClaudeTranscriptProjection = {
+  metadataOnly?: boolean;
+  summaryOnly?: boolean;
+  goalOnly?: boolean;
+};
+
+export const isClaudeTranscriptProjection = (options: ClaudeTranscriptProjection): boolean =>
+  options.metadataOnly === true || options.summaryOnly === true || options.goalOnly === true;
+
+export const selectClaudeTranscriptProjectionPath = (
+  options: ClaudeTranscriptProjection,
+): ((path: ClaudeTranscriptPath) => boolean) => {
+  if (options.metadataOnly) return selectClaudeTranscriptMetadataPath;
+  if (options.summaryOnly) return selectClaudeTranscriptSummaryPath;
+  if (options.goalOnly) return selectClaudeTranscriptGoalPath;
+  return selectClaudeTranscriptPath;
+};
+
 export const isClaudeTranscriptSummaryTextPath = (path: ClaudeTranscriptPath): boolean =>
   path[0] === "message" &&
   path[1] === "content" &&
@@ -283,13 +315,9 @@ export const retainClaudeTranscriptRecord = (
 
 export const retainParsedClaudeTranscriptRecord = (
   record: ClaudeProtocolObject,
-  options: { metadataOnly?: boolean; summaryOnly?: boolean } = {},
+  options: ClaudeTranscriptProjection = {},
 ): ClaudeProtocolObject | null => {
-  const select = options.metadataOnly
-    ? selectClaudeTranscriptMetadataPath
-    : options.summaryOnly
-      ? selectClaudeTranscriptSummaryPath
-      : selectClaudeTranscriptPath;
+  const select = selectClaudeTranscriptProjectionPath(options);
   const checkDepth = (value: ClaudeProtocolValue, depth: number): void => {
     // eslint-disable-next-line anti-slop/no-runtime-typeof -- JSON.parse already validates this JSON value.
     if (value === null || typeof value !== "object") return;
@@ -349,7 +377,5 @@ export const retainParsedClaudeTranscriptRecord = (
   };
   // SAFETY: The selected root is an object, and retention preserves its container kind.
   const retained = retain(record, [], undefined) as ClaudeProtocolObject;
-  return options.metadataOnly || options.summaryOnly
-    ? retained
-    : retainClaudeTranscriptRecord(retained);
+  return isClaudeTranscriptProjection(options) ? retained : retainClaudeTranscriptRecord(retained);
 };

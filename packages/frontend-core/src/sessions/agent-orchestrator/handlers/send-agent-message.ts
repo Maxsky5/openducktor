@@ -4,6 +4,7 @@ import {
   type AgentEnginePort,
   type AgentUserMessagePart,
   classifySystemSlashCommandInvocation,
+  goalCommandStartsWork,
   describeAgentSessionScope,
   hasMeaningfulAgentUserMessageParts,
   normalizeAgentUserMessageParts,
@@ -208,8 +209,11 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     if (!hasMeaningfulAgentUserMessageParts(normalizedParts)) {
       return null;
     }
-    const isManualCompactionSend =
-      classifySystemSlashCommandInvocation(normalizedParts).kind === "manual_session_compaction";
+    const systemInvocation = classifySystemSlashCommandInvocation(normalizedParts);
+    const isManualCompactionSend = systemInvocation.kind === "manual_session_compaction";
+    // `/goal pause` and `/goal clear` start no work, so the session does not show as running.
+    const startsNoWork =
+      systemInvocation.kind === "goal" && !goalCommandStartsWork(systemInvocation.command);
 
     const currentSession = withSendScope(
       requireLoadedSession(dependencies.readSessionSnapshot, identity),
@@ -246,9 +250,10 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     // the send as running until the host answers; a queued answer restores the previous state.
     const sessionIsRunning =
       readySession.status === "running" && isAgentSessionForegroundActive(readySession);
-    const sendAttempt = sessionIsRunning
-      ? undefined
-      : markSessionRunningForSend(readySession, dependencies);
+    const sendAttempt =
+      sessionIsRunning || startsNoWork
+        ? undefined
+        : markSessionRunningForSend(readySession, dependencies);
     const resolvedQuestionRequestIds = undefined;
 
     let sentMessage: AcceptedAgentInput | null = null;

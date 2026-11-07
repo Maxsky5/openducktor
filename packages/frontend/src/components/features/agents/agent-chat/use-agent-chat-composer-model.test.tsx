@@ -23,6 +23,7 @@ const buildComposerConfig = (
   steerBlockedReason: null,
   runningTurnModel: null,
   messageQueue: null,
+  goalRow: null,
   canStopSession: false,
   isResumingSession: false,
   stopAgentSession: async () => {},

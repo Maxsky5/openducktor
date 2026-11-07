@@ -1,3 +1,4 @@
+import type { AgentSessionGoalRowModel } from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
 import type { ReactNode } from "react";
 import type { AgentChatForkActions } from "./agent-chat-fork-context";
 import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
@@ -93,6 +94,8 @@ export type AgentChatComposerModel = {
   steerBlockedReason: string | null;
   runningTurnModel: AgentModelCatalog["models"][number] | null;
   messageQueue: AgentChatMessageQueueModel | null;
+  /** The goal row of the session, or null when the session has no goal. */
+  goalRow: AgentSessionGoalRowModel | null;
   isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
   /** Null when no speed control is available. */
