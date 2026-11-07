@@ -2608,6 +2608,33 @@ describe("Claude host live-session adapter goals", () => {
       expect(result.failure.message).toBe("Claude cannot pause a goal.");
   });
 
+  test("returns a refused goal input once, with no unhandled rejection", async () => {
+    const { harness } = await goalHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.setSendUserMessage(() =>
+      Effect.fail(new HostOperationError({ operation: "native", message: "Native input refused" })),
+    );
+    let unhandled = 0;
+    const onUnhandled = () => {
+      unhandled += 1;
+    };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const result = await Effect.runPromise(
+        Effect.result(
+          harness.adapter.controlGoal(goalInput({ kind: "set", objective: OBJECTIVE })),
+        ),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure")
+        expect(result.failure.message).toContain("Native input refused");
+      expect(unhandled).toBe(0);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   test("restores the goal of a resumed session as waiting for a message", async () => {
     const { harness, snapshotGoal } = await goalHarness([
       { type: "user", uuid: "u0", parentUuid: null, message: { content: "Hi" } },

@@ -1,5 +1,6 @@
 import type { ReusablePrompt } from "@openducktor/contracts";
 import {
+  GOAL_SLASH_COMMAND,
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER,
 } from "@openducktor/contracts";
@@ -73,6 +74,9 @@ export const resolveReusablePromptDraftToUserMessageParts = (
     MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger
   ) {
     throw new Error("/compact is reserved for manual session compaction.");
+  }
+  if (customSlashSegment.command.trigger.toLowerCase() === GOAL_SLASH_COMMAND.trigger) {
+    throw new Error("/goal is a reserved system slash command.");
   }
   if (slashSegments.length !== 1) {
     throw new Error("Reusable prompt messages must contain exactly one slash command.");

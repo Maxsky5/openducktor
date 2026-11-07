@@ -1030,6 +1030,21 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(h.inputs).toEqual([]);
   });
 
+  test("refuses a goal row action on an archived chat before calling the runtime", async () => {
+    const h = await setup();
+    await Effect.runPromise(h.store.archive({ ...h.storeRef, archivedAt: 1 }));
+    await expect(
+      Effect.runPromise(
+        h.live.applyGoalAction({
+          ...h.ref,
+          sessionScope: { kind: "repository", workspaceId: "fairnest" },
+          action: "resume",
+        }),
+      ),
+    ).rejects.toThrow("Restore");
+    expect(h.inputs).toEqual([]);
+  });
+
   test.each(["resume", "send", "read", "model"] as const)(
     "%s keeps target and archive validation ahead of other session checks",
     async (operation) => {

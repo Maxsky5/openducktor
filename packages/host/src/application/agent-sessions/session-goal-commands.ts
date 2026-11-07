@@ -8,9 +8,14 @@ import {
   type AgentSessionGoalCommand,
   type AgentUserMessagePart,
   classifySystemSlashCommandInvocation,
+  goalCommandStartsWork,
 } from "@openducktor/core";
 import { Effect } from "effect";
-import { type HostError, HostValidationError } from "../../effect/host-errors";
+import {
+  type HostError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type { AgentSessionSendOptions } from "../../ports/agent-session-live-adapter-port";
 import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
@@ -113,20 +118,39 @@ export const createSessionGoalCommands = ({
       return accepted;
     });
 
-  /** A goal row action. It neither holds the submission nor changes the message queue. */
+  /**
+   * A goal row action. It neither holds the submission nor changes the message queue. A Stop
+   * after the action starts cancels an action that starts work, so Resume cannot outlive Stop.
+   */
   const applyAction = (input: AgentSessionGoalControlInput) =>
     owner.supervise(
       Effect.gen(function* () {
         const repoPath = yield* canonicalizeRepoPath(input.repoPath);
         const { action, ...target } = input;
         const ref = { ...target, repoPath };
-        const root = yield* owner.root(ref);
         const command: AgentSessionGoalCommand = { kind: action };
+        const guard = goalCommandStartsWork(command) ? owner.captureGuard(ref) : undefined;
+        const root = yield* owner.root(ref);
         yield* requireAllowed(ref, command);
-        return yield* policyFor(root.sessionScope).run(
+        const policy = policyFor(root.sessionScope);
+        return yield* policy.run(
           ref,
           `${action} goal`,
-          runtime.controlGoal({ ...ref, command }).pipe(Effect.asVoid),
+          Effect.gen(function* () {
+            // The policy refuses a chat that the user archived.
+            yield* policy.validateRef(ref);
+            if (guard)
+              yield* Effect.try({
+                try: guard.assertCurrent,
+                catch: (cause) => toHostOperationError(cause, "session.goal"),
+              });
+            return yield* runtime
+              .controlGoal(
+                { ...ref, command, workStartGuard: guard },
+                { assertCurrent: guard?.assertCurrent },
+              )
+              .pipe(Effect.asVoid);
+          }),
         );
       }),
     );

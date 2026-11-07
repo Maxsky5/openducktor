@@ -41,9 +41,15 @@ const statusColor = (theme: AppTheme, status: AgentSessionGoalStatus): string =>
 /**
  * The goal of the session on the top edge of the composer, as the desktop goal row: the status,
  * the objective on one line, and the actions of the runtime. A press on the objective shows all
- * of it.
+ * of it. The actions send host commands, so they wait for the command gate, as the queue does.
  */
-export function GoalRow({ model }: { model: AgentSessionGoalRowModel }): ReactElement {
+export function GoalRow({
+  model,
+  commandsOpen,
+}: {
+  model: AgentSessionGoalRowModel;
+  commandsOpen: boolean;
+}): ReactElement {
   const theme = useAppTheme();
   const [expanded, setExpanded] = useState(false);
   return (
@@ -74,8 +80,10 @@ export function GoalRow({ model }: { model: AgentSessionGoalRowModel }): ReactEl
               key={action}
               action={action}
               pending={model.pendingAction === action}
-              disabled={model.pendingAction !== null}
-              onPress={() => model.onAction(action)}
+              disabled={!commandsOpen || model.pendingAction !== null}
+              onPress={() => {
+                if (commandsOpen) model.onAction(action);
+              }}
             />
           ))}
         </View>

@@ -199,7 +199,9 @@ function SessionComposerView({ composer }: { composer: SessionComposerModel }): 
             pickers={pickers}
           />
         ) : null}
-        {delivery.goalRow ? <GoalRow model={delivery.goalRow} /> : null}
+        {delivery.goalRow ? (
+          <GoalRow model={delivery.goalRow} commandsOpen={gateOpen && composer.canInteract} />
+        ) : null}
         <View style={cardStyleOf(cardState)}>
           {composer.isWorking && !composer.isWaitingInput ? (
             <BorderRay

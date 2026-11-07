@@ -1510,7 +1510,7 @@ describe("createAgentSessionCommandService", () => {
               return { type: "command_accepted" as const, commandName: "goal" };
             }),
           updateSessionModel: () => Effect.die(new Error("unexpected model update")),
-          stopSession: () => Effect.die(new Error("unexpected stop")),
+          stopSession: () => Effect.void,
           releaseSession: () => Effect.die(new Error("unexpected release")),
         },
         tasks: {
@@ -1565,6 +1565,31 @@ describe("createAgentSessionCommandService", () => {
           createGoalService().service.prepareUserMessage({ ...content, parts: goalParts(" ") }),
         ),
       ).rejects.toThrow("Add an objective, or use pause, resume, or clear.");
+      expect(goalInputs).toEqual([]);
+    });
+
+    test("a Stop during a goal Resume cancels the Resume before it reaches the runtime", async () => {
+      const entered = Deferred.makeUnsafe<void>();
+      const release = Deferred.makeUnsafe<void>();
+      const { service, goalInputs } = createGoalService({
+        blockedReason: () =>
+          Deferred.succeed(entered, undefined).pipe(
+            Effect.andThen(Deferred.await(release)),
+            Effect.as(null),
+          ),
+      });
+      const { parts: _parts, delivery: _delivery, ...target } = workflowSend;
+      const resume = Effect.runFork(
+        Effect.result(service.applyGoalAction({ ...target, action: "resume" })),
+      );
+      await Effect.runPromise(Deferred.await(entered));
+      const { sessionScope: _scope, ...ref } = target;
+      await Effect.runPromise(service.stopSession(ref));
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      const result = await Effect.runPromise(Fiber.join(resume));
+
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") expect(result.failure.message).toContain("Stop canceled");
       expect(goalInputs).toEqual([]);
     });
 

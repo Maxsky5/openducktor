@@ -135,18 +135,26 @@ export const createClaudeMessageControls = ({
       };
       if (input.systemPrompt !== undefined) sendInput.systemPrompt = input.systemPrompt;
       if (input.submissionId !== undefined) sendInput.submissionId = input.submissionId;
-      yield* sendAndPublish(sendInput, options).pipe(
-        Effect.tapError(() => Effect.sync(wait.cancel)),
+      // Observe the outcome now: a failed send cancels the wait, and the send error then reports it.
+      const outcome = wait.outcome.then(
+        () => null,
+        (cause: unknown) => cause,
       );
-      yield* Effect.tryPromise({
-        try: () => wait.outcome,
-        catch: (cause) =>
-          cause instanceof HostValidationError
-            ? cause
-            : toHostOperationError(cause, "claude-live-session.goal", {
+      yield* Effect.gen(function* () {
+        yield* sendAndPublish(sendInput, options);
+        const failure = yield* Effect.promise(() => outcome);
+        if (failure === null) return;
+        return yield* Effect.fail(
+          failure instanceof HostValidationError
+            ? failure
+            : toHostOperationError(failure, "claude-live-session.goal", {
                 externalSessionId: input.externalSessionId,
               }),
-      });
+        );
+      }).pipe(
+        // A failed or interrupted send ends the wait. After an outcome, cancel does nothing.
+        Effect.ensuring(Effect.sync(wait.cancel)),
+      );
     });
 
   return {
