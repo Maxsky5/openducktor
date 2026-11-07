@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { returnFocusOnClose } from "@/components/ui/open-dialogs";
 import { cn } from "@/lib/utils";
 import type { EditTaskSection } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 import {
@@ -109,7 +110,6 @@ function TaskDocumentFooterActions({
       <Button
         type="button"
         variant="outline"
-        className="cursor-pointer"
         onClick={controller.discardCurrentDocumentDraft}
         disabled={controller.isFormDisabled || !controller.isActiveDocumentDirty}
       >
@@ -118,7 +118,7 @@ function TaskDocumentFooterActions({
       </Button>
       <Button
         type="button"
-        className="-order-1 cursor-pointer sm:order-none"
+        className="-order-1 sm:order-none"
         onClick={() => void controller.saveActiveDocument()}
         disabled={
           controller.isFormDisabled ||
@@ -154,7 +154,6 @@ function TaskSubmitFooterActions({
         <Button
           type="button"
           variant="outline"
-          className="cursor-pointer"
           onClick={() => controller.setStep("type")}
           disabled={controller.isFormDisabled}
         >
@@ -164,7 +163,7 @@ function TaskSubmitFooterActions({
       ) : null}
       <Button
         type="button"
-        className="-order-1 cursor-pointer sm:order-none"
+        className="-order-1 sm:order-none"
         onClick={() => void controller.submit()}
         disabled={
           controller.isFormDisabled ||
@@ -323,11 +322,7 @@ export function TaskCreateModal({
             openerRef.current =
               document.activeElement instanceof HTMLElement ? document.activeElement : null;
           }}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            if (!document.activeElement?.closest('[role="dialog"][data-state="open"]'))
-              openerRef.current?.focus();
-          }}
+          onCloseAutoFocus={returnFocusOnClose(() => openerRef.current)}
         >
           <DialogHeader className="border-b border-border px-5 py-4 pr-14">
             <DialogTitle className="flex items-center gap-2">
@@ -363,7 +358,6 @@ export function TaskCreateModal({
             <Button
               type="button"
               variant="outline"
-              className="cursor-pointer"
               onClick={controller.close}
               disabled={controller.isBusy}
             >

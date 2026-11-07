@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Archive,
   Columns3,
+  Compass,
   Download,
   FolderOpen,
   FolderPlus,
@@ -26,6 +27,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useDiagnosticsPanel } from "@/components/features/diagnostics";
+import { useFeatureTour } from "@/features/feature-tour/feature-tour-context";
 import { TASK_CARD_VIEW_OPTIONS } from "@openducktor/frontend-core/tasks/board/task-card-view-options";
 import { TASK_CARD_VIEW_ICONS } from "@/components/features/kanban/task-card-view-options";
 import { SETTINGS_SECTIONS } from "@/components/features/settings/settings-modal-constants";
@@ -132,6 +134,7 @@ export function useCommandPaletteActions({
   const { taskCardView, changeTaskCardView } = useKanbanTaskCardView();
   const { openSettings } = useSettingsModal();
   const { openDiagnostics } = useDiagnosticsPanel();
+  const { openFeatureTour } = useFeatureTour();
   const { openWorkspaceDialog } = useWorkspaceDialogs();
   const repoPath = target?.repoPath ?? null;
   const taskStoreCheck = useQuery(taskStoreCheckQueryOptionsOrSkip(target));
@@ -350,6 +353,13 @@ export function useCommandPaletteActions({
       icon(ShieldCheck),
       ["health", "checks"],
       openDiagnostics,
+    ),
+    appAction(
+      "feature-tour",
+      "Show tour",
+      icon(Compass),
+      ["feature tour", "onboarding", "introduction", "guide", "help", "learn"],
+      () => openFeatureTour(previousFocus()),
     ),
     ...workspaceSwitches,
     appAction(

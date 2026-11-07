@@ -22,8 +22,6 @@ import {
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
-import * as pierre from "@pierre/diffs";
-import * as pierreReact from "@pierre/diffs/react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useEffect, useState } from "react";
 import { Link, MemoryRouter, Navigate, Route, Routes, useLocation } from "react-router";
@@ -34,7 +32,6 @@ import {
 } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import { useAgentChatTranscriptModel } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-transcript-model";
 import * as repositoryModal from "@/components/features/repository/open-repository-modal";
-import * as diffWorkers from "@/contexts/DiffWorkerProvider";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
@@ -80,6 +77,8 @@ import { ManualMergeCheckProvider } from "@/state/providers/manual-merge-check-p
 import { ManualPullRequestSyncProvider } from "@/state/providers/manual-pull-request-sync-provider";
 import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
+import { FeatureTourProvider } from "@/features/feature-tour/feature-tour-context";
+import { FeatureTourDialogHost } from "@/features/feature-tour/feature-tour-dialog-host";
 import { DiagnosticsPanelProvider } from "@/components/features/diagnostics";
 import {
   type TaskWorkflowActions,
@@ -112,6 +111,9 @@ import type {
 } from "@/types/state-slices";
 import { AppShell } from "./app-shell";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+
+// The tour host loads the dialog lazily. Load it here, so no test pays for the first load.
+await import("@/features/feature-tour/feature-tour-dialog");
 
 const LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
 const SESSION_SCOPE_STORAGE_KEY = "openducktor:sidebar:session-scope";
@@ -475,48 +477,52 @@ function AppShellTestEnvironment({
                                     value={createWorkspaceActivityObserverStub()}
                                   >
                                     <WorkspacePreviewTransitionGuardProvider>
-                                      <SettingsModalProvider>
-                                        <DiagnosticsPanelProvider>
-                                          <TaskWorkflowActionsContext.Provider
-                                            value={createTaskWorkflowActionsFixture(
-                                              options.taskWorkflowActions,
-                                            )}
-                                          >
-                                            <Routes>
-                                              <Route
-                                                element={
-                                                  <ManualPullRequestSyncProvider>
-                                                    <ManualMergeCheckProvider>
-                                                      <AppShell />
-                                                    </ManualMergeCheckProvider>
-                                                  </ManualPullRequestSyncProvider>
-                                                }
-                                              >
+                                      <FeatureTourProvider>
+                                        <SettingsModalProvider>
+                                          <DiagnosticsPanelProvider>
+                                            <TaskWorkflowActionsContext.Provider
+                                              value={createTaskWorkflowActionsFixture(
+                                                options.taskWorkflowActions,
+                                              )}
+                                            >
+                                              <Routes>
                                                 <Route
-                                                  path="/kanban"
-                                                  element={<main>Kanban</main>}
-                                                />
-                                                <Route
-                                                  path="/sessions"
                                                   element={
-                                                    options.sessionContent ? (
-                                                      <div key={currentWorkspace?.workspaceId}>
-                                                        {options.sessionContent}
-                                                      </div>
-                                                    ) : (
-                                                      <main>Sessions</main>
-                                                    )
+                                                    <ManualPullRequestSyncProvider>
+                                                      <ManualMergeCheckProvider>
+                                                        <AppShell />
+                                                      </ManualMergeCheckProvider>
+                                                    </ManualPullRequestSyncProvider>
                                                   }
-                                                />
-                                                <Route
-                                                  path="/onboarding"
-                                                  element={<Navigate to="/kanban" replace />}
-                                                />
-                                              </Route>
-                                            </Routes>
-                                          </TaskWorkflowActionsContext.Provider>
-                                        </DiagnosticsPanelProvider>
-                                      </SettingsModalProvider>
+                                                >
+                                                  <Route
+                                                    path="/kanban"
+                                                    element={<main>Kanban</main>}
+                                                  />
+                                                  <Route
+                                                    path="/sessions"
+                                                    element={
+                                                      options.sessionContent ? (
+                                                        <div key={currentWorkspace?.workspaceId}>
+                                                          {options.sessionContent}
+                                                        </div>
+                                                      ) : (
+                                                        <main>Sessions</main>
+                                                      )
+                                                    }
+                                                  />
+                                                  <Route
+                                                    path="/onboarding"
+                                                    element={<Navigate to="/kanban" replace />}
+                                                  />
+                                                </Route>
+                                              </Routes>
+                                              {/* `ApplicationOverlays` mounts the tour host. */}
+                                              <FeatureTourDialogHost />
+                                            </TaskWorkflowActionsContext.Provider>
+                                          </DiagnosticsPanelProvider>
+                                        </SettingsModalProvider>
+                                      </FeatureTourProvider>
                                     </WorkspacePreviewTransitionGuardProvider>
                                   </WorkspaceActivityContext.Provider>
                                 </NotificationContext.Provider>
@@ -594,19 +600,8 @@ const renderAppShellForTest = (
   );
 };
 
-let syntaxWorkerSpies: { mockRestore: () => void }[] = [];
-beforeEach(() => {
-  // Bun does not bundle the browser worker URL used by the syntax library.
-  syntaxWorkerSpies = [
-    spyOn(pierreReact, "WorkerPoolContextProvider").mockImplementation(({ children }) => (
-      <>{children}</>
-    )),
-    spyOn(pierre, "preloadHighlighter").mockResolvedValue(undefined),
-  ];
-});
 afterEach(() => {
   cleanup();
-  for (const spy of syntaxWorkerSpies) spy.mockRestore();
 });
 
 describe("AppShell", () => {
@@ -762,6 +757,8 @@ describe("AppShell", () => {
     expect(
       screen.queryByRole("heading", { name: "Set up your local coding workspace" }),
     ).toBeNull();
+    // A redirect is not a finished onboarding, so the tour stays closed.
+    expect(screen.queryByText("Welcome to OpenDucktor")).toBeNull();
   });
 
   test("exits onboarding only after workspace creation publishes the active workspace", async () => {
@@ -874,6 +871,9 @@ describe("AppShell", () => {
     expect(document.querySelector("main")?.textContent).toBe("Kanban");
     expect(mainFrames).not.toContain("");
     expect(screen.queryByRole("heading", { name: "Open your first workspace" })).toBeNull();
+    const tour = await screen.findByRole("dialog");
+    expect(within(tour).getByText("1 of 8")).toBeDefined();
+    expect(within(tour).getByRole("heading", { name: "Welcome to OpenDucktor" })).toBeDefined();
     // This flow renders the app shell and several onboarding stages.
   }, 2_500);
 
@@ -1384,38 +1384,6 @@ describe("AppShell session navigation", () => {
       workspaceId: activeWorkspace.workspaceId,
       missing: false,
     });
-  });
-
-  test("keeps syntax workers alive through page and workspace switches", async () => {
-    const startWorkers = mock();
-    const stopWorkers = mock();
-    const workerProvider = spyOn(diffWorkers, "DiffWorkerProvider").mockImplementation(
-      function Workers({ children }) {
-        useEffect(() => {
-          startWorkers();
-          return () => stopWorkers();
-        }, []);
-        return <>{children}</>;
-      },
-    );
-    try {
-      const view = renderAppShellForTest({ extraWorkspaces: [secondWorkspace] });
-      expect(startWorkers).toHaveBeenCalledTimes(1);
-      fireEvent.click(await screen.findByRole("button", { name: /Chat mine/ }));
-      await screen.findByText("Sessions");
-      fireEvent.click(screen.getByRole("button", { name: "Fairnest" }));
-      await screen.findByRole("button", { name: "New task in Fairnest" });
-      fireEvent.click(screen.getByRole("link", { name: "Kanban" }));
-      await waitFor(() =>
-        expect(screen.getByTestId("current-address").textContent).toBe("/kanban"),
-      );
-      expect(startWorkers).toHaveBeenCalledTimes(1);
-      expect(stopWorkers).not.toHaveBeenCalled();
-      view.unmount();
-      expect(stopWorkers).toHaveBeenCalledTimes(1);
-    } finally {
-      workerProvider.mockRestore();
-    }
   });
 
   test("keeps the list scope and session access when the sidebar collapses", async () => {

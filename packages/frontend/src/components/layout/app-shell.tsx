@@ -17,7 +17,6 @@ import {
   type OpenRepositoryModalView,
 } from "@/components/features/repository/open-repository-modal";
 import { AgentChatTranscriptCacheProvider } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-cache-provider";
-import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { WorkspaceSidebar } from "@/components/layout/sidebar";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
@@ -31,6 +30,8 @@ import type { CommandPaletteShell } from "@/features/command-palette/command-pal
 import { RecentItemsRecorder } from "@/features/command-palette/recent-items-recorder";
 import { VisibleSessionTargetProvider } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { SessionReadStateProvider } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { useFeatureTour } from "@/features/feature-tour/feature-tour-context";
+import { preloadFeatureTourDialog } from "@/features/feature-tour/feature-tour-dialog-loader";
 import { documentVisibility } from "@/features/session-navigation/document-visibility";
 import { OnboardingPage } from "@/pages/onboarding/onboarding-page";
 import {
@@ -172,11 +173,9 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
                         data-main-scroll-container="true"
                         className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
                       >
-                        <DiffWorkerProvider>
-                          <AgentChatTranscriptCacheProvider>
-                            <Outlet />
-                          </AgentChatTranscriptCacheProvider>
-                        </DiffWorkerProvider>
+                        <AgentChatTranscriptCacheProvider>
+                          <Outlet />
+                        </AgentChatTranscriptCacheProvider>
                       </main>
                     </section>
                   </div>
@@ -202,6 +201,7 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
 export const AppShell = memo(function AppShell(): ReactElement {
   const location = useLocation();
   const navigate = useNavigate();
+  const { openFeatureTour } = useFeatureTour();
   const onboardingStartedWithoutWorkspaceRef = useRef(false);
   const {
     hasWorkspaces,
@@ -217,12 +217,16 @@ export const AppShell = memo(function AppShell(): ReactElement {
       onboardingStartedWithoutWorkspaceRef.current = false;
     } else if (!isLoadingWorkspaces && !workspaceLoadError && !hasWorkspaces) {
       onboardingStartedWithoutWorkspaceRef.current = true;
+      // The tour opens when onboarding completes.
+      preloadFeatureTourDialog();
     }
   }, [hasWorkspaces, isLoadingWorkspaces, isOnboardingRoute, workspaceLoadError]);
 
   const completeOnboarding = useCallback((): void => {
     navigate("/kanban", { replace: true, flushSync: true });
-  }, [navigate]);
+    // The Kanban board shows first. The onboarding page is gone, so the tour has no return target.
+    openFeatureTour(null);
+  }, [navigate, openFeatureTour]);
 
   const retryWorkspaceLoad = useCallback((): void => {
     void retryWorkspaces().catch(() => undefined);

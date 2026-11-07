@@ -15,6 +15,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -25,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { returnFocusOnClose } from "@/components/ui/open-dialogs";
 import type { SettingsContentFocusRequest, SettingsDeepLink } from "./settings-deep-link";
 import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
 import { SettingsModalContent } from "./settings-modal-content";
@@ -36,7 +38,11 @@ import { SettingsModalOpenButton, SettingsModalTrigger } from "./settings-modal-
 import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-selection";
 import { useSettingsModalController } from "./use-settings-modal-controller";
 
-import { SettingsModalContext } from "./settings-modal-context";
+import {
+  SettingsDialogHandoffContext,
+  SettingsModalContext,
+  type SettingsDialogHandoff,
+} from "./settings-modal-context";
 
 export { useSettingsModal } from "./settings-modal-context";
 export type { SettingsDeepLink } from "./settings-deep-link";
@@ -89,13 +95,10 @@ export function SettingsModalProvider({ children }: PropsWithChildren): ReactEle
         <SettingsDialog
           key={activeRequest.id}
           open
+          focusReturn={{ kind: "opener", element: activeRequest.trigger }}
           initialNavigation={navigation}
           {...(activeRequest.deepLink ? { deepLink: activeRequest.deepLink } : {})}
           onOpenChange={handleDialogOpenChange}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            activeRequest.trigger?.focus();
-          }}
         />
       ) : null}
     </SettingsModalContext.Provider>
@@ -120,7 +123,12 @@ function LocalSettingsModal({
   );
 
   return (
-    <SettingsDialog open={open} deepLink={deepLink} onOpenChange={handleOpenChange}>
+    <SettingsDialog
+      open={open}
+      focusReturn={TRIGGER_FOCUS_RETURN}
+      deepLink={deepLink}
+      onOpenChange={handleOpenChange}
+    >
       <SettingsModalTrigger
         className={triggerClassName}
         iconOnly={triggerIconOnly}
@@ -131,21 +139,60 @@ function LocalSettingsModal({
   );
 }
 
+/**
+ * Where Settings returns the focus on close. `trigger`: the Radix trigger of `LocalSettingsModal`
+ * gets it, and Settings has no handoff. `opener`: the shared Settings returns it to the element
+ * that opened Settings, or gives that element to a dialog that opens in its place. `element` is
+ * `null` when no element had the focus.
+ */
+type SettingsFocusReturn = { kind: "trigger" } | { kind: "opener"; element: HTMLElement | null };
+
+const TRIGGER_FOCUS_RETURN: SettingsFocusReturn = { kind: "trigger" };
+
 type SettingsDialogProps = {
   children?: ReactNode;
   deepLink?: SettingsDeepLink | undefined;
+  focusReturn: SettingsFocusReturn;
   initialNavigation?: Navigation;
   onOpenChange: (open: boolean, navigation: Navigation) => void;
-  onCloseAutoFocus?: ((event: Event) => void) | undefined;
   open: boolean;
 };
+
+type SettingsDialogHandoffState = {
+  handoff: SettingsDialogHandoff | null;
+  onCloseAutoFocus: ((event: Event) => void) | undefined;
+};
+
+/**
+ * The handoff of the shared Settings to a dialog that opens in its place, and the focus return of
+ * Settings. The next dialog returns the focus to the opener, so Settings must not move it first.
+ */
+function useSettingsDialogHandoffState(
+  focusReturn: SettingsFocusReturn,
+  close: () => void,
+): SettingsDialogHandoffState {
+  const handedOffRef = useRef(false);
+  const hasOpener = focusReturn.kind === "opener";
+  const opener = hasOpener ? focusReturn.element : null;
+  return useMemo(() => {
+    if (!hasOpener) return { handoff: null, onCloseAutoFocus: undefined };
+    return {
+      handoff: (openDialog) => {
+        handedOffRef.current = true;
+        openDialog(opener);
+        close();
+      },
+      onCloseAutoFocus: returnFocusOnClose(() => (handedOffRef.current ? null : opener)),
+    };
+  }, [close, hasOpener, opener]);
+}
 
 function SettingsDialog({
   children,
   deepLink,
   initialNavigation = INITIAL_NAVIGATION,
+  focusReturn,
   onOpenChange,
-  onCloseAutoFocus,
   open,
 }: SettingsDialogProps): ReactElement {
   const initial = getOpenState(deepLink, initialNavigation);
@@ -209,12 +256,16 @@ function SettingsDialog({
     });
   };
 
+  const { isSaving, retainDraft } = controller;
+  const dismiss = useCallback((): void => {
+    if (isSaving) return;
+    retainDraft();
+    close();
+  }, [close, isSaving, retainDraft]);
+
   const handleOpenChange = (nextOpen: boolean): void => {
     if (!nextOpen) {
-      if (!controller.isSaving) {
-        controller.retainDraft();
-        close();
-      }
+      dismiss();
       return;
     }
 
@@ -224,6 +275,8 @@ function SettingsDialog({
     setFocusRequest(next.focusRequest);
     onOpenChange(true, next.navigation);
   };
+
+  const { handoff, onCloseAutoFocus } = useSettingsDialogHandoffState(focusReturn, dismiss);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -258,25 +311,27 @@ function SettingsDialog({
               onChange={handleSectionChange}
             />
             <div className="min-h-0 min-w-0 overflow-y-auto">
-              <SettingsModalContent
-                section={navigation.section}
-                repositorySection={navigation.repositorySection}
-                globalPromptRoleTab={navigation.globalPromptRoleTab}
-                repoPromptRoleTab={navigation.repoPromptRoleTab}
-                selectedReusablePromptId={navigation.selectedReusablePromptId}
-                selectedCustomAgentRoleId={navigation.selectedCustomAgentRoleId}
-                onSelectedCustomAgentRoleIdChange={(selectedCustomAgentRoleId) =>
-                  setNavigation((current) => ({ ...current, selectedCustomAgentRoleId }))
-                }
-                isInteractionDisabled={isInteractionDisabled}
-                controller={controller}
-                onRepositorySectionChange={handleRepositorySectionChange}
-                onGlobalPromptRoleTabChange={handleGlobalPromptRoleTabChange}
-                onRepoPromptRoleTabChange={handleRepoPromptRoleTabChange}
-                onSelectedReusablePromptIdChange={handleSelectedReusablePromptIdChange}
-                contentFocusRequest={focusRequest}
-                onContentFocusRequestHandled={clearFocusRequest}
-              />
+              <SettingsDialogHandoffContext.Provider value={handoff}>
+                <SettingsModalContent
+                  section={navigation.section}
+                  repositorySection={navigation.repositorySection}
+                  globalPromptRoleTab={navigation.globalPromptRoleTab}
+                  repoPromptRoleTab={navigation.repoPromptRoleTab}
+                  selectedReusablePromptId={navigation.selectedReusablePromptId}
+                  selectedCustomAgentRoleId={navigation.selectedCustomAgentRoleId}
+                  onSelectedCustomAgentRoleIdChange={(selectedCustomAgentRoleId) =>
+                    setNavigation((current) => ({ ...current, selectedCustomAgentRoleId }))
+                  }
+                  isInteractionDisabled={isInteractionDisabled}
+                  controller={controller}
+                  onRepositorySectionChange={handleRepositorySectionChange}
+                  onGlobalPromptRoleTabChange={handleGlobalPromptRoleTabChange}
+                  onRepoPromptRoleTabChange={handleRepoPromptRoleTabChange}
+                  onSelectedReusablePromptIdChange={handleSelectedReusablePromptIdChange}
+                  contentFocusRequest={focusRequest}
+                  onContentFocusRequestHandled={clearFocusRequest}
+                />
+              </SettingsDialogHandoffContext.Provider>
             </div>
           </div>
         </DialogBody>

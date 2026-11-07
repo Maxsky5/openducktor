@@ -26,8 +26,17 @@ import {
   createRepoSettingsConfigFixture,
   createDeferred,
 } from "@/test-utils/shared-test-fixtures";
+import { ThemeProvider } from "@/components/layout/theme-provider";
+import {
+  FeatureTourProvider,
+  useFeatureTourState,
+} from "@/features/feature-tour/feature-tour-context";
+import { FeatureTourDialogHost } from "@/features/feature-tour/feature-tour-dialog-host";
 import { SettingsModal, SettingsModalProvider } from "./settings-modal";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
+
+// The tour host loads the dialog lazily. Load it here, so no test pays for the first load.
+await import("@/features/feature-tour/feature-tour-dialog");
 
 for (const shared of [true, false]) {
   test(`${shared ? "shared" : "local"} settings opens and reopens cached settings without a loader`, async () => {
@@ -167,6 +176,84 @@ for (const shared of [true, false]) {
   });
 }
 
+test("Show tour hands the focus from Settings to the tour and back to the opener", async () => {
+  const settings = renderSettings(true, undefined, { featureTour: "dialog" });
+  try {
+    const trigger = within(document.body).getByRole("button", { name: "Open settings" });
+    trigger.focus();
+    const content = await settings.open();
+    // The tour traps the focus, so only a focus event shows a move to the trigger behind it.
+    const triggerFocus = mock(() => {});
+    trigger.addEventListener("focus", triggerFocus);
+    fireEvent.click(content.getByRole("button", { name: "General" }));
+    await act(async () => {
+      fireEvent.click(content.getByRole("button", { name: "Show tour" }));
+    });
+    const tour = await waitFor(
+      () => {
+        const dialogs = within(document.body).getAllByRole("dialog");
+        expect(dialogs).toHaveLength(1);
+        return dialogs[0]!;
+      },
+      { timeout: 500 },
+    );
+    expect(within(tour).getByText("1 of 8")).toBeDefined();
+    expect(tour.contains(document.activeElement)).toBe(true);
+    expect(triggerFocus).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.click(within(tour).getByRole("button", { name: "Close" }));
+    });
+    await waitFor(() => expect(within(document.body).queryByRole("dialog")).toBeNull(), {
+      timeout: 500,
+    });
+    expect(document.activeElement).toBe(trigger);
+    expect(triggerFocus).toHaveBeenCalledTimes(1);
+  } finally {
+    settings.unmount();
+  }
+});
+
+test("Show tour leaves the focus return to the tour, also before the tour shows", async () => {
+  // Without the tour dialog, only the tour state shows the handoff.
+  const settings = renderSettings(true, undefined, { featureTour: "state" });
+  try {
+    const trigger = within(document.body).getByRole("button", { name: "Open settings" });
+    trigger.focus();
+    const content = await settings.open();
+    const triggerFocus = mock(() => {});
+    trigger.addEventListener("focus", triggerFocus);
+    fireEvent.click(content.getByRole("button", { name: "General" }));
+    await act(async () => {
+      fireEvent.click(content.getByRole("button", { name: "Show tour" }));
+    });
+    await waitFor(() => expect(within(document.body).queryByRole("dialog")).toBeNull(), {
+      timeout: 500,
+    });
+    // Radix runs the close focus handler in a timer after Settings unmounts.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(tourStateProbe).toEqual({ open: true, returnFocus: trigger });
+    expect(triggerFocus).not.toHaveBeenCalled();
+  } finally {
+    settings.unmount();
+  }
+});
+
+test("local settings shows General without a tour provider and without Show tour", async () => {
+  const settings = renderSettings(false);
+  try {
+    const content = await settings.open();
+    fireEvent.click(content.getByRole("button", { name: "General" }));
+    expect(content.getByRole("heading", { name: "General settings" })).toBeDefined();
+    expect(content.queryByRole("button", { name: "Show tour" })).toBeNull();
+    await settings.close(content);
+  } finally {
+    settings.unmount();
+  }
+});
+
 test("cached settings stays visible while executable validation runs", async () => {
   const pending = createDeferred<RuntimeExecutableCheck>();
   const check = mock(async () => pending.promise);
@@ -212,7 +299,7 @@ test("missing settings shows preparation, then a read error that stays during re
 });
 
 test("a client without a local host keeps settings controls and returns focus", async () => {
-  const settings = renderSettings(true);
+  const settings = renderSettings(true, undefined, { featureTour: "dialog" });
   try {
     const trigger = within(document.body).getByRole("button", { name: "Open settings" });
     trigger.focus();
@@ -300,6 +387,11 @@ function renderSettings(
     cacheSnapshot?: boolean;
     cacheExecutables?: boolean;
     enabledRuntime?: boolean;
+    /**
+     * Mounts the shared Settings inside the feature tour, as the app does. "state" mounts no tour
+     * dialog and records the tour state in `tourStateProbe`.
+     */
+    featureTour?: "dialog" | "state";
   } = {},
 ) {
   const snapshot = createSettingsSnapshotFixture({
@@ -422,10 +514,21 @@ function renderSettings(
       </QueryProvider>
     );
   }
-  const view = render(
-    shared ? <SettingsModalProvider>{triggers}</SettingsModalProvider> : triggers,
-    { wrapper: Wrapper },
-  );
+  let settingsTree: ReactElement = triggers;
+  if (shared && options.featureTour) {
+    // The tour shows its pictures in the theme of the app.
+    settingsTree = (
+      <ThemeProvider>
+        <FeatureTourProvider>
+          <SettingsModalProvider>{triggers}</SettingsModalProvider>
+          {options.featureTour === "dialog" ? <FeatureTourDialogHost /> : <TourStateProbe />}
+        </FeatureTourProvider>
+      </ThemeProvider>
+    );
+  } else if (shared) {
+    settingsTree = <SettingsModalProvider>{triggers}</SettingsModalProvider>;
+  }
+  const view = render(settingsTree, { wrapper: Wrapper });
   const open = async (label = "Open settings") => {
     await act(async () => {
       fireEvent.click(view.getByRole("button", { name: label }));
@@ -459,6 +562,14 @@ function renderSettings(
       queryClient.clear();
     },
   };
+}
+
+let tourStateProbe: { open: boolean; returnFocus: HTMLElement | null } | null = null;
+
+function TourStateProbe(): null {
+  const { open, returnFocus } = useFeatureTourState();
+  tourStateProbe = { open, returnFocus };
+  return null;
 }
 
 function ImportTrigger(): ReactElement {

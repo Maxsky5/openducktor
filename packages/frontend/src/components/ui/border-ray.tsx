@@ -69,9 +69,10 @@ function parseCssLength(
 }
 
 function readBorderRaySize(host: HTMLElement): BorderRaySize {
-  const rect = host.getBoundingClientRect();
-  const width = Math.max(rect.width, 1);
-  const height = Math.max(rect.height, 1);
+  // The layout size ignores the transforms of the ancestors. The non-scaling stroke draws its
+  // dashes in the layout pixels of the SVG, so a scaled size would repeat the ray.
+  const width = Math.max(host.offsetWidth, 1);
+  const height = Math.max(host.offsetHeight, 1);
   const radius = Math.max(
     parseCssLength(getComputedStyle(host).borderTopLeftRadius, host, width, height, 12),
     0,

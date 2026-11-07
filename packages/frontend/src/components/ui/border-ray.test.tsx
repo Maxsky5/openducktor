@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createElement } from "react";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BorderRay } from "@/components/ui/border-ray";
 import {
@@ -45,5 +46,23 @@ describe("BorderRay", () => {
 
     expect(html).toContain('class="odt-border-ray custom-ray"');
     expect(html).toContain('class="odt-border-ray-segment"');
+  });
+});
+
+describe("BorderRay size", () => {
+  test("measures the layout size of its host, not the size after a scale transform", () => {
+    const host = document.createElement("div");
+    // A scaled ancestor halves the box that getBoundingClientRect returns.
+    Object.defineProperty(host, "offsetWidth", { value: 200 });
+    Object.defineProperty(host, "offsetHeight", { value: 100 });
+    host.getBoundingClientRect = () => new DOMRect(0, 0, 100, 50);
+    document.body.append(host);
+    const root = createRoot(host);
+    act(() => root.render(createElement(BorderRay)));
+
+    expect(host.querySelector("svg")?.getAttribute("viewBox")).toBe("0 0 200 100");
+
+    act(() => root.unmount());
+    host.remove();
   });
 });

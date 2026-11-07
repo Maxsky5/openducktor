@@ -227,6 +227,7 @@
         "@openducktor/frontend-core": "workspace:*",
         "@openducktor/host-client": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "@openducktor/product-scenes": "workspace:*",
         "@openducktor/theme": "workspace:*",
         "@openducktor/workflows": "workspace:*",
         "@pierre/diffs": "1.5.2",
