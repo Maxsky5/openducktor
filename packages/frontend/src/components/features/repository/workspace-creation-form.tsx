@@ -309,13 +309,16 @@ function WorkspaceModelsFields({
         onUpdateSelectedRepoAgentDefault={(role, field, value) =>
           controller.updateModelDraft((current) => {
             const roleDefault = current.agentDefaults[role];
+            const runtimeKind = roleDefault?.runtimeKind ?? current.defaultModel?.runtimeKind;
+            if (!runtimeKind)
+              throw new Error("Choose a runtime for this role before setting its model options.");
             return {
               ...current,
               agentDefaults: {
                 ...current.agentDefaults,
                 [role]: {
                   ...ensureDraftAgentDefault(roleDefault),
-                  runtimeKind: roleDefault?.runtimeKind ?? current.defaultModel?.runtimeKind,
+                  runtimeKind,
                   [field]: value,
                 },
               },

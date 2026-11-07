@@ -1,4 +1,5 @@
 import {
+  TASK_CLOSED_STATE,
   artifactCreateRequestSchema,
   artifactDeleteRequestSchema,
   artifactReadRequestSchema,
@@ -28,7 +29,6 @@ type ArtifactUseCases = Pick<
 
 export const createArtifactUseCases = ({
   taskStore,
-  taskWorkflows,
   taskSessionLifecycleCoordinator,
   gitPort,
 }: TaskServiceUseCaseInput): ArtifactUseCases => {
@@ -40,7 +40,7 @@ export const createArtifactUseCases = ({
         const artifacts = yield* taskStore.listArtifacts(scope);
         return {
           artifacts,
-          canManageFree: !taskWorkflows.forTask(task).isTerminalState(task.status),
+          canManageFree: task.status !== TASK_CLOSED_STATE,
         };
       });
     },

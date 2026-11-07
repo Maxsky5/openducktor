@@ -219,7 +219,8 @@ describe("asset-aware task store lifecycle", () => {
       store.transitionTask({
         ...scope,
         taskId: task.id,
-        decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
+        decide: () =>
+          Result.succeed({ status: "closed", workflowId: "openducktor-spec-plan-build" }),
       }),
     );
     expect(

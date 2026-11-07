@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import {
   RUNTIME_DESCRIPTORS_BY_KIND,
@@ -13,6 +13,7 @@ import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
   createBuildStartWorktreeFiles,
+  createBuildSystemCommands,
   createBuildWorkspaceSettingsService,
   createDirectMergeGitPort,
   createDirectMergeTaskWorktreeService,
@@ -81,7 +82,17 @@ const taskStoreWithTasks = (
   }) satisfies RealTaskStorePort;
 
 const emptyHooks = {
-  postComplete: [],
+  beforeWorktreeRemoval: [],
+};
+
+/** The repository settings of a merged task cleanup without a before worktree removal script. */
+const noRemovalScriptServices = {
+  systemCommands: undefined,
+  workspaceSettingsService: createBuildWorkspaceSettingsService({
+    workspaceId: "repo",
+    repoPath: "/repo",
+    hooks: emptyHooks,
+  }),
 };
 
 const createTerminalCleanupService = (calls: unknown[]): TaskTerminalCleanupPort => ({
@@ -130,7 +141,7 @@ describe("task worktree cleanup", () => {
           resolveRuntimeDescriptorForTaskSession(
             runtimeDefinitionsWithScopes(supportedScopes),
             "opencode",
-            builtinTaskWorkflow.role(role),
+            specPlanBuildWorkflow.role(role),
           ),
         ),
       ).resolves.toMatchObject({ kind: "opencode" });
@@ -382,7 +393,8 @@ describe("task worktree cleanup", () => {
       Effect.scoped(
         cleanupMergedTaskState(
           {
-            workflow: builtinTaskWorkflow,
+            ...noRemovalScriptServices,
+            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: {
@@ -431,6 +443,55 @@ describe("task worktree cleanup", () => {
     ]);
   });
 
+  test("runs the before worktree removal script before it removes the worktree of a merged task", async () => {
+    const calls: unknown[] = [];
+
+    await Effect.runPromise(
+      Effect.scoped(
+        cleanupMergedTaskState(
+          {
+            systemCommands: createBuildSystemCommands(calls),
+            workspaceSettingsService: createBuildWorkspaceSettingsService({
+              workspaceId: "repo",
+              repoPath: "/repo",
+              hooks: { beforeWorktreeRemoval: ["make clean"] },
+            }),
+            workflow: specPlanBuildWorkflow,
+            gitPort: createDirectMergeGitPort({
+              calls,
+              currentBranches: {
+                "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+              },
+              branches: {
+                "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+              },
+              ancestorResults: { "/repo|odt/task-1|main": true },
+            }),
+            settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+            taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
+            taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
+            terminalService: createTerminalCleanupService(calls),
+            worktreeOwners: noWorktreeOwners,
+            worktreeFiles: createBuildStartWorktreeFiles(calls),
+          },
+          taskStoreWithTasks([task()]),
+          "/repo",
+          "task-1",
+          "odt/task-1",
+          "main",
+          true,
+          "repo",
+        ),
+      ),
+    );
+
+    expect(calls.slice(1, 4)).toMatchObject([
+      { type: "acquireTerminalCleanup", repoPath: "/repo", taskIds: ["task-1"] },
+      { command: "make", args: ["clean"], options: { cwd: "/worktrees/repo/task-1" } },
+      { type: "removeWorktree", repoPath: "/repo", worktreePath: "/worktrees/repo/task-1" },
+    ]);
+  });
+
   test("keeps the worktree of a merged task when a Claude chat keeps its native history there", async () => {
     const calls: unknown[] = [];
     const reads: unknown[] = [];
@@ -440,7 +501,8 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              workflow: builtinTaskWorkflow,
+              ...noRemovalScriptServices,
+              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: {
@@ -534,7 +596,8 @@ describe("task worktree cleanup", () => {
       Effect.scoped(
         cleanupMergedTaskState(
           {
-            workflow: builtinTaskWorkflow,
+            ...noRemovalScriptServices,
+            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: { [worktreePath]: { name: "odt/task-1", detached: false } },
@@ -601,7 +664,8 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              workflow: builtinTaskWorkflow,
+              ...noRemovalScriptServices,
+              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: { [worktreePath]: { name: "odt/task-1", detached: false } },
@@ -637,7 +701,8 @@ describe("task worktree cleanup", () => {
       Effect.scoped(
         cleanupMergedTaskState(
           {
-            workflow: builtinTaskWorkflow,
+            ...noRemovalScriptServices,
+            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               canonicalPaths: {
@@ -701,7 +766,8 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              workflow: builtinTaskWorkflow,
+              ...noRemovalScriptServices,
+              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 canonicalPaths: {
@@ -769,7 +835,13 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              workflow: builtinTaskWorkflow,
+              ...noRemovalScriptServices,
+              workspaceSettingsService: createBuildWorkspaceSettingsService({
+                workspaceId: "repo",
+                repoPath,
+                hooks: emptyHooks,
+              }),
+              workflow: specPlanBuildWorkflow,
               gitPort: extendGitPort(baseGitPort, {
                 removeWorktree(repoPath, targetWorktreePath, force) {
                   return baseGitPort.removeWorktree(repoPath, targetWorktreePath, force).pipe(
@@ -816,7 +888,8 @@ describe("task worktree cleanup", () => {
         Effect.scoped(
           cleanupMergedTaskState(
             {
-              workflow: builtinTaskWorkflow,
+              ...noRemovalScriptServices,
+              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: {
@@ -874,7 +947,7 @@ describe("task worktree cleanup", () => {
             defaultTargetBranch: { remote: "origin", branch: "main" },
           }),
         },
-        builtinTaskWorkflow,
+        specPlanBuildWorkflow,
         task(),
         "/repo",
         "task-1",
@@ -899,7 +972,7 @@ describe("task worktree cleanup", () => {
               hooks: emptyHooks,
             }),
           },
-          builtinTaskWorkflow,
+          specPlanBuildWorkflow,
           task(),
           "/repo",
           "task-1",
@@ -928,7 +1001,7 @@ describe("task worktree cleanup", () => {
               hooks: emptyHooks,
             }),
           },
-          builtinTaskWorkflow,
+          specPlanBuildWorkflow,
           task(),
           "/repo",
           "task-1",
@@ -955,7 +1028,7 @@ describe("task worktree cleanup", () => {
               hooks: emptyHooks,
             }),
           },
-          builtinTaskWorkflow,
+          specPlanBuildWorkflow,
           task(),
           "/repo",
           "task-1",

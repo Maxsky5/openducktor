@@ -1,3 +1,4 @@
+import { laneColors } from "./lane-colors";
 import { memo, type ReactElement } from "react";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -24,7 +25,7 @@ const LaneHeader = memo(function LaneHeader({
   loading: boolean;
 }): ReactElement {
   const theme = useAppTheme();
-  const lane = theme.lanes[column.id];
+  const lane = laneColors(theme, column.tone);
   return (
     <View
       style={[styles.header, { borderBottomColor: lane.border }]}
@@ -38,9 +39,9 @@ const LaneHeader = memo(function LaneHeader({
           {column.title}
         </Text>
         {loading ? (
-          <LaneCountPlaceholder columnId={column.id} />
+          <LaneCountPlaceholder tone={column.tone} />
         ) : (
-          <LaneCount columnId={column.id} count={column.tasks.length} long />
+          <LaneCount tone={column.tone} count={column.tasks.length} long />
         )}
       </View>
     </View>
@@ -54,7 +55,7 @@ const CollapsedLane = memo(function CollapsedLane({
   column: BoardColumn;
 }): ReactElement {
   const theme = useAppTheme();
-  const lane = theme.lanes[column.id];
+  const lane = laneColors(theme, column.tone);
   return (
     <View
       style={[styles.collapsed, { backgroundColor: lane.wash, borderColor: lane.border }]}
@@ -62,7 +63,7 @@ const CollapsedLane = memo(function CollapsedLane({
       accessibilityLabel={`${columnChoiceLabel(column)}. ${column.emptyMessage ?? ""}`}
     >
       <View style={[styles.collapsedDot, { backgroundColor: lane.accent }]} />
-      <LaneCount columnId={column.id} count={0} />
+      <LaneCount tone={column.tone} count={0} />
       <Text
         variant="footnote"
         weight="semibold"
@@ -93,7 +94,7 @@ export function BoardWide({
       {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
       {columns.map((column) => {
         if (column.collapsed) return <CollapsedLane key={column.id} column={column} />;
-        const lane = theme.lanes[column.id];
+        const lane = laneColors(theme, column.tone);
         return (
           <View
             key={column.id}
@@ -124,7 +125,7 @@ export function BoardWidePlaceholder({
         {/* The board has one column for each of its lanes, as the loaded board. */}
         {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
         {columns.map((column) => {
-          const lane = theme.lanes[column.id];
+          const lane = laneColors(theme, column.tone);
           return (
             <View
               key={column.id}

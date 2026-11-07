@@ -11,6 +11,8 @@ import { sessionHistoryQueryOptions } from "../../queries/agent-session-history"
 import { getSessionHistoryFreshnessTracker } from "../../queries/agent-session-history-freshness-tracker";
 import { updateSessionTodosQueryData } from "../../queries/agent-session-todos";
 import { invalidateRepoTaskQueries } from "../../queries/tasks";
+import { loadTaskWorkflowRole } from "../../queries/task-workflow-context";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import { loadSettingsSnapshotFromQuery } from "../../queries/workspace";
 import type {
   ActiveWorkspace,
@@ -27,7 +29,7 @@ import { createSessionHistoryReadGeneration } from "./history/session-history-re
 import { createWorkflowSessionHistoryPromptPolicy } from "./history/workflow-session-history-policy";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
-import { loadRepoPromptOverrides } from "./runtime/runtime";
+import { loadEffectivePromptOverrides } from "../../queries/prompt-overrides";
 import {
   closeProjectedBackgroundQuestions,
   toContextUsage,
@@ -35,7 +37,7 @@ import {
 import { useClientConnection } from "../../connection/client-connection-react";
 import { createAgentOrchestratorDependencies } from "./support/orchestrator-dependencies";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 type UseAgentOrchestratorOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -120,7 +122,8 @@ export function useAgentOrchestratorOperations({
     [sessionStore],
   );
   const queryBackedPromptOverrides = useCallback(
-    (workspaceId: string) => loadRepoPromptOverrides(workspaceId, { queryClient }),
+    (workspaceId: string, workflow: TaskWorkflow) =>
+      loadEffectivePromptOverrides(workspaceId, queryClient, workflow),
     [queryClient],
   );
   const transcriptEvents = useMemo(
@@ -164,6 +167,16 @@ export function useAgentOrchestratorOperations({
         loadRepoPromptOverrides: queryBackedPromptOverrides,
       }),
       loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
+      loadWorkflowRole: async (taskId: string, roleId: string) => {
+        if (!workspaceRepoPath || !workspaceId)
+          throw new Error("Select a workspace before loading session policy.");
+        return loadTaskWorkflowRole(
+          queryClient,
+          { workspaceId, repoPath: workspaceRepoPath },
+          taskId,
+          roleId,
+        );
+      },
       historyReadGeneration,
     };
 

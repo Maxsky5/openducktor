@@ -7,7 +7,6 @@ import {
   agentSessionApprovalRequestSchema,
   agentSessionRecordSchema,
   agentSessionStopTargetSchema,
-  buildSessionBootstrapSchema,
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   formatRuntimeDescriptorSchemaIssue,
@@ -32,6 +31,7 @@ import {
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
   OPENCODE_ODT_TOOL_ID_PREFIXES,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  promptOverrideKey,
   type RuntimeDescriptor,
   repoConfigSchema,
   runtimeDescriptorSchema,
@@ -45,6 +45,17 @@ import {
   toOpencodeExposedOdtToolIds,
   toOpencodeOdtToolAliases,
 } from "./index";
+
+const KICKOFF_KEY = promptOverrideKey({
+  ownerKind: "workflow",
+  ownerId: "rpi",
+  promptId: "messages.spec_start",
+});
+const GUARDS_KEY = promptOverrideKey({
+  ownerKind: "workflow",
+  ownerId: "rpi",
+  promptId: "workflow.rules",
+});
 
 const baseRepoConfigInput = {
   workspaceId: "repo",
@@ -246,6 +257,8 @@ describe("runtime schemas", () => {
 
   const stepState = { required: false, canSkip: true, available: false, completed: false };
   const projection = {
+    workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+    workflowSteps: [],
     availableActions: [],
     agentWorkflows: { spec: stepState, planner: stepState, build: stepState, qa: stepState },
   };
@@ -273,24 +286,28 @@ describe("runtime schemas", () => {
     expect(taskCardSchema.safeParse(payload).success).toBe(false);
   });
 
-  test("task card rejects unsupported issue types", () => {
-    expect(() =>
-      taskCardSchema.parse({
-        id: "task-2",
-        title: "Legacy type",
-        description: "",
-        status: "open",
-        priority: 2,
-        issueType: "decision",
-        labels: [],
-        updatedAt: "2026-01-01T00:00:00.000Z",
-        createdAt: "2026-01-01T00:00:00.000Z",
-      }),
-    ).toThrow();
+  test("task card accepts only the fixed issue types", () => {
+    const parsed = taskCardSchema.parse({
+      ...projection,
+      id: "task-2",
+      title: "Bug",
+      description: "",
+      status: "open",
+      priority: 2,
+      issueType: "bug",
+      labels: [],
+      artifactSummary: {},
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(parsed.issueType).toBe("bug");
+    for (const issueType of ["decision", ""])
+      expect(taskCardSchema.safeParse({ ...parsed, issueType }).success).toBe(false);
   });
 
   test("task card parses document summary flags and updated timestamps", () => {
     const parsed = taskCardSchema.parse({
+      ...projection,
       id: "task-3",
       title: "Docs",
       status: "open",
@@ -385,26 +402,12 @@ describe("runtime schemas", () => {
     expect(parsed.targetBranchError).toContain("Invalid openducktor.targetBranch metadata");
   });
 
-  test("build session bootstrap exposes runtime kind and working directory only", () => {
-    const parsed = buildSessionBootstrapSchema.parse({
-      runtimeKind: "opencode",
-      runtimeId: " runtime-1 ",
-      runtimeRoute: { type: "stdio", identity: " runtime-build-1 " },
-      workingDirectory: "/repo/.worktrees/task-1",
-    });
-
-    expect(parsed.runtimeKind).toBe("opencode");
-    expect("runtimeId" in parsed).toBe(false);
-    expect("runtimeRoute" in parsed).toBe(false);
-    expect(parsed.workingDirectory).toBe("/repo/.worktrees/task-1");
-  });
-
   test("repo config accepts null worktree base path", () => {
     const parsed = repoConfigSchema.parse({
       ...baseRepoConfigInput,
       worktreeBasePath: null,
       branchPrefix: "obp",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
     });
 
     expect(parsed.worktreeBasePath).toBeUndefined();
@@ -422,7 +425,7 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       agentDefaults: {
         spec: {
           runtimeKind: "opencode",
@@ -446,9 +449,9 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       promptOverrides: {
-        "kickoff.spec_initial": {
+        [KICKOFF_KEY]: {
           template: "Custom kickoff for {{task.id}}",
           baseVersion: 1,
           enabled: false,
@@ -456,11 +459,9 @@ describe("runtime schemas", () => {
       },
     });
 
-    expect(parsed.promptOverrides["kickoff.spec_initial"]?.template).toBe(
-      "Custom kickoff for {{task.id}}",
-    );
-    expect(parsed.promptOverrides["kickoff.spec_initial"]?.baseVersion).toBe(1);
-    expect(parsed.promptOverrides["kickoff.spec_initial"]?.enabled).toBe(false);
+    expect(parsed.promptOverrides[KICKOFF_KEY]?.template).toBe("Custom kickoff for {{task.id}}");
+    expect(parsed.promptOverrides[KICKOFF_KEY]?.baseVersion).toBe(1);
+    expect(parsed.promptOverrides[KICKOFF_KEY]?.enabled).toBe(false);
   });
 
   test("repo config allows empty prompt override templates", () => {
@@ -468,9 +469,9 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       promptOverrides: {
-        "system.shared.workflow_guards": {
+        [GUARDS_KEY]: {
           template: "",
           baseVersion: 1,
           enabled: true,
@@ -478,8 +479,8 @@ describe("runtime schemas", () => {
       },
     });
 
-    expect(parsed.promptOverrides["system.shared.workflow_guards"]?.template).toBe("");
-    expect(parsed.promptOverrides["system.shared.workflow_guards"]?.enabled).toBe(true);
+    expect(parsed.promptOverrides[GUARDS_KEY]?.template).toBe("");
+    expect(parsed.promptOverrides[GUARDS_KEY]?.enabled).toBe(true);
   });
 
   test("repo config normalizes null agent default fields and entries", () => {
@@ -487,7 +488,7 @@ describe("runtime schemas", () => {
       ...baseRepoConfigInput,
       worktreeBasePath: "/tmp/wt",
       branchPrefix: "obp",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       agentDefaults: {
         spec: {
           runtimeKind: "opencode",
@@ -1096,8 +1097,8 @@ describe("runtime schemas", () => {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
       workflowToolAliasesByCanonical: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-        odt_build_blocked: [" shared_alias "],
-        odt_build_completed: ["shared_alias"],
+        odt_apply_workflow_event: [" shared_alias "],
+        odt_set_pull_request: ["shared_alias"],
         odt_read_task: [" odt_set_task_artifact "],
         odt_set_task_artifact: [" runtime_artifact ", "runtime_artifact", "   "],
       },
@@ -1112,8 +1113,8 @@ describe("runtime schemas", () => {
       expect.arrayContaining([
         expect.objectContaining({
           message:
-            'Runtime workflow alias "shared_alias" is already assigned to canonical tool "odt_build_blocked".',
-          path: ["workflowToolAliasesByCanonical", "odt_build_completed", 0],
+            'Runtime workflow alias "shared_alias" is already assigned to canonical tool "odt_apply_workflow_event".',
+          path: ["workflowToolAliasesByCanonical", "odt_set_pull_request", 0],
         }),
         expect.objectContaining({
           message: "Runtime workflow aliases must not repeat canonical odt_* tool IDs.",
@@ -1911,7 +1912,7 @@ describe("runtime schemas", () => {
         repoPath: "/repo",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         branchPrefix: "obp",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     ).toMatchObject({ workspaceId: "repo" });
 
@@ -1919,7 +1920,7 @@ describe("runtime schemas", () => {
       repoConfigSchema.parse({
         ...baseRepoConfigInput,
         branchPrefix: "obp",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         agentDefaults: {
           spec: {
             providerId: "openai",
@@ -1933,7 +1934,7 @@ describe("runtime schemas", () => {
       repoConfigSchema.parse({
         ...baseRepoConfigInput,
         branchPrefix: "obp",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         defaultModel: {
           providerId: "openai",
           modelId: "gpt-5",

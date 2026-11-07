@@ -11,7 +11,6 @@ export const publicationDefinition = (): WorkflowDefinition => ({
   id: "publication",
   revision: 2,
   label: "Publication",
-  initialState: "draft",
   facts: [
     { id: "hold", type: "boolean" },
     { id: "edition", type: "number" },
@@ -19,25 +18,10 @@ export const publicationDefinition = (): WorkflowDefinition => ({
     { id: "channel", type: "enum", values: ["web", "print", null] },
   ],
   roles: [
-    {
-      id: "author",
-      label: "Author",
-      tools: ["odt_read_task", "odt_set_task_artifact"],
-      writes: ["copy"],
-      workspaceAccess: "write",
-      location: "task_worktree",
-      runtimeScopes: ["build"],
-    },
-    {
-      id: "reviewer",
-      label: "Reviewer",
-      tools: ["odt_read_task", "odt_set_task_artifact"],
-      writes: ["first-review", "second-review"],
-      workspaceAccess: "read",
-      location: "repository",
-      runtimeScopes: ["workspace"],
-    },
+    { id: "author", writes: ["copy"] },
+    { id: "reviewer", writes: ["first-review", "second-review"] },
   ],
+  pullRequestRoles: [],
   artifacts: [
     { id: "copy", label: "Copy", kind: "document", saveEventId: "submit" },
     {
@@ -55,7 +39,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
     { id: "approval", label: "Approval", kind: "document" },
   ],
   states: [
-    { id: "draft", label: "Draft", studioRole: "author" },
+    { id: "open", label: "Draft", studioRole: "author" },
     {
       id: "first-review",
       label: "First review",
@@ -73,7 +57,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
     },
     { id: "second-review", label: "Second review" },
     { id: "human-approval", label: "Human approval", shortLabel: "Approval" },
-    { id: "published", label: "Published", terminal: true },
+    { id: "closed", label: "Published" },
   ],
   steps: [
     {
@@ -84,7 +68,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
       inputs: [],
       outputs: ["copy"],
       requiredWhen: true,
-      availableWhen: { stateIn: ["draft"] },
+      availableWhen: { stateIn: ["open"] },
       completedWhen: { artifact: "copy", present: true },
       launchActions: [
         {
@@ -92,14 +76,14 @@ export const publicationDefinition = (): WorkflowDefinition => ({
           label: "Write draft",
           startModes: ["fresh"],
           defaultStartMode: "fresh",
-          template: { kind: "kickoff", id: "kickoff.write" },
+          template: { kind: "kickoff", id: "messages.write" },
         },
         {
           id: "revise-draft",
           label: "Revise draft",
           startModes: ["fresh", "reuse", "fork"],
           defaultStartMode: "reuse",
-          template: { kind: "kickoff", id: "kickoff.revise" },
+          template: { kind: "kickoff", id: "messages.revise" },
           selectWhen: { artifact: "first-review", verdict: "changes" },
           context: "human_feedback",
           requiresWorktree: true,
@@ -122,7 +106,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
           label: "First review",
           startModes: ["fresh"],
           defaultStartMode: "fresh",
-          template: { kind: "kickoff", id: "kickoff.review" },
+          template: { kind: "kickoff", id: "messages.review" },
         },
       ],
     },
@@ -147,7 +131,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
           label: "Second review",
           startModes: ["fresh", "fork"],
           defaultStartMode: "fork",
-          template: { kind: "message", id: "message.review" },
+          template: { kind: "message", id: "messages.review_message" },
         },
       ],
     },
@@ -178,7 +162,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
       kind: "session",
       stepId: "write",
       launchActionIds: ["write-draft", "revise-draft"],
-      availableWhen: { stateIn: ["draft"] },
+      availableWhen: { stateIn: ["open"] },
     },
     {
       id: "finish-first",
@@ -209,7 +193,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
   events: [
     {
       id: "submit",
-      from: ["draft"],
+      from: ["open"],
       guards: [{ id: "draft-ready", when: { artifact: "copy", present: true } }],
       outcomes: [{ when: true, to: "first-review", signal: "copySubmitted", sourceRole: "author" }],
     },
@@ -231,7 +215,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
       id: "return-draft",
       from: ["first-review", "second-review"],
       guards: [],
-      outcomes: [{ when: true, to: "draft", signal: "changesRequested" }],
+      outcomes: [{ when: true, to: "open", signal: "changesRequested" }],
     },
     {
       id: "publish",
@@ -241,7 +225,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
         { id: "second-reviewed", when: { artifact: "second-review", verdict: "approved" } },
         { id: "approved", when: { artifact: "approval", present: true } },
       ],
-      outcomes: [{ when: true, to: "published" }],
+      outcomes: [{ when: true, to: "closed" }],
     },
   ],
   signals: [
@@ -283,7 +267,7 @@ export const publicationDefinition = (): WorkflowDefinition => ({
     { when: { fact: "hold", equals: true }, actions: ["view-copy", "submit"] },
     { when: true, actions: ["publish", "submit", "finish-first", "view-copy"] },
   ],
-  actionPriority: [{ when: { stateIn: ["draft"] }, actions: ["start-writing", "submit"] }],
+  actionPriority: [{ when: { stateIn: ["open"] }, actions: ["start-writing", "submit"] }],
 });
 
 export type Artifacts = WorkflowInput["artifacts"];

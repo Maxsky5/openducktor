@@ -1,3 +1,4 @@
+import { specPlanBuildPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
@@ -17,7 +18,7 @@ const createHookHarness = (initialProps: HookArgs) =>
 const createSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({
     globalPromptOverrides: {
-      "system.role.spec.base": {
+      [rolePromptKey("spec")]: {
         template: "invalid {{task.bad}}",
         baseVersion: 1,
         enabled: true,
@@ -32,11 +33,11 @@ const createSnapshot = (): SettingsSnapshot =>
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {
-          "kickoff.build_implementation_start": {
+          [specPlanBuildPromptKey("messages.build_start")]: {
             template: "invalid {{unknown.value}}",
             baseVersion: 1,
             enabled: true,
@@ -52,7 +53,7 @@ const createSnapshot = (): SettingsSnapshot =>
         branchPrefix: "obp",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
@@ -105,8 +106,8 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.promptValidationState.globalErrorCount).toBe(1);
     expect(latest.promptValidationState.repoErrorCountByWorkspaceId["repo-a"]).toBe(1);
     expect(latest.promptValidationState.totalErrorCount).toBe(2);
-    expect(latest.globalPromptRoleTabErrorCounts.spec).toBe(1);
-    expect(latest.selectedRepoPromptRoleTabErrorCounts.build).toBe(1);
+    expect(latest.globalPromptRoleTabErrorCounts["role:spec"]).toBe(1);
+    expect(latest.selectedRepoPromptRoleTabErrorCounts["role:build"]).toBe(1);
     expect(latest.settingsSectionErrorCountById).toEqual({
       general: 0,
       "remote-access": 0,
@@ -122,9 +123,9 @@ describe("useSettingsModalPromptValidation", () => {
       kanban: 0,
       autopilot: 0,
     });
-    expect(latest.selectedRepoPromptValidationErrors["kickoff.build_implementation_start"]).toBe(
-      "Unsupported placeholder: {{unknown.value}}.",
-    );
+    expect(
+      latest.selectedRepoPromptValidationErrors[specPlanBuildPromptKey("messages.build_start")],
+    ).toBe("Unsupported placeholder: {{unknown.value}}.");
 
     await harness.unmount();
   });
@@ -132,7 +133,7 @@ describe("useSettingsModalPromptValidation", () => {
   test("includes required-placeholder validation errors in the aggregated counts", async () => {
     const snapshot = createSnapshot();
     snapshot.globalPromptOverrides = {
-      "kickoff.build_after_human_request_changes": {
+      [specPlanBuildPromptKey("messages.build_requested_changes")]: {
         template: "Review {{task.id}} before editing.",
         baseVersion: 3,
         enabled: true,
@@ -149,7 +150,9 @@ describe("useSettingsModalPromptValidation", () => {
 
     expect(latest.hasPromptValidationErrors).toBe(true);
     expect(
-      latest.promptValidationState.globalErrors["kickoff.build_after_human_request_changes"],
+      latest.promptValidationState.globalErrors[
+        specPlanBuildPromptKey("messages.build_requested_changes")
+      ],
     ).toBe("Missing required placeholder: {{humanFeedback}}.");
     expect(latest.promptValidationState.globalErrorCount).toBe(1);
 

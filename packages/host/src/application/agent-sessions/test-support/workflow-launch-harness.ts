@@ -14,6 +14,7 @@ import {
   type AgentSessionModelSelection,
   type AgentSessionRecord,
   type AgentSessionLiveSnapshot,
+  type IssueType,
   type RuntimeKind,
   type WorkflowLaunchRequest,
   RUNTIME_DESCRIPTORS_BY_KIND,
@@ -77,7 +78,7 @@ export const createLaunchHarness = async (
     completion?: Effect.Effect<void, HostOperationError>;
     taskWorkflows?: TaskWorkflowResolver;
     /** The first issue type and status of the task. Defaults suit the built-in workflow. */
-    task?: { issueType: string; status: string };
+    task?: { issueType: IssueType; status: string };
   } = {},
 ) => {
   const taskWorkflows = gates.taskWorkflows ?? builtinTaskWorkflows;
@@ -117,6 +118,7 @@ export const createLaunchHarness = async (
   const sends: AgentSessionControlSendInput[] = [];
   const sendOptions: Array<AgentSessionSendOptions | undefined> = [];
   const publications: string[] = [];
+  const appliedEvents: string[] = [];
   const removedWorktrees: string[] = [];
   const deletedBranches: string[] = [];
   const envelopes: unknown[] = [];
@@ -322,7 +324,6 @@ export const createLaunchHarness = async (
         : Effect.fail(new HostValidationError({ message: "Task not found" })),
   });
   const tasks = createEventPublishingTaskService({
-    taskWorkflows,
     taskService: createTaskServiceWithMutationProgressTestDouble({
       agentSessionsList: () => Effect.succeed([...records]),
       agentSessionUpsert: (input) =>
@@ -348,21 +349,18 @@ export const createLaunchHarness = async (
           records[index] = { ...records[index]!, selectedModel: input.selectedModel };
           return true;
         }),
-      transitionTask: (input) =>
-        Effect.sync(() => {
-          task = { ...task, status: input.status };
-          return task;
-        }),
       applyStartEvent: (input) =>
         Effect.sync(() => {
           const decision = workflow.decide(input.eventId, task);
           if (decision.kind === "transition") task = { ...task, status: decision.to };
           return task;
         }),
-      humanRequestChanges: () =>
+      applyTaskEvent: (input) =>
         Effect.sync(() => {
-          task = { ...task, status: "in_progress" };
-          return task;
+          appliedEvents.push(input.eventId);
+          const decision = workflow.decide(input.eventId, task);
+          if (decision.kind === "transition") task = { ...task, status: decision.to };
+          return { task, artifactChanges: [] };
         }),
       updateTask: (input) =>
         Effect.sync(() => {
@@ -681,6 +679,7 @@ export const createLaunchHarness = async (
       externalSessionId: string,
       options: {
         role?: string;
+        startedAt?: string;
         selectedModel?: AgentSessionModelSelection;
         live?: boolean;
         working?: boolean;
@@ -693,7 +692,7 @@ export const createLaunchHarness = async (
         runtimeKind,
         workingDirectory,
         role: options.role ?? "build",
-        startedAt: timestamp,
+        startedAt: options.startedAt ?? timestamp,
         selectedModel: options.selectedModel ?? modelFor(runtimeKind),
       });
       if (options.live) {
@@ -718,6 +717,7 @@ export const createLaunchHarness = async (
     sends,
     sendOptions,
     publications,
+    appliedEvents,
     removedWorktrees,
     deletedBranches,
     envelopes,

@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import "../../test-support/dom-environment";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
@@ -14,6 +15,11 @@ import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import * as cleanupImpactModule from "../details/use-task-cleanup-impact";
 import { useTaskResetFlow } from "./use-task-reset-flow";
+import { resolveWorkflowBoard } from "@openducktor/workflows";
+import {
+  createReviewTaskWorkflow,
+  createWorkflowTaskCardFixture,
+} from "@openducktor/workflows/test-support";
 
 enableReactActEnvironment();
 
@@ -29,7 +35,7 @@ const impactSpies: Array<{ mockRestore(): void }> = [];
 const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   tasks: [task],
   workspaceIdentity: workspaceA,
-  resetTaskImplementation: async () => {},
+  resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
   closeTaskDetails: () => {},
   ...overrides,
 });
@@ -83,7 +89,7 @@ describe("useTaskResetFlow", () => {
     try {
       await harness.mount();
       await harness.run((model) => {
-        model.openResetImplementation("task-1");
+        model.openResetImplementation("task-1", "reset-implementation");
       });
 
       expect(harness.getLatest().resetImplementationModal?.taskId).toBe("task-1");
@@ -92,14 +98,51 @@ describe("useTaskResetFlow", () => {
     }
   });
 
+  test("applies the event of a custom workflow and names the state that the event gives", async () => {
+    const workflow = createReviewTaskWorkflow();
+    const board = resolveWorkflowBoard(
+      { states: workflow.definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
+      [workflow],
+    );
+    const review = createWorkflowTaskCardFixture(workflow, board, {
+      id: "task-1",
+      status: "approval",
+    });
+    const resetTaskImplementation = mock(async (taskId: string) =>
+      createWireTaskCardFixture({ id: taskId }),
+    );
+    const harness = createHookHarness(createArgs({ tasks: [review], resetTaskImplementation }));
+
+    try {
+      await harness.mount();
+      await harness.run((model) => {
+        model.openResetImplementation("task-1", "drop-review");
+      });
+      expect(harness.getLatest().resetImplementationModal?.targetStatusLabel).toBe("Writing");
+      await harness.run((model) => {
+        model.resetImplementationModal?.onConfirm();
+      });
+      await waitFor(() => {
+        expect(resetTaskImplementation).toHaveBeenCalledWith("task-1", "drop-review");
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("resets the task once for a double tap that comes before the busy state renders", async () => {
-    const resetTaskImplementation = mock(async (_taskId: string) => {});
+    const resetTaskImplementation = mock(async (taskId: string) =>
+      createWireTaskCardFixture({ id: taskId }),
+    );
+    const continuation = mock(async () => {});
     const harness = createHookHarness(createArgs({ resetTaskImplementation }));
 
     try {
       await harness.mount();
       await harness.run((model) => {
-        model.openResetImplementation("task-1");
+        model.openResetImplementation("task-1", "reset-implementation", {
+          onCommitted: continuation,
+        });
       });
       await harness.run((model) => {
         model.resetImplementationModal?.onConfirm();
@@ -108,6 +151,7 @@ describe("useTaskResetFlow", () => {
 
       await waitFor(() => expect(harness.getLatest().resetImplementationModal).toBeNull());
       expect(resetTaskImplementation).toHaveBeenCalledTimes(1);
+      expect(continuation).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }
@@ -120,7 +164,7 @@ describe("useTaskResetFlow", () => {
     try {
       await harness.mount();
       await harness.run((model) => {
-        model.openResetImplementation("task-1");
+        model.openResetImplementation("task-1", "reset-implementation");
       });
       await harness.update({ ...args, workspaceIdentity: { ...workspaceA } });
 
@@ -131,14 +175,16 @@ describe("useTaskResetFlow", () => {
   });
 
   test("binds the modal to its opening workspace", async () => {
-    const resetTaskImplementation = mock(async () => {});
+    const resetTaskImplementation = mock(async (taskId: string) =>
+      createWireTaskCardFixture({ id: taskId }),
+    );
     const args = createArgs({ resetTaskImplementation });
     const harness = createHookHarness(args);
 
     try {
       await harness.mount();
       await harness.run((model) => {
-        model.openResetImplementation("task-1");
+        model.openResetImplementation("task-1", "reset-implementation");
       });
       await harness.update({ ...args, workspaceIdentity: workspaceB });
 
@@ -152,7 +198,7 @@ describe("useTaskResetFlow", () => {
         modal?.onConfirm();
       });
       await waitFor(() => {
-        expect(resetTaskImplementation).toHaveBeenCalledWith("task-1");
+        expect(resetTaskImplementation).toHaveBeenCalledWith("task-1", "reset-implementation");
       });
       expect(harness.getLatest().resetImplementationModal).toBeNull();
     } finally {
@@ -168,7 +214,7 @@ describe("useTaskResetFlow", () => {
       await harness.mount();
       let opened = true;
       await harness.run((model) => {
-        opened = model.openResetImplementation("missing-task");
+        opened = model.openResetImplementation("missing-task", "reset-implementation");
       });
 
       expect(opened).toBe(false);
@@ -199,7 +245,7 @@ describe("useTaskResetFlow", () => {
     try {
       await harness.mount();
       await harness.run((model) => {
-        model.openResetImplementation("task-1");
+        model.openResetImplementation("task-1", "reset-implementation");
       });
       await harness.run((model) => {
         model.resetImplementationModal?.onConfirm();

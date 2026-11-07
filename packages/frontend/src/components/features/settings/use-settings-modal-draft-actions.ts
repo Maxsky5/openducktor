@@ -54,11 +54,11 @@ export type SettingsModalDraftActions = {
     updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
   ) => void;
   updateSelectedRepoAgentDefault: (
-    role: "spec" | "planner" | "build" | "qa",
+    role: string,
     field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
     value: string,
   ) => void;
-  clearSelectedRepoAgentDefault: (role: "spec" | "planner" | "build" | "qa") => void;
+  clearSelectedRepoAgentDefault: (role: string) => void;
   updateSelectedRepoDefaultModel: (
     field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
     value: string,
@@ -217,7 +217,7 @@ export const useSettingsModalDraftActions = ({
 
   const updateSelectedRepoAgentDefault = useCallback(
     (
-      role: "spec" | "planner" | "build" | "qa",
+      role: string,
       field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
       value: string,
     ): void => {
@@ -243,7 +243,7 @@ export const useSettingsModalDraftActions = ({
   );
 
   const clearSelectedRepoAgentDefault = useCallback(
-    (role: "spec" | "planner" | "build" | "qa"): void => {
+    (role: string): void => {
       updateSelectedRepoConfig((repoConfig) => {
         const { [role]: _ignored, ...remainingDefaults } = repoConfig.agentDefaults;
         return {

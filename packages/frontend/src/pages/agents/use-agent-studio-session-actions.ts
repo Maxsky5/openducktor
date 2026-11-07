@@ -18,11 +18,10 @@ import { useCallback } from "react";
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import { hasSettledLatestTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import {
-  getSessionLaunchAction,
   isRoleAvailableForTask,
-  type BuiltinLaunchActionId as SessionLaunchActionId,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowLaunchActionId as SessionLaunchActionId,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import { useInterruptedTurnResume } from "@openducktor/frontend-core/sessions/session-view/use-interrupted-turn-resume";
 import { useAgentSessionApprovalActions } from "@openducktor/frontend-core/sessions/pending-input/use-agent-session-approval-actions";
@@ -65,8 +64,8 @@ type UseAgentStudioSessionActionsArgs = {
   branches?: GitBranch[];
   favoriteState: SessionStartModalModel["favoriteState"];
   taskId: string;
-  role: AgentRole;
-  launchActionId: SessionLaunchActionId;
+  role: AgentRole | null;
+  launchActionId: SessionLaunchActionId | null;
   selectedSession: AgentStudioSelectedSessionState;
   runtimeDefinitions: RuntimeDescriptor[];
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
@@ -212,7 +211,7 @@ export function useAgentStudioSessionActions({
     selectedTask,
     startPreparedSession,
     scheduleQueryUpdate,
-    canStartSession: canStartRole(role),
+    canStartSession: role !== null && canStartRole(role),
     assertCanPrepareSession,
     agentStudioReady:
       agentStudioReady && (selectedSessionIdentity === null || selectedSession.preparation.ready),
@@ -280,10 +279,14 @@ export function useAgentStudioSessionActions({
   });
 
   const canUseKickoffPrompt = canUseAgentStudioKickoffPrompt({
-    canStartSession: canStartRole(role),
+    selectedTask,
+    canStartSession: role !== null && canStartRole(role),
     launchActionId,
   });
-  const kickoffLabel = getSessionLaunchAction(launchActionId).label;
+  const kickoffLabel =
+    selectedTask && launchActionId
+      ? selectedTask.taskWorkflow.launchDefinition(launchActionId).label
+      : "Start session";
   const canStopSession =
     selectedSessionIdentity !== null &&
     isAgentSessionActivityWorking(
@@ -293,25 +296,12 @@ export function useAgentStudioSessionActions({
     );
   const canResumeSession = sessionState.canResumeSession;
 
-  const selectedSessionKey =
-    selectedSessionIdentity === null ? null : agentSessionIdentityKey(selectedSessionIdentity);
-  const { resume, isSessionResuming, resumeErrorForSession, persistentResumeErrorForSession } =
-    useInterruptedTurnResume(continueInterruptedTurn, {
-      sessionKey: selectedSessionKey,
-      isLatestTurnSettled: hasSettledLatestTurn(loadedSession?.messages.items ?? []),
-    });
-  const isResumingSession = selectedSessionKey !== null && isSessionResuming(selectedSessionKey);
-  const resumeSessionError =
-    selectedSessionKey === null ? null : resumeErrorForSession(selectedSessionKey);
-  const persistentResumeError =
-    selectedSessionKey === null ? null : persistentResumeErrorForSession(selectedSessionKey);
-
-  const onResumeSession = useCallback((): void => {
-    if (selectedSessionIdentity === null) {
-      return;
-    }
-    resume(selectedSessionIdentity);
-  }, [resume, selectedSessionIdentity]);
+  const { isResumingSession, resumeSessionError, persistentResumeError, onResumeSession } =
+    useAgentStudioInterruptedTurnResume(
+      continueInterruptedTurn,
+      selectedSessionIdentity,
+      loadedSession,
+    );
 
   return {
     isStarting,
@@ -341,4 +331,31 @@ export function useAgentStudioSessionActions({
     handlePrepareMessageFirstSession,
     handleQuickAction,
   };
+}
+
+function useAgentStudioInterruptedTurnResume(
+  continueInterruptedTurn: UseAgentStudioSessionActionsArgs["continueInterruptedTurn"],
+  selectedSessionIdentity: AgentStudioSelectedSessionState["identity"],
+  loadedSession: AgentStudioSelectedSessionState["loadedSession"],
+) {
+  const selectedSessionKey =
+    selectedSessionIdentity === null ? null : agentSessionIdentityKey(selectedSessionIdentity);
+  const { resume, isSessionResuming, resumeErrorForSession, persistentResumeErrorForSession } =
+    useInterruptedTurnResume(continueInterruptedTurn, {
+      sessionKey: selectedSessionKey,
+      isLatestTurnSettled: hasSettledLatestTurn(loadedSession?.messages.items ?? []),
+    });
+  const isResumingSession = selectedSessionKey !== null && isSessionResuming(selectedSessionKey);
+  const resumeSessionError =
+    selectedSessionKey === null ? null : resumeErrorForSession(selectedSessionKey);
+  const persistentResumeError =
+    selectedSessionKey === null ? null : persistentResumeErrorForSession(selectedSessionKey);
+
+  const onResumeSession = useCallback((): void => {
+    if (selectedSessionIdentity === null) {
+      return;
+    }
+    resume(selectedSessionIdentity);
+  }, [resume, selectedSessionIdentity]);
+  return { isResumingSession, resumeSessionError, persistentResumeError, onResumeSession };
 }

@@ -1,3 +1,4 @@
+import { laneColors } from "./lane-colors";
 import type { KanbanColumnId } from "@openducktor/workflows";
 import {
   type ReactElement,
@@ -32,7 +33,6 @@ import {
 import type { BoardColumn } from "./board-columns";
 import { useMountedLanes } from "./board-lane-mounting";
 import { BoardLaneSwitcher } from "./board-lane-switcher";
-import { useLaneIds } from "./use-lane-ids";
 
 type BoardPagerProps = Omit<BoardColumnListProps, "column" | "active"> & {
   columns: readonly BoardColumn[];
@@ -71,8 +71,10 @@ export function BoardPager({
   // The page that the pager shows, so a swipe does not scroll the pager again.
   const shownIndex = useRef(selectedIndex);
   const mountedLanes = useMountedLanes(columns, selectedIndex);
-  const laneIds = useLaneIds(columns);
-  const washes = useMemo(() => laneIds.map((id) => theme.lanes[id].wash), [laneIds, theme.lanes]);
+  const washes = useMemo(
+    () => columns.map((column) => laneColors(theme, column.tone).wash),
+    [columns, theme],
+  );
 
   useEffect(() => {
     if (width === 0 || shownIndex.current === selectedIndex) return;

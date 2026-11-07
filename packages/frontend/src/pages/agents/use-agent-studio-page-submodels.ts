@@ -1,21 +1,21 @@
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import { useMemo } from "react";
 import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
-import { ROLE_OPTIONS } from "./agents-page-constants";
+import { roleOptionsForTask } from "@/lib/agent-role-presentation";
 import { buildAgentStudioHeaderModel } from "./agents-page-view-model";
 import type {
   AgentStudioWorkflowStepSelect,
   WorkflowHeaderContext,
 } from "./use-agent-studio-page-submodel-contracts";
 import type {
-  BuiltinRoleId as AgentRole,
-  BuiltinTaskCard as TaskCard,
+  WorkflowRoleId as AgentRole,
+  ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 
 type UseAgentStudioHeaderModelArgs = {
   selectedTask: TaskCard | null;
   onOpenTaskDetails: (() => void) | null;
-  selectedRole: AgentRole;
+  selectedRole: AgentRole | null;
   sessionsForTaskLength: number;
   agentStudioReady: boolean;
   isStarting: boolean;
@@ -44,8 +44,8 @@ export const useAgentStudioHeaderModel = ({
       buildAgentStudioHeaderModel({
         selectedTask,
         onOpenTaskDetails,
-        roleOptions: ROLE_OPTIONS,
-        workflowStateByRole: workflow.workflowStateByRole,
+        roleOptions: roleOptionsForTask(selectedTask),
+        workflowRail: workflow.workflowRail,
         selectedRole,
         workflowSessionByRole: workflow.workflowSessionByRole,
         sessionSelectorAutofocusByValue: workflow.sessionSelectorAutofocusByValue,
@@ -80,7 +80,7 @@ export const useAgentStudioHeaderModel = ({
       workflow.sessionSelectorGroups,
       workflow.sessionSelectorValue,
       workflow.workflowSessionByRole,
-      workflow.workflowStateByRole,
+      workflow.workflowRail,
     ],
   );
 };

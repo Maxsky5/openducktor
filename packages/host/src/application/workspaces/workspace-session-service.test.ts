@@ -169,7 +169,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       repoPath: database.repoPath,
       branchPrefix: "odt",
       worktreeCopyPaths: [".env"],
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       actions: {
         items: [
           {

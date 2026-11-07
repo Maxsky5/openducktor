@@ -1,7 +1,7 @@
-import { gitTargetBranchSchema } from "@openducktor/contracts";
+import { gitTargetBranchSchema, TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { validateWithSchema } from "./sqlite-task-store-validation";
-import { isMergeDetectionCandidateTask } from "../../domain/task";
-import { and, asc, desc, eq, notInArray, type SQL, sql } from "drizzle-orm";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import { and, asc, desc, eq, ne, type SQL, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
 import type { TaskReference } from "../../ports/task-repository-ports";
@@ -19,6 +19,7 @@ export type TaskCardRow = {
   task: TaskRow;
   labels: string[];
   pullRequest: typeof taskPullRequests.$inferSelect | null;
+  directMerge: typeof taskDirectMerges.$inferSelect | null;
   sourceIssue: typeof taskIssueLinks.$inferSelect | null;
 };
 
@@ -74,6 +75,7 @@ export const taskCardRows = (
           .select({
             task: tasks,
             pullRequest: taskPullRequests,
+            directMerge: taskDirectMerges,
             sourceIssue: taskIssueLinks,
             labels: sql<string>`(select json_group_array(label) from (
               select label from task_labels
@@ -87,6 +89,13 @@ export const taskCardRows = (
             and(
               eq(taskPullRequests.workspaceId, tasks.workspaceId),
               eq(taskPullRequests.taskId, tasks.id),
+            ),
+          )
+          .leftJoin(
+            taskDirectMerges,
+            and(
+              eq(taskDirectMerges.workspaceId, tasks.workspaceId),
+              eq(taskDirectMerges.taskId, tasks.id),
             ),
           )
           .leftJoin(
@@ -106,7 +115,7 @@ export const taskCardRows = (
 export const mergeCandidates = (
   session: HostDatabaseSession,
   workspaceId: string,
-  terminalStates: readonly string[],
+  taskWorkflows: Pick<TaskWorkflowResolver, "forTask">,
 ) =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
@@ -119,13 +128,12 @@ export const mergeCandidates = (
             targetRemote: tasks.targetRemote,
           })
           .from(tasks)
-          .where(
-            and(eq(tasks.workspaceId, workspaceId), notInArray(tasks.status, [...terminalStates])),
-          )
+          .where(and(eq(tasks.workspaceId, workspaceId), ne(tasks.status, TASK_CLOSED_STATE)))
           .orderBy(...taskLaneOrderBy),
       "sqliteTaskStore.mergeCandidates.selectTasks",
     );
-    return yield* Effect.forEach(rows.filter(isMergeDetectionCandidateTask), (row) =>
+    const checked = rows.filter((row) => taskWorkflows.forTask(row).detectsMerge(row.status));
+    return yield* Effect.forEach(checked, (row) =>
       Effect.gen(function* () {
         const targetBranch =
           row.targetBranch === null

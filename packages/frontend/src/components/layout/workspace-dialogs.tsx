@@ -1,22 +1,23 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import {
-  createContext,
   lazy,
   type PropsWithChildren,
   type ReactElement,
   Suspense,
-  use,
   useCallback,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { useNavigate } from "react-router";
+import {
+  type WorkspaceDialogRequest,
+  WorkspaceDialogsContext,
+} from "@/components/layout/workspace-dialogs-context";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { useDialogPresence } from "@/components/ui/dialog";
 import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
 import { WorkspaceSessionCreateDialog } from "@/pages/workspace-sessions/workspace-session-create-dialog";
-import type { IssueImportProvider } from "@openducktor/frontend-core/tasks/issue-import/issue-import-provider";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 const WorkspaceSessionHistoryDialog = lazy(() =>
@@ -35,29 +36,8 @@ const IssueImportDialog = lazy(() =>
   })),
 );
 
-/** A dialog keeps the workspace that was active when it opened, so a submission never moves. */
-export type WorkspaceDialogRequest =
-  | { kind: "chat" | "archived_chats" | "import_chat"; workspace: ActiveWorkspace }
-  | { kind: "import_tasks"; workspace: ActiveWorkspace; provider: IssueImportProvider };
-
-type WorkspaceDialogsContextValue = {
-  /**
-   * Open a workspace dialog. When it closes, focus goes to `returnFocus` unless another dialog
-   * took focus.
-   */
-  openWorkspaceDialog: (request: WorkspaceDialogRequest, returnFocus: HTMLElement | null) => void;
-};
-
 /** The create chat dialog stays mounted while it closes, so it keeps its own request. */
 type ChatDialogRequest = { workspace: ActiveWorkspace; attempt: number };
-
-const WorkspaceDialogsContext = createContext<WorkspaceDialogsContextValue | null>(null);
-
-export function useWorkspaceDialogs(): WorkspaceDialogsContextValue {
-  const value = use(WorkspaceDialogsContext);
-  if (!value) throw new Error("useWorkspaceDialogs must be used inside WorkspaceDialogsProvider.");
-  return value;
-}
 
 /** One owner for the workspace dialogs that the sidebar menu and the command palette open. */
 export function WorkspaceDialogsProvider({ children }: PropsWithChildren): ReactElement {

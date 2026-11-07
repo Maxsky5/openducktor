@@ -1,3 +1,4 @@
+import { WorkflowTestProvider } from "@/test-utils/workflow-provider";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   PullRequest,
@@ -245,7 +246,7 @@ const basePanelModel = {
 const renderPanel = (model: TaskRightPanelModel): string =>
   renderToStaticMarkup(
     createElement(
-      QueryProvider,
+      WorkflowTestProvider,
       null,
       createElement(ThemeProvider, null, createElement(TaskRightPanel, { model })),
     ),

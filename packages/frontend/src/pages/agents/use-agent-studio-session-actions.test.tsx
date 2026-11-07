@@ -16,6 +16,7 @@ import {
   toAgentSessionIdentity,
 } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { QueryProvider } from "@/test-utils/query-provider";
+import { withEditedTaskWorkflow } from "@/test-utils/edited-task-workflow";
 import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { ChecksOperationsContext, ChecksStateContext } from "@/state/app-state-contexts";
@@ -306,7 +307,7 @@ const createBaseArgs = (): HookArgs => {
         profileId: "",
       },
       defaultTargetBranch: { remote: "origin", branch: "main" },
-      postCompleteHooks: [],
+      beforeWorktreeRemovalHooks: [],
       actions: { items: [], defaultActionId: null },
       worktreeCopyPaths: [],
       agentDefaults: { spec: null, planner: null, build: null, qa: null },
@@ -684,6 +685,7 @@ describe("useAgentStudioSessionActions", () => {
       role: "build",
       launchActionId: "build_implementation_start",
       selectedTask: createTask({
+        status: "human_review",
         agentWorkflows: {
           build: { required: true, canSkip: false, available: true, completed: false },
         },
@@ -702,9 +704,9 @@ describe("useAgentStudioSessionActions", () => {
     await harness.run((state) => {
       state.handleQuickAction({
         kind: "session_start",
-        id: "quick:build_pull_request_generation",
+        id: "quick:pull_request",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         label: "Generate Pull Request",
         description: "Reuse or fork a Builder session to create or update a pull request.",
         postStartAction: "kickoff",
@@ -740,7 +742,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("request changes quick action submits feedback and mutation intent to the host", async () => {
+  test("feedback launch that Request Changes starts commits Request Changes with its start", async () => {
     let submitted: import("@openducktor/contracts").WorkflowLaunchRequest | undefined;
     const calls: string[] = [];
     const startAgentSession = mock(async () => {
@@ -830,8 +832,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
     expect(submitted?.beforeStartAction).toEqual({
-      action: "human_request_changes",
-      note: "Please address the review comments.",
+      eventId: "human-request-changes",
     });
     expect(submitted?.instruction).toMatchObject({
       kind: "kickoff",
@@ -1361,6 +1362,64 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.unmount();
   });
+
+  test.each(["start", "create"] as const)(
+    "Studio %s forwards an ordinary message launch through the shared launch interface",
+    async (entry) => {
+      const task = withEditedTaskWorkflow(createTask(), (definition, templates) => {
+        const launch = definition.steps
+          .flatMap((step) => (step.kind === "agent" ? step.launchActions : []))
+          .find(({ id }) => id === "spec_initial")!;
+        launch.template.kind = "message";
+        const template = templates.find(({ id }) => id === launch.template.id)!;
+        template.purpose = "message";
+        template.template = "Inspect {{task.id}} for {{role}}";
+        template.requiredPlaceholders = [];
+      });
+      const launch = task.taskWorkflow.launchAction("spec_initial");
+      let submitted: Parameters<HookArgs["runSessionStartWorkflow"]>[0] | undefined;
+      const harness = createHookHarness({
+        ...createBaseArgs(),
+        selectedTask: task,
+        runSessionStartWorkflow: async (input) => {
+          submitted = input;
+          return { ...sessionIdentity("session-new"), postStartActionError: null };
+        },
+      });
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          if (entry === "start") void state.startLaunchKickoff();
+          else
+            state.handleCreateSession({
+              id: "message-create",
+              launchActionId: launch.id,
+              role: "spec",
+              label: "Inspect",
+              description: "Inspect task",
+              disabled: false,
+            });
+        });
+        await harness.waitFor((state) => state.sessionStartModal?.selectedModelSelection != null);
+        await harness.run(async (state) => {
+          await state.sessionStartModal?.onConfirm({
+            runInBackground: false,
+            startMode: "fresh",
+            sourceSessionOptionValue: null,
+          });
+        });
+        expect(submitted?.request).toMatchObject({
+          taskId: task.id,
+          role: "spec",
+          launchActionId: launch.id,
+          postStartAction: "send_message",
+        });
+        expect(submitted?.task?.taskWorkflow).toBe(task.taskWorkflow);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("handleCreateSession does not switch query before creating another session for the same role", async () => {
     const deferredStart = createDeferred<ReturnType<typeof sessionIdentity>>();

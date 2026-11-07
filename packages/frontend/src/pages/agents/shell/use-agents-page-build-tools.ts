@@ -1,3 +1,4 @@
+import { taskGitConflictLaunch } from "@openducktor/workflows";
 import { useMemo } from "react";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import {
@@ -59,8 +60,13 @@ export function useAgentsPageBuildTools({
     () => collectUnmergedFilePaths(diffData.fileStatuses),
     [diffData.fileStatuses],
   );
+  const task = selectedView.selectedTask;
+  const conflictLaunch = task ? taskGitConflictLaunch(task) : null;
+  const conflictRole =
+    task && conflictLaunch ? task.taskWorkflow.role(conflictLaunch.role) : undefined;
   const gitActionInput: Parameters<typeof useAgentStudioGitActions>[0] = {
     contextKey: buildToolsSnapshot.comparison?.contextKey,
+    conflictRecipientLabel: conflictRole?.label ?? "agent",
     repoPath: workspaceRepoPath,
     workingDir: diffData.worktreePath,
     branch: resolvedGitPanelBranch,

@@ -1,8 +1,9 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import type { KanbanTaskSession } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
+import { CLOSE_TASK_ACTION } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import { buildTaskCardModel } from "./task-card-model";
 
 const task = (overrides: Partial<TaskCard>): TaskCard =>
@@ -25,19 +26,14 @@ describe("buildTaskCardModel", () => {
     const model = buildTaskCardModel({
       task: task({
         status: "human_review",
-        availableActions: [
-          "human_approve",
-          "human_request_changes",
-          "reset_implementation",
-          "reset_task",
-        ],
+        availableActions: ["human_approve", "human_request_changes", "reset_implementation"],
       }),
       taskSessions: [],
       historicalSessions: [],
       activeSessionRole: undefined,
       taskActivityState: "idle",
     });
-    expect(model.primary?.action).toBe("human_approve");
+    expect(model.primary?.action).toEqual({ kind: "workflow", action: "human_approve" });
     expect(model.primary?.label).toBe("Approve Task");
     expect(model.primary?.appearance).toBe("filled");
     expect(model.primary?.icon).toBe("circle-check-big");
@@ -65,14 +61,16 @@ describe("buildTaskCardModel", () => {
   test("proposes Close Task and reads the reason when the pull request sync could not close it", () => {
     const reason = "Pull request merged, but the task did not close. Archive the chat first.";
     const model = buildTaskCardModel({
-      task: task({ status: "human_review", availableActions: ["human_approve", "close_task"] }),
+      task: task({ status: "human_review", availableActions: ["human_approve"] }),
       taskSessions: [],
       historicalSessions: [],
       activeSessionRole: undefined,
       taskActivityState: "idle",
       autoCloseFailure: reason,
     });
-    expect(model.primary?.action).toBe("close_task");
+    expect(model.primary?.action).toEqual({ kind: "core", action: CLOSE_TASK_ACTION });
+    expect(model.primary).toMatchObject({ label: "Close Task", icon: "circle-check-big" });
+    expect(model.menu.map((item) => item.id)).toEqual(["human_approve"]);
     expect(model.accessibilityLabel).toContain(reason);
   });
 
@@ -84,7 +82,7 @@ describe("buildTaskCardModel", () => {
       activeSessionRole: "build",
       taskActivityState: "waiting_input",
     });
-    expect(model.primary?.action).toBe("open_builder");
+    expect(model.primary?.action).toEqual({ kind: "workflow", action: "open_builder" });
     expect(model.primary?.activeSession).toEqual({
       roleLabel: "Builder",
       statusLabel: "Waiting input",
@@ -92,6 +90,7 @@ describe("buildTaskCardModel", () => {
     });
     expect(model.primary?.appearance).toBe("waiting");
     expect(model.liveSession).toEqual({
+      iconHint: "building",
       role: "build",
       label: "Builder needs input",
       waitingInput: true,
@@ -111,6 +110,7 @@ describe("buildTaskCardModel", () => {
     expect(model.primary?.label).toBe("Open Builder");
     expect(model.primary?.appearance).toBe("running");
     expect(model.liveSession).toEqual({
+      iconHint: "building",
       role: "build",
       label: "Builder running",
       waitingInput: false,
@@ -154,7 +154,7 @@ describe("buildTaskCardModel", () => {
     const model = buildTaskCardModel({
       task: task({
         status: "closed",
-        availableActions: ["reset_task"],
+        availableActions: ["open_builder"],
         labels: ["api", "ui", "docs", "mobile", "perf"],
       }),
       taskSessions: [],

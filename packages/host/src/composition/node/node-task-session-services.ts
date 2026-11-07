@@ -1,3 +1,4 @@
+import { createWorkflowReads } from "../../application/tasks/workflow-reads";
 import { agentSessionRefKey } from "@openducktor/core";
 import { createTaskWorkflowSessionFork } from "../../application/agent-sessions/task-workflow-session-fork";
 import { createTaskSessionOperations } from "../../application/agent-sessions/task-session-operations";
@@ -49,6 +50,7 @@ type TaskServiceInput = Omit<
   >;
 
 export const createNodeTaskSessionServices = ({
+  hostInstanceId,
   taskServiceInput,
   eventServiceInput,
   publishMergeStatus,
@@ -63,6 +65,7 @@ export const createNodeTaskSessionServices = ({
   savedSessions,
   claudeSessionMetadata,
 }: {
+  hostInstanceId: string;
   taskServiceInput: TaskServiceInput;
   eventServiceInput: Omit<
     Parameters<typeof createNodeTaskEventServices>[0],
@@ -135,7 +138,6 @@ export const createNodeTaskSessionServices = ({
   const eventServices = createNodeTaskEventServices({
     ...eventServiceInput,
     settingsConfig: taskServiceInput.settingsConfig,
-    taskWorkflows: taskServiceInput.taskWorkflows,
     baseTaskService,
     mergeDetection,
   });
@@ -274,6 +276,7 @@ export const createNodeTaskSessionServices = ({
     shutdownCompletionOperations: completionWorkers.shutdown,
     agentSessionCommandService: { ...agentSessionCommandService, forkWorkflowSession },
     workflowLaunchService,
+    workflowReads: createWorkflowReads(taskServiceInput.taskWorkflows, hostInstanceId),
     agentRuntimeQueries,
     approvalPolicy,
   };

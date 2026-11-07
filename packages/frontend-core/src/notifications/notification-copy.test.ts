@@ -1,3 +1,4 @@
+import { builtinNotificationPresentation } from "../test-support/workflow-fixtures";
 import { describe, expect, test } from "bun:test";
 import type { NotificationKind, NotificationOccurrence } from "@openducktor/contracts";
 import { buildNotificationCopy } from "./notification-copy";
@@ -21,6 +22,9 @@ const EVENT_CASES = [
 const occurrence = (kind: NotificationKind): NotificationOccurrence => ({
   occurrenceId: `${kind}:/repo:task-1:event-1`,
   kind,
+  ...(kind.startsWith("workflow.")
+    ? builtinNotificationPresentation(kind)
+    : { sessionLabel: "Builder" }),
   repoPath: "/repo",
   repositoryLabel: "Repo",
   task: { id: "task-1", title: "Build notifications" },
@@ -64,6 +68,7 @@ describe("notification copy", () => {
     const occurrence: NotificationOccurrence = {
       occurrenceId: "workflow.blocked:/repo:task-1:event-1",
       kind: "workflow.blocked",
+      ...builtinNotificationPresentation("workflow.blocked"),
       repoPath: "/repo",
       repositoryLabel: "Repo",
       task: { id: "task-1", title: "Build notifications" },
@@ -105,6 +110,7 @@ describe("notification copy", () => {
     const occurrence: NotificationOccurrence = {
       occurrenceId: "agent.session_idle:/repo:task-1:cycle-1",
       kind: "agent.session_idle",
+      sessionLabel: "Builder",
       repoPath: "/repo",
       repositoryLabel: "Repo",
       task: { id: "task-1", title: "Build **notifications**" },
@@ -142,9 +148,10 @@ describe("notification copy", () => {
     ["build", "Builder"],
     ["qa", "QA"],
   ] as const)("uses the %s role in agent titles", (role, label) => {
-    expect(buildNotificationCopy({ ...occurrence("agent.session_idle"), role }).title).toBe(
-      `${label} - Build notifications`,
-    );
+    expect(
+      buildNotificationCopy({ ...occurrence("agent.session_idle"), role, sessionLabel: label })
+        .title,
+    ).toBe(`${label} - Build notifications`);
   });
 
   test("bounds long titles and bodies without adding repository context", () => {

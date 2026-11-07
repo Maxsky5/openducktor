@@ -1,3 +1,5 @@
+import { createTaskWorkflowActionsFixture } from "@/test-utils/shared-test-fixtures";
+import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import type { AgentSessionRecord } from "@openducktor/contracts";
@@ -9,12 +11,12 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { KanbanTaskCard } from "./kanban-task-card";
-import { type BuiltinRoleId } from "@openducktor/workflows";
+import { type WorkflowRoleId } from "@openducktor/workflows";
 
 enableReactActEnvironment();
 
 const noop = (): void => {};
-const session = (role: BuiltinRoleId): AgentSessionRecord & { role: BuiltinRoleId } => ({
+const session = (role: WorkflowRoleId): AgentSessionRecord & { role: WorkflowRoleId } => ({
   externalSessionId: `${role}-session`,
   runtimeKind: "codex",
   workingDirectory: `/repo/${role}`,
@@ -22,7 +24,13 @@ const session = (role: BuiltinRoleId): AgentSessionRecord & { role: BuiltinRoleI
   startedAt: "2026-10-01T10:00:00Z",
   selectedModel: null,
 });
-const cardProps = (): ComponentProps<typeof KanbanTaskCard> => ({
+type CardTestProps = ComponentProps<typeof KanbanTaskCard> & {
+  onLaunch: ReturnType<typeof mock>;
+  onOpenSession: ReturnType<typeof mock>;
+  onResetImplementation: ReturnType<typeof mock>;
+};
+const cardProps = (): CardTestProps => ({
+  onLaunch: mock(noop),
   task: createTaskCardFixture({
     status: "ready_for_dev",
     availableActions: ["build_start", "reset_implementation"],
@@ -30,17 +38,26 @@ const cardProps = (): ComponentProps<typeof KanbanTaskCard> => ({
   historicalSessions: [session("qa"), session("planner"), session("build"), session("spec")],
   taskActivityState: "idle",
   onOpenDetails: mock(noop),
-  onDelegate: mock(noop),
   onOpenSession: mock(noop),
-  onPlan: mock(noop),
   onResetImplementation: mock(noop),
 });
 
-function Card(props: ComponentProps<typeof KanbanTaskCard>) {
+function Card(props: CardTestProps) {
   return (
     <MemoryRouter>
       <TooltipProvider>
-        <KanbanTaskCard {...props} />
+        <TaskWorkflowActionsContext
+          value={createTaskWorkflowActionsFixture(
+            { onLaunch: props.onLaunch, onOpenSession: props.onOpenSession },
+            {
+              onConfirm: (taskId, action) => {
+                if (action === "reset_implementation") props.onResetImplementation(taskId);
+              },
+            },
+          )}
+        >
+          <KanbanTaskCard {...props} />
+        </TaskWorkflowActionsContext>
       </TooltipProvider>
     </MemoryRouter>
   );
@@ -133,11 +150,10 @@ describe("Kanban card session shortcuts", () => {
         expect(props.onOpenSession).toHaveBeenCalledWith(props.task.id, "planner", {
           session: session("planner"),
         });
-        expect(props.onDelegate).not.toHaveBeenCalled();
-        expect(props.onPlan).not.toHaveBeenCalled();
+        expect(props.onLaunch).not.toHaveBeenCalled();
         expect(props.onOpenDetails).not.toHaveBeenCalled();
         fireEvent.click(view.getByRole("button", { name: "Start Builder" }));
-        expect(props.onDelegate).toHaveBeenCalledTimes(1);
+        expect(props.onLaunch).toHaveBeenCalledTimes(1);
         fireEvent.click(view.getByRole("button", { name: "Open workflow actions menu" }));
         expect(view.getByRole("button", { name: "Reset Implementation" })).toBeDefined();
         expect(view.queryByRole("button", { name: "Open Planner" })).toBeNull();
@@ -168,8 +184,7 @@ describe("Kanban card session shortcuts", () => {
       expect(props.onOpenDetails).toHaveBeenCalledTimes(3);
       expect(props.onOpenDetails).toHaveBeenCalledWith(props.task.id);
       expect(props.onOpenSession).not.toHaveBeenCalled();
-      expect(props.onDelegate).not.toHaveBeenCalled();
-      expect(props.onPlan).not.toHaveBeenCalled();
+      expect(props.onLaunch).not.toHaveBeenCalled();
     } finally {
       view.unmount();
     }
@@ -188,7 +203,7 @@ describe("Kanban card session shortcuts", () => {
       expect(builder.hasAttribute("disabled")).toBe(true);
       fireEvent.click(builder);
       expect(props.onOpenSession).not.toHaveBeenCalled();
-      expect(props.onDelegate).not.toHaveBeenCalled();
+      expect(props.onLaunch).not.toHaveBeenCalled();
       expect(view.queryByRole("button", { name: "Open Builder session" })).toBeNull();
       expect(view.queryByRole("button", { name: "Open workflow actions menu" })).toBeNull();
     } finally {
@@ -269,7 +284,9 @@ describe("Kanban card session shortcuts", () => {
       );
       expect(view.queryByRole("button", { name: "Open Builder session" })).toBeNull();
       expect(document.activeElement).toBe(view.getByRole("button", { name: "Builder Starting" }));
-      view.rerender(<Card {...props} task={{ ...props.task, status: "closed" }} />);
+      view.rerender(
+        <Card {...props} task={createTaskCardFixture({ ...props.task, status: "closed" })} />,
+      );
       expect(document.activeElement).toBe(
         view.getByRole("button", { name: `Open details for ${props.task.title}` }),
       );
@@ -310,7 +327,7 @@ describe("Kanban card session shortcuts", () => {
       const startBuilder = view.getByRole("button", { name: "Start Builder" });
       expect(startBuilder.hasAttribute("disabled")).toBe(true);
       fireEvent.click(startBuilder);
-      expect(props.onDelegate).not.toHaveBeenCalled();
+      expect(props.onLaunch).not.toHaveBeenCalled();
       expect(
         view.getByRole("button", { name: "Open Planner session" }).hasAttribute("disabled"),
       ).toBe(false);
@@ -331,7 +348,7 @@ describe("Kanban card session shortcuts", () => {
         />,
       );
       fireEvent.click(view.getByRole("button", { name: "Start Builder" }));
-      expect(props.onDelegate).toHaveBeenCalledTimes(1);
+      expect(props.onLaunch).toHaveBeenCalledTimes(1);
     } finally {
       view.unmount();
     }

@@ -8,7 +8,6 @@ import {
 } from "./agent-studio-test-utils";
 import {
   coerceVisibleSelectionToCatalog,
-  emptyDraftSelections,
   extractCompletionTimestamp,
   isSameSelection,
   pickDefaultVisibleSelectionForCatalog,
@@ -61,9 +60,8 @@ const catalogFixture: AgentModelCatalog = {
 };
 
 describe("agents-page-selection", () => {
-  test("builds the client-local panel key and empty role selections", () => {
+  test("builds the client-local panel key", () => {
     expect(toRightPanelStorageKey()).toBe("openducktor:agent-studio:right-panel");
-    expect(emptyDraftSelections()).toEqual({ spec: null, planner: null, build: null, qa: null });
   });
 
   test("extracts completion timestamp from tool output", () => {
@@ -652,6 +650,7 @@ describe("agents-page-selection", () => {
     });
 
     const resolved = resolveAgentStudioBuilderSessionsForTask({
+      role: "build",
       taskId: "task-1",
       candidateSessions: [activeBuildSession, null, null, olderBuildSession],
     })[0];
@@ -672,6 +671,7 @@ describe("agents-page-selection", () => {
     });
 
     const resolved = resolveAgentStudioBuilderSessionsForTask({
+      role: "build",
       taskId: "task-1",
       candidateSessions: [null, otherTaskBuildSession, null, buildSession, otherTaskBuildSession],
     })[0];
@@ -692,6 +692,7 @@ describe("agents-page-selection", () => {
     });
 
     const sessions = resolveAgentStudioBuilderSessionsForTask({
+      role: "build",
       taskId: "task-1",
       candidateSessions: [
         activeBuildSession,

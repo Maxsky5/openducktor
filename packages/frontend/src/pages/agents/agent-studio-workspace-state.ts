@@ -1,7 +1,7 @@
 import {
   taskHasSessionPage,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import type { WorkspaceAgentStudioState } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
@@ -72,7 +72,7 @@ export const createAgentStudioStateSnapshot = ({
 }: {
   openTaskIds: readonly string[];
   taskId: string;
-  role: AgentRole;
+  role: AgentRole | null;
   externalSessionId: string | null;
 }): WorkspaceAgentStudioState => {
   if (!taskId) {
@@ -81,8 +81,8 @@ export const createAgentStudioStateSnapshot = ({
 
   const activeTask: NonNullable<WorkspaceAgentStudioState["activeTask"]> = {
     taskId,
-    role,
   };
+  if (role) activeTask.role = role;
   if (externalSessionId) {
     activeTask.externalSessionId = externalSessionId;
   }

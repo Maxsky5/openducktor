@@ -1,7 +1,16 @@
+import {
+  isPullRequestLaunch,
+  type ResolvedTaskCard,
+  workflowRoleIcon,
+} from "@openducktor/workflows";
 import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
+import { taskActionIsDestructive } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { formatElapsedAgo } from "@openducktor/frontend-core/lib/relative-time";
 import type { TaskSessionGroup } from "@/features/tasks/details/task-sessions-model";
-import { TASK_ACTION_ICONS } from "@/features/tasks/presentation/task-action-paint";
+import {
+  coreTaskActionIcon,
+  taskActionIcon,
+} from "@/features/tasks/presentation/task-action-paint";
 import type { ActionMenuItem } from "@/ui/action-menu";
 
 /**
@@ -18,7 +27,7 @@ export const sessionHistoryItems = (
     group.rows.map((row) => ({
       id: row.key,
       title: row.label,
-      role: group.role,
+      role: group.iconHint,
       detail: `${formatElapsedAgo(now - Date.parse(row.startedAt))} · ${row.statusLabel}`,
       checked: row.key === currentKey,
     })),
@@ -32,22 +41,35 @@ export const sessionHistoryItems = (
  */
 export const quickActionItems = (
   options: readonly AgentStudioQuickActionOption[],
+  task: ResolvedTaskCard | null,
 ): ActionMenuItem[] =>
-  options.map((option) => {
-    const item: ActionMenuItem = {
-      id: option.id,
-      title: option.label,
-      disabled: option.disabled,
-      // As the desktop marker, the merged Close Task names its target.
-      detail:
-        option.kind === "task_action" && option.mergedTarget
-          ? `Merged into ${option.mergedTarget}`
-          : option.disabledReason,
-      command: true,
-    };
-    if (option.kind === "task_action") item.icon = TASK_ACTION_ICONS[option.taskAction];
-    else if (option.launchActionId === "build_pull_request_generation") {
-      item.icon = "git-pull-request";
-    } else item.role = option.role;
-    return item;
-  });
+  task
+    ? options.map((option) => {
+        const item: ActionMenuItem = {
+          id: option.id,
+          title: option.label,
+          disabled: option.disabled,
+          // As the desktop marker, the merged Close Task names its target.
+          detail:
+            option.kind === "task_action" && option.mergedTarget
+              ? `Merged into ${option.mergedTarget}`
+              : option.disabledReason,
+          command: true,
+        };
+        if (option.kind === "task_action") {
+          const { taskAction } = option;
+          item.icon =
+            taskAction.kind === "core"
+              ? coreTaskActionIcon(taskAction.action)
+              : taskActionIcon(taskAction.action, task);
+          // As in the card and details menus, a destructive action shows in red.
+          item.destructive =
+            taskAction.kind === "core"
+              ? taskAction.action.emphasis === "destructive"
+              : taskActionIsDestructive(taskAction.action, task);
+        } else if (isPullRequestLaunch(option.launchActionId)) {
+          item.icon = "git-pull-request";
+        } else item.role = workflowRoleIcon(task.taskWorkflow, option.role);
+        return item;
+      })
+    : [];

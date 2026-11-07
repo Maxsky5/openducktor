@@ -1,5 +1,6 @@
 import {
   ODT_TOOL_SCHEMAS,
+  TASK_CLOSED_STATE,
   type OdtToolName,
   type CompiledWorkflowDefinition,
 } from "@openducktor/contracts";
@@ -9,7 +10,7 @@ import { taskIssueTypes } from "./task-workflow/task-input";
 const workflowValues = (definition: CompiledWorkflowDefinition, field: string) => {
   if (field === "issueType") return taskIssueTypes(definition);
   if (field === "status") {
-    return definition.states.filter(({ terminal }) => !terminal).map(({ id }) => id);
+    return definition.states.flatMap(({ id }) => (id === TASK_CLOSED_STATE ? [] : [id]));
   }
   return [];
 };

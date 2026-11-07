@@ -6,8 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import {
   resolveAgentStudioDefaultRoleForTask,
-  type BuiltinTaskCard as TaskCard,
-  builtinRoleId,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import {
   buildSessionNavigationHref,
@@ -143,7 +142,7 @@ export const navigateToNotificationTarget = async (
         workspaceId: workspace.workspaceId,
         taskId: task.id,
         role: target.preferredRole
-          ? builtinRoleId(target.preferredRole)
+          ? target.preferredRole
           : resolveAgentStudioDefaultRoleForTask(task),
       }),
     );
@@ -161,7 +160,7 @@ export const navigateToNotificationTarget = async (
     kind: "task_session",
     workspaceId: workspace.workspaceId,
     taskId,
-    role: builtinRoleId(session.role),
+    role: session.role,
     identity: {
       externalSessionId: session.externalSessionId,
       runtimeKind: session.runtimeKind,

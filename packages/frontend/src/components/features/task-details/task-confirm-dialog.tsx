@@ -55,7 +55,7 @@ export function TaskConfirmDialog({
           {error ? (
             <Alert variant="destructive" className="mt-4">
               <AlertTriangle aria-hidden="true" />
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription className="whitespace-pre-line">{error}</AlertDescription>
             </Alert>
           ) : null}
         </DialogBody>

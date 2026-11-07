@@ -8,7 +8,10 @@ const makeModel = (legacyWorktreeCount: number): TaskResetImplementationModalMod
   open: true,
   taskId: "task-1",
   taskTitle: "Task One",
+  actionLabel: "Reset Implementation",
   targetStatusLabel: "Ready for Dev",
+  worktreeRoleLabels: ["Builder", "QA"],
+  dropsLocalMerge: false,
   isSubmitting: false,
   activeSessionCount: 0,
   activeSessionCountError: null,
@@ -87,11 +90,11 @@ describe("TaskResetImplementationModal", () => {
 
     expect(screen.getByText(/Could not check running sessions: host unavailable/)).toBeDefined();
     expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Reset implementation" }).disabled,
+      screen.getByRole<HTMLButtonElement>("button", { name: "Reset Implementation" }).disabled,
     ).toBe(true);
     expect(
       screen
-        .getByRole<HTMLButtonElement>("button", { name: "Reset implementation" })
+        .getByRole<HTMLButtonElement>("button", { name: "Reset Implementation" })
         .getAttribute("aria-busy"),
     ).toBe("false");
     expect(document.body.innerHTML).not.toContain("lucide-loader-circle");

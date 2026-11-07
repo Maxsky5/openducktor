@@ -1,3 +1,5 @@
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
+
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -7,6 +9,7 @@ describe("TaskEditSectionSwitcher", () => {
   test("uses segmented-button semantics instead of incomplete tab roles", () => {
     const html = renderToStaticMarkup(
       createElement(TaskEditSectionSwitcher, {
+        taskWorkflow: specPlanBuildWorkflow,
         section: "details",
         dirtyDocuments: { spec: true, plan: false },
         onSectionChange: () => {},

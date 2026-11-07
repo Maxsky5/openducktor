@@ -21,7 +21,8 @@ type BrowserToolMessageProps = {
 
 /**
  * One `odt_browser_*` call: its action, the screenshot it saved, and its input and result. The
- * screenshot loads from the host when the user opens it.
+ * screenshot loads from the host when the user opens it. A failed call shows its error message
+ * under the row.
  */
 export const BrowserToolMessage = ({
   meta,

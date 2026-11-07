@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
@@ -24,7 +25,7 @@ import {
   type WorkspaceIntent,
   type WorkspaceIntentContext,
 } from "./use-workspace-intent-runner";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const alpha = createWorkspaceRecordFixture({ workspaceId: "alpha", workspaceName: "Alpha" });
 const beta = createWorkspaceRecordFixture({
@@ -62,12 +63,10 @@ const createTasksState = (tasks: TaskCard[]): TasksStateContextValue => ({
   updateTask: async () => {},
   setTaskTargetBranch: async () => {},
   deleteTask: async () => {},
-  closeTask: async () => {},
+  closeTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
   removeTaskWorktree: async () => {},
-  resetTaskImplementation: async () => {},
-  resetTask: async () => {},
-  transitionTask: async () => {},
-  humanRequestChangesTask: async () => {},
+  resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
+  resetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
 });
 
 let runIntent: ((intent: WorkspaceIntent) => void) | null = null;

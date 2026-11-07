@@ -12,7 +12,7 @@ import {
 } from "./agent-studio-navigation";
 import { taskRouteStateSchema, readTaskRouteIntent } from "./task-route-intent";
 import { useNavigationUrlSync } from "./use-navigation-url-sync";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 type UseAgentStudioQuerySyncArgs = {
   activeWorkspaceId: string | null;
@@ -95,7 +95,7 @@ export function useAgentStudioQuerySync({
 
   const shown = searchParams.has("task") ? parsedNavigation : navigation;
   const hasExplicitRoleParam = shown.role !== null;
-  const roleFromQuery: AgentRole = shown.role ?? "spec";
+  const roleFromQuery: AgentRole | null = shown.role;
 
   return {
     taskIdParam: shown.taskId,
@@ -114,7 +114,7 @@ export function useAgentStudioQuerySync({
     sessionExternalIdParam: string | null;
     hasExplicitRoleParam: boolean;
     keepSessionlessParam: boolean;
-    roleFromQuery: AgentRole;
+    roleFromQuery: AgentRole | null;
     isNavigationPending: boolean;
     isWorkspaceRestorePending: boolean;
     isWorkspaceStateLoaded: boolean;

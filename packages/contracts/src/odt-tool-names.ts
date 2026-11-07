@@ -18,9 +18,7 @@ export const ODT_WORKFLOW_AGENT_TOOL_NAMES = [
   "odt_set_task_artifact",
   "odt_delete_task_artifact",
   "odt_update_task",
-  "odt_build_blocked",
-  "odt_build_resumed",
-  "odt_build_completed",
+  "odt_apply_workflow_event",
   "odt_set_pull_request",
   ...ODT_BROWSER_TOOL_NAMES,
 ] as const;

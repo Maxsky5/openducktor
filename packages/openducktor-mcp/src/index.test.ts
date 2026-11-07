@@ -5,6 +5,7 @@ import {
   expectToolError,
   readToolInputProperties,
   startMockBridge,
+  TEST_ACTIVE_STATUSES,
   taskReadPayload,
   taskSummaryPayload,
   useMcpServerTestLifecycle,
@@ -139,10 +140,11 @@ describe("MCP server tool results", () => {
     try {
       await client.connect(transport);
       const result = await client.callTool({
-        name: "odt_build_blocked",
+        name: "odt_apply_workflow_event",
         arguments: {
           taskId: "task-1",
-          reason: "needs a product decision",
+          eventId: "build-blocked",
+          note: "needs a product decision",
         },
       });
       const contentResult = result;
@@ -331,7 +333,7 @@ describe("MCP server tool results", () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, {
       workspaceId: "repo",
-      allowedTools: "odt_read_task,odt_read_task_artifacts,odt_build_completed",
+      allowedTools: "odt_read_task,odt_read_task_artifacts,odt_apply_workflow_event",
     });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
@@ -343,8 +345,26 @@ describe("MCP server tool results", () => {
       expect(toolNames).toEqual([
         "odt_read_task",
         "odt_read_task_artifacts",
-        "odt_build_completed",
+        "odt_apply_workflow_event",
       ]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("lists the active states from the host ready reply as status values", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const tools = await client.listTools();
+      const search = tools.tools.find(({ name }) => name === "odt_search_tasks");
+
+      expect(search?.inputSchema.properties?.status).toMatchObject({
+        enum: TEST_ACTIVE_STATUSES,
+      });
     } finally {
       await client.close();
     }
@@ -354,7 +374,7 @@ describe("MCP server tool results", () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, {
       workspaceId: "repo",
-      allowedTools: "odt_read_task,odt_set_task_artifact,odt_build_completed",
+      allowedTools: "odt_read_task,odt_set_task_artifact,odt_apply_workflow_event",
     });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
@@ -365,7 +385,7 @@ describe("MCP server tool results", () => {
       expect(tools.tools.map(({ name, title }) => ({ name, title }))).toEqual([
         { name: "odt_read_task", title: "odt_read_task" },
         { name: "odt_set_task_artifact", title: "odt_set_task_artifact" },
-        { name: "odt_build_completed", title: "odt_build_completed" },
+        { name: "odt_apply_workflow_event", title: "odt_apply_workflow_event" },
       ]);
     } finally {
       await client.close();

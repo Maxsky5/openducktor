@@ -1,3 +1,4 @@
+import { specPlanBuildPromptKey } from "@openducktor/workflows/test-support";
 import { describe, expect, mock, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useState } from "react";
@@ -26,7 +27,7 @@ const createSnapshot = (): SettingsSnapshot =>
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
@@ -127,7 +128,7 @@ describe("useSettingsModalDirtyDraftActions", () => {
     await harness.run((state) => {
       state.updateRepoPromptOverrides((overrides) => ({
         ...overrides,
-        "kickoff.spec_initial": {
+        [specPlanBuildPromptKey("messages.spec_start")]: {
           template: "custom",
           baseVersion: 1,
           enabled: true,
@@ -137,8 +138,9 @@ describe("useSettingsModalDirtyDraftActions", () => {
     });
 
     expect(
-      harness.getLatest().snapshotDraft?.workspaces.repo?.promptOverrides["kickoff.spec_initial"]
-        ?.template,
+      harness.getLatest().snapshotDraft?.workspaces.repo?.promptOverrides[
+        specPlanBuildPromptKey("messages.spec_start")
+      ]?.template,
     ).toBe("custom");
     expect(harness.getLatest().snapshotDraft?.workspaces.repo?.agentDefaults.build?.profileId).toBe(
       "builder",

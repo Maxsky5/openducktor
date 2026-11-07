@@ -1,11 +1,15 @@
-import { getSessionLaunchAction, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { isPullRequestLaunch, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "../../lib/agent-session-identity";
 import type { AgentSessionSummary } from "../agent-sessions-store";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import type { SessionStartModalSource } from "./session-start-modal-types";
-import { buildReusableSessionOptions } from "./session-start-reuse-options";
+import { sessionLaunchTask } from "./session-start-kickoff";
+import {
+  buildPullRequestSessionOptions,
+  buildReusableSessionOptions,
+} from "./session-start-reuse-options";
 import type { ResolvedSessionStartDecision, SessionStartFlowRequest } from "./session-start-types";
 export type { ResolvedSessionStartDecision, SessionStartFlowRequest } from "./session-start-types";
 import {
@@ -35,7 +39,7 @@ type BuildSessionStartModalRequestArgs = {
   selectedModel: AgentModelSelection | null;
   taskSessions: AgentSessionSummary[];
   preferredSourceSession?: SessionStartContextSession | null | undefined;
-  selectedTask?: Pick<TaskCard, "targetBranch" | "targetBranchError"> | null;
+  selectedTask?: TaskCard | null;
 };
 
 export type RunSessionStartWorkflowInput = {
@@ -56,6 +60,7 @@ export type SessionStartNotificationInput = {
   taskId: string;
   taskTitle?: string;
   role: SessionStartFlowRequest["role"];
+  roleLabel: string;
   session?: AgentSessionIdentity;
   errorAttentionId?: string;
   inAppFeedbackHandled?: boolean;
@@ -117,6 +122,11 @@ type CreateSessionStartWorkflowRunnerArgs = {
   sendAgentMessage: SendAgentMessage;
   notifications?: SessionStartNotificationPublisher | undefined;
   launchAttemptId: string;
+  /**
+   * Completes the request before the launch, as with a message from its template. It runs after
+   * the context check, because the owner of a background start can unmount during this work.
+   */
+  prepareRequest?: (input: RunSessionStartWorkflowInput) => Promise<SessionStartFlowRequest>;
 };
 
 export const createSessionStartWorkflowRunner = ({
@@ -126,14 +136,19 @@ export const createSessionStartWorkflowRunner = ({
   sendAgentMessage,
   notifications,
   launchAttemptId,
+  prepareRequest,
 }: CreateSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow => {
   return async (input) => {
+    if (!input.task)
+      throw new Error("The task is unavailable. Reload the task before starting a session.");
+    const role = input.task.taskWorkflow.role(input.request.role);
     const notificationInput: SessionStartNotificationInput = {
       launchAttemptId,
       workspaceId,
       taskId: input.request.taskId,
       role: input.request.role,
       inAppFeedbackHandled: true,
+      roleLabel: role.label,
     };
     if (input.task?.title) notificationInput.taskTitle = input.task.title;
     const reportNotificationFailure = (cause: unknown): void => {
@@ -155,8 +170,9 @@ export const createSessionStartWorkflowRunner = ({
         throw new Error("The session start context changed. Start again in the current workspace.");
       if (!workspaceId || !repoPath)
         throw new Error("Session start requires an explicit workspace and repository.");
+      const request = prepareRequest ? await prepareRequest(input) : input.request;
       result = await startSessionWorkflow({
-        request: input.request,
+        request,
         decision: input.decision,
         workspaceId,
         repoPath,
@@ -200,7 +216,25 @@ export const buildSessionStartModalRequest = ({
   preferredSourceSession,
   selectedTask,
 }: BuildSessionStartModalRequestArgs): SessionStartModalOpenRequest => {
-  const existingSessionOptions = resolveExistingSessionOptions(request, taskSessions);
+  if (!selectedTask)
+    throw new Error("Task workflow is unavailable. Reload the task before starting a session.");
+  const { taskWorkflow } = selectedTask;
+  const launch = taskWorkflow.launchAction(request.launchActionId, request.role);
+  const launchTask = sessionLaunchTask(selectedTask, request.beforeStartAction);
+  if (isPullRequestLaunch(launch.id)) {
+    if (!taskWorkflow.pullRequestLaunchAvailable(launchTask))
+      throw new Error(
+        `Pull request generation is not available for task "${selectedTask.id}" now.`,
+      );
+  } else if (
+    !taskWorkflow.project(launchTask).agentWorkflows[request.role]?.available ||
+    launch.role !== request.role
+  ) {
+    throw new Error(
+      `Workflow step for role "${request.role}" is unavailable for task "${selectedTask.id}".`,
+    );
+  }
+  const existingSessionOptions = resolveExistingSessionOptions(request, taskSessions, selectedTask);
   const initialSourceSession = resolveInitialSourceSession({
     request,
     existingSessionOptions,
@@ -211,6 +245,7 @@ export const buildSessionStartModalRequest = ({
     request.initialTargetBranchError ?? selectedTask?.targetBranchError ?? null;
   const modalRequest: SessionStartModalOpenRequest = {
     source,
+    taskWorkflow: selectedTask.taskWorkflow,
     taskId: request.taskId,
     role: request.role,
     launchActionId: request.launchActionId,
@@ -250,27 +285,33 @@ export const buildSessionStartModalRequest = ({
 
 const launchActionSupportsReusableSessions = (
   launchActionId: SessionStartFlowRequest["launchActionId"],
+  taskWorkflow: import("@openducktor/workflows").TaskWorkflow,
 ): boolean => {
-  return getSessionLaunchAction(launchActionId).startModes.some(
-    (mode) => mode === "reuse" || mode === "fork",
-  );
+  return taskWorkflow
+    .launchDefinition(launchActionId)
+    .startModes.some((mode) => mode === "reuse" || mode === "fork");
 };
 
 const resolveExistingSessionOptions = (
   request: SessionStartFlowRequest,
   taskSessions: AgentSessionSummary[],
+  task: TaskCard,
 ) => {
   if (request.existingSessionOptions) {
     return request.existingSessionOptions;
   }
+  const { taskWorkflow } = task;
+  if (isPullRequestLaunch(request.launchActionId))
+    return buildPullRequestSessionOptions({ task, sessions: taskSessions });
 
-  if (!launchActionSupportsReusableSessions(request.launchActionId)) {
+  if (!launchActionSupportsReusableSessions(request.launchActionId, taskWorkflow)) {
     return [];
   }
 
   return buildReusableSessionOptions({
     sessions: taskSessions.filter((session) => session.taskId === request.taskId),
     role: request.role,
+    roleLabel: taskWorkflow.role(request.role).label,
   });
 };
 
@@ -290,7 +331,6 @@ const resolveInitialSourceSession = ({
   if (
     preferredSourceSession &&
     preferredSourceSession.taskId === request.taskId &&
-    preferredSourceSession.role === request.role &&
     existingSessionOptions.some(
       (option) => option.value === agentSessionIdentityKey(preferredSourceSession),
     )

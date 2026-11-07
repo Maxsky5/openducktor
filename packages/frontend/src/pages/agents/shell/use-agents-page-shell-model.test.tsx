@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import type { SessionPanelsModel } from "@/features/session-panels";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
@@ -233,12 +234,14 @@ let tasksState: TasksStateContextValue = {
   updateTask: mock(async () => undefined),
   setTaskTargetBranch: mock(async () => undefined),
   deleteTask: mock(async () => undefined),
-  closeTask: mock(async () => undefined),
+  closeTask: mock(async (taskId: string) =>
+    createWireTaskCardFixture({ id: taskId, status: "closed" }),
+  ),
   removeTaskWorktree: mock(async () => {}),
-  resetTaskImplementation: mock(async () => undefined),
-  resetTask: mock(async () => undefined),
-  transitionTask: mock(async () => undefined),
-  humanRequestChangesTask: mock(async () => undefined),
+  resetTaskImplementation: mock(async (taskId: string) =>
+    createWireTaskCardFixture({ id: taskId }),
+  ),
+  resetTask: mock(async (taskId: string) => createWireTaskCardFixture({ id: taskId })),
   detectingPullRequestTaskIds: new Set<string>(),
   linkingMergedPullRequestTaskId: null,
   unlinkingPullRequestTaskIds: new Set<string>(),
@@ -333,6 +336,8 @@ let selectionState: SelectionState = {
   sessionsForTask: [toAgentSessionSummary(initialSelectionSession)],
 };
 const baseHumanReviewFeedbackModal: HumanReviewFeedbackModalModel = {
+  confirmLabel: "Request Changes",
+  roleLabel: "Builder",
   open: true,
   taskId: "task-1",
   message: "Please address review feedback.",
@@ -393,7 +398,9 @@ let orchestrationState: OrchestrationState = {
   repoSettings: null,
   chatSettingsLoadError: new Error("chat settings failed"),
   retryChatSettingsLoad,
-  humanReviewFeedbackModal: { ...baseHumanReviewFeedbackModal },
+  humanReviewFeedbackModal: {
+    ...baseHumanReviewFeedbackModal,
+  },
   sessionStartModal: { ...baseSessionStartModal },
   startSessionRequest: async () => undefined,
   agentStudioHeaderModel,
@@ -680,12 +687,14 @@ beforeEach(async () => {
     updateTask: mock(async () => undefined),
     setTaskTargetBranch: mock(async () => undefined),
     deleteTask: mock(async () => undefined),
-    closeTask: mock(async () => undefined),
+    closeTask: mock(async (taskId: string) =>
+      createWireTaskCardFixture({ id: taskId, status: "closed" }),
+    ),
     removeTaskWorktree: mock(async () => {}),
-    resetTaskImplementation: mock(async () => undefined),
-    resetTask: mock(async () => undefined),
-    transitionTask: mock(async () => undefined),
-    humanRequestChangesTask: mock(async () => undefined),
+    resetTaskImplementation: mock(async (taskId: string) =>
+      createWireTaskCardFixture({ id: taskId }),
+    ),
+    resetTask: mock(async (taskId: string) => createWireTaskCardFixture({ id: taskId })),
     detectingPullRequestTaskIds: new Set<string>(),
     linkingMergedPullRequestTaskId: null,
     unlinkingPullRequestTaskIds: new Set<string>(),

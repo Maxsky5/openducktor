@@ -99,7 +99,7 @@ The OpenDucktor host owns SQLite task-store readiness, workflow transitions, and
 - `odt_delete_task_artifact`
 - `odt_update_task`
 
-The remaining `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server.
+The remaining `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server: `odt_apply_workflow_event` sends a workflow event that the task workflow declares for agents, and `odt_set_pull_request` saves the pull request of a task. See [External MCP](../../docs/external-mcp.md#send-a-workflow-event).
 
 The `odt_browser_*` tools are only for agent sessions that OpenDucktor starts. The server lists them only when `ODT_ALLOWED_TOOLS` names them, so external clients never get them. See [External MCP](../../docs/external-mcp.md#browser-tools).
 
@@ -237,7 +237,7 @@ Each read returns complete content or fails. Reads accept no byte offset, size, 
 
 Use `odt_set_task_artifact` with required `code` to save any artifact. The result is `{ artifact }` with the saved public metadata and no content copy.
 
-For workflow codes `spec`, `plan`, and `qaReport`, put complete Markdown directly in `content`. The format is fixed as `text/markdown`; Set also accepts UTF-8 Markdown bytes in `dataBase64`. Workflow codes reject `name`, `fileName`, and `mediaType`. Code `qaReport` also requires an approved or rejected `verdict`; other codes reject `verdict`. Workflow writes keep their existing domain operations, provenance, and status transitions. Build completion still uses `odt_build_completed`.
+For workflow codes `spec`, `plan`, and `qaReport`, put complete Markdown directly in `content`. The format is fixed as `text/markdown`; Set also accepts UTF-8 Markdown bytes in `dataBase64`. Workflow codes reject `name`, `fileName`, and `mediaType`. Code `qaReport` also requires an approved or rejected `verdict`; other codes reject `verdict`. Workflow writes keep their existing domain operations, provenance, and status transitions. Build completion uses `odt_apply_workflow_event` with `eventId: "build-completed"`.
 
 For free artifacts, `code` selects the saved artifact. If the code does not exist, supply `name`, `fileName`, `mediaType`, and one content field to create it. Use a plain string in `content` for text or padded base64 in `dataBase64` for exact file bytes. Send only one content field. Every content change requires `fileName` and `mediaType`; `mediaType` selects the format. For an existing code, supply `name` to rename it, content fields to replace its content, or both. A rename omits both content fields and needs no current bytes. The decoded limit is 10 MiB. A combined update commits once. Use `odt_delete_task_artifact` with `code` to delete one free artifact. Delete rejects reserved workflow codes.
 

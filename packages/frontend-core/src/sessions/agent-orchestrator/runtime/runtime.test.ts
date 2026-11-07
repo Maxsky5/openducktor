@@ -1,13 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { type RepoConfig, type SettingsSnapshot } from "@openducktor/contracts";
-import { createClientQueryClient } from "../../../connection/client-query-client";
-import { createSettingsSnapshotFixture } from "../../../test-support/shared-test-fixtures";
-import {
-  loadRepoDefaultModel,
-  loadRepoPromptOverrides,
-  requireConfiguredRuntimeKind,
-} from "./runtime";
-import { BUILTIN_PROMPT_TEMPLATE_IDS } from "@openducktor/workflows";
+import { type RepoConfig } from "@openducktor/contracts";
+import { loadRepoDefaultModel, requireConfiguredRuntimeKind } from "./runtime";
 
 const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
@@ -21,7 +14,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   },
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
@@ -29,14 +22,6 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   agentDefaults: {},
   ...overrides,
 });
-
-const createPromptOverrideRepoConfig = (
-  promptOverrides: RepoConfig["promptOverrides"],
-): RepoConfig => createRepoConfig({ promptOverrides });
-
-const createPromptOverrideSettingsSnapshot = (
-  globalPromptOverrides: SettingsSnapshot["globalPromptOverrides"],
-): SettingsSnapshot => createSettingsSnapshotFixture({ globalPromptOverrides });
 
 describe("agent-orchestrator-runtime", () => {
   test.each([null, undefined])(
@@ -77,62 +62,5 @@ describe("agent-orchestrator-runtime", () => {
       variant: "high",
       profileId: "builder",
     });
-  });
-
-  test("merges global and repository prompt overrides", async () => {
-    const overrides = await loadRepoPromptOverrides("/tmp/repo", {
-      queryClient: createClientQueryClient(),
-      loadRepoConfig: async () =>
-        createPromptOverrideRepoConfig({
-          "kickoff.planner_initial": {
-            template: "repo planner {{task.id}}",
-            baseVersion: 1,
-            enabled: true,
-          },
-          "kickoff.spec_initial": {
-            template: "repo disabled {{task.id}}",
-            baseVersion: 1,
-            enabled: false,
-          },
-        }),
-      loadSettingsSnapshot: async () =>
-        createPromptOverrideSettingsSnapshot({
-          "kickoff.spec_initial": {
-            template: "global kickoff {{task.id}}",
-            baseVersion: 1,
-            enabled: true,
-          },
-        }),
-    });
-
-    expect(overrides["kickoff.spec_initial"]?.template).toBe("global kickoff {{task.id}}");
-    expect(overrides["kickoff.planner_initial"]?.template).toBe("repo planner {{task.id}}");
-  });
-
-  test("resolves every prompt override deterministically", async () => {
-    const globalPromptOverrides = Object.fromEntries(
-      BUILTIN_PROMPT_TEMPLATE_IDS.map((templateId) => [
-        templateId,
-        { template: `global ${templateId}`, baseVersion: 1, enabled: true },
-      ]),
-    );
-    const repoPromptOverrides = Object.fromEntries(
-      BUILTIN_PROMPT_TEMPLATE_IDS.map((templateId, index) => [
-        templateId,
-        { template: `repo ${templateId}`, baseVersion: 1, enabled: index % 2 === 0 },
-      ]),
-    );
-
-    const overrides = await loadRepoPromptOverrides("/tmp/repo", {
-      queryClient: createClientQueryClient(),
-      loadRepoConfig: async () => createPromptOverrideRepoConfig(repoPromptOverrides),
-      loadSettingsSnapshot: async () => createPromptOverrideSettingsSnapshot(globalPromptOverrides),
-    });
-
-    for (const [index, templateId] of BUILTIN_PROMPT_TEMPLATE_IDS.entries()) {
-      expect(overrides[templateId]?.template).toBe(
-        index % 2 === 0 ? `repo ${templateId}` : `global ${templateId}`,
-      );
-    }
   });
 });

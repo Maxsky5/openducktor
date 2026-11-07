@@ -121,7 +121,7 @@ const createHarness = (
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath: "/repo",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       defaultTargetBranch: { branch: "main" },
     }),
     taskStore: {
@@ -398,83 +398,92 @@ describe("task completion recovery and reset", () => {
     expect(harness.live.snapshot(input.repoPath).taskCompletions).toEqual([]);
   });
 
-  for (const reset of ["resetTask", "resetImplementation"] as const) {
-    const resetTask = (service: ReturnType<typeof createHarness>["service"]) =>
-      reset === "resetTask"
-        ? service.resetTask(input).pipe(Effect.asVoid)
-        : service.resetImplementation(input).pipe(Effect.asVoid);
-    test.each(["none", "clear merge", "transition", "publish"] as const)(
-      `${reset} invalidates completion at the committed merge clear: %s`,
-      async (failure) => {
-        const harness = createHarness();
-        const first = await Effect.runPromise(
-          harness.service.directMerge(mergeInput).pipe(Effect.flip),
-        );
-        expect(first).toMatchObject({
-          _tag: "TaskMutationProgressFailure",
-          failure: { message: expect.stringContaining("Completion cleanup failed") },
-        });
-        expect(harness.directMerge()).toBeDefined();
-        expect(harness.mergeCalls()).toBe(1);
-        const priorObservations = structuredClone(harness.observations);
-        const priorLive = harness.live.snapshot(input.repoPath).taskCompletions;
-        expect(priorLive[0]?.failure?.stage).toBe("cleanup");
+  test("resetTask waits until the recorded merge is published or the task is closed", async () => {
+    const harness = createHarness();
+    await Effect.runPromise(harness.service.directMerge(mergeInput).pipe(Effect.flip));
+    expect(harness.directMerge()).toBeDefined();
+    harness.allowCleanup();
+    const rejected = await Effect.runPromise(harness.service.resetTask(input).pipe(Effect.flip));
+    expect(rejected).toMatchObject({
+      message: expect.stringContaining("has a local direct merge that is not published"),
+    });
+    expect(harness.directMerge()).toBeDefined();
+    expect(harness.status()).toBe("human_review");
+  });
 
-        harness.allowCleanup();
-        harness.failReset(failure);
-        const result = await Effect.runPromise(resetTask(harness.service).pipe(Effect.result));
-        if (failure === "none") expect(result._tag).toBe("Success");
-        else
-          expect(result).toMatchObject({
-            _tag: "Failure",
-            failure: { _tag: "TaskMutationProgressFailure" },
-          });
-        if (failure === "clear merge") {
-          expect(harness.directMerge()).toBeDefined();
-          expect(harness.observations).toEqual(priorObservations);
-          expect(harness.live.snapshot(input.repoPath).taskCompletions).toEqual(priorLive);
-          harness.failReset("none");
-          await Effect.runPromise(resetTask(harness.service));
-        }
-        expect(harness.directMerge()).toBeUndefined();
-        const resetObservations = harness.live.snapshot(input.repoPath).taskCompletions;
-
-        harness.failReset("none");
-        harness.rebuild();
-        const rebuilt = await Effect.runPromise(harness.service.directMerge(mergeInput));
-        expect(rebuilt).toMatchObject({ outcome: "completed", task: { status: "closed" } });
-        expect(harness.mergeCalls()).toBe(2);
-        expect(resetObservations).toEqual([]);
-      },
-    );
-    test(`${reset} settles committed invalidation before releasing its lifecycle guard on interruption`, async () => {
-      const entered = Deferred.makeUnsafe<void>();
-      const release = Deferred.makeUnsafe<void>();
-      const harness = createHarness(
-        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
-      );
-      await Effect.runPromise(harness.service.directMerge(mergeInput).pipe(Effect.flip));
-      harness.allowCleanup();
-      const worker = Effect.runFork(resetTask(harness.service));
-      await Effect.runPromise(Deferred.await(entered));
-      expect(harness.directMerge()).toBeUndefined();
-      const conflicting = await Effect.runPromise(
+  const resetTask = (service: ReturnType<typeof createHarness>["service"]) =>
+    service.applyTaskEvent({ ...input, eventId: "reset-implementation" }).pipe(Effect.asVoid);
+  test.each(["none", "clear merge", "transition", "publish"] as const)(
+    `resetImplementation invalidates completion at the committed merge clear: %s`,
+    async (failure) => {
+      const harness = createHarness();
+      const first = await Effect.runPromise(
         harness.service.directMerge(mergeInput).pipe(Effect.flip),
       );
-      expect(conflicting).toMatchObject({
-        message: expect.stringContaining("another lifecycle operation"),
+      expect(first).toMatchObject({
+        _tag: "TaskMutationProgressFailure",
+        failure: { message: expect.stringContaining("Completion cleanup failed") },
       });
+      expect(harness.directMerge()).toBeDefined();
       expect(harness.mergeCalls()).toBe(1);
-      const interrupted = Effect.runPromise(Fiber.interrupt(worker));
-      Effect.runSync(Deferred.succeed(release, undefined));
-      await interrupted;
-      expect(harness.live.snapshot(input.repoPath).taskCompletions).toEqual([]);
+      const priorObservations = structuredClone(harness.observations);
+      const priorLive = harness.live.snapshot(input.repoPath).taskCompletions;
+      expect(priorLive[0]?.failure?.stage).toBe("cleanup");
+
+      harness.allowCleanup();
+      harness.failReset(failure);
+      const result = await Effect.runPromise(resetTask(harness.service).pipe(Effect.result));
+      if (failure === "none") expect(result._tag).toBe("Success");
+      else
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: { _tag: "TaskMutationProgressFailure" },
+        });
+      if (failure === "clear merge") {
+        expect(harness.directMerge()).toBeDefined();
+        expect(harness.observations).toEqual(priorObservations);
+        expect(harness.live.snapshot(input.repoPath).taskCompletions).toEqual(priorLive);
+        harness.failReset("none");
+        await Effect.runPromise(resetTask(harness.service));
+      }
+      expect(harness.directMerge()).toBeUndefined();
+      const resetObservations = harness.live.snapshot(input.repoPath).taskCompletions;
+
+      harness.failReset("none");
       harness.rebuild();
-      expect(await Effect.runPromise(harness.service.directMerge(mergeInput))).toMatchObject({
-        outcome: "completed",
-        task: { status: "closed" },
-      });
+      const rebuilt = await Effect.runPromise(harness.service.directMerge(mergeInput));
+      expect(rebuilt).toMatchObject({ outcome: "completed", task: { status: "closed" } });
       expect(harness.mergeCalls()).toBe(2);
+      expect(resetObservations).toEqual([]);
+    },
+  );
+  test("resetImplementation settles committed invalidation before releasing its lifecycle guard on interruption", async () => {
+    const entered = Deferred.makeUnsafe<void>();
+    const release = Deferred.makeUnsafe<void>();
+    const harness = createHarness(
+      Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+    );
+    await Effect.runPromise(harness.service.directMerge(mergeInput).pipe(Effect.flip));
+    harness.allowCleanup();
+    const worker = Effect.runFork(resetTask(harness.service));
+    await Effect.runPromise(Deferred.await(entered));
+    expect(harness.directMerge()).toBeUndefined();
+    const conflicting = await Effect.runPromise(
+      harness.service.directMerge(mergeInput).pipe(Effect.flip),
+    );
+    expect(conflicting).toMatchObject({
+      message: expect.stringContaining("another lifecycle operation"),
     });
-  }
+    expect(harness.mergeCalls()).toBe(1);
+    const interrupted = Effect.runPromise(Fiber.interrupt(worker));
+    Effect.runSync(Deferred.succeed(release, undefined));
+    await interrupted;
+    expect(harness.live.snapshot(input.repoPath).taskCompletions).toEqual([]);
+    harness.rebuild();
+    expect(await Effect.runPromise(harness.service.directMerge(mergeInput))).toMatchObject({
+      outcome: "completed",
+      task: { status: "closed" },
+    });
+    expect(harness.mergeCalls()).toBe(2);
+  });
 });

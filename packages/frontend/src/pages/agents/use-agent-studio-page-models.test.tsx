@@ -1,3 +1,4 @@
+import type { AgentChatSurfaceModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import { MemoryRouter } from "react-router";
 import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
 import { createAgentChatSendFixture } from "@openducktor/frontend-core/test-support/agent-chat-send-fixture";
@@ -5,7 +6,6 @@ import { describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import { AgentChatComposer } from "@/components/features/agents/agent-chat/agent-chat-composer";
 import { AgentChatSettingsProvider } from "@/components/features/agents/agent-chat/agent-chat-settings-context";
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
@@ -43,7 +43,7 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { ROLE_OPTIONS } from "./agents-page-constants";
+import { TEST_ROLE_OPTIONS as ROLE_OPTIONS } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import {
   type AgentStudioSelectedSessionContextInput,
@@ -300,7 +300,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       role: selectedSessionCore.role,
       session: selectedSessionCore.selectedSessionIdentity,
     },
-    ...overrides.composer,
+    ...overrides.composer!,
   };
   const selectedSession = {
     ...buildAgentStudioSelectedSessionContext({
@@ -411,7 +411,7 @@ const createHookHarness = (initialProps: HookArgs) => {
   };
 };
 
-const createAgentChatThreadElement = (model: AgentChatModel) =>
+const createAgentChatThreadElement = (model: AgentChatSurfaceModel) =>
   createElement(
     AgentChatSettingsProvider,
     { value: model.chatSettings },
@@ -427,14 +427,14 @@ describe("useAgentStudioPageModels", () => {
     const harness = createHookHarness(args);
     try {
       await harness.mount();
-      const composer = harness.getLatest().agentChatModel.composer;
+      const composer = harness.getLatest().agentChatModel.composer!;
       expect(composer.canSend).toBe(false);
       expect(composer.isReadOnly).toBe(false);
       expect(composer.readOnlyReason).toBeNull();
       args.selectedSession.selectedSession.preparation = { ready: true, error: null };
       args.sessionActions.messageDelivery = createAgentChatSendFixture({ canSend: true });
       await harness.update(args);
-      const prepared = harness.getLatest().agentChatModel.composer;
+      const prepared = harness.getLatest().agentChatModel.composer!;
       expect(prepared.canSend).toBe(true);
       expect(prepared.isReadOnly).toBe(false);
       expect(prepared.selectedModelSelection).toEqual(composer.selectedModelSelection);
@@ -573,7 +573,7 @@ describe("useAgentStudioPageModels", () => {
       );
       try {
         await harness.mount();
-        const composer = harness.getLatest().agentChatModel.composer;
+        const composer = harness.getLatest().agentChatModel.composer!;
         expect(composer.slashCommands).toEqual([command]);
         expect(composer.slashCommandsError).toBeNull();
         expect(composer.isReadOnly).toBe(false);
@@ -600,7 +600,7 @@ describe("useAgentStudioPageModels", () => {
     );
     try {
       await harness.mount();
-      const composer = harness.getLatest().agentChatModel.composer;
+      const composer = harness.getLatest().agentChatModel.composer!;
       expect(composer.supportsSubagentReferences).toBe(true);
       expect(composer.subagents).toEqual([{ id: "research", name: "research" }]);
       expect(composer.subagentsError).toBeNull();
@@ -624,8 +624,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const state = harness.getLatest();
-    expect(state.agentChatModel.composer.isReadOnly).toBe(true);
-    expect(state.agentChatModel.composer.readOnlyReason).toBe("Select a task to begin.");
+    expect(state.agentChatModel.composer!.isReadOnly).toBe(true);
+    expect(state.agentChatModel.composer!.readOnlyReason).toBe("Select a task to begin.");
     expect(state.agentChatModel.thread.emptyState?.title).toBe("Select a task to begin.");
 
     await harness.unmount();
@@ -658,17 +658,17 @@ describe("useAgentStudioPageModels", () => {
 
     const state = harness.getLatest();
     expect(state.agentStudioHeaderModel.taskId).toBe("task-1");
-    expect(state.agentChatModel.composer.contextUsage).toEqual({
+    expect(state.agentChatModel.composer!.contextUsage).toEqual({
       totalTokens: 12,
       contextWindow: 100,
     });
-    expect(state.agentChatModel.composer.draftScope.persistence).not.toBeNull();
+    expect(state.agentChatModel.composer!.draftScope.persistence).not.toBeNull();
     expect(state.agentChatModel.thread.isInteractionEnabled).toBe(true);
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
     expect(state.agentChatModel.chatSettings?.showThinkingMessages).toBe(false);
 
-    await state.agentChatModel.composer.onSend(createComposerDraft("message"), "default");
-    state.agentChatModel.composer.onStopSession();
+    await state.agentChatModel.composer!.onSend(createComposerDraft("message"), "default");
+    state.agentChatModel.composer!.onStopSession();
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onStopSession).toHaveBeenCalledTimes(1);
@@ -726,7 +726,7 @@ describe("useAgentStudioPageModels", () => {
     expect(chatModel.thread.transcript.session).toBeNull();
     expect(chatModel.thread.isSessionWorking).toBe(false);
     expect(chatModel.thread.sessionAccentColor).toBe("var(--odt-runtime-accent-codex)");
-    expect(chatModel.composer.accentColor).toBe("var(--odt-runtime-accent-codex)");
+    expect(chatModel.composer!.accentColor).toBe("var(--odt-runtime-accent-codex)");
 
     await harness.unmount();
   });
@@ -765,14 +765,14 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
 
-    const composer = harness.getLatest().agentChatModel.composer;
+    const composer = harness.getLatest().agentChatModel.composer!;
     expect(composer.accentColor).toBe("var(--odt-runtime-accent-codex)");
 
     const html = renderToStaticMarkup(
       createElement(
         AgentChatSettingsProvider,
         { value: harness.getLatest().agentChatModel.chatSettings },
-        createElement(AgentChatComposer, { model: { ...composer, isSessionWorking: true } }),
+        createElement(AgentChatComposer, { model: { ...composer!, isSessionWorking: true } }),
       ),
     );
     expect(html).toContain("--odt-border-ray-color:var(--odt-runtime-accent-codex)");
@@ -870,11 +870,11 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
     const state = harness.getLatest();
-    state.agentChatModel.composer.scrollToBottomOnSendRef.current = scrollToBottomOnSend;
+    state.agentChatModel.composer!.scrollToBottomOnSendRef.current = scrollToBottomOnSend;
 
     let sendPromise: Promise<AgentChatSendResult> | null = null;
     await act(async () => {
-      sendPromise = state.agentChatModel.composer.onSend(createComposerDraft("message"), "steer");
+      sendPromise = state.agentChatModel.composer!.onSend(createComposerDraft("message"), "steer");
       await Promise.resolve();
     });
 
@@ -1500,22 +1500,22 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
     const initialState = harness.getLatest();
     const initialThreadModel = initialState.agentChatModel.thread;
-    const initialComposerModel = initialState.agentChatModel.composer;
+    const initialComposerModel = initialState.agentChatModel.composer!;
 
     await harness.update({
       ...baseProps,
       composer: {
-        ...baseProps.composer,
+        ...baseProps.composer!,
         draftScope: draftScopeFixture("draft-update"),
       },
     });
 
     const nextState = harness.getLatest();
     expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
-    expect(nextState.agentChatModel.composer).not.toBe(initialComposerModel);
-    expect(nextState.agentChatModel.composer.draftScope.key).toBe(
+    expect(nextState.agentChatModel.composer!).not.toBe(initialComposerModel);
+    expect(nextState.agentChatModel.composer!.draftScope.key).toBe(
       agentStudioChatDraftScopeKey(
-        baseProps.composer.workspaceId,
+        baseProps.composer!.workspaceId,
         draftScopeFixture("draft-update"),
       ),
     );
@@ -1538,7 +1538,7 @@ describe("useAgentStudioPageModels", () => {
     );
 
     await harness.mount();
-    const initialPersistence = harness.getLatest().agentChatModel.composer.draftScope.persistence;
+    const initialPersistence = harness.getLatest().agentChatModel.composer!.draftScope.persistence;
 
     await harness.update(
       createHookArgs({
@@ -1549,7 +1549,7 @@ describe("useAgentStudioPageModels", () => {
       }),
     );
 
-    expect(harness.getLatest().agentChatModel.composer.draftScope.persistence).toBe(
+    expect(harness.getLatest().agentChatModel.composer!.draftScope.persistence).toBe(
       initialPersistence,
     );
     await harness.unmount();
@@ -1571,7 +1571,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
     const initialState = harness.getLatest();
     const initialThreadModel = initialState.agentChatModel.thread;
-    const initialComposerModel = initialState.agentChatModel.composer;
+    const initialComposerModel = initialState.agentChatModel.composer!;
 
     await harness.run((state) => {
       state.agentChatModel.thread.onToggleTodoPanel();
@@ -1579,7 +1579,7 @@ describe("useAgentStudioPageModels", () => {
 
     const nextState = harness.getLatest();
     expect(nextState.agentChatModel.thread).not.toBe(initialThreadModel);
-    expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
+    expect(nextState.agentChatModel.composer!).toBe(initialComposerModel);
     expect(nextState.agentChatModel.thread.todoPanelCollapsed).toBe(false);
 
     await harness.unmount();
@@ -1602,7 +1602,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
     const initialState = harness.getLatest();
     const initialThreadModel = initialState.agentChatModel.thread;
-    const initialComposerModel = initialState.agentChatModel.composer;
+    const initialComposerModel = initialState.agentChatModel.composer!;
 
     await harness.update({
       ...baseProps,
@@ -1611,7 +1611,7 @@ describe("useAgentStudioPageModels", () => {
 
     const nextState = harness.getLatest();
     expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
-    expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
+    expect(nextState.agentChatModel.composer!).toBe(initialComposerModel);
     expect(nextState.agentChatModel.chatSettings?.showThinkingMessages).toBe(true);
 
     await harness.unmount();
@@ -1634,7 +1634,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
     const initialState = harness.getLatest();
     const initialThreadModel = initialState.agentChatModel.thread;
-    const initialComposerModel = initialState.agentChatModel.composer;
+    const initialComposerModel = initialState.agentChatModel.composer!;
 
     await harness.update({
       ...baseProps,
@@ -1643,7 +1643,7 @@ describe("useAgentStudioPageModels", () => {
 
     const nextState = harness.getLatest();
     expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
-    expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
+    expect(nextState.agentChatModel.composer!).toBe(initialComposerModel);
     expect(nextState.agentChatModel.chatSettings?.expandFileDiffsByDefault).toBe(false);
 
     await harness.unmount();
@@ -1665,7 +1665,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
     const initialState = harness.getLatest();
     const initialThreadModel = initialState.agentChatModel.thread;
-    const initialComposerModel = initialState.agentChatModel.composer;
+    const initialComposerModel = initialState.agentChatModel.composer!;
 
     const approvalUpdateProps = {
       ...baseProps,
@@ -1687,7 +1687,7 @@ describe("useAgentStudioPageModels", () => {
     const approvalState = harness.getLatest();
     const approvalThreadModel = approvalState.agentChatModel.thread;
     expect(approvalThreadModel).not.toBe(initialThreadModel);
-    expect(approvalState.agentChatModel.composer).toBe(initialComposerModel);
+    expect(approvalState.agentChatModel.composer!).toBe(initialComposerModel);
     expect(approvalThreadModel.isSubmittingApprovalByRequestId["perm-1"]).toBe(true);
 
     await harness.update({
@@ -1708,7 +1708,7 @@ describe("useAgentStudioPageModels", () => {
 
     const questionState = harness.getLatest();
     expect(questionState.agentChatModel.thread).not.toBe(approvalThreadModel);
-    expect(questionState.agentChatModel.composer).toBe(initialComposerModel);
+    expect(questionState.agentChatModel.composer!).toBe(initialComposerModel);
     expect(questionState.agentChatModel.thread.isSubmittingQuestionByRequestId["q-1"]).toBe(true);
 
     await harness.unmount();
@@ -2031,7 +2031,7 @@ describe("useAgentStudioPageModels", () => {
     const harness = createHookHarness(baseProps);
 
     await harness.mount();
-    const initialComposerModel = harness.getLatest().agentChatModel.composer;
+    const initialComposerModel = harness.getLatest().agentChatModel.composer!;
     const selectedSessionKey = agentSessionIdentityKey(selectedSessionIdentity);
 
     const sameSessionIdNewRef = createSession("external-1", {
@@ -2055,7 +2055,7 @@ describe("useAgentStudioPageModels", () => {
       }),
     );
 
-    const nextComposerModel = harness.getLatest().agentChatModel.composer;
+    const nextComposerModel = harness.getLatest().agentChatModel.composer!;
     expect(initialComposerModel.displayedSessionKey).toBe(selectedSessionKey);
     expect(nextComposerModel.displayedSessionKey).toBe(selectedSessionKey);
     expect(nextComposerModel.isSessionWorking).toBe(initialComposerModel.isSessionWorking);
@@ -2091,7 +2091,7 @@ describe("useAgentStudioPageModels", () => {
     const harness = createHookHarness(baseProps);
 
     await harness.mount();
-    const initialComposerModel = harness.getLatest().agentChatModel.composer;
+    const initialComposerModel = harness.getLatest().agentChatModel.composer!;
     expect(initialComposerModel.isWaitingInput).toBe(false);
 
     const waitingSession = createSession("external-1", {
@@ -2130,7 +2130,7 @@ describe("useAgentStudioPageModels", () => {
       }),
     );
 
-    const nextComposerModel = harness.getLatest().agentChatModel.composer;
+    const nextComposerModel = harness.getLatest().agentChatModel.composer!;
     expect(nextComposerModel).not.toBe(initialComposerModel);
     expect(nextComposerModel.isWaitingInput).toBe(true);
     expect(nextComposerModel.waitingInputPlaceholder).toBe(
@@ -2170,8 +2170,8 @@ describe("useAgentStudioPageModels", () => {
 
     const state = harness.getLatest();
     expect(state.agentChatModel.thread.emptyState?.actionLabel).toBeUndefined();
-    expect(state.agentChatModel.composer.isReadOnly).toBe(true);
-    expect(state.agentChatModel.composer.readOnlyReason).toContain("Planner is unavailable");
+    expect(state.agentChatModel.composer!.isReadOnly).toBe(true);
+    expect(state.agentChatModel.composer!.readOnlyReason).toContain("Planner is unavailable");
 
     await harness.unmount();
   });
@@ -2214,9 +2214,9 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const state = harness.getLatest();
-    expect(state.agentChatModel.composer.isReadOnly).toBe(false);
-    expect(state.agentChatModel.composer.readOnlyReason).toBeNull();
-    expect(state.agentChatModel.composer.canStopSession).toBe(true);
+    expect(state.agentChatModel.composer!.isReadOnly).toBe(false);
+    expect(state.agentChatModel.composer!.readOnlyReason).toBeNull();
+    expect(state.agentChatModel.composer!.canStopSession).toBe(true);
 
     await harness.unmount();
   });

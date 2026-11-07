@@ -1,6 +1,10 @@
 import { workspaceRefFixture } from "./test-support/workspace-ref-fixture";
 import { savedTestAuthorizationStore } from "../../host-client/src/remote/test-support/authorization";
 import { createFakeHostChannel } from "../../host-client/src/remote/test-support/host-channel";
+import {
+  builtinWorkflowCatalogFixture,
+  builtinWorkspaceWorkflowFixture,
+} from "./test-support/workflow-fixtures";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { createHostClient } from "@openducktor/host-client";
 import { QueryObserver } from "@tanstack/react-query";
@@ -17,13 +21,13 @@ import {
   createChannelTestTransport,
   testRemoteDescriptor,
 } from "./test-support/remote-channel-transport";
-import { createTaskCardFixture } from "./test-support/shared-test-fixtures";
+import { createTaskCardFixture, toWireTaskCard } from "./test-support/shared-test-fixtures";
 import {
   createTestClientConnection,
   createTestHostConnection,
 } from "./test-support/test-client-connection";
 import { waitForExpectation } from "./test-support/wait-for-expectation";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const REPO_PATH = "/repo";
 const chatDraftIdentity = { workspaceId: "workspace-1", workspaceSessionId: "session-1" };
@@ -42,7 +46,7 @@ const inlineComment = {
 };
 
 const hostWithTasks = (tasks: TaskCard[]) =>
-  createTestHostConnection({ client: { tasksList: async () => tasks } });
+  createTestHostConnection({ client: { tasksList: async () => tasks.map(toWireTaskCard) } });
 
 describe("frontend core without a DOM", () => {
   test("runs without browser globals", () => {
@@ -95,7 +99,7 @@ describe("frontend core without a DOM", () => {
   });
 
   test("drops a late response of a disposed connection", async () => {
-    const lateTasks = Promise.withResolvers<TaskCard[]>();
+    const lateTasks = Promise.withResolvers<ReturnType<typeof toWireTaskCard>[]>();
     const connectionA = createTestClientConnection({
       host: createTestHostConnection({ client: { tasksList: () => lateTasks.promise } }),
     });
@@ -105,7 +109,7 @@ describe("frontend core without a DOM", () => {
       .catch((cause: unknown) => cause);
 
     await connectionA.dispose();
-    lateTasks.resolve([createTaskCardFixture({ id: "late-task" })]);
+    lateTasks.resolve([toWireTaskCard(createTaskCardFixture({ id: "late-task" }))]);
     await lateRead;
 
     expect(
@@ -274,6 +278,8 @@ const createRemoteFixture = () => {
   let taskReads = 0;
   const channel = createFakeHostChannel({
     invoke: (command) => {
+      if (command === "workflow_catalog_get") return { result: builtinWorkflowCatalogFixture };
+      if (command === "workspace_workflow_get") return { result: builtinWorkspaceWorkflowFixture };
       if (command !== "tasks_list") throw new Error(`Unexpected command: ${command}`);
       taskReads += 1;
       return { result: [] };

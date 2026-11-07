@@ -5,7 +5,7 @@ import type { TaskCloseImpact, TaskWorktreeImpact } from "./use-task-close-impac
 /** The fixed text of a task close and its cleanup choice. Every client shows the same text. */
 export const TASK_CLOSE_COPY = {
   title: "Close task",
-  description: "Move to Done and keep the task's history.",
+  description: "Close the task and keep its history.",
   failureTitle: "Close failed",
   removeWorktreeLabel: "Remove worktree and branch",
   noCleanupTargets: "No task worktree or local branch remains.",
@@ -14,9 +14,8 @@ export const TASK_CLOSE_COPY = {
   retry: "Retry",
   /** What a close does not do, and what it keeps. */
   closeNotes: [
-    "Keep artifacts, session history and the pull request link.",
-    "Artifacts you added become read-only. Spec, plan and QA reports stay editable.",
     "Closing does not merge code or change a pull request.",
+    "The task keeps its artifacts, session history, and pull request link. Workflow rules control artifact editing.",
   ],
 } as const;
 

@@ -1,12 +1,14 @@
+import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { createSessionMessagesFixture } from "../../../test-support/session-message-test-helpers";
 import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
 } from "../../../test-support/shared-test-fixtures";
 import type { AgentSessionState } from "../../../types/agent-orchestrator";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 export const createTaskFixture = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+  ...createTaskCardFixture(),
   id: "task-1",
   title: "Task",
   description: "",

@@ -22,6 +22,7 @@ import { createHookHarness } from "../../../test-support/react-hook-harness";
 import {
   createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
+  createWireTaskCardFixture,
 } from "../../../test-support/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "../../../types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
@@ -102,7 +103,14 @@ const readyRuntimeStatus = createHostRuntimeStatusContextValue();
 // Each mount gets its own connection, so each test has an isolated query cache and host fake.
 const createWrapper = (client: Partial<HostClient> = {}) =>
   function Wrapper({ children }: PropsWithChildren) {
-    const [connection] = useState(() => createTestClientConnection({ client }));
+    const [connection] = useState(() =>
+      createTestClientConnection({
+        client: {
+          tasksListAll: async () => [createWireTaskCardFixture({ id: "task-1" })],
+          ...client,
+        },
+      }),
+    );
     return createElement(
       ClientConnectionProvider,
       { connection },

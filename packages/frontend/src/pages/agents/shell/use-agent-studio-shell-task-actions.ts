@@ -1,3 +1,4 @@
+import type { ResolvedTaskCard } from "@openducktor/workflows";
 import { useCallback, useMemo } from "react";
 import type { AgentStudioTaskQuickAction } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
@@ -9,7 +10,7 @@ import {
 import type { CloseTaskOptions } from "@openducktor/frontend-core/types/task-close";
 
 type UseAgentStudioShellTaskActionsArgs = {
-  selectedTaskId: string | null;
+  selectedTask: ResolvedTaskCard | null;
   linkingMergedPullRequestTaskId: ReturnType<
     typeof useTasksState
   >["linkingMergedPullRequestTaskId"];
@@ -29,7 +30,7 @@ export type AgentStudioShellTaskActionsModel = {
 };
 
 export function useAgentStudioShellTaskActions({
-  selectedTaskId,
+  selectedTask,
   linkingMergedPullRequestTaskId,
   pendingMergedPullRequest,
   syncPullRequests,
@@ -52,18 +53,18 @@ export function useAgentStudioShellTaskActions({
     cancelLinkMergedPullRequest();
   }, [cancelLinkMergedPullRequest]);
 
-  const { onOpenTaskDetails, onHumanApprove, onConfirmTaskAction } =
-    useRequiredTaskWorkflowActions();
+  const { onOpenTaskDetails, runAction, onConfirmTaskAction } = useRequiredTaskWorkflowActions();
+  const selectedTaskId = selectedTask?.id ?? null;
   const openTaskDetails = useCallback((): void => {
     if (selectedTaskId) onOpenTaskDetails(selectedTaskId);
   }, [onOpenTaskDetails, selectedTaskId]);
   const runTaskQuickAction = useCallback(
     (action: AgentStudioTaskQuickAction): void => {
-      if (!selectedTaskId) return;
-      if (action === "human_approve") onHumanApprove(selectedTaskId);
-      else onConfirmTaskAction(selectedTaskId, "close");
+      if (!selectedTask) return;
+      if (action.kind === "core") onConfirmTaskAction(selectedTask.id, action.action.confirmation);
+      else runAction(selectedTask, action.action);
     },
-    [onConfirmTaskAction, onHumanApprove, selectedTaskId],
+    [onConfirmTaskAction, runAction, selectedTask],
   );
 
   const mergedPullRequestModal = useAgentStudioPullRequestModalModel({

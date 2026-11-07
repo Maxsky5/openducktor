@@ -1,11 +1,12 @@
 import type { RepoPromptOverrides } from "@openducktor/contracts";
-import { mergePromptOverrides } from "@openducktor/workflows";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import type { QueryClient } from "@tanstack/react-query";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "./workspace";
 
 export const loadEffectivePromptOverrides = async (
   workspaceId: string,
   queryClient: QueryClient,
+  workflow: TaskWorkflow,
 ): Promise<RepoPromptOverrides> => {
   const normalizedWorkspaceId = workspaceId.trim();
   if (normalizedWorkspaceId.length === 0) {
@@ -16,7 +17,7 @@ export const loadEffectivePromptOverrides = async (
     loadSettingsSnapshotFromQuery(queryClient),
   ]);
 
-  return mergePromptOverrides({
+  return workflow.prompts.mergeOverrides({
     globalOverrides: snapshot.globalPromptOverrides,
     repoOverrides: repoConfig.promptOverrides,
   });

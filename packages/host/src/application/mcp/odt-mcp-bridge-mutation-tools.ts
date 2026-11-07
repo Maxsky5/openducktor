@@ -1,11 +1,12 @@
 import {
-  type BuildCompletedResult,
+  type ApplyWorkflowEventResult,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType, z } from "zod";
-import type { TaskService } from "../tasks/task-service";
+import { TaskPolicyError } from "../../domain/task";
+import { HostValidationError } from "../../effect/host-errors";
 import { executeSetTaskArtifact, executeDeleteTaskArtifact } from "./odt-mcp-artifact-tools";
 import {
   buildTaskUpdatePatch,
@@ -14,10 +15,12 @@ import {
   parseResponse,
   parseToolInput,
 } from "./odt-mcp-bridge-model";
-import type {
-  OdtMcpBridgeError,
-  OdtMcpMutationToolName,
-  OdtMcpToolContext,
+import {
+  type OdtMcpBridgeError,
+  type OdtMcpMutationToolName,
+  type OdtMcpToolContext,
+  resolveTaskCaller,
+  splitBridgeCaller,
 } from "./odt-mcp-bridge-tool-context";
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
@@ -98,78 +101,65 @@ const executeUpdateTask: OdtMcpMutationHandler = (context, input) =>
     );
   });
 
-const executeBuildBlocked: OdtMcpMutationHandler = (context, input) =>
+/**
+ * Sends an agent event of the task workflow. A managed task session may send only the events that
+ * its role may send, for its own task. A user client may send every agent event.
+ */
+const executeApplyWorkflowEvent: OdtMcpMutationHandler = (context, body) =>
   Effect.gen(function* () {
-    const { taskScopeForWorkspace, taskService } = context;
-    const parsed = yield* parseToolInput(
-      "odt_build_blocked",
-      ODT_TOOL_SCHEMAS.odt_build_blocked,
-      input,
+    const { caller: rawCaller, input: toolBody } = yield* splitBridgeCaller(
+      "odt_apply_workflow_event",
+      body,
     );
-    const { workspaceId, repoPath, task } = yield* taskScopeForWorkspace(
+    const parsed = yield* parseToolInput(
+      "odt_apply_workflow_event",
+      ODT_TOOL_SCHEMAS.odt_apply_workflow_event,
+      toolBody,
+    );
+    const { workspaceId, repoPath, task } = yield* context.taskScopeForWorkspace(
       parsed.workspaceId ?? "",
       parsed.taskId,
     );
-    const updated = yield* taskService.buildBlocked({
-      workspaceId,
-      repoPath,
-      taskId: task.id,
-      reason: parsed.reason,
-    });
-    return yield* parseResponse("odt_build_blocked", RESPONSE_SCHEMAS.odt_build_blocked, {
-      task: mapPublicTask(updated),
-      reason: parsed.reason.trim(),
-    });
-  });
-
-const executeBuildResumed: OdtMcpMutationHandler = (context, input) =>
-  Effect.gen(function* () {
-    const { taskScopeForWorkspace, taskService } = context;
-    const parsed = yield* parseToolInput(
-      "odt_build_resumed",
-      ODT_TOOL_SCHEMAS.odt_build_resumed,
-      input,
-    );
-    const { workspaceId, repoPath, task } = yield* taskScopeForWorkspace(
+    const owner = yield* resolveTaskCaller(
+      context,
+      "odt_apply_workflow_event",
+      rawCaller,
       parsed.workspaceId ?? "",
-      parsed.taskId,
+      task.id,
+      "send workflow events",
     );
-    const updated = yield* taskService.buildResumed({ workspaceId, repoPath, taskId: task.id });
-    return yield* parseResponse("odt_build_resumed", RESPONSE_SCHEMAS.odt_build_resumed, {
-      task: mapPublicTask(updated),
-    });
-  });
-
-const executeBuildCompleted: OdtMcpMutationHandler = (context, input) =>
-  Effect.gen(function* () {
-    const { taskScopeForWorkspace, taskService } = context;
-    const parsed = yield* parseToolInput(
-      "odt_build_completed",
-      ODT_TOOL_SCHEMAS.odt_build_completed,
-      input,
-    );
-    const { workspaceId, repoPath, task } = yield* taskScopeForWorkspace(
-      parsed.workspaceId ?? "",
-      parsed.taskId,
-    );
-    const completionInput: Parameters<TaskService["buildCompleted"]>[0] = {
-      workspaceId,
-      repoPath,
-      taskId: task.id,
-    };
-    if (parsed.summary !== undefined) {
-      completionInput.summary = parsed.summary;
+    const workflow = context.taskWorkflows.forTask(task);
+    const event = workflow.agentEvent(parsed.eventId);
+    if (event === undefined) {
+      return yield* TaskPolicyError.policy(
+        `Task workflow "${workflow.definition.id}" has no agent event ${parsed.eventId}. Use an event that your role instructions list.`,
+      );
     }
-    const updated = yield* taskService.buildCompleted(completionInput);
-    const response: BuildCompletedResult = {
-      task: mapPublicTask(updated),
-    };
-    if (parsed.summary !== undefined) {
-      response.summary = parsed.summary;
+    if (owner?.kind === "task" && !event.roles.includes(owner.role)) {
+      const allowed = workflow.agentEvents(owner.role).map(({ id }) => id);
+      return yield* TaskPolicyError.policy(
+        `The ${owner.role} role cannot send ${parsed.eventId}. ${allowed.length > 0 ? `Use ${allowed.join(", ")}.` : "The role has no workflow events."}`,
+      );
     }
+    if (event.note === "required" && parsed.note === undefined) {
+      return yield* new HostValidationError({
+        field: "note",
+        message: `${parsed.eventId} requires a note. Say why you send the event.`,
+      });
+    }
+    const scope = { workspaceId, repoPath, taskId: task.id };
+    const updated = yield* context.taskService.applyAgentEvent({
+      ...scope,
+      eventId: parsed.eventId,
+    });
+    const response: ApplyWorkflowEventResult = {
+      task: mapPublicTask(updated),
+      eventId: parsed.eventId,
+    };
+    if (parsed.note !== undefined) response.note = parsed.note;
     return yield* parseResponse(
-      "odt_build_completed",
-      RESPONSE_SCHEMAS.odt_build_completed,
+      "odt_apply_workflow_event",
+      RESPONSE_SCHEMAS.odt_apply_workflow_event,
       response,
     );
   });
@@ -205,8 +195,6 @@ const MUTATION_HANDLERS = {
 
   odt_create_task: executeCreateTask,
   odt_update_task: executeUpdateTask,
-  odt_build_blocked: executeBuildBlocked,
-  odt_build_resumed: executeBuildResumed,
-  odt_build_completed: executeBuildCompleted,
+  odt_apply_workflow_event: executeApplyWorkflowEvent,
   odt_set_pull_request: executeSetPullRequest,
 } satisfies Record<OdtMcpMutationToolName, OdtMcpMutationHandler>;

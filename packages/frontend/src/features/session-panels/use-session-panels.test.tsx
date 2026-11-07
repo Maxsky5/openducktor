@@ -925,7 +925,7 @@ describe("useSessionPanels browser tabs", () => {
     const store = layoutStore();
     act(() => {
       store.update(owner, (layout) =>
-        appendRightPanelEntry(layout, "task", browserTabEntry(TAB_2)),
+        appendRightPanelEntry(layout, "task", browserTabEntry(TAB_2), ["build"]),
       );
       view.setBrowser({ tabs: [userTab, agentTab] });
     });

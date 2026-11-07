@@ -34,6 +34,7 @@ const createHookHarness = (
 ) => createSharedHookHarness(useHook, initialProps, { connection });
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  conflictRecipientLabel: "Builder",
   isCurrentContext: () => true,
   repoPath: "/repo",
   workingDir: null,

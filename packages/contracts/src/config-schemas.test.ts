@@ -1183,12 +1183,12 @@ describe("config-schemas", () => {
       autopilot: {
         rules: [
           {
-            workflowId: "openducktor",
+            workflowId: "openducktor-spec-plan-build",
             eventId: "taskProgressedToHumanReview",
             actionIds: ["startGeneratePullRequest", "startGeneratePullRequest"],
           },
           {
-            workflowId: "openducktor",
+            workflowId: "openducktor-spec-plan-build",
             eventId: "taskProgressedToSpecReady",
             actionIds: ["startPlanner", "startPlanner"],
           },
@@ -1198,12 +1198,12 @@ describe("config-schemas", () => {
 
     expect(parsed.autopilot.rules).toEqual([
       {
-        workflowId: "openducktor",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToHumanReview",
         actionIds: ["startGeneratePullRequest"],
       },
       {
-        workflowId: "openducktor",
+        workflowId: "openducktor-spec-plan-build",
         eventId: "taskProgressedToSpecReady",
         actionIds: ["startPlanner"],
       },
@@ -1219,12 +1219,12 @@ describe("config-schemas", () => {
       autopilot: {
         rules: [
           {
-            workflowId: "openducktor",
+            workflowId: "openducktor-spec-plan-build",
             eventId: "taskProgressedToSpecReady",
             actionIds: ["startPlanner"],
           },
           {
-            workflowId: "openducktor",
+            workflowId: "openducktor-spec-plan-build",
             eventId: "taskProgressedToSpecReady",
             actionIds: ["startBuilder", "startPlanner"],
           },
@@ -1233,7 +1233,7 @@ describe("config-schemas", () => {
     });
 
     expect(parsed.autopilot.rules[0]).toEqual({
-      workflowId: "openducktor",
+      workflowId: "openducktor-spec-plan-build",
       eventId: "taskProgressedToSpecReady",
       actionIds: ["startPlanner", "startBuilder"],
     });

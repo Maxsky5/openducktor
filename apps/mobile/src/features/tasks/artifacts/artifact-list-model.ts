@@ -25,19 +25,4 @@ export const artifactDetail = (artifact: TaskArtifact, now: number): string =>
     .filter((part) => part !== null)
     .join(" · ");
 
-const WORKFLOW_DOCUMENT_KEYS = new Map<string, HostDocumentKey>([
-  ["spec", "spec"],
-  ["plan", "plan"],
-  ["qaReport", "qa"],
-]);
-
-/** The Documents view of a built-in workflow artifact code. */
-export const workflowDocumentKey = (code: string): HostDocumentKey => {
-  const key = WORKFLOW_DOCUMENT_KEYS.get(code);
-  if (key === undefined) {
-    throw new Error(
-      `The built-in workflow has no artifact "${code}". Report this host data error.`,
-    );
-  }
-  return key;
-};
+export const workflowDocumentKey = (code: string): HostDocumentKey => code;

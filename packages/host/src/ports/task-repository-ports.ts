@@ -8,6 +8,7 @@ import type {
   TaskArtifact,
   TaskAssetDescriptionMutation,
   TaskCard,
+  TaskRecordData,
   TaskCreateInput,
   TaskMetadataArtifact,
   TaskMetadataPayload,
@@ -56,8 +57,8 @@ export type TaskMergeCandidate = Pick<
   "id" | "status" | "targetBranch" | "targetBranchError"
 >;
 export type TaskReference = Pick<TaskCard, "id" | "title">;
-/** A stored task. The workflow projection adds its actions and role states. */
-export type TaskRecord = Omit<TaskCard, "availableActions" | "agentWorkflows">;
+/** A stored task. The response adds the workflow reference, steps, actions, and role states. */
+export type TaskRecord = TaskRecordData;
 export type TaskSearchInput = {
   workspaceId: string;
   repoPath: string;
@@ -69,6 +70,7 @@ export type TaskSearchInput = {
   limit: number;
 };
 export type TaskReader = {
+  /** The tasks in a state whose workflow declares `mergeDetection`. */
   listMergeCandidates(input: {
     workspaceId: string;
     repoPath: string;

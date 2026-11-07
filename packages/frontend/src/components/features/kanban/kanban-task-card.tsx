@@ -1,10 +1,12 @@
+import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import {
   taskHasSessionPage,
   type TaskWorkflowAction,
-  isQaRejectedTask,
-  BUILTIN_ROLE_LABELS,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  isReviewRejectedTask,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
+  taskIssueType,
+  workflowRoleLabel,
 } from "@openducktor/workflows";
 import type { AgentSessionRecord, KanbanTaskCardView } from "@openducktor/contracts";
 import { GitMerge, PlayCircle, Tag } from "lucide-react";
@@ -16,15 +18,14 @@ import type {
 import {
   IssueTypeBadge,
   PriorityBadge,
-  QaRejectedBadge,
+  ReviewRejectedBadge,
 } from "@/components/features/kanban/kanban-task-badges";
 import { resolveTaskLabelOverflow } from "@/components/features/kanban/kanban-task-label-overflow";
 import {
   getTaskFooter,
   type WorkflowPendingState,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
-import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
-import { TASK_ACTION_ICON } from "@/components/features/kanban/task-action-ui";
+import { taskActionIcon } from "@/components/features/kanban/task-action-ui";
 import { taskSessionStatusLabel } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { useCardFocus } from "@/components/features/kanban/use-kanban-card-focus";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
@@ -40,7 +41,7 @@ import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-se
 import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { toDisplayTaskLabels } from "@openducktor/frontend-core/tasks/presentation/task-labels";
 import { cn } from "@/lib/utils";
-import { getPriorityStyle, ISSUE_TYPE_STYLES } from "./kanban-task-badge-model";
+import { getPriorityStyle, taskIssueTypeStyle } from "./kanban-task-badge-model";
 
 type CardProps = {
   task: TaskCard;
@@ -52,18 +53,10 @@ type CardProps = {
   taskActivityState: KanbanTaskActivityState;
   pendingState?: WorkflowPendingState | undefined;
   onOpenDetails: (taskId: string) => void;
-  onDelegate: (taskId: string) => void;
-  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
-  onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
-  onQaStart?: (taskId: string) => void;
-  onHumanApprove?: (taskId: string) => void;
-  onHumanRequestChanges?: (taskId: string) => void;
-  onResetImplementation?: (taskId: string) => void;
   /** The target that the task branch is merged into. The card then proposes Close Task. */
   mergedTarget?: string | undefined;
   /** Why the pull request sync could not close the task. The card shows it and proposes Close Task. */
   autoCloseFailure?: string | undefined;
-  onCloseTask?: ((taskId: string) => void) | undefined;
 };
 
 export const KanbanTaskCard = memo(function KanbanTaskCard({
@@ -76,16 +69,8 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   taskActivityState,
   pendingState,
   onOpenDetails,
-  onDelegate,
-  onOpenSession,
-  onPlan,
-  onQaStart,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
   mergedTarget,
   autoCloseFailure,
-  onCloseTask,
 }: CardProps): ReactElement {
   const isActive =
     (hasActiveSession ?? true) &&
@@ -134,7 +119,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         ) : (
           <TaskMeta task={task} mergedTarget={mergedTarget} />
         )}
-        <SessionStatusNotes taskSessions={taskSessions} />
+        <SessionStatusNotes task={task} taskSessions={taskSessions} />
         {autoCloseFailure ? (
           <p role="status" className="mt-1 break-words text-xs text-warning-muted">
             {autoCloseFailure}
@@ -149,16 +134,8 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           taskActivityState={taskActivityState}
           pendingState={pendingState}
           compact={isCompact}
-          onPlan={onPlan}
-          onDelegate={onDelegate}
-          onOpenSession={onOpenSession}
-          {...(onQaStart ? { onQaStart } : {})}
-          {...(onHumanApprove ? { onHumanApprove } : {})}
-          {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
-          {...(onResetImplementation ? { onResetImplementation } : {})}
           mergedTarget={mergedTarget}
           autoCloseFailure={autoCloseFailure}
-          onCloseTask={onCloseTask}
         />
       </div>
     </article>
@@ -202,6 +179,20 @@ const sameTask = (left: TaskCard, right: TaskCard): boolean =>
   left.title === right.title &&
   left.status === right.status &&
   left.issueType === right.issueType &&
+  left.workflow.id === right.workflow.id &&
+  left.workflow.revision === right.workflow.revision &&
+  left.taskWorkflow === right.taskWorkflow &&
+  left.sharedState === right.sharedState &&
+  left.workflowSteps.length === right.workflowSteps.length &&
+  left.workflowSteps.every((step, index) => {
+    const other = right.workflowSteps[index];
+    return (
+      other?.id === step.id &&
+      other.available === step.available &&
+      other.completed === step.completed &&
+      other.required === step.required
+    );
+  }) &&
   sameArtifactStates(left.artifactSummary, right.artifactSummary) &&
   left.sourceIssue === right.sourceIssue &&
   left.priority === right.priority &&
@@ -273,7 +264,13 @@ const sameTaskSessions = (
 };
 
 /** The sessions whose status cannot be read, with the reason. */
-function SessionStatusNotes({ taskSessions }: { taskSessions: KanbanTaskSession[] }): ReactElement {
+function SessionStatusNotes({
+  taskSessions,
+  task,
+}: {
+  taskSessions: KanbanTaskSession[];
+  task: TaskCard;
+}): ReactElement {
   return (
     <>
       {taskSessions.map((session) =>
@@ -283,7 +280,7 @@ function SessionStatusNotes({ taskSessions }: { taskSessions: KanbanTaskSession[
             role="status"
             className="mt-1 break-words text-xs text-muted-foreground"
           >
-            {BUILTIN_ROLE_LABELS[session.role]}
+            {workflowRoleLabel(task.taskWorkflow, session.role)}
             {session.activityState === "error" ? " error" : ""}. Status unavailable:{" "}
             {session.statusUnavailableReason}
           </p>
@@ -308,16 +305,8 @@ function sameProps(previous: CardProps, next: CardProps): boolean {
     previous.pendingState?.resettingImplementationTaskId ===
       next.pendingState?.resettingImplementationTaskId &&
     previous.onOpenDetails === next.onOpenDetails &&
-    previous.onDelegate === next.onDelegate &&
-    previous.onOpenSession === next.onOpenSession &&
-    previous.onPlan === next.onPlan &&
-    previous.onQaStart === next.onQaStart &&
-    previous.onHumanApprove === next.onHumanApprove &&
-    previous.onHumanRequestChanges === next.onHumanRequestChanges &&
-    previous.onResetImplementation === next.onResetImplementation &&
     previous.mergedTarget === next.mergedTarget &&
-    previous.autoCloseFailure === next.autoCloseFailure &&
-    previous.onCloseTask === next.onCloseTask
+    previous.autoCloseFailure === next.autoCloseFailure
   );
 }
 
@@ -359,7 +348,7 @@ function TaskPrimaryMeta({ task }: { task: TaskCard }): ReactElement {
   return (
     <div className="flex min-w-0 items-center justify-between gap-2">
       <div className="flex shrink-0 items-center gap-1.5">
-        <IssueTypeBadge issueType={task.issueType} />
+        <IssueTypeBadge issueType={taskIssueType(task)} />
         <PriorityBadge priority={task.priority} />
       </div>
       <TaskIdBadge taskId={task.id} className="min-w-0" />
@@ -448,7 +437,7 @@ function CompactTaskMeta({
   task: TaskCard;
   onOpenDetails: (taskId: string) => void;
 }): ReactElement {
-  const issueTypeStyle = ISSUE_TYPE_STYLES[task.issueType] ?? ISSUE_TYPE_STYLES.task;
+  const issueTypeStyle = taskIssueTypeStyle(task);
   const IssueTypeIcon = issueTypeStyle.icon;
   const priorityStyle = getPriorityStyle(task.priority);
 
@@ -555,14 +544,14 @@ function TaskStatus({
 }): ReactElement | null {
   const hasStatus =
     Boolean(task.pullRequest) || Boolean(task.sourceIssue) || mergedTarget !== undefined;
-  if (!hasStatus && !isQaRejectedTask(task)) {
+  if (!hasStatus && !isReviewRejectedTask(task)) {
     return null;
   }
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {mergedTarget !== undefined ? <MergedBadge target={mergedTarget} /> : null}
-      <QaRejectedBadge task={task} />
+      <ReviewRejectedBadge task={task} />
       {task.pullRequest ? (
         <TaskPullRequestLink
           pullRequest={task.pullRequest}
@@ -643,14 +632,6 @@ type TaskActionsProps = Omit<CardProps, "onOpenDetails" | "taskCardView"> & {
 /** Open only resolved sessions; use workflow handlers for session starts and task changes. */
 function TaskActions({
   task,
-  onPlan,
-  onQaStart,
-  onDelegate,
-  onOpenSession,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
-  onCloseTask,
   mergedTarget,
   autoCloseFailure,
   taskSessions,
@@ -661,6 +642,7 @@ function TaskActions({
   pendingState,
   compact = false,
 }: TaskActionsProps): ReactElement | null {
+  const workflowActions = useRequiredTaskWorkflowActions();
   if (!taskHasSessionPage(task)) {
     return null;
   }
@@ -676,54 +658,14 @@ function TaskActions({
     mergedTarget,
     autoCloseFailure,
   });
-  const { primaryActiveSession, primarySessionIsWaitingInput } = footer;
-  if (footer.actions.allActions.length === 0 && footer.shortcuts.length === 0) return null;
+  const { primaryActiveSession, primarySessionIsWaitingInput, leadingCoreAction } = footer;
+  if (footer.actions.allActions.length === 0 && footer.shortcuts.length === 0 && !leadingCoreAction)
+    return null;
 
-  const openRoleSession = (role: AgentRole): void => {
-    const options = footer.sessions.find((session) => session.role === role)?.options;
-    if (options) onOpenSession(task.id, role, options);
-  };
-
-  const runAction = (action: TaskWorkflowAction): void => {
-    switch (action) {
-      case "set_spec":
-      case "set_plan":
-        onPlan(task.id, action);
-        return;
-      case "open_spec":
-        openRoleSession("spec");
-        return;
-      case "open_planner":
-        openRoleSession("planner");
-        return;
-      case "open_builder":
-        openRoleSession("build");
-        return;
-      case "open_qa":
-        openRoleSession("qa");
-        return;
-      case "qa_start":
-        onQaStart?.(task.id);
-        return;
-      case "build_start":
-        onDelegate(task.id);
-        return;
-      case "human_approve":
-        onHumanApprove?.(task.id);
-        return;
-      case "human_request_changes":
-        onHumanRequestChanges?.(task.id);
-        return;
-      case "reset_implementation":
-        onResetImplementation?.(task.id);
-        return;
-      case "close_task":
-        onCloseTask?.(task.id);
-        return;
-      default:
-        return;
-    }
-  };
+  const runAction = (action: TaskWorkflowAction): void =>
+    workflowActions.runAction(task, action, {
+      sessionOptionsOf: (role) => footer.sessions.find((session) => session.role === role)?.options,
+    });
   return (
     <div
       className={cn(
@@ -748,13 +690,13 @@ function TaskActions({
                   aria-label={`Open ${label} session`}
                   onClick={(event) => {
                     event.stopPropagation();
-                    onOpenSession(task.id, role, options);
+                    workflowActions.onOpenSession(task.id, role, options);
                   }}
                 >
                   <span className="underline decoration-muted-foreground/50 underline-offset-4">
                     {label}
                   </span>
-                  {TASK_ACTION_ICON[action]}
+                  {taskActionIcon(action, task)}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Open {label} session</TooltipContent>
@@ -768,20 +710,29 @@ function TaskActions({
         disabledActions={footer.disabledActions}
         hideWhenEmpty
         onAction={runAction}
+        leadingCoreAction={
+          leadingCoreAction
+            ? {
+                action: leadingCoreAction,
+                onSelect: () =>
+                  workflowActions.onConfirmTaskAction(task.id, leadingCoreAction.confirmation),
+              }
+            : undefined
+        }
         size="sm"
         expandPrimary
         compactMenuTrigger
         className={taskActionsGroupClassName(compact)}
         primaryClassName={taskActionsPrimaryClassName({
           compact,
-          hasActiveSession,
+          hasActiveSession: hasActiveSession && !leadingCoreAction,
           isWaitingInput: primarySessionIsWaitingInput,
         })}
         primaryContent={
           hasActiveSession && primaryActiveSession ? (
             <>
               <PlayCircle className="size-3" />
-              {BUILTIN_ROLE_LABELS[primaryActiveSession.role] ?? primaryActiveSession.role}
+              {workflowRoleLabel(task.taskWorkflow, primaryActiveSession.role)}
               <span
                 className={taskActionSessionStatusClassName(compact, primarySessionIsWaitingInput)}
               >

@@ -74,9 +74,9 @@ export const taskBoardView = ({
   if (state.status === "loading") return { kind: "loading" };
   if (state.status === "error")
     return { kind: "error", title: state.title, message: state.message };
+  if (columnCount > 0) return { kind: "board" };
   if (taskCount === 0) return { kind: "no_tasks" };
-  // As on desktop, an active search or filter that keeps no task says so, also when the board
-  // shows empty lanes.
+  // When settings hide every lane, the result message replaces the lane container.
   if (filterActive && matchingCount === 0) return { kind: "no_results" };
   // The board hides empty lanes, and no lane can have a task to show.
   return columnCount === 0 ? { kind: "no_lanes" } : { kind: "board" };

@@ -1,21 +1,23 @@
 import { Check } from "lucide-react";
 import type { ReactElement } from "react";
-import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
+import { issueTypeOptions } from "@/components/features/task-composer/constants";
 import { cn } from "@/lib/utils";
-import type { BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
+import type { WorkflowIssueTypeId as IssueType } from "@openducktor/workflows";
 
 type IssueTypeGridProps = {
+  choices: Parameters<typeof issueTypeOptions>[0];
   selectedIssueType: IssueType | null;
   onSelectIssueType: (issueType: IssueType) => void;
 };
 
 export function IssueTypeGrid({
+  choices,
   selectedIssueType,
   onSelectIssueType,
 }: IssueTypeGridProps): ReactElement {
   return (
     <div className="grid gap-3 sm:grid-cols-3 mt-5">
-      {ISSUE_TYPE_OPTIONS.map((option) => {
+      {issueTypeOptions(choices).map((option) => {
         const selected = selectedIssueType === option.value;
         const Icon = option.icon;
         return (

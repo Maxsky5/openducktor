@@ -1,3 +1,4 @@
+import { workflowReferenceSchema } from "./workflow-reference-schemas";
 import { z } from "zod";
 import { withMaxUtf16Length } from "./string-schemas";
 import { agentSessionLiveRefSchema } from "./agent-session-schemas";
@@ -186,6 +187,8 @@ export type NotificationNavigationTarget = z.infer<typeof notificationNavigation
 
 export const notificationOccurrenceSchema = z.strictObject({
   workspaceId: z.string().trim().min(1).optional(),
+  workflow: workflowReferenceSchema.optional(),
+  copy: z.strictObject({ title: z.string(), body: z.string() }).optional(),
   occurrenceId: withMaxUtf16Length(z.string().trim().min(1), 1024),
   kind: notificationKindSchema,
   repoPath: agentSessionLiveRefSchema.shape.repoPath,

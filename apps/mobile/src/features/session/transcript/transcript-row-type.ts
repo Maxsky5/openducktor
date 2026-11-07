@@ -15,6 +15,7 @@ type MessageMeta = NonNullable<AgentChatMessage["meta"]>;
 type MetaOf<Kind extends MessageMeta["kind"]> = Extract<MessageMeta, { kind: Kind }>;
 type TaskToolPresentation = Extract<AgentChatToolCallPresentation, { kind: "task" }>;
 type ArtifactToolPresentation = Extract<AgentChatToolCallPresentation, { kind: "artifact" }>;
+type WorkflowToolPresentation = Extract<AgentChatToolCallPresentation, { kind: "workflow" }>;
 
 /** The row of a message, with the data that its row view needs, as the desktop `MessageBody`. */
 export type MessageRowKind =
@@ -22,7 +23,12 @@ export type MessageRowKind =
   | { kind: "reasoning" }
   | { kind: "computer_use"; meta: MetaOf<"tool"> }
   | { kind: "task_tool"; meta: MetaOf<"tool">; taskTool: TaskToolPresentation["taskTool"] }
-  | { kind: "workflow_tool"; meta: MetaOf<"tool">; displayName: string }
+  | {
+      kind: "workflow_tool";
+      meta: MetaOf<"tool">;
+      displayName: string;
+      odtTool: WorkflowToolPresentation["odtTool"];
+    }
   | {
       kind: "artifact_tool";
       meta: MetaOf<"tool">;
@@ -82,7 +88,12 @@ const resolveMessageRowKind = (
         };
       }
       if (presentation.kind === "workflow") {
-        return { kind: "workflow_tool", meta, displayName: presentation.displayName };
+        return {
+          kind: "workflow_tool",
+          meta,
+          displayName: presentation.displayName,
+          odtTool: presentation.odtTool,
+        };
       }
       return { kind: "tool", meta, displayName: presentation.displayName };
     }

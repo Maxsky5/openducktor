@@ -1,15 +1,10 @@
-import {
-  BUILTIN_WORKFLOW_NOTIFICATION_LABELS,
-  BUILTIN_WORKFLOW_NOTIFICATION_DESCRIPTIONS,
-  type BuiltinNotificationKind,
-} from "@openducktor/workflows";
-import type { AgentNotificationKind, TaskNotificationKind } from "@openducktor/contracts";
+import type {
+  AgentNotificationKind,
+  TaskNotificationKind,
+  NotificationKind,
+} from "@openducktor/contracts";
 
-/** A notification that Settings shows: an agent, task, or built-in workflow notification. */
-export type SettingsNotificationKind =
-  | AgentNotificationKind
-  | TaskNotificationKind
-  | BuiltinNotificationKind;
+export type SettingsNotificationKind = NotificationKind;
 
 export const NOTIFICATION_KIND_LABELS = {
   "agent.permission_requested": "Permission request",
@@ -18,8 +13,7 @@ export const NOTIFICATION_KIND_LABELS = {
   "agent.session_started": "Session started",
   "agent.session_idle": "Session idle",
   "task.auto_close_blocked": "Task not closed",
-  ...BUILTIN_WORKFLOW_NOTIFICATION_LABELS,
-} satisfies Record<SettingsNotificationKind, string>;
+} satisfies Record<AgentNotificationKind | TaskNotificationKind, string>;
 
 export const NOTIFICATION_KIND_DESCRIPTIONS = {
   "agent.permission_requested": "The agent needs permission to continue.",
@@ -29,5 +23,4 @@ export const NOTIFICATION_KIND_DESCRIPTIONS = {
   "agent.session_idle": "The session becomes idle or finishes.",
   "task.auto_close_blocked":
     "The pull request of a task merged, but the pull request sync could not close the task.",
-  ...BUILTIN_WORKFLOW_NOTIFICATION_DESCRIPTIONS,
-} satisfies Record<SettingsNotificationKind, string>;
+} satisfies Record<AgentNotificationKind | TaskNotificationKind, string>;

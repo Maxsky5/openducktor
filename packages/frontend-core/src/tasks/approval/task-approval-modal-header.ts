@@ -8,11 +8,12 @@ type TaskApprovalModalHeader = {
 };
 
 export function getTaskApprovalModalHeader(model: TaskApprovalModalModel): TaskApprovalModalHeader {
-  if (model.stage === "missing_builder_worktree") {
+  if (model.stage === "missing_worktree") {
     return {
-      title: "Builder worktree missing",
-      description:
-        "The Builder worktree is gone. Close the task without a merge, or reset the implementation to build it again.",
+      title: "Task worktree missing",
+      description: model.resetLabel
+        ? `The task worktree is gone. Close the task without a merge, or use ${model.resetLabel} to start the work again.`
+        : "The task worktree is gone. Close the task without a merge.",
     };
   }
 

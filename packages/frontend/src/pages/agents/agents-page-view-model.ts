@@ -1,25 +1,16 @@
-import type { WorkflowStepPresentation } from "@openducktor/frontend-core/types/agent-workflow";
+import { toAgentWorkflowStep } from "@/components/features/agents/agent-workflow-step";
 import {
-  BUILTIN_ROLE_LABELS,
-  BUILTIN_STEPS,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
-import { workflowStepRailState } from "@openducktor/frontend-core/lib/agent-workflow-state";
+import type { WorkflowRailStep } from "@openducktor/frontend-core/tasks/presentation/workflow-rail";
 import type { AgentRoleOption, AgentStudioHeaderModel } from "@/components/features/agents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
-import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import type { AgentSessionWorkflowSummary, SessionCreateOption } from "./agents-page-session-tabs";
 
 export const buildRoleLabelByRole = (roleOptions: AgentRoleOption[]): Record<AgentRole, string> => {
-  return roleOptions.reduce(
-    (acc, entry) => {
-      acc[entry.role] = entry.label;
-      return acc;
-    },
-    { ...BUILTIN_ROLE_LABELS },
-  );
+  return Object.fromEntries(roleOptions.map(({ role, label }) => [role, label]));
 };
 
 /** The chat header model without the git conflict handler, which the page shell adds. */
@@ -32,7 +23,7 @@ export const buildAgentStudioHeaderModel = (args: {
   selectedTask: TaskCard | null;
   onOpenTaskDetails: (() => void) | null;
   roleOptions: AgentRoleOption[];
-  workflowStateByRole: Record<AgentRole, WorkflowStepPresentation>;
+  workflowRail: WorkflowRailStep<string>[];
   selectedRole: AgentRole | null;
   workflowSessionByRole: Record<AgentRole, AgentSessionWorkflowSummary | null>;
   onWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
@@ -54,20 +45,7 @@ export const buildAgentStudioHeaderModel = (args: {
   pullRequest: args.selectedTask?.pullRequest ?? null,
   onOpenTaskDetails: args.selectedTask ? args.onOpenTaskDetails : null,
   selectedRole: args.selectedRole,
-  workflowSteps: BUILTIN_STEPS.flatMap((step) => {
-    const roleOption = args.roleOptions.find((option) => option.role === step.roleId);
-    if (!roleOption) return [];
-    const workflowSession = args.workflowSessionByRole[step.roleId];
-    const entry = {
-      id: step.id,
-      role: step.roleId,
-      label: step.label,
-      icon: roleOption.icon,
-      state: args.workflowStateByRole[step.roleId],
-      sessionValue: workflowSession ? agentSessionIdentityKey(workflowSession) : null,
-    };
-    return [{ ...entry, ...workflowStepRailState(entry) }];
-  }),
+  workflowSteps: args.workflowRail.map(toAgentWorkflowStep),
   onWorkflowStepSelect: args.onWorkflowStepSelect,
   sessionSelector: {
     value: args.sessionSelectorValue,

@@ -1,6 +1,7 @@
 import { requireWorkspaceRef } from "../operations/task-operations-model";
-import { taskStatusSchema } from "@openducktor/contracts";
-import type { TaskApprovalContext } from "@openducktor/contracts";
+import { resolveTaskCards } from "../../queries/workflows";
+import { TASK_CLOSED_STATE, taskStatusSchema } from "@openducktor/contracts";
+import type { TaskApprovalContext, TaskCard } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import type { GitConflict } from "../../git/contracts";
 import { canonicalTargetBranch } from "../../lib/target-branch";
@@ -17,7 +18,6 @@ type DirectMergeApprovalArgs = {
   approval: TaskApprovalFlowReadyState;
   queryClient: QueryClient;
   repoPath: string;
-  refreshTasks: () => Promise<void>;
   workspaceId: string | null;
   /** The close that the merge completes removes the task worktree and its local branch. */
   removeWorktree: boolean;
@@ -31,6 +31,7 @@ export type SubmitDirectMergeApprovalResult =
   | {
       outcome: "task_closed";
       successDescription: string;
+      committed: TaskCard;
     }
   | {
       outcome: "await_completion";
@@ -55,7 +56,6 @@ export async function submitDirectMergeApproval({
   approval,
   queryClient,
   repoPath,
-  refreshTasks,
   workspaceId,
   removeWorktree,
 }: DirectMergeApprovalArgs): Promise<SubmitDirectMergeApprovalResult> {
@@ -68,8 +68,8 @@ export async function submitDirectMergeApproval({
     repoPath,
     workspaceId,
     taskIds: [approval.taskId],
-    mutation: async () =>
-      host.taskDirectMerge(scope, approval.taskId, {
+    mutation: async () => {
+      const result = await host.taskDirectMerge(scope, approval.taskId, {
         expected: {
           taskStatus: taskStatusSchema.parse(approvalContext.taskStatus),
           sourceBranch: approvalContext.sourceBranch,
@@ -81,8 +81,13 @@ export async function submitDirectMergeApproval({
             ? approval.squashCommitMessage.trim() || undefined
             : undefined,
         removeWorktree,
-      }),
-    shouldCleanup: (result) => result.outcome !== "conflicts" && result.task.status === "closed",
+      });
+      if (result.outcome === "conflicts") return result;
+      const [resolved] = await resolveTaskCards(queryClient, scope, [result.task]);
+      return { ...result, resolved: resolved! };
+    },
+    shouldCleanup: (result) =>
+      result.outcome !== "conflicts" && result.resolved.status === TASK_CLOSED_STATE,
   });
 
   if (directMergeResult.outcome === "conflicts") {
@@ -92,18 +97,16 @@ export async function submitDirectMergeApproval({
     };
   }
 
-  if (directMergeResult.task.status === "closed") {
-    await refreshTasks();
+  // The task stream updates every task view with the committed change.
+  if (directMergeResult.resolved.status === TASK_CLOSED_STATE) {
     return {
       outcome: "task_closed",
       successDescription: canonicalTargetBranch(approvalContext.targetBranch),
+      committed: directMergeResult.task,
     };
   }
 
-  await Promise.all([
-    refreshTasks(),
-    invalidateTaskApprovalContextQuery(queryClient, scope, approval.taskId),
-  ]);
+  await invalidateTaskApprovalContextQuery(queryClient, scope, approval.taskId);
   const nextApprovalContext = await loadTaskApprovalContextFromQuery(
     queryClient,
     scope,
@@ -132,16 +135,15 @@ export async function completeDirectMergeApproval({
   approval,
   queryClient,
   repoPath,
-  refreshTasks,
   workspaceId,
   removeWorktree,
-}: DirectMergeApprovalArgs): Promise<{ successDescription: string }> {
+}: DirectMergeApprovalArgs): Promise<{ successDescription: string; committed: TaskCard }> {
   const host = connectionHost(queryClient);
   const scope = requireWorkspaceRef(repoPath, workspaceId);
   const approvalContext = approval.approvalContext;
   const publishTarget = approvalContext.publishTarget;
 
-  await runTaskMutationWithChatDraftCleanup({
+  const committed = await runTaskMutationWithChatDraftCleanup({
     agentSessionReadPort: host,
     queryClient,
     repoPath,
@@ -159,7 +161,7 @@ export async function completeDirectMergeApproval({
           expectedPublication: approvalContext.publicationPreview,
         };
       }
-      await host.taskDirectMergeComplete(
+      return host.taskDirectMergeComplete(
         scope,
         approval.taskId,
         removeWorktree,
@@ -167,9 +169,9 @@ export async function completeDirectMergeApproval({
       );
     },
   });
-  await refreshTasks();
 
   return {
     successDescription: canonicalTargetBranch(publishTarget ?? approvalContext.targetBranch),
+    committed,
   };
 }

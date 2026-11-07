@@ -1,3 +1,4 @@
+import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow-settings";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ReactElement } from "react";
@@ -18,7 +19,6 @@ import { RepositoryDefaultModelBlock } from "./repository-default-model";
 import { RepositoryModelPickerField } from "./repository-model-picker-field";
 import {
   ensureDraftAgentDefault,
-  ROLE_DEFAULTS,
   resolveRepoAgentDefaultRuntimeKind,
 } from "./model-defaults-model";
 
@@ -42,11 +42,11 @@ export type RepositoryModelDefaultsFieldsProps = {
     updater: (current: WorkspaceModelDefaultsDraft) => WorkspaceModelDefaultsDraft,
   ) => void;
   onUpdateSelectedRepoAgentDefault: (
-    role: "spec" | "planner" | "build" | "qa",
+    role: string,
     field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
     value: string,
   ) => void;
-  onClearSelectedRepoAgentDefault: (role: "spec" | "planner" | "build" | "qa") => void;
+  onClearSelectedRepoAgentDefault: (role: string) => void;
   onUpdateSelectedRepoDefaultModel: (
     field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
     value: string,
@@ -74,6 +74,13 @@ export function RepositoryModelDefaultsFields({
   const { isLoadingRuntimeDefinitions, isLoadingCatalog, isLoadingSettings, isSaving } =
     loadingState;
   const isCreation = presentation === "creation";
+  const workflows = useWorkflowSettings();
+  if (!workflows.data || workflows.error)
+    return (
+      <p role={workflows.error ? "alert" : "status"}>
+        {workflows.error?.message ?? "Loading workflow roles..."}
+      </p>
+    );
 
   return (
     <div className={cn("grid", isCreation ? "gap-5" : "gap-4 p-4")}>
@@ -123,10 +130,10 @@ export function RepositoryModelDefaultsFields({
       ) : null}
 
       <div className="grid gap-3">
-        {ROLE_DEFAULTS.map(({ role, label }) => {
+        {workflows.data.roles.map(({ role, label, definition }) => {
           const runtimeDefinitions = filterRuntimeDefinitionsForRole(
             availableRuntimeDefinitions,
-            role,
+            definition,
           );
           const roleViewModel = buildRepositoryAgentRoleViewModel({
             selectedRepoConfig,
@@ -252,7 +259,7 @@ const buildRepositoryAgentRoleViewModel = ({
 }: {
   selectedRepoConfig: WorkspaceModelDefaultsDraft;
   runtimeDefinitions: RuntimeDescriptor[];
-  role: "spec" | "planner" | "build" | "qa";
+  role: string;
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
 }): RepositoryAgentRoleViewModel => {

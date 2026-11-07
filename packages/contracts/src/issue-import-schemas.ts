@@ -1,7 +1,8 @@
 import { workspaceRefSchema } from "./workspace-id-schemas";
 import { z } from "zod";
 import { sourceIssueReferenceSchema } from "./git-schemas";
-import { issueTypeSchema, taskPrioritySchema } from "./task-schemas";
+import { issueTypeSchema } from "./issue-type-schemas";
+import { taskPrioritySchema } from "./task-schemas";
 
 export const sourceIssueSchema = sourceIssueReferenceSchema.extend({
   title: z.string().min(1),

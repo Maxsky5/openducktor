@@ -2,7 +2,7 @@ import type { PublicTaskSummaryTask } from "@openducktor/contracts";
 import { ImageIcon } from "lucide-react";
 import { lazy, Suspense, useMemo, useState, type ComponentProps, type ReactElement } from "react";
 import type { Components, ExtraProps } from "react-markdown";
-import { builtinIssueTypeId, builtinStateId } from "@openducktor/workflows";
+import { useChatToolTask } from "./agent-chat-workflow-context";
 import { IssueTypeBadge } from "@/components/features/kanban/issue-type-badge";
 import { PriorityBadge } from "@/components/features/kanban/priority-badge";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
@@ -63,6 +63,12 @@ const TaskDetailsSheetViewer = lazy(
 );
 
 const TaskResultCard = ({ task }: { task: PublicTaskSummaryTask }) => {
+  const workflow = useChatToolTask(task.id);
+  const issueType = workflow.task?.taskWorkflow.definition.issueTypes.find(
+    (type) => type.id === task.issueType,
+  );
+  const state = workflow.task?.taskWorkflow.definition.states.find(({ id }) => id === task.status);
+  const displayState = state ? workflow.board?.states.find(({ id }) => id === state.id) : null;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const descriptionPreview = useMemo(
     () => buildTaskDescriptionPreviewMarkdown(task.description ?? ""),
@@ -80,12 +86,32 @@ const TaskResultCard = ({ task }: { task: PublicTaskSummaryTask }) => {
         </CardHeader>
         <CardContent className="flex flex-col gap-3 px-4 py-4">
           <div className="flex flex-wrap items-center gap-1.5">
-            <IssueTypeBadge issueType={builtinIssueTypeId(task.issueType)} />
+            {issueType ? (
+              <IssueTypeBadge issueType={issueType} />
+            ) : (
+              <Badge variant="outline">{task.issueType}</Badge>
+            )}
             <PriorityBadge priority={task.priority} />
-            <Badge variant="outline" className={statusBadgeClassName(builtinStateId(task.status))}>
-              {statusLabel(builtinStateId(task.status))}
+            <Badge
+              variant="outline"
+              className={displayState ? statusBadgeClassName(displayState) : ""}
+            >
+              {displayState ? statusLabel(displayState) : task.status}
             </Badge>
           </div>
+          {workflow.error ? (
+            <p role="alert" className="text-xs text-destructive">
+              {workflow.error}
+            </p>
+          ) : workflow.task && (!issueType || !state) ? (
+            <p role="alert" className="text-xs text-destructive">
+              The task result uses metadata absent from its current workflow. Reload the task.
+            </p>
+          ) : !workflow.task ? (
+            <p role="status" className="text-xs text-muted-foreground">
+              Loading task workflow...
+            </p>
+          ) : null}
           {task.description && (
             <MarkdownRenderer
               markdown={descriptionPreview}

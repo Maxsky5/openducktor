@@ -1,3 +1,4 @@
+import { prepareSessionStartInstruction } from "./session-start-kickoff";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
@@ -62,11 +63,13 @@ export function useSessionStartWorkflowRunner({
           existing.origin.scope.role !== input.request.role)
       )
         throw new Error("The session start no longer belongs to this workspace and task.");
+      const role = input.task?.taskWorkflow.roles.find(({ id }) => id === input.request.role);
       const id =
         existing?.id ??
         startupAttempts.begin({
           origin,
-          label: `Start ${input.request.role} session`,
+          label: `Start ${role?.label ?? "task"} session`,
+          ...(role && { roleLabel: role.label }),
           presentation: "inline",
           instructionRequired: input.request.postStartAction !== "none",
         });
@@ -78,6 +81,14 @@ export function useSessionStartWorkflowRunner({
         sendAgentMessage,
         notifications,
         launchAttemptId: id,
+        prepareRequest: ({ task, request, decision }) =>
+          prepareSessionStartInstruction({
+            queryClient,
+            workspaceId,
+            task,
+            request,
+            targetBranch: decision.targetBranch,
+          }),
         client: {
           agentSessionWorkflowLaunch: withWorktreeRefresh(queryClient, async (request) => {
             launchRequest = request;

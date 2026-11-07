@@ -1,11 +1,13 @@
+import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import {
   type AgentSessionRecord,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 export const taskFixture: TaskCard = {
+  ...createTaskCardFixture(),
   id: "task-1",
   title: "Task",
   description: "",
@@ -31,12 +33,14 @@ export const taskFixture: TaskCard = {
 };
 
 const taskFixture2: TaskCard = {
+  ...createTaskCardFixture(),
   ...taskFixture,
   id: "task-2",
   title: "Task 2",
 };
 
 export const createUnavailableBuildTaskFixture = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+  ...createTaskCardFixture(),
   ...taskFixture,
   status: "open",
   agentWorkflows: {
@@ -58,10 +62,12 @@ export const persistedSessionFixture: AgentSessionRecord = {
 };
 
 export const taskFixtureWithPersistedBuildSession: TaskCard = {
+  ...createTaskCardFixture(),
   ...taskFixture,
 };
 
 export const taskFixture2WithPersistedBuildSession: TaskCard = {
+  ...createTaskCardFixture(),
   ...taskFixture2,
 };
 

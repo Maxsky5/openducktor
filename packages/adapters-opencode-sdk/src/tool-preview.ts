@@ -175,11 +175,10 @@ const summarizeOdtMutation = (
   tool: string,
   input: OpenCodeProtocolObject | undefined,
 ): string | null => {
-  if (tool === "odt_build_blocked") {
-    return readTrimmedString(input, ["reason", "taskId"]);
-  }
-  if (tool === "odt_build_completed") {
-    return readTrimmedString(input, ["summary", "taskId"]);
+  if (tool === "odt_apply_workflow_event") {
+    const eventId = readTrimmedString(input, ["eventId"]);
+    const note = readTrimmedString(input, ["note"]);
+    return [eventId, note].filter((value) => value && value.length > 0).join(" · ") || null;
   }
   if (tool === "odt_set_pull_request") {
     const providerId = readTrimmedString(input, ["providerId"]);

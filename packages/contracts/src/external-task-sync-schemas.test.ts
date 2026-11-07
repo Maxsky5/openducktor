@@ -12,6 +12,8 @@ import type { TaskCard } from "./task-schemas";
 
 const card = (id: string): TaskCard => ({
   id,
+  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflowSteps: [],
   title: "Task 8",
   description: "Complete description",
   status: "open",
@@ -39,7 +41,12 @@ describe("external-task-sync-schemas", () => {
   test("preserves an optional source role and rejects blank roles", () => {
     const change = {
       previousStatus: "blocked",
-      task: { id: "task-1", title: "Task", status: "human_review" },
+      task: {
+        id: "task-1",
+        title: "Task",
+        status: "human_review",
+        workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+      },
     };
     expect(taskEventStatusChangeSchema.parse(change)).toEqual(change);
     expect(taskEventStatusChangeSchema.parse({ ...change, sourceRole: "build" }).sourceRole).toBe(
@@ -60,7 +67,12 @@ describe("external-task-sync-schemas", () => {
       workspaceId: "repo",
       repoPath,
       taskId,
-      taskSnapshot: { id: taskId, title: "Task", status: "open" },
+      taskSnapshot: {
+        id: taskId,
+        title: "Task",
+        status: "open",
+        workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+      },
       emittedAt: "2026-04-10T13:00:00.000Z",
     });
 
@@ -82,7 +94,14 @@ describe("external-task-sync-schemas", () => {
       taskIds: ["task-7", "task-8"],
       removedTaskIds: ["task-7"],
       statusChanges: [],
-      taskSnapshots: [{ id: "task-8", title: "Task 8", status: "ready_for_dev" }],
+      taskSnapshots: [
+        {
+          id: "task-8",
+          title: "Task 8",
+          status: "ready_for_dev",
+          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+        },
+      ],
       emittedAt: "2026-04-10T13:05:00.000Z",
     });
 
@@ -92,7 +111,12 @@ describe("external-task-sync-schemas", () => {
       expect(parsed.taskIds).toEqual(["task-7", "task-8"]);
       expect(parsed.removedTaskIds).toEqual(["task-7"]);
       expect(parsed.taskSnapshots).toEqual([
-        { id: "task-8", title: "Task 8", status: "ready_for_dev" },
+        {
+          id: "task-8",
+          title: "Task 8",
+          status: "ready_for_dev",
+          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+        },
       ]);
     }
   });
@@ -107,7 +131,14 @@ describe("external-task-sync-schemas", () => {
       taskIds: ["task-8"],
       removedTaskIds: [],
       statusChanges: [],
-      taskSnapshots: [{ id: "task-8", title: "", status: "ready_for_dev" }],
+      taskSnapshots: [
+        {
+          id: "task-8",
+          title: "",
+          status: "ready_for_dev",
+          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+        },
+      ],
       emittedAt: "2026-04-10T13:05:00.000Z",
     });
 
@@ -121,7 +152,12 @@ describe("external-task-sync-schemas", () => {
       workspaceId: "repo",
       repoPath: "/repo",
       taskId: "task-7",
-      taskSnapshot: { id: "task-7", title: "Task", status: "open" },
+      taskSnapshot: {
+        id: "task-7",
+        title: "Task",
+        status: "open",
+        workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+      },
       emittedAt: "2026-04-10T13:00:00.000Z",
     };
 
@@ -215,7 +251,14 @@ describe("external-task-sync-schemas", () => {
     expect(
       tasksUpdatedEventSchema.safeParse({
         ...event,
-        taskSnapshots: [{ id: "task-8", title: "Task 8", status: "open" }],
+        taskSnapshots: [
+          {
+            id: "task-8",
+            title: "Task 8",
+            status: "open",
+            workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          },
+        ],
       }).success,
     ).toBe(true);
     expect(tasksUpdatedEventSchema.safeParse({ ...event, taskSnapshots: [] }).success).toBe(false);
@@ -223,7 +266,14 @@ describe("external-task-sync-schemas", () => {
       tasksUpdatedEventSchema.safeParse({
         ...event,
         statusChanges: [],
-        taskSnapshots: [{ id: "task-7", title: "Removed", status: "open" }],
+        taskSnapshots: [
+          {
+            id: "task-7",
+            title: "Removed",
+            status: "open",
+            workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          },
+        ],
       }).success,
     ).toBe(false);
     expect(
@@ -231,8 +281,18 @@ describe("external-task-sync-schemas", () => {
         ...event,
         statusChanges: [],
         taskSnapshots: [
-          { id: "task-8", title: "Task 8", status: "open" },
-          { id: "task-8", title: "Task 8", status: "spec_ready" },
+          {
+            id: "task-8",
+            title: "Task 8",
+            status: "open",
+            workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          },
+          {
+            id: "task-8",
+            title: "Task 8",
+            status: "spec_ready",
+            workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          },
         ],
       }).success,
     ).toBe(false);
@@ -247,7 +307,14 @@ describe("external-task-sync-schemas", () => {
       taskIds: ["task-8"],
       removedTaskIds: [],
       statusChanges: [],
-      taskSnapshots: [{ id: changed.id, title: changed.title, status: changed.status }],
+      taskSnapshots: [
+        {
+          id: changed.id,
+          title: changed.title,
+          status: changed.status,
+          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+        },
+      ],
       boardChanges: { artifactChanges: [], cards: [changed, card("parent")], doneVisibleDays: 1 },
       emittedAt: "2026-04-10T13:15:00.000Z",
     };
@@ -318,7 +385,12 @@ describe("external-task-sync-schemas", () => {
           workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-7",
-          taskSnapshot: { id: "task-7", title: "Task", status: "open" },
+          taskSnapshot: {
+            id: "task-7",
+            title: "Task",
+            status: "open",
+            workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          },
           emittedAt: "2026-04-10T13:20:00.000Z",
         },
       }),
@@ -365,13 +437,23 @@ test("creation events require a snapshot for the same task", () => {
   expect(
     externalTaskSyncEventSchema.safeParse({
       ...event,
-      taskSnapshot: { id: "task-2", title: "Other", status: "open" },
+      taskSnapshot: {
+        id: "task-2",
+        title: "Other",
+        status: "open",
+        workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+      },
     }).success,
   ).toBe(false);
   expect(
     externalTaskSyncEventSchema.safeParse({
       ...event,
-      taskSnapshot: { id: "task-1", title: "Created", status: "open" },
+      taskSnapshot: {
+        id: "task-1",
+        title: "Created",
+        status: "open",
+        workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+      },
     }).success,
   ).toBe(true);
 });
@@ -385,9 +467,24 @@ test("requires source status changes and keeps them distinct from later task sna
     repoPath: "/repo",
     taskIds: ["task-1"],
     removedTaskIds: [],
-    taskSnapshots: [{ id: "task-1", title: "Current", status: "ready_for_dev" }],
+    taskSnapshots: [
+      {
+        id: "task-1",
+        title: "Current",
+        status: "ready_for_dev",
+        workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+      },
+    ],
     statusChanges: [
-      { previousStatus: "open", task: { id: "task-1", title: "At commit", status: "spec_ready" } },
+      {
+        previousStatus: "open",
+        task: {
+          id: "task-1",
+          title: "At commit",
+          status: "spec_ready",
+          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+        },
+      },
     ],
     emittedAt: "2026-09-06T10:00:00.000Z",
   };
@@ -401,7 +498,12 @@ test("requires source status changes and keeps them distinct from later task sna
       statusChanges: [
         {
           previousStatus: "open",
-          task: { id: "other-task", title: "Other", status: "spec_ready" },
+          task: {
+            id: "other-task",
+            title: "Other",
+            status: "spec_ready",
+            workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          },
         },
       ],
     }).success,

@@ -5,7 +5,7 @@ import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agen
 import { toSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentStudioSelectedSessionState } from "./selected-session/selected-session-state";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 export const toAgentStudioTranscriptTarget = ({
   identity,
@@ -16,9 +16,9 @@ export const toAgentStudioTranscriptTarget = ({
   identity: AgentSessionIdentity | null;
   workspaceId: string | null;
   taskId: string;
-  role: AgentRole;
+  role: AgentRole | null;
 }): AgentSessionTranscriptTarget | null => {
-  if (!identity || !workspaceId) {
+  if (!identity || !workspaceId || !role) {
     return null;
   }
 

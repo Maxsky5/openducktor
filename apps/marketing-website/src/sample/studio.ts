@@ -167,13 +167,13 @@ export function byPath(files: GitFile[]): GitFile[] {
 
 export const TASK_ID = taskId("k3x9");
 
-/** Kickoff prompt samples from packages/workflows/src/builtin/agent-prompts.ts. */
+/** Kickoff prompt samples from packages/workflows/src/builtin/spec-plan-build/agent-prompts.ts. */
 export const KICKOFF = {
   spec: `Write the specification for this task and save it with odt_set_task_artifact and code spec. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,
   planner: `Write the implementation plan for this task and save it with odt_set_task_artifact and code plan. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,
-  build: `Implement this task and submit the completed change with odt_build_completed. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,
+  build: `Implement this task and submit the completed change with odt_apply_workflow_event with eventId build-completed. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,
   qa: `Review this task's implementation and submit one QA report with exactly one odt_set_task_artifact call using code qaReport and verdict approved or rejected. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,
-  fix: `Address the latest QA rejection for this task. Check each finding against the current code. Fix valid in-scope issues and explain why you decline any other finding. Submit the completed change with odt_build_completed. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,
+  fix: `Address the latest QA rejection for this task. Check each finding against the current code. Fix valid in-scope issues and explain why you decline any other finding. Submit the completed change with odt_apply_workflow_event with eventId build-completed. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,
   pullRequest: [
     "Publish a review-ready pull request for the current task.",
     "Pull request base:\norigin/main",

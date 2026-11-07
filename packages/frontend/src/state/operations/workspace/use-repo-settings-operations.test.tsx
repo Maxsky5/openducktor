@@ -25,7 +25,8 @@ import {
   createGitProviderContextFixture,
   createRepoSettingsConfigFixture,
   createSettingsSnapshotFixture,
-  createTaskCardFixture,
+  createWireTaskCardFixture,
+  toWireTaskCard,
 } from "@/test-utils/shared-test-fixtures";
 import { checksQueryKeys } from "@openducktor/frontend-core/queries/checks";
 import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
@@ -44,7 +45,7 @@ import {
 } from "@openducktor/frontend-core/queries/workspace";
 import { customAgentRolesQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
-import { BUILTIN_PROMPT_TEMPLATE_IDS } from "@openducktor/workflows";
+import { SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS } from "@openducktor/workflows/test-support";
 
 /**
  * The host of every harness in this file. Its commands fail until a test sets them. Each harness
@@ -254,7 +255,7 @@ const createRepoConfig = (): Awaited<ReturnType<typeof host.workspaceGetRepoConf
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: ["b"] },
+  hooks: { beforeWorktreeRemoval: ["b"] },
   actions: createRepoActions(),
   worktreeCopyPaths: [],
   promptOverrides: {},
@@ -397,7 +398,7 @@ describe("use-repo-settings-operations", () => {
         branchPrefix: "codex/",
         defaultModel: null,
         defaultTargetBranch: { remote: "origin", branch: "main" },
-        postCompleteHooks: ["b"],
+        beforeWorktreeRemovalHooks: ["b"],
         actions: createRepoActions(),
         worktreeCopyPaths: [],
         agentDefaults: {
@@ -589,7 +590,7 @@ describe("use-repo-settings-operations", () => {
   test("replaces an in-flight task read after the retention setting changes", async () => {
     const firstTaskRead = createDeferred<Awaited<ReturnType<typeof host.tasksList>>>();
     const firstTaskReadStarted = createDeferred<void>();
-    const refreshedTasks = [createTaskCardFixture({ title: "New retention" })];
+    const refreshedTasks = [createWireTaskCardFixture({ title: "New retention" })];
     const tasksList = mock(async () => {
       if (tasksList.mock.calls.length === 1) {
         firstTaskReadStarted.resolve();
@@ -632,28 +633,24 @@ describe("use-repo-settings-operations", () => {
 
       expect(tasksList).toHaveBeenCalledTimes(2);
       expect(
-        queryClient.getQueryData<RepoTaskData>(
-          taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")),
-        ),
-      ).toEqual({
-        tasks: refreshedTasks,
-      });
+        queryClient
+          .getQueryData<RepoTaskData>(taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")))
+          ?.tasks.map(toWireTaskCard),
+      ).toEqual(refreshedTasks);
       expect(
         queryClient.getQueryState(taskQueryKeys.repoData(createWorkspaceRecord("/repo-b")))
           ?.isInvalidated,
       ).toBe(true);
 
-      firstTaskRead.resolve([createTaskCardFixture({ title: "Old retention" })]);
+      firstTaskRead.resolve([createWireTaskCardFixture({ title: "Old retention" })]);
       await Promise.allSettled([pendingTaskRead]);
       expect(
-        queryClient.getQueryData<RepoTaskData>(
-          taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")),
-        ),
-      ).toEqual({
-        tasks: refreshedTasks,
-      });
+        queryClient
+          .getQueryData<RepoTaskData>(taskQueryKeys.repoData(createWorkspaceRecord("/repo-a")))
+          ?.tasks.map(toWireTaskCard),
+      ).toEqual(refreshedTasks);
     } finally {
-      firstTaskRead.resolve([createTaskCardFixture({ title: "Old retention" })]);
+      firstTaskRead.resolve([createWireTaskCardFixture({ title: "Old retention" })]);
       await harness.unmount();
       host.tasksList = original.tasksList;
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
@@ -1064,7 +1061,7 @@ describe("use-repo-settings-operations", () => {
       workspaces: {
         "repo-a": {
           ...createRepoSettingsConfigFixture("repo-a", "/repo-a"),
-          hooks: { postComplete: ["bun run cleanup"] },
+          hooks: { beforeWorktreeRemoval: ["bun run cleanup"] },
         },
       },
     });
@@ -1299,7 +1296,7 @@ describe("use-repo-settings-operations", () => {
       applyWorkspaceRecords,
     });
     const globalPromptOverrides = Object.fromEntries(
-      BUILTIN_PROMPT_TEMPLATE_IDS.map((templateId) => [
+      SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS.map((templateId) => [
         templateId,
         {
           template: `global ${templateId}`,
@@ -1309,7 +1306,7 @@ describe("use-repo-settings-operations", () => {
       ]),
     );
     const repoPromptOverrides = Object.fromEntries(
-      BUILTIN_PROMPT_TEMPLATE_IDS.map((templateId) => [
+      SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS.map((templateId) => [
         templateId,
         {
           template: `repo ${templateId}`,
@@ -1328,7 +1325,7 @@ describe("use-repo-settings-operations", () => {
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
-          hooks: { postComplete: [] },
+          hooks: { beforeWorktreeRemoval: [] },
           actions: { items: [], defaultActionId: null },
           worktreeCopyPaths: [],
           promptOverrides: repoPromptOverrides,
@@ -1353,11 +1350,11 @@ describe("use-repo-settings-operations", () => {
         throw new Error("Expected settings snapshot to be forwarded.");
       }
       expect(Object.keys(savedSnapshot.global?.globalPromptOverrides?.create ?? {}).sort()).toEqual(
-        BUILTIN_PROMPT_TEMPLATE_IDS.toSorted(),
+        SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS.toSorted(),
       );
       expect(
         Object.keys(savedSnapshot.workspaces?.["repo-a"]?.promptOverrides?.create ?? {}).sort(),
-      ).toEqual(BUILTIN_PROMPT_TEMPLATE_IDS.toSorted());
+      ).toEqual(SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS.toSorted());
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;

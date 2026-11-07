@@ -45,6 +45,8 @@ const taskCard = (id: string): TaskCard => ({
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
+  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflowSteps: [],
   availableActions: [],
   labels: [],
   artifactSummary: {

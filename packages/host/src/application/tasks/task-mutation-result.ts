@@ -20,7 +20,6 @@ export const withoutTaskMutationProgress = (
 ): TaskService => {
   return {
     ...taskService,
-    buildCompleted: (input) => discardTaskMutationProgress(taskService.buildCompleted(input)),
     createTask: (input) => discardTaskMutationProgress(taskService.createTask(input)),
     deleteTask: (input) => discardTaskMutationProgress(taskService.deleteTask(input)),
     directMerge: (input) => discardTaskMutationProgress(taskService.directMerge(input)),
@@ -28,8 +27,10 @@ export const withoutTaskMutationProgress = (
       discardTaskMutationProgress(taskService.completeDirectMerge(input)),
     linkMergedPullRequest: (input) =>
       discardTaskMutationProgress(taskService.linkMergedPullRequest(input)),
-    resetImplementation: (input) =>
-      discardTaskMutationProgress(taskService.resetImplementation(input)),
+    applyTaskEvent: (input) =>
+      discardTaskMutationProgress(taskService.applyTaskEvent(input)).pipe(
+        Effect.map(({ task }) => task),
+      ),
     resetTask: (input) =>
       discardTaskMutationProgress(taskService.resetTask(input)).pipe(
         Effect.map(({ task }) => task),

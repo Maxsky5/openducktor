@@ -1,22 +1,20 @@
 import { Effect, type Scope } from "effect";
-import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
-import type { TaskPolicyError } from "../../../domain/task";
 import { HostDependencyError, type HostOperationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type {
+  DecideTaskTransition,
   TaskRecord,
   TaskStoreError,
   TaskStorePort,
 } from "../../../ports/task-repository-ports";
 import type { TaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
-import { decideEffectTransition, type HostEffect } from "./task-workflow-events";
 
 type TaskClosureStore = Pick<TaskStorePort, "transitionTask">;
 
-export const completeTaskClosure = <CleanupError>({
+/** Runs the cleanup of a closure under the task lifecycle lock, then commits the decided state. */
+export const completeTaskClosure = <CleanupError, DecideError>({
   cleanup,
-  taskWorkflows,
-  effect,
+  decide,
   gitPort,
   operation,
   repoPath,
@@ -26,8 +24,7 @@ export const completeTaskClosure = <CleanupError>({
   taskStore,
 }: {
   cleanup: Effect.Effect<void, CleanupError, Scope.Scope>;
-  taskWorkflows: TaskWorkflowResolver;
-  effect: HostEffect;
+  decide: DecideTaskTransition<DecideError>;
   gitPort: Pick<GitPort, "canonicalizePath"> | undefined;
   operation: string;
   repoPath: string;
@@ -37,7 +34,7 @@ export const completeTaskClosure = <CleanupError>({
   taskStore: TaskClosureStore;
 }): Effect.Effect<
   TaskRecord,
-  CleanupError | HostDependencyError | HostOperationError | TaskStoreError | TaskPolicyError
+  CleanupError | DecideError | HostDependencyError | HostOperationError | TaskStoreError
 > =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -67,13 +64,7 @@ export const completeTaskClosure = <CleanupError>({
       );
       yield* cleanup;
       return yield* Effect.suspend(() =>
-        taskStore.transitionTask({
-          repoPath,
-          taskId,
-          workspaceId,
-          decide: (current) =>
-            decideEffectTransition(taskWorkflows.forTask(current), effect, current),
-        }),
+        taskStore.transitionTask({ repoPath, taskId, workspaceId, decide }),
       );
     }),
   );

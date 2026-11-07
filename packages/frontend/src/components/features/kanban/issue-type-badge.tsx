@@ -1,14 +1,14 @@
 import { memo, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
-import { ISSUE_TYPE_STYLES } from "./kanban-task-badge-model";
-import type { BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
+import { issueTypeStyle } from "./kanban-task-badge-model";
+import type { WorkflowIssueTypeDefinition } from "@openducktor/contracts";
 
 export const IssueTypeBadge = memo(function IssueTypeBadge({
   issueType,
 }: {
-  issueType: IssueType;
+  issueType: WorkflowIssueTypeDefinition;
 }): ReactElement {
-  const style = ISSUE_TYPE_STYLES[issueType] ?? ISSUE_TYPE_STYLES.task;
+  const style = issueTypeStyle(issueType);
   const Icon = style.icon;
   return (
     <Badge

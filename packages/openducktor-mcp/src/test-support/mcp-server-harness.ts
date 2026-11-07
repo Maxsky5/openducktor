@@ -18,6 +18,8 @@ import {
 } from "@openducktor/contracts";
 import { mcpToolPayloadSchema, type McpToolPayload } from "../tool-results";
 
+export const TEST_ACTIVE_STATUSES = ["open", "in_progress", "blocked"];
+
 type McpToolObject = Record<string, McpToolPayload>;
 const mcpToolObjectSchema = z.record(z.string(), mcpToolPayloadSchema);
 const isMcpToolObject = (value: McpToolPayload): value is McpToolObject =>
@@ -152,6 +154,7 @@ export const startMockBridge = async (
       writeJson(response, {
         bridgeVersion: ODT_MCP_BRIDGE_VERSION,
         toolNames: [...ODT_MCP_TOOL_NAMES],
+        activeStatuses: TEST_ACTIVE_STATUSES,
       });
       return;
     }
@@ -307,7 +310,7 @@ export const startMockBridge = async (
       return;
     }
 
-    if (url === "/invoke/odt_build_blocked") {
+    if (url === "/invoke/odt_apply_workflow_event") {
       requests.push({ url, body: await readJsonBody(request) });
       writeJson(
         response,

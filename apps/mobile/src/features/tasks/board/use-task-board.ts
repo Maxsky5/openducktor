@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import {
   useAutoCloseFailures,
   useMergedTaskTargets,
@@ -104,6 +104,7 @@ export function useTaskBoard(workspace: WorkspaceRecord): TaskBoard {
   const { columns: kanbanColumns, taskActivityStateByTaskId } = useKanbanBoardColumns(
     matchingTasks,
     taskSessionsByTaskId,
+    board.boardDefinition,
   );
 
   const doneVisibleDays =
@@ -112,11 +113,18 @@ export function useTaskBoard(workspace: WorkspaceRecord): TaskBoard {
     () =>
       buildBoardColumns({
         columns: kanbanColumns,
+        creationStateId: board.creationStateId,
         emptyColumnDisplay: board.emptyColumnDisplay,
         doneVisibleDays,
         filterActive: filter.isActive,
       }),
-    [board.emptyColumnDisplay, doneVisibleDays, filter.isActive, kanbanColumns],
+    [
+      board.creationStateId,
+      board.emptyColumnDisplay,
+      doneVisibleDays,
+      filter.isActive,
+      kanbanColumns,
+    ],
   );
 
   const sessions = useMemo<BoardSessionLookup>(
@@ -139,7 +147,7 @@ export function useTaskBoard(workspace: WorkspaceRecord): TaskBoard {
   );
 
   const state = resolveTaskBoardState({
-    settingsError: settingsQuery.error,
+    settingsError: board.workflowError ?? settingsQuery.error,
     taskReadError: taskRead.error,
     taskCount: board.kanbanTasks.length,
     isLoadingTasks: board.isLoadingTasks,

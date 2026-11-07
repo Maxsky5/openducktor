@@ -95,7 +95,8 @@ describe("OpenCode V2 conversation identity and history", () => {
   });
 
   test("reads installed workflow instructions separately from later native updates", async () => {
-    const installedPrompt = "You are the OpenDucktor Builder for task-1. Use odt_build_completed.";
+    const installedPrompt =
+      "You are the OpenDucktor Builder for task-1. Use odt_apply_workflow_event.";
     const messages: SessionMessageInfo[] = [
       { id: "msg_user", type: "user", text: "Implement this task.", time: { created: 2 } },
       {

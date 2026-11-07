@@ -1,8 +1,7 @@
-import type { SourceIssue } from "@openducktor/contracts";
-import { ISSUE_TYPE_LABELS } from "@openducktor/frontend-core/tasks/board/kanban-task-badge-model";
+import { issueTypeSchema, type SourceIssue, type WorkflowIcon } from "@openducktor/contracts";
+import type { IssueTypeChoice } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 import { PRIORITY_OPTIONS } from "@openducktor/frontend-core/tasks/create/task-composer-options";
 import {
-  ISSUE_IMPORT_ISSUE_TYPES,
   ISSUE_IMPORT_LABELS,
   issueImportItemTitle,
   issueImportReviewStatus,
@@ -26,12 +25,12 @@ import { useAnnounce } from "@/ui/use-announce";
 import { FormField, ToolbarButton } from "../edit/form-parts";
 import { LabelsField } from "../edit/labels-field";
 
-/** The desktop composer icons of the issue types that an import can create. */
-const ISSUE_TYPE_ICONS = {
-  feature: "sparkles",
-  bug: "bug",
-  task: "list-todo",
-} as const satisfies Record<(typeof ISSUE_IMPORT_ISSUE_TYPES)[number], IconName>;
+/** The desktop composer icons of the issue type icons. Other icons use the document icon. */
+const ISSUE_TYPE_ICONS = new Map<WorkflowIcon, IconName>([
+  ["feature", "sparkles"],
+  ["bug", "bug"],
+  ["task", "list-todo"],
+]);
 
 const PRIORITY_CHOICES = PRIORITY_OPTIONS.map((option) => ({
   value: String(option.value),
@@ -87,6 +86,8 @@ function DescriptionDisclosure({ item }: { item: SourceIssue }): ReactElement {
  */
 export function IssueReviewCard({
   item,
+  issueTypes,
+  defaultIssueType,
   review,
   outcome,
   knownLabels,
@@ -98,6 +99,10 @@ export function IssueReviewCard({
   onRefresh,
 }: {
   item: SourceIssue;
+  /** The declared issue types of the new-task workflow. */
+  issueTypes: readonly IssueTypeChoice[];
+  /** The issue type that the import uses until the user picks one. */
+  defaultIssueType: string | undefined;
   review: IssueReview;
   outcome: ImportOutcome | undefined;
   /** Label suggestions: the provider tags of the item, then the workspace labels. */
@@ -110,6 +115,7 @@ export function IssueReviewCard({
   onRefresh: () => void;
 }): ReactElement {
   const theme = useAppTheme();
+  const issueType = review.issueType ?? defaultIssueType;
   const created = outcome?.outcome === "created";
   const fieldsDisabled = busy || created;
   const status = issueImportReviewStatus(item, outcome);
@@ -157,23 +163,23 @@ export function IssueReviewCard({
       <FormField label={ISSUE_IMPORT_LABELS.issueType}>
         <SegmentedControl
           label={ISSUE_IMPORT_LABELS.issueType}
-          options={ISSUE_IMPORT_ISSUE_TYPES.map((value) => ({
-            value,
-            label: ISSUE_TYPE_LABELS[value],
+          options={issueTypes.map((choice) => ({
+            value: choice.value,
+            label: choice.label,
             leading: (
               <Icon
-                name={ISSUE_TYPE_ICONS[value]}
+                name={(choice.icon && ISSUE_TYPE_ICONS.get(choice.icon)) || "file-text"}
                 size={14}
                 colorValue={
-                  review.issueType === value
+                  issueType === choice.value
                     ? theme.desktop.foreground
                     : theme.desktop.mutedForeground
                 }
               />
             ),
           }))}
-          value={review.issueType}
-          onChange={(issueType) => onChange({ issueType })}
+          value={issueType ?? ""}
+          onChange={(issueType) => onChange({ issueType: issueTypeSchema.parse(issueType) })}
           disabled={fieldsDisabled}
         />
       </FormField>

@@ -367,7 +367,6 @@
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
-        "@openducktor/workflows": "workspace:*",
         "zod": "^4.6.7",
       },
       "devDependencies": {
@@ -388,7 +387,6 @@
         "@openducktor/build-tools": "workspace:*",
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
-        "@openducktor/workflows": "workspace:*",
         "bun-types": "^1.4.2",
       },
     },

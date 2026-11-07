@@ -1,11 +1,16 @@
 import {
-  resolveTaskCardActions,
   type TaskWorkflowAction,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
+import {
+  type CoreTaskAction,
+  coreTaskActions,
+  REMOVE_WORKTREE_ACTION,
+} from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import { PencilLine, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
+import { coreTaskActionMenuItem } from "@/components/features/kanban/task-action-ui";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { Button } from "@/components/ui/button";
 
@@ -18,27 +23,11 @@ export type TaskDetailsSheetFooterProps = {
   activeSessionRole?: AgentRole;
   historicalSessionRoles?: readonly AgentRole[];
   onWorkflowAction?: (action: TaskWorkflowAction) => void;
+  /** Shows Close Task and Reset Task, which OpenDucktor gives every task. */
+  onCoreTaskAction?: (action: CoreTaskAction) => void;
+  /** Shows Remove Worktree. The sheet passes it only while a closed task keeps its worktree. */
+  onRemoveWorktreeSelect?: () => void;
   onDeleteSelect?: () => void;
-};
-
-type WorkflowActionOptions = NonNullable<Parameters<typeof resolveTaskCardActions>[1]>;
-
-const workflowActionOptions = ({
-  hasActiveSession,
-  includeActions,
-  activeSessionRole,
-  historicalSessionRoles,
-}: {
-  hasActiveSession: boolean;
-  includeActions: readonly TaskWorkflowAction[] | undefined;
-  activeSessionRole: AgentRole | undefined;
-  historicalSessionRoles: readonly AgentRole[] | undefined;
-}): WorkflowActionOptions => {
-  const options: WorkflowActionOptions = { hasActiveSession };
-  if (includeActions) options.include = includeActions;
-  if (activeSessionRole) options.activeSessionRole = activeSessionRole;
-  if (historicalSessionRoles) options.historicalSessionRoles = historicalSessionRoles;
-  return options;
 };
 
 const deleteMenuActions = (onDeleteSelect: (() => void) | undefined) =>
@@ -46,9 +35,9 @@ const deleteMenuActions = (onDeleteSelect: (() => void) | undefined) =>
     ? [
         {
           id: "delete-task",
-          label: "Delete task",
+          label: "Delete Task",
           icon: <Trash2 className="size-3.5" />,
-          destructive: true,
+          variant: "destructiveGhost" as const,
           onSelect: onDeleteSelect,
         },
       ]
@@ -65,21 +54,21 @@ export function TaskDetailsSheetFooter({
   activeSessionRole,
   historicalSessionRoles,
   onWorkflowAction,
+  onCoreTaskAction,
+  onRemoveWorktreeSelect,
   onDeleteSelect,
 }: TaskDetailsSheetFooterProps): ReactElement {
-  const hasWorkflowAction =
-    includeActions !== undefined &&
-    onWorkflowAction !== undefined &&
-    resolveTaskCardActions(
-      task,
-      workflowActionOptions({
-        hasActiveSession,
-        includeActions,
-        activeSessionRole,
-        historicalSessionRoles,
-      }),
-    ).allActions.length > 0;
-  const extraMenuActions = deleteMenuActions(onDeleteSelect);
+  const extraMenuActions = [
+    ...(onCoreTaskAction
+      ? coreTaskActions(task).map((action) =>
+          coreTaskActionMenuItem(action, () => onCoreTaskAction(action)),
+        )
+      : []),
+    ...(onRemoveWorktreeSelect
+      ? [coreTaskActionMenuItem(REMOVE_WORKTREE_ACTION, onRemoveWorktreeSelect)]
+      : []),
+    ...deleteMenuActions(onDeleteSelect),
+  ];
 
   return (
     <div className="mt-0 flex flex-none flex-wrap items-center justify-between gap-2 border-t border-border bg-card px-5 py-3">
@@ -95,7 +84,7 @@ export function TaskDetailsSheetFooter({
         ) : null}
       </div>
 
-      {includeActions && onWorkflowAction && (hasWorkflowAction || onDeleteSelect) ? (
+      {includeActions && onWorkflowAction ? (
         <TaskWorkflowActionGroup
           task={task}
           includeActions={includeActions}

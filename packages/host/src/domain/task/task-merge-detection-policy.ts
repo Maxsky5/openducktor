@@ -1,18 +1,11 @@
-import { isMergeDetectionCandidateStatus } from "@openducktor/workflows";
-
-/** Whether the status of a task lets merge detection check it. This needs no Git read. */
-export const isMergeDetectionCandidateTask = (task: { status: string }): boolean =>
-  isMergeDetectionCandidateStatus(task.status);
-
 /**
- * Whether merge detection checks a task. It adds two rules to `isMergeDetectionCandidateTask`:
- * the task has a branch, and the task has no pending direct merge.
+ * Whether merge detection can check the branch of a task: the task has a branch, and it has no
+ * pending direct merge. The workflow of the task decides by state with `detectsMerge`.
  */
-export const isMergeDetectionCandidate = (
-  task: { status: string },
-  facts: { taskBranch: TaskBranchMatch; hasPendingDirectMerge: boolean },
-): boolean =>
-  isMergeDetectionCandidateTask(task) &&
+export const hasCheckableTaskBranch = (facts: {
+  taskBranch: TaskBranchMatch;
+  hasPendingDirectMerge: boolean;
+}): boolean =>
   facts.taskBranch.kind !== "none" &&
   // A pending direct merge has its own completion flow.
   !facts.hasPendingDirectMerge;

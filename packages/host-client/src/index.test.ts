@@ -30,6 +30,8 @@ type ClientResult<Method extends keyof HostClientType> = Awaited<
 type HostWirePayload = ClientResult<keyof HostClientType> | JSONType | undefined;
 
 const makeTaskCardPayload = () => ({
+  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflowSteps: [],
   id: "task-1",
   title: "Task",
   description: "",
@@ -246,12 +248,13 @@ describe("HostClient", () => {
   test("reads held Autopilot outcomes and claims one first-message recovery", async () => {
     const outcome: ClientResult<"autopilotStateRead">["outcomes"][number] = {
       outcomeId: "outcome-1",
-      workflowId: "openducktor",
+      workflowId: "openducktor-spec-plan-build",
       workspaceId: "alpha",
       repoPath: "/repo",
       task: { id: "task-1", title: "Task" },
       eventId: "taskProgressedToAiReview",
       actionId: "startQa",
+      actionLabel: "Start QA",
       occurredAt: "2026-10-10T00:00:00.000Z",
       kind: "skipped",
       reason: "The task moved on.",
@@ -980,16 +983,6 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("taskTransition validates status before invoking host", async () => {
-    const { client, calls } = createClient(() => makeTaskCardPayload());
-
-    await expect(
-      // @ts-expect-error This negative test verifies runtime validation of a blank task status.
-      client.taskTransition(workspace, "task-1", " "),
-    ).rejects.toThrow();
-    expect(calls).toHaveLength(0);
-  });
-
   test("workspaceGetSettingsSnapshot uses snapshot IPC route", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "workspace_get_settings_snapshot") {
@@ -1013,7 +1006,7 @@ describe("HostClient", () => {
               branchPrefix: "obp",
               defaultTargetBranch: { remote: "origin", branch: "main" },
               git: {},
-              hooks: { postComplete: [] },
+              hooks: { beforeWorktreeRemoval: [] },
               worktreeCopyPaths: [],
               promptOverrides: {},
               agentDefaults: {},
@@ -1812,25 +1805,6 @@ describe("HostClient", () => {
       conflictedFiles: ["src/index.ts"],
       output: "Automatic merge failed; fix conflicts and then commit the result.",
     });
-  });
-
-  test("build and human workflow commands use expected IPC routes", async () => {
-    const { client, calls } = createClient((command) => {
-      if (command === "build_blocked") {
-        return { ...makeTaskCardPayload(), status: "blocked" };
-      }
-      if (command === "human_request_changes") {
-        return { ...makeTaskCardPayload(), status: "in_progress" };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    await client.buildBlocked(workspace, "task-1", "Needs clarification");
-    await client.humanRequestChanges(workspace, "task-1", "Please rework API");
-
-    expect(calls.map((entry) => entry.command)).toEqual(["build_blocked", "human_request_changes"]);
-    expect(calls[0]?.args?.reason).toBe("Needs clarification");
-    expect(calls[1]?.args?.note).toBe("Please rework API");
   });
 
   test("tasksList rejects malformed host payloads", async () => {

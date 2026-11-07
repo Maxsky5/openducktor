@@ -103,7 +103,7 @@ The frontend renders `availableActions`. It does not derive transition rights fr
 
 ## Start an agent session
 
-The host owns complete workflow launches.
+The host owns complete workflow launches. The shared client launch module prepares a declared message after branch selection and before host dispatch. Task actions and Studio pass the launch intent and selected choices through that interface.
 
 1. The frontend sends one request with the requested workspace, task, action, user choices, and instruction.
 2. The host validates the request and starts an independent worker. Launches for one task run one at a time, in arrival order. A fresh workflow role creates or reuses the task worktree and runs its worktree-creation actions through terminals.
@@ -177,26 +177,63 @@ A task workflow is a data definition. Its Zod schemas and evaluation types are i
 
 `createWorkflow` in `packages/workflows` validates, freezes, and compiles a definition. A definition has a `schemaVersion` for its format and a `revision` for its content. Evaluation reads explicit facts and artifact states. An unknown fact, a wrong value type, an invalid reference, or a missing value that evaluation reads fails with an error.
 
-Each state change uses a named event. An event declares its source states, ordered guards, and ordered outcomes. A denial names the failed guard. The first matching outcome keeps the state or selects the destination. No event leaves a terminal state. An event lists a terminal state only to admit a repeat. An event action is available only when its event admits the input. View actions never authorize writes.
+Every workflow has the core states `open` and `closed`. `TASK_OPEN_STATE` and `TASK_CLOSED_STATE` in `packages/contracts` name them. A new task and a reset task start in `open`. `closed` is the only terminal state. A definition has no initial state field and no terminal flag. It declares both core states in `states` with their labels, tone, and notification, and the board layout gives them a position. `createWorkflow` rejects a definition without them.
+
+Each state change uses a named event. An event declares its source states, ordered guards, and ordered outcomes. A denial names the failed guard. The first matching outcome keeps the state or selects the destination. No event leaves `closed`. An event lists `closed` only to admit a repeat. An event action is available only when its event admits the input. View actions never authorize writes.
 
 The definition also declares the data that host and frontend code read instead of built-in names:
 
 - Artifacts. A document names the event that its submit sends. A review lists its verdicts, and each verdict names its event and tells if it accepts the work.
-- Roles. Each role lists its `odt_*` tools, the artifacts that it can write, its workspace access, and its working location.
+- Roles. A workflow binds roles by ID. Each binding lists the workflow artifacts that the role can write and its default artifact.
+- Pull request roles. `pullRequestRoles` lists the roles whose sessions can create the pull request. Each ID must be a role of the workflow. An empty list lets the sessions of every role create it.
 - States. Each state has its labels, its notification, and its Agent Studio role.
 - Launch actions. Each agent step lists the ways to start its role: start modes, prompt template, selection condition, prompt context, target branch choice, and worktree need.
-- Signals and automations. An event outcome can raise a signal with its source role. A signal lists the automations that the user can attach to it. An automation names the launch action that Autopilot starts and its start mode. The default start mode of the launch action applies when the automation has none. A reuse start that finds no role session in the task worktree starts fresh if the launch action permits it. When `alwaysStartQaReviewsFresh` is on, a role that writes a review artifact starts fresh instead of a reuse or fork, if the launch action permits fresh.
+- Signals and automations. An event outcome can raise a signal with its source role. A signal lists the automations that the user can attach to it. An automation names the launch action that Autopilot starts and its start mode. Autopilot continues the latest task session of the automation role. An automation can also name the core pull request launch `pull_request`. Then Autopilot uses the latest task session of any pull request role, and the launch runs as the role of that session. With an empty `pullRequestRoles` list, it uses the latest session of any role. Autopilot skips the pull request launch when no such session exists. The default start mode of the launch action applies when the automation has none. A reuse start that finds no role session in the task worktree starts fresh if the launch action permits it. When `alwaysStartQaReviewsFresh` is on, a role that writes a review artifact starts fresh instead of a reuse or fork, if the launch action permits fresh.
 - Action order and priority. Task cards show actions in the declared order. The first matching priority rule selects the primary action.
+- Prompts. Every workflow provides the base prompts of `WORKFLOW_PROMPT_IDS` in `packages/contracts`: `workflow.rules`, `workflow.tool_rules`, `workflow.task_context`, `workflow.read_only_rejection`, and `messages.pull_request`. The system prompt of a session is the role instructions, then the first three, in this order. `workflow.read_only_rejection` rejects a mutating tool of a read-only role. `messages.pull_request` is the message of the core pull request launch, and it must keep the `git.targetBranch` placeholder. Each launch action names a prompt in the `messages.` group, which the session gets as its first message or as a message in a running session.
+- Merge detection. A state with `mergeDetection` lets the host check the task branch for a merge.
 
-An event can name one host effect from `workflowEventEffectValues`, such as `build.start`, `task.close`, or `pull_request.merged`. Each effect has at most one event. The exception is `status.set`, which has at most one event for each target state.
+Roles are separate from workflows. The host role catalog holds the built-in roles (`BUILTIN_ROLES` in `packages/workflows/src/builtin/roles/roles.ts`) and will hold custom roles. A catalog role (`agentRoleDefinitionSchema`) owns its label, `odt_*` tools, workspace access, working location, runtime scopes, icon, default panel, and system prompt. A workflow cannot change these. `createTaskWorkflow` merges each binding with its catalog role, and fails for an unknown role ID. The workflow catalog sends each role once. Model defaults and runtime role overrides stay keyed by role ID. The host rejects two workflows that bind one role ID to different catalog roles.
 
-The command of an effect decides its event once and branches on the decision, so a repeat needs no status check. `task_transition` sends the `status.set` event of its target state. `task_apply_event` sends the event of an available event action that has no effect. A role session start sends the start event of its step after it creates the session. `packages/host/src/application/tasks/support/task-workflow-events.ts` maps denials to typed errors and gives the store the signal and source role of each transition.
+Issue types are fixed: `ISSUE_TYPE_VALUES` in `packages/contracts/src/issue-type-schemas.ts` lists `task`, `feature`, and `bug`. A workflow cannot add an issue type. It lists the issue types that it supports, with their label, description, form guidance, and icon, and its conditions can depend on the issue type. A workflow can support only some issue types.
+
+Each prompt has one owner: a role or a workflow. A role owns its instructions, with the prompt ID `instructions`, for example `build.instructions`. A workflow owns its base prompts and its `messages.` prompts. A prompt ID is unique only within its owner, so two workflows can use one prompt ID with different text. A prompt override is keyed by `promptOverrideKey({ ownerKind, ownerId, promptId })` from `packages/contracts`. A role prompt override applies to the role in every workflow. A workflow prompt override applies to every revision of that workflow.
+
+Host effects are a static set that the host owns: `HOST_EFFECT_IDS` in `packages/contracts/src/workflow-definition-schemas.ts`. An event can declare `effects`, a list of host effect IDs. An event without effects only changes the state. Declare effects only on a task action event. The definition check rejects effects on an agent event, on an artifact save or verdict event, and on a step start event, because the host commits these events inside a session that `worktree.reset` would stop.
+
+- `worktree.reset` stops the sessions of the worktree roles, runs the before worktree removal script, removes their other worktrees and branches, and restores the task worktree to its start point. Then it clears the sessions of the worktree roles, the review artifacts, the pull request link, and the merge record. The event still chooses its target state with its outcomes. The Reset Implementation event of Spec, Plan, Build uses it.
+
+`task_apply_event` (`applyTaskEvent`) is the one path that applies a workflow event by its ID. It accepts the event of an available event action. The host decides the event, runs its effects in order through the host effect registry in `packages/host/src/application/tasks/host-effects/host-effect-registry.ts`, and then commits the event through `commitWorkflowEvent`. When an effect fails, the host commits nothing. A failure after a store write of an effect reports the progress and the changed task. Clients send the event ID; they do not look up an event by its effect.
+
+Close Task and Reset Task are core task actions. A workflow does not declare them, and no event or guard controls them. Close Task (`task_close`) moves any task except a closed one to `closed`. A close of a closed task changes nothing. Reset Task (`task_reset`) moves any task except a closed one to `open`. A reset of an open task keeps the status and still clears the task. The host decides both with `decideCoreTaskAction` in `packages/host/src/application/tasks/support/task-workflow-events.ts`, and commits the state through `transitionTask`. `CLOSE_TASK_ACTION` and `RESET_TASK_ACTION` in `packages/frontend-core/src/tasks/workflow/core-task-actions.ts` give their label, icon, emphasis, and confirmation. Every client shows them from `coreTaskActions(task)` after the workflow actions, and opens their confirmation without the workflow action runner.
+
+Approve is an OpenDucktor feature. A workflow only tells when it is available, with one action of kind `approval` and its `availableWhen` condition. The action has no event. `approvalAvailable(task)` on the task workflow evaluates it. The host commands of the approval (`task_approval_context_get`, `task_direct_merge`, and `task_pull_request_upsert`) fail when the approval is not available for a task that is not closed. Every client runner opens the approval dialog for an `approval` action. The approval outcomes are core decisions, so no workflow event controls them:
+
+- A direct merge without a publish target closes the task.
+- A direct merge with a publish target keeps the task state. Its publication (`task_direct_merge_complete`) then closes the task.
+- A pull request upsert keeps the task state.
+- A merged pull request closes the task. The pull request sync and a manual link of a merged pull request use this rule.
+- Close in the approval dialog is the core Close Task.
+
+Each close uses `decideCoreTaskAction("close", task)`, so a close of a closed task changes nothing.
+
+Pull request management is an OpenDucktor feature. The host allows link, detect, unlink, and `odt_set_pull_request` for a task that is not closed. No workflow event controls it. Detection and the upsert read the task branch from the task worktree, so they also need that branch. Link and unlink do not read the branch, because that read needs a Git call. `canUnlinkTaskPullRequest` and `canDetectTaskPullRequest` in `packages/frontend-core/src/tasks/presentation/task-display.ts` give the same rule to the clients.
+
+A recorded local direct merge waits for its publication until the publication closes the task. While it waits, the host rejects every workflow event and Reset Task with an error that tells the user to publish the merge, close the task, or reset the implementation. `commitWorkflowEvent` in `packages/host/src/application/tasks/support/task-workflow-helpers.ts` commits each workflow event transition and runs this check on the locked task row. Workflow artifact submits use the same check, and a role session start checks it before it prepares the worktree. The publication, Close Task, and an event with the `worktree.reset` effect stay allowed, because that effect clears the merge record before the commit.
+
+An event can declare `agent`: the roles that can send it with `odt_apply_workflow_event`, its description, and if it requires a note. An agent event cannot declare `effects`, and the definition check rejects it. Each role must be a role of the workflow, and its catalog role must have the `odt_apply_workflow_event` tool. `agentEvents(roleId)` on the task workflow gives the events of a role, and the system prompt of the role lists them. The host bridge checks the event, the role of the calling session, and a required note. Then `applyAgentEvent` commits the transition through `commitWorkflowEvent`.
+
+A role session start sends the start event of its step after it creates the session. `packages/host/src/application/tasks/support/task-workflow-events.ts` maps denials to typed errors and gives the store the signal and source role of each transition.
+
+Request Changes is a plain event action with a following launch. The feedback form is generic: an event action whose following launch has `context: "human_feedback"` opens it. The session start sends `beforeStartAction: { eventId, note }`. The host accepts it only for a launch with the `human_feedback` context, and commits the event through `applyTaskEvent` before the session starts, so its effects and the merge check apply. The event must be available now. The client and the host check the step of the launch against the task in the state that the event gives, through `taskAfterEvent` on the task workflow. A launch that an available event action starts next also commits that event. When the action has no launch to start, the form commits the event alone with `task_apply_event`.
 
 `createTaskWorkflow` in `packages/workflows/src/task-workflow` gives the host one API for any workflow: task projection, event decisions, roles, artifacts, launch actions, automations, notifications, and prompts. Only `issueType` is a fact. Artifact states come from the task `artifactSummary`, keyed by artifact code. Host code reads the workflow of a stored task with `forTask` and the workflow of a new task with `forNewTask` on the `TaskWorkflowResolver` port. Code that reads many tasks resolves the workflow of each task, and settings cover every workflow of the host. Runtime adapters read the tools and workspace access of a session role through a `WorkflowRolePolicyResolver`, which takes the task and role of the session scope.
 
-Settings follow the workflows of the host. A read adds the notification and Autopilot defaults of each workflow. A write fails for a role, prompt template, signal, automation, or notification kind outside them.
+Settings follow the workflows of the host. A read adds the notification and Autopilot defaults of each workflow. A write fails for a role, prompt, signal, automation, or notification kind outside them.
 
-`packages/workflows/src/builtin` owns the built-in definition, its prompts, and the helpers that the frontend reads. Every repository uses the built-in workflow. The host client parses task cards with the built-in schema, so the frontend shows only the built-in workflow. The MCP server names the built-in issue types and states as a hint, and the host checks values against the workflow of the task.
+`packages/workflows/src/builtin` owns the built-in workflows and roles. `builtin/spec-plan-build` owns the production default definition, `openducktor-spec-plan-build` ("Spec, Plan, Build"), its prompts, and its board layout. `builtin/roles` owns the built-in roles and their system prompts. The definition is the one workflow document: its entities carry optional display fields, such as issue types, state tones, action surfaces and icons, step display rules, and launch order. Injected resolvers can serve several workflows in one workspace. `workflow_catalog_get` returns the validated host inventory and `workspace_workflow_get` returns its explicit shared board order and new-task workflow. All clients join task projections to the exact host definition through the connection-owned Query cache. Missing definitions, invalid references, and incomplete or conflicting shared boards fail with an actionable error. The MCP server names the fixed issue types and the states other than `closed` in the host workflows as a hint; the host validates the workflow of each task.
+
+`createTaskWorkflowResolver` in `packages/host/src/application/tasks/task-workflows.ts` owns host inventory validation, exact revision lookup, and workspace board membership. Task reads and notification projection use this same module. Clients validate received workflow data through their connection-owned queries.
 
 The evaluator returns decisions. The host applies effects and writes to SQLite:
 
@@ -209,9 +246,11 @@ flowchart TD
     D --> F[Host effects and task write]
 ```
 
+A workspace board layout owns only column order and task order. The host resolves each column from the workflows that use its state: the label, title, short label, and tone. The host checks once that every workflow that uses a state ID declares equal metadata. The board covers every workflow state exactly once. Shared IDs combine cards across workflows without combining their actions or roles. State notifications and default Studio roles remain workflow-specific. Tones and icons are closed vocabularies in `packages/contracts`. Each client maps every token to its own icons and theme tokens, and keeps paint, live activity, and platform controls. Human steps show progress and actions without a role tab, composer, model picker, or agent session.
+
 Steps have their own IDs, separate from roles. The required, available, and completed flags of a step describe policy. They do not schedule work. Event guards enforce prerequisites. The built-in derives the `canSkip` flag of the task protocol from `required`.
 
-Task and session records store no workflow identity or revision. Before a task can name another workflow, the design must pin an immutable definition revision and define how existing tasks upgrade.
+Task and session records store no workflow identity or revision. Task responses and committed transition snapshots include a computed `{ id, revision }` reference from the same resolved workflow that projects steps and actions. The record schema and SQLite validation exclude these response fields. Durable workflow assignments, immutable revision storage, and upgrade policy remain future work.
 
 Task update events carry `statusChanges` with the previous status, the source role, and the task snapshot at each committed transition. The committed observer also receives the signal of the transition, and Autopilot reads it. After a transaction commits, the SQLite adapter records its local changes in memory for publication through that host's task stream. Committed changes carry the workflow ID and saved Autopilot rules. The local Autopilot observer creates launch attempts and checks their admission before starting them. These attempts stay in memory. Startup and explicit reads do not dispatch them. See [host database access](host-database.md#concurrent-database-access) for process behavior.
 
@@ -220,7 +259,7 @@ Workflow notifications use these committed transitions. A `snapshot_required` re
 For a human action:
 
 1. The user selects an action from `availableActions`.
-2. The frontend calls a host method such as `taskTransition`, `taskClose`, or `buildCompleted`.
+2. The frontend calls a host method such as `taskApplyEvent`, `taskClose`, or `taskReset`.
 3. The shell maps the method to a host command.
 4. The host decides the workflow event of the action.
 5. The task store writes status, fields, or artifacts.
@@ -239,10 +278,12 @@ Managed and external MCP clients use the same bridge. The host alone owns SQLite
 
 ## Generate a pull request
 
-1. The approval flow starts Builder with `build_pull_request_generation`.
-2. The launch uses `reuse` or `fork` from an existing Builder session.
-3. Builder uses provider Git or GitHub tools to create or update the pull request.
-4. Builder calls `odt_set_pull_request`.
+Pull request generation is an OpenDucktor feature. No workflow declares its launch. `PULL_REQUEST_LAUNCH` in `packages/workflows/src/task-workflow/pull-request-launch.ts` defines the core launch `pull_request` (`PULL_REQUEST_LAUNCH_ID` in `packages/contracts`). It continues or forks a session in the task worktree, with `reuse` as the default start mode. It sends the `messages.pull_request` prompt of the workflow with the task target branch.
+
+1. The approval dialog, the Agent Studio quick action, and the mobile quick action start the core launch. They show it while the task is not closed and its approval is available (`pullRequestLaunchAvailable(task)`), and while the Git provider supports pull requests.
+2. The user selects a session of a pull request role. With an empty `pullRequestRoles` list, every task session can create the pull request. The launch runs as the role of the selected session. The manual launch request names that role, and the host checks that the source session has it.
+3. The agent uses provider Git or GitHub tools to create or update the pull request.
+4. The agent calls `odt_set_pull_request`.
 5. The host resolves the configured provider and pull request number, then stores the canonical metadata.
 
 The page does not parse chat text to create a pull request.
@@ -251,11 +292,11 @@ The page does not parse chat text to create a pull request.
 
 | Concern | Source | Owner |
 |---|---|---|
-| Formats of status, issue type, role, and start mode | `packages/contracts/src/task-schemas.ts`, `packages/contracts/src/agent-workflow-schemas.ts` | Contracts |
-| Built-in states, issue types, roles, and actions | `packages/workflows/src/builtin/ids.ts` | Workflows |
+| Formats of status, role, and start mode, and the fixed issue types | `packages/contracts/src/task-schemas.ts`, `packages/contracts/src/issue-type-schemas.ts`, `packages/contracts/src/agent-workflow-schemas.ts` | Contracts |
+| Built-in states, roles, and actions | `packages/workflows/src/builtin/spec-plan-build/ids.ts`, `packages/workflows/src/builtin/roles/ids.ts` | Workflows |
 | ODT tool names and schemas | `packages/contracts/src/odt-tool-names.ts`, `packages/contracts/src/odt-mcp-schemas.ts` | Contracts |
-| Role tool list | The roles of the task workflow definition | Workflows |
-| Generic workflow definitions, decisions, and presentation | `packages/contracts/src/workflow-*-schemas.ts` | Contracts |
+| Role tool list | The host role catalog | Workflows |
+| Generic workflow definitions, display vocabularies, and decisions | `packages/contracts/src/workflow-*-schemas.ts` | Contracts |
 | Workflow evaluation and built-in rules | `packages/workflows/src/*` | Workflows |
 | Workflow execution and typed failures | `packages/host/src/domain/task/*`, `packages/host/src/application/tasks/*` | Host |
 | Task state | SQLite `tasks.status` | Host SQLite adapter |

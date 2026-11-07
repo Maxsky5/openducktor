@@ -2,10 +2,16 @@ import type { FreeTaskArtifact, TaskArtifact, WorkflowTaskArtifact } from "@open
 import { workflowArtifactOrder } from "@openducktor/workflows";
 
 /** The collection as both clients list it: workflow artifacts in workflow order, then files by name. */
-export const groupTaskArtifacts = (artifacts: readonly TaskArtifact[]) => ({
+export const groupTaskArtifacts = (
+  artifacts: readonly TaskArtifact[],
+  taskWorkflow: import("@openducktor/workflows").TaskWorkflow,
+) => ({
   workflow: artifacts
     .filter((item): item is WorkflowTaskArtifact => item.classification === "workflow")
-    .toSorted((a, b) => workflowArtifactOrder(a.code) - workflowArtifactOrder(b.code)),
+    .toSorted(
+      (a, b) =>
+        workflowArtifactOrder(a.code, taskWorkflow) - workflowArtifactOrder(b.code, taskWorkflow),
+    ),
   files: artifacts
     .filter((item): item is FreeTaskArtifact => item.classification === "free")
     .toSorted((a, b) => a.name.localeCompare(b.name)),

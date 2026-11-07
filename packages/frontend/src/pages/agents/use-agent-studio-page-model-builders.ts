@@ -1,7 +1,10 @@
 import {
-  buildRoleWorkflowMapForTask,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  buildWorkflowRail,
+  type WorkflowRailStep,
+} from "@openducktor/frontend-core/tasks/presentation/workflow-rail";
+import {
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { ComboboxGroup } from "@/components/ui/combobox";
@@ -22,7 +25,6 @@ import {
   buildLiveSessionByRoleMap,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
-  buildWorkflowStateByRole,
 } from "./agents-page-session-tabs";
 
 export type AgentStudioSessionContextUsage = {
@@ -35,7 +37,7 @@ type BuildWorkflowModelContextArgs = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   selectedSessionIdentity: AgentSessionIdentity | null;
-  role: AgentRole;
+  role: AgentRole | null;
   isSessionWorking: boolean;
   roleLabelByRole: Record<AgentRole, string>;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
@@ -46,7 +48,8 @@ type BuildWorkflowModelContextArgs = {
 
 export type WorkflowModelContext = {
   workflowSessionByRole: Record<AgentRole, AgentSessionWorkflowSummary | null>;
-  workflowStateByRole: ReturnType<typeof buildWorkflowStateByRole>;
+  /** The workflow rail. Each role shows its latest session. */
+  workflowRail: WorkflowRailStep<string>[];
   sessionSelectorGroups: ComboboxGroup[];
   sessionSelectorAutofocusByValue: Record<string, boolean>;
   sessionSelectorValue: string;
@@ -72,18 +75,24 @@ export const buildWorkflowModelContext = ({
   mergedTarget = null,
 }: BuildWorkflowModelContextArgs): WorkflowModelContext => {
   const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
-  const roleWorkflowsByTask = buildRoleWorkflowMapForTask(selectedTask);
+  const roleWorkflowsByTask = selectedTask?.agentWorkflows ?? {};
   const workflowSessionByRole = buildLatestSessionByRoleMap(sessionsForTask);
   const liveSessionByRole = buildLiveSessionByRoleMap(sessionsForTask);
-  const workflowStateByRole = buildWorkflowStateByRole({
-    task: selectedTask,
-    roleWorkflowsByTask,
-    liveSessionByRole,
-  });
-  const selectedRoleAvailable = roleWorkflowsByTask[role].available;
+  const workflowRail = selectedTask
+    ? buildWorkflowRail(selectedTask, (workflowRole) => {
+        const session = workflowSessionByRole[workflowRole] ?? null;
+        return {
+          session: session ? agentSessionIdentityKey(session) : null,
+          liveSession: liveSessionByRole[workflowRole] ?? "none",
+        };
+      })
+    : [];
+  const selectedRoleAvailable = role !== null && roleWorkflowsByTask[role]?.available === true;
   const selectedRoleReadOnlyReason = selectedRoleAvailable
     ? null
-    : `${roleLabelByRole[role]} is unavailable for this task right now.`;
+    : role
+      ? `${roleLabelByRole[role]} is unavailable for this task right now.`
+      : "This workflow step does not start an agent session.";
   const sessionSelectorGroups = buildSessionSelectorGroups({
     sessionsForTask,
     roleLabelByRole,
@@ -91,7 +100,8 @@ export const buildWorkflowModelContext = ({
   const sessionSelectorAutofocusByValue = Object.fromEntries(
     sessionsForTask.map((session) => [
       agentSessionIdentityKey(session),
-      roleWorkflowsByTask[session.role].available && session.activityState !== "waiting_input",
+      roleWorkflowsByTask[session.role]?.available === true &&
+        session.activityState !== "waiting_input",
     ]),
   );
   const sessionSelectorValue = selectedSessionIdentity
@@ -116,7 +126,7 @@ export const buildWorkflowModelContext = ({
 
   return {
     workflowSessionByRole,
-    workflowStateByRole,
+    workflowRail,
     sessionSelectorGroups,
     sessionSelectorAutofocusByValue,
     sessionSelectorValue,

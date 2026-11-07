@@ -1,5 +1,6 @@
+import { renderWithWorkflow as render } from "@/test-utils/render-with-workflow";
 import { describe, expect, mock, test } from "bun:test";
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, fireEvent } from "@testing-library/react";
 import type { McpTaskArtifact, RuntimeKind } from "@openducktor/contracts";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -162,7 +163,7 @@ describe("artifact tool cards", () => {
 
   test("does not call a failed QA approval successful", () => {
     const view = render(
-      card({ code: "qaReport", verdict: "approved" }, null, {
+      card({ taskId: "task-1", code: "qaReport", verdict: "approved" }, null, {
         status: "error",
         error: "Save failed",
       }),

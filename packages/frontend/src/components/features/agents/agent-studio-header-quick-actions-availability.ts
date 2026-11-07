@@ -22,9 +22,7 @@ type QuickActionBlockedReasonInput = {
 export const isGitConflictResolutionQuickAction = (
   option: AgentStudioQuickActionOption,
 ): boolean => {
-  return (
-    option.kind !== "task_action" && option.launchActionId === "build_rebase_conflict_resolution"
-  );
+  return option.kind !== "task_action" && option.surface === "git_conflict";
 };
 
 export const getQuickActionBlockedReason = ({
@@ -33,7 +31,7 @@ export const getQuickActionBlockedReason = ({
   sessionStartBlockedReason,
   onResolveGitConflictQuickAction,
 }: QuickActionBlockedReasonInput): string | null => {
-  if (!agentStudioReady) {
+  if (!agentStudioReady && option.kind !== "task_action") {
     return "The task session view is not ready.";
   }
 
@@ -102,5 +100,5 @@ export const canOpenQuickActionsMenu = ({
     (option) => option.kind === "task_action" && !option.disabled,
   );
 
-  return agentStudioReady && hasMenuEntries && (!primaryActionDisabled || hasEnabledTaskAction);
+  return hasMenuEntries && ((agentStudioReady && !primaryActionDisabled) || hasEnabledTaskAction);
 };

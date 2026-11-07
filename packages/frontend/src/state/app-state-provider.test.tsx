@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  useChecksState,
-  useDelegationState,
-  useDocumentState,
-  useTasksState,
-} from "./app-state-provider";
+import { useChecksState, useDocumentState, useTasksState } from "./app-state-provider";
 import { useWorkspaceState } from "./index";
 
 const HookProbe = ({ hook }: { hook: () => void }): ReactElement => {
@@ -37,10 +32,6 @@ describe("AppStateProvider hooks", () => {
       {
         hook: useTasksState,
         expected: "useTasksState must be used inside AppStateProvider",
-      },
-      {
-        hook: useDelegationState,
-        expected: "useDelegationState must be used inside AppStateProvider",
       },
       {
         hook: useDocumentState,

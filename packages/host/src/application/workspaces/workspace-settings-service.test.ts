@@ -31,10 +31,11 @@ import type {
   WorkspaceSettingsService,
 } from "./workspace-settings-model";
 import {
-  builtinTaskWorkflow,
-  createBuiltinNotificationSettings,
+  specPlanBuildWorkflow,
   createTaskWorkflow,
+  workflowRoleCatalog,
 } from "@openducktor/workflows";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 const createWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,
@@ -60,7 +61,7 @@ const repoConfig = (workspaceId: string, repoPath: string): RepoConfig => ({
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
@@ -81,14 +82,34 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   autopilot: {
     alwaysStartQaReviewsFresh: false,
     rules: [
-      { workflowId: "openducktor", eventId: "taskProgressedToSpecReady", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskProgressedToReadyForDev", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskProgressedToAiReview", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskRejectedByQa", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskProgressedToHumanReview", actionIds: [] },
+      {
+        workflowId: "openducktor-spec-plan-build",
+        eventId: "taskProgressedToSpecReady",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-spec-plan-build",
+        eventId: "taskProgressedToReadyForDev",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-spec-plan-build",
+        eventId: "taskProgressedToAiReview",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-spec-plan-build",
+        eventId: "taskRejectedByQa",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-spec-plan-build",
+        eventId: "taskProgressedToHumanReview",
+        actionIds: [],
+      },
     ],
   },
-  notifications: createBuiltinNotificationSettings(),
+  notifications: createSpecPlanBuildNotificationSettings(),
   remoteAccess: { enabled: false, configuration: null },
   agentRuntimes: {
     opencode: {
@@ -326,7 +347,7 @@ describe("createWorkspaceSettingsService", () => {
         alwaysStartQaReviewsFresh: false,
         rules: [
           {
-            workflowId: "openducktor",
+            workflowId: "openducktor-spec-plan-build",
             eventId: "taskProgressedToAiReview",
             actionIds: ["startBuilder"],
           },
@@ -340,12 +361,13 @@ describe("createWorkspaceSettingsService", () => {
     });
     const port = createFakeSettingsConfig({ config: initial });
     const otherWorkflow = createTaskWorkflow(
-      workflowDefinitionSchema.parse({ ...builtinTaskWorkflow.definition, id: "other" }),
-      builtinTaskWorkflow.prompts.templates,
+      workflowDefinitionSchema.parse({ ...specPlanBuildWorkflow.definition, id: "other" }),
+      specPlanBuildWorkflow.workflowTemplates,
+      workflowRoleCatalog([specPlanBuildWorkflow]),
     );
     const service = createWorkspaceSettingsService(port, {
       ...builtinTaskWorkflows,
-      workflows: [builtinTaskWorkflow, otherWorkflow],
+      workflows: [specPlanBuildWorkflow, otherWorkflow],
     });
     await Effect.runPromise(
       saveWith(
@@ -363,7 +385,7 @@ describe("createWorkspaceSettingsService", () => {
           autopilot: {
             rules: [
               {
-                workflowId: "openducktor",
+                workflowId: "openducktor-spec-plan-build",
                 eventId: "taskProgressedToAiReview",
                 actionIds: ["startQa"],
               },
@@ -398,7 +420,11 @@ describe("createWorkspaceSettingsService", () => {
     expect(
       saved.autopilot.rules.filter((rule) => rule.eventId === "taskProgressedToAiReview"),
     ).toEqual([
-      { workflowId: "openducktor", eventId: "taskProgressedToAiReview", actionIds: ["startQa"] },
+      {
+        workflowId: "openducktor-spec-plan-build",
+        eventId: "taskProgressedToAiReview",
+        actionIds: ["startQa"],
+      },
       {
         workflowId: "other",
         eventId: "taskProgressedToAiReview",
@@ -1114,7 +1140,10 @@ describe("createWorkspaceSettingsService", () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({
         workspaces: {
-          repo: { ...repoConfig("repo", "/repos/repo"), hooks: { postComplete: ["bun lint"] } },
+          repo: {
+            ...repoConfig("repo", "/repos/repo"),
+            hooks: { beforeWorktreeRemoval: ["bun lint"] },
+          },
         },
         workspaceOrder: ["repo"],
       }),
@@ -1127,7 +1156,7 @@ describe("createWorkspaceSettingsService", () => {
     const repo = await Effect.runPromise(service.getRepoConfig("repo"));
     expect(updated).toMatchObject({ workspaceId: "repo" });
     expect(repo.git).toEqual(git);
-    expect(repo.hooks).toEqual({ postComplete: ["bun lint"] });
+    expect(repo.hooks).toEqual({ beforeWorktreeRemoval: ["bun lint"] });
   });
   test("saves repository actions and keeps them when a later save omits them", async () => {
     const actions: RepoConfig["actions"] = {
@@ -2013,7 +2042,7 @@ describe("createWorkspaceSettingsService", () => {
 
   test("preserves notifications during unrelated settings writes", async () => {
     const notifications = {
-      ...createBuiltinNotificationSettings(),
+      ...createSpecPlanBuildNotificationSettings(),
       volumePercent: 70,
     };
     const settingsConfig = createFakeSettingsConfig({

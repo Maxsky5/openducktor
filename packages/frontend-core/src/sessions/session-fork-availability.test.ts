@@ -8,6 +8,7 @@ const base = {
   readOnly: false,
   readOnlyReason: null,
   error: null,
+  waitsForMergePublication: false,
 };
 
 test("a ready, open session can fork", () => {
@@ -22,6 +23,9 @@ test("names the first reason that blocks a fork", () => {
       readOnly: true,
     }),
   ).toBe("Start the runtime before forking this reply.");
+  expect(
+    sessionForkDisabledReason({ ...base, waitsForMergePublication: true, readOnly: true }),
+  ).toBe("Publish or close the local merge before you fork a reply.");
   expect(sessionForkDisabledReason({ ...base, readOnly: true })).toBe(
     "Reopen this chat before forking a reply.",
   );

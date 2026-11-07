@@ -32,7 +32,6 @@ import {
   mergeCandidates,
 } from "./sqlite-task-queries";
 import {
-  hostTerminalStates,
   type SqliteTaskRepositoryContextProvider,
   type SqliteTaskRepositoryContext,
 } from "./sqlite-task-repository-context";
@@ -297,12 +296,7 @@ export const createSqliteTaskRepository = ({
       withReadDatabase(
         input,
         "sqliteTaskRepository.listPullRequestSyncCandidates",
-        ({ session, workspaceId, taskWorkflows }) =>
-          listPullRequestSyncCandidatesInDatabase(
-            session,
-            workspaceId,
-            hostTerminalStates(taskWorkflows),
-          ),
+        ({ session, workspaceId }) => listPullRequestSyncCandidatesInDatabase(session, workspaceId),
       ),
     listAgentSessionsForTasks: (input) =>
       input.taskIds.length === 0
@@ -348,7 +342,7 @@ export const createSqliteTaskRepository = ({
         input,
         "sqliteTaskRepository.listMergeCandidates",
         ({ session, workspaceId, taskWorkflows }) =>
-          mergeCandidates(session, workspaceId, hostTerminalStates(taskWorkflows)),
+          mergeCandidates(session, workspaceId, taskWorkflows),
       ),
     searchTasks: (input) =>
       withReadDatabase(

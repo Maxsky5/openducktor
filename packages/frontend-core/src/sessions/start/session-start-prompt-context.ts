@@ -1,8 +1,6 @@
 import type { GitTargetBranch } from "@openducktor/contracts";
 import {
-  kickoffPromptContextKind,
   type KickoffPromptContextKind,
-  type AgentKickoffTemplateId,
   type BuildAgentKickoffPromptInput,
   resolvePullRequestTarget,
 } from "@openducktor/workflows";
@@ -16,7 +14,8 @@ type SessionStartKickoffPromptContext = Pick<
 >;
 
 type ResolveSessionStartKickoffPromptContextInput = {
-  templateId: AgentKickoffTemplateId;
+  templateId: string;
+  context: KickoffPromptContextKind;
   message?: string;
   taskTargetBranch?: GitTargetBranch;
   repoDefaultTargetBranch: GitTargetBranch | null;
@@ -67,5 +66,5 @@ const KICKOFF_PROMPT_CONTEXT_RESOLVERS = {
 export const resolveSessionStartKickoffPromptContext = (
   input: ResolveSessionStartKickoffPromptContextInput,
 ): SessionStartKickoffPromptContext => {
-  return KICKOFF_PROMPT_CONTEXT_RESOLVERS[kickoffPromptContextKind(input.templateId)](input);
+  return KICKOFF_PROMPT_CONTEXT_RESOLVERS[input.context](input);
 };

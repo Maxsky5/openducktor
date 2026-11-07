@@ -57,26 +57,6 @@ export const requireAgentSessionDependencies = (
     workspaceSettingsService: WorkspaceSettingsService;
   };
 };
-export const requireBuildCompletedDependencies = (
-  settingsConfig: SettingsConfigPort | undefined,
-  systemCommands: SystemCommandPort | undefined,
-  workspaceSettingsService: WorkspaceSettingsService | undefined,
-) => {
-  if (!settingsConfig) {
-    throw missingTaskDependency("Settings config port is required for build_completed.");
-  }
-  if (!systemCommands) {
-    throw missingTaskDependency("System command port is required for build_completed.");
-  }
-  if (!workspaceSettingsService) {
-    throw missingTaskDependency("Workspace settings service is required for build_completed.");
-  }
-  return { settingsConfig, systemCommands, workspaceSettingsService } satisfies {
-    settingsConfig: SettingsConfigPort;
-    systemCommands: SystemCommandPort;
-    workspaceSettingsService: WorkspaceSettingsService;
-  };
-};
 export const requireBuildStartDependencies = (
   gitPort: GitPort | undefined,
   runtimeDefinitionsService: RuntimeDefinitionsService | undefined,
@@ -128,6 +108,8 @@ export const requireBuildStartDependencies = (
 type MergedTaskCleanupDependencies = {
   gitPort: GitPort;
   settingsConfig: SettingsConfigPort;
+  /** Runs the before worktree removal script. Only a removal with commands needs it. */
+  systemCommands: SystemCommandPort | undefined;
   taskWorktreeService: TaskWorktreeService;
   terminalService: TaskTerminalCleanupPort;
   workspaceSettingsService: WorkspaceSettingsService;
@@ -140,6 +122,7 @@ export const requireMergedTaskCleanupDependencies = (
   {
     gitPort,
     settingsConfig,
+    systemCommands,
     taskWorktreeService,
     terminalService,
     workspaceSettingsService,
@@ -165,6 +148,7 @@ export const requireMergedTaskCleanupDependencies = (
   const dependencies: MergedTaskCleanupDependencies = {
     gitPort,
     settingsConfig,
+    systemCommands,
     taskWorktreeService,
     terminalService,
     workspaceSettingsService,
@@ -177,6 +161,7 @@ export const requireMergedTaskCleanupDependencies = (
 export const requireDirectMergeDependencies = ({
   gitPort,
   settingsConfig,
+  systemCommands,
   taskWorktreeService,
   terminalService,
   worktreeFiles,
@@ -184,6 +169,7 @@ export const requireDirectMergeDependencies = ({
 }: {
   gitPort: GitPort | undefined;
   settingsConfig: SettingsConfigPort | undefined;
+  systemCommands: SystemCommandPort | undefined;
   taskWorktreeService: TaskWorktreeService | undefined;
   terminalService: TaskTerminalCleanupPort | undefined;
   worktreeFiles: WorktreeFilePort | undefined;
@@ -210,6 +196,7 @@ export const requireDirectMergeDependencies = ({
   return {
     gitPort,
     settingsConfig,
+    systemCommands,
     taskWorktreeService,
     terminalService,
     worktreeFiles,
@@ -219,6 +206,7 @@ export const requireDirectMergeDependencies = ({
 export const requireLinkMergedPullRequestDependencies = ({
   gitPort,
   settingsConfig,
+  systemCommands,
   taskWorktreeService,
   terminalService,
   worktreeFiles,
@@ -226,6 +214,7 @@ export const requireLinkMergedPullRequestDependencies = ({
 }: {
   gitPort: GitPort | undefined;
   settingsConfig: SettingsConfigPort | undefined;
+  systemCommands: SystemCommandPort | undefined;
   taskWorktreeService: TaskWorktreeService | undefined;
   terminalService: TaskTerminalCleanupPort | undefined;
   worktreeFiles: WorktreeFilePort | undefined;
@@ -257,6 +246,7 @@ export const requireLinkMergedPullRequestDependencies = ({
   } = {
     gitPort,
     settingsConfig,
+    systemCommands,
     taskWorktreeService,
     terminalService,
     workspaceSettingsService,

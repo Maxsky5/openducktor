@@ -1,3 +1,6 @@
+import { workflowReferenceSchema } from "@openducktor/contracts";
+import { z } from "zod";
+import type { TaskWorkflowContinuation } from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { useLocalSearchParams } from "expo-router";
 import type { ReactNode } from "react";
@@ -15,8 +18,13 @@ export type WorkflowSheetParams = {
   workspaceId: string | null;
   taskId: string | null;
   action: string | null;
+  /** What the human feedback sheet does: `launch` or `event`. */
+  mode: string | null;
+  /** The workflow event that the human feedback sheet applies in the `event` mode. */
+  event: string | null;
   /** The session launch action of a quick action, which the start sheet runs instead. */
   launch: string | null;
+  continuation: TaskWorkflowContinuation | undefined;
 };
 
 export const useWorkflowSheetParams = (): WorkflowSheetParams => {
@@ -24,13 +32,19 @@ export const useWorkflowSheetParams = (): WorkflowSheetParams => {
     workspaceId: string;
     taskId: string;
     action: string;
+    mode: string;
+    event: string;
     launch: string;
+    continuation: string;
   }>();
   return {
     workspaceId: routeParam(params.workspaceId),
     taskId: routeParam(params.taskId),
     action: routeParam(params.action),
+    mode: routeParam(params.mode),
+    event: routeParam(params.event),
     launch: routeParam(params.launch),
+    continuation: parseWorkflowContinuation(routeParam(params.continuation)),
   };
 };
 
@@ -73,3 +87,10 @@ export function WorkflowSheetFrame({
     </GroupedSheet>
   );
 }
+
+const parseWorkflowContinuation = (raw: string | null): TaskWorkflowContinuation | undefined => {
+  if (!raw) return undefined;
+  return z
+    .object({ workflow: workflowReferenceSchema, launchActionIds: z.array(z.string()) })
+    .parse(JSON.parse(raw));
+};

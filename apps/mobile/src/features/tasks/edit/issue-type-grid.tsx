@@ -1,8 +1,5 @@
-import { type BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
-import {
-  ISSUE_TYPE_CHOICES,
-  issueTypeGuidance,
-} from "@openducktor/frontend-core/tasks/create/task-composer-options";
+import { type WorkflowIssueTypeId as IssueType } from "@openducktor/workflows";
+import type { IssueTypeChoice } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 import { memo, type ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -26,7 +23,7 @@ type IssueTypePaint = {
 };
 
 /** The desktop task composer colors and icons of each issue type. */
-const issueTypePaint = (theme: AppTheme, issueType: IssueType): IssueTypePaint => {
+const issueTypePaint = (theme: AppTheme, issueType: string | undefined): IssueTypePaint => {
   const d = theme.desktop;
   switch (issueType) {
     case "feature":
@@ -47,7 +44,7 @@ const issueTypePaint = (theme: AppTheme, issueType: IssueType): IssueTypePaint =
           foreground: d.destructiveMuted,
         },
       };
-    case "task":
+    default:
       return {
         icon: "list-todo",
         card: { background: withAlpha(d.muted, 0.8), border: d.input },
@@ -58,7 +55,7 @@ const issueTypePaint = (theme: AppTheme, issueType: IssueType): IssueTypePaint =
 };
 
 /** The 36-point icon tile of an issue type, as the desktop composer. */
-function IssueTypeIconTile({ issueType }: { issueType: IssueType }): ReactElement {
+function IssueTypeIconTile({ issueType }: { issueType?: string | undefined }): ReactElement {
   const theme = useAppTheme();
   const paint = issueTypePaint(theme, issueType);
   return (
@@ -75,20 +72,22 @@ function IssueTypeIconTile({ issueType }: { issueType: IssueType }): ReactElemen
  */
 export const IssueTypeGrid = memo(function IssueTypeGrid({
   selected,
+  choices,
   disabled,
   onSelect,
 }: {
   selected: IssueType | null;
+  choices: readonly IssueTypeChoice[];
   disabled: boolean;
   onSelect: (issueType: IssueType) => void;
 }): ReactElement {
   const theme = useAppTheme();
   return (
     <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel="Issue type">
-      {ISSUE_TYPE_CHOICES.map((choice) => {
+      {choices.map((choice) => {
         const isSelected = selected === choice.value;
         const unavailable = choice.disabled === true && !isSelected;
-        const paint = issueTypePaint(theme, choice.value);
+        const paint = issueTypePaint(theme, choice.icon);
         const description =
           unavailable && choice.disabledText ? choice.disabledText : choice.description;
         return (
@@ -110,7 +109,7 @@ export const IssueTypeGrid = memo(function IssueTypeGrid({
             ]}
           >
             <View style={styles.cardTop}>
-              <IssueTypeIconTile issueType={choice.value} />
+              <IssueTypeIconTile issueType={choice.icon} />
               {unavailable ? null : (
                 <View
                   style={[
@@ -147,24 +146,25 @@ export const IssueTypeGrid = memo(function IssueTypeGrid({
  * tile, the name, and Change in New Task on one row, then the type guidance.
  */
 export function IssueTypeSummary({
-  issueType,
+  choice,
   onChange,
   disabled,
 }: {
-  issueType: IssueType;
+  choice: IssueTypeChoice;
   /** Goes back to the type step. Null in Edit Task, where the type cannot change. */
   onChange: (() => void) | null;
   disabled: boolean;
 }): ReactElement {
-  const label = ISSUE_TYPE_CHOICES.find((choice) => choice.value === issueType)?.label ?? issueType;
+  const label = choice.label;
+  const guidance = choice.guidance ?? choice.description;
   return (
     <View
       style={styles.summary}
       accessible={onChange === null}
-      accessibilityLabel={`Issue type ${label}. ${issueTypeGuidance(issueType)}`}
+      accessibilityLabel={`Issue type ${label}. ${guidance}`}
     >
       <View style={styles.summaryHeader}>
-        <IssueTypeIconTile issueType={issueType} />
+        <IssueTypeIconTile issueType={choice.icon} />
         <Text variant="callout" weight="semibold" style={styles.summaryName}>
           {label}
         </Text>
@@ -179,7 +179,7 @@ export function IssueTypeSummary({
         ) : null}
       </View>
       <Text variant="footnote" tone="tertiary">
-        {issueTypeGuidance(issueType)}
+        {guidance}
       </Text>
     </View>
   );

@@ -1,3 +1,5 @@
+import { useTaskActionTasks } from "@openducktor/frontend-core/queries/use-task-action-tasks";
+import { useWorkflowEventActions } from "@openducktor/frontend-core/tasks/workflow/use-workflow-event-actions";
 import type { PullRequest } from "@openducktor/contracts";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useCallback, useMemo, useRef } from "react";
@@ -39,6 +41,7 @@ import {
   useTaskConfirmDialogHost,
 } from "./task-confirm-dialog-host";
 import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
+import { createTaskActionRunner } from "@openducktor/frontend-core/tasks/workflow/task-action-runner";
 import {
   type TaskWorkflowTaskComposerModel,
   useTaskWorkflowComposer,
@@ -78,8 +81,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     [allSessions, activeWorkspace?.workspaceId],
   );
   const {
-    tasks,
-    refreshTasks,
+    tasks: boardTasks,
     deleteTask,
     closeTask,
     removeTaskWorktree,
@@ -90,6 +92,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     resetTask,
     resetTaskImplementation,
   } = useTasksState();
+  const tasks = useTaskActionTasks(activeWorkspace, boardTasks);
   const { sessionStartNotifications } = useNotificationContext();
   const runSessionStartWorkflow = useSessionStartWorkflowRunner({
     workspaceId: activeWorkspaceId,
@@ -128,17 +131,14 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
 
   const {
     humanReviewFeedbackModal,
+    continueTaskWorkflow,
     sessionStartModal,
     isSessionStarting,
     startSessionIntent,
+    onLaunch,
     onPullRequestGenerate,
-    onDelegate,
     onOpenSession,
-    onPlan,
-    onQaStart,
-    onQaOpen,
-    onBuild,
-    onHumanRequestChanges,
+    onHumanFeedback,
   } = useKanbanSessionStartFlow({
     activeWorkspaceId,
     branches: branches ?? [],
@@ -167,7 +167,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
   });
 
   const openBuilderSession = useCallback(
-    (taskId: string, identity: AgentSessionIdentity): void => {
+    (taskId: string, identity: AgentSessionIdentity, role: string): void => {
       if (!activeWorkspaceId) {
         throw new Error("No active workspace is selected.");
       }
@@ -176,7 +176,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
           kind: "task_session",
           workspaceId: activeWorkspaceId,
           taskId,
-          role: "build",
+          role,
           identity,
         }),
       );
@@ -199,7 +199,6 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     loadGitProviderContext: gitProvider.load,
     tasks,
     requestPullRequestGeneration: onPullRequestGenerate,
-    refreshTasks,
     closeTask,
     openResetImplementation,
     onResolveGitConflict: handleResolveTaskGitConflict,
@@ -214,15 +213,21 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
   });
 
   const onDelete = deleteTask;
-  const { onConfirmTaskAction, model: taskConfirmDialog } = useTaskConfirmDialogHost({
-    workspaceIdentity,
-    tasks,
-    onResetTask: resetTask,
-    onDelete,
-    onCloseTask: closeTask,
-    // A details sheet of the task also closes, as after a confirmation in the sheet.
-    onSucceeded: closeTaskDetails,
-  });
+  const { onConfirmTaskAction: openConfirmation, model: taskConfirmDialog } =
+    useTaskConfirmDialogHost({
+      workspaceIdentity,
+      tasks,
+      onResetTask: resetTask,
+      onDelete,
+      onCloseTask: closeTask,
+      // A details sheet of the task also closes, as after a confirmation in the sheet.
+      onSucceeded: closeTaskDetails,
+    });
+
+  const onConfirmTaskAction = useCallback<TaskWorkflowActions["onConfirmTaskAction"]>(
+    (taskId, action) => openConfirmation(taskId, action),
+    [openConfirmation],
+  );
 
   const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(sessions), [sessions]);
   const activeTaskSessionContextByTaskId = useMemo(
@@ -257,23 +262,46 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     [isSessionStarting, approvingTaskId, requestingChangesTaskId, resettingImplementationTaskId],
   );
 
+  const { onApplyEvent } = useWorkflowEventActions(
+    workspaceRepoPath,
+    tasks,
+    onLaunch,
+    activeWorkspaceId,
+  );
+  const runAction = useMemo(
+    () =>
+      createTaskActionRunner({
+        onLaunch,
+        onApplyEvent,
+        onOpenTaskDetails,
+        onOpenSession,
+        onHumanApprove: (taskId) => openTaskApproval(taskId),
+        onHumanFeedback,
+        onConfirm: (taskId, _action, eventId, onCommitted) =>
+          openResetImplementation(taskId, eventId, { closeDetailsAfterReset: true, onCommitted }),
+        continueTaskWorkflow,
+        showError: showWorkflowActionError,
+      }),
+    [
+      onLaunch,
+      onApplyEvent,
+      onOpenTaskDetails,
+      onOpenSession,
+      openTaskApproval,
+      onHumanFeedback,
+      openResetImplementation,
+      continueTaskWorkflow,
+    ],
+  );
   const actions = useMemo<TaskWorkflowActions>(
     () => ({
+      runAction,
       kanbanPendingState,
+      onLaunch,
       onCreateTask,
-      onPlan,
-      onQaStart,
-      onQaOpen,
-      onBuild,
       onOpenSession,
-      onDelegate,
       onEdit,
       onOpenTaskDetails,
-      onHumanApprove: openTaskApproval,
-      onHumanRequestChanges,
-      onResetImplementation: (taskId, options) => {
-        openResetImplementation(taskId, options);
-      },
       onResetTask: resetTask,
       onCloseTask: closeTask,
       onRemoveTaskWorktree: removeTaskWorktree,
@@ -295,26 +323,20 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       activeTaskSessionContextByTaskId,
     }),
     [
+      runAction,
       kanbanPendingState,
+      onLaunch,
       activeTaskSessionContextByTaskId,
       closeTask,
       detectingPullRequestTaskIds,
       gitProvider.context,
       gitProvider.error,
-      onBuild,
       onConfirmTaskAction,
       onCreateTask,
-      onDelegate,
       onDelete,
       onEdit,
-      onHumanRequestChanges,
       onOpenSession,
       onOpenTaskDetails,
-      onPlan,
-      onQaOpen,
-      onQaStart,
-      openResetImplementation,
-      openTaskApproval,
       registerTaskDetailsClose,
       removeTaskWorktree,
       resetTask,
@@ -365,6 +387,10 @@ const showPullRequestCreatedToast = (pullRequest: PullRequest): void => {
       },
     },
   });
+};
+
+const showWorkflowActionError = (title: string, description: string): void => {
+  toast.error(title, { description });
 };
 
 const showGitProviderContextLoadFailureToast = (description: string, retry: () => void): void => {

@@ -1,4 +1,5 @@
 import { BROWSER_FORWARDED_SHORTCUTS } from "@openducktor/contracts";
+import { workflowCatalogQueryOptions } from "@openducktor/frontend-core/queries/workflows";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
@@ -50,6 +51,17 @@ const useRecentPagesPruning = (): void => {
  * shortcuts.
  */
 const useBrowserTabCoordinator = (platform: string): void => {
+  const catalog = useQuery(workflowCatalogQueryOptions());
+  const roleIds = useMemo(
+    () => [
+      ...new Set(
+        [...(catalog.data?.workflows.values() ?? [])].flatMap(({ definition }) =>
+          definition.roles.map(({ id }) => id),
+        ),
+      ),
+    ],
+    [catalog.data],
+  );
   const runtime = useBrowserRuntime();
   const layoutStore = useSessionPanelLayoutStore();
   const recentPages = useBrowserRecentPages();
@@ -67,7 +79,7 @@ const useBrowserTabCoordinator = (platform: string): void => {
         }
         if (change.kind === "tab_added" || change.kind === "tab_updated") {
           layoutStore.update(browserTabPanelOwner(change.tab.owner), (layout) =>
-            placeBrowserTab(layout, change.tab),
+            placeBrowserTab(layout, change.tab, roleIds),
           );
           recentPages.record(change.tab);
           return;
@@ -83,7 +95,7 @@ const useBrowserTabCoordinator = (platform: string): void => {
         }
         toast.info(text.title, { description: text.description });
       }),
-    [layoutStore, recentPages, runtime],
+    [layoutStore, recentPages, runtime, roleIds],
   );
 
   useEffect(

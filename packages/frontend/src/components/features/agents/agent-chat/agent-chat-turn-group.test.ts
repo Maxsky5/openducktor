@@ -133,6 +133,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
             presentToolCall: (toolName) => ({
               kind: "workflow",
               displayName: toolName,
+              odtTool: null,
             }),
           },
         }),

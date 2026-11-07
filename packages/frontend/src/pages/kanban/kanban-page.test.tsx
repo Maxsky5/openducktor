@@ -1,6 +1,15 @@
+import { specPlanBuildPromptKey } from "@openducktor/workflows/test-support";
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { createAgentStudioStartupTestHost } from "../agents/agent-studio-startup-test-host";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
+import { workflowQueryKeys } from "@openducktor/frontend-core/queries/workflows";
+import {
+  builtinCompiledCatalogFixture,
+  builtinWorkspaceWorkflowsFixture,
+} from "@openducktor/frontend-core/test-support/workflow-fixtures";
+
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   type AppPlatform,
@@ -23,7 +32,6 @@ import { createAgentSessionCollection } from "@openducktor/frontend-core/session
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
-  DelegationStateContext,
   RuntimeDefinitionsContext,
   DocumentStateContext,
   TasksStateContext,
@@ -51,6 +59,7 @@ import {
   createHostRuntimeStatusContextValue,
   createObservedCheckFixture,
   createSettingsSnapshotFixture,
+  toWireTaskCard,
 } from "@/test-utils/shared-test-fixtures";
 import type {
   AgentSessionIdentity,
@@ -58,7 +67,6 @@ import type {
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { readyAgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import type {
-  DelegationStateContextValue,
   DocumentStateContextValue,
   TasksStateContextValue,
 } from "@openducktor/frontend-core/types/state-slices";
@@ -90,7 +98,7 @@ import { KanbanPageHeader } from "./kanban-page-header";
 import { KanbanColumn } from "@/components/features/kanban/kanban-column";
 import type { HumanReviewFeedbackModalModel } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 enableReactActEnvironment();
 
@@ -107,10 +115,18 @@ const sendAgentMessageMock = mock(async () => {
   return null;
 });
 const updateAgentSessionModelMock = mock(async () => {});
-const humanRequestChangesTaskMock = mock(async () => {});
+const taskApplyEventMock = mock(async () => {
+  currentTaskFixture = createTaskCardFixture({
+    ...currentTaskFixture,
+    status: "in_progress",
+  });
+  return toWireTaskCard(currentTaskFixture);
+});
 const deleteTaskMock = mock(async () => {});
-const resetTaskImplementationMock = mock(async () => {});
-const resetTaskMock = mock(async () => {});
+const resetTaskImplementationMock = mock(async (taskId: string) =>
+  createWireTaskCardFixture({ id: taskId }),
+);
+const resetTaskMock = mock(async (taskId: string) => createWireTaskCardFixture({ id: taskId }));
 const sonnerModule = await import("sonner");
 const toastSuccessMock = mock<typeof sonnerModule.toast.success>(() => "toast-success");
 const toastErrorMock = mock<typeof sonnerModule.toast.error>(() => "toast-error");
@@ -295,7 +311,7 @@ const createRepoSettingsFixture = (): RepoSettingsInput => ({
   branchPrefix: "codex/",
   defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  postCompleteHooks: [],
+  beforeWorktreeRemovalHooks: [],
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   agentDefaults: {
@@ -411,12 +427,10 @@ const createTasksStateValue = (
   unlinkingPullRequestTaskIds: new Set<string>(),
   pendingMergedPullRequest: renderState.pendingMergedPullRequest,
   deleteTask: deleteTaskMock,
-  closeTask: async () => {},
+  closeTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
   removeTaskWorktree: async () => {},
   resetTaskImplementation: resetTaskImplementationMock,
   resetTask: resetTaskMock,
-  transitionTask: async () => {},
-  humanRequestChangesTask: humanRequestChangesTaskMock,
 });
 
 const createChecksStateValue = (): ChecksStateContextValue => ({
@@ -438,10 +452,6 @@ const createChecksStateValue = (): ChecksStateContextValue => ({
   refreshChecks: async () => {},
 });
 
-const delegationStateValue: DelegationStateContextValue = {
-  delegateTask: async () => {},
-};
-
 const documentStateValue: DocumentStateContextValue = {
   loadDocument: async () => ({ markdown: "", updatedAt: null }),
   saveDocument: async () => ({ updatedAt: "2026-01-01T00:00:00.000Z" }),
@@ -457,7 +467,7 @@ function createRepoConfigFixture(promptOverrides: RepoPromptOverrides = {}): Rep
     defaultTargetBranch: { remote: "origin", branch: "main" },
     git: {},
     hooks: {
-      postComplete: [],
+      beforeWorktreeRemoval: [],
     },
     actions: { items: [], defaultActionId: null },
     worktreeCopyPaths: [],
@@ -499,14 +509,7 @@ const publishKanbanPageModels = (
         activeTaskSessionContextByTaskId: models.content.activeTaskSessionContextByTaskId,
         taskActivityStateByTaskId: models.content.taskActivityStateByTaskId,
         onOpenDetails: models.content.onOpenDetails,
-        onDelegate: models.content.onDelegate,
-        onOpenSession: models.content.onOpenSession,
         pendingState: models.content.pendingState,
-        onPlan: models.content.onPlan,
-        onQaStart: models.content.onQaStart,
-        onHumanApprove: models.content.onHumanApprove,
-        onHumanRequestChanges: models.content.onHumanRequestChanges,
-        onResetImplementation: models.content.onResetImplementation,
       }
     : null;
   latest.isLoadingTasks = models.content.isLoadingTasks;
@@ -534,6 +537,17 @@ const getKanbanColumnProps = (latest: LatestKanbanPageModels): KanbanColumnTestP
     throw new Error("Expected the Kanban page model to publish column actions.");
   }
   return latest.columnProps;
+};
+
+/** Runs a declared workflow action of the current task fixture through the shared runner. */
+const runTaskAction = (
+  renderer: { getTaskWorkflowActions: () => TaskWorkflowActionsController["actions"] | null },
+  action: string,
+  taskId = currentTaskFixture.id,
+): void => {
+  const actions = renderer.getTaskWorkflowActions();
+  if (!actions) throw new Error("Expected task workflow actions.");
+  actions.runAction({ ...currentTaskFixture, id: taskId, availableActions: [action] }, action);
 };
 
 const renderPage = async (
@@ -584,6 +598,11 @@ const renderPage = async (
   );
   const { connection } = startupHost;
   const queryClient = connection.queryClient;
+  queryClient.setQueryData(workflowQueryKeys.catalog, builtinCompiledCatalogFixture);
+  queryClient.setQueryData(
+    workflowQueryKeys.workspace({ workspaceId: "repo", repoPath: "/repo" }),
+    builtinWorkspaceWorkflowsFixture,
+  );
   const checksStateValue = createChecksStateValue();
   queryClient.setQueryData(workspaceQueryKeys.repoConfig("repo"), renderState.repoConfig);
   if (options.seedSettingsSnapshot !== false) {
@@ -648,47 +667,45 @@ const renderPage = async (
               <HostRuntimeStatusContext.Provider value={createHostRuntimeStatusContextValue()}>
                 <ChecksStateContext.Provider value={checksStateValue}>
                   <TasksStateContext.Provider value={createTasksStateValue(renderState)}>
-                    <DelegationStateContext.Provider value={delegationStateValue}>
-                      <DocumentStateContext.Provider value={documentStateValue}>
-                        <AgentSessionsContext.Provider value={sessionStore}>
-                          <AgentOperationsContext.Provider value={createAgentOperationsValue()}>
-                            <AgentSessionReadModelStateContext.Provider
+                    <DocumentStateContext.Provider value={documentStateValue}>
+                      <AgentSessionsContext.Provider value={sessionStore}>
+                        <AgentOperationsContext.Provider value={createAgentOperationsValue()}>
+                          <AgentSessionReadModelStateContext.Provider
+                            value={{
+                              sessionReadModelLoadState:
+                                readyAgentSessionReadModelLoadState("/repo"),
+                              reloadSessionReadModel: () => undefined,
+                              getSessionFault: () => null,
+                              workspaceSessionRecordsError: null,
+                            }}
+                          >
+                            <RuntimeDefinitionsContext.Provider
                               value={{
-                                sessionReadModelLoadState:
-                                  readyAgentSessionReadModelLoadState("/repo"),
-                                reloadSessionReadModel: () => undefined,
-                                getSessionFault: () => null,
-                                workspaceSessionRecordsError: null,
+                                runtimeDefinitions: [...RUNTIME_DEFINITIONS],
+                                availableRuntimeDefinitions: [...RUNTIME_DEFINITIONS],
+                                agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+                                isLoadingRuntimeDefinitions: false,
+                                runtimeDefinitionsError: null,
+                                isLoadingRuntimeSettings: false,
+                                runtimeSettingsError: null,
+                                hasRuntimeSettingsSnapshot: true,
+                                refreshRuntimeSettings: async () => {},
+                                refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
+                                loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
+                                loadRepoRuntimeFileSearch: async () => [],
                               }}
                             >
-                              <RuntimeDefinitionsContext.Provider
-                                value={{
-                                  runtimeDefinitions: [...RUNTIME_DEFINITIONS],
-                                  availableRuntimeDefinitions: [...RUNTIME_DEFINITIONS],
-                                  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-                                  isLoadingRuntimeDefinitions: false,
-                                  runtimeDefinitionsError: null,
-                                  isLoadingRuntimeSettings: false,
-                                  runtimeSettingsError: null,
-                                  hasRuntimeSettingsSnapshot: true,
-                                  refreshRuntimeSettings: async () => {},
-                                  refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
-                                  loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
-                                  loadRepoRuntimeFileSearch: async () => [],
-                                }}
-                              >
-                                <NotificationContext.Provider value={notificationContextValue}>
-                                  <MemoryRouter initialEntries={["/"]}>
-                                    <LocationProbe />
-                                    <KanbanModelsProbe />
-                                  </MemoryRouter>
-                                </NotificationContext.Provider>
-                              </RuntimeDefinitionsContext.Provider>
-                            </AgentSessionReadModelStateContext.Provider>
-                          </AgentOperationsContext.Provider>
-                        </AgentSessionsContext.Provider>
-                      </DocumentStateContext.Provider>
-                    </DelegationStateContext.Provider>
+                              <NotificationContext.Provider value={notificationContextValue}>
+                                <MemoryRouter initialEntries={["/"]}>
+                                  <LocationProbe />
+                                  <KanbanModelsProbe />
+                                </MemoryRouter>
+                              </NotificationContext.Provider>
+                            </RuntimeDefinitionsContext.Provider>
+                          </AgentSessionReadModelStateContext.Provider>
+                        </AgentOperationsContext.Provider>
+                      </AgentSessionsContext.Provider>
+                    </DocumentStateContext.Provider>
                   </TasksStateContext.Provider>
                 </ChecksStateContext.Provider>
               </HostRuntimeStatusContext.Provider>
@@ -845,6 +862,11 @@ const confirmSessionStartModal = async (
 
 const inactiveBoardFilterModel: KanbanBoardFilterModel = {
   value: EMPTY_KANBAN_BOARD_FILTER,
+  issueTypeOptions: specPlanBuildWorkflow.definition.issueTypes.map(({ id, label, icon }) => ({
+    value: id,
+    label,
+    icon,
+  })),
   labelOptions: [],
   isActive: false,
   isDisabled: false,
@@ -866,7 +888,11 @@ const kanbanTest = (name: string, fn: () => Promise<void> | void): void => {
 
 describe("KanbanPage session start modal flow", () => {
   beforeEach(() => {
-    hostClientFakes = {};
+    hostClientFakes = {
+      taskApplyEvent: taskApplyEventMock,
+      tasksList: async () => [toWireTaskCard(currentTaskFixture)],
+      tasksListAll: async () => [toWireTaskCard(currentTaskFixture)],
+    };
     toastSpies = [
       spyOn(sonnerModule.toast, "success").mockImplementation(toastSuccessMock),
       spyOn(sonnerModule.toast, "error").mockImplementation(toastErrorMock),
@@ -926,7 +952,7 @@ describe("KanbanPage session start modal flow", () => {
     startAgentSessionMock.mockClear();
     sendAgentMessageMock.mockClear();
     updateAgentSessionModelMock.mockClear();
-    humanRequestChangesTaskMock.mockClear();
+    taskApplyEventMock.mockClear();
     deleteTaskMock.mockClear();
     resetTaskImplementationMock.mockClear();
     resetTaskMock.mockClear();
@@ -1009,7 +1035,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(renderer.getKanbanColumnProps()).toBeTruthy();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onDelegate("TASK-123");
+        renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
       });
 
       expect(renderer.getSessionStartModalModel()?.open).toBe(true);
@@ -1213,7 +1239,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      renderer.getKanbanColumnProps().onDelegate("TASK-123");
+      renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
     });
 
     await confirmSessionStartModal(renderer, {
@@ -1259,7 +1285,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      renderer.getKanbanColumnProps().onDelegate("TASK-123");
+      renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
     });
 
     const sessionStartModal = renderer.getSessionStartModalModel();
@@ -1294,7 +1320,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onDelegate("TASK-123");
+        renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
       });
 
       await confirmSessionStartModal(renderer, {
@@ -1305,7 +1331,7 @@ describe("KanbanPage session start modal flow", () => {
       });
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onDelegate("TASK-123");
+        renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
       });
 
       expect(renderer.getSessionStartModalModel()?.isStarting).toBe(false);
@@ -1326,7 +1352,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onDelegate("TASK-123");
+        renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
       });
 
       await confirmSessionStartModal(renderer, {
@@ -1366,7 +1392,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      renderer.getKanbanColumnProps().onDelegate("TASK-123");
+      renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
     });
 
     await confirmSessionStartModal(renderer, {
@@ -1402,7 +1428,7 @@ describe("KanbanPage session start modal flow", () => {
 
   kanbanTest("malformed kickoff override blocks the modal before startup", async () => {
     currentRepoConfigFixture = createRepoConfigFixture({
-      "kickoff.build_implementation_start": {
+      [specPlanBuildPromptKey("messages.build_start")]: {
         template: "Kickoff {{unsupported.token}}",
         baseVersion: 1,
       },
@@ -1411,7 +1437,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      renderer.getKanbanColumnProps().onDelegate("TASK-123");
+      renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
     });
 
     await confirmSessionStartModal(renderer, {
@@ -1422,7 +1448,7 @@ describe("KanbanPage session start modal flow", () => {
 
     await waitFor(() => {
       expect(renderer.getSessionStartModalModel()?.kickoffPromptError).toBe(
-        'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token". Edit or disable this prompt override in Settings.',
+        'The prompt "messages.build_start" uses unsupported placeholder "unsupported.token". Edit or disable this prompt override in Settings.',
       );
     });
     expect(startAgentSessionMock).not.toHaveBeenCalled();
@@ -1440,7 +1466,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      renderer.getKanbanColumnProps().onDelegate("TASK-123");
+      renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
     });
 
     const sessionStartModal = renderer.getSessionStartModalModel();
@@ -1491,7 +1517,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onOpenSession("TASK-123", "spec");
+        renderer.getTaskWorkflowActions()!.onOpenSession("TASK-123", "spec");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1506,26 +1532,22 @@ describe("KanbanPage session start modal flow", () => {
     },
   );
 
-  kanbanTest(
-    "keeps human request changes handler stable across modal state re-renders",
-    async () => {
-      const renderer = await renderPage();
+  kanbanTest("keeps the workflow action runner stable across modal state re-renders", async () => {
+    const renderer = await renderPage();
 
-      const initialOnHumanRequestChanges = renderer.getKanbanColumnProps().onHumanRequestChanges;
-      expect(initialOnHumanRequestChanges).toBeDefined();
+    const initialRunAction = renderer.getTaskWorkflowActions()!.runAction;
+    expect(initialRunAction).toBeDefined();
 
-      await act(async () => {
-        renderer.getKanbanColumnProps().onDelegate("TASK-123");
-      });
+    await act(async () => {
+      renderer.getTaskWorkflowActions()!.onLaunch("TASK-123", "build_implementation_start");
+    });
 
-      const nextOnHumanRequestChanges = renderer.getKanbanColumnProps().onHumanRequestChanges;
-      expect(nextOnHumanRequestChanges).toBe(initialOnHumanRequestChanges);
+    expect(renderer.getTaskWorkflowActions()!.runAction).toBe(initialRunAction);
 
-      await act(async () => {
-        renderer.unmount();
-      });
-    },
-  );
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
 
   kanbanTest("human request changes opens dedicated feedback modal before mutating", async () => {
     currentTaskFixture = createTaskCardFixture({
@@ -1535,13 +1557,10 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      await requireCallback(
-        renderer.getKanbanColumnProps().onHumanRequestChanges,
-        "request human-review changes",
-      )("TASK-123");
+      await runTaskAction(renderer, "human_request_changes");
     });
 
-    expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
+    expect(taskApplyEventMock).not.toHaveBeenCalled();
     expect(renderer.getHumanReviewFeedbackModalModel()?.open).toBe(true);
     expect(renderer.getHumanReviewFeedbackModalModel()?.message).toBe("");
     expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1561,10 +1580,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        await requireCallback(
-          renderer.getKanbanColumnProps().onHumanRequestChanges,
-          "request human-review changes",
-        )("TASK-123");
+        await runTaskAction(renderer, "human_request_changes");
       });
 
       const feedbackModal = renderer.getHumanReviewFeedbackModalModel();
@@ -1584,7 +1600,7 @@ describe("KanbanPage session start modal flow", () => {
       await waitForSessionStartModalReady(renderer);
 
       expect(startAgentSessionMock).not.toHaveBeenCalled();
-      expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
+      expect(taskApplyEventMock).not.toHaveBeenCalled();
       expect(sendAgentMessageMock).not.toHaveBeenCalled();
       expect(renderer.getSessionStartModalModel()?.open).toBe(true);
       expect(renderer.getSessionStartModalModel()?.selectedStartMode).toBe("reuse");
@@ -1628,10 +1644,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        await requireCallback(
-          renderer.getKanbanColumnProps().onHumanRequestChanges,
-          "request human-review changes",
-        )("TASK-123");
+        await runTaskAction(renderer, "human_request_changes");
       });
 
       expect(renderer.getHumanReviewFeedbackModalModel()?.open).toBe(true);
@@ -1663,7 +1676,7 @@ describe("KanbanPage session start modal flow", () => {
   );
 
   kanbanTest(
-    "keeps feedback edits out of task action updates and restores the draft on cancel",
+    "keeps feedback edits out of task action updates and keeps the draft when the start is canceled",
     async () => {
       currentTaskFixture = createTaskCardFixture({
         id: "TASK-123",
@@ -1673,10 +1686,7 @@ describe("KanbanPage session start modal flow", () => {
 
       try {
         await act(async () => {
-          requireCallback(
-            renderer.getKanbanColumnProps().onHumanRequestChanges,
-            "request human-review changes",
-          )("TASK-123");
+          runTaskAction(renderer, "human_request_changes");
         });
 
         const feedbackModal = renderer.getHumanReviewFeedbackModalModel();
@@ -1702,9 +1712,7 @@ describe("KanbanPage session start modal flow", () => {
 
         await waitForSessionStartModalReady(renderer);
         expect(renderer.getActionRenderCount()).toBeGreaterThan(rendersBeforeEdit);
-        expect(renderer.getKanbanColumnProps().pendingState?.requestingChangesTaskId).toBe(
-          "TASK-123",
-        );
+        expect(renderer.getHumanReviewFeedbackModalModel()?.isSubmitting).toBe(true);
 
         const sessionStartModal = renderer.getSessionStartModalModel();
         if (!sessionStartModal) {
@@ -1716,12 +1724,13 @@ describe("KanbanPage session start modal flow", () => {
           sessionStartModal.onOpenChange(false);
         });
 
+        // The host commits Request Changes only with the launch, so the draft stays for a retry.
         await waitFor(() => {
           expect(renderer.getSessionStartModalModel()).toBeNull();
-          expect(renderer.getHumanReviewFeedbackModalModel()?.open).toBe(true);
           expect(renderer.getHumanReviewFeedbackModalModel()?.message).toBe(
             "Keep this request-changes draft.",
           );
+          expect(renderer.getHumanReviewFeedbackModalModel()?.isSubmitting).toBe(false);
           expect(renderer.getKanbanColumnProps().pendingState?.requestingChangesTaskId).toBeNull();
         });
       } finally {
@@ -1767,10 +1776,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      requireCallback(
-        renderer.getKanbanColumnProps().onResetImplementation,
-        "reset implementation",
-      )("TASK-123");
+      runTaskAction(renderer, "reset_implementation");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1788,7 +1794,7 @@ describe("KanbanPage session start modal flow", () => {
       await Promise.resolve();
     });
 
-    expect(resetTaskImplementationMock).toHaveBeenCalledWith("TASK-123");
+    expect(resetTaskImplementationMock).toHaveBeenCalledWith("TASK-123", "reset-implementation");
     await waitFor(() => {
       expect(renderer.getResetImplementationModalModel()).toBeNull();
     });
@@ -1822,10 +1828,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      requireCallback(
-        renderer.getKanbanColumnProps().onResetImplementation,
-        "reset implementation",
-      )("TASK-123");
+      runTaskAction(renderer, "reset_implementation");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1861,10 +1864,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        requireCallback(
-          renderer.getKanbanColumnProps().onResetImplementation,
-          "reset implementation",
-        )("MISSING-1");
+        runTaskAction(renderer, "reset_implementation", "MISSING-1");
         await Promise.resolve();
         await Promise.resolve();
       });
@@ -1884,7 +1884,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      renderer.getKanbanColumnProps().onOpenSession("TASK-123", "build");
+      renderer.getTaskWorkflowActions()!.onOpenSession("TASK-123", "build");
     });
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1938,10 +1938,7 @@ describe("KanbanPage session start modal flow", () => {
         const page = await renderPage();
         renderer = page;
         await act(async () => {
-          requireCallback(
-            page.getKanbanColumnProps().onHumanApprove,
-            "approve human review",
-          )("TASK-123");
+          runTaskAction(page, "human_approve");
           await Promise.resolve();
         });
         await waitFor(() => {
@@ -2004,7 +2001,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onOpenSession("TASK-123", "build");
+        renderer.getTaskWorkflowActions()!.onOpenSession("TASK-123", "build");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -2029,7 +2026,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onOpenSession("TASK-123", "build");
+        renderer.getTaskWorkflowActions()!.onOpenSession("TASK-123", "build");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -2052,7 +2049,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      renderer.getKanbanColumnProps().onOpenSession("TASK-123", "qa");
+      renderer.getTaskWorkflowActions()!.onOpenSession("TASK-123", "qa");
     });
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -2139,7 +2136,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        renderer.getKanbanColumnProps().onOpenSession("TASK-123", "build");
+        renderer.getTaskWorkflowActions()!.onOpenSession("TASK-123", "build");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -2174,6 +2171,10 @@ describe("KanbanPage session start modal flow", () => {
         await Promise.resolve();
       });
     };
+    const runDeclaredAction =
+      (action: string) =>
+      (actions: TaskWorkflowActionsController["actions"]): void =>
+        actions.runAction({ ...currentTaskFixture, availableActions: [action] }, action);
     const closeDialog = async (dialog: WorkflowDialog): Promise<void> => {
       await act(async () => {
         dialog?.onOpenChange(false);
@@ -2196,25 +2197,25 @@ describe("KanbanPage session start modal flow", () => {
       {
         name: "Request Changes",
         status: "human_review",
-        open: (actions) => actions.onHumanRequestChanges("TASK-123"),
+        open: runDeclaredAction("human_request_changes"),
         dialog: (page) => page.getHumanReviewFeedbackModalModel(),
       },
       {
         name: "Reset Implementation",
         status: "in_progress",
-        open: (actions) => actions.onResetImplementation("TASK-123"),
+        open: runDeclaredAction("reset_implementation"),
         dialog: (page) => page.getResetImplementationModalModel(),
       },
       {
         name: "Approve",
         status: "human_review",
-        open: (actions) => actions.onHumanApprove("TASK-123"),
+        open: runDeclaredAction("human_approve"),
         dialog: (page) => page.getTaskApprovalModalModel(),
       },
       {
         name: "session start",
         status: "ready_for_dev",
-        open: (actions) => actions.onDelegate("TASK-123"),
+        open: (actions) => actions.onLaunch("TASK-123", "build_implementation_start"),
         dialog: (page) => page.getSessionStartModalModel(),
       },
     ];
@@ -2241,7 +2242,7 @@ describe("KanbanPage session start modal flow", () => {
       currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
       const page = await renderPage();
       try {
-        await runFromSheet(page, (actions) => actions.onHumanRequestChanges("TASK-123"));
+        await runFromSheet(page, runDeclaredAction("human_request_changes"));
         await act(async () => {
           page.getHumanReviewFeedbackModalModel()?.onMessageChange("Apply the review changes.");
         });
@@ -2287,7 +2288,7 @@ describe("KanbanPage session start modal flow", () => {
       hostClientFakes.workspaceGetGitProviderContext = async () => null;
       const page = await renderPage();
       try {
-        await runFromSheet(page, (actions) => actions.onHumanApprove("TASK-123"));
+        await runFromSheet(page, runDeclaredAction("human_approve"));
         await waitFor(() => {
           expect(page.getTaskApprovalModalModel()?.stage).toBe("approval");
         });

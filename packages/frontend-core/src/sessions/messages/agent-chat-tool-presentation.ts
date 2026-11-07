@@ -3,6 +3,8 @@ import type {
   AgentToolData,
   AgentToolImage,
   AgentToolResultContent,
+  OdtToolName,
+  PullRequest,
 } from "@openducktor/contracts";
 import { buildContentEntries } from "../transcript/agent-chat-content-keys";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
@@ -18,7 +20,10 @@ import {
   type ToolLifecyclePhase,
 } from "./tool-lifecycle";
 import { relativizeDisplayPathsInValue } from "./tool-path-utils";
+import { ODT_TOOL_CARDS, type OdtToolIconKind } from "./odt-tool-call";
+import { readToolCallError, type ToolCallError } from "./tool-call-error";
 import { buildToolSummary } from "./tool-summary";
+import { compactText } from "./tool-text-utils";
 
 /** Which detail sections a Tool Call has. A call with any section can expand. */
 export type ToolDetailAvailability = {
@@ -33,24 +38,97 @@ export const readToolDetailAvailability = (meta: ToolMeta): ToolDetailAvailabili
   hasError: hasNonEmptyText(meta.error),
 });
 
+/**
+ * A workflow tool card. Its header shows the icon, the title, and the pull request of the call.
+ * The line under the header shows the error message of a failed call. A press on the title opens
+ * the note, then the Input, Output, and Error boxes.
+ */
+export type WorkflowToolCard = {
+  /** The event of a workflow event call, or else the name of the tool. */
+  title: string;
+  /** Null for a tool with no icon of its own. */
+  iconKind: OdtToolIconKind | null;
+  pullRequest: PullRequest | null;
+  /** The error of a failed call. */
+  error: ToolCallError | null;
+  /** The Markdown note of a workflow event. */
+  note: string | null;
+  showsInput: boolean;
+  showsOutput: boolean;
+  /**
+   * The text of the Error box: the full error, such as the JSON of an ODT error. Plain error text
+   * is all in the line under the header, so it has no box.
+   */
+  errorDetail: string | null;
+  /** True when a press on the title opens a part. */
+  hasDetails: boolean;
+};
+
+type WorkflowToolCardInput = {
+  meta: ToolMeta;
+  /** The ODT tool of the call, as `presentToolCall` resolved it. */
+  odtTool: OdtToolName | null;
+  displayName: string;
+  /** A card that opens its saved document shows Open in place of its Input and Output boxes. */
+  opensDocument: boolean;
+};
+
+/** Reads what a workflow tool card shows. */
+export const readWorkflowToolCard = ({
+  meta,
+  odtTool,
+  displayName,
+  opensDocument,
+}: WorkflowToolCardInput): WorkflowToolCard => {
+  const odtCard = odtTool === null ? undefined : ODT_TOOL_CARDS.get(odtTool);
+  const content = odtCard?.read(meta);
+  const { hasInput, hasOutput, hasError } = readToolDetailAvailability(meta);
+  const error = readToolCallError(meta);
+  // An error that only the output holds shows once, in the Error box, so the Output box hides.
+  const errorSource = hasError ? "error" : "output";
+  const note = content?.note ?? null;
+  const showsInput = !opensDocument && hasInput;
+  const showsOutput = !opensDocument && hasOutput && !(error && errorSource === "output");
+  const errorDetail = error ? error.detail : hasError ? (meta.error ?? null) : null;
+  return {
+    title: content?.title ?? displayName,
+    iconKind: odtCard?.iconKind ?? null,
+    pullRequest: content?.pullRequest ?? null,
+    error,
+    note,
+    showsInput,
+    showsOutput,
+    errorDetail,
+    hasDetails: note !== null || showsInput || showsOutput || errorDetail !== null,
+  };
+};
+
 export const hasExpandableToolDetails = ({
   hasInput,
   hasOutput,
   hasError,
 }: ToolDetailAvailability): boolean => hasInput || hasOutput || hasError;
 
-/** The compact summary text of a regular Tool Call, with the failure or cancel fallback. */
-export const resolveRegularToolSummaryText = (
+/** The compact summary of a Tool Call. A failed call shows the message of its error. */
+export type ToolSummary = { text: string; isError: boolean };
+
+/**
+ * The compact summary of a regular Tool Call: the error message of a failed call, or else the
+ * summary, with the cancel fallback.
+ */
+export const resolveRegularToolSummary = (
   meta: ToolMeta,
   messageContent: string,
   workingDirectory?: string | null,
-): string => {
-  const summary = buildToolSummary(meta, messageContent, workingDirectory);
-  if (summary.length > 0) return summary;
-  const phase = getToolLifecyclePhase(meta);
-  if (phase === "failed") return "Tool failed";
-  if (phase === "cancelled") return "Tool cancelled";
-  return "";
+): ToolSummary => {
+  // A failed call shows the message of its error, never its JSON.
+  const error = readToolCallError(meta);
+  if (error) return { text: compactText(error.message, 220), isError: true };
+  const text = buildToolSummary(meta, messageContent, workingDirectory);
+  if (text.length > 0 || getToolLifecyclePhase(meta) !== "cancelled") {
+    return { text, isError: false };
+  }
+  return { text: "Tool cancelled", isError: false };
 };
 
 /**

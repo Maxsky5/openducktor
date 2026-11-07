@@ -1,17 +1,16 @@
 import { workspaceScopeValue } from "./workspace-scope";
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
+import { resolveTaskCards } from "./workflows";
 import type { HostClient } from "@openducktor/host-client";
 import { connectionHost } from "../connection/client-connection";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const TASK_DATA_STALE_TIME_MS = 30_000;
 
 export type RepoTaskData = {
   tasks: TaskCard[];
 };
-
-export type ListTasks = (scope: WorkspaceRef, queryClient: QueryClient) => Promise<TaskCard[]>;
 
 export const taskQueryKeys = {
   all: ["tasks"] as const,
@@ -27,25 +26,29 @@ export const taskQueryKeys = {
   ids: (scope: WorkspaceRef) => [...taskQueryKeys.repoDataPrefix(scope), "ids"] as const,
 };
 
-export const createRepoTaskDataQueryOptions = (listTasks: ListTasks) => (scope: WorkspaceRef) =>
+export const repoTaskDataQueryOptions = (scope: WorkspaceRef) =>
   queryOptions<RepoTaskData, Error, RepoTaskData, QueryKey>({
     queryKey: taskQueryKeys.repoData(scope),
-    queryFn: async ({ client }): Promise<RepoTaskData> => ({
-      tasks: await listTasks(scope, client),
-    }),
+    queryFn: async ({ client, signal }): Promise<RepoTaskData> => {
+      const tasks = await resolveTaskCards(client, scope, connectionHost(client).tasksList(scope));
+      signal.throwIfAborted();
+      return { tasks };
+    },
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
-
-export const repoTaskDataQueryOptions = createRepoTaskDataQueryOptions((scope, queryClient) =>
-  connectionHost(queryClient).tasksList(scope),
-);
 
 export const unfilteredRepoTaskDataQueryOptions = (scope: WorkspaceRef) =>
   queryOptions<RepoTaskData, Error, RepoTaskData, QueryKey>({
     queryKey: taskQueryKeys.unfilteredRepoData(scope),
-    queryFn: async ({ client }): Promise<RepoTaskData> => ({
-      tasks: await connectionHost(client).tasksListAll(scope),
-    }),
+    queryFn: async ({ client, signal }): Promise<RepoTaskData> => {
+      const tasks = await resolveTaskCards(
+        client,
+        scope,
+        connectionHost(client).tasksListAll(scope),
+      );
+      signal.throwIfAborted();
+      return { tasks };
+    },
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
 

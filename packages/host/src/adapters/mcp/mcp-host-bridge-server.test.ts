@@ -28,7 +28,7 @@ const repoConfig: RepoConfig = {
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
@@ -119,7 +119,11 @@ describe("createMcpHostBridgeServer", () => {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.sync(() => {
-            return { bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [...ODT_MCP_TOOL_NAMES] };
+            return {
+              bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+              toolNames: [...ODT_MCP_TOOL_NAMES],
+              activeStatuses: ["open"],
+            };
           });
         },
         getWorkspaces() {
@@ -191,7 +195,11 @@ describe("createMcpHostBridgeServer", () => {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.sync(() => {
-            return { bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [...ODT_MCP_TOOL_NAMES] };
+            return {
+              bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+              toolNames: [...ODT_MCP_TOOL_NAMES],
+              activeStatuses: ["open"],
+            };
           });
         },
         getWorkspaces() {
@@ -259,6 +267,7 @@ describe("createMcpHostBridgeServer", () => {
       expect(ready.body).toEqual({
         bridgeVersion: ODT_MCP_BRIDGE_VERSION,
         toolNames: [...ODT_MCP_TOOL_NAMES],
+        activeStatuses: ["open"],
       });
       expect(ready.status).toBe(200);
     } finally {
@@ -333,6 +342,7 @@ describe("createMcpHostBridgeServer", () => {
           return Effect.succeed({
             bridgeVersion: ODT_MCP_BRIDGE_VERSION,
             toolNames: [...ODT_MCP_TOOL_NAMES],
+            activeStatuses: ["open"],
           });
         },
         getWorkspaces() {
@@ -378,6 +388,7 @@ describe("createMcpHostBridgeServer", () => {
           return Effect.succeed({
             bridgeVersion: ODT_MCP_BRIDGE_VERSION,
             toolNames: [...ODT_MCP_TOOL_NAMES],
+            activeStatuses: ["open"],
           });
         },
         getWorkspaces() {
@@ -425,6 +436,7 @@ describe("createMcpHostBridgeServer", () => {
           return Effect.succeed({
             bridgeVersion: ODT_MCP_BRIDGE_VERSION,
             toolNames: [...ODT_MCP_TOOL_NAMES],
+            activeStatuses: ["open"],
           });
         },
         getWorkspaces() {
@@ -485,7 +497,11 @@ describe("createMcpHostBridgeServer", () => {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.sync(() => {
-            return { bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: [...ODT_MCP_TOOL_NAMES] };
+            return {
+              bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+              toolNames: [...ODT_MCP_TOOL_NAMES],
+              activeStatuses: ["open"],
+            };
           });
         },
         getWorkspaces() {
@@ -516,6 +532,7 @@ describe("createMcpHostBridgeServer", () => {
                 createdAt: "2026-05-10T10:00:00.000Z",
                 updatedAt: "2026-05-10T10:01:00.000Z",
               },
+              eventId: "build-resumed",
             };
           });
         },
@@ -523,12 +540,12 @@ describe("createMcpHostBridgeServer", () => {
     });
     try {
       const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
-      const response = await requestJson(`${connection.hostUrl}/invoke/odt_build_resumed`, {
+      const response = await requestJson(`${connection.hostUrl}/invoke/odt_apply_workflow_event`, {
         method: "POST",
         headers: {
           "x-openducktor-app-token": "token-1",
         },
-        body: { workspaceId: "repo", taskId: "task-1" },
+        body: { workspaceId: "repo", taskId: "task-1", eventId: "build-resumed" },
       });
       expect(response.status).toBe(200);
       expect(response.body).toMatchObject({
@@ -536,8 +553,8 @@ describe("createMcpHostBridgeServer", () => {
       });
       expect(calls).toEqual([
         {
-          toolName: "odt_build_resumed",
-          input: { workspaceId: "repo", taskId: "task-1" },
+          toolName: "odt_apply_workflow_event",
+          input: { workspaceId: "repo", taskId: "task-1", eventId: "build-resumed" },
         },
       ]);
     } finally {
@@ -559,6 +576,7 @@ describe("createMcpHostBridgeServer", () => {
           return Effect.succeed({
             bridgeVersion: ODT_MCP_BRIDGE_VERSION,
             toolNames: [...ODT_MCP_TOOL_NAMES],
+            activeStatuses: ["open"],
           });
         },
         getWorkspaces() {
@@ -576,12 +594,17 @@ describe("createMcpHostBridgeServer", () => {
     });
     try {
       const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
-      const response = await requestJson(`${connection.hostUrl}/invoke/odt_build_blocked`, {
+      const response = await requestJson(`${connection.hostUrl}/invoke/odt_apply_workflow_event`, {
         method: "POST",
         headers: {
           "x-openducktor-app-token": "token-1",
         },
-        body: { workspaceId: "repo", taskId: "task-1", reason: "needs a product decision" },
+        body: {
+          workspaceId: "repo",
+          taskId: "task-1",
+          eventId: "build-blocked",
+          note: "needs a product decision",
+        },
       });
 
       expect(response.status).toBe(400);
@@ -612,6 +635,7 @@ describe("createMcpHostBridgeServer", () => {
           Effect.succeed({
             bridgeVersion: ODT_MCP_BRIDGE_VERSION,
             toolNames: [...ODT_MCP_TOOL_NAMES],
+            activeStatuses: ["open"],
           }),
         getWorkspaces: () => Effect.succeed({ workspaces: [] }),
         invoke: unexpectedTaskTool,
@@ -660,6 +684,7 @@ describe("createMcpHostBridgeServer", () => {
           Effect.succeed({
             bridgeVersion: ODT_MCP_BRIDGE_VERSION,
             toolNames: [...ODT_MCP_TOOL_NAMES],
+            activeStatuses: ["open"],
           }),
         getWorkspaces: () => Effect.succeed({ workspaces: [] }),
         invoke: unexpectedTaskTool,
@@ -723,6 +748,7 @@ describe("createMcpHostBridgeServer", () => {
           Effect.succeed({
             bridgeVersion: ODT_MCP_BRIDGE_VERSION,
             toolNames: [...ODT_MCP_TOOL_NAMES],
+            activeStatuses: ["open"],
           }),
         getWorkspaces: () => Effect.succeed({ workspaces: [] }),
         invoke: unexpectedTaskTool,
@@ -771,6 +797,7 @@ test("artifact setters use a bounded 16 MiB envelope while other bridge requests
         Effect.succeed({
           bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: [...ODT_MCP_TOOL_NAMES],
+          activeStatuses: ["open"],
         }),
       getWorkspaces: () => Effect.succeed({ workspaces: [] }),
       invokeBrowserTool: unexpectedBrowserTool,

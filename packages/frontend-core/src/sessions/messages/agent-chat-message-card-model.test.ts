@@ -22,6 +22,7 @@ import {
   stripToolPrefix,
   toSingleLineMarkdown,
 } from "./agent-chat-message-card-model";
+import { resolveRegularToolSummary } from "./agent-chat-tool-presentation";
 
 type ToolMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>;
 
@@ -92,7 +93,7 @@ describe("agent-chat-message-card-model", () => {
       expect(roleLabel("assistant", noMetaMessage)).toBe("Assistant");
     });
 
-    test("keeps planner assistant labels when metadata includes the planner role", () => {
+    test("keeps the declared role ID for the workflow label owner", () => {
       const plannerMessage = createMessage({
         meta: {
           kind: "assistant",
@@ -101,7 +102,7 @@ describe("agent-chat-message-card-model", () => {
       });
 
       expect(assistantRoleFromMessage(plannerMessage)).toBe("planner");
-      expect(roleLabel("assistant", plannerMessage)).toBe("Planner");
+      expect(roleLabel("assistant", plannerMessage)).toBe("planner");
     });
 
     test("returns non-assistant role labels", () => {
@@ -430,6 +431,66 @@ describe("agent-chat-message-card-model", () => {
       ).toBe("task-1 · login-preview");
     });
 
+    test.each([
+      "odt_apply_workflow_event",
+      "openducktor_odt_apply_workflow_event",
+      "mcp__openducktor__odt_apply_workflow_event",
+    ])("shows no summary for the workflow event %s, not even its note", (tool) => {
+      const summary = (input: Record<string, string>) =>
+        buildToolSummary(createToolMeta({ tool, toolType: "workflow", input }), "");
+      expect(summary({ taskId: "task-1", eventId: "build-completed" })).toBe("");
+      expect(
+        summary({ taskId: "task-1", eventId: "build-blocked", note: "The API key is missing." }),
+      ).toBe("");
+    });
+
+    test("shows no summary for a saved pull request", () => {
+      const summary = (overrides: Partial<ToolMeta>) =>
+        buildToolSummary(
+          createToolMeta({
+            tool: "odt_set_pull_request",
+            toolType: "workflow",
+            title: "task-1 · #141",
+            input: { taskId: "task-1", number: 141 },
+            ...overrides,
+          }),
+          "",
+        );
+      expect(summary({ status: "completed", output: '{"pullRequest":{}}' })).toBe("");
+    });
+
+    test("shows the message of an ODT error envelope, never its JSON", () => {
+      const error = JSON.stringify({
+        ok: false,
+        error: { code: "ODT_HOST_BRIDGE_ERROR", message: "Task task-1 was not found." },
+      });
+      for (const tool of ["odt_read_task", "odt_set_task_artifact", "odt_create_task"]) {
+        expect(
+          resolveRegularToolSummary(
+            createToolMeta({ tool, toolType: "workflow", status: "error", error }),
+            "",
+          ).text,
+        ).toBe("Task task-1 was not found.");
+      }
+    });
+
+    test("marks the summary of a failed call as an error, for any tool", () => {
+      for (const tool of ["bash", "odt_read_task"]) {
+        expect(
+          resolveRegularToolSummary(
+            createToolMeta({ tool, status: "error", error: "Not found." }),
+            "",
+          ),
+        ).toEqual({ text: "Not found.", isError: true });
+        expect(
+          resolveRegularToolSummary(
+            createToolMeta({ tool, status: "completed", title: "Done" }),
+            "",
+          ).isError,
+        ).toBe(false);
+      }
+    });
+
     const partialArtifactReadCases: Array<{
       input?: NonNullable<ToolMeta["input"]>;
       expected: string;
@@ -468,7 +529,7 @@ describe("agent-chat-message-card-model", () => {
         expected: "Tool call cancelled by user",
       },
       { error: undefined, output: "Artifact not found", expected: "Artifact not found" },
-      { error: undefined, output: "", expected: "" },
+      { error: undefined, output: "", expected: "The tool call failed." },
     ])("keeps artifact failure text before input for $expected", ({ error, output, expected }) => {
       const meta = createToolMeta({
         tool: "odt_read_task_artifacts",
@@ -479,7 +540,7 @@ describe("agent-chat-message-card-model", () => {
         output,
       });
       if (error !== undefined) meta.error = error;
-      expect(buildToolSummary(meta, "")).toBe(expected);
+      expect(resolveRegularToolSummary(meta, "").text).toBe(expected);
     });
 
     test.each([
@@ -593,9 +654,9 @@ describe("agent-chat-message-card-model", () => {
           }),
           "",
         ),
-      ).toBe("todos update cancelled");
+      ).toBe("cancelled by user");
       expect(
-        buildToolSummary(
+        resolveRegularToolSummary(
           createToolMeta({
             tool: "todowrite",
             toolType: "todo",
@@ -603,7 +664,7 @@ describe("agent-chat-message-card-model", () => {
             error: "boom",
           }),
           "",
-        ),
+        ).text,
       ).toBe("boom");
     });
 
@@ -633,13 +694,13 @@ describe("agent-chat-message-card-model", () => {
 
     test("prefers explicit error text and title with compaction", () => {
       const longError = "x".repeat(260);
-      const errorSummary = buildToolSummary(
+      const errorSummary = resolveRegularToolSummary(
         createToolMeta({
           status: "error",
           error: longError,
         }),
         "",
-      );
+      ).text;
       expect(errorSummary.startsWith("x".repeat(40))).toBe(true);
       expect(errorSummary.endsWith("...")).toBe(true);
       expect(errorSummary.length).toBeLessThanOrEqual(223);
@@ -679,7 +740,7 @@ describe("agent-chat-message-card-model", () => {
       ).toBe("test-audit");
 
       expect(
-        buildToolSummary(
+        resolveRegularToolSummary(
           createToolMeta({
             tool: "skill",
             toolType: "generic" as const,
@@ -688,7 +749,7 @@ describe("agent-chat-message-card-model", () => {
             error: "Skill not found",
           }),
           "",
-        ),
+        ).text,
       ).toBe("Skill not found");
     });
 
@@ -1480,7 +1541,7 @@ describe("agent-chat-message-card-model", () => {
 
     test("preserves read_task error summaries when taskId is present", () => {
       expect(
-        buildToolSummary(
+        resolveRegularToolSummary(
           createToolMeta({
             tool: "odt_read_task",
             toolType: "generic" as const,
@@ -1489,7 +1550,7 @@ describe("agent-chat-message-card-model", () => {
             error: "Task not found",
           }),
           "",
-        ),
+        ).text,
       ).toBe("Task not found");
     });
 

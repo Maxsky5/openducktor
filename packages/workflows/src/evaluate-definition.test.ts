@@ -10,13 +10,6 @@ describe("workflow definition validation", () => {
     path: string;
   }> = [
     {
-      name: "initial state",
-      change: (definition) => {
-        definition.initialState = "missing";
-      },
-      path: "initialState",
-    },
-    {
       name: "agent role",
       change: (definition) => {
         definition.roles = [];
@@ -270,6 +263,17 @@ describe("workflow definition validation", () => {
     },
   );
 
+  test.each(["open", "closed"])("rejects a workflow without the core state %s", (core) => {
+    const definition = publicationDefinition();
+    definition.states = definition.states.filter(({ id }) => id !== core);
+    expect(() => createWorkflow(definition)).toThrow(
+      expect.objectContaining({
+        code: "invalid_definition",
+        message: expect.stringContaining(`Missing core state "${core}" in states.`),
+      }),
+    );
+  });
+
   test.each([
     "facts",
     "roles",
@@ -331,6 +335,51 @@ describe("workflow definition validation", () => {
         code: "invalid_definition",
         message: expect.stringContaining(
           'Start mode "fork" at automations[0].startMode is not a start mode of launch action "review-first"',
+        ),
+      }),
+    );
+  });
+
+  test("rejects a pull request role that the workflow does not bind", () => {
+    const definition = publicationDefinition();
+    definition.pullRequestRoles = ["author", "missing"];
+    expect(() => createWorkflow(definition)).toThrow(
+      expect.objectContaining({
+        code: "invalid_definition",
+        message: expect.stringContaining(
+          'Unknown roles ID "missing" at pullRequestRoles[1]. Use an ID from roles.',
+        ),
+      }),
+    );
+  });
+
+  test("reserves the core pull request launch ID", () => {
+    const definition = publicationDefinition();
+    const step = definition.steps[0]!;
+    if (step.kind === "agent") step.launchActions[0]!.id = "pull_request";
+    expect(() => createWorkflow(definition)).toThrow(
+      expect.objectContaining({
+        code: "invalid_definition",
+        message: expect.stringContaining(
+          'Launch action ID "pull_request" names the core pull request launch.',
+        ),
+      }),
+    );
+  });
+
+  test("lets automations and launch order name the core pull request launch", () => {
+    const definition = publicationDefinition();
+    definition.automations[0]!.launchActionId = "pull_request";
+    delete definition.automations[0]!.startMode;
+    definition.launchOrder = [{ when: true, order: ["pull_request"] }];
+    expect(() => createWorkflow(definition)).not.toThrow();
+    definition.pullRequestRoles = ["author"];
+    expect(() => createWorkflow(definition)).not.toThrow();
+    definition.automations[0]!.startMode = "fresh";
+    expect(() => createWorkflow(definition)).toThrow(
+      expect.objectContaining({
+        message: expect.stringContaining(
+          'Start mode "fresh" at automations[0].startMode is not a start mode of launch action "pull_request"',
         ),
       }),
     );

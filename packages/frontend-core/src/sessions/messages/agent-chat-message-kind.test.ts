@@ -23,7 +23,7 @@ describe("classifyAgentChatMessage", () => {
   test("tells workflow tool calls from regular tool calls", () => {
     const workflow = classifyAgentChatMessage({
       message: toolMessage,
-      toolCallPresentation: { kind: "workflow", displayName: "Set spec" },
+      toolCallPresentation: { kind: "workflow", displayName: "Set spec", odtTool: null },
     });
     expect(workflow.isWorkflowToolMessage).toBe(true);
     expect(workflow.isRegularToolMessage).toBe(false);

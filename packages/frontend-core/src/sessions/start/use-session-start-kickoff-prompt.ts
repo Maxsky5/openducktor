@@ -1,4 +1,3 @@
-import { mergePromptOverrides } from "@openducktor/workflows";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { errorMessage } from "../../lib/errors";
@@ -29,6 +28,7 @@ export function useSessionStartKickoffPrompt({
       : null;
     if (readError) return { error: errorMessage(readError) };
     try {
+      if (!kickoff.task) throw new Error("The task workflow is unavailable. Reload the task.");
       const intent = { ...kickoff.request };
       if (selectedTargetBranch)
         intent.targetBranch = targetBranchFromSelection(selectedTargetBranch);
@@ -38,7 +38,7 @@ export function useSessionStartKickoffPrompt({
           task: kickoff.task,
           repoDefaultTargetBranch: enabled ? (config.data?.defaultTargetBranch ?? null) : null,
           overrides: enabled
-            ? mergePromptOverrides({
+            ? kickoff.task.taskWorkflow.prompts.mergeOverrides({
                 globalOverrides: settings.data?.globalPromptOverrides ?? {},
                 repoOverrides: config.data?.promptOverrides ?? {},
               })

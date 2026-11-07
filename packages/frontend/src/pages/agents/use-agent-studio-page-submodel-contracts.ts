@@ -1,9 +1,9 @@
 import type { WorkflowModelContext } from "./use-agent-studio-page-model-builders";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 export type WorkflowHeaderContext = Pick<
   WorkflowModelContext,
-  | "workflowStateByRole"
+  | "workflowRail"
   | "workflowSessionByRole"
   | "sessionSelectorAutofocusByValue"
   | "sessionSelectorValue"

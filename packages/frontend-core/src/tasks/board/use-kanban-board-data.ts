@@ -1,5 +1,12 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
-import { type AgentSessionRecord, DEFAULT_KANBAN_SETTINGS } from "@openducktor/contracts";
+import { optionalWorkspaceWorkflowQueryOptions } from "../../queries/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+import {
+  TASK_OPEN_STATE,
+  type AgentSessionRecord,
+  DEFAULT_KANBAN_SETTINGS,
+  type WorkflowIcon,
+  type IssueType,
+} from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { TasksStateContext, useRequiredContext } from "../../app-state/app-state-contexts";
@@ -28,10 +35,40 @@ export function useKanbanBoardData({
     TasksStateContext,
     "useKanbanBoardData",
   );
+  const workflowQuery = useQuery(
+    optionalWorkspaceWorkflowQueryOptions(
+      workspaceId && repoPath ? { workspaceId, repoPath } : null,
+    ),
+  );
   const settingsQuery = useQuery(settingsSnapshotQueryOptions());
-  const kanbanTasks = repoPath && !settingsQuery.isError ? tasks : NO_TASKS;
+  const workspace = workflowQuery.data;
+  const workflowError = workflowQuery.error;
+  const kanbanTasks =
+    repoPath && workspace && !workflowError && !settingsQuery.isError ? tasks : NO_TASKS;
   const taskIds = useMemo(() => kanbanTasks.map((task) => task.id), [kanbanTasks]);
-  const { filter, matchingTasks } = useKanbanBoardFilterModel(workspaceId, kanbanTasks);
+  const issueTypeOptions = useMemo(() => {
+    const options = new Map<
+      IssueType,
+      { value: IssueType; label: string; icon?: WorkflowIcon | undefined }
+    >();
+    for (const workflow of workspace?.workflows ?? []) {
+      for (const type of workflow.definition.issueTypes) {
+        const prior = options.get(type.id);
+        options.set(type.id, {
+          value: type.id,
+          label:
+            prior && prior.label !== type.label ? `${prior.label} / ${type.label}` : type.label,
+          icon: type.icon,
+        });
+      }
+    }
+    return [...options.values()];
+  }, [workspace]);
+  const { filter, matchingTasks } = useKanbanBoardFilterModel(
+    workspaceId,
+    kanbanTasks,
+    issueTypeOptions,
+  );
   const sessionLists = useAgentSessionLists({
     workspaceId,
     repoPath,
@@ -43,14 +80,20 @@ export function useKanbanBoardData({
     () => new Map(taskIds.map((taskId) => [taskId, sessionLists.data[taskId] ?? NO_SESSIONS])),
     [sessionLists.data, taskIds],
   );
-  const isLoadingTasks = isKanbanForegroundLoading({
-    hasActiveWorkspace: repoPath !== null,
-    isForegroundLoadingTasks,
-    isSettingsPending: settingsQuery.isPending,
-    doneVisibleDays: settingsQuery.data?.kanban.doneVisibleDays,
-    isKanbanPending: false,
-  });
+  const isLoadingTasks =
+    !workflowError &&
+    isKanbanForegroundLoading({
+      hasActiveWorkspace: repoPath !== null,
+      isForegroundLoadingTasks,
+      isSettingsPending: settingsQuery.isPending || workflowQuery.isPending,
+      doneVisibleDays: settingsQuery.data?.kanban.doneVisibleDays,
+      isKanbanPending: false,
+    });
   return {
+    workflowQuery,
+    workflowError,
+    boardDefinition: workflowError ? undefined : workspace?.context.board,
+    creationStateId: workflowError || !workspace ? null : TASK_OPEN_STATE,
     settingsQuery,
     emptyColumnDisplay:
       settingsQuery.data?.kanban.emptyColumnDisplay ?? DEFAULT_KANBAN_SETTINGS.emptyColumnDisplay,

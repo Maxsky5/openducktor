@@ -19,8 +19,8 @@ import {
   createAgentStudioRouteSelectionState,
 } from "./shell/agent-studio-selection-state";
 import type {
-  BuiltinRoleId as AgentRole,
-  BuiltinTaskCard as TaskCard,
+  WorkflowRoleId as AgentRole,
+  ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 
 export type AgentStudioNavigationViewSelection = {
@@ -29,7 +29,7 @@ export type AgentStudioNavigationViewSelection = {
   sessionsForTask: AgentSessionSummary[];
   sessionExternalId: string | null;
   sessionIdentity: AgentSessionIdentity | null;
-  role: AgentRole;
+  role: AgentRole | null;
   hasExplicitRoleSelection: boolean;
   keepExplicitRoleSessionless: boolean;
 };
@@ -54,7 +54,7 @@ export type ResolveAgentStudioNavigationStateArgs = {
   taskIdParam: string;
   sessionExternalIdParam: string | null;
   hasExplicitRoleParam: boolean;
-  roleFromQuery: AgentRole;
+  roleFromQuery: AgentRole | null;
   selectionState: AgentStudioSelectionState;
 };
 
@@ -147,7 +147,7 @@ const resolveRouteSession = ({
   sessionExternalIdParam: string | null;
   routeSessionResolution: AgentStudioRouteSessionResolution;
   hasExplicitRoleParam: boolean;
-  roleFromQuery: AgentRole;
+  roleFromQuery: AgentRole | null;
 }): AgentSessionSummary | null => {
   if (isWorkspaceRestorePending) {
     return null;
@@ -214,7 +214,7 @@ const resolveNavigationQueryUpdate = ({
   sessionExternalIdParam: string | null;
   routeSessionResolution: AgentStudioRouteSessionResolution;
   resolvedSession: AgentSessionSummary | null;
-  roleFromQuery: AgentRole;
+  roleFromQuery: AgentRole | null;
   selectionState: AgentStudioSelectionState;
   hasExplicitRoleParam: boolean;
 }): AgentStudioQueryUpdate | null => {
@@ -258,7 +258,7 @@ const hasLocalSelectionAheadOfRoute = ({
   taskIdParam: string;
   sessionExternalIdParam: string | null;
   hasExplicitRoleParam: boolean;
-  roleFromQuery: AgentRole;
+  roleFromQuery: AgentRole | null;
   selectionState: AgentStudioSelectionState;
 }): boolean => {
   const routeSelection = createAgentStudioRouteSelectionState({

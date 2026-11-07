@@ -1,6 +1,7 @@
+import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow-settings";
 import type {
-  BuiltinPromptRoleTabId,
-  BuiltinPromptTemplateId as AgentPromptTemplateId,
+  WorkflowPromptRoleTabId,
+  WorkflowPromptTemplateId as AgentPromptTemplateId,
 } from "@openducktor/workflows";
 import { useSettingsModalClaudePolicy } from "./use-settings-modal-claude-policy";
 import { validateOpenCodePermissions } from "./opencode-permission-validation";
@@ -104,8 +105,8 @@ export type SettingsModalController = {
   hasPromptValidationErrors: boolean;
   selectedRepoPromptValidationErrors: Partial<Record<AgentPromptTemplateId, string>>;
   selectedRepoPromptValidationErrorCount: number;
-  globalPromptRoleTabErrorCounts: Record<BuiltinPromptRoleTabId, number>;
-  selectedRepoPromptRoleTabErrorCounts: Record<BuiltinPromptRoleTabId, number>;
+  globalPromptRoleTabErrorCounts: Record<WorkflowPromptRoleTabId, number>;
+  selectedRepoPromptRoleTabErrorCounts: Record<WorkflowPromptRoleTabId, number>;
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
   reusablePromptValidationState: ReusablePromptValidationState;
   hasReusablePromptValidationErrors: boolean;
@@ -163,11 +164,11 @@ export type SettingsModalController = {
     updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
   ) => void;
   updateSelectedRepoAgentDefault: (
-    role: "spec" | "planner" | "build" | "qa",
+    role: string,
     field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
     value: string,
   ) => void;
-  clearSelectedRepoAgentDefault: (role: "spec" | "planner" | "build" | "qa") => void;
+  clearSelectedRepoAgentDefault: (role: string) => void;
   updateSelectedRepoDefaultModel: (
     field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
     value: string,
@@ -191,6 +192,7 @@ export const useSettingsModalController = ({
   workspaceSelectionPolicy,
   onRuntimeAvailabilityError,
 }: UseSettingsModalControllerArgs): SettingsModalController => {
+  const workflowMetadata = useWorkflowSettings();
   const workspaceState = useRequiredContext(WorkspaceStateContext, "useSettingsModalController");
   const {
     activeWorkspace,
@@ -530,13 +532,13 @@ export const useSettingsModalController = ({
   return {
     customAgentRoleValidationState,
     updateCustomAgentRoles,
-    isLoadingSettings,
+    isLoadingSettings: isLoadingSettings || !workflowMetadata.data,
     isLoadingRuntimeDefinitions,
     isLoadingRuntimeExecutables,
     isCheckingRuntimeExecutables,
     isLoadingCatalog,
     isSaving,
-    settingsError,
+    settingsError: settingsError ?? workflowMetadata.error?.message ?? null,
     runtimeDefinitionsError,
     runtimeExecutablesError,
     runtimeDiscoveryError,
@@ -612,7 +614,7 @@ export const useSettingsModalController = ({
     runtimeReview,
     confirmRuntimeReview,
     cancelRuntimeReview,
-    submit,
+    submit: async () => (workflowMetadata.data && !workflowMetadata.error ? submit() : false),
     discardDraft,
     retainDraft,
   };

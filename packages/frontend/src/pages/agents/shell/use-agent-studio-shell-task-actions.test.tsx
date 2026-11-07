@@ -5,7 +5,10 @@ import {
   TaskWorkflowActionsContext,
 } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
-import { createTaskWorkflowActionsFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createTaskCardFixture,
+  createTaskWorkflowActionsFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { enableReactActEnvironment } from "../agent-studio-test-utils";
 import { useAgentStudioShellTaskActions } from "./use-agent-studio-shell-task-actions";
 
@@ -14,7 +17,7 @@ enableReactActEnvironment();
 type HookArgs = Parameters<typeof useAgentStudioShellTaskActions>[0];
 
 const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  selectedTaskId: "task-1",
+  selectedTask: createTaskCardFixture({ id: "task-1" }),
   linkingMergedPullRequestTaskId: null,
   pendingMergedPullRequest: {
     taskId: "task-1",
@@ -80,7 +83,12 @@ describe("useAgentStudioShellTaskActions", () => {
     [null, []],
   ])("opens the details of the selected task %s", async (selectedTaskId, calls) => {
     const onOpenTaskDetails = mock((_taskId: string) => {});
-    const harness = createHookHarness(createArgs({ selectedTaskId }), { onOpenTaskDetails });
+    const harness = createHookHarness(
+      createArgs({
+        selectedTask: selectedTaskId ? createTaskCardFixture({ id: selectedTaskId }) : null,
+      }),
+      { onOpenTaskDetails },
+    );
 
     try {
       await harness.mount();

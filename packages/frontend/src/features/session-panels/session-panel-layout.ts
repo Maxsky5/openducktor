@@ -1,8 +1,4 @@
-import {
-  BUILTIN_ROLE_IDS,
-  BUILTIN_DEFAULT_RIGHT_PANEL_BY_ROLE,
-  type BuiltinRoleId as AgentRole,
-} from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import { type BrowserTabSummary } from "@openducktor/contracts";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import {
@@ -23,11 +19,6 @@ export type SessionPanelOwner =
 
 /** Each task role remembers its own selected right panel tab. A chat has one selection. */
 export type SessionPanelSelectionKey = AgentRole | "chat";
-
-export const SESSION_PANEL_SELECTION_KEYS = [
-  ...BUILTIN_ROLE_IDS,
-  "chat",
-] as const satisfies readonly SessionPanelSelectionKey[];
 
 type PanelEntries = { right: PanelTabEntry[]; bottom: PanelTabEntry[] };
 
@@ -105,6 +96,7 @@ export type HostTabSource<Tab> = {
 export type SessionPanelContext = {
   ownerKind: SessionOwnerKind;
   selectionKey: SessionPanelSelectionKey;
+  defaultRightSelection?: ToolTabKind | undefined;
   /** Kinds that the rules allow but that the page cannot show now, such as CI Checks without a pull request. */
   unavailableKinds: ReadonlySet<PanelTabKind>;
   hostTabs: { [Kind in HostTabKind]: HostTabSource<HostTab<Kind>> };
@@ -129,22 +121,12 @@ export type SessionPanelLayoutUpdate = (
 
 const PANEL_IDS: readonly PanelId[] = ["right", "bottom"];
 
-const DEFAULT_RIGHT_SELECTION = {
-  ...BUILTIN_DEFAULT_RIGHT_PANEL_BY_ROLE,
-  chat: "diffs",
-} satisfies Record<SessionPanelSelectionKey, ToolTabKind>;
-
-const SELECTION_KEYS_BY_OWNER_KIND = {
-  task: BUILTIN_ROLE_IDS,
-  chat: ["chat"],
-} as const satisfies Record<SessionOwnerKind, readonly SessionPanelSelectionKey[]>;
-
 const rememberedRightTabId = (
   layout: SessionPanelLayout,
-  selectionKey: SessionPanelSelectionKey,
+  context: SessionPanelContext,
 ): string | null => {
-  const remembered = layout.selectedRight[selectionKey];
-  return remembered === undefined ? DEFAULT_RIGHT_SELECTION[selectionKey] : remembered;
+  const remembered = layout.selectedRight[context.selectionKey];
+  return remembered === undefined ? (context.defaultRightSelection ?? null) : remembered;
 };
 
 export const sessionPanelOwnerKey = (owner: SessionPanelOwner): string =>
@@ -274,7 +256,9 @@ const sameItems = <Value>(left: readonly Value[], right: readonly Value[]): bool
 const sameSelection = (
   left: SessionPanelLayout["selectedRight"],
   right: SessionPanelLayout["selectedRight"],
-): boolean => SESSION_PANEL_SELECTION_KEYS.every((key) => left[key] === right[key]);
+): boolean =>
+  Object.keys(left).length === Object.keys(right).length &&
+  Object.keys(left).every((key) => left[key] === right[key]);
 
 const insertAt = <Value>(items: readonly Value[], index: number, item: Value): Value[] => [
   ...items.slice(0, index),
@@ -349,7 +333,7 @@ export const reconcileSessionPanelLayout = (
   // A remembered tab that left the panel keeps its key, so the panel selects its first tab, not
   // the default tab of the role.
   const selectedRight: SessionPanelLayout["selectedRight"] = {};
-  for (const key of SESSION_PANEL_SELECTION_KEYS) {
+  for (const key of Object.keys(layout.selectedRight)) {
     const entryId = layout.selectedRight[key];
     if (entryId === undefined) continue;
     selectedRight[key] = entryId !== null && rightIds.has(entryId) ? entryId : null;
@@ -402,7 +386,7 @@ export const selectedPanelTabId = (
   tabs: readonly ResolvedPanelTab[] = shownPanelTabs(layout, panel, context),
 ): string | null => {
   const remembered =
-    panel === "right" ? rememberedRightTabId(layout, context.selectionKey) : layout.selectedBottom;
+    panel === "right" ? rememberedRightTabId(layout, context) : layout.selectedBottom;
   if (tabs.some((tab) => tab.id === remembered)) return remembered;
   return tabs[0]?.id ?? null;
 };
@@ -592,7 +576,7 @@ export const removePanelEntry = (
   const found = findPanelTab(layout, entryId);
   if (!found) return layout;
   const selectedRight = { ...layout.selectedRight };
-  for (const key of SESSION_PANEL_SELECTION_KEYS) {
+  for (const key of Object.keys(layout.selectedRight)) {
     if (selectedRight[key] === entryId) selectedRight[key] = null;
   }
   const entries = layout.panels[found.panel].filter((entry) => entry.id !== entryId);
@@ -623,7 +607,7 @@ export const insertPanelEntryAfter = (
     return layout.selectedBottom === anchorId ? { ...placed, selectedBottom: entry.id } : placed;
   }
   const selectedRight = { ...layout.selectedRight };
-  for (const key of SESSION_PANEL_SELECTION_KEYS) {
+  for (const key of Object.keys(layout.selectedRight)) {
     if (selectedRight[key] === anchorId) selectedRight[key] = entry.id;
   }
   return { ...placed, selectedRight };
@@ -638,6 +622,7 @@ export const appendRightPanelEntry = (
   layout: SessionPanelLayout,
   ownerKind: SessionOwnerKind,
   entry: PanelTabEntry,
+  selectionKeys: readonly string[] = Object.keys(layout.selectedRight),
 ): SessionPanelLayout => {
   const isNew =
     layout.panels.right.length === 0 &&
@@ -647,7 +632,7 @@ export const appendRightPanelEntry = (
     ? withDefaultToolTabs(layout.panels, new Set(), [], ownerKind, new Set())
     : layout.panels;
   const selectedRight = { ...layout.selectedRight };
-  for (const key of SELECTION_KEYS_BY_OWNER_KIND[ownerKind]) selectedRight[key] = entry.id;
+  for (const key of ownerKind === "chat" ? ["chat"] : selectionKeys) selectedRight[key] = entry.id;
   return { ...layout, panels: { ...panels, right: [...panels.right, entry] }, selectedRight };
 };
 

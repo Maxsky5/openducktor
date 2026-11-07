@@ -1,7 +1,10 @@
 import { AgentRuntimeTestAdapter } from "../../test-support/agent-runtime-test-adapter";
 import { spyOn } from "bun:test";
 import type { HostClient } from "@openducktor/host-client";
-import { createSettingsSnapshotFixture } from "../../test-support/shared-test-fixtures";
+import {
+  createSettingsSnapshotFixture,
+  createWireTaskCardFixture,
+} from "../../test-support/shared-test-fixtures";
 import { createTestHostConnection } from "../../test-support/test-client-connection";
 
 export type OrchestratorOperationsTestEnvironment = {
@@ -19,7 +22,7 @@ export const setupOrchestratorOperationsTestEnvironment =
       branchPrefix: "odt",
       defaultTargetBranch: { remote: "origin", branch: "main" },
       git: {},
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       actions: { items: [], defaultActionId: null },
       worktreeCopyPaths: [],
       promptOverrides: {},
@@ -29,6 +32,7 @@ export const setupOrchestratorOperationsTestEnvironment =
     const { client: host } = createTestHostConnection({
       client: {
         workspaceSessionListActive: async () => [],
+        tasksListAll: async () => [createWireTaskCardFixture({ id: "task-1" })],
         taskWorktreeGet: async () => ({ workingDirectory: "/tmp/repo/worktree" }),
         workspaceGetRepoConfig: async () => repoConfig,
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),

@@ -1,3 +1,4 @@
+import { specPlanBuildPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useState } from "react";
@@ -33,7 +34,7 @@ const createInitialSnapshot = (): SettingsSnapshot =>
         },
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
@@ -72,7 +73,7 @@ describe("useSettingsModalDraftActions", () => {
       }));
       state.updateRepoPromptOverrides((overrides) => ({
         ...overrides,
-        "kickoff.spec_initial": {
+        [specPlanBuildPromptKey("messages.spec_start")]: {
           template: "custom",
           baseVersion: 2,
           enabled: true,
@@ -80,7 +81,7 @@ describe("useSettingsModalDraftActions", () => {
       }));
       state.updateGlobalPromptOverrides((overrides) => ({
         ...overrides,
-        "system.role.spec.base": {
+        [rolePromptKey("spec")]: {
           template: "global custom",
           baseVersion: 2,
           enabled: true,
@@ -90,12 +91,11 @@ describe("useSettingsModalDraftActions", () => {
 
     const snapshot = harness.getLatest().snapshotDraft;
     expect(snapshot?.workspaces["repo-a"]?.branchPrefix).toBe("feature/");
-    expect(snapshot?.workspaces["repo-a"]?.promptOverrides["kickoff.spec_initial"]?.template).toBe(
-      "custom",
-    );
-    expect(snapshot?.globalPromptOverrides["system.role.spec.base"]?.template).toBe(
-      "global custom",
-    );
+    expect(
+      snapshot?.workspaces["repo-a"]?.promptOverrides[specPlanBuildPromptKey("messages.spec_start")]
+        ?.template,
+    ).toBe("custom");
+    expect(snapshot?.globalPromptOverrides[rolePromptKey("spec")]?.template).toBe("global custom");
 
     await harness.unmount();
   });

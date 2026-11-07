@@ -12,11 +12,16 @@ import {
   type BrowserOwnerCleanupPort,
   closeOwnerBrowserTabs,
 } from "../../browser/browser-owner-cleanup";
-import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
+import {
+  type RemoveWorktreeAndFilesystemPathDependencies,
+  type RemoveWorktreeAndFilesystemPathInput,
+  removeWorktreeAndFilesystemPath,
+} from "../../git/worktree-removal";
 import { classifyWorkspaceCheckout } from "../../git/workspace-checkout";
 import type { TaskTerminalCleanupPort } from "../task-service";
 import { type TaskCleanupOperation, type TaskCleanupProgressState } from "./task-cleanup-progress";
 import type { OwnerCheckedWorktreePaths } from "./task-worktree-owner-guard";
+import { type BeforeWorktreeRemovalScript, runBeforeWorktreeRemovalScript } from "./workflow-hooks";
 /** The roles of the task workflow. Cleanup stops and removes only their sessions. */
 export const workflowRoleIds = (workflow: TaskWorkflow): Set<string> =>
   new Set(workflow.definition.roles.map(({ id }) => id));
@@ -289,11 +294,10 @@ export const runTaskRuntimeCleanup = ({
       repoPath,
       taskIds,
     });
-    progress.completedSteps.push(
-      terminalResult.closedTerminalIds.length > 0
-        ? `terminated task terminals: ${terminalResult.closedTerminalIds.join(", ")}`
-        : "checked task terminals",
-    );
+    if (terminalResult.closedTerminalIds.length > 0)
+      progress.completedSteps.push(
+        `terminated task terminals: ${terminalResult.closedTerminalIds.join(", ")}`,
+      );
   });
 
 /** Reads the agent sessions of each task, in task order. */
@@ -340,7 +344,30 @@ export const runTaskBrowserTabCleanup = ({
     progress.completedSteps.push("closed task browser tabs");
   });
 
+/**
+ * Removes one task worktree. Each task cleanup removes a worktree here, so the before worktree
+ * removal script runs in every existing worktree right before its removal. A failed command keeps
+ * the worktree and fails the cleanup.
+ */
+export const removeTaskWorktree = (
+  dependencies: RemoveWorktreeAndFilesystemPathDependencies & {
+    beforeWorktreeRemoval: BeforeWorktreeRemovalScript;
+  },
+  input: RemoveWorktreeAndFilesystemPathInput,
+) =>
+  Effect.gen(function* () {
+    const worktreePath = dependencies.worktreeFiles.resolveWorktreePath(
+      input.repoPath,
+      input.worktreePath,
+    );
+    if (yield* dependencies.settingsConfig.pathExists(worktreePath)) {
+      yield* runBeforeWorktreeRemovalScript(dependencies.beforeWorktreeRemoval, worktreePath);
+    }
+    yield* removeWorktreeAndFilesystemPath(dependencies, input);
+  });
+
 export const runTaskLocalCleanup = ({
+  beforeWorktreeRemoval,
   branchNames,
   gitPort,
   managedWorktreeBasePath,
@@ -356,6 +383,8 @@ export const runTaskLocalCleanup = ({
   forceWorktreeRemoval = true,
   onBranchDeleting,
 }: {
+  /** Runs in each existing worktree right before its removal. */
+  beforeWorktreeRemoval: BeforeWorktreeRemovalScript;
   branchNames: string[];
   gitPort: GitPort;
   managedWorktreeBasePath: string;
@@ -399,8 +428,9 @@ export const runTaskLocalCleanup = ({
 
     if (cleanupFiles) {
       for (const worktreePath of worktreePaths) {
-        yield* removeWorktreeAndFilesystemPath(
+        yield* removeTaskWorktree(
           {
+            beforeWorktreeRemoval,
             gitPort,
             settingsConfig,
             worktreeFiles: cleanupFiles,

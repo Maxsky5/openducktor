@@ -1,4 +1,5 @@
-import { isQaRejectedTask, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { taskIssueType } from "@openducktor/workflows";
+import { isReviewRejectedTask, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { TASK_PULL_REQUEST_ACTION_LABELS } from "@openducktor/frontend-core/tasks/pull-requests/pull-request-presentation";
 import { toDisplayTaskLabels } from "@openducktor/frontend-core/tasks/presentation/task-labels";
 import { memo, type ReactElement, type ReactNode } from "react";
@@ -13,7 +14,7 @@ import {
   IssueTypeBadge,
   PriorityBadge,
   PullRequestBadge,
-  QaRejectedBadge,
+  ReviewRejectedBadge,
   SourceIssueBadge,
   TaskLabelChip,
 } from "../presentation/task-badges";
@@ -125,7 +126,7 @@ export const TaskSummary = memo(function TaskSummary({
           </Text>
           <Icon name="copy" size={12} colorValue={theme.desktop.mutedForeground} />
         </Touchable>
-        <TaskStatusBadge status={task.status} />
+        <TaskStatusBadge status={task.sharedState} />
       </View>
       <View style={styles.badgeRow}>
         <TaskSummaryBadges task={task} />
@@ -152,11 +153,11 @@ export const TaskSummary = memo(function TaskSummary({
 function TaskSummaryBadges({ task }: { task: TaskCard }): ReactElement {
   return (
     <View style={[styles.badges, styles.grow]}>
-      <IssueTypeBadge issueType={task.issueType} />
+      <IssueTypeBadge issueType={taskIssueType(task)} />
       <PriorityBadge priority={task.priority} />
       {task.pullRequest ? <PullRequestBadge pullRequest={task.pullRequest} /> : null}
       {task.sourceIssue ? <SourceIssueBadge sourceIssue={task.sourceIssue} /> : null}
-      {isQaRejectedTask(task) ? <QaRejectedBadge /> : null}
+      {isReviewRejectedTask(task) ? <ReviewRejectedBadge task={task} /> : null}
     </View>
   );
 }

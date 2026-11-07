@@ -89,14 +89,14 @@ for (const input of [
   {
     workflow: builtinTaskWorkflows.forNewTask("/repos/Fair Nest"),
     status: "open",
-    issueType: "task",
+    issueType: "task" as const,
     code: "spec",
     secondCode: "plan",
   },
   {
     workflow: createReviewTaskWorkflow(),
-    status: "backlog",
-    issueType: "article",
+    status: "open",
+    issueType: "feature" as const,
     code: "draft",
     secondCode: "review",
   },

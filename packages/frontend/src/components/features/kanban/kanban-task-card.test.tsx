@@ -1,3 +1,5 @@
+import { createTaskWorkflowActionsFixture } from "@/test-utils/shared-test-fixtures";
+import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -7,7 +9,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { KanbanTaskCard } from "./kanban-task-card";
 
 const renderCardMarkup = (element: Parameters<typeof renderToStaticMarkup>[0]): string =>
-  renderToStaticMarkup(createElement(TooltipProvider, null, element));
+  renderToStaticMarkup(
+    createElement(
+      TaskWorkflowActionsContext,
+      { value: createTaskWorkflowActionsFixture() },
+      createElement(TooltipProvider, null, element),
+    ),
+  );
 
 const noop = (): void => {};
 
@@ -56,9 +64,6 @@ describe("KanbanTaskCard active sessions", () => {
             },
           ],
           onOpenDetails: noop,
-          onDelegate: noop,
-          onPlan: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -113,9 +118,6 @@ describe("KanbanTaskCard active sessions", () => {
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
-          onDelegate: noop,
-          onPlan: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -162,9 +164,6 @@ describe("KanbanTaskCard active sessions", () => {
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
-          onDelegate: noop,
-          onPlan: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -206,9 +205,6 @@ describe("KanbanTaskCard active sessions", () => {
             },
           ],
           onOpenDetails: noop,
-          onDelegate: noop,
-          onPlan: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -244,9 +240,6 @@ describe("KanbanTaskCard active sessions", () => {
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
-          onDelegate: noop,
-          onPlan: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -272,9 +265,6 @@ describe("KanbanTaskCard active sessions", () => {
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
-          onDelegate: noop,
-          onPlan: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -304,9 +294,6 @@ describe("KanbanTaskCard active sessions", () => {
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
-          onDelegate: noop,
-          onPlan: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -342,9 +329,6 @@ describe("KanbanTaskCard active sessions", () => {
           taskActivityState: "idle",
           taskSessions: [],
           onOpenDetails: noop,
-          onDelegate: noop,
-          onPlan: noop,
-          onOpenSession: noop,
         }),
       ),
     );
@@ -376,9 +360,6 @@ describe("KanbanTaskCard active sessions", () => {
             taskActivityState: "idle",
             taskSessions: [],
             onOpenDetails: noop,
-            onDelegate: noop,
-            onPlan: noop,
-            onOpenSession: noop,
           }),
         ),
       ),
@@ -428,9 +409,6 @@ describe("KanbanTaskCard active sessions", () => {
             taskActivityState: "idle",
             taskSessions: [],
             onOpenDetails: noop,
-            onDelegate: noop,
-            onPlan: noop,
-            onOpenSession: noop,
           }),
         ),
       ),
@@ -447,7 +425,7 @@ describe("KanbanTaskCard merged task branch", () => {
       id: "TASK-1",
       title: "Implement payment flow",
       status: "human_review",
-      availableActions: ["human_approve", "close_task"],
+      availableActions: ["human_approve"],
     });
 
     const html = renderCardMarkup(
@@ -459,11 +437,6 @@ describe("KanbanTaskCard merged task branch", () => {
           taskActivityState: "idle",
           mergedTarget: "origin/main",
           onOpenDetails: noop,
-          onDelegate: noop,
-          onOpenSession: noop,
-          onPlan: noop,
-          onHumanApprove: noop,
-          onCloseTask: noop,
         }),
       ),
     );
@@ -476,7 +449,7 @@ describe("KanbanTaskCard merged task branch", () => {
     const task = createTaskCardFixture({
       id: "TASK-1",
       status: "human_review",
-      availableActions: ["human_approve", "close_task"],
+      availableActions: ["human_approve"],
     });
 
     const html = renderCardMarkup(
@@ -488,11 +461,6 @@ describe("KanbanTaskCard merged task branch", () => {
           taskActivityState: "idle",
           autoCloseFailure: "Pull request merged, but the task did not close. A chat needs it.",
           onOpenDetails: noop,
-          onDelegate: noop,
-          onOpenSession: noop,
-          onPlan: noop,
-          onHumanApprove: noop,
-          onCloseTask: noop,
         }),
       ),
     );
@@ -505,7 +473,7 @@ describe("KanbanTaskCard merged task branch", () => {
     const task = createTaskCardFixture({
       id: "TASK-1",
       status: "human_review",
-      availableActions: ["human_approve", "close_task"],
+      availableActions: ["human_approve"],
     });
 
     const html = renderCardMarkup(
@@ -516,10 +484,6 @@ describe("KanbanTaskCard merged task branch", () => {
           task,
           taskActivityState: "idle",
           onOpenDetails: noop,
-          onDelegate: noop,
-          onOpenSession: noop,
-          onPlan: noop,
-          onHumanApprove: noop,
         }),
       ),
     );

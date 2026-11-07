@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type {
   AgentRuntimes,
   RuntimeDescriptor,
@@ -19,14 +19,9 @@ import {
   useMemo,
 } from "react";
 import type { ActiveWorkspace } from "../types/session-slices";
-import type {
-  DelegationStateContextValue,
-  DocumentStateContextValue,
-  TasksStateContextValue,
-} from "../types/state-slices";
+import type { DocumentStateContextValue, TasksStateContextValue } from "../types/state-slices";
 
 export const TasksStateContext = createContext<TasksStateContextValue | null>(null);
-export const DelegationStateContext = createContext<DelegationStateContextValue | null>(null);
 export const DocumentStateContext = createContext<DocumentStateContextValue | null>(null);
 
 export type ActiveWorkspaceContextValue = {

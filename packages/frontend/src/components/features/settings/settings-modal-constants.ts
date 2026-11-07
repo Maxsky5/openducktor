@@ -1,11 +1,4 @@
 import {
-  listBuiltinAgentPromptTemplates,
-  resolveBuiltinPromptRoleTab,
-  type BuiltinPromptRoleTabId,
-  type BuiltinPromptTemplateId as AgentPromptTemplateId,
-  BUILTIN_PROMPT_TEMPLATE_IDS,
-} from "@openducktor/workflows";
-import {
   Bell,
   Columns3,
   Cpu,
@@ -35,7 +28,6 @@ export type SettingsSectionId =
   | "autopilot"
   | "notifications";
 export type RepositorySectionId = "configuration" | "scripts" | "git" | "agents" | "prompts";
-type BuiltinPromptDefinition = ReturnType<typeof listBuiltinAgentPromptTemplates>[number];
 
 export const SETTINGS_SECTIONS: ReadonlyArray<{
   id: SettingsSectionId;
@@ -68,28 +60,10 @@ export const REPOSITORY_SECTIONS: ReadonlyArray<{
   { id: "prompts", label: "Repository prompts" },
 ];
 
-export const BUILTIN_PROMPTS_BY_ID: ReadonlyMap<AgentPromptTemplateId, BuiltinPromptDefinition> =
-  new Map(
-    listBuiltinAgentPromptTemplates().map((definition) => [definition.id, definition] as const),
-  );
-
 export const countPromptErrorsByRoleTab = (
-  errors: Partial<Record<AgentPromptTemplateId, string>>,
-) => {
-  const counts = {
-    shared: 0,
-    spec: 0,
-    planner: 0,
-    build: 0,
-    qa: 0,
-  } satisfies Record<BuiltinPromptRoleTabId, number>;
-
-  for (const templateId of BUILTIN_PROMPT_TEMPLATE_IDS) {
-    if (!errors[templateId]) {
-      continue;
-    }
-    counts[resolveBuiltinPromptRoleTab(templateId)] += 1;
-  }
-
-  return counts satisfies Record<BuiltinPromptRoleTabId, number>;
-};
+  errors: Partial<Record<string, string>>,
+  tabs: readonly { id: string; templates: readonly { key: string }[] }[],
+): Record<string, number> =>
+  Object.fromEntries(
+    tabs.map((tab) => [tab.id, tab.templates.filter(({ key }) => errors[key]).length]),
+  );

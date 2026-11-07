@@ -1,4 +1,5 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { OnTaskCommitted } from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "@openducktor/frontend-core/types/task-close";
 import {
   TasksStateContext,
@@ -29,6 +30,7 @@ import { TaskConfirmView } from "./task-confirm-view";
  */
 export type TaskConfirmationRequest = {
   id: number;
+  onCommitted?: OnTaskCommitted | undefined;
   taskId: string;
   action: Exclude<TaskConfirmationAction, "reset_implementation">;
 };
@@ -84,31 +86,34 @@ function RequestedCloseConfirm({
     initiallyOpen: true,
     run,
     onSucceeded: () => onSucceeded(request),
+    onCommitted: request.onCommitted,
   });
   return <TaskCloseConfirm dialog={dialog} onDismiss={() => onClosed(request.id)} />;
 }
 
-function RequestedTaskConfirm({
+function RequestedTaskConfirm<Result>({
   request,
   action,
   tasks,
+  runAction,
+  onCommitted,
   onClosed,
   onStarted,
   onSucceeded,
 }: Omit<TaskConfirmationsProps, "request"> & {
   request: TaskConfirmationRequest;
   action: TaskConfirmAction;
+  runAction: (taskId: string) => Promise<Result>;
+  onCommitted?: ((result: Result) => Promise<void>) | undefined;
 }): ReactElement {
-  const { resetTask, deleteTask } = useRequiredContext(TasksStateContext, "RequestedTaskConfirm");
   const task = useLastKnownTask(tasks, request.taskId);
-  const run = useMemo(() => {
-    const runAction = (taskId: string): Promise<void> =>
-      action === "delete" ? deleteTask(taskId) : resetTask(taskId);
-    return (taskId: string) => {
+  const run = useMemo(
+    () => (taskId: string) => {
       onStarted(request);
       return runAction(taskId);
-    };
-  }, [action, deleteTask, onStarted, request, resetTask]);
+    },
+    [onStarted, request, runAction],
+  );
   const { dialog } = useTaskConfirmDialog({
     action,
     task,
@@ -116,6 +121,7 @@ function RequestedTaskConfirm({
     initiallyOpen: true,
     run,
     onSucceeded: () => onSucceeded(request),
+    onCommitted,
   });
   // Keep the confirmed impact while the command changes task data. A failed command shows the
   // current impact.
@@ -179,12 +185,29 @@ export function ResetImplementationConfirmation({
  * started it. Each states what the host keeps and removes.
  */
 export function TaskConfirmations(props: TaskConfirmationsProps): ReactElement | null {
+  const { resetTask, deleteTask } = useRequiredContext(TasksStateContext, "TaskConfirmations");
   const { request } = props;
   if (!request) return null;
-  if (request.action === "close_task") {
+  if (request.action === "close") {
     return <RequestedCloseConfirm key={request.id} {...props} request={request} />;
   }
-  return (
-    <RequestedTaskConfirm key={request.id} {...props} request={request} action={request.action} />
+  // Delete returns no task, and a reset returns the task that its continuation needs.
+  return request.action === "delete" ? (
+    <RequestedTaskConfirm
+      key={request.id}
+      {...props}
+      request={request}
+      action={request.action}
+      runAction={deleteTask}
+    />
+  ) : (
+    <RequestedTaskConfirm
+      key={request.id}
+      {...props}
+      request={request}
+      action={request.action}
+      runAction={resetTask}
+      onCommitted={request.onCommitted}
+    />
   );
 }

@@ -379,7 +379,12 @@ const buildExternalTaskCreatedEvent = (
   workspaceId,
   repoPath,
   taskId: taskSnapshot.id,
-  taskSnapshot: { id: taskSnapshot.id, title: taskSnapshot.title, status: taskSnapshot.status },
+  taskSnapshot: {
+    id: taskSnapshot.id,
+    title: taskSnapshot.title,
+    status: taskSnapshot.status,
+    workflow: taskSnapshot.workflow,
+  },
   boardChanges: null,
   emittedAt: nowIso(),
 });
@@ -408,7 +413,7 @@ const taskSnapshotsForChanges = (
   const removedTaskIds = new Set(changes.removedTaskIds);
   return tasks
     .filter((task) => changedTaskIds.has(task.id) && !removedTaskIds.has(task.id))
-    .map(({ id, title, status }) => ({ id, title, status }));
+    .map(({ id, title, status, workflow }) => ({ id, title, status, workflow }));
 };
 
 const publicationError = (

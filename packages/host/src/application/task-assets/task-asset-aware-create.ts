@@ -23,7 +23,7 @@ export const createTaskAssetAwareCreate =
   (input) => {
     let createdTaskId: string | undefined;
     let workspaceId: string | undefined;
-    let committedTask: TaskEventTaskSnapshot | null = null;
+    let committedTask: Omit<TaskEventTaskSnapshot, "workflow"> | null = null;
     let committedCleanupPhase: "purge_create_quarantine" | "discard_committed_staging" =
       "discard_committed_staging";
     let recoveryId: string | null = null;

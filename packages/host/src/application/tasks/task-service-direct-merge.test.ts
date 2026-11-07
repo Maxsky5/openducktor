@@ -35,7 +35,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         defaultTargetBranch: { branch: "main" },
       }),
     });
@@ -93,7 +93,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
     const result = await Effect.runPromise(
@@ -127,9 +127,8 @@ describe("createTaskService direct merge", () => {
     expect(calls).toMatchObject([]);
   });
 
-  test("records a published direct merge and moves ai review to human review", async () => {
+  test("records a direct merge with a publish target and keeps the task state", async () => {
     const calls: unknown[] = [];
-    const humanReviewTask = task({ status: "human_review" });
     const taskStore: TaskStorePort = {
       listTasks(input) {
         return Effect.sync(() => {
@@ -152,12 +151,7 @@ describe("createTaskService direct merge", () => {
           return true;
         });
       },
-      transitionTask(input) {
-        return Effect.sync(() => {
-          calls.push({ type: "transition", input });
-          return humanReviewTask;
-        });
-      },
+      transitionTask: () => Effect.die(new Error("a publish target keeps the task state")),
     };
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
@@ -224,7 +218,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
     await expect(
@@ -246,7 +240,7 @@ describe("createTaskService direct merge", () => {
       ),
     ).resolves.toMatchObject({
       outcome: "completed",
-      task: { id: "task-1", status: "human_review" },
+      task: { id: "task-1", status: "ai_review" },
     });
     expect(calls).toMatchObject([
       { type: "list", input: { repoPath: "/repo" } },
@@ -288,19 +282,13 @@ describe("createTaskService direct merge", () => {
           },
         },
       },
-      { type: "list", input: { repoPath: "/repo" } },
-      {
-        type: "transition",
-        input: { repoPath: "/repo", taskId: "task-1", status: "human_review", cause: {} },
-      },
     ]);
   });
-  test.each(["review_task", "publish", "publish_always"])(
+  test.each(["publish", "publish_always"])(
     "reports %s failure after recording a direct merge as partial progress",
     async (failedStage) => {
       const failure = new HostOperationError({
-        operation:
-          failedStage === "review_task" ? "task-store.transition-task" : "completion.publish",
+        operation: "completion.publish",
         message: `${failedStage} failed`,
       });
       let directMergeWritten = false;
@@ -318,10 +306,6 @@ describe("createTaskService direct merge", () => {
             directMergeWritten = true;
             return true;
           }),
-        transitionTask: () =>
-          failedStage === "review_task"
-            ? Effect.fail(failure)
-            : Effect.succeed(task({ status: "human_review" })),
       };
       const calls: unknown[] = [];
       const service = createTaskServiceWithMutationProgress({
@@ -377,7 +361,7 @@ describe("createTaskService direct merge", () => {
         workspaceSettingsService: createBuildWorkspaceSettingsService({
           workspaceId: "repo",
           repoPath: "/repo",
-          hooks: { postComplete: [] },
+          hooks: { beforeWorktreeRemoval: [] },
         }),
       });
 
@@ -410,7 +394,7 @@ describe("createTaskService direct merge", () => {
         expect(result.failure.message).toContain("Completion observation could not be published");
       else expect(result.failure).toBe(failure);
       expect(observations.at(-1)?.failure).toMatchObject({
-        stage: failedStage === "review_task" ? "review_task" : "publish",
+        stage: "publish",
         message: failure.message,
       });
       expect(merges).toBe(1);
@@ -505,7 +489,7 @@ describe("createTaskService direct merge", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).directMerge({
           workspaceId: "repo",
@@ -610,7 +594,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
     await expect(
@@ -705,7 +689,7 @@ describe("createTaskService direct merge", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
       }),
     });
     const input = { repoPath: "/repo", taskId: "task-1" };
@@ -782,7 +766,7 @@ describe("createTaskService direct merge", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).completeDirectMerge({
           workspaceId: "repo",
@@ -827,7 +811,7 @@ describe("createTaskService direct merge", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).completeDirectMerge({
           workspaceId: "repo",

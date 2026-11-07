@@ -1,4 +1,4 @@
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import { type ReactElement, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";

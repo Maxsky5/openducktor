@@ -2,6 +2,7 @@ import type { McpTaskArtifact } from "@openducktor/contracts";
 import {
   type ArtifactToolHeading,
   readArtifactToolCall,
+  readArtifactToolTaskId,
 } from "@openducktor/frontend-core/sessions/messages/artifact-tool-call";
 import { ArrowRight, File, FileText, LoaderCircle, ShieldCheck, ShieldX } from "lucide-react";
 import { useMemo, useState, type ReactElement } from "react";
@@ -9,8 +10,11 @@ import { Button } from "@/components/ui/button";
 import { useChatArtifactLinkAction } from "./agent-chat-artifact-link-context";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
+import { useChatToolTask } from "./agent-chat-workflow-context";
 
 const HEADING_ICONS = {
+  artifact: <FileText className="size-3.5" />,
+
   document: <FileText className="size-3.5" />,
   review_passed: <ShieldCheck className="size-3.5" />,
   review_failed: <ShieldX className="size-3.5" />,
@@ -27,20 +31,33 @@ export const ArtifactToolMessage = ({
   timeLabel: string;
   sessionWorkingDirectory?: string | null | undefined;
 }): ReactElement => {
-  const { heading, title, saved } = useMemo(() => readArtifactToolCall(meta), [meta]);
+  const snapshot = useMemo(() => readArtifactToolCall(meta), [meta]);
+  const taskId = snapshot.saved?.taskId ?? readArtifactToolTaskId(meta);
+  const workflow = useChatToolTask(taskId);
+  const { heading, title, saved } = useMemo(
+    () => readArtifactToolCall(meta, workflow.task?.taskWorkflow),
+    [meta, workflow.task?.taskWorkflow],
+  );
 
   return (
-    <WorkflowToolMessage
-      {...props}
-      meta={meta}
-      displayName={title}
-      icon={HEADING_ICONS[heading]}
-      action={
-        saved?.classification === "free" ? (
-          <ArtifactOpenButton key={`${saved.taskId}:${saved.code}`} artifact={saved} />
-        ) : null
-      }
-    />
+    <>
+      <WorkflowToolMessage
+        {...props}
+        meta={meta}
+        displayName={title}
+        icon={HEADING_ICONS[heading]}
+        action={
+          saved?.classification === "free" ? (
+            <ArtifactOpenButton key={`${saved.taskId}:${saved.code}`} artifact={saved} />
+          ) : null
+        }
+      />
+      {workflow.error ? (
+        <p role="alert" className="text-xs text-destructive">
+          {workflow.error}
+        </p>
+      ) : null}
+    </>
   );
 };
 

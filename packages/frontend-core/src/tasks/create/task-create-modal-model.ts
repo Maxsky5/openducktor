@@ -1,8 +1,8 @@
 import type { TaskCreateInput, TaskUpdatePatch } from "@openducktor/contracts";
-import type { BuiltinDocumentCode } from "@openducktor/workflows";
+import type { WorkflowDocumentCode } from "@openducktor/workflows";
 import type { ComposerState, EditTaskSection } from "./task-composer-types";
 
-export const isDocumentSection = (section: EditTaskSection): section is BuiltinDocumentCode =>
+export const isDocumentSection = (section: EditTaskSection): section is { artifactCode: string } =>
   section !== "details";
 
 export const toTaskCreateInput = (state: ComposerState): TaskCreateInput => ({
@@ -23,9 +23,9 @@ export const toTaskUpdatePatch = (state: ComposerState): TaskUpdatePatch => ({
 });
 
 export const hasUnsavedDocumentChanges = (
-  section: BuiltinDocumentCode | null,
-  dirtyDocuments: Record<BuiltinDocumentCode, boolean>,
-): boolean => (section === null ? false : dirtyDocuments[section]);
+  section: WorkflowDocumentCode | null,
+  dirtyDocuments: Record<WorkflowDocumentCode, boolean>,
+): boolean => (section === null ? false : dirtyDocuments[section] === true);
 
 /**
  * True when the live task card reports a newer document than the one the editor loaded. A card

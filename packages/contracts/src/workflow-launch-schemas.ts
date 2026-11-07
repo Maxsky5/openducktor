@@ -49,6 +49,11 @@ export const workflowLaunchRequestSchema = z
       .object({
         kind: z.literal("manual"),
         actionId: sessionLaunchActionIdSchema,
+        /**
+         * The role of the source session. Only the core pull request launch needs it, because any
+         * pull request role can run it. The host checks that the source session has this role.
+         */
+        role: agentRoleSchema.optional(),
         decision: workflowLaunchDecisionSchema,
       })
       .strict(),
@@ -69,8 +74,12 @@ export const workflowLaunchRequestSchema = z
         .strict(),
     ]),
     targetBranch: gitTargetBranchSchema.optional(),
+    /**
+     * A workflow event that the host commits before the session starts. Only a launch with the
+     * `human_feedback` context accepts it. The note is the feedback of the person.
+     */
     beforeStartAction: z
-      .object({ action: z.literal("human_request_changes"), note: z.string() })
+      .object({ eventId: z.string().trim().min(1) })
       .strict()
       .optional(),
   })

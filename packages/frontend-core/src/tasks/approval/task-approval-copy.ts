@@ -11,7 +11,7 @@ import type {
   PullRequestDraftMode,
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
-  TaskApprovalMissingBuilderWorktreeModalModel,
+  TaskApprovalMissingWorktreeModalModel,
   TaskApprovalMode,
 } from "./task-approval-types";
 
@@ -51,11 +51,13 @@ export const TASK_APPROVAL_MERGE_METHOD_OPTIONS: ReadonlyArray<{
   },
 ];
 
-export const TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS: ReadonlyArray<{
-  value: PullRequestDraftMode;
-  label: string;
-  description: string;
-}> = [
+/**
+ * The pull request draft choices. The generated draft names the one pull request role of the
+ * workflow, or an agent when the workflow names zero or several roles.
+ */
+export const taskApprovalPullRequestDraftOptions = (
+  pullRequestRoleLabel: string | null,
+): Array<{ value: PullRequestDraftMode; label: string; description: string }> => [
   {
     value: "manual",
     label: "Write manually",
@@ -63,10 +65,16 @@ export const TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS: ReadonlyArray<{
   },
   {
     value: "generate_ai",
-    label: "Ask Builder",
-    description: "Let Builder create or update the pull request.",
+    label: `Ask ${pullRequestRoleLabel ?? "agent"}`,
+    description: `Let ${pullRequestRoleLabel ?? "an agent"} create or update the pull request.`,
   },
 ];
+
+/** The notice of the generated draft: the next step chooses the session that creates it. */
+export const taskApprovalGeneratePullRequestNotice = (
+  pullRequestRoleLabel: string | null,
+): string =>
+  `Next, choose the ${pullRequestRoleLabel ? `${pullRequestRoleLabel} ` : ""}session to use.`;
 
 /** The fixed text of the approval flow. */
 export const TASK_APPROVAL_COPY = {
@@ -83,11 +91,9 @@ export const TASK_APPROVAL_COPY = {
   pullRequestDraftLabel: "Pull request draft",
   pullRequestTitleLabel: "Pull request title",
   pullRequestDescriptionLabel: "Pull request description",
-  generatePullRequestNotice: "Next, choose the Builder session to fork.",
   openExistingPullRequest: "Open existing pull request",
   cancel: "Cancel",
   recoveryFailedTitle: "Could not finish this action",
-  resetImplementation: "Reset implementation",
   completionFailedTitle: "Could not finish the merge",
   localMergeReadyTitle: "Local merge ready",
   nextStepTitle: "Next step",
@@ -167,7 +173,7 @@ export const getTaskApprovalSubmitState = (
   if (model.mode === "pull_request" && model.pullRequestDraftMode === "manual") {
     confirmLabel = "Create pull request";
   } else if (model.mode === "pull_request") {
-    confirmLabel = "Choose Builder session";
+    confirmLabel = `Choose ${model.pullRequestRoleLabel ? `${model.pullRequestRoleLabel} ` : ""}session`;
   }
 
   return {
@@ -194,9 +200,9 @@ export const getTaskApprovalSubmitState = (
   };
 };
 
-/** Whether Close Task of the missing builder worktree stage cannot run now. */
-export const missingBuilderWorktreeConfirmDisabled = (
-  model: Pick<TaskApprovalMissingBuilderWorktreeModalModel, "isSubmitting" | "removeWorktree">,
+/** Whether Close Task of the missing worktree stage cannot run now. */
+export const missingWorktreeConfirmDisabled = (
+  model: Pick<TaskApprovalMissingWorktreeModalModel, "isSubmitting" | "removeWorktree">,
   impact: TaskCloseImpact,
   isPreparing: boolean,
 ): boolean => isPreparing || model.isSubmitting || isCloseBlocked(impact, model.removeWorktree);

@@ -86,11 +86,15 @@ describe("useTaskOperations", () => {
       await harness.mount();
 
       await expect(
-        harness.run((operations) => operations.resetTaskImplementation("task-1")),
+        harness.run(async (operations) => {
+          await operations.resetTaskImplementation("task-1", "reset-implementation");
+        }),
       ).rejects.toThrow("Select a workspace first.");
-      await expect(harness.run((operations) => operations.resetTask("task-1"))).rejects.toThrow(
-        "Select a workspace first.",
-      );
+      await expect(
+        harness.run(async (operations) => {
+          await operations.resetTask("task-1");
+        }),
+      ).rejects.toThrow("Select a workspace first.");
 
       expect(agentSessionsListForTasks).not.toHaveBeenCalled();
     } finally {
@@ -100,12 +104,12 @@ describe("useTaskOperations", () => {
 
   test("runs reset commands on the host and refreshes task state", async () => {
     const taskReset = mock(async () => createTaskCardFixture({ id: "task-2", status: "open" }));
-    const taskResetImplementation = mock(async () =>
+    const taskApplyEvent = mock(async () =>
       createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
     );
     const feedback = createFeedbackFake();
     const connection = createTestClientConnection({
-      client: { taskReset, taskResetImplementation },
+      client: { taskReset, taskApplyEvent },
       feedback,
     });
     const refreshTaskData = mock(async () => undefined);
@@ -133,12 +137,17 @@ describe("useTaskOperations", () => {
 
     try {
       await harness.mount();
-      await harness.run((operations) => operations.resetTaskImplementation("task-1"));
-      await harness.run((operations) => operations.resetTask("task-2"));
+      await harness.run(async (operations) => {
+        await operations.resetTaskImplementation("task-1", "reset-implementation");
+      });
+      await harness.run(async (operations) => {
+        await operations.resetTask("task-2");
+      });
 
-      expect(taskResetImplementation).toHaveBeenCalledWith(
+      expect(taskApplyEvent).toHaveBeenCalledWith(
         { workspaceId: "workspace-1", repoPath: "/repo" },
         "task-1",
+        "reset-implementation",
       );
       expect(taskReset).toHaveBeenCalledWith(
         { workspaceId: "workspace-1", repoPath: "/repo" },
@@ -169,7 +178,7 @@ describe("useTaskOperations", () => {
         taskReset: mock(async () => {
           throw resetFailure;
         }),
-        taskResetImplementation: mock(async () => {
+        taskApplyEvent: mock(async () => {
           throw resetFailure;
         }),
       },
@@ -195,11 +204,15 @@ describe("useTaskOperations", () => {
     try {
       await harness.mount();
       await expect(
-        harness.run((operations) => operations.resetTaskImplementation("task-1")),
+        harness.run(async (operations) => {
+          await operations.resetTaskImplementation("task-1", "reset-implementation");
+        }),
       ).rejects.toBe(resetFailure);
-      await expect(harness.run((operations) => operations.resetTask("task-2"))).rejects.toBe(
-        resetFailure,
-      );
+      await expect(
+        harness.run(async (operations) => {
+          await operations.resetTask("task-2");
+        }),
+      ).rejects.toBe(resetFailure);
 
       expect(refreshTaskData).not.toHaveBeenCalled();
       expect(feedback.shownOf("error")).toEqual([

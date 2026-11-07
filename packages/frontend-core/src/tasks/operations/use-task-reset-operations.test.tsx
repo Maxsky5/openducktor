@@ -21,7 +21,7 @@ const createHarness = ({
   taskResetImplementationError?: Error;
 }) => {
   const taskReset = mock(async () => createTaskCardFixture({ id: "A", status: "open" }));
-  const taskResetImplementation = mock(async () => {
+  const taskApplyEvent = mock(async () => {
     if (taskResetImplementationError) {
       throw taskResetImplementationError;
     }
@@ -29,7 +29,7 @@ const createHarness = ({
   });
   const feedback = createFeedbackFake();
   const connection = createTestClientConnection({
-    client: { taskReset, taskResetImplementation },
+    client: { taskReset, taskApplyEvent },
     feedback,
   });
   const harness = createHookHarness(
@@ -55,7 +55,7 @@ const createHarness = ({
     feedback,
     harness,
     taskReset,
-    taskResetImplementation,
+    taskApplyEvent,
   };
 };
 
@@ -71,11 +71,14 @@ describe("useTaskResetOperations", () => {
 
     try {
       await setup.harness.mount();
-      await setup.harness.run(({ operations }) => operations.resetTaskImplementation("A"));
+      await setup.harness.run(async ({ operations }) => {
+        await operations.resetTaskImplementation("A", "reset-implementation");
+      });
 
-      expect(setup.taskResetImplementation).toHaveBeenCalledWith(
+      expect(setup.taskApplyEvent).toHaveBeenCalledWith(
         { workspaceId: "workspace-1", repoPath: "/repo" },
         "A",
+        "reset-implementation",
       );
       expect(setup.feedback.shownOf("error")).toEqual([
         {
@@ -101,7 +104,9 @@ describe("useTaskResetOperations", () => {
 
     try {
       await setup.harness.mount();
-      await setup.harness.run(({ operations }) => operations.resetTask("A"));
+      await setup.harness.run(async ({ operations }) => {
+        await operations.resetTask("A");
+      });
 
       expect(setup.taskReset).toHaveBeenCalledWith(
         { workspaceId: "workspace-1", repoPath: "/repo" },
@@ -141,7 +146,9 @@ describe("useTaskResetOperations", () => {
         queryClient.setQueryData(queryKey, { stoppableSessionCount: 1 });
       });
       await expect(
-        setup.harness.run(({ operations }) => operations.resetTaskImplementation("A")),
+        setup.harness.run(async ({ operations }) => {
+          await operations.resetTaskImplementation("A", "reset-implementation");
+        }),
       ).rejects.toThrow("reset failed");
       let isInvalidated: boolean | undefined;
       await setup.harness.run(({ queryClient }) => {

@@ -1,7 +1,7 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { Check, ChevronRight, MessagesSquare } from "lucide-react";
 import { type ComponentProps, type ReactElement, type ReactNode, useId } from "react";
-import { ISSUE_TYPE_STYLES } from "@/components/features/kanban/kanban-task-badge-model";
+import { taskIssueTypeStyle } from "@/components/features/kanban/kanban-task-badge-model";
 import {
   AttentionBadges,
   SessionEntryStatusDot,
@@ -45,7 +45,7 @@ export function TaskRow({
   onShowActions: () => void;
 }): ReactElement {
   const { task, workspace } = item;
-  const issueType = ISSUE_TYPE_STYLES[task.issueType] ?? ISSUE_TYPE_STYLES.task;
+  const issueType = taskIssueTypeStyle(task);
   const IssueTypeIcon = issueType.icon;
   return (
     <PaletteOption value={item.key} onSelect={onSelect} className={ROW_CLASS_NAME}>
@@ -66,10 +66,10 @@ export function TaskRow({
         variant="outline"
         className={cn(
           "h-5 shrink-0 rounded-full px-2 py-0 text-[10px] font-medium",
-          statusBadgeClassName(task.status),
+          statusBadgeClassName(task.sharedState),
         )}
       >
-        {statusLabel(task.status)}
+        {statusLabel(task.sharedState)}
       </Badge>
       <ShowActionsButton title={task.title} onShowActions={onShowActions} />
     </PaletteOption>

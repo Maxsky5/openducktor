@@ -1,9 +1,8 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import type { KanbanColumnId } from "@openducktor/workflows";
 import {
-  type TaskWorkflowAction,
-  type BuiltinTaskCard as TaskCardData,
-  type BuiltinRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCardData,
+  type WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 import { type NativeStackNavigationOptions, Stack, useRouter } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
@@ -39,7 +38,7 @@ import { BoardFilterSheet } from "./board-filter-sheet";
 import { BoardPager } from "./board-pager";
 import { BoardSkeleton } from "./board-skeleton";
 import { BoardWide, BoardWidePlaceholder } from "./board-wide";
-import type { TaskCardModel } from "./task-card-model";
+import type { TaskCardAction, TaskCardModel } from "./task-card-model";
 import { useBoardAvailability } from "./use-board-availability";
 import { type TaskBoardView, taskBoardView } from "./task-board-state";
 import { useTaskBoard } from "./use-task-board";
@@ -174,14 +173,17 @@ function TaskBoardContent({
     },
     [router, withDetails, workspace.workspaceId],
   );
-  const { runAction, openSession } = actions;
+  const { runAction, openSession, confirm } = actions;
   const onAction = useCallback(
     (
       task: TaskCardData,
-      action: TaskWorkflowAction,
+      action: TaskCardAction,
       sessionOptionsByRole: TaskCardModel["sessionOptionsByRole"],
-    ) => runAction(task, action, (role: AgentRole) => sessionOptionsByRole[role]),
-    [runAction],
+    ) =>
+      action.kind === "core"
+        ? confirm(task, action.action.confirmation)
+        : runAction(task, action.action, (role: AgentRole) => sessionOptionsByRole[role]),
+    [confirm, runAction],
   );
   // Refresh Tasks in the menu shows the same list progress as a pull.
   const { pulling, pull: onPull } = usePullRefresh(board.refresh);
@@ -205,7 +207,7 @@ function TaskBoardContent({
     [board.sessions, onAction, onNewTask, onOpenDetails, onPull, openSession, pulling, shownTaskId],
   );
 
-  const ready = board.state.status === "ready" && board.allTasks.length > 0;
+  const ready = board.state.status === "ready";
   const onSearchText = useHeaderSearchText(search, filter);
   const headerRight = useCallback(
     () => <BoardHeaderActions workspace={workspace} onRefresh={onPull} />,
@@ -256,6 +258,16 @@ function TaskBoardContent({
             summary={filterSummary(board.matchingTasks.length, board.allTasks.length)}
             onClear={filter.onClear}
           />
+        ) : null}
+        {view.kind === "board" && board.allTasks.length === 0 ? (
+          <Text
+            variant="footnote"
+            tone="secondary"
+            accessibilityLiveRegion="polite"
+            style={styles.notice}
+          >
+            No tasks yet. Create a task or import issues from your Git provider.
+          </Text>
         ) : null}
         <View style={styles.content}>
           {view.kind === "board" ? (

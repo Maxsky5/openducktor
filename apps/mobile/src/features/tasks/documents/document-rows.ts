@@ -2,9 +2,9 @@ import type { MarkdownBlock, MarkdownDefinitions } from "@/rich-content/markdown
 import type { TaskImageContext } from "@/rich-content/markdown/markdown-view";
 import type { Tone } from "@/ui/tones";
 
-type TaskDocumentKey = "description" | "spec" | "plan" | "qa";
+type TaskDocumentKey = string;
 /** The documents that the host stores and the view reads again on Retry. */
-export type HostDocumentKey = Exclude<TaskDocumentKey, "description">;
+export type HostDocumentKey = string;
 
 /** One document as the rows need it. `blocks` is null while its text is not loaded. */
 export type DocumentSource = {

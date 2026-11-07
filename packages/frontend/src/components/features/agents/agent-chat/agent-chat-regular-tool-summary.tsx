@@ -4,7 +4,7 @@ import { getToolLifecyclePhase } from "@openducktor/frontend-core/sessions/messa
 import {
   isRegularToolPreparing,
   readRegularToolTiming,
-  resolveRegularToolSummaryText,
+  resolveRegularToolSummary,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { toolIcon } from "./agent-chat-tool-icon";
@@ -56,7 +56,7 @@ export const RegularToolSummary = ({
 }: RegularToolSummaryProps): ReactElement => {
   const lifecyclePhase = getToolLifecyclePhase(meta);
   const appearance = TOOL_APPEARANCE[lifecyclePhase];
-  const summaryText = resolveRegularToolSummaryText(meta, messageContent, sessionWorkingDirectory);
+  const summary = resolveRegularToolSummary(meta, messageContent, sessionWorkingDirectory);
   const { isActive, durationMs } = readRegularToolTiming(meta, messageTimestamp);
   const activity = lifecyclePhase === "executing" ? "running" : "preparing";
   return (
@@ -70,8 +70,16 @@ export const RegularToolSummary = ({
     >
       <span className={appearance.icon}>{toolIcon(meta)}</span>
       <p className="shrink-0 font-medium text-current">{displayName}</p>
-      {summaryText.length > 0 ? (
-        <p className="min-w-0 flex-1 truncate text-foreground/75">{summaryText}</p>
+      {summary.text.length > 0 ? (
+        <p
+          className={cn(
+            "min-w-0 flex-1",
+            // The error message of a failed call wraps, so the reader sees all of it.
+            summary.isError ? "break-words text-destructive-muted" : "truncate text-foreground/75",
+          )}
+        >
+          {summary.text}
+        </p>
       ) : null}
       <ToolMessageTiming
         activity={isActive ? activity : null}

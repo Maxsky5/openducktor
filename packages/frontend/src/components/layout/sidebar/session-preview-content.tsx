@@ -72,7 +72,7 @@ export function SessionPreviewContent({
               selectedStepId={selectedStepId}
               onStepSelect={(stepId) => {
                 const step = details.steps.find((entry) => entry.id === stepId);
-                const target = step ? details.roleTargets.get(step.role) : undefined;
+                const target = step?.role ? details.roleTargets.get(step.role) : undefined;
                 if (target) onOpen(target);
               }}
             />
@@ -159,8 +159,11 @@ function SessionPreviewHeader({
           ) : null}
         </div>
         {task ? (
-          <Badge variant="outline" className={cn("shrink-0", statusBadgeClassName(task.status))}>
-            {statusLabel(task.status)}
+          <Badge
+            variant="outline"
+            className={cn("shrink-0", statusBadgeClassName(task.sharedState))}
+          >
+            {statusLabel(task.sharedState)}
           </Badge>
         ) : null}
         {workspaceSession ? (

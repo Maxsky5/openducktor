@@ -3,7 +3,11 @@ import {
   workflowConditionSchema,
   workflowFactDefinitionSchema,
 } from "./workflow-condition-schemas";
-import { type WorkflowDefinition, workflowDefinitionSchema } from "./workflow-definition-schemas";
+import {
+  agentRoleDefinitionSchema,
+  type WorkflowDefinition,
+  workflowDefinitionSchema,
+} from "./workflow-definition-schemas";
 
 const createDefinition = (): WorkflowDefinition => ({
   schemaVersion: 1,
@@ -18,17 +22,9 @@ const createDefinition = (): WorkflowDefinition => ({
     { id: "decision", type: "enum", values: ["approved", "rejected"] },
     { id: "comment", type: "string" },
   ],
-  roles: [
-    {
-      id: "reviewer",
-      label: "Reviewer",
-      tools: ["odt_read_task", "odt_set_task_artifact"],
-      writes: ["release-review"],
-      workspaceAccess: "read",
-      location: "repository",
-      runtimeScopes: ["workspace"],
-    },
-  ],
+  issueTypes: [],
+  roles: [{ id: "reviewer", writes: ["release-review"] }],
+  pullRequestRoles: ["reviewer"],
   artifacts: [
     { id: "release-notes", label: "Release notes", shortLabel: "Notes", kind: "document" },
     {
@@ -57,9 +53,8 @@ const createDefinition = (): WorkflowDefinition => ({
         role: "reviewer",
       },
     },
-    { id: "released", label: "Released", terminal: true },
+    { id: "released", label: "Released" },
   ],
-  initialState: "draft",
   steps: [
     {
       id: "review-notes",
@@ -77,9 +72,9 @@ const createDefinition = (): WorkflowDefinition => ({
           label: "Review release",
           startModes: ["fresh", "reuse"],
           defaultStartMode: "reuse",
-          template: { kind: "kickoff", id: "kickoff.review" },
+          template: { kind: "kickoff", id: "messages.review" },
           selectWhen: { artifact: "release-notes", present: true },
-          context: "pull_request",
+          context: "human_feedback",
           targetBranch: true,
           requiresWorktree: false,
         },
@@ -151,6 +146,7 @@ const createDefinition = (): WorkflowDefinition => ({
   ],
   actionOrder: [{ when: true, actions: ["approve", "start-review", "view-notes"] }],
   actionPriority: [{ when: { stateIn: ["draft"] }, actions: ["start-review"] }],
+  launchOrder: [],
 });
 
 describe("workflow definition schemas", () => {
@@ -164,11 +160,99 @@ describe("workflow definition schemas", () => {
       { ...definition, actions: [{ ...sessionAction, launchActionIds: [] }] },
       { ...definition, artifacts: [{ ...review, verdicts: [] }] },
       { ...definition, artifacts: [{ ...review, kind: "document" }] },
-      { ...definition, roles: [{ ...definition.roles[0], workspaceAccess: "admin" }] },
-      { ...definition, roles: [{ ...definition.roles[0], tools: ["shell"] }] },
+      { ...definition, roles: [{ ...definition.roles[0], workspaceAccess: "read" }] },
     ]) {
       expect(workflowDefinitionSchema.safeParse(invalidDefinition).success).toBe(false);
     }
+  });
+
+  test("requires launch action prompt IDs in the messages namespace", () => {
+    const definition = createDefinition();
+    const agentStep = definition.steps[0]!;
+    if (agentStep.kind !== "agent") throw new Error("Expected the agent step fixture");
+    const withTemplateId = (id: string) => ({
+      ...definition,
+      steps: [
+        {
+          ...agentStep,
+          launchActions: agentStep.launchActions.map((launch) => ({
+            ...launch,
+            template: { ...launch.template, id },
+          })),
+        },
+        ...definition.steps.slice(1),
+      ],
+    });
+
+    expect(workflowDefinitionSchema.safeParse(withTemplateId("messages.review")).success).toBe(
+      true,
+    );
+    const rejected = workflowDefinitionSchema.safeParse(withTemplateId("kickoff.review"));
+    expect(rejected.success).toBe(false);
+    expect(rejected.error?.issues.map(({ message }) => message)).toContain(
+      'A launch action prompt ID starts with "messages.".',
+    );
+  });
+
+  test("defaults the pull request roles to every role and keeps no pull request launch context", () => {
+    const { pullRequestRoles: _roles, ...withoutRoles } = createDefinition();
+    expect(workflowDefinitionSchema.parse(withoutRoles).pullRequestRoles).toEqual([]);
+    const definition = createDefinition();
+    const step = definition.steps[0];
+    if (step?.kind !== "agent") throw new Error("Expected an agent step.");
+    const launch = step.launchActions[0]!;
+    expect(
+      workflowDefinitionSchema.safeParse({
+        ...definition,
+        steps: [{ ...step, launchActions: [{ ...launch, context: "pull_request" }] }],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("lets a workflow support a subset of the fixed issue types and no other type", () => {
+    const definition = createDefinition();
+    const withIssueTypes = (ids: readonly string[]) => ({
+      ...definition,
+      facts: [],
+      issueTypes: ids.map((id) => ({ id, label: id })),
+    });
+
+    expect(workflowDefinitionSchema.parse(withIssueTypes(["bug"])).issueTypes).toEqual([
+      { id: "bug", label: "bug" },
+    ]);
+    expect(workflowDefinitionSchema.safeParse(withIssueTypes(["bug", "article"])).success).toBe(
+      false,
+    );
+    expect(
+      workflowDefinitionSchema.safeParse({
+        ...withIssueTypes(["bug"]),
+        defaultIssueType: "article",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("keeps role capabilities in the role catalog", () => {
+    const role = {
+      id: "reviewer",
+      label: "Reviewer",
+      tools: ["odt_read_task", "odt_set_task_artifact"],
+      workspaceAccess: "read",
+      location: "repository",
+      runtimeScopes: ["workspace"],
+      systemPrompt: {
+        builtinVersion: 1,
+        template: "Review {{task.id}}.",
+        label: "Reviewer system prompt",
+        description: "Instructions for the reviewer.",
+      },
+    };
+    expect(agentRoleDefinitionSchema.parse(role)).toEqual(role);
+    for (const invalid of [
+      { ...role, workspaceAccess: "admin" },
+      { ...role, tools: ["shell"] },
+      { ...role, writes: ["release-review"] },
+    ])
+      expect(agentRoleDefinitionSchema.safeParse(invalid).success).toBe(false);
   });
 
   test("rejects reserved artifact IDs in declarations and conditions", () => {
@@ -218,7 +302,7 @@ describe("workflow definition schemas", () => {
     for (const identifier of ["", " ", "\t\n"]) {
       for (const invalidDefinition of [
         { ...definition, id: identifier },
-        { ...definition, initialState: identifier },
+        { ...definition, states: [{ id: identifier, label: "Blank" }] },
         { ...definition, facts: [{ id: identifier, type: "boolean" }] },
         {
           ...definition,
@@ -238,6 +322,19 @@ describe("workflow definition schemas", () => {
     expect(workflowDefinitionSchema.parse({ ...definition, id: " release-review " }).id).toBe(
       " release-review ",
     );
+  });
+
+  test("rejects an initial state field and a terminal flag, because the core states own them", () => {
+    const definition = createDefinition();
+    expect(
+      workflowDefinitionSchema.safeParse({ ...definition, initialState: "draft" }).success,
+    ).toBe(false);
+    expect(
+      workflowDefinitionSchema.safeParse({
+        ...definition,
+        states: [{ id: "released", label: "Released", terminal: true }],
+      }).success,
+    ).toBe(false);
   });
 
   test("requires the schema version and a positive definition revision", () => {

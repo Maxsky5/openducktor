@@ -1,3 +1,5 @@
+import { workflowQueryKeys } from "@openducktor/frontend-core/queries/workflows";
+import { builtinCompiledCatalogFixture } from "@openducktor/frontend-core/test-support/workflow-fixtures";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -15,8 +17,11 @@ export function QueryProvider({
 }: PropsWithChildren<{
   connection?: ClientConnection;
 }>): ReactElement {
-  const [mounted] = useState(
-    () => connection ?? createTestClientConnection({ feedback: sonnerFeedback }),
-  );
+  const [mounted] = useState(() => {
+    if (connection) return connection;
+    const created = createTestClientConnection({ feedback: sonnerFeedback });
+    created.queryClient.setQueryData(workflowQueryKeys.catalog, builtinCompiledCatalogFixture);
+    return created;
+  });
   return <ClientConnectionProvider connection={mounted}>{children}</ClientConnectionProvider>;
 }

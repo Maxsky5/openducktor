@@ -13,9 +13,6 @@ import type { HostCommandHandlerDefinitions } from "../router/host-command-route
 import type { HostCommandArgs } from "./command-inputs";
 import {
   parseAgentSessionDeleteInput,
-  parseBuildBlockedInput,
-  parseBuildCompletedInput,
-  parseBuildStartInput,
   parseCloseTaskInput,
   parseCreateTaskInput,
   parseApplyTaskEventInput,
@@ -23,7 +20,6 @@ import {
   parseDirectMergeInput,
   parseDirectMergeCompleteInput,
   parseListAgentSessionsForTasksInput,
-  parseOptionalNoteInput,
   parsePullRequestLinkMergedInput,
   parsePullRequestUpsertInput,
   parseRepoPathInput,
@@ -31,7 +27,6 @@ import {
   parseTaskIdInput,
   parseTaskStopImpactInput,
   parseTaskWorktreeOwnersInput,
-  parseTransitionTaskInput,
   parseUpdateTaskInput,
   parseWorkflowArtifactInput,
   parseWorkflowArtifactSaveInput,
@@ -56,15 +51,6 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
       taskService.agentSessionsList(parseTaskIdInput(args, "agent_sessions_list input")),
     agent_sessions_list_for_tasks: (args) =>
       taskService.agentSessionsListForTasks(parseListAgentSessionsForTasksInput(args)),
-    build_blocked: (args) => taskService.buildBlocked(parseBuildBlockedInput(args)),
-    build_completed: (args) => taskService.buildCompleted(parseBuildCompletedInput(args)),
-    build_resumed: (args) =>
-      taskService.buildResumed(parseTaskIdInput(args, "build_resumed input")),
-    build_start: (args) => taskService.buildStart(parseBuildStartInput(args)),
-    human_request_changes: (args) =>
-      taskService.humanRequestChanges(
-        parseOptionalNoteInput(args, "human_request_changes input", "human_request_changes note"),
-      ),
     repo_pull_request_sync: (args) =>
       taskService.repoPullRequestSync(parseRepoPullRequestSyncInput(args)),
     task_approval_context_get: (args) =>
@@ -99,8 +85,6 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
     task_metadata_get: (args) =>
       taskService.getTaskMetadata(parseTaskIdInput(args, "task_metadata_get input")),
     task_reset: (args) => taskService.resetTask(parseTaskIdInput(args, "task_reset input")),
-    task_reset_implementation: (args) =>
-      taskService.resetImplementation(parseTaskIdInput(args, "task_reset_implementation input")),
     task_stop_impact_get: (args) => taskService.getTaskStopImpact(parseTaskStopImpactInput(args)),
     task_worktree_cleanup_impact_get: (args) =>
       taskService.getTaskWorktreeCleanupImpact(
@@ -110,7 +94,6 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
       taskService.getTaskWorktreeOwners(parseTaskWorktreeOwnersInput(args)),
     task_worktree_remove: (args) =>
       taskService.removeTaskWorktree(parseTaskIdInput(args, "task_worktree_remove input")),
-    task_transition: (args) => taskService.transitionTask(parseTransitionTaskInput(args)),
     task_apply_event: (args) => taskService.applyTaskEvent(parseApplyTaskEventInput(args)),
     task_update: (args) => taskService.updateTask(parseUpdateTaskInput(args)),
     tasks_list: (args) => taskService.listKanbanTasks(parseRepoPathInput(args, "tasks_list input")),

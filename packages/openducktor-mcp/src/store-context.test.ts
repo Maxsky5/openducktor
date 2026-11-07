@@ -6,6 +6,8 @@ import { ODT_TOOL_SCHEMAS, ODT_MCP_BRIDGE_VERSION } from "@openducktor/contracts
 import { resolveStoreContext } from "./store-context";
 import { mcpToolPayloadSchema, type McpToolPayload } from "./tool-results";
 
+const TEST_ACTIVE_STATUSES = ["open", "in_progress", "blocked"];
+
 const originalFetch = globalThis.fetch;
 const tempDirs: string[] = [];
 const STORE_CONTEXT_ENV_KEYS = [
@@ -133,6 +135,7 @@ describe("resolveStoreContext", () => {
         return jsonResponse({
           bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+          activeStatuses: TEST_ACTIVE_STATUSES,
         });
       }
       if (url.endsWith("/invoke/odt_get_workspaces")) {
@@ -165,6 +168,7 @@ describe("resolveStoreContext", () => {
     releaseResponses();
 
     await expect(contextPromise).resolves.toEqual({
+      activeStatuses: TEST_ACTIVE_STATUSES,
       workspaceId: "repo",
       hostUrl: "http://127.0.0.1:14327",
     });
@@ -192,6 +196,7 @@ describe("resolveStoreContext", () => {
         return jsonResponse({
           bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+          activeStatuses: TEST_ACTIVE_STATUSES,
         });
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -200,6 +205,7 @@ describe("resolveStoreContext", () => {
     process.env.ODT_HOST_URL = "http://127.0.0.1:14327";
 
     await expect(resolveStoreContext({})).resolves.toEqual({
+      activeStatuses: TEST_ACTIVE_STATUSES,
       hostUrl: "http://127.0.0.1:14327",
     });
     expect(requests).toEqual([
@@ -227,6 +233,7 @@ describe("resolveStoreContext", () => {
         return jsonResponse({
           bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+          activeStatuses: TEST_ACTIVE_STATUSES,
         });
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -236,6 +243,7 @@ describe("resolveStoreContext", () => {
     process.env.ODT_HOST_TOKEN_FILE = tokenFile;
 
     await expect(resolveStoreContext({})).resolves.toEqual({
+      activeStatuses: TEST_ACTIVE_STATUSES,
       hostUrl: "http://127.0.0.1:14327",
       hostToken: "file-token",
     });
@@ -249,6 +257,7 @@ describe("resolveStoreContext", () => {
         return jsonResponse({
           bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+          activeStatuses: TEST_ACTIVE_STATUSES,
         });
       }
       if (url.endsWith("/invoke/odt_get_workspaces")) {
@@ -277,6 +286,7 @@ describe("resolveStoreContext", () => {
     process.env.ODT_FORBID_WORKSPACE_ID_INPUT = "true";
 
     await expect(resolveStoreContext({})).resolves.toEqual({
+      activeStatuses: TEST_ACTIVE_STATUSES,
       workspaceId: "repo",
       hostUrl: "http://127.0.0.1:14327",
       forbidWorkspaceIdInput: true,
@@ -290,6 +300,7 @@ describe("resolveStoreContext", () => {
         return jsonResponse({
           bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+          activeStatuses: TEST_ACTIVE_STATUSES,
         });
       }
       throw new Error(`Unexpected URL: ${url}`);
@@ -299,6 +310,7 @@ describe("resolveStoreContext", () => {
     process.env.ODT_FORBID_WORKSPACE_ID_INPUT = "0";
 
     await expect(resolveStoreContext({})).resolves.toEqual({
+      activeStatuses: TEST_ACTIVE_STATUSES,
       hostUrl: "http://127.0.0.1:14327",
       forbidWorkspaceIdInput: false,
     });
@@ -351,6 +363,7 @@ describe("resolveStoreContext", () => {
         return jsonResponse({
           bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+          activeStatuses: TEST_ACTIVE_STATUSES,
         });
       }
       if (url === "http://127.0.0.1:14327/invoke/odt_get_workspaces") {
@@ -376,6 +389,7 @@ describe("resolveStoreContext", () => {
     });
 
     await expect(resolveStoreContext({})).resolves.toEqual({
+      activeStatuses: TEST_ACTIVE_STATUSES,
       workspaceId: "repo",
       hostUrl: "http://127.0.0.1:14327",
       hostToken: "discovery-token",
@@ -417,12 +431,14 @@ describe("resolveStoreContext", () => {
         return jsonResponse({
           bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+          activeStatuses: TEST_ACTIVE_STATUSES,
         });
       }
       throw new Error(`Unexpected URL: ${url}`);
     });
 
     await expect(resolveStoreContext({})).resolves.toEqual({
+      activeStatuses: TEST_ACTIVE_STATUSES,
       hostToken: "development-token",
       hostUrl: "http://127.0.0.1:24327",
     });
@@ -510,6 +526,7 @@ describe("resolveStoreContext", () => {
         return jsonResponse({
           bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: ["odt_mcp_ready"],
+          activeStatuses: TEST_ACTIVE_STATUSES,
         });
       }
       if (url.endsWith("/invoke/odt_get_workspaces")) {
@@ -543,6 +560,7 @@ describe("resolveStoreContext", () => {
         return jsonResponse({
           bridgeVersion: ODT_MCP_BRIDGE_VERSION,
           toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+          activeStatuses: TEST_ACTIVE_STATUSES,
         });
       }
       if (url.endsWith("/invoke/odt_get_workspaces")) {

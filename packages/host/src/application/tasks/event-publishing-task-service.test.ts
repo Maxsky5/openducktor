@@ -1,4 +1,3 @@
-import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createTaskEventStream } from "../../events/task-event-stream";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { noMergeDetection } from "./sync/task-sync-service.test-support";
@@ -24,6 +23,8 @@ const taskCard = (): TaskCard => ({
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
+  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflowSteps: [],
   availableActions: [],
   labels: [],
   artifactSummary: {
@@ -74,7 +75,6 @@ describe("createEventPublishingTaskService", () => {
   test("passes the captured workspace to the gated sync and preserves its skip result", async () => {
     const calls: unknown[] = [];
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({}),
       taskSyncService: {
         ...sync([]),
@@ -111,7 +111,6 @@ describe("createEventPublishingTaskService", () => {
     const publications: Array<{ operation: string; taskIds: string[]; removedTaskIds: string[] }> =
       [];
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({ workflowArtifactSave: () => Effect.succeed(plan) }),
       taskSyncService: {
         ...sync([]),
@@ -153,7 +152,6 @@ describe("createEventPublishingTaskService", () => {
     const calls: boolean[] = [];
     const taskSyncService = sync([]);
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         workflowArtifactSave: () => {
           calls.push(gateActive);
@@ -198,7 +196,6 @@ describe("createEventPublishingTaskService", () => {
     let saves = 0;
     let publications = 0;
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         agentSessionUpdateModel: () =>
           Effect.sync(() => {
@@ -243,7 +240,6 @@ describe("createEventPublishingTaskService", () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     const failure = new HostOperationError({ operation: "model-save", message: "Save failed" });
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({ agentSessionUpdateModel: () => Effect.fail(failure) }),
       taskSyncService: sync(events),
     });
@@ -310,7 +306,6 @@ describe("createEventPublishingTaskService", () => {
         },
       });
       const service = createEventPublishingTaskService({
-        taskWorkflows: builtinTaskWorkflows,
         taskService: base,
         taskSyncService,
       });
@@ -378,7 +373,6 @@ describe("createEventPublishingTaskService", () => {
         Effect.succeed({ ran: true, changedTaskIds: [], autoCloseFailures: [] }),
     };
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         createTask: () => Effect.succeed(taskCard()),
         updateTask: () => Effect.succeed(taskCard()),
@@ -408,12 +402,16 @@ describe("createEventPublishingTaskService", () => {
       message: "Asset cleanup failed.",
     });
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         createTask: () =>
           Effect.fail(
             new TaskCreationProgressFailure(
-              { id: "task-1", title: "Created", status: "open" },
+              {
+                workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+                id: "task-1",
+                title: "Created",
+                status: "open",
+              },
               failure,
             ),
           ),
@@ -452,7 +450,6 @@ describe("createEventPublishingTaskService", () => {
       message: "closure failed",
     });
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         linkMergedPullRequest: () =>
           Effect.fail(
@@ -495,7 +492,6 @@ describe("createEventPublishingTaskService", () => {
       message: "closure failed",
     });
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         directMerge: () =>
           Effect.fail(
@@ -538,7 +534,6 @@ describe("createEventPublishingTaskService", () => {
       message: "Task task-1 not found",
     });
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         updateTask: () => Effect.fail(failure),
       }),
@@ -561,7 +556,6 @@ describe("createEventPublishingTaskService", () => {
       message: "Delete failed",
     });
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         deleteTask: () => Effect.fail(failure),
       }),
@@ -584,7 +578,6 @@ describe("createEventPublishingTaskService", () => {
       message: "Detection failed",
     });
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         detectPullRequest: () => Effect.fail(failure),
       }),
@@ -607,7 +600,6 @@ describe("createEventPublishingTaskService", () => {
       message: "Artifact write failed",
     });
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         workflowArtifactSave: () => Effect.fail(failure),
       }),
@@ -635,7 +627,6 @@ describe("createEventPublishingTaskService", () => {
   test("publishes deleted task ids as removed", async () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     const service = createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: fakeTaskService({
         deleteTask: () =>
           Effect.succeed({

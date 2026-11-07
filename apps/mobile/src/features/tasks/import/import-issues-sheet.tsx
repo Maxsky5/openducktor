@@ -341,6 +341,8 @@ function ReviewStep({
           <IssueReviewCard
             key={item.sourceId}
             item={item}
+            issueTypes={submission.issueTypeChoices}
+            defaultIssueType={submission.defaultIssueType}
             review={review}
             outcome={submission.outcomes.get(item.sourceId)}
             knownLabels={reviewLabelSuggestions(item.tags, knownLabels)}

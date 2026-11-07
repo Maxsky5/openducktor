@@ -1,11 +1,3 @@
-import type { BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
-
-export const ISSUE_TYPE_LABELS = {
-  bug: "Bug",
-  feature: "Feature",
-  task: "Task",
-} satisfies Record<IssueType, string>;
-
 /** The task priorities, from P0 to P4. */
 export const PRIORITY_LEVELS = [0, 1, 2, 3, 4] as const;
 

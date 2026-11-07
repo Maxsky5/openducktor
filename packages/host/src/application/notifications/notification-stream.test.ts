@@ -3,7 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import { type NotificationStreamFrame, type SelectedNotification } from "@openducktor/contracts";
 import { createControlledScheduler } from "../../effect/test-support/controlled-scheduler";
 import { createNotificationStream } from "./notification-stream";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 const selected = (id: string): SelectedNotification => ({
   occurrence: {
     occurrenceId: id,
@@ -13,7 +13,7 @@ const selected = (id: string): SelectedNotification => ({
     status: "Closed",
     navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task" },
   },
-  settings: createBuiltinNotificationSettings(),
+  settings: createSpecPlanBuildNotificationSettings(),
   preferenceRevision: 1,
 });
 // Effect v4 runs each scheduled fiber step in a setImmediate callback. A frame passes through

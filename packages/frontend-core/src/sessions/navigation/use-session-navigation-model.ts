@@ -1,4 +1,4 @@
-import { taskHasSessionPage, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { taskHasSessionPage, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type {
   AgentSessionRecord,
   SidebarSessionGrouping,

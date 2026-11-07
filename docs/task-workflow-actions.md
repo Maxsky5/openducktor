@@ -1,10 +1,16 @@
 # Task workflow actions
 
-The backend returns allowed task actions in `TaskCard.availableActions`. The frontend renders that list. It does not infer actions from status.
+The backend returns allowed workflow actions in `TaskCard.availableActions`. The frontend renders that list. It does not infer workflow actions from status.
+
+OpenDucktor also gives every task the core task actions Close Task, Reset Task, and Remove Worktree. No workflow declares them, so they are not in `availableActions`. Each client shows Close Task and Reset Task for every task that is not `closed`, from `coreTaskActions(task)` in `packages/frontend-core`. Remove Worktree applies to a `closed` task, from `canRemoveTaskWorktree(task)` in the same module.
+
+Approve is also an OpenDucktor feature. A workflow only declares when it is available, with one action of kind `approval`. Read [the architecture overview](architecture-overview.md#change-task-workflow-state) for the approval and pull request rules.
 
 Read [the status model](task-workflow-status-model.md) for status and issue type rules. Read [the transition matrix](task-workflow-transition-matrix.md) for all transition guards.
 
 ## Action IDs
+
+The built-in workflow declares these workflow actions:
 
 - `view_details`
 - `set_spec`
@@ -12,11 +18,8 @@ Read [the status model](task-workflow-status-model.md) for status and issue type
 - `build_start`
 - `open_builder`
 - `reset_implementation`
-- `reset_task`
 - `qa_start`
 - `open_qa`
-- `close_task`
-- `remove_worktree`
 - `human_request_changes`
 - `human_approve`
 
@@ -29,14 +32,20 @@ Read [the status model](task-workflow-status-model.md) for status and issue type
 | `open_builder` | Open the linked Builder session. No transition. |
 | `qa_start` | Open QA from `blocked`, `ai_review`, or `human_review`. No direct transition. |
 | `open_qa` | Open the linked QA session. No transition. |
-| `human_request_changes` | Move `ai_review` or `human_review` to `in_progress`. |
-| `human_approve` | Open the approval modal for an `ai_review` or `human_review` task. No direct transition. |
+| `human_request_changes` | Collect feedback, then move `ai_review` or `human_review` to `in_progress` and start the Builder with the feedback. |
+| `human_approve` | The `approval` action. Open the approval modal for an `ai_review` or `human_review` task. No direct transition. |
 
 ## Event actions
 
-An event action sends one workflow event. When the event names a host effect, the client calls the command of that effect, such as `task_close` for `task.close`. When the event has no effect, the client calls `task_apply_event` with the event ID. The host rejects `task_apply_event` for an event that has an effect, that no event action sends, or whose action is not available for the task. All event actions of the built-in workflow have an effect.
+An event action sends one workflow event. The client calls `task_apply_event` with the event ID. The host rejects an event that no event action sends, or whose action is not available for the task. The host runs the host effects of the event in order, then commits the event. When an effect fails, the host commits nothing.
 
-`human_approve` opens the approval modal and sends no event. The host uses its `review.approve` event only to allow the approval reads.
+The client operation follows the event:
+
+- An event with the `worktree.reset` effect opens the Reset Implementation confirmation first. `reset_implementation` uses it.
+- An event action whose following launch has `context: "human_feedback"` opens the feedback form first. `human_request_changes` uses it. The session start sends `beforeStartAction: { eventId, note }`, and the host commits the event before the session starts. Without a launch to start, the form sends `task_apply_event`.
+- Another event action sends `task_apply_event` directly, then starts its following launch when it has one.
+
+`human_approve` is an `approval` action, not an event action. It opens the approval modal and sends no event. The host allows the approval reads and writes while the `availableWhen` condition of this action matches the task.
 
 ## Session startup
 
@@ -66,15 +75,19 @@ Users and workflow agents can create, rename, replace, and delete free artifacts
 
 Stop all running sessions for the task before direct merge or its completion. The host checks linked roots and verified descendants before it changes Git. While either operation runs, the host rejects conflicting starts, resumes, forks, continuation, model actions, and message delivery.
 
-The host waits for publication consent, then completes publication, cleanup, and closure in one operation. An unfinished merge requires manual Git review after a host restart because its original applied-commit evidence is no longer available.
+A direct merge without a publish target closes the task. A direct merge with a publish target keeps the task state. The host waits for publication consent, then completes publication, cleanup, and closure in one operation. An unfinished merge requires manual Git review after a host restart because its original applied-commit evidence is no longer available.
+
+While a recorded local merge waits for its publication, the host rejects every workflow event, artifact submit event, session start event, Request Changes, and Reset Task. Publish the merge, close the task, or reset the implementation.
 
 Cleanup releases the live state of the task sessions before it removes the task worktree. A later runtime read then does not report the removed worktree as a session fault, so Delete can run on the closed task.
 
 ## Approval modal
 
-The approval modal offers Direct Merge, Pull Request, and Close Task. Pull Request needs a provider that supports pull requests. Close Task runs `task_close`, so it merges no code and changes no pull request.
+The approval modal offers Direct Merge, Pull Request, and Close Task. Pull Request needs a provider that supports pull requests. A pull request keeps the task state. Close Task runs `task_close`, so it merges no code and changes no pull request.
 
-Uncommitted changes block Direct Merge and Pull Request. When merge detection reports the task branch as merged, the modal selects Close Task. When the builder worktree is missing, the modal offers Close Task and Reset Implementation. When the approval context read fails, it offers only Close Task.
+Pull Request offers Write manually and a generated draft. The generated draft starts the core pull request launch from a session of a pull request role. With exactly one pull request role, the option names that role, for example "Ask Builder". With zero or several roles, it reads "Ask agent". Read [the architecture overview](architecture-overview.md#generate-a-pull-request) for the launch rules.
+
+Uncommitted changes block Direct Merge and Pull Request. When merge detection reports the task branch as merged, the modal selects Close Task. When the task worktree is missing, the modal offers Close Task and the available workflow action that resets the worktree, with the label of that action. A workflow without such an action gets only Close Task. When the approval context read fails, it offers only Close Task.
 
 ## Reset implementation
 
@@ -97,7 +110,7 @@ Before the reset:
 
 ## Reset task
 
-`reset_task` moves any non-closed task to `open`. It keeps the task ID and user fields.
+Reset Task is a core task action. It moves any task that is not `closed` to `open`, with no workflow event. A reset of an `open` task keeps the status and still clears the task. The host rejects a reset of a `closed` task. It keeps the task ID and user fields.
 
 It clears all workflow and free artifacts, linked role sessions, pull request data, direct merge data, and in-memory runs. It stops task terminals, then removes task worktrees and related local branches.
 
@@ -105,13 +118,13 @@ Reject the action while a live role still owns task state. Reject it when branch
 
 ## Close task
 
-`close_task` moves any non-closed task to `closed`. It is an administrative override.
+Close Task is a core task action. It moves any task that is not `closed` to `closed`, with no workflow event. A close of a `closed` task changes nothing. It is an administrative override.
 
 The action keeps the task record, user fields, all artifacts, session history, pull request data, and direct merge data. It stops task terminals and running sessions. It removes the task worktrees only when `removeWorktree` is `true`. If cleanup is unsafe or incomplete, the action fails and the task keeps its status.
 
 Reject it while a live role owns mutable task state.
 
-The task detail sheet shows `close_task` for every non-closed task. A Kanban card and the session page header show it as their main action, with a "Merged" marker, only for a merged task branch. Do not show it in a bulk action or the command palette.
+The task detail sheet, the command palette, and the mobile task details show Close Task and Reset Task for every task that is not `closed`. A Kanban card does not show them. A Kanban card and the session page header show Close Task as their main action, with a "Merged" marker, only for a merged task branch. Do not show them in a bulk action.
 
 ## Worktree cleanup on close
 
@@ -123,7 +136,7 @@ A confirmed close removes the task worktree, the session worktrees, and the rela
 
 ## Remove worktree
 
-`remove_worktree` is available for a closed task. The detail sheet shows it while the task has a managed worktree or a related local branch.
+Remove Worktree is a core task action of a closed task. The host rejects `task_worktree_remove` for a task that is not `closed`. The detail sheet reads the worktree of a closed task and shows the action while the task has a managed worktree or a related local branch. The desktop detail sheet and the mobile task details show it in the actions menu, after Reset Task and Close Task and before Delete Task. The command palette and the Kanban card do not show it, because they do not read the worktree.
 
 `task_worktree_remove` stops task terminals, removes the managed worktrees, and force-deletes the related local branches. Commits that exist only on these branches are lost. It changes no other task data.
 
@@ -148,11 +161,17 @@ The host keeps each task that the last pull request sync could not close in memo
 
 A worktree that no longer exists has nothing to remove, so its owners do not count.
 
+## Before worktree removal script
+
+The repository setting `hooks.beforeWorktreeRemoval` holds one command per line. The host runs these commands in a task worktree right before it removes that worktree. Close, Delete, Reset Task, Reset Implementation, Remove worktree, and merged task cleanup run them. A worktree that no longer exists has no script run.
+
+The host runs the commands in order. The first failed command stops the cleanup: the host keeps that worktree, deletes no branch, and does not change the task status. The error names the command and shows its output. Fix the cause, then run the action again.
+
 ## Merge detection
 
 The host checks whether task branches are merged into their targets. It never closes a task. It only proposes Close Task.
 
-A task is a candidate when its status is `in_progress`, `blocked`, `ai_review`, or `human_review`, its local task branch exists, and it has no pending direct merge. The target is the saved task target, else the repository default target.
+A task is a candidate when its workflow sets `mergeDetection` on its current state, its local task branch exists, and it has no pending direct merge. The built-in workflow sets it on `in_progress`, `blocked`, `ai_review`, and `human_review`. The target is the saved task target, else the repository default target.
 
 The task sync loop runs a pass for each open workspace every five minutes, after its pull request sync. `task_merge_status_check` runs a pass on request: Check again in the approval modal, and Check merged tasks in the command palette for one or all open workspaces. A pass fetches each target remote through the [shared remote fetch](git-comparison.md#remote-fetch).
 
@@ -182,7 +201,7 @@ Use "Sync pull requests" in the command palette to start a manual sync. Each run
 
 Manual sync keeps its chosen targets when you change pages or workspaces. The progress toast names the scope, and this client cannot start another manual run until it finishes. A batch run ignores workspaces without a configured, enabled Git provider. These workspaces do not cause a warning or appear in the result. If none can sync, the result explains that no open workspace has an enabled provider. Other skipped or failed workspaces remain in the result, with recovery instructions. A workspace that closes before its turn is skipped. Manual sync does not change the automatic schedule.
 
-Pull request sync records the merged pull request. Before it closes the task, it stops task terminals and live task sessions and releases the task sessions. It removes the task worktree and local source branch when the task value or the global setting asks for it. If cleanup fails, the task keeps its current status and the host reports the error.
+Pull request sync records the merged pull request. A merged pull request closes the task in any state that is not `closed`, with no workflow event. Before it closes the task, it stops task terminals and live task sessions and releases the task sessions. It removes the task worktree and local source branch when the task value or the global setting asks for it. If cleanup fails, the task keeps its current status and the host reports the error.
 
 ## UI rules
 
@@ -196,6 +215,6 @@ Each session shortcut opens the preferred active session for its role or the lat
 
 Current card and detail views use all action IDs except `view_details`, which the card click and details panel already provide.
 
-The session page header shows Approve Task for a task that allows `human_approve`. It leads for a `human_review` task when the repository has no enabled Git provider.
+The session page header shows Approve Task for a task whose `approval` action is available. It leads for a `human_review` task when the repository has no enabled Git provider.
 
 When you add an action ID, update backend derivation, the transition matrix, the status and action docs, and UI mapping in one change.

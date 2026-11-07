@@ -1,8 +1,4 @@
-import {
-  BUILTIN_ROLE_IDS,
-  BUILTIN_ROLE_LABELS,
-  type BuiltinRoleId as AgentRole,
-} from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import { GitMerge, MessageCirclePlus, Zap } from "lucide-react";
 import type { ReactElement } from "react";
 import {
@@ -18,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SessionActionButton, SessionActionMenuTrigger } from "./session-action-button";
 import type {
+  AgentWorkflowStep,
   AgentSessionCreateOption,
   AgentStudioQuickActionOption,
   AgentStudioTaskQuickActionOption,
@@ -30,6 +27,7 @@ import {
 
 type QuickActionsMenuProps = {
   canOpenActionsMenu: boolean;
+  workflowSteps: readonly AgentWorkflowStep[];
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   agentStudioReady: boolean;
@@ -58,21 +56,15 @@ type QuickActionGroupKey = AgentRole | "task";
 type QuickActionMenuGroup = {
   key: QuickActionGroupKey;
   entries: QuickActionMenuEntry[];
+  label: string;
 };
-
-const QUICK_ACTION_GROUP_ORDER: readonly QuickActionGroupKey[] = ["task", ...BUILTIN_ROLE_IDS];
-
-const QUICK_ACTION_GROUP_LABELS = {
-  task: "Task",
-  ...BUILTIN_ROLE_LABELS,
-} satisfies Record<QuickActionGroupKey, string>;
 
 const quickActionEntryId = (entry: QuickActionMenuEntry): string =>
   `${entry.kind}:${entry.option.id}`;
 
 const quickActionEntryGroup = (entry: QuickActionMenuEntry): QuickActionGroupKey => {
-  if (entry.kind === "message_first") return entry.option.role;
-  return entry.option.kind === "task_action" ? "task" : entry.option.role;
+  if (entry.kind === "message_first") return `role:${entry.option.role}`;
+  return entry.option.kind === "task_action" ? "task" : `role:${entry.option.role}`;
 };
 
 const getEntryDisabledReason = (
@@ -113,28 +105,35 @@ const buildQuickActionMenuEntries = (
   ...sessionCreateOptions.map((option) => ({ kind: "message_first" as const, option })),
 ];
 
-const buildQuickActionMenuGroups = (entries: QuickActionMenuEntry[]): QuickActionMenuGroup[] => {
-  const entriesByGroup = {
-    task: new Array<QuickActionMenuEntry>(),
-    spec: new Array<QuickActionMenuEntry>(),
-    planner: new Array<QuickActionMenuEntry>(),
-    build: new Array<QuickActionMenuEntry>(),
-    qa: new Array<QuickActionMenuEntry>(),
-  } satisfies Record<QuickActionGroupKey, QuickActionMenuEntry[]>;
-  const groups: QuickActionMenuGroup[] = [];
-
+const buildQuickActionMenuGroups = (
+  entries: QuickActionMenuEntry[],
+  steps: readonly AgentWorkflowStep[],
+): QuickActionMenuGroup[] => {
+  const groups: QuickActionMenuGroup[] = [
+    { key: "task", label: "Task", entries: [] },
+    ...steps.flatMap((step) =>
+      step.role
+        ? [
+            {
+              key: `role:${step.role}`,
+              label: step.label,
+              entries: new Array<QuickActionMenuEntry>(),
+            },
+          ]
+        : [],
+    ),
+  ];
+  const groupByKey = new Map(groups.map((group) => [group.key, group]));
   for (const entry of entries) {
-    entriesByGroup[quickActionEntryGroup(entry)].push(entry);
+    const key = quickActionEntryGroup(entry);
+    const group = groupByKey.get(key);
+    if (!group)
+      throw new Error(
+        `Quick action group "${key}" is not declared by this workflow. Reload the task.`,
+      );
+    group.entries.push(entry);
   }
-
-  for (const key of QUICK_ACTION_GROUP_ORDER) {
-    const groupEntries = entriesByGroup[key];
-    if (groupEntries.length > 0) {
-      groups.push({ key, entries: groupEntries });
-    }
-  }
-
-  return groups;
+  return groups.filter(({ entries }) => entries.length > 0);
 };
 
 function QuickActionCommandItem({
@@ -158,7 +157,9 @@ function QuickActionCommandItem({
       <Icon className="size-3.5 text-muted-foreground" />
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-foreground">{option.label}</p>
-        <p className="truncate text-[11px] text-muted-foreground">{description}</p>
+        {description ? (
+          <p className="truncate text-[11px] text-muted-foreground">{description}</p>
+        ) : null}
       </div>
     </CommandItem>
   );
@@ -166,6 +167,7 @@ function QuickActionCommandItem({
 
 export function QuickActionsMenu({
   canOpenActionsMenu,
+  workflowSteps,
   isOpen,
   onOpenChange,
   agentStudioReady,
@@ -188,7 +190,7 @@ export function QuickActionsMenu({
   });
   const menuEntries = buildQuickActionMenuEntries(options, sessionCreateOptions);
   const isMenuOpen = isOpen && canOpenActionsMenu;
-  const groupedMenuEntries = buildQuickActionMenuGroups(menuEntries);
+  const groupedMenuEntries = buildQuickActionMenuGroups(menuEntries, workflowSteps);
   const primaryActionHint = primaryAction
     ? (getQuickActionBlockedReason({
         option: primaryAction,
@@ -293,7 +295,7 @@ export function QuickActionsMenu({
             <CommandList className="max-h-[32rem]">
               <CommandEmpty>No quick actions available.</CommandEmpty>
               {groupedMenuEntries.map((group) => (
-                <CommandGroup key={group.key} heading={QUICK_ACTION_GROUP_LABELS[group.key]}>
+                <CommandGroup key={group.key} heading={group.label}>
                   {group.entries.map((entry) => (
                     <QuickActionCommandItem
                       key={quickActionEntryId(entry)}

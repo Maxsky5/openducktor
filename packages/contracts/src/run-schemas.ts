@@ -130,12 +130,6 @@ export const runtimeRouteSchema = z.discriminatedUnion("type", [
 ]);
 export type RuntimeRoute = z.infer<typeof runtimeRouteSchema>;
 
-export const buildSessionBootstrapSchema = z.object({
-  runtimeKind: runtimeKindSchema,
-  workingDirectory: z.string().trim().min(1),
-});
-export type BuildSessionBootstrap = z.infer<typeof buildSessionBootstrapSchema>;
-
 export const taskWorktreeSummarySchema = z.object({
   workingDirectory: z.string().trim().min(1),
 });

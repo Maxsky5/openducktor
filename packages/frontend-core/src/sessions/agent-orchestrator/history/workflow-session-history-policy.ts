@@ -1,8 +1,10 @@
-import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type { AgentSessionHistorySystemPromptContext } from "@openducktor/core";
 import type { AgentSessionState } from "../../../types/agent-orchestrator";
-import { loadSessionPromptContext } from "../support/session-prompt";
-import { builtinRoleId, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import {
+  loadSessionPromptContext,
+  type LoadSessionPromptContextInput,
+} from "../support/session-prompt";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 export type LoadSessionHistorySystemPromptContext = (
   session: AgentSessionState,
@@ -15,7 +17,7 @@ export const createWorkflowSessionHistoryPromptPolicy = ({
 }: {
   workspaceId: string | null;
   taskRef: { current: TaskCard[] };
-  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  loadRepoPromptOverrides: LoadSessionPromptContextInput["loadRepoPromptOverrides"];
 }): LoadSessionHistorySystemPromptContext => {
   return async (session): Promise<AgentSessionHistorySystemPromptContext | undefined> => {
     if (session.sessionAssociation.kind === "repository") {
@@ -40,7 +42,7 @@ export const createWorkflowSessionHistoryPromptPolicy = ({
 
     const { systemPrompt } = await loadSessionPromptContext({
       workspaceId,
-      role: builtinRoleId(role),
+      role,
       task,
       loadRepoPromptOverrides,
     });

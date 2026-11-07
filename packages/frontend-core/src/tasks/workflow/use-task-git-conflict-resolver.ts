@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { taskGitConflictLaunch, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import {
   type GitConflictAssistanceResult,
@@ -22,7 +22,7 @@ type UseTaskGitConflictResolverArgs = {
   sessions: AgentSessionSummary[];
   startSessionIntent: UseTaskSessionStartFlowResult["startSessionIntent"];
   /** Opens the Builder session that received the conflict request. */
-  openBuilderSession: (taskId: string, session: AgentSessionIdentity) => void;
+  openBuilderSession: (taskId: string, session: AgentSessionIdentity, role: string) => void;
 };
 
 /**
@@ -62,8 +62,13 @@ export function useTaskGitConflictResolver({
         if (conflictWorkspace.current.version !== version) throw new GitConflictRequestCancelled();
       };
       const task = tasks.find((entry) => entry.id === taskId) ?? null;
+      const launch = task && taskGitConflictLaunch(task);
+      if (!launch)
+        throw new Error(
+          "This task has no available conflict-resolution launch. Open its workflow actions.",
+        );
       const builderSessions = sessions.filter(
-        (entry) => entry.role === "build" && entry.taskId === taskId,
+        (entry) => entry.role === launch.role && entry.taskId === taskId,
       );
       return handleResolveGitConflict(
         conflict,
@@ -76,7 +81,7 @@ export function useTaskGitConflictResolver({
             if (!activeWorkspaceId) {
               throw new Error("No active workspace is selected.");
             }
-            openBuilderSession(taskId, toAgentSessionIdentity(session));
+            openBuilderSession(taskId, toAgentSessionIdentity(session), launch.role);
           },
         },
         assertSessionCanSend,

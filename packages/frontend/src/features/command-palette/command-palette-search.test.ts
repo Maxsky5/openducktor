@@ -7,7 +7,7 @@ import {
 import { searchGroups } from "./command-palette-groups";
 import { rankActions, rankChats, rankTasks, type ScoredMatch } from "./command-palette-search";
 import type { PaletteAction, PaletteChat, PaletteTask } from "./command-palette-types";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const workspace = createWorkspaceRecordFixture();
 

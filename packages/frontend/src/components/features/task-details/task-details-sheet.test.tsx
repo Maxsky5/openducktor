@@ -1,3 +1,6 @@
+import { CLOSE_TASK_ACTION } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
+import { createTaskWorkflowActionsFixture } from "@/test-utils/shared-test-fixtures";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import {
   noTaskWorktreeOwners,
@@ -5,7 +8,7 @@ import {
 } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, type PropsWithChildren, useState } from "react";
+import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -136,35 +139,30 @@ const createTaskStopImpactHookMock = () =>
     retry: () => {},
   }));
 
-const createTaskWorkflowActionsValue = (): TaskWorkflowActions => ({
-  onCreateTask: mock(() => {}),
-  onPlan: mock(() => {}),
-  onQaStart: mock(() => {}),
-  onQaOpen: mock(() => {}),
-  onBuild: mock(() => {}),
-  onOpenSession: mock(() => {}),
-  onDelegate: mock(() => {}),
-  onEdit: mock(() => {}),
-  onOpenTaskDetails: mock(() => {}),
-  onHumanApprove: mock(() => {}),
-  onHumanRequestChanges: mock(() => {}),
-  onResetImplementation: mock(() => {}),
-  onResetTask: mock(async () => {}),
-  onCloseTask: mock(async () => {}),
-  onRemoveTaskWorktree: mock(async () => {}),
-  onDelete: mock(async () => {}),
-  onConfirmTaskAction: mock(() => {}),
-  onDetectPullRequest: mock(() => {}),
-  onUnlinkPullRequest: mock(() => {}),
-  detectingPullRequestTaskIds: new Set<string>(),
-  unlinkingPullRequestTaskIds: new Set<string>(),
-  gitProviderContext: undefined,
-  gitProviderReadError: null,
-  registerTaskDetailsClose: mock(() => () => {}),
-  claimWorkflowDialog: (_owner, run) => run(),
-  taskSessionsByTaskId: new Map(),
-  activeTaskSessionContextByTaskId: new Map(),
-});
+const createTaskWorkflowActionsValue = (): TaskWorkflowActions =>
+  createTaskWorkflowActionsFixture({
+    onLaunch: mock(() => {}),
+    onCreateTask: mock(() => {}),
+    onOpenSession: mock(() => {}),
+    onEdit: mock(() => {}),
+    onOpenTaskDetails: mock(() => {}),
+    onResetTask: mock(async (taskId: string) => createWireTaskCardFixture({ id: taskId })),
+    onCloseTask: mock(async (taskId: string) =>
+      createWireTaskCardFixture({ id: taskId, status: "closed" }),
+    ),
+    onRemoveTaskWorktree: mock(async () => {}),
+    onDelete: mock(async () => {}),
+    onConfirmTaskAction: mock(() => {}),
+    onDetectPullRequest: mock(() => {}),
+    onUnlinkPullRequest: mock(() => {}),
+    detectingPullRequestTaskIds: new Set<string>(),
+    unlinkingPullRequestTaskIds: new Set<string>(),
+    gitProviderContext: undefined,
+    gitProviderReadError: null,
+    registerTaskDetailsClose: mock(() => () => {}),
+    taskSessionsByTaskId: new Map(),
+    activeTaskSessionContextByTaskId: new Map(),
+  });
 
 describe("TaskDetailsSheet", () => {
   test.each(["detect", "unlink"] as const)(
@@ -193,9 +191,9 @@ describe("TaskDetailsSheet", () => {
               }
             : undefined,
       });
-      task.agentWorkflows.build.completed = true;
+      task.agentWorkflows.build!.completed = true;
       const sheet = (taskId: string) => {
-        const shownTask = { ...task, id: taskId };
+        const shownTask = createTaskCardFixture({ ...task, id: taskId });
         return (
           <IsolatedProviders>
             <TaskWorkflowActionsContext.Provider value={actions}>
@@ -219,7 +217,7 @@ describe("TaskDetailsSheet", () => {
     },
   );
 
-  test("passes activeWorkspace into task details view model", async () => {
+  test("does not load cleanup impact before a confirmation opens", async () => {
     const { useTaskDetailsSheetViewModel } =
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
 
@@ -236,23 +234,10 @@ describe("TaskDetailsSheet", () => {
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
       task,
       open: true,
       onOpenChange: () => {},
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
-      onOpenSession: undefined,
-      onDelegate: undefined,
-      onHumanApprove: undefined,
-      onHumanRequestChanges: undefined,
-      onResetImplementation: undefined,
+      runAction: createTaskWorkflowActionsFixture().runAction,
       onResetTask: undefined,
       onCloseTask: undefined,
       onDelete: undefined,
@@ -284,23 +269,10 @@ describe("TaskDetailsSheet", () => {
       (_args: Parameters<typeof useTaskStopImpact>[0]) => loadingStopImpact,
     );
     const harnessOptions = {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
       task,
       open: true,
       onOpenChange: () => {},
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
-      onOpenSession: undefined,
-      onDelegate: undefined,
-      onHumanApprove: undefined,
-      onHumanRequestChanges: undefined,
-      onResetImplementation: undefined,
+      runAction: createTaskWorkflowActionsFixture().runAction,
       onResetTask: undefined,
       onCloseTask: undefined,
       onDelete: mock(async () => {}),
@@ -340,23 +312,10 @@ describe("TaskDetailsSheet", () => {
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
     const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
       task,
       open: true,
       onOpenChange: () => {},
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
-      onOpenSession: undefined,
-      onDelegate: undefined,
-      onHumanApprove: undefined,
-      onHumanRequestChanges: undefined,
-      onResetImplementation: undefined,
+      runAction: createTaskWorkflowActionsFixture().runAction,
       onResetTask: undefined,
       onCloseTask: undefined,
       onDelete: mock(async () => {}),
@@ -390,25 +349,14 @@ describe("TaskDetailsSheet", () => {
     const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
       task,
       open: true,
       onOpenChange: () => {},
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
-      onOpenSession: undefined,
-      onDelegate: undefined,
-      onHumanApprove: undefined,
-      onHumanRequestChanges: undefined,
-      onResetImplementation: undefined,
-      onResetTask: mock(async () => {}),
-      onCloseTask: mock(async () => {}),
+      runAction: createTaskWorkflowActionsFixture().runAction,
+      onResetTask: mock(async (taskId: string) => createWireTaskCardFixture({ id: taskId })),
+      onCloseTask: mock(async (taskId: string) =>
+        createWireTaskCardFixture({ id: taskId, status: "closed" }),
+      ),
       onDelete: mock(async () => {}),
       taskCleanupImpactHook: taskCleanupImpactHookMock,
       taskStopImpactHook: createTaskStopImpactHookMock(),
@@ -446,14 +394,17 @@ describe("TaskDetailsSheet", () => {
   ] as const)("closes the sheet after %s only when it opens a session", async (action, closes) => {
     const { useTaskDetailsSheetViewModel } =
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
-    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      title: "Task 1",
+      availableActions: [action],
+    });
     const onOpenChange = mock((_open: boolean) => {});
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
       task,
       open: true,
       onOpenChange,
-      onOpenSession: mock(() => {}),
-      onHumanApprove: mock(() => {}),
+      runAction: createTaskWorkflowActionsFixture().runAction,
       taskCleanupImpactHook: createTaskCleanupImpactHookMock(),
       taskStopImpactHook: createTaskStopImpactHookMock(),
     });
@@ -468,36 +419,21 @@ describe("TaskDetailsSheet", () => {
     }
   });
 
-  test("routes close_task to the confirmation dialog before invoking close", async () => {
+  test("routes the core Close Task to the confirmation dialog before invoking close", async () => {
     const { useTaskDetailsSheetViewModel } =
       await import("@openducktor/frontend-core/tasks/details/use-task-details-sheet-view-model");
-    const task = createTaskCardFixture({
-      id: "TASK-1",
-      title: "Task 1",
-      availableActions: ["close_task"],
-    });
-    const onCloseTask = mock(async (_taskId: string, _options: { removeWorktree: boolean }) => {});
+    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1", availableActions: [] });
+    const onCloseTask = mock(async (taskId: string, _options: { removeWorktree: boolean }) =>
+      createWireTaskCardFixture({ id: taskId, status: "closed" }),
+    );
     const onOpenChange = mock(() => {});
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
       task,
       open: true,
       onOpenChange,
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
-      onOpenSession: undefined,
-      onDelegate: undefined,
-      onHumanApprove: undefined,
-      onHumanRequestChanges: undefined,
-      onResetImplementation: undefined,
+      runAction: createTaskWorkflowActionsFixture().runAction,
       onResetTask: undefined,
       onCloseTask,
       onDelete: undefined,
@@ -507,7 +443,7 @@ describe("TaskDetailsSheet", () => {
 
     try {
       await harness.mount();
-      await harness.run((viewModel) => viewModel.runWorkflowAction("close_task"));
+      await harness.run((viewModel) => viewModel.runCoreTaskAction(CLOSE_TASK_ACTION));
 
       expect(harness.getLatest().closeConfirm.dialog.open).toBe(true);
       expect(onCloseTask).not.toHaveBeenCalled();
@@ -532,23 +468,10 @@ describe("TaskDetailsSheet", () => {
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createViewModelHarness(useTaskDetailsSheetViewModel, {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
       task,
       open: true,
       onOpenChange: () => {},
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
-      onOpenSession: undefined,
-      onDelegate: undefined,
-      onHumanApprove: undefined,
-      onHumanRequestChanges: undefined,
-      onResetImplementation: undefined,
+      runAction: createTaskWorkflowActionsFixture().runAction,
       onResetTask: undefined,
       onCloseTask,
       onDelete: undefined,
@@ -595,7 +518,7 @@ describe("TaskDetailsSheet", () => {
     const task = createTaskCardFixture({
       id: "TASK-1",
       status: "closed",
-      availableActions: ["remove_worktree"],
+      availableActions: [],
     });
     const message = "Unable to read the kept worktree: permission denied.";
     const view = render(
@@ -723,11 +646,7 @@ describe("TaskDetailsSheet", () => {
     const { TaskDetailsSheet } = await import("./task-details-sheet");
     const { TaskWorkflowActionsContext } =
       await import("@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context");
-    const task = createTaskCardFixture({
-      id: "TASK-1",
-      title: "Task 1",
-      availableActions: ["close_task"],
-    });
+    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1", availableActions: [] });
     const onOpenChange = mock((_open: boolean) => {});
 
     const { unmount } = render(
@@ -744,6 +663,7 @@ describe("TaskDetailsSheet", () => {
 
     try {
       await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      fireEvent.click(screen.getByRole("button", { name: /More/ }));
       const closeTask = screen.getByRole("button", { name: "Close Task" });
       closeTask.focus();
       fireEvent.click(closeTask);
@@ -776,79 +696,6 @@ describe("TaskDetailsSheet", () => {
     const view = render(renderSheet(false));
     try {
       await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-      view.rerender(renderSheet(true));
-      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-
-      expect(onOpenChange).toHaveBeenCalledWith(false);
-    } finally {
-      view.unmount();
-    }
-  });
-
-  const renderSheetWithWorkflowDialog = async () => {
-    const { TaskDetailsSheet } = await import("./task-details-sheet");
-    const { Dialog, DialogContent, DialogTitle } = await import("@/components/ui/dialog");
-    const { TaskWorkflowActionsContext, TaskWorkflowDialogOwnerContext } =
-      await import("@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context");
-    const { useWorkflowDialogOwner } =
-      await import("@openducktor/frontend-core/tasks/workflow/use-workflow-dialog-owner");
-    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
-    const onOpenChange = mock((_open: boolean) => {});
-    const baseActions = createTaskWorkflowActionsValue();
-    // As in the workflow actions provider, the shared dialog renders before the sheet.
-    function WorkflowActionsHarness({ openedElsewhere }: { openedElsewhere: boolean }) {
-      const [editOpen, setEditOpen] = useState(false);
-      const dialogOpen = editOpen || openedElsewhere;
-      const { workflowDialogOwner, claimWorkflowDialog } = useWorkflowDialogOwner(dialogOpen);
-      return createElement(
-        TaskWorkflowActionsContext.Provider,
-        { value: { ...baseActions, claimWorkflowDialog, onEdit: () => setEditOpen(true) } },
-        createElement(
-          TaskWorkflowDialogOwnerContext.Provider,
-          { value: workflowDialogOwner },
-          createElement(
-            Dialog,
-            { open: dialogOpen, onOpenChange: setEditOpen },
-            createElement(DialogContent, null, createElement(DialogTitle, null, "Edit task")),
-          ),
-          createElement(TaskDetailsSheet, { task, open: true, onOpenChange }),
-        ),
-      );
-    }
-    const renderSheet = (openedElsewhere: boolean) =>
-      createElement(
-        IsolatedProviders,
-        null,
-        createElement(WorkflowActionsHarness, { openedElsewhere }),
-      );
-    const view = render(renderSheet(false));
-    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-    return { view, renderSheet, onOpenChange };
-  };
-
-  test("keeps the sheet open while a workflow dialog that it opens shows", async () => {
-    const { view, onOpenChange } = await renderSheetWithWorkflowDialog();
-    try {
-      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-
-      const editor = screen.getByRole("dialog", { name: "Edit task" });
-      expect(onOpenChange).not.toHaveBeenCalledWith(false);
-
-      fireEvent.keyDown(editor, { key: "Escape" });
-      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-
-      expect(screen.queryByRole("dialog", { name: "Edit task" })).toBeNull();
-      expect(screen.getByRole("dialog", { name: "Task 1" })).toBeTruthy();
-      expect(onOpenChange).not.toHaveBeenCalledWith(false);
-    } finally {
-      view.unmount();
-    }
-  });
-
-  test("closes the sheet when a workflow dialog opens from elsewhere", async () => {
-    const { view, renderSheet, onOpenChange } = await renderSheetWithWorkflowDialog();
-    try {
       view.rerender(renderSheet(true));
       await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
@@ -939,7 +786,7 @@ describe("TaskDetailsSheet", () => {
 
     fireEvent.click(screen.getByText("Start Builder"));
 
-    expect(actions.onDelegate).toHaveBeenCalledWith("TASK-1");
+    expect(actions.onLaunch).toHaveBeenCalledWith("TASK-1", "build_implementation_start");
 
     unmount();
   });

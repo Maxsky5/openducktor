@@ -2,6 +2,7 @@ import {
   type GetWorkspacesResult,
   ODT_BROWSER_BRIDGE_TIMEOUT_MS,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
+  ODT_MCP_BRIDGE_VERSION,
   ODT_TOOL_SCHEMAS,
   type OdtBrowserCaller,
   type OdtBrowserToolName,
@@ -20,7 +21,7 @@ type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Nam
 type ToolOutput<Name extends OdtToolName> = z.infer<
   (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[Name]
 >;
-/** Workspace task tools. Managed artifact writes also send their native caller. */
+/** Workspace task tools. Managed artifact writes and workflow events also send their native caller. */
 export type WorkspaceTaskToolName = Exclude<WorkspaceScopedOdtToolName, OdtBrowserToolName>;
 type OdtToolInput = ToolInput<OdtToolName> & { caller?: OdtBrowserCaller };
 type BrowserBridgeBody = ToolInput<OdtBrowserToolName> & {
@@ -309,8 +310,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     if (!ready.success) {
       throw new OdtToolError({
         code: "ODT_HOST_RESPONSE_INVALID",
-        message:
-          "The OpenDucktor host bridge is incompatible. Update the host and MCP client together to bridge version 2.",
+        message: `The OpenDucktor host bridge is incompatible. Update the host and MCP client together to bridge version ${ODT_MCP_BRIDGE_VERSION}.`,
         details: { command: READY_TOOL_NAME },
         issues: toIssueDetails(ready.error),
       });

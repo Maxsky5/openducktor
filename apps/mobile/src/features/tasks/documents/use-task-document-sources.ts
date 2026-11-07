@@ -1,12 +1,10 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { readMarkdownDocument } from "@/rich-content/markdown/markdown-document";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { TASK_DOCUMENT_SECTION_COPY } from "@openducktor/frontend-core/tasks/details/task-details-sheet-model";
 import { useTaskDocuments } from "@openducktor/frontend-core/tasks/details/use-task-documents";
 import { useCallback, useMemo } from "react";
 import { useMarkdownBlocks } from "@/rich-content/markdown/markdown-view";
-import {
-  qaVerdictPresentation,
-  taskDescriptionForReading,
-} from "../presentation/task-document-paint";
+import { taskDescriptionForReading } from "../presentation/task-document-paint";
 import type { DocumentSource, HostDocumentKey } from "./document-rows";
 
 /** The description of a task, parsed into Markdown blocks. It needs no host read. */
@@ -47,7 +45,7 @@ export function useTaskDescriptionSource(
 }
 
 export type TaskDocumentSources = {
-  sources: Record<HostDocumentKey, DocumentSource>;
+  sources: ReadonlyMap<HostDocumentKey, DocumentSource>;
   reload: (key: HostDocumentKey) => void;
 };
 
@@ -64,75 +62,49 @@ export function useTaskDocumentSources({
   workspaceId: string;
   repoPath: string;
 }): TaskDocumentSources {
-  const { specDoc, planDoc, qaDoc, reloadDocument } = useTaskDocuments(task.id, true, {
-    workspaceId,
-    repoPath,
-  });
-  const specDocument = useMarkdownBlocks(
-    specDoc.markdown,
-    `${task.id}:spec:${specDoc.updatedAt ?? ""}`,
-  );
-  const planDocument = useMarkdownBlocks(
-    planDoc.markdown,
-    `${task.id}:plan:${planDoc.updatedAt ?? ""}`,
-  );
-  const qaDocument = useMarkdownBlocks(qaDoc.markdown, `${task.id}:qa:${qaDoc.updatedAt ?? ""}`);
-  const summary = task.artifactSummary;
-  const verdict = qaVerdictPresentation(summary.qaReport?.verdict);
-
-  const sources = useMemo(
+  const { documents, reloadDocument } = useTaskDocuments(task, true, { workspaceId, repoPath });
+  const sources = useMemo<ReadonlyMap<string, DocumentSource>>(
     () =>
-      ({
-        spec: {
-          key: "spec",
-          ...TASK_DOCUMENT_SECTION_COPY.spec,
-          updatedAt: specDoc.updatedAt ?? summary.spec?.updatedAt ?? null,
-          exists: summary.spec?.present || specDoc.markdown.length > 0,
-          isLoading: specDoc.isLoading,
-          error: specDoc.error,
-          blocks: specDoc.loaded ? specDocument.blocks : null,
-          definitions: specDocument.definitions,
-          imageContext: null,
-          badge: null,
-        },
-        plan: {
-          key: "plan",
-          ...TASK_DOCUMENT_SECTION_COPY.plan,
-          updatedAt: planDoc.updatedAt ?? summary.plan?.updatedAt ?? null,
-          exists: summary.plan?.present || planDoc.markdown.length > 0,
-          isLoading: planDoc.isLoading,
-          error: planDoc.error,
-          blocks: planDoc.loaded ? planDocument.blocks : null,
-          definitions: planDocument.definitions,
-          imageContext: null,
-          badge: null,
-        },
-        qa: {
-          key: "qa",
-          ...TASK_DOCUMENT_SECTION_COPY.qa,
-          updatedAt: qaDoc.updatedAt ?? summary.qaReport?.updatedAt ?? null,
-          exists: summary.qaReport?.present || qaDoc.markdown.length > 0,
-          isLoading: qaDoc.isLoading,
-          error: qaDoc.error,
-          blocks: qaDoc.loaded ? qaDocument.blocks : null,
-          definitions: qaDocument.definitions,
-          imageContext: null,
-          badge: summary.qaReport?.present ? { label: verdict.label, tone: verdict.tone } : null,
-        },
-      }) satisfies Record<HostDocumentKey, DocumentSource>,
-    [
-      planDoc,
-      planDocument,
-      qaDoc,
-      qaDocument,
-      specDoc,
-      specDocument,
-      summary,
-      verdict.label,
-      verdict.tone,
-    ],
+      new Map(
+        task.taskWorkflow.definition.artifacts.map((artifact) => {
+          const payload = documents[artifact.id]!;
+          const parsed = readMarkdownDocument(
+            payload.markdown,
+            `${repoPath}:${task.id}:${artifact.id}:${payload.updatedAt ?? ""}`,
+            null,
+          );
+          const summary = task.artifactSummary[artifact.id];
+          const verdict =
+            artifact.kind === "review"
+              ? artifact.verdicts.find(({ id }) => id === summary?.verdict)
+              : undefined;
+          return [
+            artifact.id,
+            {
+              key: artifact.id,
+              title: artifact.label,
+              empty: `No ${artifact.label.toLowerCase()} saved.`,
+              updatedAt: payload.updatedAt ?? summary?.updatedAt ?? null,
+              exists: summary?.present === true || payload.markdown.length > 0,
+              isLoading: payload.isLoading,
+              error: payload.error,
+              blocks: payload.loaded ? parsed.blocks : null,
+              definitions: parsed.definitions,
+              imageContext: null,
+              badge: verdict
+                ? { label: verdict.label, tone: verdict.passes ? "success" : "destructive" }
+                : null,
+            },
+          ];
+        }),
+      ),
+    [task, repoPath, documents],
   );
-
-  const reload = useCallback((key: HostDocumentKey) => void reloadDocument(key), [reloadDocument]);
+  const reload = useCallback(
+    (key: string) => {
+      reloadDocument(key);
+    },
+    [reloadDocument],
+  );
   return { sources, reload };
 }

@@ -1,7 +1,8 @@
+import type { TaskCard as WireTaskCard } from "@openducktor/contracts";
+import type { OnTaskCommitted } from "./task-workflow-continuation";
 import {
-  decideTaskEvent,
-  taskStatusTitle,
-  type BuiltinTaskCard as TaskCard,
+  type ResolvedTaskCard as TaskCard,
+  taskWaitsForMergePublication,
 } from "@openducktor/workflows";
 import { useCallback, useMemo, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
@@ -19,7 +20,13 @@ export type TaskResetImplementationModalModel = {
   open: boolean;
   taskId: string;
   taskTitle: string;
+  /** The label of the workflow action that resets the worktree, for example "Reset Implementation". */
+  actionLabel: string;
   targetStatusLabel: string;
+  /** The roles whose sessions the reset clears, by label. */
+  worktreeRoleLabels: readonly string[];
+  /** A local direct merge waits for its publication. The reset drops its record. */
+  dropsLocalMerge: boolean;
   isSubmitting: boolean;
   activeSessionCount: number | null;
   activeSessionCountError: string | null;
@@ -43,6 +50,7 @@ export type TaskResetImplementationModalModel = {
 type ResetImplementationModalModel = TaskResetImplementationModalModel;
 type ResetImplementationOptions = {
   closeDetailsAfterReset?: boolean;
+  onCommitted?: OnTaskCommitted | undefined;
 };
 
 type ResetFlowWorkspaceIdentity = {
@@ -52,20 +60,36 @@ type ResetFlowWorkspaceIdentity = {
 
 type ResetFlowRequest = ResetFlowWorkspaceIdentity & {
   taskId: string;
+  /** The workflow event whose `worktree.reset` effect resets the implementation. */
+  eventId: string;
   closeDetailsAfterReset: boolean;
+  onCommitted?: OnTaskCommitted | undefined;
 };
 
 type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
   workspaceIdentity: ResetFlowWorkspaceIdentity | null;
-  resetTaskImplementation: (taskId: string) => Promise<void>;
+  resetTaskImplementation: (taskId: string, eventId: string) => Promise<WireTaskCard>;
   closeTaskDetails: (taskId: string) => void;
 };
 
-/** A task that does not offer the reset keeps its status, and the host rejects the request. */
-const deriveRollbackLabel = (task: TaskCard): string => {
-  const decision = decideTaskEvent("reset-implementation", task);
-  return taskStatusTitle(decision.kind === "transition" ? decision.to : task.status);
+/** A task that does not admit the event keeps its status, and the host rejects the request. */
+/** The label of the event action of the reset, so the dialog uses the workflow's own name. */
+const resetActionLabel = (task: TaskCard, eventId: string): string => {
+  const action = task.taskWorkflow.definition.actions.find(
+    (entry) => entry.kind === "event" && entry.eventId === eventId,
+  );
+  if (!action)
+    throw new Error(`Task workflow has no action for event "${eventId}". Reload the task.`);
+  return action.label;
+};
+
+const deriveRollbackLabel = (task: TaskCard, eventId: string): string => {
+  const workflow = task.taskWorkflow;
+  const decision = workflow.decide(eventId, task);
+  const status = decision.kind === "transition" ? decision.to : task.status;
+  const state = workflow.state(status);
+  return state.title ?? state.label;
 };
 
 export function useTaskResetFlow({
@@ -130,7 +154,7 @@ export function useTaskResetFlow({
   }, [isSubmitting]);
 
   const openResetImplementation = useCallback(
-    (nextTaskId: string, options?: ResetImplementationOptions): boolean => {
+    (nextTaskId: string, eventId: string, options?: ResetImplementationOptions): boolean => {
       const nextTask = tasks.find((entry) => entry.id === nextTaskId);
       if (!nextTask || !workspaceIdentity) {
         feedback.show("error", "Unable to reset implementation", {
@@ -140,12 +164,15 @@ export function useTaskResetFlow({
       }
 
       setModalError(null);
-      setRequest({
+      const nextRequest: ResetFlowRequest = {
         taskId: nextTaskId,
+        eventId,
         workspaceId: workspaceIdentity.workspaceId,
         repoPath: workspaceIdentity.repoPath,
         closeDetailsAfterReset: options?.closeDetailsAfterReset ?? false,
-      });
+      };
+      if (options?.onCommitted) nextRequest.onCommitted = options.onCommitted;
+      setRequest(nextRequest);
       return true;
     },
     [feedback, tasks, workspaceIdentity],
@@ -160,7 +187,8 @@ export function useTaskResetFlow({
       setIsSubmitting(true);
       setModalError(null);
       try {
-        await resetTaskImplementation(task.id);
+        const committed = await resetTaskImplementation(task.id, request.eventId);
+        await request.onCommitted?.(committed);
         setRequest(null);
         if (request.closeDetailsAfterReset) {
           closeTaskDetails(task.id);
@@ -179,7 +207,11 @@ export function useTaskResetFlow({
       openResetImplementation,
     } satisfies {
       resetImplementationModal: ResetImplementationModalModel | null;
-      openResetImplementation: (taskId: string, options?: ResetImplementationOptions) => boolean;
+      openResetImplementation: (
+        taskId: string,
+        eventId: string,
+        options?: ResetImplementationOptions,
+      ) => boolean;
     };
   }
 
@@ -188,7 +220,12 @@ export function useTaskResetFlow({
       open,
       taskId: task.id,
       taskTitle: task.title,
-      targetStatusLabel: deriveRollbackLabel(task),
+      actionLabel: request ? resetActionLabel(task, request.eventId) : "",
+      targetStatusLabel: request ? deriveRollbackLabel(task, request.eventId) : "",
+      worktreeRoleLabels: task.taskWorkflow.worktreeRoles.map(
+        (role) => task.taskWorkflow.role(role).label,
+      ),
+      dropsLocalMerge: taskWaitsForMergePublication(task),
       isSubmitting,
       activeSessionCount,
       activeSessionCountError: stopImpactError,
@@ -213,6 +250,10 @@ export function useTaskResetFlow({
     openResetImplementation,
   } satisfies {
     resetImplementationModal: ResetImplementationModalModel | null;
-    openResetImplementation: (taskId: string, options?: ResetImplementationOptions) => boolean;
+    openResetImplementation: (
+      taskId: string,
+      eventId: string,
+      options?: ResetImplementationOptions,
+    ) => boolean;
   };
 }

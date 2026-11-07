@@ -925,6 +925,19 @@ describe("AgentChatComposerEditor", () => {
     });
   });
 
+  test("keeps text that replaces a select-all of the empty editor", async () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+    const editorRoot = getEditorRoot(rendered.container);
+
+    // A select-all from outside the key handler, then typing, replaces every child of the editor.
+    editorRoot.replaceChildren(document.createTextNode("hello"));
+    fireEvent.input(editorRoot);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("draft-state").textContent).toContain('"text":"hello"');
+    });
+  });
+
   test("edits the latest draft supplied by a parent rerender", async () => {
     const onDraftChange = mock((_draft: AgentChatComposerDraft) => {});
     const rendered = render(

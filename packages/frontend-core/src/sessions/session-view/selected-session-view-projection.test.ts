@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import { toAgentSessionIdentity } from "../../lib/agent-session-identity";
 import { createSessionMessagesState } from "../agent-orchestrator/support/messages";
@@ -43,7 +43,7 @@ const repoSettings = {
   branchPrefix: "",
   defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  postCompleteHooks: [],
+  beforeWorktreeRemovalHooks: [],
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   agentDefaults: {

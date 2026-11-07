@@ -176,7 +176,7 @@ const createHarness = (worktreeOwners: TaskWorktreeOwnerReader = noWorktreeOwner
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath,
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       defaultTargetBranch: { branch: "main" },
     }),
     taskStore: {

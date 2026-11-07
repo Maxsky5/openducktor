@@ -74,7 +74,5 @@ export function useTaskOperations({
     removeTaskWorktree: mutationCommands.removeTaskWorktree,
     resetTaskImplementation: resetOperations.resetTaskImplementation,
     resetTask: resetOperations.resetTask,
-    transitionTask: mutationCommands.transitionTask,
-    humanRequestChangesTask: mutationCommands.humanRequestChangesTask,
   };
 }

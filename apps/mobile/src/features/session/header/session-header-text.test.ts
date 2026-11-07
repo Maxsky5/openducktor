@@ -1,7 +1,9 @@
+import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { describe, expect, test } from "bun:test";
 import { sessionHeaderText } from "./session-header-text";
 
 const base = {
+  task: null,
   sessionTitle: null,
   taskTitle: null,
   runtimeKind: "claude",
@@ -17,6 +19,7 @@ describe("sessionHeaderText", () => {
       readOnly: false,
       sessionTitle: "Build session",
       taskTitle: "Add the login form",
+      task: createTaskCardFixture({ id: "odt-1" }),
     });
     expect(text.title).toBe("Add the login form");
     expect(text.details).toHaveLength(2);

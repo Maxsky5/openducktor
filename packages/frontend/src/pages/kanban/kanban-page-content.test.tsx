@@ -1,3 +1,8 @@
+import {
+  createKanbanColumnFixture,
+  createTaskWorkflowActionsFixture,
+} from "@/test-utils/shared-test-fixtures";
+import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
@@ -5,8 +10,15 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { KanbanTaskActivityState } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
-import { KanbanPageContent } from "./kanban-page-content";
+import { KanbanPageContent as ProductionKanbanPageContent } from "./kanban-page-content";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
+
+const workflowActions = createTaskWorkflowActionsFixture();
+const KanbanPageContent = (props: Parameters<typeof ProductionKanbanPageContent>[0]) => (
+  <TaskWorkflowActionsContext value={workflowActions}>
+    <ProductionKanbanPageContent {...props} />
+  </TaskWorkflowActionsContext>
+);
 
 const visibleTask = createTaskCardFixture({
   id: "TASK-1",
@@ -21,13 +33,7 @@ const model: KanbanPageContentModel = {
   emptyColumnDisplay: "show",
   taskCardView: "normal",
   showHorizontalScrollbars: false,
-  columns: [
-    {
-      id: "open",
-      title: "Backlog",
-      tasks: [],
-    },
-  ],
+  columns: [createKanbanColumnFixture("open", [], { title: "Backlog" })],
   hasLoadedTasks: false,
   filter: { isActive: false, onClear: () => {} },
   taskSessionsByTaskId: new Map(),
@@ -37,14 +43,6 @@ const model: KanbanPageContentModel = {
   activeTaskSessionContextByTaskId: new Map(),
   taskActivityStateByTaskId: new Map(),
   onOpenDetails: () => {},
-  onDelegate: () => {},
-  onOpenSession: () => {},
-  onPlan: () => {},
-  onQaStart: () => {},
-  onHumanApprove: () => {},
-  onHumanRequestChanges: () => {},
-  onResetImplementation: () => {},
-  onCloseTask: () => {},
 };
 
 describe("KanbanPageContent", () => {
@@ -78,8 +76,8 @@ describe("KanbanPageContent", () => {
           ...model,
           taskCardView,
           columns: [
-            { id: "ready_for_dev", title: "Ready for Dev", tasks: [task] },
-            { id: "in_progress", title: "In progress", tasks: [] },
+            createKanbanColumnFixture("ready_for_dev", [task], { title: "Ready for Dev" }),
+            createKanbanColumnFixture("in_progress", [], { title: "In progress" }),
           ],
           taskActivityStateByTaskId: new Map([[task.id, "idle"]]),
         };
@@ -117,7 +115,7 @@ describe("KanbanPageContent", () => {
         <KanbanPageContent
           model={{
             ...model,
-            columns: [{ id: "open", title: "Backlog", tasks }],
+            columns: [createKanbanColumnFixture("open", tasks, { title: "Backlog" })],
             taskActivityStateByTaskId: new Map(tasks.map((task) => [task.id, "idle"])),
           }}
         />,
@@ -151,8 +149,8 @@ describe("KanbanPageContent", () => {
     const movingModel: KanbanPageContentModel = {
       ...model,
       columns: [
-        { id: "ready_for_dev", title: "Ready for Dev", tasks: [task] },
-        { id: "in_progress", title: "In progress", tasks: [] },
+        createKanbanColumnFixture("ready_for_dev", [task], { title: "Ready for Dev" }),
+        createKanbanColumnFixture("in_progress", [], { title: "In progress" }),
       ],
       historicalSessionsByTaskId: new Map([
         [
@@ -170,7 +168,6 @@ describe("KanbanPageContent", () => {
         ],
       ]),
       taskActivityStateByTaskId: new Map([[task.id, "idle"]]),
-      onOpenSession: mock(() => {}),
     };
     const view = render(
       <>
@@ -218,8 +215,8 @@ describe("KanbanPageContent", () => {
     const movingModel: KanbanPageContentModel = {
       ...model,
       columns: [
-        { id: "open", title: "Backlog", tasks: [task] },
-        { id: "in_progress", title: "In progress", tasks: nextTasks },
+        createKanbanColumnFixture("open", [task], { title: "Backlog" }),
+        createKanbanColumnFixture("in_progress", nextTasks, { title: "In progress" }),
       ],
       taskActivityStateByTaskId: new Map([task, ...nextTasks].map((entry) => [entry.id, "idle"])),
     };
@@ -285,6 +282,24 @@ describe("KanbanPageContent", () => {
     expect(html).not.toContain("hide-scrollbar");
   });
 
+  test("shows an actionable read error instead of a blocking loader", () => {
+    const view = render(
+      <KanbanPageContent
+        model={{
+          ...model,
+          isLoadingTasks: true,
+          loadError: "Workflow catalog is invalid. Restart the host, then refresh tasks.",
+        }}
+      />,
+    );
+    try {
+      expect(view.getByRole("alert").textContent).toContain("Restart the host");
+      expect(view.queryByTestId("kanban-loading-overlay")).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("renders a blocking board loader while the initial task load is in progress", () => {
     const html = renderToStaticMarkup(
       createElement(KanbanPageContent, {
@@ -296,7 +311,7 @@ describe("KanbanPageContent", () => {
     );
 
     expect(html).toContain('data-testid="kanban-loading-overlay"');
-    expect(html.match(/data-testid="kanban-loading-lane"/g)?.length).toBe(8);
+    expect(html.match(/data-testid="kanban-loading-lane"/g)?.length).toBe(4);
     expect(html).toContain('data-slot="skeleton"');
     expect(html).not.toContain('data-testid="kanban-refresh-indicator"');
   });
@@ -308,13 +323,7 @@ describe("KanbanPageContent", () => {
           ...model,
           isLoadingTasks: true,
           hasLoadedTasks: true,
-          columns: [
-            {
-              id: "open",
-              title: "Backlog",
-              tasks: [visibleTask],
-            },
-          ],
+          columns: [createKanbanColumnFixture("open", [visibleTask], { title: "Backlog" })],
           taskActivityStateByTaskId: visibleTaskActivityState,
         },
       }),
@@ -354,11 +363,7 @@ describe("KanbanPageContent", () => {
           emptyColumnDisplay: "collapsed",
           columns: [
             ...model.columns,
-            {
-              id: "in_progress",
-              title: "In progress",
-              tasks: [visibleTask],
-            },
+            createKanbanColumnFixture("in_progress", [visibleTask], { title: "In progress" }),
           ],
           taskActivityStateByTaskId: visibleTaskActivityState,
         },
@@ -377,11 +382,7 @@ describe("KanbanPageContent", () => {
           ...model,
           taskCardView: "compact",
           columns: [
-            {
-              id: "in_progress",
-              title: "In progress",
-              tasks: [visibleTask],
-            },
+            createKanbanColumnFixture("in_progress", [visibleTask], { title: "In progress" }),
           ],
           taskActivityStateByTaskId: visibleTaskActivityState,
         },
@@ -410,7 +411,8 @@ describe("KanbanPageContent", () => {
       expect(view.getByRole("status")).toBe(status);
       expect(status.textContent).toBe("No tasks match your search or filters");
       expect(lane.isConnected).toBe(true);
-      expect(lane.closest("[inert]")).not.toBeNull();
+      expect(lane.closest("[inert]")).toBeNull();
+      expect(lane.closest(".invisible")).toBeNull();
 
       fireEvent.click(view.getByRole("button", { name: "Clear filters" }));
 

@@ -25,7 +25,10 @@ export type TaskConfirmCopy = {
 export type TaskResetImplementationCopyInput = {
   taskId: string;
   taskTitle: string;
+  actionLabel: string;
   targetStatusLabel: string;
+  worktreeRoleLabels: readonly string[];
+  dropsLocalMerge: boolean;
   activeSessionCount: number | null;
   activeSessionCountError: string | null;
   hasCanonicalWorktree: boolean;
@@ -43,12 +46,12 @@ export function buildTaskResetConfirmCopy(
 ): TaskConfirmCopy {
   return {
     title: "Reset task",
-    description: "Move this task to Backlog and start again.",
+    description: "Move this task back to the start of its workflow.",
     subject,
     tone: "destructive",
     changes: [
       "Delete all task artifacts",
-      "Remove Spec, Planner, Builder and QA sessions",
+      "Remove all task sessions",
       "Remove pull request and merge links",
       ...cleanupChanges(impact),
       ...stoppedWork(impact),
@@ -98,14 +101,26 @@ export function buildTaskDeleteConfirmCopy(
   };
 }
 
-/** Reset implementation keeps the plan and the current worktree, and discards build progress. */
+/** "A", "A and B", or "A, B, and C". Hermes on mobile has no `Intl.ListFormat`. */
+const listLabels = (labels: readonly string[]): string =>
+  labels.length < 3
+    ? labels.join(" and ")
+    : `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+
+/** The `worktree.reset` effect keeps the other artifacts and the current worktree. */
 export function buildTaskResetImplementationConfirmCopy(
   input: TaskResetImplementationCopyInput,
 ): TaskConfirmCopy {
+  const roles = listLabels(input.worktreeRoleLabels);
   const changes = [
-    "Remove Builder and QA session history",
-    "Delete QA reports and remove the pull request link",
+    `Remove the ${roles} session history`,
+    "Delete review reports and remove the pull request link",
   ];
+  if (input.dropsLocalMerge) {
+    changes.push(
+      "Drop the record of the unpublished local merge. The merge commit stays on the local target branch",
+    );
+  }
   if (input.hasCanonicalWorktree) {
     changes.push("Reset tracked files to the latest local base commit and delete untracked files");
   }
@@ -121,30 +136,26 @@ export function buildTaskResetImplementationConfirmCopy(
     ...stoppedWork(input),
   );
   return {
-    title: "Reset implementation",
+    title: input.actionLabel,
     description: `Move this task back to ${input.targetStatusLabel} and clear the implementation.`,
     subject: { id: input.taskId, title: input.taskTitle },
     tone: "destructive",
     changes,
     kept: [
-      "Spec, plan and artifacts you added",
+      "Other task artifacts",
       ...(input.hasCanonicalWorktree ? ["Current worktree, its branch and ignored files"] : []),
     ],
     warning: withOwnerWarnings(
       input.hasCanonicalWorktree || input.legacyWorktreeCount > 0
-        ? "Uncommitted and untracked work will be lost. Builder and QA history cannot be recovered."
-        : "Builder and QA history cannot be recovered.",
+        ? `Uncommitted and untracked work will be lost. The ${roles} session history cannot be recovered.`
+        : `The ${roles} session history cannot be recovered.`,
       input.worktreeOwners,
     ),
     errors: [
       ...readErrors(input.activeSessionCountError, input.impactError),
       ...ownerErrors(input.worktreeOwners),
     ],
-    confirmLabel: {
-      idle: "Reset implementation",
-      pending: "Resetting…",
-      checking: "Checking…",
-    },
+    confirmLabel: { idle: input.actionLabel, pending: "Resetting…", checking: "Checking…" },
   };
 }
 

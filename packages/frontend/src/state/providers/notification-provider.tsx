@@ -1,4 +1,3 @@
-import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import type { NotificationNavigationTarget, WorkspaceRecord } from "@openducktor/contracts";
 import {
   type PropsWithChildren,
@@ -127,7 +126,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
         runtime.publish(
           buildSessionStartedOccurrence(resolveWorkspace(input), {
             ...input,
-            roleLabel: BUILTIN_ROLE_LABELS[input.role],
+            roleLabel: input.roleLabel,
           }),
           input.inAppFeedbackHandled,
         );
@@ -136,7 +135,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
         return await runtime.publishAndWait(
           buildSessionStartErrorOccurrence(
             resolveWorkspace(input),
-            { ...input, roleLabel: BUILTIN_ROLE_LABELS[input.role] },
+            { ...input, roleLabel: input.roleLabel },
             localErrorMessage,
           ),
           localErrorMessage,

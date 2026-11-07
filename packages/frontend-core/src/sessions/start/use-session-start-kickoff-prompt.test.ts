@@ -1,9 +1,11 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
+import { specPlanBuildPromptKey } from "@openducktor/workflows/test-support";
 import { type RepoConfig, type SettingsSnapshot } from "@openducktor/contracts";
 import { workspaceQueryKeys } from "../../queries/workspace";
 import { createRuntimeHookHarness } from "../../test-support/runtime-hook-harness";
 import {
+  createTaskCardFixture,
   createDeferred,
   createSettingsSnapshotFixture,
 } from "../../test-support/shared-test-fixtures";
@@ -19,14 +21,20 @@ const configFor = (workspaceId = "a", template = "Repo {{task.id}}") =>
     workspaceName: workspaceId,
     repoPath: `/${workspaceId}`,
     branchPrefix: "odt",
-    promptOverrides: { "kickoff.spec_initial": { template, baseVersion: 1, enabled: true } },
+    promptOverrides: {
+      [specPlanBuildPromptKey("messages.spec_start")]: {
+        template,
+        baseVersion: 1,
+        enabled: true,
+      },
+    },
   });
 
 const inputFor = (workspaceId: string | null = "a"): PromptRequest => ({
   selectedTargetBranch: "",
   kickoff: {
     workspaceId,
-    task: null,
+    task: createTaskCardFixture({ id: "TASK-1" }),
     request: { taskId: "TASK-1", role: "spec", launchActionId: "spec_initial" },
   },
 });
@@ -50,7 +58,11 @@ const seedSettings = (connection: ReturnType<typeof createTestClientConnection>)
     workspaceQueryKeys.settingsSnapshot(),
     createSettingsSnapshotFixture({
       globalPromptOverrides: {
-        "kickoff.spec_initial": { template: "Global {{task.id}}", baseVersion: 1, enabled: true },
+        [specPlanBuildPromptKey("messages.spec_start")]: {
+          template: "Global {{task.id}}",
+          baseVersion: 1,
+          enabled: true,
+        },
       },
     }),
   );
@@ -188,7 +200,7 @@ describe("useSessionStartKickoffPrompt", () => {
     input.kickoff!.request = {
       taskId: "TASK-1",
       role: "build",
-      launchActionId: "build_pull_request_generation",
+      launchActionId: "pull_request",
     };
     const harness = renderPrompt(input, connection);
     try {

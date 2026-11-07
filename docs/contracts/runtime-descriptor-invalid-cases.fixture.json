@@ -12,11 +12,11 @@
     "name": "normalized-workflow-alias-tool-ids",
     "patch": [
       {
-        "path": ["workflowToolAliasesByCanonical", "odt_build_blocked"],
+        "path": ["workflowToolAliasesByCanonical", "odt_apply_workflow_event"],
         "value": [" shared_alias "]
       },
       {
-        "path": ["workflowToolAliasesByCanonical", "odt_build_completed"],
+        "path": ["workflowToolAliasesByCanonical", "odt_set_pull_request"],
         "value": ["shared_alias"]
       },
       {

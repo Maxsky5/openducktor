@@ -7,8 +7,6 @@ import { Button, type ButtonVariant } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
 import { Text } from "@/ui/text";
 import { useAnnounce } from "@/ui/use-announce";
-import { taskActionSendsCommand } from "@/features/workflow/task-action-routing";
-import { TASK_ACTION_ICONS, taskActionRole } from "../presentation/task-action-paint";
 import type { TaskDetailsAction } from "./task-details-model";
 
 /** The desktop primary action variants: violet for the next step, outlined for other starts. */
@@ -58,12 +56,12 @@ export function TaskPrimaryAction({
         {action ? (
           <Button
             label={action.label}
-            icon={TASK_ACTION_ICONS[action.action]}
-            roleIcon={taskActionRole(action.action) ?? undefined}
+            icon={action.icon}
+            roleIcon={action.roleIconHint}
             variant={ACTION_VARIANTS[action.tone]}
             fill
             disabled={!enabled || action.disabled}
-            command={taskActionSendsCommand(action.action)}
+            command={action.command}
             accessibilityLabel={`${action.label} for ${taskTitle}`}
             onPress={() => onAction(action)}
           />

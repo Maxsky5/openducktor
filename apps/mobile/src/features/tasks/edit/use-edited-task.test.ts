@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import "@openducktor/frontend-core/test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
 import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";

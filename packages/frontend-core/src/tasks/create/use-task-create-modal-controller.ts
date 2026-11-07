@@ -1,12 +1,13 @@
+import { useTaskFormWorkflow } from "../../queries/use-task-form-workflow";
+import { issueTypeChoices } from "./task-composer-options";
 import {
   taskEditorDraftKey,
   rebaseTaskComposer,
   type RetainedTaskFields,
 } from "./task-editor-drafts";
 import {
-  byDocumentCode,
-  type BuiltinIssueTypeId as IssueType,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowIssueTypeId as IssueType,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import type { TaskAssetFailure, WorkspaceRef } from "@openducktor/contracts";
 import {
@@ -437,7 +438,7 @@ function createDocumentNavigationActions({
       return;
     }
     dispatch({ type: "sectionChanged", section: next });
-    if (isDocumentSection(next)) void loadDocumentSection(next);
+    if (isDocumentSection(next)) void loadDocumentSection(next.artifactCode);
   };
 
   const confirmDiscard = async (): Promise<void> => {
@@ -453,7 +454,7 @@ function createDocumentNavigationActions({
     } else {
       dispatch({ type: "sectionChanged", section: pendingDiscardIntent.next });
       if (isDocumentSection(pendingDiscardIntent.next)) {
-        void loadDocumentSection(pendingDiscardIntent.next);
+        void loadDocumentSection(pendingDiscardIntent.next.artifactCode);
       }
     }
     dispatch({ type: "discardIntentCleared" });
@@ -475,8 +476,11 @@ function selectTaskCreateModalView({
   modalState: TaskCreateModalState;
   mode: ComposerMode;
 }) {
-  const dirtyDocuments = byDocumentCode(
-    (code) => documents[code].draftMarkdown !== documents[code].serverMarkdown,
+  const dirtyDocuments = Object.fromEntries(
+    Object.entries(documents).map(([code, document]) => [
+      code,
+      document.loaded && document.draftMarkdown !== document.serverMarkdown,
+    ]),
   );
   const activeDocument = activeDocumentSection ? documents[activeDocumentSection] : null;
   const activeDraft = activeDocument?.draftMarkdown ?? "";
@@ -545,6 +549,19 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     destination,
     activeWorkspace,
   );
+  const workflowRead = useTaskFormWorkflow(
+    task,
+    workspaceId && workspaceRepoPath ? { workspaceId, repoPath: workspaceRepoPath } : null,
+    open,
+  );
+  const taskWorkflow = workflowRead.taskWorkflow;
+  const documentCodes = useMemo(
+    () =>
+      taskWorkflow?.definition.artifacts
+        .filter(({ kind }) => kind === "document")
+        .map(({ id }) => id) ?? [],
+    [taskWorkflow],
+  );
   const { createTask, updateTask } = useRequiredContext(
     TasksStateContext,
     "useTaskCreateModalController",
@@ -575,15 +592,21 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     pendingDiscardIntent,
   } = modalState;
 
-  const activeDocumentSection =
-    mode === "edit" && isDocumentSection(editSection) ? editSection : null;
+  const activeDocumentSection = documentCodeForSection(mode, editSection);
 
   const loadScopedDocument = useCallback(
     (taskId: string, code: DocumentSection) => {
       if (destinationError !== null) return Promise.reject(new Error(destinationError));
+      if (
+        !taskWorkflow ||
+        taskWorkflow.definition.artifacts.find(({ id }) => id === code)?.kind !== "document"
+      )
+        return Promise.reject(
+          new Error(`Workflow document "${code}" is unavailable. Reload its workflow.`),
+        );
       return loadDocument(taskId, code);
     },
-    [destinationError, loadDocument],
+    [destinationError, taskWorkflow, loadDocument],
   );
 
   const {
@@ -599,6 +622,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     taskId,
     repoPath: activeWorkspace?.repoPath ?? null,
     activeSection: activeDocumentSection,
+    documentCodes,
     loadDocument: loadScopedDocument,
     workspaceId,
     retainedDrafts: retainedDrafts.documents,
@@ -760,6 +784,17 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     workspaceRepoPath,
   });
   const submit = async (): Promise<void> => {
+    if (
+      !taskWorkflow ||
+      workflowRead.error ||
+      !taskWorkflow.definition.issueTypes.some(({ id }) => id === composer.issueType)
+    ) {
+      dispatch({
+        type: "submitBlocked",
+        error: workflowRead.error ?? "Select an issue type from the task workflow.",
+      });
+      return;
+    }
     await saveFlight.start(submitTask);
   };
 
@@ -769,6 +804,16 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
       dispatch({
         type: "documentSaveFailed",
         error: { message: destinationError, outcomeUnknown: false },
+      });
+      return;
+    }
+    if (!taskWorkflow || workflowRead.error) {
+      dispatch({
+        type: "documentSaveFailed",
+        error: {
+          message: workflowRead.error ?? "Task workflow is loading.",
+          outcomeUnknown: false,
+        },
       });
       return;
     }
@@ -822,6 +867,9 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
   }, []);
 
   return {
+    taskWorkflow,
+    issueTypeChoices: issueTypeChoices(taskWorkflow),
+    workflowRead,
     mode,
     taskId,
     workspaceId,
@@ -844,12 +892,12 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     isSubmitting,
     isSavingDocument,
     isBusy,
-    isFormDisabled,
+    isFormDisabled: isFormDisabled || workflowRead.pending || workflowRead.error !== null,
     isRecoveryBlocked,
     isSaveOrRecoveryLocked,
     isTypeStepVisible,
     isEditingDocument,
-    footerError: destinationError ?? footerError?.message ?? null,
+    footerError: destinationError ?? workflowRead.error ?? footerError?.message ?? null,
     /** True when the footer error is a lost save result. The host may have saved the change. */
     footerErrorOutcomeUnknown: destinationError === null && footerError?.outcomeUnknown === true,
     destination,
@@ -872,4 +920,8 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     confirmDiscard,
     onDialogOpenChange,
   };
+}
+
+function documentCodeForSection(mode: ComposerMode, section: EditTaskSection) {
+  return mode === "edit" && isDocumentSection(section) ? section.artifactCode : null;
 }

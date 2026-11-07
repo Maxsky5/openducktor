@@ -17,7 +17,6 @@ export const createAppStateProviderModuleMock = (
   useWorkspaceState: unused("useWorkspaceState"),
   useChecksState: unused("useChecksState"),
   useTasksState: unused("useTasksState"),
-  useDelegationState: unused("useDelegationState"),
   useDocumentState: unused("useDocumentState"),
   useAgentOperations: unused("useAgentOperations"),
   useAgentSessionReadModelState: unused("useAgentSessionReadModelState"),

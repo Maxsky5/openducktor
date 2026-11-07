@@ -1,4 +1,5 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { useTaskActions } from "@/features/workflow/use-task-actions";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { PullRequest } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 
@@ -209,27 +210,45 @@ const useTaskSessionMenus = ({
     summaries,
     sessionWorking,
   });
-  const quickItems = useMemo(() => quickActionItems(quickActions), [quickActions]);
+  const quickItems = useMemo(() => quickActionItems(quickActions, task), [quickActions, task]);
+  const actionTasks = useMemo(() => (task ? [task] : []), [task]);
+  const taskActions = useTaskActions({ workspace: target.workspace, tasks: actionTasks });
   const runQuickAction = useCallback(
     (id: string) => {
       const option = quickActions.find((entry) => entry.id === id);
-      if (!option || option.disabled || !taskId) return;
-      // Approve Task and Close Task open the approval, which selects Close Task for a merged branch.
+      if (!option || option.disabled || !taskId || !task) return;
+      // Approve Task opens the approval. Close Task for a merged branch opens its confirmation.
       if (option.kind === "task_action") {
-        router.push(routes.approveTask(workspaceId, taskId), SINGLE_SHEET);
+        if (option.taskAction.kind === "core") {
+          taskActions.confirm(task, option.taskAction.action.confirmation);
+          return;
+        }
+        taskActions.runAction(task, option.taskAction.action, (role) => {
+          const row = groups.find((group) => group.role === role)?.rows[0];
+          return row ? { session: row.identity } : undefined;
+        });
         return;
       }
       // Apply Human Changes first asks for the feedback, as the desktop quick action does.
       router.push(
         option.requiresHumanFeedback
-          ? routes.requestChanges(workspaceId, taskId)
+          ? routes.requestChanges(workspaceId, taskId, {
+              kind: "launch",
+              launchActionId: option.launchActionId,
+            })
           : routes.quickAction(workspaceId, taskId, option.launchActionId),
         SINGLE_SHEET,
       );
     },
-    [quickActions, router, taskId, workspaceId],
+    [quickActions, router, taskId, workspaceId, task, taskActions, groups],
   );
-  return { historyItems, openHistorySession, quickItems, runQuickAction };
+  return {
+    historyItems,
+    openHistorySession,
+    quickItems,
+    runQuickAction,
+    confirmations: taskActions.confirmations,
+  };
 };
 
 /**
@@ -258,6 +277,7 @@ export function SessionHeader({
     readOnly,
     sessionTitle: facts.title,
     taskTitle: task?.title ?? null,
+    task: task ?? null,
     runtimeKind: identity.runtimeKind,
     selectedModel: facts.selectedModel,
     modelCatalog,
@@ -275,12 +295,13 @@ export function SessionHeader({
   );
   // A Subagent session only shows its own activity, so it has no task menus.
   const workflowTaskId = readOnly ? null : taskId;
-  const { historyItems, openHistorySession, quickItems, runQuickAction } = useTaskSessionMenus({
-    target,
-    taskId: workflowTaskId,
-    task: workflowTaskId ? (task ?? null) : null,
-    sessionWorking: facts.isWorking,
-  });
+  const { historyItems, openHistorySession, quickItems, runQuickAction, confirmations } =
+    useTaskSessionMenus({
+      target,
+      taskId: workflowTaskId,
+      task: workflowTaskId ? (task ?? null) : null,
+      sessionWorking: facts.isWorking,
+    });
 
   const actionCount = [historyItems, quickItems, menu.items].filter(
     (items) => items.length > 0,
@@ -353,6 +374,7 @@ export function SessionHeader({
   return (
     <>
       <Stack.Screen options={options} />
+      {confirmations}
       {showsRail && owner.kind === "task" && !readOnly ? (
         <SessionWorkflowRail
           workspaceId={workspace.workspaceId}

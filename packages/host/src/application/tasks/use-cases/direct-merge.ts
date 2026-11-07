@@ -9,7 +9,6 @@ import {
 import type { GitMergeBranchRequest } from "../../../ports/git-port";
 import { prepareDirectMerge } from "../support/approval-readiness";
 import { enrichTask } from "../support/task-workflow-helpers";
-import { decideEffectTransition } from "../support/task-workflow-events";
 import { closeMergedTask } from "../support/close-merged-task";
 import {
   TaskMutationProgressFailure,
@@ -30,7 +29,7 @@ export const createTaskDirectMergeUseCase = (
         taskSessionLifecycleCoordinator,
       } = services;
       const { taskId, input: mergeInput } = input;
-      const { dependencies, effectiveRepoPath, current, workflow, approval, state, decision } =
+      const { dependencies, effectiveRepoPath, current, workflow, approval, state } =
         yield* prepareDirectMerge(services, input);
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
@@ -123,30 +122,14 @@ export const createTaskDirectMergeUseCase = (
                   directMerge,
                   current,
                   state,
-                  decision,
                   "direct-merge",
                 );
                 return { outcome: "completed" as const, task };
               }
-              // A recorded remote merge waits for a separate explicit publication intent.
-              stage = "review_task";
-              const task =
-                decision.kind === "transition"
-                  ? yield* taskStore.transitionTask({
-                      workspaceId: input.workspaceId,
-                      repoPath: effectiveRepoPath,
-                      taskId,
-                      decide: (task) =>
-                        decideEffectTransition(
-                          services.taskWorkflows.forTask(task),
-                          "direct_merge.publish",
-                          task,
-                        ),
-                    })
-                  : current;
+              // A recorded remote merge keeps the task state until a separate publication intent.
               return {
                 outcome: "completed" as const,
-                task: enrichTask(workflow, task),
+                task: enrichTask(workflow, { ...current, directMerge }),
               };
             }),
           );

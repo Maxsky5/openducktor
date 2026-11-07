@@ -25,11 +25,11 @@ import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { WorkspaceStateContext } from "../app-state-contexts";
 import { useNotificationContext } from "../notifications/notification-context";
 import { NotificationProvider } from "./notification-provider";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 import { createWorkspaceRecordFixture } from "@/test-utils/shared-test-fixtures";
 
 test("startup feedback suppresses only its in-app Started toast through publication echoes", async () => {
-  const settings = createBuiltinNotificationSettings();
+  const settings = createSpecPlanBuildNotificationSettings();
   settings.volumePercent = 17;
   settings.osFocus = "always_send";
   settings.soundFocus = "always_play";
@@ -95,6 +95,7 @@ test("startup feedback suppresses only its in-app Started toast through publicat
           workspaceId: record.workspaceId,
           taskId: "task-1",
           role: "build",
+          roleLabel: "Builder",
           inAppFeedbackHandled,
           session: {
             externalSessionId: "session-1",
@@ -138,7 +139,7 @@ describe("notification permission recovery", () => {
           if (delivery === "throw") throw new Error("Test delivery failed.");
           return { status: "failed", message: "Test delivery failed." };
         });
-        const settings = createBuiltinNotificationSettings();
+        const settings = createSpecPlanBuildNotificationSettings();
         settings.volumePercent = 0;
         await h.hook.run(async (context) => {
           if (delivery === "throw") {
@@ -273,7 +274,7 @@ const createHarness = (
     showOsNotification,
     async mount(): Promise<void> {
       await hook.mount();
-      const settings = createBuiltinNotificationSettings();
+      const settings = createSpecPlanBuildNotificationSettings();
       settings.volumePercent = 0;
       settings.kinds["workflow.closed"] = { enabled: true, target: "os", sound: "inherit" };
       await hook.run(() => {

@@ -192,6 +192,7 @@ export const LUCIDE_GLYPHS = {
   unlink: "\u{e19c}",
   "wand-sparkles": "\u{e357}",
   "wifi-off": "\u{e1af}",
+  workflow: "\u{e425}",
   wrench: "\u{e1b1}",
   x: "\u{e1b2}",
   "x-circle": "\u{e084}",

@@ -1,5 +1,5 @@
 import type { ManagedMcpServer, WorkflowRolePolicyResolver } from "@openducktor/core";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { expect, mock } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
@@ -30,7 +30,7 @@ import { extractStringField, isPlainObject } from "./codex-app-server-shared";
 
 /** The role policy of the built-in task workflow. */
 export const testWorkflowRolePolicy: WorkflowRolePolicyResolver = ({ role }) => {
-  const workflowRole = builtinTaskWorkflow.role(role);
+  const workflowRole = specPlanBuildWorkflow.role(role);
   return { tools: workflowRole.tools, readOnly: workflowRole.workspaceAccess === "read" };
 };
 

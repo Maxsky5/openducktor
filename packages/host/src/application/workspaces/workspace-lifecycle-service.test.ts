@@ -11,7 +11,7 @@ import {
   type WorkspaceCatalog,
   type WorkspaceRemovalRecord,
 } from "@openducktor/contracts";
-import { emptyArtifactSummary } from "@openducktor/workflows";
+import { emptyArtifactSummary } from "@openducktor/workflows/test-support";
 import { Effect } from "effect";
 import {
   HostOperationError,

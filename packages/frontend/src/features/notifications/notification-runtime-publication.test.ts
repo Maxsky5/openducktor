@@ -1,3 +1,4 @@
+import { builtinNotificationPresentation } from "@openducktor/frontend-core/test-support/workflow-fixtures";
 import { describe, expect, mock, test } from "bun:test";
 import {
   type NotificationOccurrence,
@@ -12,7 +13,7 @@ import {
   createNotificationRuntime,
   workflowClosedOccurrence,
 } from "@openducktor/frontend-core/notifications/notification-runtime.test-support";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 describe("notification publication and coordination", () => {
   test("shows the local start error once without putting it in the shared or OS payload", async () => {
@@ -44,7 +45,7 @@ describe("notification publication and coordination", () => {
           return { status: "shown" };
         },
       }),
-      selectSettings: async () => createBuiltinNotificationSettings(),
+      selectSettings: async () => createSpecPlanBuildNotificationSettings(),
       navigate: async () => {},
       onFailure: () => {},
       inApp: { dismiss: () => {}, deliver: deliverInApp },
@@ -88,7 +89,7 @@ describe("notification publication and coordination", () => {
             return { status: "shown" };
           },
         }),
-        selectSettings: async () => createBuiltinNotificationSettings(),
+        selectSettings: async () => createSpecPlanBuildNotificationSettings(),
         navigate: async () => {},
         onFailure: () => {},
       });
@@ -118,7 +119,7 @@ describe("notification publication and coordination", () => {
     );
     const runtime = createNotificationRuntime({
       bridge: createBridge({ publishOccurrence }),
-      selectSettings: async () => createBuiltinNotificationSettings(),
+      selectSettings: async () => createSpecPlanBuildNotificationSettings(),
       navigate: async () => {},
       onFailure: () => {},
     });
@@ -149,7 +150,7 @@ describe("notification publication and coordination", () => {
   });
 
   test("publishes the settings snapshot selected for the occurrence", async () => {
-    const settings = createBuiltinNotificationSettings();
+    const settings = createSpecPlanBuildNotificationSettings();
     settings.kinds["workflow.closed"] = { enabled: true, target: "in_app", sound: "none" };
     let resolvePublished = (_settings: NotificationSettings | undefined): void => {};
     const published = new Promise<NotificationSettings | undefined>((resolve) => {
@@ -186,7 +187,7 @@ describe("notification publication and coordination", () => {
     });
     const recipientInApp = mock(async () => resolveDelivery());
     const recipientLoadSettings = mock(async () => {
-      const settings = createBuiltinNotificationSettings();
+      const settings = createSpecPlanBuildNotificationSettings();
       settings.kinds["workflow.closed"] = { enabled: false, target: "in_app", sound: "inherit" };
       return settings;
     });
@@ -205,7 +206,7 @@ describe("notification publication and coordination", () => {
     });
     recipient.subscribe();
 
-    const publisherSettings = createBuiltinNotificationSettings();
+    const publisherSettings = createSpecPlanBuildNotificationSettings();
     publisherSettings.kinds["workflow.closed"] = {
       enabled: true,
       target: "in_app",
@@ -234,7 +235,7 @@ describe("notification publication and coordination", () => {
   });
 
   test("keeps the host settings and reports a changed coordination selection", async () => {
-    const settings = createBuiltinNotificationSettings();
+    const settings = createSpecPlanBuildNotificationSettings();
     settings.volumePercent = 0;
     settings.kinds["agent.session_started"] = {
       enabled: true,
@@ -301,7 +302,7 @@ describe("notification publication and coordination", () => {
         showOsNotification,
       }),
       selectSettings: async () => {
-        const settings = createBuiltinNotificationSettings();
+        const settings = createSpecPlanBuildNotificationSettings();
         settings.volumePercent = 0;
         settings.kinds["workflow.closed"] = { enabled: true, target: "both", sound: "inherit" };
         return settings;
@@ -313,6 +314,7 @@ describe("notification publication and coordination", () => {
     await runtime.publishAndWait({
       occurrenceId: "workflow.closed:/repo:task-1:event-1",
       kind: "workflow.closed",
+      ...builtinNotificationPresentation("workflow.closed"),
       repoPath: "/repo",
       repositoryLabel: "Repo",
       task: { id: "task-1", title: "Build notifications" },
@@ -342,7 +344,7 @@ describe("notification publication and coordination", () => {
         showOsNotification,
       }),
       selectSettings: async () => {
-        const settings = createBuiltinNotificationSettings();
+        const settings = createSpecPlanBuildNotificationSettings();
         settings.volumePercent = 0;
         settings.kinds["workflow.closed"] = { enabled: true, target: "both", sound: "inherit" };
         return settings;
@@ -379,7 +381,7 @@ describe("notification publication and coordination", () => {
           await dispatch(true);
         },
       }),
-      selectSettings: async () => createBuiltinNotificationSettings(),
+      selectSettings: async () => createSpecPlanBuildNotificationSettings(),
       navigate: async () => {},
       onFailure: () => {},
       onCoordinationRecovered,
@@ -416,7 +418,7 @@ describe("notification publication and coordination", () => {
         },
         withExternalDeliveryOwnership: async (_occurrenceId, dispatch) => dispatch(false),
       }),
-      selectSettings: async () => createBuiltinNotificationSettings(),
+      selectSettings: async () => createSpecPlanBuildNotificationSettings(),
       navigate: async () => {},
       onFailure,
       onCoordinationRecovered,
@@ -453,7 +455,7 @@ describe("notification publication and coordination", () => {
         showOsNotification,
       }),
       selectSettings: async () => {
-        const settings = createBuiltinNotificationSettings();
+        const settings = createSpecPlanBuildNotificationSettings();
         settings.volumePercent = 0;
         settings.kinds["workflow.closed"] = { enabled: true, target: "both", sound: "inherit" };
         return settings;
@@ -481,7 +483,7 @@ describe("notification publication and coordination", () => {
     const onFailure = mock(() => {});
     const runtime = createNotificationRuntime({
       bridge: createBridge({ isAppFocused, withExternalDeliveryOwnership }),
-      selectSettings: async () => createBuiltinNotificationSettings(),
+      selectSettings: async () => createSpecPlanBuildNotificationSettings(),
       navigate: async () => {},
       onFailure,
       inApp: delivery.inApp,
@@ -511,13 +513,14 @@ describe("notification publication and coordination", () => {
           return { occurrence: item, settings };
         },
       }),
-      selectSettings: async () => createBuiltinNotificationSettings(),
+      selectSettings: async () => createSpecPlanBuildNotificationSettings(),
       navigate: async () => {},
       onFailure,
     });
     const item: NotificationOccurrence = {
       occurrenceId: `workflow.closed:${longPath}:task-1:event-1`,
       kind: "workflow.closed",
+      ...builtinNotificationPresentation("workflow.closed"),
       repoPath: longPath,
       repositoryLabel: "Repo",
       status: "Closed",
@@ -535,13 +538,14 @@ describe("notification publication and coordination", () => {
     const onFailure = mock(() => {});
     const runtime = createNotificationRuntime({
       bridge: createBridge(),
-      selectSettings: async () => createBuiltinNotificationSettings(),
+      selectSettings: async () => createSpecPlanBuildNotificationSettings(),
       navigate: async () => {},
       onFailure,
     });
     const item: NotificationOccurrence = {
       occurrenceId: "invalid-occurrence",
       kind: "workflow.closed",
+      ...builtinNotificationPresentation("workflow.closed"),
       repoPath: "",
       repositoryLabel: "Repo",
       status: "Closed",

@@ -75,7 +75,7 @@ const baseRepoConfig: SettingsRepoConfig = {
     },
   },
   hooks: {
-    postComplete: [],
+    beforeWorktreeRemoval: [],
   },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],

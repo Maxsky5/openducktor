@@ -9,6 +9,7 @@ import {
 } from "@openducktor/frontend-core/tasks/details/task-close-copy";
 import { TaskCleanupTargets, TaskReadError } from "./task-close-confirm-content";
 import { TaskDialogHeader } from "./task-dialog-header";
+import { focusDialogContent } from "@/lib/focus-dialog-content";
 import type { TaskRemoveWorktreeConfirmDialogModel } from "@openducktor/frontend-core/tasks/details/use-task-remove-worktree-confirm-dialog";
 
 /** Removes the worktree and the local task branch of a closed task. */
@@ -29,6 +30,7 @@ export function TaskRemoveWorktreeConfirmDialog({
         loading={isPreparing && !operation.isPending}
         loadingLabel="Loading worktree details…"
         className="max-w-lg overflow-hidden p-0"
+        onOpenAutoFocus={focusDialogContent}
       >
         <TaskDialogHeader
           title={COPY.title}
@@ -47,7 +49,9 @@ export function TaskRemoveWorktreeConfirmDialog({
             ))}
           </div>
           <TaskReadError read={impact} />
-          {operation.error ? <p className="text-destructive-muted">{operation.error}</p> : null}
+          {operation.error ? (
+            <p className="whitespace-pre-line text-destructive-muted">{operation.error}</p>
+          ) : null}
         </DialogBody>
 
         <DialogFooter className="mt-0 border-t border-border px-6 py-4">

@@ -9,7 +9,7 @@ import {
 } from "@openducktor/frontend-core/tasks/board/kanban-board-sessions";
 import type { TaskReadState } from "@openducktor/frontend-core/tasks/details/use-task-close-impact";
 import { useTaskRemoveWorktreeConfirmDialog } from "@openducktor/frontend-core/tasks/details/use-task-remove-worktree-confirm-dialog";
-import type { BuiltinTaskCard as TaskCard, TaskWorkflowAction } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard, type TaskWorkflowAction } from "@openducktor/workflows";
 import { useNavigation } from "expo-router";
 import { type ReactElement, useCallback, useMemo } from "react";
 import { TaskRemoveWorktreeConfirm } from "@/features/workflow/close/task-remove-worktree-confirm";
@@ -70,6 +70,12 @@ export function useTaskDetailsActions({
     TasksStateContext,
     "useTaskDetailsActions",
   );
+  // The worktree reads use the selected workspace, so they wait until it is this one.
+  const removeWorktree = useTaskRemoveWorktreeConfirmDialog({
+    task,
+    enabled: scopeReady,
+    run: removeTaskWorktree,
+  });
   const { runAction, confirm, confirmations } = useTaskActions({
     workspace,
     tasks,
@@ -97,13 +103,7 @@ export function useTaskDetailsActions({
     () => deriveActiveTaskSessionContextByTaskId(taskSessionsByTaskId).get(task.id),
     [taskSessionsByTaskId, task.id],
   );
-  // The worktree reads use the selected workspace, so they wait until it is this one.
-  const removeWorktree = useTaskRemoveWorktreeConfirmDialog({
-    task,
-    enabled: scopeReady,
-    run: removeTaskWorktree,
-  });
-  const canRemoveWorktree = removeWorktree.isAvailable;
+  const { isAvailable: canRemoveWorktree, openDialog: openRemoveWorktree } = removeWorktree;
   const actions = useMemo(
     () =>
       resolveTaskDetailsActions({
@@ -115,13 +115,11 @@ export function useTaskDetailsActions({
       }),
     [activeContext?.role, canRemoveWorktree, records, task, taskSessions],
   );
-  const openRemoveWorktree = removeWorktree.openDialog;
   const runDetailsAction = useCallback(
     (action: TaskWorkflowAction) => {
-      if (action === "remove_worktree") openRemoveWorktree();
-      else runAction(task, action, actions.sessionOptionsOf);
+      runAction(task, action, actions.sessionOptionsOf);
     },
-    [actions.sessionOptionsOf, openRemoveWorktree, runAction, task],
+    [actions.sessionOptionsOf, runAction, task],
   );
   const menuItems = useMemo(
     () => taskDetailsMenuItems({ actions, enabled: scopeReady, showUnlink, unlinking }),
@@ -141,9 +139,15 @@ export function useTaskDetailsActions({
         case "action":
           runDetailsAction(choice.action.action);
           return;
+        case "core":
+          confirm(task, choice.action.confirmation);
+          return;
+        case "remove_worktree":
+          openRemoveWorktree();
+          return;
       }
     },
-    [actions, confirm, runDetailsAction, task, unlinkPullRequest],
+    [actions, confirm, openRemoveWorktree, runDetailsAction, task, unlinkPullRequest],
   );
   const menu = useMemo(
     () => <TaskActionsMenu taskTitle={task.title} items={menuItems} onSelect={selectMenu} />,

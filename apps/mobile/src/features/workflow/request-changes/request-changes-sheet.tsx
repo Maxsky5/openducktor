@@ -1,79 +1,79 @@
+import type { HumanReviewFeedbackRequest } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
+import { HumanFeedbackSheet, useFeedbackSheetClose } from "./human-feedback-sheet";
+import type { TaskWorkflowContinuation } from "@openducktor/frontend-core/tasks/workflow/task-workflow-continuation";
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import {
-  HUMAN_REVIEW_FEEDBACK_COPY as COPY,
-  isHumanReviewFeedbackConfirmDisabled,
-} from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-state";
-import { usePreventRemove } from "expo-router";
 import type { ReactElement } from "react";
-import { View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
-import { Button } from "@/ui/button";
-import { useConfirmDiscard } from "@/ui/confirm-discard";
 import { EmptyState } from "@/ui/states";
-import { Text } from "@/ui/text";
-import { ActionForm } from "@/ui/action-form";
-import { FormBody, FormLead } from "@/ui/form-rows";
 import { RepoSettingsNotice } from "../start-session/repo-settings-notice";
 import { SessionStartSheet } from "../start-session/session-start-sheet";
 import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
-import { requestChangesRemove } from "./request-changes-remove";
-import { RequestChangesFeedbackField } from "./request-changes-feedback-field";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { useWorkflowSheetParams, WorkflowSheetFrame } from "../workflow-sheet-frame";
 
 const TITLE = "Request changes";
 
 /**
- * Request Changes: the feedback for the Builder, then the session start choices of the Builder
+ * The human feedback sheet: the feedback for the agent, then the session start choices of the
  * session that receives it.
  */
 export function RequestChangesRoute(): ReactElement {
-  const { workspaceId, taskId } = useWorkflowSheetParams();
+  const { workspaceId, taskId, mode, event, launch, continuation } = useWorkflowSheetParams();
+  const request = feedbackRequest(mode, event, launch, continuation);
   return (
     <WorkflowSheetFrame title={TITLE} workspaceId={workspaceId} taskId={taskId}>
-      {(workspace, id) => <RequestChangesContent workspace={workspace} taskId={id} />}
+      {(workspace, id) => (
+        <RequestChangesContent workspace={workspace} taskId={id} request={request} />
+      )}
     </WorkflowSheetFrame>
   );
 }
 
+/** The feedback request of the route params. A link without a valid mode has none. */
+const feedbackRequest = (
+  mode: string | null,
+  event: string | null,
+  launch: string | null,
+  continuation: TaskWorkflowContinuation | undefined,
+): HumanReviewFeedbackRequest | null => {
+  if (mode === "event" && event) return { kind: "event", eventId: event, continuation };
+  if (mode === "launch" && launch) return { kind: "launch", launchActionId: launch };
+  return null;
+};
+
 function RequestChangesContent({
   workspace,
   taskId,
+  request,
 }: {
   workspace: WorkspaceRecord;
   taskId: string;
+  request: HumanReviewFeedbackRequest | null;
 }): ReactElement {
   const { flow, navigation, tasks, settings, branchesFailure, backgroundAttemptId } =
     useTaskStartFlow(workspace);
-  const confirmDiscard = useConfirmDiscard();
   const task = tasks.find((entry) => entry.id === taskId) ?? null;
   const feedback = flow.humanReviewFeedbackModal;
   const start = flow.sessionStartModal;
+  // The feedback form is the first step of this sheet, so its Cancel closes the sheet.
+  const closeFeedback = useFeedbackSheetClose(
+    feedback,
+    start,
+    backgroundAttemptId !== null,
+    navigation.close,
+  );
   // The sheet closes when neither step is open: after a start that stays, or a cancel.
   useWorkflowSheetLifecycle({
     ready: task !== null,
     run: () => {
-      if (task) flow.onHumanRequestChanges(task.id);
+      if (!task) return;
+      if (!request) throw new Error("The feedback action is missing. Open the task action again.");
+      if (request.kind === "event")
+        flow.onHumanFeedback(task.id, request.eventId, request.continuation);
+      else flow.onLaunch(task.id, request.launchActionId);
     },
     anyOpen: feedback !== null || start?.open === true,
     close: navigation.close,
-  });
-
-  // Cancel, Android back, and the swipe gesture ask before they drop typed feedback.
-  const remove = requestChangesRemove(feedback, start, backgroundAttemptId !== null);
-  const hasUnsentFeedback = remove === "confirm_discard";
-  const discardFeedback = () => {
-    void confirmDiscard({
-      title: "Discard feedback?",
-      message: "Your feedback has not been sent.",
-    }).then((confirmed) => {
-      if (confirmed) feedback?.onOpenChange(false);
-    });
-  };
-  usePreventRemove(remove !== "leave", () => {
-    if (remove === "back_to_feedback") start?.onOpenChange(false);
-    else discardFeedback();
   });
 
   if (!task) {
@@ -106,55 +106,5 @@ function RequestChangesContent({
   if (!feedback) {
     return <GroupedSheet title={TITLE} />;
   }
-  const submitBlocked = isHumanReviewFeedbackConfirmDisabled(feedback);
-  return (
-    <GroupedSheet
-      title={COPY.title}
-      onClose={hasUnsentFeedback ? discardFeedback : () => feedback.onOpenChange(false)}
-      closable={!feedback.isSubmitting}
-    >
-      <ActionForm
-        note={
-          submitBlocked && !feedback.isSubmitting ? "Write your feedback to request changes." : null
-        }
-        primary={
-          <Button
-            label={COPY.confirmLabel}
-            size="lg"
-            loading={feedback.isSubmitting}
-            icon="message-square-warning"
-            disabled={submitBlocked}
-            onPress={() => void feedback.onConfirm()}
-            fill
-          />
-        }
-      >
-        <FormBody>
-          <RepoSettingsNotice
-            error={settings.error}
-            refreshError={settings.refreshError}
-            onRetry={settings.retry}
-          />
-          <View style={styles.lead}>
-            <FormLead text={COPY.description} />
-            <Text variant="footnote" tone="secondary" numberOfLines={2}>
-              <Text variant="monoSmall" tone="secondary">
-                {task.id}
-              </Text>
-              {`  ${task.title}`}
-            </Text>
-          </View>
-          <RequestChangesFeedbackField
-            value={feedback.message}
-            onChangeText={feedback.onMessageChange}
-            editable={!feedback.isSubmitting}
-          />
-        </FormBody>
-      </ActionForm>
-    </GroupedSheet>
-  );
+  return <HumanFeedbackSheet task={task} feedback={feedback} onClose={closeFeedback} />;
 }
-
-const styles = StyleSheet.create((theme) => ({
-  lead: { gap: theme.space.sm },
-}));

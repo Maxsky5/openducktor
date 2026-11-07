@@ -38,6 +38,7 @@ import type {
 import type { AgentChatTranscriptPresentation } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript.types";
 
 export type AgentChatThreadModel = {
+  workflowTask?: import("@openducktor/workflows").ResolvedTaskCard | null;
   forkActions?: AgentChatForkActions | null;
   forkDialog?: ReactNode;
   modelCatalog: AgentModelCatalog | null;

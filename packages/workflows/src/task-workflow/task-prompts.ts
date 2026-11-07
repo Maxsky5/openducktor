@@ -1,33 +1,57 @@
 import {
   isOdtBrowserToolName,
+  PULL_REQUEST_LAUNCH_ID,
+  promptOverrideKey,
+  ROLE_INSTRUCTIONS_PROMPT_ID,
   validatePromptTemplatePlaceholders,
+  WORKFLOW_MESSAGE_PROMPT_PREFIX,
+  WORKFLOW_PROMPT_IDS,
   type AgentPromptPlaceholder,
+  type AgentToolName,
+  type CompiledAgentRoleDefinition,
   type CompiledWorkflowDefinition,
   type GitTargetBranch,
   type RepoPromptOverrides,
 } from "@openducktor/contracts";
 import { formatOdtToolArgs } from "./prompt-tool-args";
+import { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./pull-request-launch";
 
 export type PromptPurpose = "system" | "kickoff" | "message" | "permission";
 
+/** A prompt that a workflow declares. Its ID is unique within the workflow. */
 export type PromptTemplate = {
   id: string;
+  label?: string;
+  description?: string;
+  roleIds?: string[];
   purpose: PromptPurpose;
   builtinVersion: number;
   template: string;
   /** An override must keep each of these placeholders. */
-  requiredPlaceholders?: AgentPromptPlaceholder[];
+  requiredPlaceholders?: AgentPromptPlaceholder[] | undefined;
 };
 
-/** The shared system templates, in prompt order after the role template. */
-const SHARED_SYSTEM_TEMPLATE_IDS = [
-  "system.shared.workflow_guards",
-  "system.shared.tool_protocol",
-  "system.shared.task_context",
-] as const;
-const READ_ONLY_REJECTION_TEMPLATE_ID = "permission.read_only.reject";
-/** The system template of a role. */
-const roleSystemTemplateId = (roleId: string): string => `system.role.${roleId}.base`;
+/** A prompt with the settings key of its owner: a role or the workflow. */
+export type OwnedPromptTemplate = PromptTemplate & {
+  readonly key: string;
+  readonly ownerKind: "role" | "workflow";
+};
+
+/** An event that agents of a role may send with `odt_apply_workflow_event`. */
+export type TaskWorkflowAgentEvent = {
+  readonly id: string;
+  readonly description: string;
+  readonly note: "required" | "optional";
+};
+
+/** The role facts that prompts read. The system template comes from the role catalog. */
+type PromptRole = {
+  readonly id: string;
+  readonly tools: readonly AgentToolName[];
+  readonly writes: readonly string[];
+  readonly systemPrompt: CompiledAgentRoleDefinition["systemPrompt"];
+  readonly agentEvents: readonly TaskWorkflowAgentEvent[];
+};
 
 export type PromptTaskContext = {
   taskId: string;
@@ -46,7 +70,7 @@ export type AgentPromptGitContext = {
 };
 
 export type ResolvedAgentPromptTemplate = {
-  id: string;
+  key: string;
   purpose: PromptPurpose;
   source: "builtin" | "override";
   builtinVersion: number;
@@ -57,7 +81,7 @@ export type ResolvedAgentPromptTemplate = {
 
 export type AgentPromptWarning = {
   type: "override_base_version_mismatch";
-  templateId: string;
+  key: string;
   builtinVersion: number;
   overrideBaseVersion: number;
 };
@@ -76,6 +100,8 @@ export type SystemPromptInput = {
 
 export type KickoffPromptInput = {
   launchActionId: string;
+  /** The role of the session. The core pull request launch needs it. */
+  role?: string | undefined;
   task: PromptTaskContext;
   humanFeedback?: string | undefined;
   targetBranch?: GitTargetBranch | undefined;
@@ -84,8 +110,12 @@ export type KickoffPromptInput = {
 
 export type MessagePromptInput = {
   launchActionId: string;
+  /** The role of the session. The core pull request launch needs it. */
+  role?: string | undefined;
   task: PromptTaskContext;
-  git: AgentPromptGitContext;
+  git?: AgentPromptGitContext | undefined;
+  humanFeedback?: string | undefined;
+  targetBranch?: GitTargetBranch | undefined;
   overrides?: RepoPromptOverrides | undefined;
 };
 
@@ -94,10 +124,11 @@ export type MergePromptOverridesInput = {
   repoOverrides?: RepoPromptOverrides | undefined;
 };
 
-/** The prompt templates of a task workflow and the prompts that they build. */
+/** The prompts of a task workflow and of its roles, and the prompts that they build. */
 export type TaskPrompts = {
-  readonly templates: readonly PromptTemplate[];
-  template(id: string): PromptTemplate;
+  readonly templates: readonly OwnedPromptTemplate[];
+  /** The roles that use a workflow prompt. No role marks shared prompt information. */
+  templateRoles(id: string): readonly string[];
   systemPrompt(input: SystemPromptInput): BuiltAgentPrompt;
   kickoffPrompt(input: KickoffPromptInput): BuiltAgentPrompt;
   messagePrompt(input: MessagePromptInput): BuiltAgentPrompt;
@@ -111,7 +142,21 @@ export type TaskPrompts = {
   findOverrideProblem(overrides: RepoPromptOverrides | undefined): string | undefined;
 };
 
-type LaunchTemplate = { templateId: string; kind: "kickoff" | "message"; context?: string };
+type LaunchTemplate = { templateId: string; kind: "kickoff" | "message" };
+
+/** How an error message names a prompt. */
+const promptName = (template: OwnedPromptTemplate, roleIds: readonly string[]): string =>
+  template.ownerKind === "role"
+    ? `prompt "${roleIds[0]}.${template.id}"`
+    : `prompt "${template.id}"`;
+
+/** The workflow prompts of the system prompt, after the role instructions. */
+const SYSTEM_PROMPT_IDS = [
+  WORKFLOW_PROMPT_IDS.rules,
+  WORKFLOW_PROMPT_IDS.toolRules,
+  WORKFLOW_PROMPT_IDS.taskContext,
+];
+const BASE_PROMPT_IDS = new Set<string>(Object.values(WORKFLOW_PROMPT_IDS));
 
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
 const OVERRIDE_FIX = "Edit or disable this prompt override in Settings.";
@@ -147,29 +192,32 @@ export const requirePullRequestTarget = (
 
 type PlaceholderValidation = ReturnType<typeof validatePromptTemplatePlaceholders>;
 
-/** The first unsupported or missing placeholder of a template, as an error message. */
+/** The first unsupported or missing placeholder of a prompt, as an error message. */
 const placeholderProblem = (
-  templateId: string,
+  name: string,
   { unsupportedPlaceholders, missingRequiredPlaceholders }: PlaceholderValidation,
 ): string | undefined => {
   const unsupported = unsupportedPlaceholders[0];
   if (unsupported !== undefined) {
-    return `Prompt template "${templateId}" uses unsupported placeholder "${unsupported}".`;
+    return `The ${name} uses unsupported placeholder "${unsupported}".`;
   }
   const missing = missingRequiredPlaceholders[0];
   return missing === undefined
     ? undefined
-    : `Prompt template "${templateId}" is missing required placeholder "${missing}".`;
+    : `The ${name} is missing required placeholder "${missing}".`;
 };
 
-/** Checks that the templates cover the roles and launch actions of the definition. */
+/**
+ * Checks that the workflow provides each base prompt and the prompt of each launch action, with
+ * the core pull request launch. Every other prompt ID is in the messages group.
+ */
 const checkTemplates = (
   definition: CompiledWorkflowDefinition,
-  templatesById: ReadonlyMap<string, PromptTemplate>,
+  workflowTemplatesById: ReadonlyMap<string, OwnedPromptTemplate>,
   launchTemplates: ReadonlyMap<string, LaunchTemplate>,
 ): void => {
   const requireTemplate = (id: string, purpose: PromptPurpose, user: string) => {
-    const template = templatesById.get(id);
+    const template = workflowTemplatesById.get(id);
     if (!template) {
       throw new Error(
         `Task workflow "${definition.id}" has no prompt template "${id}" for ${user}.`,
@@ -180,17 +228,14 @@ const checkTemplates = (
         `Prompt template "${id}" of task workflow "${definition.id}" is a ${template.purpose} template. ${user} needs a ${purpose} template.`,
       );
     }
-    const problem = placeholderProblem(
-      id,
-      validatePromptTemplatePlaceholders(template.template, template.requiredPlaceholders),
-    );
-    if (problem !== undefined) throw new Error(problem);
   };
-  for (const id of SHARED_SYSTEM_TEMPLATE_IDS) requireTemplate(id, "system", "the system prompt");
-  requireTemplate(READ_ONLY_REJECTION_TEMPLATE_ID, "permission", "read-only rejections");
-  for (const role of definition.roles) {
-    requireTemplate(roleSystemTemplateId(role.id), "system", `role "${role.id}"`);
-  }
+  for (const id of SYSTEM_PROMPT_IDS) requireTemplate(id, "system", "the system prompt");
+  requireTemplate(WORKFLOW_PROMPT_IDS.readOnlyRejection, "permission", "read-only rejections");
+  for (const id of workflowTemplatesById.keys())
+    if (!BASE_PROMPT_IDS.has(id) && !id.startsWith(WORKFLOW_MESSAGE_PROMPT_PREFIX))
+      throw new Error(
+        `Prompt "${id}" of task workflow "${definition.id}" is neither a base workflow prompt nor in the "${WORKFLOW_MESSAGE_PROMPT_PREFIX}" group. Rename it.`,
+      );
   for (const [launchActionId, launch] of launchTemplates) {
     requireTemplate(launch.templateId, launch.kind, `launch action "${launchActionId}"`);
   }
@@ -198,37 +243,99 @@ const checkTemplates = (
 
 export const createTaskPrompts = (
   definition: CompiledWorkflowDefinition,
-  templates: readonly PromptTemplate[],
+  workflowTemplates: readonly PromptTemplate[],
+  roles: readonly PromptRole[],
 ): TaskPrompts => {
-  const templatesById = new Map<string, PromptTemplate>();
-  for (const template of templates) {
-    if (templatesById.has(template.id)) {
+  const workflowKey = (promptId: string) =>
+    promptOverrideKey({ ownerKind: "workflow", ownerId: definition.id, promptId });
+  const roleKey = (roleId: string) =>
+    promptOverrideKey({
+      ownerKind: "role",
+      ownerId: roleId,
+      promptId: ROLE_INSTRUCTIONS_PROMPT_ID,
+    });
+  const workflowTemplatesById = new Map<string, OwnedPromptTemplate>();
+  for (const template of workflowTemplates) {
+    if (workflowTemplatesById.has(template.id)) {
       throw new Error(
         `Task workflow "${definition.id}" has two prompt templates "${template.id}". Keep one.`,
       );
     }
-    templatesById.set(template.id, template);
+    workflowTemplatesById.set(template.id, {
+      ...template,
+      key: workflowKey(template.id),
+      ownerKind: "workflow",
+    });
   }
-  const rolesById = new Map(definition.roles.map((role) => [role.id, role]));
-  const launchTemplates = new Map<string, LaunchTemplate>(
-    definition.steps.flatMap((step) =>
+  const roleTemplates = roles.map(({ id, systemPrompt }): OwnedPromptTemplate => ({
+    ...systemPrompt,
+    id: ROLE_INSTRUCTIONS_PROMPT_ID,
+    key: roleKey(id),
+    ownerKind: "role",
+    purpose: "system",
+    roleIds: [id],
+    requiredPlaceholders: systemPrompt.requiredPlaceholders
+      ? [...systemPrompt.requiredPlaceholders]
+      : undefined,
+  }));
+  const templates = [...workflowTemplatesById.values(), ...roleTemplates];
+  const templatesByKey = new Map(templates.map((template) => [template.key, template]));
+  const rolesById = new Map(roles.map((role) => [role.id, role]));
+  const launchTemplates = new Map<string, LaunchTemplate>([
+    ...definition.steps.flatMap((step) =>
       step.kind === "agent"
-        ? step.launchActions.map((launch) => {
-            const entry: LaunchTemplate = {
-              templateId: launch.template.id,
-              kind: launch.template.kind,
-            };
-            if (launch.context !== undefined) entry.context = launch.context;
-            return [launch.id, entry] as const;
-          })
+        ? step.launchActions.map(
+            (launch) =>
+              [launch.id, { templateId: launch.template.id, kind: launch.template.kind }] as const,
+          )
         : [],
     ),
+    [
+      PULL_REQUEST_LAUNCH_ID,
+      { templateId: PULL_REQUEST_LAUNCH.template.id, kind: PULL_REQUEST_LAUNCH.template.kind },
+    ],
+  ]);
+  const createsPullRequest = (roleId: string) =>
+    rolesById.has(roleId) &&
+    (definition.pullRequestRoles.length === 0 || definition.pullRequestRoles.includes(roleId));
+  checkTemplates(definition, workflowTemplatesById, launchTemplates);
+  const templateRolesByKey = new Map(
+    templates.map((entry) => {
+      const templateRoles =
+        entry.roleIds ??
+        roles
+          .filter((role) =>
+            entry.ownerKind === "workflow" && entry.id === WORKFLOW_PROMPT_IDS.pullRequest
+              ? createsPullRequest(role.id)
+              : definition.steps.some(
+                  (step) =>
+                    step.kind === "agent" &&
+                    step.roleId === role.id &&
+                    step.launchActions.some((launch) => launch.template.id === entry.id),
+                ),
+          )
+          .map(({ id }) => id);
+      for (const role of templateRoles)
+        if (!rolesById.has(role))
+          throw new Error(
+            `Prompt template "${entry.id}" names unknown role "${role}" in task workflow "${definition.id}". Fix its roleIds.`,
+          );
+      return [entry.key, templateRoles] as const;
+    }),
   );
-  checkTemplates(definition, templatesById, launchTemplates);
+  const nameOf = (entry: OwnedPromptTemplate) =>
+    promptName(entry, templateRolesByKey.get(entry.key)!);
+  for (const entry of templates) {
+    const problem = placeholderProblem(
+      nameOf(entry),
+      validatePromptTemplatePlaceholders(entry.template, entry.requiredPlaceholders),
+    );
+    if (problem !== undefined) throw new Error(problem);
+  }
 
-  const template = (id: string): PromptTemplate => {
-    const found = templatesById.get(id);
-    if (!found) throw new Error(`Task workflow "${definition.id}" has no prompt template "${id}".`);
+  const template = (key: string): OwnedPromptTemplate => {
+    const found = templatesByKey.get(key);
+    if (!found) throw new Error(`Task workflow "${definition.id}" has no prompt "${key}".`);
     return found;
   };
   const launchTemplate = (launchActionId: string, kind: LaunchTemplate["kind"]) => {
@@ -242,6 +349,11 @@ export const createTaskPrompts = (
     return launch;
   };
 
+  const systemTemplateOf = (roleId: string): string => {
+    if (!rolesById.has(roleId))
+      throw new Error(`Task workflow "${definition.id}" has no role "${roleId}".`);
+    return roleKey(roleId);
+  };
   const toolList = (roleId: string): string => {
     const role = rolesById.get(roleId);
     if (!role) throw new Error(`Task workflow "${definition.id}" has no role "${roleId}".`);
@@ -251,6 +363,11 @@ export const createTaskPrompts = (
     lines.push(
       `- Allowed workflow codes for odt_set_task_artifact: ${role.writes.join(", ")}. Free-artifact writes are also allowed.`,
     );
+    if (role.agentEvents.length > 0) {
+      lines.push("- Workflow events for odt_apply_workflow_event:");
+      for (const { id, description, note } of role.agentEvents)
+        lines.push(`  - ${id}${note === "required" ? " (note required)" : ""}: ${description}`);
+    }
     // The MCP definitions of the browser tools describe their input, so the prompt only names them.
     const browserTools = role.tools.filter(isOdtBrowserToolName);
     if (browserTools.length > 0) lines.push(`- Browser tools: ${browserTools.join(", ")}`);
@@ -262,7 +379,7 @@ export const createTaskPrompts = (
     task: PromptTaskContext;
     humanFeedback?: string | undefined;
     pullRequestTarget?: string | undefined;
-    git?: AgentPromptGitContext;
+    git?: AgentPromptGitContext | undefined;
   }) => {
     const { role, task, git, pullRequestTarget } = input;
     const humanFeedback = input.humanFeedback?.trim();
@@ -290,28 +407,27 @@ export const createTaskPrompts = (
   };
 
   const resolveTemplate = (
-    templateId: string,
+    key: string,
     values: ReadonlyMap<string, string>,
     overrides: RepoPromptOverrides | undefined,
   ): ResolvedAgentPromptTemplate => {
-    const definitionTemplate = template(templateId);
-    const overrideEntry = overrides?.[templateId];
+    const definitionTemplate = template(key);
+    const name = nameOf(definitionTemplate);
+    const overrideEntry = overrides?.[key];
     const override = overrideEntry && overrideEntry.enabled !== false ? overrideEntry : undefined;
     const text = (override?.template ?? definitionTemplate.template).trim();
     const validation = validatePromptTemplatePlaceholders(
       text,
       definitionTemplate.requiredPlaceholders,
     );
-    const problem = placeholderProblem(templateId, validation);
+    const problem = placeholderProblem(name, validation);
     if (problem !== undefined) throw new Error(override ? `${problem} ${OVERRIDE_FIX}` : problem);
     const missingValue = validation.placeholders.find((token) => !values.has(token));
     if (missingValue !== undefined) {
-      throw new Error(
-        `Prompt template "${templateId}" is missing placeholder value "${missingValue}".`,
-      );
+      throw new Error(`The ${name} is missing placeholder value "${missingValue}".`);
     }
     const resolved: ResolvedAgentPromptTemplate = {
-      id: definitionTemplate.id,
+      key,
       purpose: definitionTemplate.purpose,
       source: override ? "override" : "builtin",
       builtinVersion: definitionTemplate.builtinVersion,
@@ -328,13 +444,11 @@ export const createTaskPrompts = (
   };
 
   const buildPrompt = (
-    templateIds: readonly string[],
+    keys: readonly string[],
     values: ReadonlyMap<string, string>,
     overrides: RepoPromptOverrides | undefined,
   ): BuiltAgentPrompt => {
-    const resolved = templateIds.map((templateId) =>
-      resolveTemplate(templateId, values, overrides),
-    );
+    const resolved = keys.map((key) => resolveTemplate(key, values, overrides));
     return {
       prompt: resolved
         .map((entry) => entry.content.trim())
@@ -346,7 +460,7 @@ export const createTaskPrompts = (
           ? [
               {
                 type: "override_base_version_mismatch",
-                templateId: entry.id,
+                key: entry.key,
                 builtinVersion: entry.builtinVersion,
                 overrideBaseVersion: entry.overrideBaseVersion,
               },
@@ -363,7 +477,14 @@ export const createTaskPrompts = (
         : [],
     ),
   );
-  const roleOfLaunch = (launchActionId: string): string => {
+  const roleOfLaunch = (launchActionId: string, sessionRole: string | undefined): string => {
+    if (isPullRequestLaunch(launchActionId)) {
+      if (sessionRole === undefined || !createsPullRequest(sessionRole))
+        throw new Error(
+          `The pull request prompt of task workflow "${definition.id}" needs a session of a pull request role.`,
+        );
+      return sessionRole;
+    }
     const role = launchRole.get(launchActionId);
     if (role === undefined) {
       throw new Error(`Task workflow "${definition.id}" has no launch action "${launchActionId}".`);
@@ -373,23 +494,22 @@ export const createTaskPrompts = (
 
   return {
     templates,
-    template,
+    templateRoles: (id) => templateRolesByKey.get(template(workflowKey(id)).key)!,
     systemPrompt: ({ role, task, overrides }) =>
       buildPrompt(
-        [roleSystemTemplateId(role), ...SHARED_SYSTEM_TEMPLATE_IDS],
+        [systemTemplateOf(role), ...SYSTEM_PROMPT_IDS.map(workflowKey)],
         placeholderValues({ role, task }),
         overrides,
       ),
-    kickoffPrompt: ({ launchActionId, task, humanFeedback, targetBranch, overrides }) => {
+    kickoffPrompt: ({ launchActionId, role, task, humanFeedback, targetBranch, overrides }) => {
       const launch = launchTemplate(launchActionId, "kickoff");
-      const pullRequestTarget =
-        launch.context === "pull_request"
-          ? requirePullRequestTarget(launch.templateId, targetBranch)
-          : undefined;
+      const pullRequestTarget = isPullRequestLaunch(launchActionId)
+        ? requirePullRequestTarget(launch.templateId, targetBranch)
+        : undefined;
       return buildPrompt(
-        [launch.templateId],
+        [workflowKey(launch.templateId)],
         placeholderValues({
-          role: roleOfLaunch(launchActionId),
+          role: roleOfLaunch(launchActionId, role),
           task,
           humanFeedback,
           pullRequestTarget,
@@ -397,43 +517,59 @@ export const createTaskPrompts = (
         overrides,
       );
     },
-    messagePrompt: ({ launchActionId, task, git, overrides }) => {
+    messagePrompt: ({
+      launchActionId,
+      role,
+      task,
+      git,
+      humanFeedback,
+      targetBranch,
+      overrides,
+    }) => {
       const launch = launchTemplate(launchActionId, "message");
-      if (!git.operationLabel?.trim()) {
+      if (git && !git.operationLabel?.trim()) {
         throw new Error(
           `Missing required git conflict context for "${launch.templateId}": operationLabel.`,
         );
       }
       return buildPrompt(
-        [launch.templateId],
-        placeholderValues({ role: roleOfLaunch(launchActionId), task, git }),
+        [workflowKey(launch.templateId)],
+        placeholderValues({
+          role: roleOfLaunch(launchActionId, role),
+          task,
+          git,
+          humanFeedback,
+          pullRequestTarget: isPullRequestLaunch(launchActionId)
+            ? requirePullRequestTarget(launch.templateId, targetBranch)
+            : undefined,
+        }),
         overrides,
       );
     },
     readOnlyRejection: ({ role, overrides }) =>
       buildPrompt(
-        [READ_ONLY_REJECTION_TEMPLATE_ID],
+        [workflowKey(WORKFLOW_PROMPT_IDS.readOnlyRejection)],
         placeholderValues({ role, task: { taskId: "permission-policy" } }),
         overrides,
       ).prompt,
     mergeOverrides: ({ globalOverrides, repoOverrides }) =>
       Object.fromEntries(
-        templates.flatMap(({ id }) => {
-          const repoOverride = repoOverrides?.[id];
-          if (repoOverride && repoOverride.enabled !== false) return [[id, repoOverride] as const];
-          const globalOverride = globalOverrides?.[id];
+        templates.flatMap(({ key }) => {
+          const repoOverride = repoOverrides?.[key];
+          if (repoOverride && repoOverride.enabled !== false) return [[key, repoOverride] as const];
+          const globalOverride = globalOverrides?.[key];
           return globalOverride && globalOverride.enabled !== false
-            ? [[id, globalOverride] as const]
+            ? [[key, globalOverride] as const]
             : [];
         }),
       ),
     findOverrideProblem: (overrides) => {
-      for (const { id, requiredPlaceholders } of templates) {
-        const override = overrides?.[id];
+      for (const entry of templates) {
+        const override = overrides?.[entry.key];
         if (!override || override.enabled === false) continue;
         const problem = placeholderProblem(
-          id,
-          validatePromptTemplatePlaceholders(override.template.trim(), requiredPlaceholders),
+          nameOf(entry),
+          validatePromptTemplatePlaceholders(override.template.trim(), entry.requiredPlaceholders),
         );
         if (problem !== undefined) return `${problem} ${OVERRIDE_FIX}`;
       }

@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import type { TaskCard, TaskEventStreamFrame } from "@openducktor/contracts";
-import { QueryClient } from "@tanstack/react-query";
+import { createTestClientConnection } from "../../frontend-core/src/test-support/test-client-connection";
 import { Deferred, Effect, Fiber } from "effect";
 import { createSqliteTaskStoreHarness } from "../../host/src/adapters/sqlite/sqlite-task-store-test-support";
 import { createEventPublishingTaskService } from "../../host/src/application/tasks/event-publishing-task-service";
@@ -20,7 +20,8 @@ test.each(["returned", "interrupted"] as const)(
   "%s committed creates update cached board cards and IDs from one task event",
   async (outcome) => {
     const harness = await createSqliteTaskStoreHarness();
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
     const epoch = "11111111-1111-4111-8111-111111111111";
     const frames: TaskEventStreamFrame[] = [];
     const failures: unknown[] = [];
@@ -68,7 +69,6 @@ test.each(["returned", "interrupted"] as const)(
       });
       const committed = Deferred.makeUnsafe<TaskCard>();
       const service = createEventPublishingTaskService({
-        taskWorkflows: builtinTaskWorkflows,
         taskService:
           outcome === "interrupted"
             ? {
@@ -120,7 +120,7 @@ test.each(["returned", "interrupted"] as const)(
 
       expect(
         queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData(scope))?.tasks,
-      ).toEqual([created]);
+      ).toMatchObject([created]);
       expect(queryClient.getQueryData<string[]>(taskQueryKeys.ids(scope))).toEqual([created.id]);
       expect(frame.event).toMatchObject({
         kind: "external_task_created",
@@ -133,7 +133,7 @@ test.each(["returned", "interrupted"] as const)(
       expect(failures).toEqual([]);
     } finally {
       subscription.unsubscribe();
-      queryClient.clear();
+      await connection.dispose();
       await harness.cleanup();
     }
   },

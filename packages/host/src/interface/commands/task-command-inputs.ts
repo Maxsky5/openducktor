@@ -8,7 +8,6 @@ import {
   taskCreateInputSchema,
   taskDirectMergeInputSchema,
   taskCloseInputSchema,
-  taskStatusSchema,
   type TaskStopImpactRequest,
   taskStopImpactRequestSchema,
   taskUpdatePatchSchema,
@@ -18,9 +17,6 @@ import {
 import { z } from "zod";
 import type {
   AgentSessionDeleteInput,
-  BuildBlockedInput,
-  BuildCompletedInput,
-  BuildStartInput,
   CloseTaskInput,
   CreateTaskUseCaseInput,
   DeleteTaskInput,
@@ -28,12 +24,10 @@ import type {
   ListAgentSessionsForTasksInput,
   WorkflowArtifactInput,
   WorkflowArtifactSaveInput,
-  OptionalNoteInput,
   PullRequestLinkMergedInput,
   PullRequestUpsertInput,
   RepoPathInput,
   TaskIdInput,
-  TransitionTaskInput,
   ApplyTaskEventInput,
   UpdateTaskInput,
 } from "../../application/tasks/task-inputs";
@@ -43,13 +37,11 @@ import {
   parseAgentSessionIdentity,
   parseCreateInput,
   parseDescriptionAssets,
-  parseOptionalNote,
   parsePullRequest,
   parsePullRequestContent,
   parseRequiredBoolean,
   parseRequiredMarkdown,
   parseTaskDirectMergeInput,
-  parseTransitionStatus,
   parseUpdatePatch,
   requireString,
 } from "./task-command-parsing";
@@ -63,7 +55,6 @@ import {
 } from "./command-inputs";
 
 const requiredBooleanSchema = z.boolean();
-const optionalStringSchema = z.union([z.string(), z.null(), z.undefined()]);
 const taskIdsSchema = z.array(z.unknown());
 
 const optionalDescriptionAssetsSchema = taskAssetDescriptionMutationSchema.optional();
@@ -259,19 +250,6 @@ export const parseUpdateTaskInput = (input: HostCommandArgs): UpdateTaskInput =>
   return result;
 };
 
-export const parseTransitionTaskInput = (input: HostCommandArgs): TransitionTaskInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "task_transition input",
-  );
-  return {
-    workspaceId: readRequiredString(record, "workspaceId"),
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    status: parseTransitionStatus(taskStatusSchema.safeParse(record.status)),
-  };
-};
-
 export const parseApplyTaskEventInput = (input: HostCommandArgs): ApplyTaskEventInput => {
   const record = requireParsedRecord(
     commandInputRecordSchema.safeParse(input),
@@ -325,85 +303,6 @@ export const parseWorkflowArtifactSaveInput = (
   };
   if (record.verdict !== undefined) parsed.verdict = readRequiredString(record, "verdict");
   return parsed;
-};
-
-export const parseBuildStartInput = (input: HostCommandArgs): BuildStartInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "build_start input",
-  );
-  return {
-    workspaceId: readRequiredString(record, "workspaceId"),
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    runtimeKind: readRequiredString(record, "runtimeKind"),
-  };
-};
-
-export const parseBuildBlockedInput = (input: HostCommandArgs): BuildBlockedInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "build_blocked input",
-  );
-  const parsedReason = commandInputStringSchema.safeParse(record.reason);
-  const reason = parsedReason.success ? parsedReason.data.trim() : "";
-  if (!reason) {
-    throw new HostValidationError({
-      message: "build_blocked requires a non-empty reason",
-      field: "reason",
-    });
-  }
-  return {
-    workspaceId: readRequiredString(record, "workspaceId"),
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    reason,
-  };
-};
-
-export const parseBuildCompletedInput = (input: HostCommandArgs): BuildCompletedInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "build_completed input",
-  );
-  const inputRecord =
-    record.input === undefined || record.input === null
-      ? undefined
-      : requireParsedRecord(
-          commandInputRecordSchema.safeParse(record.input),
-          "build_completed input.input",
-        );
-  const summary = parseOptionalNote(
-    optionalStringSchema.safeParse(inputRecord?.summary),
-    "build_completed summary",
-  );
-  const result: BuildCompletedInput = {
-    workspaceId: readRequiredString(record, "workspaceId"),
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-  };
-  if (summary !== undefined) {
-    result.summary = summary;
-  }
-  return result;
-};
-
-export const parseOptionalNoteInput = (
-  input: HostCommandArgs,
-  label: string,
-  noteLabel: string,
-): OptionalNoteInput => {
-  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
-  const note = parseOptionalNote(optionalStringSchema.safeParse(record.note), noteLabel);
-  const result: OptionalNoteInput = {
-    workspaceId: readRequiredString(record, "workspaceId"),
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-  };
-  if (note !== undefined) {
-    result.note = note;
-  }
-  return result;
 };
 
 export const parseDirectMergeCompleteInput = (input: HostCommandArgs) => {

@@ -1,3 +1,5 @@
+import type { WorkflowTone } from "@openducktor/contracts";
+import { laneColors } from "./lane-colors";
 import type { KanbanColumnId } from "@openducktor/workflows";
 import type { ReactElement, ReactNode } from "react";
 import { View } from "react-native";
@@ -44,7 +46,7 @@ export function BoardSkeleton({
         onSelect={onSelectColumn}
         trailing={toolbar}
       />
-      <View style={[styles.root, shown ? styles.wash(shown.id) : null]}>
+      <View style={[styles.root, shown ? styles.wash(shown.tone) : null]}>
         <SkeletonFrame label="Loading tasks">
           <BoardColumnPlaceholder />
         </SkeletonFrame>
@@ -56,5 +58,5 @@ export function BoardSkeleton({
 const styles = StyleSheet.create((theme) => ({
   root: { flex: 1 },
   // The lane color behind the cards, as the pager paints the shown lane.
-  wash: (id: KanbanColumnId) => ({ backgroundColor: theme.lanes[id].wash }),
+  wash: (tone: WorkflowTone) => ({ backgroundColor: laneColors(theme, tone).wash }),
 }));

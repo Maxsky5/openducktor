@@ -17,9 +17,13 @@ import { InlineStartup } from "./inline-session-startup";
 async function setup({
   holdPreparedPublication = false,
   steps = [],
+  role = "build",
+  roleLabel = "Builder",
 }: {
   holdPreparedPublication?: boolean;
   steps?: StartupOperationSnapshot["steps"];
+  role?: string;
+  roleLabel?: string;
 } = {}) {
   const connection = createTestClientConnection({ scheduleTask: () => () => {} });
   const runtimeSession: AgentSessionControlSummary = {
@@ -34,11 +38,12 @@ async function setup({
   const origin = {
     workspaceId: "workspace",
     repoPath: "/repo",
-    scope: { kind: "task" as const, taskId: "task", role: "build" },
+    scope: { kind: "task" as const, taskId: "task", role },
   };
   const id = connection.startupAttempts.begin({
     origin,
-    label: "Start Builder session",
+    label: `Start ${roleLabel} session`,
+    roleLabel,
     presentation: "inline",
   });
   await observeStartupPreparation(connection.queryClient, origin.repoPath, id);
@@ -54,7 +59,7 @@ async function setup({
             runtimeSession,
             record: {
               ...runtimeSession,
-              role: "build",
+              role,
               selectedModel: null,
             },
           },
@@ -78,7 +83,7 @@ async function setup({
               })}
             >
               <WorkspacePreviewTransitionGuardProvider>
-                <InlineStartup repoPath="/repo" taskId="task" role="build" />
+                <InlineStartup repoPath="/repo" taskId="task" role={role} />
               </WorkspacePreviewTransitionGuardProvider>
             </WorkspaceStateContext>
           </QueryProvider>
@@ -125,52 +130,63 @@ test("removes inline startup only after the native session and completed launch 
   }
 });
 
-test("retains a compact inspectable trace when a prepared session has an asynchronous action failure", async () => {
-  const h = await setup({
-    steps: [
-      {
-        id: "checkout",
-        label: "Create worktree",
-        state: "completed",
-        details: [],
-        resources: [{ kind: "worktree", value: "/repo/worktree", state: "created" }],
-      },
-      {
-        id: "setup",
-        label: "Run setup",
-        state: "completed",
-        details: [],
-        action: {
-          actionId: "setup",
-          command: "bun install",
-          waitBeforeAgentStart: false,
-          result: {
-            type: "exited",
-            exitCode: 0,
-            signal: "SIGTERM",
-            outputTail: ["Setup stopped."],
+test.each([
+  ["build", "Builder"],
+  ["author", "Writer"],
+] as const)(
+  "retains an inspectable %s trace when a prepared session has an asynchronous action failure",
+  async (role, roleLabel) => {
+    const h = await setup({
+      role,
+      roleLabel,
+      steps: [
+        {
+          id: "checkout",
+          label: "Create worktree",
+          state: "completed",
+          details: [],
+          resources: [{ kind: "worktree", value: "/repo/worktree", state: "created" }],
+        },
+        {
+          id: "setup",
+          label: "Run setup",
+          state: "completed",
+          details: [],
+          action: {
+            actionId: "setup",
+            command: "bun install",
+            waitBeforeAgentStart: false,
+            result: {
+              type: "exited",
+              exitCode: 0,
+              signal: "SIGTERM",
+              outputTail: ["Setup stopped."],
+            },
           },
         },
-      },
-      { id: "copies", label: "Copy configured files", state: "completed", details: [] },
-    ],
-  });
-  await h.connection.startupAttempts.complete(h.id);
-  const view = h.render();
-  try {
-    expect(h.connection.startupAttempts.isReadyForHandoff(h.id)).toBe(true);
-    expect(h.connection.startupAttempts.getAttempt(h.id)).not.toBeNull();
-    expect(view.queryByRole("list", { name: "Session startup steps" }) === null).toBe(true);
-    const details = view.getByRole("button", { expanded: false });
-    fireEvent.click(details);
-    expect(details.getAttribute("aria-expanded")).toBe("true");
-    expect(view.getByRole("list", { name: "Session startup steps" })).toBeDefined();
-    fireEvent.click(view.getByRole("button", { name: /Run setup.*Failed/ }));
-    expect(view.getByText("Command ended with signal SIGTERM.")).toBeDefined();
-    expect(view.getByText("Setup stopped.")).toBeDefined();
-    expect(h.connection.startupAttempts.getAttempt(h.id)).not.toBeNull();
-  } finally {
-    view.unmount();
-    await h.dispose();
-  }
-});
+        { id: "copies", label: "Copy configured files", state: "completed", details: [] },
+      ],
+    });
+    await h.connection.startupAttempts.complete(h.id);
+    const view = h.render();
+    try {
+      expect(h.connection.startupAttempts.isReadyForHandoff(h.id)).toBe(true);
+      expect(h.connection.startupAttempts.getAttempt(h.id)).not.toBeNull();
+      expect(view.queryByRole("list", { name: "Session startup steps" }) === null).toBe(true);
+      const details = view.getByRole("button", {
+        expanded: false,
+        name: new RegExp(`^${roleLabel} session ready with a setup error`),
+      });
+      fireEvent.click(details);
+      expect(details.getAttribute("aria-expanded")).toBe("true");
+      expect(view.getByRole("list", { name: "Session startup steps" })).toBeDefined();
+      fireEvent.click(view.getByRole("button", { name: /Run setup.*Failed/ }));
+      expect(view.getByText("Command ended with signal SIGTERM.")).toBeDefined();
+      expect(view.getByText("Setup stopped.")).toBeDefined();
+      expect(h.connection.startupAttempts.getAttempt(h.id)).not.toBeNull();
+    } finally {
+      view.unmount();
+      await h.dispose();
+    }
+  },
+);

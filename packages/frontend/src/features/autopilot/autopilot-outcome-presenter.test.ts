@@ -35,9 +35,10 @@ const fields = {
   workspaceId: "alpha",
   repoPath: "/repos/alpha",
   task: { id: "task-1", title: "Task" },
-  workflowId: "openducktor",
+  workflowId: "openducktor-spec-plan-build",
   eventId: "taskRejectedByQa" as const,
   actionId: "startReviewQaFeedbacks" as const,
+  actionLabel: "Start Review QA Feedbacks",
   occurredAt: "2026-10-10T00:00:00.000Z",
 };
 const skipped = (outcomeId = "skipped-1", workspaceId = "alpha"): AutopilotOutcome => ({
@@ -120,7 +121,7 @@ describe("Autopilot outcome presenter", () => {
 
     expect(info).toHaveBeenCalledTimes(1);
     expect(info).toHaveBeenCalledWith("Autopilot skipped Start Review QA Feedbacks for task-1.", {
-      id: 'autopilot:["alpha","openducktor","skipped-1"]',
+      id: 'autopilot:["alpha","openducktor-spec-plan-build","skipped-1"]',
       description: "The task moved to Blocked / Needs Input before the action started.",
     });
     expect(ports.refreshTaskViews).not.toHaveBeenCalled();
@@ -154,7 +155,7 @@ describe("Autopilot outcome presenter", () => {
     expect(error).toHaveBeenCalledWith(
       "Autopilot could not start Start Review QA Feedbacks for task-1.",
       {
-        id: 'autopilot:["alpha","openducktor","failed-1"]',
+        id: 'autopilot:["alpha","openducktor-spec-plan-build","failed-1"]',
         description:
           "The model is not available. Fix the cause, then start the action from the task.",
         duration: Infinity,
@@ -271,9 +272,9 @@ describe("Autopilot outcome presenter", () => {
     presenter.present(outcome, { workspaceSelected: true });
     presenter.present(ordinary, { workspaceSelected: true });
     expect(error.mock.calls.map((call) => call[1]?.id)).toEqual([
-      'autopilot:["alpha","openducktor","failed-1"]',
-      'autopilot:["alpha","openducktor","ordinary"]',
-      'autopilot:["alpha","openducktor","failed-1"]',
+      'autopilot:["alpha","openducktor-spec-plan-build","failed-1"]',
+      'autopilot:["alpha","openducktor-spec-plan-build","ordinary"]',
+      'autopilot:["alpha","openducktor-spec-plan-build","failed-1"]',
     ]);
 
     clickAction(error.mock.calls[2]);
@@ -343,7 +344,7 @@ describe("Autopilot outcome presenter", () => {
     });
     expect(dismiss.mock.calls).toEqual([
       ["autopilot-failure"],
-      ['autopilot:["beta","openducktor","beta-outcome"]'],
+      ['autopilot:["beta","openducktor-spec-plan-build","beta-outcome"]'],
     ]);
   });
 });

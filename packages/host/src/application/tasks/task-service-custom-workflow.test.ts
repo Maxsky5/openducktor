@@ -1,16 +1,24 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
-import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
-import { Effect } from "effect";
+import type { IssueType } from "@openducktor/contracts";
+import { specPlanBuildWorkflow, createTaskWorkflow } from "@openducktor/workflows";
+import {
+  createReviewTaskWorkflow,
+  reviewTaskDefinition,
+  reviewTaskPromptTemplates,
+  reviewTaskRoles,
+} from "@openducktor/workflows/test-support";
+import { Effect, Exit } from "effect";
 import { z } from "zod";
 import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
-import { createTaskWorkflowResolver } from "../../composition/node/task-workflow-composition";
+import { createTaskWorkflowResolver } from "./task-workflows";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
-import { reviewTaskWorkflows } from "../../test-support/task-workflows";
+import { reviewTaskWorkflows, singleTaskWorkflow } from "../../test-support/task-workflows";
+import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
+import { HostOperationError } from "../../effect/host-errors";
 import type { WorkflowArtifactSaveInput } from "./task-inputs";
 import {
   createBuildSettingsConfig,
@@ -39,7 +47,7 @@ const service = (taskWorkflows: TaskWorkflowResolver = reviewTaskWorkflows) =>
     systemCommands: createBuildSystemCommands([]),
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       ...harness.scope,
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
     }),
   });
 
@@ -47,7 +55,7 @@ const createArticle = () =>
   Effect.runPromise(
     service().createTask({
       ...harness.scope,
-      task: { title: "Launch post", issueType: "article", priority: 2 },
+      task: { title: "Launch post", issueType: "feature", priority: 2 },
     }),
   );
 
@@ -99,33 +107,58 @@ describe("task service with a custom task workflow", () => {
   test("creates a task in the initial state with the roles and artifacts of its workflow", async () => {
     const card = await createArticle();
 
-    expect(card.status).toBe("backlog");
-    expect(card.issueType).toBe("article");
+    expect(card.status).toBe("open");
+    expect(card.issueType).toBe("feature");
     expect(Object.keys(card.agentWorkflows)).toEqual(["writer", "editor"]);
     expect(Object.keys(card.artifactSummary)).toEqual(["draft", "review"]);
     expect(card.availableActions).toContain("start_write");
   });
 
-  test("rejects an issue type that the workflow does not declare", async () => {
+  test("rejects an issue type that the workflow does not support", async () => {
     const result = await Effect.runPromiseExit(
       service().createTask({
         ...harness.scope,
-        task: { title: "Bug", issueType: "bug", priority: 2 },
+        task: { title: "Task", issueType: "task", priority: 2 },
       }),
     );
 
-    expect(String(result)).toContain("article");
+    expect(String(result)).toContain(
+      'Issue type task is not in task workflow "review". Use feature, bug.',
+    );
   });
 
-  test("moves a task with status events, artifact saves, and review verdicts", async () => {
+  test("creates tasks only of the one issue type that a workflow supports", async () => {
+    const definition = reviewTaskDefinition();
+    definition.issueTypes = [{ id: "bug", label: "Fix" }];
+    const taskWorkflows = singleTaskWorkflow(
+      createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles),
+    );
+    await harness.cleanup();
+    harness = await createSqliteTaskStoreHarness({ taskWorkflows });
+    const create = (issueType: IssueType) =>
+      Effect.runPromiseExit(
+        service(taskWorkflows).createTask({
+          ...harness.scope,
+          task: { title: issueType, issueType, priority: 2 },
+        }),
+      );
+
+    const bug = await create("bug");
+    expect(Exit.isSuccess(bug) && bug.value.issueType).toBe("bug");
+    for (const issueType of ["feature", "task"] as const) {
+      const rejected = await create(issueType);
+      expect(Exit.isFailure(rejected)).toBe(true);
+      expect(String(rejected)).toContain(
+        `Issue type ${issueType} is not in task workflow "review". Use bug.`,
+      );
+    }
+  });
+
+  test("moves a task with its start event, artifact saves, and review verdicts", async () => {
     const { id } = await createArticle();
 
     await Effect.runPromise(
-      service().transitionTask({
-        ...harness.scope,
-        taskId: id,
-        status: "writing",
-      }),
+      service().applyStartEvent({ ...harness.scope, taskId: id, eventId: "start-writing" }),
     );
     expect(await status(id)).toBe("writing");
 
@@ -183,11 +216,7 @@ describe("task service with a custom task workflow", () => {
   test("applies an event action without a host effect", async () => {
     const { id } = await createArticle();
     await Effect.runPromise(
-      service().transitionTask({
-        ...harness.scope,
-        taskId: id,
-        status: "writing",
-      }),
+      service().applyStartEvent({ ...harness.scope, taskId: id, eventId: "start-writing" }),
     );
     await save(id, "draft", "writer");
     await save(id, "review", "editor", "accept");
@@ -206,11 +235,7 @@ describe("task service with a custom task workflow", () => {
   test("rejects an event whose action is not available for the task", async () => {
     const { id } = await createArticle();
     await Effect.runPromise(
-      service().transitionTask({
-        ...harness.scope,
-        taskId: id,
-        status: "writing",
-      }),
+      service().applyStartEvent({ ...harness.scope, taskId: id, eventId: "start-writing" }),
     );
     await save(id, "draft", "writer");
 
@@ -227,8 +252,8 @@ describe("task service with a custom task workflow", () => {
   });
 
   test.each([
-    ["approve-copy", "review.approve host effect"],
-    ["move-writing", "not sent by an event action"],
+    ["request-rewrite", "No action that sends request-rewrite is available"],
+    ["submit-draft", "not sent by an event action"],
     ["missing", "not sent by an event action"],
   ])("rejects event %s through the event command", async (eventId, message) => {
     const { id } = await createArticle();
@@ -242,20 +267,22 @@ describe("task service with a custom task workflow", () => {
     );
 
     expect(String(result)).toContain(message);
-    expect(await status(id)).toBe("backlog");
+    expect(await status(id)).toBe("open");
   });
 
-  test("pauses, resumes, and completes a build with the effect events of the workflow", async () => {
+  test("pauses, resumes, and completes the writing with the agent events of the workflow", async () => {
     const { id } = await createArticle();
     const input = { ...harness.scope, taskId: id };
-    await Effect.runPromise(service().transitionTask({ ...input, status: "writing" }));
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
 
-    await Effect.runPromise(service().buildBlocked({ ...input, reason: "Waiting for data" }));
+    await Effect.runPromise(service().applyAgentEvent({ ...input, eventId: "pause-writing" }));
     expect(await status(id)).toBe("paused");
-    await Effect.runPromise(service().buildResumed(input));
+    await Effect.runPromise(service().applyAgentEvent({ ...input, eventId: "resume-writing" }));
     expect(await status(id)).toBe("writing");
 
-    const denied = await Effect.runPromiseExit(service().buildCompleted(input));
+    const denied = await Effect.runPromiseExit(
+      service().applyAgentEvent({ ...input, eventId: "finish-writing" }),
+    );
     expect(String(denied)).toContain("Save the draft first");
 
     await Effect.runPromise(
@@ -269,43 +296,179 @@ describe("task service with a custom task workflow", () => {
       }),
     );
     expect(await status(id)).toBe("writing");
-    await Effect.runPromise(service().buildCompleted(input));
+    await Effect.runPromise(service().applyAgentEvent({ ...input, eventId: "finish-writing" }));
     expect(await status(id)).toBe("reviewing");
   });
 
-  test("requests changes on a reviewed task with the review effect event", async () => {
+  test("rejects an event that agents cannot send through the agent event command", async () => {
+    const { id } = await createArticle();
+    const result = await Effect.runPromiseExit(
+      service().applyAgentEvent({ ...harness.scope, taskId: id, eventId: "drop-review" }),
+    );
+    expect(String(result)).toContain(
+      'Event drop-review is not an agent event of task workflow "review".',
+    );
+    expect(await status(id)).toBe("open");
+  });
+
+  test("requests changes on a reviewed task with a plain event", async () => {
     const { id } = await createArticle();
     const input = { ...harness.scope, taskId: id };
-    await Effect.runPromise(service().transitionTask({ ...input, status: "writing" }));
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
     await save(id, "draft", "writer");
     await save(id, "review", "editor", "accept");
 
-    await Effect.runPromise(service().humanRequestChanges({ ...input, note: "Shorter intro" }));
+    await Effect.runPromise(service().applyTaskEvent({ ...input, eventId: "request-rewrite" }));
     expect(await status(id)).toBe("writing");
   });
 
-  test("closes a task into its terminal close state and resets it to the initial state", async () => {
-    const first = await createArticle();
-    const second = await createArticle();
+  test("closes and resets a task of a workflow that declares no close or reset", async () => {
+    const { actions, events } = reviewTaskDefinition();
+    expect([...actions, ...events].map(({ id }) => id).join(" ")).not.toMatch(/close|reset/);
+    const close = (taskId: string) =>
+      Effect.runPromise(service().closeTask({ ...harness.scope, taskId, removeWorktree: true }));
+    const fresh = await createArticle();
+    expect((await close(fresh.id)).status).toBe("closed");
+    expect((await close(fresh.id)).status).toBe("closed");
 
-    const closed = await Effect.runPromise(
-      service().closeTask({
-        ...harness.scope,
-        taskId: first.id,
-        removeWorktree: true,
+    const reviewed = await createArticle();
+    const input = { ...harness.scope, taskId: reviewed.id };
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
+    await save(reviewed.id, "draft", "writer");
+    expect(await status(reviewed.id)).toBe("reviewing");
+    const reset = await Effect.runPromise(service().resetTask(input));
+    expect(reset.status).toBe("open");
+    expect(reset.artifactSummary.draft).toEqual({ present: false });
+    expect((await Effect.runPromise(service().resetTask(input))).status).toBe("open");
+
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
+    expect((await close(reviewed.id)).status).toBe("closed");
+    const denied = await Effect.runPromiseExit(service().resetTask(input));
+    expect(String(denied)).toContain("is closed, so it cannot reset");
+    expect(await status(reviewed.id)).toBe("closed");
+  });
+
+  test("an unpublished local merge blocks workflow events and Reset Task until Close Task", async () => {
+    const { id } = await createArticle();
+    const input = { ...harness.scope, taskId: id };
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
+    await save(id, "draft", "writer");
+    await save(id, "review", "editor", "accept");
+    const card = () => Effect.runPromise(service().findTask(input));
+    expect((await card())?.availableActions).toEqual(
+      expect.arrayContaining(["approve", "request_rewrite", "drop_review", "hold"]),
+    );
+    const directMerge = {
+      method: "merge_commit" as const,
+      sourceBranch: "odt/launch-post",
+      targetBranch: { remote: "origin", branch: "main" },
+      mergedAt: "2026-05-10T00:00:00.000Z",
+    };
+    await Effect.runPromise(harness.store.setDirectMerge({ ...input, directMerge }));
+    // The card offers only the approval that publishes the merge and the worktree.reset event.
+    const merged = await card();
+    expect(merged?.directMerge).toEqual(directMerge);
+    expect(merged?.availableActions.toSorted()).toEqual(["approve", "drop_review"]);
+    const blocked = "has a local direct merge that is not published";
+    const rejections = await Promise.all([
+      Effect.runPromiseExit(service().applyTaskEvent({ ...input, eventId: "hold" })),
+      Effect.runPromiseExit(service().applyStartEvent({ ...input, eventId: "start-writing" })),
+      Effect.runPromiseExit(service().applyAgentEvent({ ...input, eventId: "pause-writing" })),
+      Effect.runPromiseExit(service().applyTaskEvent({ ...input, eventId: "request-rewrite" })),
+      Effect.runPromiseExit(service().resetTask(input)),
+    ]);
+    for (const rejection of rejections) expect(String(rejection)).toContain(blocked);
+    const submit = await Effect.runPromiseExit(
+      service().workflowArtifactSave({
+        ...input,
+        code: "draft",
+        markdown: "# Draft",
+        submit: true,
+        sourceTool: "odt_set_task_artifact",
+        updatedBy: "writer",
       }),
     );
-    expect(closed.status).toBe("shelved");
+    expect(String(submit)).toContain(blocked);
+    expect(await status(id)).toBe("approval");
 
-    const input = {
-      ...harness.scope,
-      taskId: second.id,
-    };
-    await Effect.runPromise(service().transitionTask({ ...input, status: "writing" }));
-    await save(second.id, "draft", "writer");
-    const reset = await Effect.runPromise(service().resetTask(input));
-    expect(reset.status).toBe("backlog");
-    expect(reset.artifactSummary.draft).toEqual({ present: false });
+    const closed = await Effect.runPromise(service().closeTask({ ...input, removeWorktree: true }));
+    expect(closed.status).toBe("closed");
+  });
+
+  test("an unpublished local merge allows an event with the worktree.reset effect", async () => {
+    const { id } = await createArticle();
+    const input = { ...harness.scope, taskId: id };
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
+    await save(id, "draft", "writer");
+    await save(id, "review", "editor", "accept");
+    await Effect.runPromise(
+      harness.store.setDirectMerge({
+        ...input,
+        directMerge: {
+          method: "merge_commit",
+          sourceBranch: "odt/launch-post",
+          targetBranch: { remote: "origin", branch: "main" },
+          mergedAt: "2026-05-10T00:00:00.000Z",
+        },
+      }),
+    );
+
+    const reset = await Effect.runPromise(
+      service().applyTaskEvent({ ...input, eventId: "drop-review" }),
+    );
+    expect(reset.status).toBe("writing");
+    const delivery = await Effect.runPromise(harness.store.getTaskDelivery(input));
+    expect(delivery.directMerge).toBeUndefined();
+  });
+
+  test("runs the worktree.reset effect of an event, then commits the target state of the event", async () => {
+    const { id } = await createArticle();
+    const input = { ...harness.scope, taskId: id };
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
+    await save(id, "draft", "writer");
+    await save(id, "review", "editor", "accept");
+    expect(await status(id)).toBe("approval");
+
+    const reset = await Effect.runPromise(
+      service().applyTaskEvent({ ...input, eventId: "drop-review" }),
+    );
+
+    // drop-review chooses "writing", not the state of a Spec, Plan, Build reset.
+    expect(reset.status).toBe("writing");
+    expect(reset.artifactSummary.review).toEqual({ present: false });
+    expect(reset.artifactSummary.draft).toMatchObject({ present: true });
+    expect(readArtifactRows(id).map(({ code }) => code)).toEqual(["draft"]);
+  });
+
+  test("commits nothing when a host effect of the event fails", async () => {
+    const { id } = await createArticle();
+    const input = { ...harness.scope, taskId: id };
+    await Effect.runPromise(service().applyStartEvent({ ...input, eventId: "start-writing" }));
+    await save(id, "draft", "writer");
+    await save(id, "review", "editor", "accept");
+    const failing = createTaskService({
+      atomicTaskStore: harness.store,
+      taskWorkflows: reviewTaskWorkflows,
+      gitPort: createBuildStartGitPort({ calls: [] }),
+      settingsConfig: createBuildSettingsConfig(new Set([harness.repoPath])),
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getRepoConfig: () =>
+          Effect.fail(
+            new HostOperationError({
+              operation: "test.settings",
+              message: "Repository settings are unavailable.",
+            }),
+          ),
+      }),
+    });
+
+    const result = await Effect.runPromiseExit(
+      failing.applyTaskEvent({ ...input, eventId: "drop-review" }),
+    );
+
+    expect(String(result)).toContain("Repository settings are unavailable.");
+    expect(await status(id)).toBe("approval");
+    expect(readArtifactRows(id).map(({ code }) => code)).toEqual(["draft", "review"]);
   });
 
   test("commits the start event of a role step and rejects other events", async () => {
@@ -313,10 +476,10 @@ describe("task service with a custom task workflow", () => {
     const input = { ...harness.scope, taskId: id };
 
     const rejected = await Effect.runPromiseExit(
-      service().applyStartEvent({ ...input, eventId: "move-writing" }),
+      service().applyStartEvent({ ...input, eventId: "hold" }),
     );
     expect(String(rejected)).toContain("starts no step");
-    expect(await status(id)).toBe("backlog");
+    expect(await status(id)).toBe("open");
 
     const started = await Effect.runPromise(
       service().applyStartEvent({ ...input, eventId: "start-writing" }),
@@ -331,14 +494,26 @@ describe("task service with a workflow for each task", () => {
     // The issue type stands for the stored workflow of a task.
     const taskWorkflows = createTaskWorkflowResolver({
       forTask: (task: { readonly id: string; readonly issueType?: string }) =>
-        task.issueType === "article" ? review : builtinTaskWorkflow,
-      forNewTask: () => builtinTaskWorkflow,
-      workflows: [builtinTaskWorkflow, review],
+        task.issueType === "feature" ? review : specPlanBuildWorkflow,
+      forNewTask: () => specPlanBuildWorkflow,
+      workflows: [specPlanBuildWorkflow, review],
+      forWorkspace: () => ({
+        workflows: [specPlanBuildWorkflow, review],
+        board: {
+          states: [
+            ...new Set(
+              [...specPlanBuildWorkflow.definition.states, ...review.definition.states].map(
+                ({ id }) => id,
+              ),
+            ),
+          ].map((id) => ({ id, taskOrder: "updated" as const })),
+        },
+      }),
     });
     await harness.cleanup();
     harness = await createSqliteTaskStoreHarness({ taskWorkflows });
     const tasks = service(taskWorkflows);
-    const insert = (issueType: string, status: string) =>
+    const insert = (issueType: IssueType, status: string) =>
       Effect.runPromise(
         harness.store.createTask({
           ...harness.scope,
@@ -346,8 +521,8 @@ describe("task service with a workflow for each task", () => {
           status,
         }),
       );
-    const article = await insert("article", "backlog");
-    const feature = await insert("feature", "open");
+    const article = await insert("feature", "open");
+    const builtinTask = await insert("task", "open");
 
     const cards = await Effect.runPromise(
       tasks.listTasks({ workspaceId: harness.workspaceId, repoPath: harness.repoPath }),
@@ -355,7 +530,7 @@ describe("task service with a workflow for each task", () => {
     const card = (id: string) => cards.find((entry) => entry.id === id);
     expect(Object.keys(card(article.id)?.agentWorkflows ?? {})).toEqual(["writer", "editor"]);
     expect(Object.keys(card(article.id)?.artifactSummary ?? {})).toEqual(["draft", "review"]);
-    expect(Object.keys(card(feature.id)?.artifactSummary ?? {})).toEqual([
+    expect(Object.keys(card(builtinTask.id)?.artifactSummary ?? {})).toEqual([
       "spec",
       "plan",
       "qaReport",
@@ -369,18 +544,18 @@ describe("task service with a workflow for each task", () => {
       taskId,
     });
     const moved = await Effect.runPromise(
-      tasks.transitionTask({ ...input(article.id), status: "writing" }),
+      tasks.applyStartEvent({ ...input(article.id), eventId: "start-writing" }),
     );
     expect(moved.status).toBe("writing");
     const rejected = await Effect.runPromiseExit(
-      tasks.transitionTask({ ...input(feature.id), status: "writing" }),
+      tasks.applyStartEvent({ ...input(builtinTask.id), eventId: "start-writing" }),
     );
-    expect(String(rejected)).toContain("task_transition cannot move tasks to writing");
+    expect(String(rejected)).toContain("Event start-writing starts no step");
 
     await Effect.runPromise(tasks.closeTask({ ...input(article.id), removeWorktree: true }));
-    await Effect.runPromise(tasks.closeTask({ ...input(feature.id), removeWorktree: true }));
-    expect((await Effect.runPromise(tasks.findTask(input(article.id))))?.status).toBe("shelved");
-    expect((await Effect.runPromise(tasks.findTask(input(feature.id))))?.status).toBe("closed");
+    await Effect.runPromise(tasks.closeTask({ ...input(builtinTask.id), removeWorktree: true }));
+    expect((await Effect.runPromise(tasks.findTask(input(article.id))))?.status).toBe("closed");
+    expect((await Effect.runPromise(tasks.findTask(input(builtinTask.id))))?.status).toBe("closed");
     const visible = await Effect.runPromise(
       harness.store.listTasks({ ...harness.scope, doneVisibleDays: 0 }),
     );

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type NotificationOccurrence } from "@openducktor/contracts";
 import { createUnavailableShellBridge } from "./shell-bridge";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 const occurrence: NotificationOccurrence = {
   occurrenceId: "workflow.closed:/repo:task-1:event-1",
@@ -43,7 +43,7 @@ describe("unavailable shell notification bridge", () => {
     const expected = "OpenDucktor shell bridge is not configured.";
 
     expect(() =>
-      notifications.publishOccurrence(occurrence, createBuiltinNotificationSettings()),
+      notifications.publishOccurrence(occurrence, createSpecPlanBuildNotificationSettings()),
     ).toThrow(expected);
     expect(() => notifications.subscribeOccurrences(() => {})).toThrow(expected);
     expect(() => notifications.subscribeClicks(() => {})).toThrow(expected);

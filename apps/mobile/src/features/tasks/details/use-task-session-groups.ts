@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
+import { taskWorkflowContextQueryOptions } from "@openducktor/frontend-core/queries/task-workflow-context";
 import type { AgentSessionRecord, WorkspaceRef } from "@openducktor/contracts";
 import { useAgentSessionLists } from "@openducktor/frontend-core/queries/use-agent-session-lists";
 import { useAgentSessionSummaries } from "@openducktor/frontend-core/sessions/session-store-hooks";
@@ -14,11 +16,11 @@ const NO_TASK_IDS: string[] = [];
  * nothing.
  */
 export function useTaskSessionGroups(scope: WorkspaceRef, taskId: string | null) {
-  const allSummaries = useAgentSessionSummaries();
-  const summaries = useMemo(
-    () => allSummaries.filter((summary) => summary.workspaceId === scope.workspaceId),
-    [allSummaries, scope.workspaceId],
-  );
+  const taskQuery = useQuery({
+    ...taskWorkflowContextQueryOptions(scope, taskId ?? ""),
+    enabled: taskId !== null,
+  });
+  const summaries = useAgentSessionSummaries();
   const queryClient = useQueryClient();
   const taskIds = useMemo(() => (taskId ? [taskId] : NO_TASK_IDS), [taskId]);
   const history = useAgentSessionLists({
@@ -30,16 +32,16 @@ export function useTaskSessionGroups(scope: WorkspaceRef, taskId: string | null)
   const records = taskId ? (history.data[taskId] ?? EMPTY_RECORDS) : EMPTY_RECORDS;
   const groups = useMemo(
     () =>
-      taskId
-        ? groupTaskSessions({ workspaceId: scope.workspaceId, taskId }, records, summaries)
+      taskQuery.data
+        ? groupTaskSessions(taskQuery.data, records, summaries, scope.workspaceId)
         : [],
-    [records, summaries, taskId, scope.workspaceId],
+    [records, summaries, taskQuery.data, scope.workspaceId],
   );
   return {
     groups,
     summaries,
     records,
-    isLoadingHistory: history.isPending,
-    historyError: history.error,
+    isLoadingHistory: history.isPending || (!!taskId && taskQuery.isPending),
+    historyError: history.error ?? taskQuery.error?.message ?? null,
   };
 }

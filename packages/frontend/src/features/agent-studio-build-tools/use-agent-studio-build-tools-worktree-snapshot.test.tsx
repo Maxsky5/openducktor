@@ -1291,7 +1291,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     }
   });
 
-  test("resolves the view task worktree before the selected task loads", async () => {
+  test("waits for the resolved task before choosing its worktree", async () => {
     const harness = createHookHarness(
       createBaseArgs({
         selectedView: createSelectedView({ selectedTask: null }),
@@ -1300,6 +1300,9 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
     try {
       await harness.mount();
+      expect(taskWorktreeGetMock).not.toHaveBeenCalled();
+      expect(harness.getLatest().isEnabled).toBe(false);
+      await harness.update(createBaseArgs());
       await harness.waitFor((snapshot) => snapshot.worktree.path === "/repo/.worktrees/task-24");
 
       expect(taskWorktreeGetMock).toHaveBeenCalledWith(

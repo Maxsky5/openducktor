@@ -32,13 +32,12 @@ export const createTaskOccurrenceProjector = ({
       if (previousStatus === current.status) {
         continue;
       }
-      const notification = taskWorkflows
-        .forTask(current)
-        .stateNotification(current.status, sourceRole);
+      const workflow = taskWorkflows.forReference(current.workflow);
+      const notification = workflow.stateNotification(current.status, sourceRole);
       if (!notification) {
         continue;
       }
-      const { kind, status, preferredRole } = notification;
+      const { kind, status, preferredRole, title, body } = notification;
       const navigationTarget: NotificationOccurrence["navigationTarget"] = {
         ...notification.navigation,
         repoPath,
@@ -49,6 +48,8 @@ export const createTaskOccurrenceProjector = ({
         occurrenceId: `${kind}:${repoPath}:${current.id}:${event.eventId}:${index}`,
         kind,
         workspaceId: event.workspaceId,
+        workflow: current.workflow,
+        copy: { title, body },
         repoPath,
         repositoryLabel: currentRepositoryLabel,
         task: { id: current.id, title: current.title },

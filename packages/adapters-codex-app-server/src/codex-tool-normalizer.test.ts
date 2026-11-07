@@ -110,9 +110,9 @@ describe("Codex tool normalization", () => {
         type: "mcpToolCall",
         id: "tool-1",
         server: "openducktor",
-        tool: "odt_build_blocked",
+        tool: "odt_apply_workflow_event",
         status: "completed",
-        arguments: { taskId: "task-1", reason: "needs a product decision" },
+        arguments: { taskId: "task-1", eventId: "build-blocked", note: "needs a product decision" },
         result: {
           isError: true,
           structuredContent: errorPayload,
@@ -125,7 +125,7 @@ describe("Codex tool normalization", () => {
     expect(part).toEqual(
       expect.objectContaining({
         kind: "tool",
-        tool: "odt_build_blocked",
+        tool: "odt_apply_workflow_event",
         toolType: "workflow",
         status: "error",
         error: "Transition not allowed for task-1 (bug): closed -> blocked",

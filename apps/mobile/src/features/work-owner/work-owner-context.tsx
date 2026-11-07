@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type {
   GitCurrentBranch,
   GitTargetBranch,
@@ -333,9 +333,20 @@ function TaskOwnerSource({
         },
         worktree.path,
         retrySessions,
+        task
+          ? (task.taskWorkflow.roles.find(({ id }) =>
+              task.taskWorkflow.definition.steps.some(
+                (step) =>
+                  step.kind === "agent" &&
+                  step.roleId === id &&
+                  step.launchActions.some((launch) => launch.context === "human_feedback"),
+              ),
+            ) ?? null)
+          : null,
       ),
     [
       ownerRef.workspaceId,
+      task,
       retrySessions,
       sessionsQuery.data,
       sessionsQuery.error,

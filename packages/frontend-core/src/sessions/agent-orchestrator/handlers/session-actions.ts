@@ -14,7 +14,7 @@ import { createSendAgentMessage } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
 import { createStopAgentSession } from "./stop-session";
 import { createRefreshStoppedWorkflowSession } from "./workflow-session-operation-policy";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 type SessionActionsDependencies = {
   feedback: ClientFeedback;
@@ -29,7 +29,10 @@ type SessionActionsDependencies = {
   sessionTurnState: SessionTurnState;
   updateSession: UpdateSession;
   closeBackgroundQuestions: PendingInputActionDependencies["closeBackgroundQuestions"];
-  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  loadRepoPromptOverrides: (
+    workspaceId: string,
+    workflow: import("@openducktor/workflows").TaskWorkflow,
+  ) => Promise<RepoPromptOverrides>;
   liveSessionHost: PendingInputActionDependencies["liveSessionHost"];
   refreshTaskData: (scope: WorkspaceRef, taskIdOrIds?: string | string[]) => Promise<void>;
   invalidateSessionStopQueries: (input: {

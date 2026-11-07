@@ -248,6 +248,10 @@ export const cleanupConfirmedMergeClose = ({
       workspaceId,
     );
     yield* runTaskLocalCleanup({
+      beforeWorktreeRemoval: {
+        commands: repoConfig.hooks.beforeWorktreeRemoval,
+        systemCommands: dependencies.systemCommands,
+      },
       workspaceId,
       branchNames,
       gitPort: dependencies.gitPort,

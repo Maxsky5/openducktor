@@ -53,6 +53,8 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   issueType: "task",
   removeWorktreeOnClose: null,
   labels: [],
+  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflowSteps: [],
   availableActions: [],
   artifactSummary: {
     spec: { present: true },
@@ -86,7 +88,7 @@ const repoConfig: RepoConfig = {
   defaultTargetBranch: { remote: "origin", branch: "main" },
   worktreeBasePath: "/worktrees/repo",
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},

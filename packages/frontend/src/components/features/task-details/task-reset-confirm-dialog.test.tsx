@@ -28,9 +28,9 @@ describe("TaskResetConfirmDialog", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Reset task" })).toBeDefined();
-    expect(screen.getByText(/Move this task to Backlog/i)).toBeDefined();
+    expect(screen.getByText(/Move this task back to the start of its workflow/i)).toBeDefined();
     expect(screen.getByText(/all task artifacts/i)).toBeDefined();
-    expect(screen.getByText(/Spec, Planner, Builder and QA sessions/i)).toBeDefined();
+    expect(screen.getByText(/Remove all task sessions/i)).toBeDefined();
     expect(screen.getByText(/pull request and merge links/i)).toBeDefined();
     expect(screen.getByText(/2 linked worktrees/i)).toBeDefined();
     expect(screen.getByText(/Close 2 terminals/i)).toBeDefined();

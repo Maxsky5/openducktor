@@ -1,8 +1,7 @@
-import { type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowIcon } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { taskActionSendsCommand } from "@/features/workflow/task-action-routing";
 import { useCommandBlocked } from "@/host-session/active-session-context";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { themeStyleCache } from "@/theme/theme-style-cache";
@@ -11,7 +10,6 @@ import { RoleIcon } from "@/ui/brand-icons";
 import { Icon } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
-import { taskActionRole } from "../presentation/task-action-paint";
 import type { TaskCardLiveSession, TaskCardPrimary } from "./task-card-model";
 
 /** The desktop card control height: `h-8`, between the compact `h-7` and the normal `h-9`. */
@@ -86,10 +84,7 @@ export function CardPrimaryAction({
   const control = [styles.control, styles[CONTROL_STYLES[appearance]]];
   const foreground = foregroundStyles(useAppTheme(), appearance);
   // A start, an approval, or a change needs the live host. Opening a session does not.
-  const blockedByConnection = useCommandBlocked(
-    taskActionSendsCommand(primary.action),
-    primary.label,
-  );
+  const blockedByConnection = useCommandBlocked(primary.command, primary.label);
   const disabled = primary.disabled || blockedByConnection;
   const session = primary.activeSession;
   if ((appearance === "running" || appearance === "waiting") && session) {
@@ -130,7 +125,7 @@ export function CardPrimaryAction({
       </Touchable>
     );
   }
-  const role = taskActionRole(primary.action);
+  const role = primary.roleIconHint;
   return (
     <Touchable
       feedback="scale"
@@ -206,7 +201,7 @@ export function LiveSessionChip({ session }: { session: TaskCardLiveSession }): 
       pointerEvents="none"
       style={[styles.live, live.chip]}
     >
-      <LiveRoleIcon role={session.role} waiting={waiting} />
+      <LiveRoleIcon role={session.iconHint} waiting={waiting} />
       <Text variant="caption2" numberOfLines={1} style={[styles.shrink, live.text]}>
         {session.label}
       </Text>
@@ -224,17 +219,23 @@ function ActionRoleIcon({
   role,
   appearance,
 }: {
-  role: AgentRole;
+  role: WorkflowIcon | undefined;
   appearance: Appearance;
 }): ReactElement {
   const theme = useAppTheme();
-  return <RoleIcon role={role} size={14} color={foregroundColor(theme, appearance)} />;
+  return <RoleIcon hint={role} size={14} color={foregroundColor(theme, appearance)} />;
 }
 
 /** The role icon of a live session chip. A theme change renders only this icon again. */
-function LiveRoleIcon({ role, waiting }: { role: AgentRole; waiting: boolean }): ReactElement {
+function LiveRoleIcon({
+  role,
+  waiting,
+}: {
+  role?: WorkflowIcon | undefined;
+  waiting: boolean;
+}): ReactElement {
   const theme = useAppTheme();
-  return <RoleIcon role={role} size={12} color={liveColors(theme, waiting).text} />;
+  return <RoleIcon hint={role} size={12} color={liveColors(theme, waiting).text} />;
 }
 
 /** The spinner of a running session. A theme change renders only this spinner again. */

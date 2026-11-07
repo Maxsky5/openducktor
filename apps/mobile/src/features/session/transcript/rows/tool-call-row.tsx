@@ -8,7 +8,7 @@ import {
   readRegularToolTiming,
   readToolDetailAvailability,
   regularToolLineName,
-  resolveRegularToolSummaryText,
+  resolveRegularToolSummary,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { memo, type ReactElement } from "react";
@@ -61,7 +61,7 @@ export const ToolCallRow = memo(function ToolCallRow({
   const phase = getToolLifecyclePhase(meta);
   const availability = readToolDetailAvailability(meta);
   const expandable = hasExpandableToolDetails(availability);
-  const summary = resolveRegularToolSummaryText(meta, messageContent, workingDirectory);
+  const summary = resolveRegularToolSummary(meta, messageContent, workingDirectory);
   const timing = readRegularToolTiming(meta, messageTimestamp);
   const preparing = isRegularToolPreparing(meta);
   const name = regularToolLineName(meta, displayName);
@@ -71,14 +71,15 @@ export const ToolCallRow = memo(function ToolCallRow({
       <ToolLine
         icon={toolIcon(meta)}
         name={name}
-        summary={summary}
+        summary={summary.text}
         summaryEllipsis={PATH_TOOL_TYPES.has(meta.toolType) ? "middle" : "tail"}
         tone={toolLineTone(phase, preparing)}
         active={timing.isActive}
         durationMs={timing.durationMs}
         timeLabel={timeLabel}
         disclosure={expandable ? disclosure : null}
-        accessibilityLabel={`${name}${summary.length > 0 ? `: ${summary}` : ""}${stateLabel}`}
+        accessibilityLabel={`${name}${summary.text.length > 0 ? `: ${summary.text}` : ""}${stateLabel}`}
+        summaryIsError={summary.isError}
       />
       {expandable && disclosure.open ? (
         <LineDetails>
@@ -87,7 +88,7 @@ export const ToolCallRow = memo(function ToolCallRow({
             resetKey={rowKey}
             hasInput={availability.hasInput}
             hasOutput={availability.hasOutput}
-            hasError={availability.hasError}
+            errorText={availability.hasError ? (meta.error ?? null) : null}
             colors={colors}
           />
         </LineDetails>

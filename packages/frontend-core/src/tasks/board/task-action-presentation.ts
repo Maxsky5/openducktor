@@ -1,4 +1,5 @@
-import type { TaskWorkflowAction } from "@openducktor/workflows";
+import { actionEmphasis } from "@openducktor/workflows";
+import type { TaskWorkflowAction, ResolvedTaskCard } from "@openducktor/workflows";
 import type { KanbanTaskSession } from "./kanban-task-activity";
 
 /**
@@ -7,23 +8,14 @@ import type { KanbanTaskSession } from "./kanban-task-activity";
  */
 export type TaskActionTone = "prominent" | "neutral" | "destructive" | "warning";
 
-export const taskActionIsDestructive = (action: TaskWorkflowAction): boolean =>
-  action === "reset_implementation" || action === "reset_task" || action === "remove_worktree";
-
-export const taskActionIsWarning = (action: TaskWorkflowAction): boolean => action === "close_task";
-
-export const taskActionTone = (action: TaskWorkflowAction): TaskActionTone => {
-  if (action === "build_start" || action === "qa_start" || action === "human_approve") {
-    return "prominent";
-  }
-  if (taskActionIsDestructive(action)) {
-    return "destructive";
-  }
-  if (taskActionIsWarning(action)) {
-    return "warning";
-  }
-  return "neutral";
-};
+export const taskActionTone = (
+  action: TaskWorkflowAction,
+  task: ResolvedTaskCard,
+): TaskActionTone => actionEmphasis(task.taskWorkflow.action(action));
+export const taskActionIsDestructive = (
+  action: TaskWorkflowAction,
+  task: ResolvedTaskCard,
+): boolean => taskActionTone(action, task) === "destructive";
 
 /** The state of the active session that a task card shows on its primary control. */
 export const taskSessionStatusLabel = ({

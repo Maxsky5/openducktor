@@ -10,7 +10,7 @@ import type {
   SessionNavigationModel,
   SessionNavigationWorkspace,
 } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 export const NOW = Date.parse("2026-09-30T12:00:00.000Z");
 

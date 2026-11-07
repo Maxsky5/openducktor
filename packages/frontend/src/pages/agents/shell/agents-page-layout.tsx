@@ -345,7 +345,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
           disabled={!agentStudioReady}
           onStepSelect={(stepId) => {
             const step = workflowSteps.find((entry) => entry.id === stepId);
-            if (step) onWorkflowStepSelect(step.role, step.sessionValue);
+            if (step?.role) onWorkflowStepSelect(step.role, step.sessionValue);
           }}
         />
       </div>

@@ -3,8 +3,8 @@ import type { LucideIcon } from "lucide-react";
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import type { WorkflowRailStep } from "@/types/agent-workflow";
 import type {
-  BuiltinLaunchActionId as SessionLaunchActionId,
-  BuiltinRoleId as AgentRole,
+  WorkflowLaunchActionId as SessionLaunchActionId,
+  WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 
@@ -23,7 +23,7 @@ export type AgentRoleOption = {
 };
 
 export type AgentWorkflowStep = WorkflowRailStep & {
-  role: AgentRole;
+  role: AgentRole | null;
   sessionValue: string | null;
 };
 

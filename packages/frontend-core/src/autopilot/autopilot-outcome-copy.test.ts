@@ -7,9 +7,10 @@ const fields = {
   workspaceId: "alpha",
   repoPath: "/repos/alpha",
   task: { id: "task-1", title: "Task" },
-  workflowId: "openducktor",
+  workflowId: "openducktor-spec-plan-build",
   eventId: "taskRejectedByQa" as const,
   actionId: "startReviewQaFeedbacks" as const,
+  actionLabel: "Start Review QA Feedbacks",
   occurredAt: "2026-10-10T00:00:00.000Z",
 };
 const session = {
@@ -46,10 +47,15 @@ const skipped = (outcomeId: string, taskId = "task-1"): AutopilotOutcome => ({
 });
 
 describe("buildAutopilotHeldOutcomeRows", () => {
-  test("uses another workflow's own action ID without a built-in label", () => {
-    const outcome = { ...skipped("other"), workflowId: "other" };
+  test("uses the host action label of another workflow", () => {
+    const outcome = {
+      ...skipped("other"),
+      workflowId: "other",
+      actionId: "sendToEditor",
+      actionLabel: "Send to editor",
+    };
     const rows = buildAutopilotHeldOutcomeRows({ failure: null, outcomes: [outcome] }, "task-1");
-    expect(rows[0]?.title).toBe("Autopilot skipped startReviewQaFeedbacks for task-1.");
+    expect(rows[0]?.title).toBe("Autopilot skipped Send to editor for task-1.");
   });
   test("lists the failed and skipped outcomes of the task in host order", () => {
     const rows = buildAutopilotHeldOutcomeRows(

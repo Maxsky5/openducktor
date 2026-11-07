@@ -5,6 +5,7 @@ import {
   settingsSnapshotSchema,
   workspaceSettingsPatchSchema,
 } from "./config-schemas";
+import { promptOverrideKey, ROLE_INSTRUCTIONS_PROMPT_ID } from "./prompt-schemas";
 import { systemOpenInToolIdSchema } from "./system-open-schemas";
 import {
   applyCustomAgentRoleEdits,
@@ -39,12 +40,22 @@ describe("settings snapshot edits", () => {
     after.notifications.volumePercent = 50;
     after.agentRuntimes.opencode.executablePath = "/bin/opencode";
     after.globalPromptOverrides = {
-      "kickoff.spec_initial": { template: "Spec", baseVersion: 1, enabled: true },
+      [promptOverrideKey({
+        ownerKind: "workflow",
+        ownerId: "rpi",
+        promptId: "messages.spec_start",
+      })]: { template: "Spec", baseVersion: 1, enabled: true },
     };
     after.customAgentRoles = [{ id: "reviewer", name: "Reviewer", systemPrompt: "Review" }];
     after.autopilot = {
       alwaysStartQaReviewsFresh: true,
-      rules: [{ workflowId: "openducktor", eventId: "taskRejectedByQa", actionIds: ["build"] }],
+      rules: [
+        {
+          workflowId: "openducktor-spec-plan-build",
+          eventId: "taskRejectedByQa",
+          actionIds: ["build"],
+        },
+      ],
     };
     const model = { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" };
     after.workspaces.repo = {
@@ -56,7 +67,7 @@ describe("settings snapshot edits", () => {
       branchPrefix: "feature",
       defaultTargetBranch: { remote: "upstream", branch: "develop" },
       git: { provider: { id: "github", enabled: true, autoDetected: false } },
-      hooks: { postComplete: ["bun test"] },
+      hooks: { beforeWorktreeRemoval: ["bun test"] },
       actions: {
         items: [
           {
@@ -72,7 +83,11 @@ describe("settings snapshot edits", () => {
       },
       worktreeCopyPaths: [".env"],
       promptOverrides: {
-        "kickoff.qa_review": { template: "QA", baseVersion: 2, enabled: false },
+        [promptOverrideKey({
+          ownerKind: "role",
+          ownerId: "qa",
+          promptId: ROLE_INSTRUCTIONS_PROMPT_ID,
+        })]: { template: "QA", baseVersion: 2, enabled: false },
       },
       agentDefaults: { build: model },
     };

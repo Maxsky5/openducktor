@@ -1,5 +1,6 @@
 import "../../../test-support/dom-environment";
 import { describe, expect, mock, spyOn, test } from "bun:test";
+import { specPlanBuildPromptKey } from "@openducktor/workflows/test-support";
 import * as workspaceRecords from "../session-read-model/workspace-session-records";
 import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type {
@@ -68,10 +69,10 @@ const createReadOnlyRepoConfig = (): RepoConfig => ({
   branchPrefix: "odt/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   promptOverrides: {
-    "permission.read_only.reject": {
+    [specPlanBuildPromptKey("workflow.read_only_rejection")]: {
       template: "Custom read-only rejection for {{role}}.",
       baseVersion: 1,
       enabled: true,

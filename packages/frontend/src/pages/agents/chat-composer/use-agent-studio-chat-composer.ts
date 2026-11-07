@@ -49,7 +49,10 @@ import { useChatComposerSlashCommands } from "@openducktor/frontend-core/session
 import { useChatComposerSubagents } from "@openducktor/frontend-core/sessions/composer/prompt-input/use-chat-composer-subagents";
 import { availableDefaultSessionSelectionFor } from "@openducktor/frontend-core/sessions/session-start-selection";
 import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
-import { runtimeReadinessTargetForRuntime } from "@openducktor/frontend-core/lib/runtime-readiness";
+import {
+  inactiveRuntimeReadinessTarget,
+  runtimeReadinessTargetForRuntime,
+} from "@openducktor/frontend-core/lib/runtime-readiness";
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   type RuntimeReadiness,
@@ -61,12 +64,12 @@ import { useRuntimeModelCatalogs } from "@openducktor/frontend-core/queries/use-
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioSelectedSessionState } from "../selected-session/selected-session-state";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 type UseAgentStudioChatComposerArgs = {
   workspaceRepoPath: string | null;
   selectedSession: AgentStudioSelectedSessionState;
-  role: AgentRole;
+  role: AgentRole | null;
   reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
   updateAgentSessionModel: (
@@ -151,11 +154,13 @@ export function useAgentStudioChatComposer({
   const hasSessionTarget = selectedSessionIdentity !== null;
   const defaultSelection = useMemo(
     () =>
-      availableDefaultSessionSelectionFor({
-        repoSettings,
-        role,
-        runtimeDefinitions: availableRuntimeDefinitions,
-      }),
+      role
+        ? availableDefaultSessionSelectionFor({
+            repoSettings,
+            role,
+            runtimeDefinitions: availableRuntimeDefinitions,
+          })
+        : null,
     [availableRuntimeDefinitions, repoSettings, role],
   );
   const { draftSelection, explicitDraftSelection, applyDraftSelection } =
@@ -163,22 +168,26 @@ export function useAgentStudioChatComposer({
       contextKey: workspaceRepoPath,
       defaultSelection,
       isDefaultSelectionReady: repoSettings !== null,
-      selectionKey: role,
+      selectionKey: JSON.stringify(role),
     });
   const selectedRuntimeKind = useMemo(
     () =>
-      resolveChatComposerSelectedRuntimeKind({
-        selectedSessionModel,
-        draftSelection,
-        defaultSelection,
-        runtimeDefinitions: availableRuntimeDefinitions,
-      }),
-    [availableRuntimeDefinitions, draftSelection, defaultSelection, selectedSessionModel],
+      role
+        ? resolveChatComposerSelectedRuntimeKind({
+            selectedSessionModel,
+            draftSelection,
+            defaultSelection,
+            runtimeDefinitions: availableRuntimeDefinitions,
+          })
+        : null,
+    [role, availableRuntimeDefinitions, draftSelection, defaultSelection, selectedSessionModel],
   );
   const selectedTargetRuntimeKind = selectedSessionIdentity?.runtimeKind ?? selectedRuntimeKind;
   const draftRuntimeReadiness = useRuntimeReadiness({
     hasWorkspace: workspaceRepoPath !== null,
-    runtimeTarget: runtimeReadinessTargetForRuntime(selectedTargetRuntimeKind),
+    runtimeTarget: role
+      ? runtimeReadinessTargetForRuntime(selectedTargetRuntimeKind)
+      : inactiveRuntimeReadinessTarget,
   });
   const runtimeReadiness = hasSessionTarget
     ? selectedSession.runtimeReadiness
@@ -252,7 +261,7 @@ export function useAgentStudioChatComposer({
   );
   const { resources: repoModelPickerResources } = useRuntimeModelCatalogs({
     repoPath: workspaceRepoPath,
-    runtimeKinds: modelPickerRuntimeKinds,
+    runtimeKinds: role ? modelPickerRuntimeKinds : [],
     enabledRuntimeKinds: enabledModelPickerRuntimeKinds,
     loadRuntimeCatalog,
   });

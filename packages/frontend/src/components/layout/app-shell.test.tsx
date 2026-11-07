@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
@@ -110,7 +111,7 @@ import type {
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { AppShell } from "./app-shell";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
 const SESSION_SCOPE_STORAGE_KEY = "openducktor:sidebar:session-scope";
@@ -136,7 +137,7 @@ const activeRepoConfig = {
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
@@ -336,12 +337,10 @@ const createTasksState = (tasks: TaskCard[] = []): TasksStateContextValue => ({
   updateTask: async () => undefined,
   setTaskTargetBranch: async () => undefined,
   deleteTask: async () => undefined,
-  closeTask: async () => undefined,
+  closeTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
   removeTaskWorktree: async () => undefined,
-  resetTaskImplementation: async () => undefined,
-  resetTask: async () => undefined,
-  transitionTask: async () => undefined,
-  humanRequestChangesTask: async () => undefined,
+  resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
+  resetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
 });
 
 function AppShellTestEnvironment({
@@ -1464,7 +1463,7 @@ describe("AppShell command palette", () => {
     status: "in_progress",
     issueType: "feature",
     labels: ["ux"],
-    availableActions: ["build_start", "open_builder", "reset_task", "close_task"],
+    availableActions: ["build_start", "open_builder"],
   });
   const fairnestTask = createTaskCardFixture({
     id: "fair-1",
@@ -2138,7 +2137,7 @@ describe("AppShell command palette", () => {
       const input = search(palette, "checkout");
       fireEvent.keyDown(input, { key: "Tab" });
       search(palette, "copy");
-      expect(selectedOption(palette)?.textContent).toBe("Copy task ID");
+      expect(selectedOption(palette)?.textContent).toBe("Copy Task ID");
 
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -2282,11 +2281,12 @@ describe("AppShell command palette", () => {
       "Open latest sessionBuilder",
       "Open Builder session",
       "Start Builder",
-      "Edit task",
-      "Open task details",
-      "Copy task ID",
+      "Close Task",
+      "Edit Task",
+      "Open Task Details",
+      "Copy Task ID",
       "Reset Task",
-      "Delete task",
+      "Delete Task",
     ]);
     expect(input.value).toBe("");
 

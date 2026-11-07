@@ -1,4 +1,3 @@
-import { BUILTIN_ROLE_LABELS, type BuiltinRoleId as AgentRole } from "@openducktor/workflows";
 import type { OpenCodePermissionRule } from "@openducktor/contracts";
 import { useId, useRef, type ReactElement } from "react";
 import { Combobox } from "@/components/ui/combobox";
@@ -7,21 +6,20 @@ import { NEW_RULE, ROLE_OPTIONS } from "./opencode-permission-options";
 import { PermissionScope } from "./opencode-permission-scope";
 
 type PermissionRoleProps = {
-  role: AgentRole;
+  label: string;
   rules: OpenCodePermissionRule[];
   disabled: boolean;
   onChange: (rules: OpenCodePermissionRule[]) => void;
 };
 
 export function PermissionRole({
-  role,
+  label,
   rules,
   disabled,
   onChange,
 }: PermissionRoleProps): ReactElement {
   const id = useId();
   const rowRef = useRef<HTMLDivElement>(null);
-  const label = BUILTIN_ROLE_LABELS[role];
   const hasRules = rules.length > 0;
   const ruleLabel = rules.length === 1 ? "rule" : "rules";
   const summary = hasRules ? `${rules.length} ${ruleLabel} after defaults` : "Inherits defaults";

@@ -1,13 +1,10 @@
 import {
-  BUILTIN_ROLE_LABELS,
-  BUILTIN_ROLE_IDS,
   recordBy,
   resolveSessionContinuationLaunchAction,
-  type BuiltinLaunchActionId as SessionLaunchActionId,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowLaunchActionId as SessionLaunchActionId,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
-import type { AgentWorkflowState } from "@openducktor/contracts";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
@@ -17,12 +14,8 @@ import {
   formatAgentSessionOptionDescription,
   formatAgentSessionOptionLabel,
 } from "@openducktor/frontend-core/lib/agent-session-options";
-import { buildRoleWorkflowState } from "@openducktor/frontend-core/lib/agent-workflow-state";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import type {
-  WorkflowStepLiveSession,
-  WorkflowStepPresentation,
-} from "@openducktor/frontend-core/types/agent-workflow";
+import type { WorkflowStepLiveSession } from "@openducktor/frontend-core/types/agent-workflow";
 import { SESSION_BUSY_REASON } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 
 export type SessionCreateOption = {
@@ -44,21 +37,24 @@ type WorkflowSessionSummary = AgentSessionWorkflowSummary & {
 
 const isWorkflowSessionSummary = (
   session: AgentSessionWorkflowSummary | null | undefined,
-): session is WorkflowSessionSummary => session?.role !== null;
+): session is WorkflowSessionSummary => session != null && session.role !== null;
 
-const createRoleRecord = <Value>(build: (role: AgentRole) => Value) =>
-  recordBy(BUILTIN_ROLE_IDS, build);
+const createRoleRecord = <Value>(roles: readonly string[], build: (role: AgentRole) => Value) =>
+  recordBy(roles, build);
 
 const buildSessionsByRole = (
   sessionsForTask: AgentSessionWorkflowSummary[],
 ): Record<AgentRole, WorkflowSessionSummary[]> => {
-  const sessionsByRole = createRoleRecord<WorkflowSessionSummary[]>(() => []);
+  const sessionsByRole = createRoleRecord<WorkflowSessionSummary[]>(
+    [...new Set(sessionsForTask.flatMap((session) => (session.role ? [session.role] : [])))],
+    () => [],
+  );
 
   for (const session of sessionsForTask.toSorted(compareAgentSessionRecency)) {
     if (!isWorkflowSessionSummary(session)) {
       continue;
     }
-    sessionsByRole[session.role].push(session);
+    sessionsByRole[session.role]!.push(session);
   }
 
   return sessionsByRole;
@@ -77,25 +73,11 @@ export const buildLatestSessionByTaskMap = (
   return next;
 };
 
-export const buildWorkflowStateByRole = (params: {
-  task: TaskCard | null;
-  roleWorkflowsByTask: Record<AgentRole, AgentWorkflowState>;
-  liveSessionByRole: Record<AgentRole, WorkflowStepLiveSession>;
-}): Record<AgentRole, WorkflowStepPresentation> =>
-  createRoleRecord((role) =>
-    buildRoleWorkflowState({
-      task: params.task,
-      role,
-      workflow: params.roleWorkflowsByTask[role],
-      liveSession: params.liveSessionByRole[role],
-    }),
-  );
-
 export const buildLatestSessionByRoleMap = (
   sessionsForTask: AgentSessionWorkflowSummary[],
 ): Record<AgentRole, AgentSessionWorkflowSummary | null> => {
   const sessionsByRole = buildSessionsByRole(sessionsForTask);
-  return createRoleRecord((role) => sessionsByRole[role][0] ?? null);
+  return createRoleRecord(Object.keys(sessionsByRole), (role) => sessionsByRole[role]?.[0] ?? null);
 };
 
 export const buildLiveSessionByRoleMap = (
@@ -103,7 +85,7 @@ export const buildLiveSessionByRoleMap = (
 ): Record<AgentRole, WorkflowStepLiveSession> => {
   const latestSessionByRole = buildLatestSessionByRoleMap(sessionsForTask);
 
-  return createRoleRecord((role) => {
+  return createRoleRecord(Object.keys(latestSessionByRole), (role) => {
     const latestSession = latestSessionByRole[role];
     if (!latestSession) return "none";
     if (
@@ -123,8 +105,8 @@ export const buildSessionSelectorGroups = (params: {
   const groups: ComboboxGroup[] = [];
   const sessionsByRole = buildSessionsByRole(params.sessionsForTask);
 
-  for (const role of BUILTIN_ROLE_IDS) {
-    const roleSessions = sessionsByRole[role];
+  for (const role of Object.keys(params.roleLabelByRole)) {
+    const roleSessions = sessionsByRole[role] ?? [];
     if (roleSessions.length === 0) {
       continue;
     }
@@ -143,7 +125,7 @@ export const buildSessionSelectorGroups = (params: {
       };
     });
     groups.push({
-      label: params.roleLabelByRole[role],
+      label: params.roleLabelByRole[role]!,
       options: roleOptions,
     });
   }
@@ -157,18 +139,20 @@ export const buildSessionCreateOptions = (params: {
   createSessionDisabled: boolean;
   roleLabelByRole: Record<AgentRole, string>;
 }): SessionCreateOption[] =>
-  BUILTIN_ROLE_IDS.filter((role) => params.roleEnabledByTask[role]).map((role) => {
-    const launchActionId = resolveSessionContinuationLaunchAction(role, params.task);
-    const option: SessionCreateOption = {
-      id: `${role}:${launchActionId}:message_first`,
-      role,
-      launchActionId,
-      label: `Prepare ${params.roleLabelByRole[role]} session`,
-      description: `Open a ${BUILTIN_ROLE_LABELS[role]} composer without sending a kickoff.`,
-      disabled: params.createSessionDisabled,
-    };
-    if (params.createSessionDisabled) {
-      option.disabledReason = SESSION_BUSY_REASON;
-    }
-    return option;
-  });
+  Object.keys(params.roleEnabledByTask)
+    .filter((role) => params.roleEnabledByTask[role])
+    .map((role) => {
+      const launchActionId = resolveSessionContinuationLaunchAction(role, params.task);
+      const option: SessionCreateOption = {
+        id: `${role}:${launchActionId}:message_first`,
+        role,
+        launchActionId,
+        label: `Prepare ${params.roleLabelByRole[role]} session`,
+        description: `Open a ${params.roleLabelByRole[role]} composer without sending a kickoff.`,
+        disabled: params.createSessionDisabled,
+      };
+      if (params.createSessionDisabled) {
+        option.disabledReason = SESSION_BUSY_REASON;
+      }
+      return option;
+    });

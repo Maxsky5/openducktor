@@ -45,14 +45,7 @@ type HookArgs = Omit<ProductionHookArgs, "runSessionStartWorkflow"> & {
 
 const createTask = (overrides = {}) => createTaskCardFixture(overrides);
 
-const createPromptTask = (overrides = {}) =>
-  createTask({
-    title: undefined,
-    issueType: undefined,
-    status: undefined,
-    description: undefined,
-    ...overrides,
-  });
+const createPromptTask = createTask;
 
 const createSession = (overrides: AgentSessionFixtureOverrides = {}) =>
   createAgentSessionFixture(overrides);
@@ -258,7 +251,7 @@ const REPO_SETTINGS = {
     profileId: "",
   },
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  postCompleteHooks: [],
+  beforeWorktreeRemovalHooks: [],
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   agentDefaults: {

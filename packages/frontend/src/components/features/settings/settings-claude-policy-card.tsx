@@ -1,8 +1,5 @@
-import {
-  BUILTIN_ROLE_LABELS,
-  BUILTIN_ROLE_IDS,
-  type BuiltinRoleId as AgentRole,
-} from "@openducktor/workflows";
+import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow-settings";
+import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import type { ClaudeRuntimeConfig } from "@openducktor/contracts";
 import { resolveClaudePolicy } from "@openducktor/contracts";
 import { useId, useState } from "react";
@@ -155,7 +152,14 @@ export function ClaudePolicyCard({
 }) {
   const id = useId();
   const [showRoles, setShowRoles] = useState(false);
-  const hasOverride = BUILTIN_ROLE_IDS.some(
+  const workflows = useWorkflowSettings();
+  if (!workflows.data || workflows.error)
+    return (
+      <p role={workflows.error ? "alert" : "status"}>
+        {workflows.error?.message ?? "Loading workflow roles..."}
+      </p>
+    );
+  const hasOverride = Object.keys(config.roleOverrides).some(
     (role) => readClaudePolicyField(config.roleOverrides[role] ?? {}, field.path) !== undefined,
   );
   const rolesVisible = showRoles || hasOverride;
@@ -238,7 +242,7 @@ export function ClaudePolicyCard({
           setShowRoles(enabled);
           if (!enabled) {
             const roleOverrides = { ...config.roleOverrides };
-            for (const role of BUILTIN_ROLE_IDS) {
+            for (const role of Object.keys(config.roleOverrides)) {
               if (roleOverrides[role])
                 roleOverrides[role] = updateClaudePolicyField(
                   roleOverrides[role],
@@ -251,9 +255,9 @@ export function ClaudePolicyCard({
         }}
       >
         <div className="divide-y divide-border rounded-md border border-border">
-          {BUILTIN_ROLE_IDS.map((role) => {
+          {workflows.data.roles.map(({ role, label: roleLabel }) => {
             const roleId = `${id}-${role}`;
-            const label = `${BUILTIN_ROLE_LABELS[role]} ${field.label.toLowerCase()}`;
+            const label = `${roleLabel} ${field.label.toLowerCase()}`;
             const value = readClaudePolicyField(config.roleOverrides[role] ?? {}, field.path);
             const effective = readClaudePolicyField(
               resolveClaudePolicy(config, role).settings,
@@ -266,7 +270,7 @@ export function ClaudePolicyCard({
               >
                 <div className="flex flex-col gap-1">
                   <Label id={`${roleId}-label`} className="text-sm font-medium text-foreground">
-                    {BUILTIN_ROLE_LABELS[role]}
+                    {roleLabel}
                     <span className="sr-only"> {field.label.toLowerCase()}</span>
                   </Label>
                   <p className="text-xs text-muted-foreground">

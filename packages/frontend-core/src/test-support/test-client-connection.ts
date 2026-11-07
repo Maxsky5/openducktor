@@ -1,3 +1,7 @@
+import {
+  builtinWorkflowCatalogFixture,
+  builtinWorkspaceWorkflowFixture,
+} from "./workflow-fixtures";
 import { createHostClient, type HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
 import { type ClientConnection, createClientConnection } from "../connection/client-connection";
@@ -19,13 +23,20 @@ export type TestHostConnectionOverrides = Partial<Omit<HostConnection, "client">
   client?: Partial<HostClient>;
 };
 
-/** A host whose commands fail until a test supplies them. Event streams stay silent. */
+/** A host with the built-in read-only workflow fixture. Other commands need handlers. */
 export const createTestHostConnection = (
   overrides: TestHostConnectionOverrides = {},
 ): HostConnection => {
   const { client, ...streams } = overrides;
   return {
-    client: Object.assign(createHostClient(unconfiguredCommand), client),
+    client: Object.assign(
+      createHostClient(unconfiguredCommand),
+      {
+        workflowCatalogGet: async () => structuredClone(builtinWorkflowCatalogFixture),
+        workspaceWorkflowGet: async () => structuredClone(builtinWorkspaceWorkflowFixture),
+      },
+      client,
+    ),
     subscribeStartupProgress: noSubscription,
     subscribeWorkspaceProviderSetupUpdates: noSubscription,
     subscribeWorkspaceSessionUpdates: noSubscription,

@@ -1,5 +1,11 @@
 import {
   type WorkspaceRef,
+  workflowCatalogSchema,
+  workspaceWorkflowContextSchema,
+  type WorkflowCatalog,
+  type WorkspaceWorkflowContext,
+  type TaskCard,
+  taskCardSchema,
   artifactScopeSchema,
   artifactReadRequestSchema,
   artifactCreateRequestSchema,
@@ -68,7 +74,6 @@ import {
   taskArtifactSaveResultSchema,
   taskMetadataArtifactSchema,
   taskMetadataPayloadSchema,
-  taskStatusSchema,
   taskStopImpactSchema,
   taskUpdatePatchSchema,
 } from "@openducktor/contracts";
@@ -80,11 +85,6 @@ import {
   okResultSchema,
   voidResultSchema,
 } from "./invoke-utils";
-import {
-  type BuiltinStateId as TaskStatus,
-  type BuiltinTaskCard as TaskCard,
-  builtinTaskCardSchema,
-} from "@openducktor/workflows";
 
 /** A submit sends the event that the artifact or its verdict declares. */
 export type WorkflowArtifactSaveInput = WorkspaceRef & {
@@ -110,11 +110,6 @@ type TaskUpdateArgs = WorkspaceRef & {
   patch: TaskUpdatePatch;
   descriptionAssets?: TaskAssetDescriptionMutation;
 };
-type TaskTransitionArgs = WorkspaceRef & {
-  taskId: string;
-  status: TaskStatus;
-  reason?: string;
-};
 
 /**
  * Callers can pass a wider object, such as a workspace record, because it has every scope field.
@@ -129,6 +124,18 @@ const artifactDeleteRequest = z.object(artifactDeleteRequestSchema.shape);
 
 export class HostTaskClient {
   constructor(private readonly invokeFn: InvokeFn) {}
+
+  workflowCatalogGet(): Promise<WorkflowCatalog> {
+    return this.invokeFn("workflow_catalog_get", {}, workflowCatalogSchema);
+  }
+
+  workspaceWorkflowGet(scope: WorkspaceRef): Promise<WorkspaceWorkflowContext> {
+    return this.invokeFn(
+      "workspace_workflow_get",
+      { workspaceId: scope.workspaceId, repoPath: scope.repoPath },
+      workspaceWorkflowContextSchema,
+    );
+  }
 
   taskArtifactsList(input: ArtifactScope): Promise<TaskArtifactCollection> {
     return this.invokeFn(
@@ -180,11 +187,7 @@ export class HostTaskClient {
 
   async tasksList(scope: WorkspaceRef): Promise<TaskCard[]> {
     const args: WorkspaceRef = { workspaceId: scope.workspaceId, repoPath: scope.repoPath };
-    return this.invokeFn(
-      "tasks_list",
-      args,
-      arrayResultSchema(builtinTaskCardSchema, "tasks_list"),
-    );
+    return this.invokeFn("tasks_list", args, arrayResultSchema(taskCardSchema, "tasks_list"));
   }
 
   /** Read every task card, including closed tasks outside Kanban retention. */
@@ -193,7 +196,7 @@ export class HostTaskClient {
     return this.invokeFn(
       "tasks_list_all",
       args,
-      arrayResultSchema(builtinTaskCardSchema, "tasks_list_all"),
+      arrayResultSchema(taskCardSchema, "tasks_list_all"),
     );
   }
 
@@ -256,7 +259,7 @@ export class HostTaskClient {
     if (assetIntent) {
       args.descriptionAssets = assetIntent;
     }
-    return this.invokeFn("task_create", args, builtinTaskCardSchema);
+    return this.invokeFn("task_create", args, taskCardSchema);
   }
 
   async taskUpdate(
@@ -281,7 +284,7 @@ export class HostTaskClient {
     if (assetIntent) {
       args.descriptionAssets = assetIntent;
     }
-    return this.invokeFn("task_update", args, builtinTaskCardSchema);
+    return this.invokeFn("task_update", args, taskCardSchema);
   }
 
   async taskAssetStage(input: TaskAssetStageInput): Promise<TaskAssetStageResult> {
@@ -317,7 +320,7 @@ export class HostTaskClient {
         taskId,
         removeWorktree,
       }),
-      builtinTaskCardSchema,
+      taskCardSchema,
     );
   }
 
@@ -363,46 +366,20 @@ export class HostTaskClient {
     );
   }
 
-  async taskResetImplementation(scope: WorkspaceRef, taskId: string): Promise<TaskCard> {
-    return this.invokeFn(
-      "task_reset_implementation",
-      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
-      builtinTaskCardSchema,
-    );
-  }
-
   async taskReset(scope: WorkspaceRef, taskId: string): Promise<TaskCard> {
     return this.invokeFn(
       "task_reset",
       { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
-      builtinTaskCardSchema,
+      taskCardSchema,
     );
   }
 
-  async taskTransition(
-    scope: WorkspaceRef,
-    taskId: string,
-    status: TaskStatus,
-    reason?: string,
-  ): Promise<TaskCard> {
-    taskStatusSchema.parse(status);
-    const args: TaskTransitionArgs = {
-      workspaceId: scope.workspaceId,
-      repoPath: scope.repoPath,
-      taskId,
-      status,
-    };
-    if (reason !== undefined) {
-      args.reason = reason;
-    }
-    return this.invokeFn("task_transition", args, builtinTaskCardSchema);
-  }
-
+  /** Applies a workflow event. The host runs its host effects in order, then commits the event. */
   async taskApplyEvent(scope: WorkspaceRef, taskId: string, eventId: string): Promise<TaskCard> {
     return this.invokeFn(
       "task_apply_event",
       { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, eventId },
-      builtinTaskCardSchema,
+      taskCardSchema,
     );
   }
 

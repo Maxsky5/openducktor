@@ -4,11 +4,13 @@ import {
   ODT_MCP_BRIDGE_VERSION,
   ODT_MCP_TOOL_NAMES,
   ODT_TOOL_SCHEMAS,
+  TASK_CLOSED_STATE,
   type OdtBrowserToolName,
   type OdtBrowserToolResult,
   type OdtHostBridgeReady,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type { JSONType, z } from "zod";
 import {
   executeOdtMcpBrowserTool,
@@ -55,6 +57,7 @@ export const createOdtMcpBridgeService = (
       return Effect.succeed({
         bridgeVersion: ODT_MCP_BRIDGE_VERSION,
         toolNames: [...ODT_MCP_TOOL_NAMES],
+        activeStatuses: hostActiveStatuses(context.taskWorkflows),
       });
     },
     getWorkspaces(input) {
@@ -84,6 +87,15 @@ export const createOdtMcpBridgeService = (
 };
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
+
+/** The states other than `closed` in the host workflows, unique, in first-use order. */
+const hostActiveStatuses = (taskWorkflows: TaskWorkflowResolver): string[] => [
+  ...new Set(
+    taskWorkflows.workflows.flatMap(({ definition }) =>
+      definition.states.flatMap(({ id }) => (id === TASK_CLOSED_STATE ? [] : [id])),
+    ),
+  ),
+];
 
 const READ_TOOL_NAMES: ReadonlySet<OdtMcpTaskToolName> = new Set(ODT_MCP_READ_TOOL_NAMES);
 

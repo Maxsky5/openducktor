@@ -84,7 +84,7 @@ const createHarness = (
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath: "/repo",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       defaultTargetBranch: publish ? { remote: "origin", branch: "main" } : { branch: "main" },
     }),
     taskStore: {
@@ -206,7 +206,7 @@ describe("direct merge session guard", () => {
       const result = await Effect.runPromise(service.directMerge(mergeInput));
       expect(result).toMatchObject({
         outcome: "completed",
-        task: { status: publish ? "human_review" : "closed" },
+        task: { status: publish ? "ai_review" : "closed" },
       });
     },
   );

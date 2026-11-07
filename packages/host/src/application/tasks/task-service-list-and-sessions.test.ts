@@ -250,10 +250,8 @@ describe("createTaskService list and session reads", () => {
         "qa_start",
         "open_builder",
         "reset_implementation",
-        "reset_task",
         "human_request_changes",
         "human_approve",
-        "close_task",
       ],
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },

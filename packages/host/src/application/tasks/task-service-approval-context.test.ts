@@ -203,7 +203,7 @@ describe("createTaskService approval context", () => {
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         git: {
           provider: {
             id: "github",
@@ -372,7 +372,7 @@ describe("createTaskService approval context", () => {
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
             repoPath: "/repo",
-            hooks: { postComplete: [] },
+            hooks: { beforeWorktreeRemoval: [] },
           }),
         }).getApprovalContext({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
       ),
@@ -494,7 +494,7 @@ describe("approval preparation", () => {
     if (scenario === "missing" && entryPoint === "getApprovalContext") {
       if (result._tag !== "Success") throw new Error("Expected missing-worktree result");
       expect(result.success).toEqual({
-        outcome: "missing_builder_worktree",
+        outcome: "missing_worktree",
         taskId: "task-1",
         taskStatus,
       });
@@ -539,11 +539,17 @@ describe("approval preparation", () => {
 });
 
 test.each([
-  ["built-in", builtinTaskWorkflows, "human_review", "task"],
-  ["review", reviewTaskWorkflows, "approval", "article"],
+  ["built-in", builtinTaskWorkflows, "human_review", "task", task().artifactSummary],
+  [
+    "review",
+    reviewTaskWorkflows,
+    "approval",
+    "feature",
+    { draft: { present: true }, review: { present: true } },
+  ],
 ] as const)(
   "approval context rereads the target and keeps the publication snapshot (%s)",
-  async (_label, taskWorkflows, status, issueType) => {
+  async (_label, taskWorkflows, status, issueType, artifactSummary) => {
     const calls: unknown[] = [];
     const repoConfig = repoConfigFixture();
     let repoReads = 0;
@@ -551,7 +557,7 @@ test.each([
       taskWorkflows,
       gitProviderResolver: unusedGitProviderResolver,
       taskStore: {
-        getTask: () => Effect.succeed(task({ status, issueType, artifactSummary: {} })),
+        getTask: () => Effect.succeed(task({ status, issueType, artifactSummary })),
         getTaskMetadata: () => Effect.succeed({ artifacts: {}, agentSessions: [] }),
       },
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),

@@ -6,6 +6,7 @@ import type { LucideIcon } from "lucide-react";
 
 export type WorkflowRailStep = WorkflowStepRailState & {
   id: string;
+  human?: boolean;
   label: string;
   icon: LucideIcon;
   state: WorkflowStepPresentation;

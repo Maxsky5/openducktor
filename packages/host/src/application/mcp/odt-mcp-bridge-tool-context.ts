@@ -1,12 +1,19 @@
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
-import type { OdtBrowserToolName, WorkspaceScopedOdtToolName } from "@openducktor/contracts";
+import {
+  odtBrowserCallerSchema,
+  type OdtBrowserToolName,
+  type OdtToolName,
+  type WorkspaceScopedOdtToolName,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
+import { type JSONType, z } from "zod";
 import {
   type HostOperationErrorAggregate,
   HostValidationError,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { TaskReference } from "../../ports/task-repository-ports";
+import type { RuntimeSessionOwner } from "../../ports/workspace-session-store-port";
 import type { BrowserCallerResolver } from "../browser/browser-caller-resolver";
 import type { ManagedCallerResolver } from "../agent-sessions/managed-caller-resolver";
 import type { BrowserService } from "../browser/browser-service-types";
@@ -16,7 +23,7 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
-import { resolveTaskReference, taskNotFoundError } from "./odt-mcp-bridge-model";
+import { parseToolInput, resolveTaskReference, taskNotFoundError } from "./odt-mcp-bridge-model";
 
 export type OdtMcpBridgeError =
   | HostOperationErrorAggregate
@@ -41,9 +48,7 @@ export type OdtMcpMutationToolName = Exclude<OdtMcpTaskToolName, OdtMcpReadToolN
 type OdtMcpTaskAssetReadService = Pick<TaskAssetReadService, "readBatch">;
 type OdtMcpTaskService = Pick<
   TaskService,
-  | "buildBlocked"
-  | "buildCompleted"
-  | "buildResumed"
+  | "applyAgentEvent"
   | "createTask"
   | "listTaskArtifacts"
   | "readTaskArtifact"
@@ -132,6 +137,39 @@ export const createOdtMcpToolContext = ({
 };
 
 export type OdtMcpToolContext = ReturnType<typeof createOdtMcpToolContext>;
+
+const callerBridgeBodySchema = z.record(z.string(), z.json());
+
+/** Splits the native caller of a managed session from the tool input of a bridge body. */
+export const splitBridgeCaller = (toolName: OdtToolName, body: JSONType) =>
+  parseToolInput(toolName, callerBridgeBodySchema, body).pipe(
+    Effect.map(({ caller, ...input }) => ({ caller, input })),
+  );
+
+/**
+ * The saved root session of a managed caller. A call without a caller comes from a user client
+ * and has no owner. A task session may act only on its own task.
+ */
+export const resolveTaskCaller = (
+  context: OdtMcpToolContext,
+  toolName: OdtToolName,
+  rawCaller: JSONType | undefined,
+  workspaceId: string,
+  taskId: string,
+  action: string,
+): Effect.Effect<RuntimeSessionOwner | undefined, OdtMcpBridgeError> =>
+  Effect.gen(function* () {
+    if (rawCaller === undefined) return undefined;
+    const caller = yield* parseToolInput(toolName, odtBrowserCallerSchema, rawCaller);
+    const owner = yield* context.managedCallers.resolve({ workspaceId, caller });
+    if (owner.kind === "task" && owner.taskId !== taskId) {
+      return yield* new HostValidationError({
+        field: "taskId",
+        message: `Managed task sessions can ${action} only for their own task.`,
+      });
+    }
+    return owner;
+  });
 
 const taskReferenceError = (cause: unknown) =>
   new HostValidationError({

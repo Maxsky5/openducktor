@@ -41,7 +41,9 @@ export function HumanReviewFeedbackModal({
       <DialogContent className="max-w-xl overflow-hidden p-0">
         <DialogHeader className="px-6 py-5 pr-14">
           <DialogTitle>{HUMAN_REVIEW_FEEDBACK_COPY.title}</DialogTitle>
-          <DialogDescription>{HUMAN_REVIEW_FEEDBACK_COPY.description}</DialogDescription>
+          <DialogDescription>
+            {HUMAN_REVIEW_FEEDBACK_COPY.description(model.roleLabel)}
+          </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="min-h-0 overflow-y-auto px-6 pb-6">
@@ -54,7 +56,7 @@ export function HumanReviewFeedbackModal({
               value={model.message}
               disabled={model.isSubmitting}
               className="min-h-48"
-              placeholder={HUMAN_REVIEW_FEEDBACK_COPY.messagePlaceholder}
+              placeholder={HUMAN_REVIEW_FEEDBACK_COPY.messagePlaceholder(model.roleLabel)}
               onChange={(event) => model.onMessageChange(event.target.value)}
             />
           </div>
@@ -80,7 +82,7 @@ export function HumanReviewFeedbackModal({
             ) : (
               <MessageSquareWarning data-icon="inline-start" />
             )}
-            {HUMAN_REVIEW_FEEDBACK_COPY.confirmLabel}
+            {model.confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

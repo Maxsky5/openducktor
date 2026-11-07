@@ -1,6 +1,7 @@
+import { renderWithWorkflow as render } from "@/test-utils/render-with-workflow";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { type AutopilotSettings, createDefaultAutopilotSettings } from "@openducktor/contracts";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { act } from "react";
 import { setAutopilotRuleAction } from "@/features/autopilot/autopilot-catalog";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
@@ -65,6 +66,15 @@ describe("settings Autopilot section", () => {
     ).toBeDefined();
   });
 
+  test("groups the rules under the workflow that owns them", async () => {
+    renderSection(createDefaultAutopilotSettings());
+
+    const workflow = await screen.findByRole("region", { name: "Spec, Plan, Build" });
+    expect(
+      within(workflow).getByRole("button", { name: "When a task progresses to Human Review" }),
+    ).toBeDefined();
+  });
+
   test("shows the fresh QA setting and its saved state", () => {
     const setting = {
       ...createDefaultAutopilotSettings(),
@@ -120,32 +130,29 @@ describe("settings Autopilot section", () => {
       );
     });
     expect(
-      screen
-        .getByRole("option", { name: /Start Generate Pull Request/ })
-        .getAttribute("aria-disabled"),
+      screen.getByRole("option", { name: /Generate Pull Request/ }).getAttribute("aria-disabled"),
     ).toBe("false");
   });
 
   test("keeps a saved global Pull Request action visible", async () => {
     const autopilot = setAutopilotRuleAction(
       createDefaultAutopilotSettings(),
+      "openducktor-spec-plan-build",
       "taskProgressedToHumanReview",
-      "startGeneratePullRequest",
+      "action:startGeneratePullRequest",
     );
     renderSection(autopilot);
 
     expect(
       screen.getByRole("button", { name: "When a task progresses to Human Review" }).textContent,
-    ).toContain("Start Generate Pull Request");
+    ).toContain("Generate Pull Request");
     await act(async () => {
       fireEvent.click(
         screen.getByRole("button", { name: "When a task progresses to Human Review" }),
       );
     });
     expect(
-      screen
-        .getByRole("option", { name: /Start Generate Pull Request/ })
-        .getAttribute("aria-disabled"),
+      screen.getByRole("option", { name: /Generate Pull Request/ }).getAttribute("aria-disabled"),
     ).toBe("false");
   });
 });

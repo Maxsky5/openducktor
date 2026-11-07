@@ -1,5 +1,5 @@
 import type { RepoPromptOverrides } from "@openducktor/contracts";
-import type { BuiltinPromptTemplateId as AgentPromptTemplateId } from "@openducktor/workflows";
+import type { WorkflowPromptTemplateId as AgentPromptTemplateId } from "@openducktor/workflows";
 
 export type PromptInheritedPreview = {
   sourceLabel: string;
@@ -21,7 +21,7 @@ export const buildInheritedPromptPreview = (
     globalOverride && globalOverride.enabled !== false ? globalOverride : undefined;
 
   return {
-    sourceLabel: globalEnabledOverride ? "Global override" : "Builtin prompt",
+    sourceLabel: globalEnabledOverride ? "Global override" : "Built-in prompt",
     template: globalEnabledOverride?.template ?? builtinTemplate,
   };
 };

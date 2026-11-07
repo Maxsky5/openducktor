@@ -20,11 +20,10 @@ import { Touchable } from "@/ui/touchable";
 import { useAnnounce } from "@/ui/use-announce";
 import type { DocumentSource, HostDocumentKey } from "./document-rows";
 import {
-  DOCUMENT_KINDS,
-  DOCUMENT_PANEL_COPY,
   type DocumentBlockRow,
   type DocumentPanelState,
   documentPanelState,
+  documentMenuItems,
   formatDocumentUpdatedAt,
 } from "./documents-panel-model";
 import { useTaskDocumentSources } from "./use-task-document-sources";
@@ -65,14 +64,15 @@ function DocumentsContent({ owner }: { owner: WorkOwner }): ReactElement {
  */
 const initialDocument = (
   requested: string | string[] | undefined,
-  summary: NonNullable<WorkOwner["task"]>["artifactSummary"],
-): HostDocumentKey => {
-  const named = DOCUMENT_KINDS.find((kind) => kind === requested);
-  if (named) return named;
-  if (summary.spec?.present) return "spec";
-  if (summary.plan?.present) return "plan";
-  if (summary.qaReport?.present) return "qa";
-  return "spec";
+  task: NonNullable<WorkOwner["task"]>,
+): HostDocumentKey | null => {
+  if (requested !== undefined && !Array.isArray(requested)) return requested;
+  return (
+    task.taskWorkflow.definition.artifacts.find(({ id }) => task.artifactSummary[id]?.present)
+      ?.id ??
+    task.taskWorkflow.definition.artifacts[0]?.id ??
+    null
+  );
 };
 
 /**
@@ -94,13 +94,13 @@ function TaskDocuments({
     repoPath: owner.repoPath,
   });
   const { document: requested } = useLocalSearchParams<{ document?: string }>();
-  const [selected, setSelected] = useState<HostDocumentKey>(() =>
-    initialDocument(requested, task.artifactSummary),
+  const [selected, setSelected] = useState<HostDocumentKey | null>(() =>
+    initialDocument(requested, task),
   );
-  const source = sources[selected];
-  const state = useMemo(() => documentPanelState(source), [source]);
-  const { title } = DOCUMENT_PANEL_COPY[selected];
-  const markdown = state.kind === "ready" ? state.markdown : null;
+  const source = selected ? sources.get(selected) : undefined;
+  const state = useMemo(() => (source ? documentPanelState(source) : null), [source]);
+  const title = source?.title ?? "Document";
+  const markdown = state?.kind === "ready" ? state.markdown : null;
   // Selectable text tracks its place on each frame, so a document turns it on only on request.
   const [selecting, setSelecting] = useState(false);
   const toggleSelecting = useCallback(() => setSelecting((current) => !current), []);
@@ -131,6 +131,19 @@ function TaskDocuments({
     return next;
   }, [copy, markdown, selecting, theme.desktop.card, title, toggleSelecting]);
 
+  if (!selected || !source || !state)
+    return (
+      <EmptyState
+        icon="file-text"
+        title={selected ? "Document Unavailable" : "No Workflow Documents"}
+        message={
+          selected
+            ? `Artifact "${selected}" is absent from this task workflow. Open its artifacts again.`
+            : "This workflow declares no documents."
+        }
+      />
+    );
+
   return (
     <View style={styles.page}>
       <Stack.Screen options={options} />
@@ -145,6 +158,8 @@ function TaskDocuments({
           key={selected}
           state={state}
           document={selected}
+          title={source.title}
+          emptyMessage={source.empty}
           selectable={selecting}
           onRetry={reload}
         />
@@ -162,29 +177,22 @@ function DocumentBar({
 }: {
   selected: HostDocumentKey;
   onSelect: (document: HostDocumentKey) => void;
-  sources: Record<HostDocumentKey, DocumentSource>;
+  sources: ReadonlyMap<HostDocumentKey, DocumentSource>;
   badge: DocumentSource["badge"];
 }): ReactElement {
   const theme = useAppTheme();
-  const { title } = DOCUMENT_PANEL_COPY[selected];
+  const title = sources.get(selected)!.title;
   const items = useMemo<ActionMenuItem[]>(
-    () =>
-      DOCUMENT_KINDS.map((kind) => ({
-        id: kind,
-        title: DOCUMENT_PANEL_COPY[kind].title,
-        detail: formatDocumentUpdatedAt(sources[kind].updatedAt) ?? "Not set",
-        checked: kind === selected,
-      })),
+    () => documentMenuItems(sources, selected),
     [selected, sources],
   );
   const select = useCallback(
     (id: string) => {
-      const kind = DOCUMENT_KINDS.find((candidate) => candidate === id);
-      if (kind) onSelect(kind);
+      if (sources.has(id)) onSelect(id);
     },
-    [onSelect],
+    [onSelect, sources],
   );
-  const updated = formatDocumentUpdatedAt(sources[selected].updatedAt);
+  const updated = formatDocumentUpdatedAt(sources.get(selected)!.updatedAt);
   return (
     <View style={styles.bar}>
       <View style={styles.picker}>
@@ -224,15 +232,18 @@ function DocumentBar({
 function DocumentBody({
   state,
   document,
+  title,
+  emptyMessage,
   selectable,
   onRetry,
 }: {
   state: DocumentPanelState;
   document: HostDocumentKey;
+  title: string;
+  emptyMessage: string;
   selectable: boolean;
   onRetry: (document: HostDocumentKey) => void;
 }): ReactElement {
-  const copy = DOCUMENT_PANEL_COPY[document];
   useAnnounce(state.kind === "error" ? state.message : null);
   switch (state.kind) {
     case "loading":
@@ -254,7 +265,7 @@ function DocumentBody({
             icon="refresh"
             size="sm"
             variant="outline"
-            accessibilityLabel={`Read the ${copy.title} again`}
+            accessibilityLabel={`Read the ${title} again`}
             onPress={() => onRetry(document)}
           />
         </View>
@@ -263,7 +274,7 @@ function DocumentBody({
       return (
         <View style={styles.message}>
           <Text variant="callout" style={styles.muted}>
-            {copy.empty}
+            {emptyMessage}
           </Text>
         </View>
       );

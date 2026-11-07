@@ -242,7 +242,9 @@ test("shared settings remembers the repository subsection and prompt tab", async
   const settings = renderSettings(true);
   try {
     let content = await settings.open("Open scripts");
-    expect(content.getByLabelText("Worktree cleanup script (one command per line)")).toBeDefined();
+    expect(
+      content.getByLabelText("Before worktree removal script (one command per line)"),
+    ).toBeDefined();
     fireEvent.click(content.getByRole("button", { name: "Repository prompts" }));
     fireEvent.click(content.getByRole("tab", { name: "QA" }));
     await settings.close(content);
@@ -261,7 +263,9 @@ test("shared settings clears the repository target after closing", async () => {
     await settings.close(content);
     content = await settings.open();
     expect(content.queryByRole("alert")).toBeNull();
-    expect(content.getByLabelText("Worktree cleanup script (one command per line)")).toBeDefined();
+    expect(
+      content.getByLabelText("Before worktree removal script (one command per line)"),
+    ).toBeDefined();
   } finally {
     settings.unmount();
   }

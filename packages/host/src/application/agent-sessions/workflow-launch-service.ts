@@ -15,7 +15,7 @@ import { toControlSessionRef } from "./task-workflow-session-storage";
 import {
   prepareWorkflowLaunch,
   resolveLaunchWorkspace,
-  requireLaunchAction,
+  requireInitialLaunchRole,
   isStartupRepair,
 } from "./workflow-launch-preparation";
 import type {
@@ -59,7 +59,7 @@ export const createWorkflowLaunchService = (
         attempt.keepInstruction(
           request.instruction.kind === "message" ? request.instruction.parts : parts,
         );
-      attempt.setResultFields({ startMode: decision.startMode });
+      attempt.setResultFields({ role: action.role, startMode: decision.startMode });
       if (model) attempt.setResultFields({ model });
       const sessionScope = {
         kind: "workflow" as const,
@@ -190,8 +190,8 @@ export const createWorkflowLaunchService = (
     },
     initial: (request) =>
       // A missing task fails in the launch, which reports it in the result.
-      requireLaunchAction(deps.taskWorkflows.forTask({ id: request.taskId }), request).pipe(
-        Effect.map(({ role }) => ({
+      requireInitialLaunchRole(deps.taskWorkflows.forTask({ id: request.taskId }), request).pipe(
+        Effect.map((role) => ({
           workspaceId: request.workspaceId,
           repoPath: request.repoPath,
           taskId: request.taskId,

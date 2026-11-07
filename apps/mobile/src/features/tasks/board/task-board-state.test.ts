@@ -64,11 +64,15 @@ describe("taskBoardView", () => {
     ).toEqual({ kind: "error", title: "Failed", message: "Retry." });
   });
 
-  test("says when the workspace has no task, a filter keeps none, or every lane is hidden", () => {
-    expect(taskBoardView({ ...ready, taskCount: 0 })).toEqual({ kind: "no_tasks" });
+  test("keeps visible lanes when there are no tasks or no filter matches", () => {
+    expect(taskBoardView({ ...ready, taskCount: 0 })).toEqual({ kind: "board" });
     expect(taskBoardView({ ...ready, filterActive: true, matchingCount: 0 })).toEqual({
-      kind: "no_results",
+      kind: "board",
     });
+    expect(taskBoardView({ ...ready, columnCount: 0, taskCount: 0 })).toEqual({ kind: "no_tasks" });
+    expect(
+      taskBoardView({ ...ready, columnCount: 0, filterActive: true, matchingCount: 0 }),
+    ).toEqual({ kind: "no_results" });
     expect(taskBoardView({ ...ready, columnCount: 0 })).toEqual({ kind: "no_lanes" });
   });
 });

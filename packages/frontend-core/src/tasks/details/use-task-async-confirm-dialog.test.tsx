@@ -70,17 +70,35 @@ describe("useTaskAsyncConfirmDialog", () => {
     });
   });
 
+  test("keeps the owner mounted until its committed continuation opens the next form", async () => {
+    const continuation = deferredRun();
+    const onSucceeded = mock(() => {});
+    const run = mock(async () => {});
+    const hook = await mount({ enabled: true, scopeKey: "effect", run, onSucceeded });
+    await hook.run((state) => state.openDialog(continuation.run));
+    await startConfirm();
+    expect(continuation.run).toHaveBeenCalledTimes(1);
+    expect(onSucceeded).not.toHaveBeenCalled();
+    expect(hook.getLatest().dialog.open).toBe(true);
+    await hook.run(() => continuation.resolve());
+    expect(onSucceeded).toHaveBeenCalledTimes(1);
+    expect(hook.getLatest().dialog.open).toBe(false);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   test("keeps the dialog open with the error when the run fails", async () => {
     const onSucceeded = mock(() => {});
+    const continuation = mock(async () => {});
     const run = mock(async () => {
       throw new Error("delete failed");
     });
     const hook = await mount({ enabled: true, scopeKey: "ODT-2", run, onSucceeded });
 
-    await hook.run((state) => state.openDialog());
+    await hook.run((state) => state.openDialog(continuation));
     await hook.run((state) => state.dialog.onConfirm());
 
     expect(onSucceeded).not.toHaveBeenCalled();
+    expect(continuation).not.toHaveBeenCalled();
     expect(hook.getLatest().dialog).toMatchObject({
       open: true,
       operation: { isPending: false, error: "delete failed", errorOutcomeUnknown: false },

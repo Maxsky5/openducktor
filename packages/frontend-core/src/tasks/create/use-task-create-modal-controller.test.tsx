@@ -1,5 +1,11 @@
+import { createWireTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import type { ClientConnection } from "../../connection/client-connection";
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { workflowQueryKeys } from "../../queries/workflows";
+import {
+  builtinCompiledCatalogFixture,
+  builtinWorkspaceWorkflowsFixture,
+} from "../../test-support/workflow-fixtures";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type { HostClient } from "@openducktor/host-client";
@@ -63,12 +69,10 @@ const createTasksState = (
   updateTask,
   setTaskTargetBranch: async () => {},
   deleteTask: async () => {},
-  closeTask: async () => {},
+  closeTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
   removeTaskWorktree: async () => {},
-  resetTaskImplementation: async () => {},
-  resetTask: async () => {},
-  transitionTask: async () => {},
-  humanRequestChangesTask: async () => {},
+  resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
+  resetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
 });
 
 const readFileBase64 = async (_file: TestImage): Promise<string> => "AQID";
@@ -112,6 +116,11 @@ const renderController = ({
   let latest: Controller | null = null;
   const feedback = createFeedbackFake();
   const connection = providedConnection ?? createTestClientConnection({ feedback, client });
+  connection.queryClient.setQueryData(workflowQueryKeys.catalog, builtinCompiledCatalogFixture);
+  connection.queryClient.setQueryData(
+    workflowQueryKeys.workspace(activeWorkspace),
+    builtinWorkspaceWorkflowsFixture,
+  );
 
   const Probe = ({ current }: { current: TaskCard | null }): null => {
     latest = useTaskCreateModalController({
@@ -414,7 +423,7 @@ describe("useTaskCreateModalController", () => {
       });
       let harness = renderController({ task, documentState });
       try {
-        act(() => harness.getController().requestSectionChange("spec"));
+        act(() => harness.getController().requestSectionChange({ artifactCode: "spec" }));
         await act(async () => {
           await Promise.resolve();
         });
@@ -424,7 +433,7 @@ describe("useTaskCreateModalController", () => {
         if (editor === "reopened") {
           harness.unmount();
           harness = renderController({ task, documentState, connection: harness.connection });
-          act(() => harness.getController().requestSectionChange("spec"));
+          act(() => harness.getController().requestSectionChange({ artifactCode: "spec" }));
         } else {
           harness.replaceTask(task);
         }
@@ -457,7 +466,7 @@ describe("useTaskCreateModalController", () => {
       documentState: createDocumentState({ saveDocument }),
     });
     try {
-      act(() => harness.getController().requestSectionChange("spec"));
+      act(() => harness.getController().requestSectionChange({ artifactCode: "spec" }));
       await act(async () => {
         await Promise.resolve();
       });
@@ -594,7 +603,7 @@ describe("useTaskCreateModalController", () => {
           .getController()
           .stageDescriptionImage({ name: "diagram.png", type: "image/png", size: 3 });
       });
-      act(() => harness.getController().requestSectionChange("spec"));
+      act(() => harness.getController().requestSectionChange({ artifactCode: "spec" }));
       await act(async () => {
         await Promise.resolve();
       });

@@ -1,3 +1,5 @@
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
+
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
@@ -183,7 +185,7 @@ const createRepoSettings = (
   branchPrefix: "codex/",
   defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  postCompleteHooks: [],
+  beforeWorktreeRemovalHooks: [],
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   agentDefaults: {
@@ -335,6 +337,7 @@ describe("useSessionStartModalState", () => {
     try {
       await harness.run((state) =>
         state.openStartModal({
+          taskWorkflow: specPlanBuildWorkflow,
           source: "task_action",
           taskId: "TASK-1",
           role: "build",
@@ -448,6 +451,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "agent_studio",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-1",
         role: "build",
         launchActionId: "build_implementation_start",
@@ -496,6 +500,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "agent_studio",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-1",
         role: "build",
         launchActionId: "build_implementation_start",
@@ -531,6 +536,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "agent_studio",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-1",
         role: "build",
         launchActionId: "build_implementation_start",
@@ -615,13 +621,11 @@ describe("useSessionStartModalState", () => {
       try {
         await harness.run((state) => {
           state.openStartModal({
+            taskWorkflow: specPlanBuildWorkflow,
             source: "task_action",
             taskId: "TASK-PROFILE",
             role: "build",
-            launchActionId:
-              startMode === "fresh"
-                ? "build_implementation_start"
-                : "build_pull_request_generation",
+            launchActionId: startMode === "fresh" ? "build_implementation_start" : "pull_request",
             initialStartMode: startMode,
             existingSessionOptions: [source],
             selectedModel: source.selectedModel,
@@ -661,6 +665,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-2",
         role: "spec",
         launchActionId: "spec_initial",
@@ -697,6 +702,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-2",
         role: "spec",
         launchActionId: "spec_initial",
@@ -737,6 +743,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-3",
         role: "spec",
         launchActionId: "spec_initial",
@@ -764,6 +771,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-3",
         role: "spec",
         launchActionId: "spec_initial",
@@ -803,6 +811,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-3B",
         role: "spec",
         launchActionId: "spec_initial",
@@ -871,6 +880,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-3C",
         role: "spec",
         launchActionId: "spec_initial",
@@ -906,6 +916,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-3",
         role: "spec",
         launchActionId: "spec_initial",
@@ -936,6 +947,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-4",
         role: "build",
         launchActionId: "build_after_human_request_changes",
@@ -969,6 +981,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-4B",
         role: "build",
         launchActionId: "build_after_human_request_changes",
@@ -994,6 +1007,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-5",
         role: "build",
         launchActionId: "build_implementation_start",
@@ -1016,6 +1030,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "agent_studio",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-6",
         role: "build",
         launchActionId: "build_after_human_request_changes",
@@ -1033,6 +1048,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-6B",
         role: "build",
         launchActionId: "build_after_human_request_changes",
@@ -1059,9 +1075,10 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-6C",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [
           {
             value: "session-build-pr",
@@ -1093,6 +1110,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-7",
         role: "build",
         launchActionId: "build_implementation_start",
@@ -1125,6 +1143,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-7B",
         role: "build",
         launchActionId: "build_implementation_start",
@@ -1160,6 +1179,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-8",
         role: "build",
         launchActionId: "build_implementation_start",
@@ -1192,6 +1212,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "agent_studio",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-4",
         role: "spec",
         launchActionId: "spec_initial",
@@ -1241,6 +1262,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "agent_studio",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-5",
         role: "spec",
         launchActionId: "spec_initial",
@@ -1268,6 +1290,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "agent_studio",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-5B",
         role: "spec",
         launchActionId: "spec_initial",
@@ -1319,6 +1342,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "agent_studio",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-RUNTIME-SWITCH",
         role: "spec",
         launchActionId: "spec_initial",
@@ -1371,6 +1395,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "agent_studio",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-EXACT-PAIR",
         role: "spec",
         launchActionId: "spec_initial",
@@ -1442,6 +1467,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-FRESH-CLAUDE-CATALOG",
         role: "spec",
         launchActionId: "spec_initial",
@@ -1495,6 +1521,7 @@ describe("useSessionStartModalState", () => {
       await harness.mount();
       await harness.run((state) =>
         state.openStartModal({
+          taskWorkflow: specPlanBuildWorkflow,
           source: "task_action",
           taskId: "TASK-CACHED-CATALOG",
           role: "spec",
@@ -1536,6 +1563,7 @@ describe("useSessionStartModalState", () => {
       await harness.run(() => {
         harness.getLatest().openStartModal({
           source: "task_action",
+          taskWorkflow: specPlanBuildWorkflow,
           taskId: "TASK-STALE-CATALOG",
           role: "spec",
           launchActionId: "spec_initial",
@@ -1592,6 +1620,7 @@ describe("useSessionStartModalState", () => {
       await harness.run(() => {
         harness.getLatest().openStartModal({
           source: "task_action",
+          taskWorkflow: specPlanBuildWorkflow,
           taskId: "TASK-FAILED-REFRESH",
           role: "spec",
           launchActionId: "spec_initial",
@@ -1627,6 +1656,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "agent_studio",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-5",
         role: "spec",
         launchActionId: "spec_initial",
@@ -1661,6 +1691,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "agent_studio",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-6",
         role: "spec",
         launchActionId: "spec_initial",
@@ -1683,6 +1714,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-7",
         role: "qa",
         launchActionId: "qa_review",
@@ -1733,9 +1765,10 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-7A",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [
           {
             value: "session-fallback",
@@ -1786,6 +1819,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-8",
         role: "qa",
         launchActionId: "qa_review",
@@ -1814,6 +1848,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-9",
         role: "build",
         launchActionId: "build_after_human_request_changes",
@@ -1901,9 +1936,10 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-PR",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [
           {
             value: "session-pr-2",
@@ -2029,9 +2065,10 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-PR-RUNTIME-MODE",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [
           createExistingSessionWithModel({
             value: "session-pr-runtime",
@@ -2100,9 +2137,10 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-PR-NO-FORK-RUNTIME",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [
           createExistingSessionWithModel({
             value: "session-pr-no-fork",
@@ -2142,9 +2180,10 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-PR-REUSE-INCOMPATIBLE",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         existingSessionOptions: [
           createExistingSessionWithModel({
             value: "session-pr-fork-runtime",
@@ -2173,6 +2212,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-10",
         role: "build",
         launchActionId: "build_after_human_request_changes",
@@ -2249,9 +2289,10 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-10-FORK",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         initialStartMode: "fork",
         existingSessionOptions: [
           {
@@ -2300,9 +2341,10 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-10-STALE-FORK-MODEL",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         initialStartMode: "fork",
         existingSessionOptions: [
           {
@@ -2359,9 +2401,10 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-10-CROSS-RUNTIME-FORK",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         initialStartMode: "fork",
         existingSessionOptions: [
           {
@@ -2434,6 +2477,7 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       harness.getLatest().openStartModal({
         source: "task_action",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-10A",
         role: "build",
         launchActionId: "build_after_human_request_changes",

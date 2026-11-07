@@ -12,7 +12,7 @@ describe("generic workflow events", () => {
   test("runs two separate reviews by the same role before human approval and publication", () => {
     const workflow = createWorkflow(publicationDefinition());
     let input = publicationInput(
-      "draft",
+      "open",
       { edition: 2 },
       { ...noArtifacts(), copy: { present: true } },
     );
@@ -21,7 +21,7 @@ describe("generic workflow events", () => {
       definitionRevision: 2,
       kind: "transition",
       eventId: "submit",
-      from: "draft",
+      from: "open",
       to: "first-review",
       signal: "copySubmitted",
       sourceRole: "author",
@@ -102,7 +102,7 @@ describe("generic workflow events", () => {
       kind: "transition",
       eventId: "publish",
       from: "human-approval",
-      to: "published",
+      to: "closed",
     });
     expect(workflow.availableActions(input)).toEqual(["publish", "view-copy"]);
   });
@@ -111,12 +111,12 @@ describe("generic workflow events", () => {
     const definition = publicationDefinition();
     definition.events[3]!.outcomes = [
       { when: { stateIn: ["second-review"] }, to: null, signal: "changesRequested" },
-      { when: true, to: "draft", signal: "changesRequested" },
+      { when: true, to: "open", signal: "changesRequested" },
     ];
     const workflow = createWorkflow(definition);
     expect(workflow.decide(publicationInput("first-review"), "return-draft")).toMatchObject({
       kind: "transition",
-      to: "draft",
+      to: "open",
       signal: "changesRequested",
     });
     expect(workflow.decide(publicationInput("second-review"), "return-draft")).toEqual({
@@ -166,18 +166,18 @@ describe("generic workflow events", () => {
 
   test("uses source admission before guards and does not evaluate unrelated artifacts", () => {
     const workflow = createWorkflow(publicationDefinition());
-    const input = publicationInput("draft");
+    const input = publicationInput("open");
     expect(workflow.isEventAvailable(input, "publish")).toBe(false);
     expect(workflow.decide(input, "publish")).toEqual({
       workflowId: "publication",
       definitionRevision: 2,
       kind: "denied",
       eventId: "publish",
-      state: "draft",
+      state: "open",
       reason: "source_state",
     });
     expect(
-      workflow.availableActions(publicationInput("draft", {}, { copy: { present: false } })),
+      workflow.availableActions(publicationInput("open", {}, { copy: { present: false } })),
     ).toEqual(["start-writing", "view-copy"]);
     expect(() => workflow.steps(input)).toThrow(
       expect.objectContaining({
@@ -200,25 +200,25 @@ describe("generic workflow events", () => {
     definition.events.push(
       {
         id: "hold-back",
-        from: ["draft"],
+        from: ["open"],
         guards: [{ id: "not-ready", when: { not: { fact: "toString", equals: "ready" } } }],
         outcomes: [{ when: true, to: "first-review" }],
       },
       {
         id: "value-back",
-        from: ["draft"],
+        from: ["open"],
         guards: [{ id: "value", when: { artifact: "valueOf", present: true } }],
         outcomes: [{ when: true, to: "first-review" }],
       },
     );
     const workflow = createWorkflow(definition);
-    expect(() => workflow.decide(publicationInput("draft"), "hold-back")).toThrow(
+    expect(() => workflow.decide(publicationInput("open"), "hold-back")).toThrow(
       expect.objectContaining({
         code: "missing_fact",
         message: expect.stringContaining("toString"),
       }),
     );
-    expect(() => workflow.isEventAvailable(publicationInput("draft"), "value-back")).toThrow(
+    expect(() => workflow.isEventAvailable(publicationInput("open"), "value-back")).toThrow(
       expect.objectContaining({
         code: "missing_artifact",
         message: expect.stringContaining("valueOf"),
@@ -230,11 +230,11 @@ describe("generic workflow events", () => {
     const definition = publicationDefinition();
     definition.events.push({
       id: "record",
-      from: ["human-approval", "published"],
+      from: ["human-approval", "closed"],
       guards: [{ id: "approved", when: { artifact: "approval", present: true } }],
       outcomes: [
-        { when: { fact: "hold", equals: true }, to: "draft" },
-        { when: true, to: "published" },
+        { when: { fact: "hold", equals: true }, to: "open" },
+        { when: true, to: "closed" },
       ],
     });
     definition.actions.push({
@@ -246,20 +246,20 @@ describe("generic workflow events", () => {
     });
     const workflow = createWorkflow(definition);
     const published = (facts: WorkflowInput["facts"], approved = true) =>
-      publicationInput("published", facts, { approval: { present: approved } });
+      publicationInput("closed", facts, { approval: { present: approved } });
     expect(workflow.decide(published({ hold: false }), "record")).toEqual({
       workflowId: "publication",
       definitionRevision: 2,
       kind: "unchanged",
       eventId: "record",
-      state: "published",
+      state: "closed",
     });
     expect(workflow.decide(published({ hold: true }), "record")).toEqual({
       workflowId: "publication",
       definitionRevision: 2,
       kind: "denied",
       eventId: "record",
-      state: "published",
+      state: "closed",
       reason: "terminal_state",
     });
     expect(workflow.decide(published({}, false), "record")).toMatchObject({
@@ -274,7 +274,7 @@ describe("generic workflow events", () => {
     expect(workflow.isEventAvailable(published({}), "record")).toBe(true);
     expect(workflow.availableActions(published({ hold: false }))).toEqual(["view-copy"]);
     expect(
-      workflow.steps(publicationInput("published", { edition: 2 }, completedArtifacts()))[3],
+      workflow.steps(publicationInput("closed", { edition: 2 }, completedArtifacts()))[3],
     ).toEqual({
       id: "approve",
       label: "Approve publication",
@@ -299,14 +299,14 @@ describe("generic workflow events", () => {
   test("compiles an extra condition once and checks input on each call", () => {
     const workflow = createWorkflow(publicationDefinition());
     const ready = workflow.condition({
-      all: [{ stateIn: ["draft"] }, { artifact: "copy", present: true }],
+      all: [{ stateIn: ["open"] }, { artifact: "copy", present: true }],
     });
-    expect(ready(publicationInput("draft", {}, { copy: { present: true } }))).toBe(true);
+    expect(ready(publicationInput("open", {}, { copy: { present: true } }))).toBe(true);
     expect(ready(publicationInput("first-review", {}, { copy: { present: true } }))).toBe(false);
-    expect(() => ready(publicationInput("draft"))).toThrow(
+    expect(() => ready(publicationInput("open"))).toThrow(
       expect.objectContaining({ code: "missing_artifact" }),
     );
-    expect(() => ready({ ...publicationInput("draft"), definitionRevision: 1 })).toThrow(
+    expect(() => ready({ ...publicationInput("open"), definitionRevision: 1 })).toThrow(
       expect.objectContaining({ code: "invalid_input" }),
     );
     for (const condition of [
@@ -332,7 +332,7 @@ describe("generic workflow events", () => {
     event.outcomes = [
       { when: { fact: "hold", equals: true }, to: null },
       { when: { artifact: "approval", present: false }, to: "human-approval" },
-      { when: true, to: "published" },
+      { when: true, to: "closed" },
     ];
     const workflow = createWorkflow(definition);
     const input = (hold: boolean, approved = false) =>
@@ -359,7 +359,7 @@ describe("generic workflow events", () => {
       kind: "transition",
       eventId: "publish",
       from: "human-approval",
-      to: "published",
+      to: "closed",
     });
   });
 
@@ -367,7 +367,7 @@ describe("generic workflow events", () => {
     const definition = publicationDefinition();
     definition.events[0]!.outcomes = [{ when: false, to: "first-review" }];
     const workflow = createWorkflow(definition);
-    const input = publicationInput("draft", {}, { copy: { present: true } });
+    const input = publicationInput("open", {}, { copy: { present: true } });
     expect(workflow.availableActions(input).includes("submit")).toBe(true);
     expect(() => workflow.decide(input, "submit")).toThrow(
       expect.objectContaining({
@@ -402,14 +402,14 @@ describe("generic workflow events", () => {
     definition.actionOrder = [];
     definition.actionPriority = [];
     const workflow = createWorkflow(definition);
-    expect(workflow.availableActions(publicationInput("draft", { channel: null }))).toEqual([
+    expect(workflow.availableActions(publicationInput("open", { channel: null }))).toEqual([
       "any",
       "null",
     ]);
-    expect(workflow.availableActions(publicationInput("draft", { channel: "web" }))).toEqual([
+    expect(workflow.availableActions(publicationInput("open", { channel: "web" }))).toEqual([
       "any",
     ]);
-    expect(() => workflow.availableActions(publicationInput("draft"))).toThrow(
+    expect(() => workflow.availableActions(publicationInput("open"))).toThrow(
       expect.objectContaining({
         code: "missing_fact",
         message: expect.stringContaining('fact "channel"'),

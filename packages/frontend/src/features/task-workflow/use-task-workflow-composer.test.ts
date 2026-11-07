@@ -8,10 +8,11 @@ import { createHookHarness } from "@openducktor/frontend-core/test-support/react
 import {
   createTaskCardFixture,
   createWorkspaceRecordFixture,
+  toWireTaskCard,
 } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useTaskWorkflowComposer } from "./use-task-workflow-composer";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 type Props = { activeWorkspace: ActiveWorkspace | null; tasks: TaskCard[] };
 
@@ -29,7 +30,10 @@ let harness: ReturnType<
 let connection: ReturnType<typeof createTestClientConnection>;
 const mount = async (props: Props, storedTasks: TaskCard[] = []) => {
   connection = createTestClientConnection({
-    client: { tasksList: async () => [], tasksListAll: async () => storedTasks },
+    client: {
+      tasksList: async () => [],
+      tasksListAll: async () => storedTasks.map(toWireTaskCard),
+    },
   });
   harness = createHookHarness(useTaskWorkflowComposer, props, {
     wrapper: ({ children }: PropsWithChildren) =>
@@ -70,7 +74,7 @@ describe("useTaskWorkflowComposer", () => {
   });
 
   test("edits a closed task outside the board list", async () => {
-    const closedTask = { ...task, status: "closed" as const };
+    const closedTask = createTaskCardFixture({ ...task, status: "closed" });
     const hook = await mount({ ...inA, tasks: [] }, [closedTask]);
     await hook.run((state) => state.onEdit(task.id));
     await hook.waitFor((state) => state.composer.open);
@@ -106,6 +110,20 @@ describe("useTaskWorkflowComposer", () => {
       initialTitle: "Draft",
       destination: { workspaceId: "w-a", workspaceName: "A" },
     });
+  });
+
+  test("closes an edit form whose task changed after its save started", async () => {
+    const hook = await mount(inA);
+    await hook.run((state) => state.onEdit(task.id));
+    // A save keeps the close handler of the render where the user clicked Save.
+    const closeAfterSave = hook.getLatest().composer.onOpenChange;
+    const savedTask = createTaskCardFixture({ ...task, title: "Saved title" });
+
+    await hook.update({ ...inA, tasks: [savedTask] });
+    expect(hook.getLatest().composer).toMatchObject({ open: true, task: savedTask });
+
+    await hook.run(() => closeAfterSave(false));
+    expect(hook.getLatest().composer.open).toBe(false);
   });
 
   test("ignores the close handler of an earlier form", async () => {

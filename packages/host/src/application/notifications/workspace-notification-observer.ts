@@ -101,7 +101,20 @@ export const createWorkspaceNotificationObserver = ({
     const addWorkspaceSessionTitle = (
       occurrence: NotificationOccurrence,
     ): NotificationOccurrence => {
-      if (occurrence.task) return occurrence;
+      if (occurrence.task) {
+        if (occurrence.copy || !occurrence.role) return occurrence;
+        const task = state.tasks.get(occurrence.task.id);
+        if (!task)
+          throw new Error(
+            `Notification task "${occurrence.task.id}" is unavailable. Reload the workspace.`,
+          );
+        const role = taskWorkflows.forReference(task.workflow).role(occurrence.role);
+        return {
+          ...occurrence,
+          workflow: task.workflow,
+          copy: { title: role.label, body: occurrence.status },
+        };
+      }
 
       const target = occurrence.navigationTarget;
       switch (target.type) {
@@ -266,12 +279,11 @@ export const createWorkspaceNotificationObserver = ({
         yield* refreshTaskOwners(event.taskIds.filter((id) => !event.removedTaskIds.includes(id)));
         yield* refreshOwners();
       });
-    const consume = (input: WorkspaceNotificationInput) =>
-      process(input).pipe(
-        Effect.catch((cause) =>
-          Effect.sync(() => failure(state.record.repoPath, notificationInputSource(input), cause)),
-        ),
-      );
+    const consume = (input: WorkspaceNotificationInput) => {
+      const report = (cause: unknown) =>
+        Effect.sync(() => failure(state.record.repoPath, notificationInputSource(input), cause));
+      return process(input).pipe(Effect.catch(report), Effect.catchDefect(report));
+    };
     const initialize = () =>
       Effect.gen(function* () {
         const baseline = yield* tasks.listTasks({
@@ -304,6 +316,12 @@ export const createWorkspaceNotificationObserver = ({
         yield* refreshOwners();
         state.liveKeys.clear();
         recovered(state.record.repoPath);
+      });
+    // A failed baseline cannot observe changes. A config commit can create a fresh observer.
+    const initializationFailed = (cause: unknown) =>
+      Effect.sync(() => {
+        state.active = false;
+        failure(state.record.repoPath, "initialization", cause);
       });
     const enqueue = (input: WorkspaceNotificationInput) => {
       if (!state.active) return;
@@ -339,13 +357,8 @@ export const createWorkspaceNotificationObserver = ({
           // Config writes cannot be interrupted, but the worker must stop when its workspace closes.
           state.fiber = yield* Effect.forkDetach(
             initialize().pipe(
-              Effect.catch((cause) =>
-                Effect.sync(() => {
-                  // A failed baseline cannot observe changes. A config commit can create a fresh observer.
-                  state.active = false;
-                  failure(state.record.repoPath, "initialization", cause);
-                }),
-              ),
+              Effect.catch(initializationFailed),
+              Effect.catchDefect(initializationFailed),
               Effect.andThen(
                 Effect.suspend(() =>
                   state.active

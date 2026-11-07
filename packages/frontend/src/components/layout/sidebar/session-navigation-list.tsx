@@ -1,4 +1,3 @@
-import { BUILTIN_STATUS_SHORT_LABELS } from "@openducktor/workflows";
 import { ChevronDown, LoaderCircle } from "lucide-react";
 import { memo, type ReactElement, useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -200,10 +199,10 @@ const SessionRow = memo(function SessionRow({
               variant="outline"
               className={cn(
                 "h-4 shrink-0 px-1.5 py-0 text-[10px] leading-none",
-                statusBadgeClassName(task.status),
+                statusBadgeClassName(task.sharedState),
               )}
             >
-              {BUILTIN_STATUS_SHORT_LABELS[task.status]}
+              {task.sharedState.shortLabel}
             </Badge>
           )}
           <SessionRowMetadata entry={entry} now={now} />

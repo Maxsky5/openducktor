@@ -1,3 +1,4 @@
+import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { describe, expect, test } from "bun:test";
 import {
   type AgentSessionSummary,
@@ -13,9 +14,10 @@ import {
   buildTaskSessionsByTaskId,
   sortTasksByActivityState,
 } from "./kanban-board-sessions";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const createTaskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+  ...createTaskCardFixture(),
   id: "task-1",
   title: "Test Task",
   description: "",
@@ -178,7 +180,7 @@ describe("use-kanban-board-model helpers", () => {
             requestType: "permission_grant" as const,
             title: `Approve permission: ${"tool"}`,
             summary: `Approval request for ${"tool"}.`,
-            affectedPaths: ["odt_build_completed"],
+            affectedPaths: ["odt_apply_workflow_event"],
             action: { name: "tool" },
             mutation: "read_only" as const,
             supportedReplyOutcomes: [

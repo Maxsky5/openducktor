@@ -31,6 +31,7 @@ export const createTaskDeleteUseCase = ({
   taskWorkflows,
   taskActivityGuard,
   settingsConfig,
+  systemCommands,
   terminalService,
   browserTabs,
   worktreeFiles,
@@ -121,6 +122,10 @@ export const createTaskDeleteUseCase = ({
       let durableDeleteCommitted = false;
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
+          beforeWorktreeRemoval: {
+            commands: repoConfig.hooks.beforeWorktreeRemoval,
+            systemCommands,
+          },
           workspaceId: input.workspaceId,
           branchNames,
           gitPort: dependencies.gitPort,

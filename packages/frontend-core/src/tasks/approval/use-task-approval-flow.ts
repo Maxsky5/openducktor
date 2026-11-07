@@ -1,3 +1,5 @@
+import type { TaskCard as WireTaskCard } from "@openducktor/contracts";
+import type { OnTaskCommitted } from "../workflow/task-workflow-continuation";
 import type { GitConflictAssistanceResult } from "../../git/conflicts/conflict-assistance";
 import type { PullRequest, RepositoryGitProviderContext } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -37,8 +39,9 @@ import {
 } from "./task-approval-transition-resolver";
 import { useTaskApprovalGitConflictFlow } from "./use-task-approval-git-conflict-flow";
 import { useClientConnection, useHostClient } from "../../connection/client-connection-react";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { pullRequestRoleLabel, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
+import { availableWorktreeResetAction } from "../workflow/task-action-destination";
 
 type UseTaskApprovalFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -47,9 +50,9 @@ type UseTaskApprovalFlowArgs = {
   loadGitProviderContext: () => Promise<RepositoryGitProviderContext>;
   tasks: TaskCard[];
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
-  refreshTasks: () => Promise<void>;
-  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<void>;
-  openResetImplementation: (taskId: string) => boolean;
+  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<WireTaskCard>;
+  /** Opens the confirmation of an event whose `worktree.reset` effect resets the implementation. */
+  openResetImplementation: (taskId: string, eventId: string) => boolean;
   onResolveGitConflict?: (
     conflict: GitConflict,
     taskId: string,
@@ -78,7 +81,6 @@ export function useTaskApprovalFlow({
   loadGitProviderContext,
   tasks,
   requestPullRequestGeneration,
-  refreshTasks,
   closeTask,
   openResetImplementation,
   onResolveGitConflict = async (): Promise<GitConflictAssistanceResult> => {
@@ -112,13 +114,26 @@ export function useTaskApprovalFlow({
   const closeChoice = useTaskCloseChoice(openTask?.removeWorktreeOnClose ?? null);
   const { resetChoice: resetCloseChoice } = closeChoice;
   const removeWorktree = isTaskApprovalOpen(state) ? closeChoice.removeWorktree : null;
+  const continuationRef = useRef<OnTaskCommitted | undefined>(undefined);
   const approvalRequestVersionRef = useRef(0);
   const workspaceIdentityRef = useRef<TaskApprovalWorkspaceIdentity | null>(workspaceIdentity);
 
   const reset = useCallback(() => {
     approvalRequestVersionRef.current += 1;
+    continuationRef.current = undefined;
     dispatch({ type: "close" });
   }, []);
+
+  /** Without a committed task, the approval event has not run, so no following launch starts. */
+  const completeApproval = useCallback(
+    async (committed?: WireTaskCard) => {
+      const continuation = continuationRef.current;
+      // Keep the sheet mounted while the committed task loads and its next form opens.
+      if (committed) await continuation?.(committed);
+      reset();
+    },
+    [reset],
+  );
 
   useLayoutEffect(() => {
     if (hasSameWorkspaceIdentity(workspaceIdentityRef.current, workspaceIdentity)) {
@@ -160,6 +175,7 @@ export function useTaskApprovalFlow({
             })
           : "direct_merge");
 
+      continuationRef.current = options?.onCommitted;
       resetCloseChoice();
       dispatch({
         type: "open_loading",
@@ -222,9 +238,9 @@ export function useTaskApprovalFlow({
             taskId,
           );
           if (isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
-            if (approvalContextResult.outcome === "missing_builder_worktree") {
+            if (approvalContextResult.outcome === "missing_worktree") {
               dispatch({
-                type: "load_missing_builder_worktree",
+                type: "load_missing_worktree",
                 taskId,
                 mode: effectiveMode,
                 pullRequestDraftMode,
@@ -316,7 +332,7 @@ export function useTaskApprovalFlow({
     }
 
     if (
-      submissionRoute.kind === "close_missing_builder_worktree" ||
+      submissionRoute.kind === "close_missing_worktree" ||
       submissionRoute.kind === "close_task"
     ) {
       if (removeWorktree === null) return;
@@ -325,11 +341,11 @@ export function useTaskApprovalFlow({
         dispatch({ type: "start_submitting" });
         try {
           // The close shows its own success and failure toasts.
-          await closeTask(submissionRoute.approval.taskId, { removeWorktree });
+          const committed = await closeTask(submissionRoute.approval.taskId, { removeWorktree });
           if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
             return;
           }
-          reset();
+          await completeApproval(committed);
         } catch (error) {
           if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
             return;
@@ -356,7 +372,6 @@ export function useTaskApprovalFlow({
             approval: approvalState,
             queryClient,
             repoPath,
-            refreshTasks,
             workspaceId: submissionWorkspace.workspaceId,
             removeWorktree,
           });
@@ -364,13 +379,14 @@ export function useTaskApprovalFlow({
             return;
           }
           if (directMergeResult.outcome === "conflicts") {
+            const continuation = continuationRef.current;
             reset();
-            openGitConflictDialog(approvalState.taskId, directMergeResult.conflict);
+            openGitConflictDialog(approvalState.taskId, directMergeResult.conflict, continuation);
             return;
           }
 
           if (directMergeResult.outcome === "task_closed") {
-            reset();
+            await completeApproval(directMergeResult.committed);
             feedback.show("success", "Task approved", {
               description: directMergeResult.successDescription,
             });
@@ -390,7 +406,6 @@ export function useTaskApprovalFlow({
           repoPath,
           workspaceId: submissionWorkspace.workspaceId,
           requestPullRequestGeneration,
-          refreshTasks,
         });
         if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
           return;
@@ -405,7 +420,8 @@ export function useTaskApprovalFlow({
         }
 
         showPullRequestCreated(pullRequestResult.pullRequest);
-        reset();
+        // A pull request leaves the task in review. The approval event runs when it merges.
+        await completeApproval();
       } catch (error) {
         if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
           return;
@@ -430,28 +446,35 @@ export function useTaskApprovalFlow({
     isApprovalRequestCurrent,
     queryClient,
     openGitConflictDialog,
-    refreshTasks,
     removeWorktree,
     requestPullRequestGeneration,
     reset,
     showPullRequestCreated,
     state,
     submitFlight,
+    completeApproval,
   ]);
 
-  const resetMissingBuilderWorktree = useCallback((): void => {
+  const resetMissingWorktree = useCallback((): void => {
     if (
       !isTaskApprovalInteractive(state) ||
-      state.stage !== "missing_builder_worktree" ||
+      state.stage !== "missing_worktree" ||
       !hasSameWorkspaceIdentity(workspaceIdentityRef.current, state.workspaceIdentity)
     ) {
       return;
     }
 
-    if (openResetImplementation(state.taskId)) {
+    const resetAction = openTask ? availableWorktreeResetAction(openTask) : null;
+    if (resetAction === null) {
+      feedback.show("error", "Unable to reset the worktree", {
+        description: `Task ${state.taskId} offers no action that resets its worktree. Close the task instead.`,
+      });
+      return;
+    }
+    if (openResetImplementation(state.taskId, resetAction.eventId)) {
       reset();
     }
-  }, [openResetImplementation, reset, state]);
+  }, [feedback, openResetImplementation, openTask, reset, state]);
 
   const completeDirectMerge = useCallback((): void => {
     if (
@@ -473,14 +496,13 @@ export function useTaskApprovalFlow({
           approval: approvalState,
           queryClient,
           repoPath: submissionWorkspace.repoPath,
-          refreshTasks,
           workspaceId: submissionWorkspace.workspaceId,
           removeWorktree,
         });
         if (!isApprovalRequestCurrent(submissionVersion, submissionWorkspace)) {
           return;
         }
-        reset();
+        await completeApproval(result.committed);
         feedback.show("success", "Task moved to Done", {
           description: result.successDescription,
         });
@@ -503,11 +525,10 @@ export function useTaskApprovalFlow({
     feedback,
     isApprovalRequestCurrent,
     queryClient,
-    refreshTasks,
     removeWorktree,
-    reset,
     state,
     submitFlight,
+    completeApproval,
   ]);
 
   if (!isTaskApprovalOpen(state)) {
@@ -523,9 +544,11 @@ export function useTaskApprovalFlow({
     confirm,
     dispatch,
     reset,
-    resetMissingBuilderWorktree,
+    resetMissingWorktree,
     state,
     taskTitle: openTask?.title ?? "",
+    pullRequestRoleLabel: openTask ? pullRequestRoleLabel(openTask.taskWorkflow) : null,
+    worktreeResetLabel: openTask ? (availableWorktreeResetAction(openTask)?.label ?? null) : null,
     removeWorktree,
     onRemoveWorktreeChange: (nextRemoveWorktree: boolean) => {
       dispatch({ type: "clear_error" });

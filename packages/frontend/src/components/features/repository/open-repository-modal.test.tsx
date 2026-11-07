@@ -1,3 +1,5 @@
+import { workflowQueryKeys } from "@openducktor/frontend-core/queries/workflows";
+import { builtinCompiledCatalogFixture } from "@openducktor/frontend-core/test-support/workflow-fixtures";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -119,6 +121,7 @@ const createModalConnection = (client: Partial<HostClient> = {}) => {
   const connection = createTestClientConnection({
     client: { ...localOnlyProviderSetupClient(), ...client },
   });
+  connection.queryClient.setQueryData(workflowQueryKeys.catalog, builtinCompiledCatalogFixture);
   connection.queryClient.setQueryData(filesystemQueryKeys.directory(), {
     currentPath: "/repo",
     currentPathIsGitRepo: true,

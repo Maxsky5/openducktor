@@ -18,8 +18,8 @@ import {
 } from "../use-agent-studio-page-model-builders";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 import type {
-  BuiltinRoleId as AgentRole,
-  BuiltinTaskCard as TaskCard,
+  WorkflowRoleId as AgentRole,
+  ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 
 const EMPTY_PENDING_APPROVAL_REQUESTS = Object.freeze(new Array<AgentApprovalRequest>());
@@ -48,7 +48,7 @@ export type SelectedSessionPendingInputContext = {
 
 export type AgentStudioSelectedSessionContext = {
   taskId: string;
-  role: AgentRole;
+  role: AgentRole | null;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   selectedSession: AgentStudioSelectedSessionState;
@@ -58,7 +58,7 @@ export type AgentStudioSelectedSessionContext = {
 
 export type AgentStudioSelectedSessionContextInput = {
   taskId: string;
-  role: AgentRole;
+  role: AgentRole | null;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   selectedSession: AgentStudioSelectedSessionState;

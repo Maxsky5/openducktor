@@ -16,7 +16,7 @@ import { completeTaskPublication } from "./complete-task-publication";
 import type { requireMergedTaskCleanupDependencies } from "./required-task-dependencies";
 import { cleanupConfirmedMergeClose } from "./task-close-cleanup";
 import { enrichTask } from "./task-workflow-helpers";
-import { decideEffectTransition, type AdmittedTaskEvent } from "./task-workflow-events";
+import { coreTaskTransition } from "./task-workflow-events";
 
 /** Callers hold the task lifecycle guard and validate closure before entering this operation. */
 export const closeMergedTask = (
@@ -33,7 +33,6 @@ export const closeMergedTask = (
   merge: DirectMergeRecord,
   current: TaskRecord,
   state: TaskCompletionState,
-  decision: AdmittedTaskEvent,
   operation: "direct-merge" | "complete-direct-merge",
 ) =>
   Effect.uninterruptible(
@@ -78,14 +77,7 @@ export const closeMergedTask = (
                   workspaceId: input.workspaceId,
                   repoPath,
                   taskId,
-                  decide: (task) =>
-                    decideEffectTransition(
-                      services.taskWorkflows.forTask(task),
-                      operation === "complete-direct-merge"
-                        ? "direct_merge.completed"
-                        : "direct_merge.local",
-                      task,
-                    ),
+                  decide: coreTaskTransition(services.taskWorkflows, "close"),
                 })
                 .pipe(
                   Effect.tap(() =>

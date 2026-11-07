@@ -1,8 +1,4 @@
-import type {
-  KanbanColumn as KanbanColumnData,
-  KanbanColumnId,
-  BuiltinRoleId as AgentRole,
-} from "@openducktor/workflows";
+import type { KanbanColumn as KanbanColumnData } from "@openducktor/workflows";
 import type { KanbanTaskCardView } from "@openducktor/contracts";
 import { Inbox } from "lucide-react";
 import { type ComponentProps, memo, type ReactElement, useEffect, useMemo, useRef } from "react";
@@ -21,7 +17,6 @@ import {
   getCardLayout,
   type WorkflowPendingState,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
-import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { useKanbanVirtualization } from "@/components/features/kanban/use-kanban-virtualization";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -43,14 +38,6 @@ type KanbanColumnProps = {
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
-  onDelegate: (taskId: string) => void;
-  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
-  onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
-  onQaStart?: (taskId: string) => void;
-  onHumanApprove?: (taskId: string) => void;
-  onHumanRequestChanges?: (taskId: string) => void;
-  onResetImplementation?: (taskId: string) => void;
-  onCloseTask?: (taskId: string) => void;
 };
 
 export function KanbanColumn({
@@ -64,16 +51,8 @@ export function KanbanColumn({
   activeTaskSessionContextByTaskId,
   taskActivityStateByTaskId,
   onOpenDetails,
-  onDelegate,
-  onOpenSession,
-  onPlan,
-  onQaStart,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
-  onCloseTask,
 }: KanbanColumnProps): ReactElement {
-  const theme = laneTheme(column.id);
+  const theme = laneTheme(column.tone);
   const cardLayoutsByTaskId = useMemo(
     () =>
       new Map(
@@ -127,20 +106,12 @@ export function KanbanColumn({
       hasActiveSession: Boolean(context),
       taskActivityState: getRequiredTaskActivityState(taskActivityStateByTaskId, task.id),
       onOpenDetails,
-      onDelegate,
-      onOpenSession,
-      onPlan,
     };
     if (context?.role) cardProps.activeSessionRole = context.role;
     const mergedTarget = mergedTargetByTaskId.get(task.id);
     if (mergedTarget !== undefined) cardProps.mergedTarget = mergedTarget;
     const autoCloseFailure = autoCloseFailureByTaskId.get(task.id);
     if (autoCloseFailure !== undefined) cardProps.autoCloseFailure = autoCloseFailure;
-    if (onCloseTask) cardProps.onCloseTask = onCloseTask;
-    if (onQaStart) cardProps.onQaStart = onQaStart;
-    if (onHumanApprove) cardProps.onHumanApprove = onHumanApprove;
-    if (onHumanRequestChanges) cardProps.onHumanRequestChanges = onHumanRequestChanges;
-    if (onResetImplementation) cardProps.onResetImplementation = onResetImplementation;
     if (!isVirtualized) return <KanbanTaskCard key={task.id} {...cardProps} />;
     return (
       <MeasuredCard
@@ -178,9 +149,9 @@ export function KanbanColumn({
         theme.boardSurfaceClass,
       )}
     >
-      <LaneHeader id={column.id} title={column.title} count={column.tasks.length} />
+      <LaneHeader theme={theme} title={column.title} count={column.tasks.length} />
       <div ref={cardsViewportRef} className="flex-1 p-3">
-        {column.tasks.length === 0 ? <LaneEmptyState id={column.id} /> : null}
+        {column.tasks.length === 0 ? <LaneEmptyState theme={theme} /> : null}
 
         {column.tasks.length > 0 ? cards : null}
       </div>
@@ -252,16 +223,17 @@ const MeasuredCard = memo(function MeasuredCard({
   );
 });
 
+type KanbanLaneTheme = ReturnType<typeof laneTheme>;
+
 function LaneHeader({
-  id,
+  theme,
   title,
   count,
 }: {
-  id: KanbanColumnId;
+  theme: KanbanLaneTheme;
   title: string;
   count: number;
 }): ReactElement {
-  const theme = laneTheme(id);
   return (
     <header
       className={cn(
@@ -289,8 +261,7 @@ function LaneHeader({
   );
 }
 
-function LaneEmptyState({ id }: { id: KanbanColumnId }): ReactElement {
-  const theme = laneTheme(id);
+function LaneEmptyState({ theme }: { theme: KanbanLaneTheme }): ReactElement {
   return (
     <div
       className={cn(

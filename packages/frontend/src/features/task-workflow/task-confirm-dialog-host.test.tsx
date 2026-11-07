@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import {
   noTaskWorktreeOwners,
   worktreeOwnersRead,
@@ -34,9 +35,11 @@ type HostProps = Parameters<typeof useTaskConfirmDialogHost>[0];
 
 const createHandlers = () => ({
   tasks: [task],
-  onResetTask: mock(async (_taskId: string) => {}),
+  onResetTask: mock(async (taskId: string) => createWireTaskCardFixture({ id: taskId })),
   onDelete: mock(async (_taskId: string) => {}),
-  onCloseTask: mock(async (_taskId: string, _options: { removeWorktree: boolean }) => {}),
+  onCloseTask: mock(async (taskId: string, _options: { removeWorktree: boolean }) =>
+    createWireTaskCardFixture({ id: taskId, status: "closed" }),
+  ),
   onSucceeded: mock((_taskId: string) => {}),
 });
 

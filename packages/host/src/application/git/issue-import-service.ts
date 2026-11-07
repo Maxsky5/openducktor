@@ -1,3 +1,4 @@
+import { TASK_OPEN_STATE } from "@openducktor/contracts";
 import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
 import type {
   IssueItemsImportInput,
@@ -25,7 +26,6 @@ import type { IssueReaderPort } from "../../ports/git-provider-port";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import type { GitProviderResolver } from "./git-provider-resolver";
 import type { TaskSyncService } from "../tasks/sync/task-sync-service";
-import type { TaskRecord } from "../../ports/task-repository-ports";
 
 const cursorSchema = z
   .object({
@@ -136,7 +136,7 @@ export const createIssueImportService = ({
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig">;
   publishTaskCreated: (
     workspace: WorkspaceRef,
-    task: TaskRecord,
+    task: import("@openducktor/contracts").TaskEventTaskSnapshot,
   ) => Effect.Effect<void, HostOperationErrorAggregate>;
 }) => {
   const resolveReader = (workspace: WorkspaceRef) =>
@@ -399,7 +399,7 @@ export const createIssueImportService = ({
                     workspaceId: input.workspaceId,
                     repoPath: input.repoPath,
                     sourceIssue: source,
-                    status: workflow.initialState,
+                    status: TASK_OPEN_STATE,
                     task: {
                       title: source.title,
                       description: source.description,
@@ -419,7 +419,14 @@ export const createIssueImportService = ({
                         reason: `This source item is already linked to Task ${created.taskId}.`,
                       };
                     }
-                    yield* publishTaskCreated(input, created.task);
+                    const workflow = taskWorkflows.forTask(created.task);
+                    yield* publishTaskCreated(input, {
+                      ...created.task,
+                      workflow: {
+                        id: workflow.definition.id,
+                        revision: workflow.definition.revision,
+                      },
+                    });
                     return { outcome: "created" as const, taskId: created.task.id };
                   }),
               );

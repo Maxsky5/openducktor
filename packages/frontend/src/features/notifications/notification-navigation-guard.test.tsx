@@ -14,12 +14,12 @@ import {
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import { createWireTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { NotificationNavigationRegistrar } from "./notification-navigation";
 
 test("notification workspace selection keeps the draft on cancel and failure", async () => {
   const connection = createTestClientConnection({
-    client: { tasksListAll: async () => [createTaskCardFixture({ id: "task-1" })] },
+    client: { tasksListAll: async () => [createWireTaskCardFixture({ id: "task-1" })] },
   });
   const selectWorkspace = mock(async () => {});
   let navigateToNotification: ((target: NotificationNavigationTarget) => Promise<void>) | undefined;

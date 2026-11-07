@@ -27,12 +27,13 @@ import {
   taskAssetIdSchema,
   taskAssetMediaTypeSchema,
 } from "./task-asset-schemas";
-import { issueTypeSchema, taskPrioritySchema, taskStatusSchema } from "./task-schemas";
+import { issueTypeSchema } from "./issue-type-schemas";
+import { taskPrioritySchema, taskStatusSchema } from "./task-schemas";
 import { workflowArtifactIdSchema, workflowIdSchema } from "./workflow-condition-schemas";
 
 const odtToolErrorDetailsSchema = z.record(z.string(), z.json());
 
-export const ODT_MCP_BRIDGE_VERSION = 3;
+export const ODT_MCP_BRIDGE_VERSION = 4;
 
 export const ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 
@@ -147,31 +148,19 @@ export type ReadTaskAssetsInput = z.infer<typeof ReadTaskAssetsInputSchema>;
 
 const labelStringSchema = z.string().trim().min(1);
 
-export const BuildBlockedInputSchema = z
+/**
+ * An event that the workflow of the task declares for agents. The role prompt lists the events of
+ * the role. The host checks the event against the task workflow and the role of the caller.
+ */
+export const ApplyWorkflowEventInputSchema = z
   .object({
     workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
-    reason: z.string().trim().min(1),
+    eventId: workflowIdSchema,
+    note: z.string().trim().min(1).optional().describe("Why you send the event."),
   })
   .strict();
-export type BuildBlockedInput = z.infer<typeof BuildBlockedInputSchema>;
-
-export const BuildResumedInputSchema = z
-  .object({
-    workspaceId: odtToolWorkspaceIdSchema,
-    taskId: z.string().trim().min(1),
-  })
-  .strict();
-export type BuildResumedInput = z.infer<typeof BuildResumedInputSchema>;
-
-export const BuildCompletedInputSchema = z
-  .object({
-    workspaceId: odtToolWorkspaceIdSchema,
-    taskId: z.string().trim().min(1),
-    summary: z.string().optional(),
-  })
-  .strict();
-export type BuildCompletedInput = z.infer<typeof BuildCompletedInputSchema>;
+export type ApplyWorkflowEventInput = z.infer<typeof ApplyWorkflowEventInputSchema>;
 
 export const SetPullRequestInputSchema = z
   .object({
@@ -236,9 +225,7 @@ export const ODT_TOOL_SCHEMAS = {
   odt_set_task_artifact: SetTaskArtifactInputSchema,
   odt_delete_task_artifact: DeleteTaskArtifactInputSchema,
   odt_update_task: UpdateTaskInputSchema,
-  odt_build_blocked: BuildBlockedInputSchema,
-  odt_build_resumed: BuildResumedInputSchema,
-  odt_build_completed: BuildCompletedInputSchema,
+  odt_apply_workflow_event: ApplyWorkflowEventInputSchema,
   odt_set_pull_request: SetPullRequestInputSchema,
   ...ODT_BROWSER_TOOL_SCHEMAS,
 } as const satisfies Record<OdtToolName, z.ZodTypeAny>;
@@ -252,9 +239,7 @@ export const ODT_WORKFLOW_TOOL_SCHEMAS = {
   odt_set_task_artifact: ODT_TOOL_SCHEMAS.odt_set_task_artifact,
   odt_delete_task_artifact: ODT_TOOL_SCHEMAS.odt_delete_task_artifact,
   odt_update_task: ODT_TOOL_SCHEMAS.odt_update_task,
-  odt_build_blocked: ODT_TOOL_SCHEMAS.odt_build_blocked,
-  odt_build_resumed: ODT_TOOL_SCHEMAS.odt_build_resumed,
-  odt_build_completed: ODT_TOOL_SCHEMAS.odt_build_completed,
+  odt_apply_workflow_event: ODT_TOOL_SCHEMAS.odt_apply_workflow_event,
   odt_set_pull_request: ODT_TOOL_SCHEMAS.odt_set_pull_request,
   ...ODT_BROWSER_TOOL_SCHEMAS,
 } as const;
@@ -287,9 +272,7 @@ export const ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS = {
   odt_set_task_artifact: ODT_TOOL_SCHEMAS.odt_set_task_artifact,
   odt_delete_task_artifact: ODT_TOOL_SCHEMAS.odt_delete_task_artifact,
   odt_update_task: ODT_TOOL_SCHEMAS.odt_update_task,
-  odt_build_blocked: ODT_TOOL_SCHEMAS.odt_build_blocked,
-  odt_build_resumed: ODT_TOOL_SCHEMAS.odt_build_resumed,
-  odt_build_completed: ODT_TOOL_SCHEMAS.odt_build_completed,
+  odt_apply_workflow_event: ODT_TOOL_SCHEMAS.odt_apply_workflow_event,
   odt_set_pull_request: ODT_TOOL_SCHEMAS.odt_set_pull_request,
   ...ODT_BROWSER_TOOL_SCHEMAS,
 } as const;
@@ -366,28 +349,14 @@ export const getWorkspacesResultSchema = z
   .strict();
 export type GetWorkspacesResult = z.infer<typeof getWorkspacesResultSchema>;
 
-export const buildBlockedResultSchema = z
+export const applyWorkflowEventResultSchema = z
   .object({
     task: publicTaskSchema,
-    reason: z.string(),
+    eventId: workflowIdSchema,
+    note: z.string().optional(),
   })
   .strict();
-export type BuildBlockedResult = z.infer<typeof buildBlockedResultSchema>;
-
-export const buildResumedResultSchema = z
-  .object({
-    task: publicTaskSchema,
-  })
-  .strict();
-export type BuildResumedResult = z.infer<typeof buildResumedResultSchema>;
-
-export const buildCompletedResultSchema = z
-  .object({
-    task: publicTaskSchema,
-    summary: z.string().optional(),
-  })
-  .strict();
-export type BuildCompletedResult = z.infer<typeof buildCompletedResultSchema>;
+export type ApplyWorkflowEventResult = z.infer<typeof applyWorkflowEventResultSchema>;
 
 export const setPullRequestResultSchema = z
   .object({
@@ -401,6 +370,8 @@ export const odtHostBridgeReadySchema = z
   .object({
     bridgeVersion: z.literal(ODT_MCP_BRIDGE_VERSION),
     toolNames: z.array(z.string().trim().min(1)).min(1),
+    /** The states that are not terminal in the workflows of the host. Tool lists name them. */
+    activeStatuses: z.array(taskStatusSchema).min(1),
   })
   .strict();
 export type OdtHostBridgeReady = z.infer<typeof odtHostBridgeReadySchema>;
@@ -420,9 +391,7 @@ export const ODT_HOST_BRIDGE_RESPONSE_SCHEMAS = {
   odt_set_task_artifact: mcpArtifactSaveResultSchema,
   odt_delete_task_artifact: mcpArtifactDeleteResultSchema,
   odt_update_task: taskSummarySchema,
-  odt_build_blocked: buildBlockedResultSchema,
-  odt_build_resumed: buildResumedResultSchema,
-  odt_build_completed: buildCompletedResultSchema,
+  odt_apply_workflow_event: applyWorkflowEventResultSchema,
   odt_set_pull_request: setPullRequestResultSchema,
   ...ODT_BROWSER_TOOL_RESPONSE_SCHEMAS,
 } as const;

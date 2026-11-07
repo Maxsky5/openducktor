@@ -3,20 +3,18 @@ import type {
   KanbanEmptyColumnDisplay,
   KanbanTaskCardView,
 } from "@openducktor/contracts";
-import type {
-  BuiltinRoleId as AgentRole,
-  BuiltinTaskCard as TaskCard,
-} from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type {
   ActiveTaskSessionContext,
   KanbanTaskSession,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
-import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
 import { useKanbanBoardColumns } from "@openducktor/frontend-core/tasks/board/use-kanban-board-columns";
 import type { WorkflowPendingState } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
 
 type UseKanbanBoardModelArgs = {
+  boardDefinition: import("@openducktor/contracts").WorkflowBoardDefinition | undefined;
+  loadError?: string | null;
   isLoadingTasks: boolean;
   isSwitchingWorkspace: boolean;
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
@@ -35,17 +33,11 @@ type UseKanbanBoardModelArgs = {
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   activeTaskSessionContextByTaskId: Map<string, ActiveTaskSessionContext>;
   onOpenDetails: (taskId: string) => void;
-  onDelegate: (taskId: string) => void;
-  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
-  onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
-  onQaStart: (taskId: string) => void;
-  onHumanApprove: (taskId: string) => void;
-  onHumanRequestChanges: (taskId: string) => void;
-  onResetImplementation: (taskId: string) => void;
-  onCloseTask: (taskId: string) => void;
 };
 
 export function useKanbanBoardModel({
+  boardDefinition,
+  loadError = null,
   isLoadingTasks,
   isSwitchingWorkspace,
   emptyColumnDisplay,
@@ -61,18 +53,15 @@ export function useKanbanBoardModel({
   taskSessionsByTaskId,
   activeTaskSessionContextByTaskId,
   onOpenDetails,
-  onDelegate,
-  onOpenSession,
-  onPlan,
-  onQaStart,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
-  onCloseTask,
 }: UseKanbanBoardModelArgs): KanbanPageContentModel {
-  const { columns, taskActivityStateByTaskId } = useKanbanBoardColumns(tasks, taskSessionsByTaskId);
+  const { columns, taskActivityStateByTaskId } = useKanbanBoardColumns(
+    tasks,
+    taskSessionsByTaskId,
+    boardDefinition,
+  );
 
   return {
+    loadError,
     isLoadingTasks,
     isSwitchingWorkspace,
     emptyColumnDisplay,
@@ -89,13 +78,5 @@ export function useKanbanBoardModel({
     activeTaskSessionContextByTaskId,
     taskActivityStateByTaskId,
     onOpenDetails,
-    onDelegate,
-    onOpenSession,
-    onPlan,
-    onQaStart,
-    onHumanApprove,
-    onHumanRequestChanges,
-    onResetImplementation,
-    onCloseTask,
   };
 }

@@ -152,17 +152,17 @@ describe("resolveTaskApprovalSubmissionRoute", () => {
 
   test("routes missing builder worktree completion without requiring a repo path", () => {
     const state = openState({
-      stage: "missing_builder_worktree",
+      stage: "missing_worktree",
       approvalContext: null,
     });
     const route = resolveTaskApprovalSubmissionRoute(state, null);
 
-    expect(route.kind).toBe("close_missing_builder_worktree");
-    if (route.kind !== "close_missing_builder_worktree") {
+    expect(route.kind).toBe("close_missing_worktree");
+    if (route.kind !== "close_missing_worktree") {
       throw new Error(`Expected missing-builder route, received ${route.kind}`);
     }
 
-    expect(route.approval.stage).toBe("missing_builder_worktree");
+    expect(route.approval.stage).toBe("missing_worktree");
     expect(route.approval.taskId).toBe(state.taskId);
   });
 

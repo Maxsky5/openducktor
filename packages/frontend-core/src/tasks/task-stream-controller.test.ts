@@ -1,5 +1,8 @@
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+
 import { describe, expect, mock, test } from "bun:test";
 import type {
   AgentSessionRecord,
@@ -28,7 +31,7 @@ import {
 import { taskQueryKeys } from "../queries/tasks";
 import { createTaskCardFixture } from "../test-support/shared-test-fixtures";
 import { createTaskStreamController } from "./task-stream-controller";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
 const cursor = (sequence: number): TaskEventCursor => ({ epoch, sequence });
@@ -41,7 +44,9 @@ const event = (taskId: string, repoPath = "/repo"): ExternalTaskSyncEvent => ({
   taskIds: [taskId],
   removedTaskIds: [],
   statusChanges: [],
-  taskSnapshots: [{ id: taskId, title: taskId, status: "open" }],
+  taskSnapshots: [
+    { workflow: specPlanBuildWorkflow.reference, id: taskId, title: taskId, status: "open" },
+  ],
   emittedAt: "2026-04-10T13:10:00.000Z",
 });
 
@@ -309,6 +314,7 @@ describe("task stream controller recovery", () => {
 
   test("acknowledges a snapshot without waiting for the read of a workspace that closed", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({ queryClient });
     const pendingRead = deferred<TaskCard[]>();
     const readStarted = deferred<void>();
     const taskViewSync = createTaskViewSync({
@@ -347,6 +353,7 @@ describe("task stream controller recovery", () => {
 
   test("uses one task list read to reconcile task and session snapshots", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({ queryClient });
     const listTasks = mock(async () => [createTaskCardFixture({ id: "task-1" })]);
     const taskViewSync = createTaskViewSync({
       queryClient,
@@ -403,6 +410,7 @@ describe("task stream controller recovery", () => {
 
   test("a replacement snapshot cancels the record reads of the replaced stream", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({ queryClient });
     const listKey = agentSessionQueryKeys.list(workspaceRefFixture("/repo"), "task-1");
     const olderRead = deferred<TaskAgentSessions[]>();
     const snapshotPrepared = deferred<string[]>();
@@ -464,6 +472,7 @@ describe("task stream controller recovery", () => {
 
   test("changes that arrive while a request is in progress share the next request", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({ queryClient });
     const busyRead = deferred<TaskAgentSessions[]>();
     const loadSessionBatch = mock(async (_repoPath: WorkspaceRef, taskIds: string[]) =>
       taskIds.includes("busy")
@@ -510,6 +519,7 @@ describe("task stream controller recovery", () => {
 
   test("a newer snapshot supersedes an older snapshot during task preparation", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({ queryClient });
     const olderPreparation = deferred<string[]>();
     const loadSessionBatch = mock(async (_repoPath: WorkspaceRef, taskIds: string[]) =>
       taskIds.map((taskId) => ({ taskId, agentSessions: [] })),
@@ -556,6 +566,7 @@ describe("task stream controller recovery", () => {
 
   test("a change batch starts no live refresh for a workspace that closed while it waited", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({ queryClient });
     const pendingRead = deferred<TaskAgentSessions[]>();
     const readPort = {
       agentSessionsListForTasks: mock(async ({ repoPath }: WorkspaceRef, taskIds: string[]) =>
@@ -616,6 +627,7 @@ describe("task stream controller recovery", () => {
   for (let microtasks = 0; microtasks <= 6; microtasks += 1) {
     test(`a snapshot ${microtasks} microtasks after a cold read response keeps its records out`, async () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      createTestClientConnection({ queryClient });
       const listKey = agentSessionQueryKeys.list(workspaceRefFixture("/repo"), "task-1");
       const olderRead = deferred<TaskAgentSessions[]>();
       const snapshotPrepared = deferred<string[]>();
@@ -673,6 +685,7 @@ describe("task stream controller recovery", () => {
   for (let microtasks = 0; microtasks <= 6; microtasks += 1) {
     test(`a change ${microtasks} microtasks after an unobserved response waits for current records`, async () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      createTestClientConnection({ queryClient });
       const olderRead = deferred<TaskAgentSessions[]>();
       const currentRead = deferred<TaskAgentSessions[]>();
       const loadSessionBatch = mock(async (_repoPath: WorkspaceRef, _taskIds: string[]) =>
@@ -713,6 +726,7 @@ describe("task stream controller recovery", () => {
 
   test("a confirmed deletion completes a pending unobserved load and its change", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({ queryClient });
     const heldRead = deferred<TaskAgentSessions[]>();
     const loadSessionBatch = mock(async () => heldRead.promise);
     const readPort = { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] };
@@ -760,6 +774,7 @@ describe("task stream controller recovery", () => {
 
   test("changes whose records share a request share one live refresh across drains", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({ queryClient });
     const busyRead = deferred<TaskAgentSessions[]>();
     const loadSessionBatch = mock(async (_repoPath: WorkspaceRef, taskIds: string[]) =>
       taskIds.includes("unrelated")
@@ -824,6 +839,7 @@ describe("task stream controller recovery", () => {
 
   test("a stopped stream starts no live refresh for its snapshot", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({ queryClient });
     const heldRead = deferred<TaskAgentSessions[]>();
     const loadSessionBatch = mock(async () => heldRead.promise);
     const refreshLiveSessions = mock(async (_repoPath: WorkspaceRef) => {});
@@ -856,6 +872,7 @@ describe("task stream controller recovery", () => {
   for (let microtasks = 0; microtasks <= 6; microtasks += 1) {
     test(`a snapshot ${microtasks} microtasks after a record response keeps a list from a read`, async () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      createTestClientConnection({ queryClient });
       const listKey = agentSessionQueryKeys.list(workspaceRefFixture("/repo"), "task-1");
       const olderRead = deferred<TaskAgentSessions[]>();
       const snapshotPrepared = deferred<string[]>();
@@ -906,6 +923,7 @@ describe("task stream controller recovery", () => {
 
   test("a stopped stream starts no live refresh for its pending changes", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({ queryClient });
     const listKey = agentSessionQueryKeys.list(workspaceRefFixture("/repo"), "task-1");
     const heldRead = deferred<TaskAgentSessions[]>();
     const loadSessionBatch = mock(async () => heldRead.promise);
@@ -944,6 +962,7 @@ describe("task stream controller recovery", () => {
   for (let microtasks = 0; microtasks <= 6; microtasks += 1) {
     test(`a snapshot ${microtasks} microtasks after a record response stops the older change`, async () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      createTestClientConnection({ queryClient });
       const listKey = agentSessionQueryKeys.list(workspaceRefFixture("/repo"), "task-1");
       const olderRead = deferred<TaskAgentSessions[]>();
       const snapshotPrepared = deferred<string[]>();
@@ -1260,6 +1279,7 @@ describe("task stream controller recovery", () => {
 
   test("terminal recovery completes a queued live refresh before acknowledging its replay", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({ queryClient });
     const firstRefresh = deferred<void>();
     const firstRefreshStarted = deferred<void>();
     const secondRefresh = deferred<void>();

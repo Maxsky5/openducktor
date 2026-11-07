@@ -1,11 +1,27 @@
+import {
+  createSharedBoardWorkflows,
+  createWorkflowTaskCardFixture,
+} from "@openducktor/workflows/test-support";
+import {
+  promptOverrideKey,
+  workflowDefinitionSchema,
+  type WorkflowLaunchRequest,
+} from "@openducktor/contracts";
+import { prepareSessionStartInstruction } from "../../sessions/start/session-start-kickoff";
+import { startSessionWorkflow } from "../../sessions/start/session-start-workflow";
+import { createTestClientConnection } from "../../test-support/test-client-connection";
+import { createSettingsSnapshotFixture } from "../../test-support/shared-test-fixtures";
+import { createTaskWorkflow, workflowRoleCatalog } from "@openducktor/workflows";
+import { createHumanReviewFeedbackState } from "./human-review-feedback-state";
 import { describe, expect, mock, test } from "bun:test";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 import { createFeedbackFake } from "../../test-support/feedback-fake";
 import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
 import { createAgentSessionSummaryFixture } from "../../test-support/shared-test-fixtures";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import {
+  type HumanReviewFeedbackStartRequest,
   HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE,
-  prepareHumanReviewFeedback,
   submitHumanReviewFeedback,
 } from "./human-review-feedback-flow";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
@@ -27,10 +43,22 @@ const createBuilderSession = (
 const createState = (
   overrides: Partial<HumanReviewFeedbackState> = {},
 ): HumanReviewFeedbackState => ({
+  launch: {
+    role: "build",
+    roleLabel: "Builder",
+    launchActionId: "build_after_human_request_changes",
+    postStartAction: "kickoff",
+  },
+  eventId: null,
+  confirmLabel: "Request Changes",
   taskId: "TASK-1",
   message: "Apply the requested changes.",
   ...overrides,
 });
+
+const unexpectedRequestChanges = async (): Promise<never> => {
+  throw new Error("A feedback launch must not request task changes.");
+};
 
 const STARTED_SESSION = {
   externalSessionId: "session-new",
@@ -39,21 +67,156 @@ const STARTED_SESSION = {
 } satisfies AgentSessionIdentity;
 
 describe("human-review-feedback-flow", () => {
-  test("prepareHumanReviewFeedback returns the created feedback state", () => {
-    const state = createState();
-
-    const result = prepareHumanReviewFeedback({
-      createState: () => state,
-    });
-
-    expect(result).toBe(state);
-  });
+  test.each([
+    { kind: "kickoff", override: false },
+    { kind: "message", override: false },
+    { kind: "message", override: true },
+  ] as const)(
+    "renders collected feedback at the host request boundary %j",
+    async ({ kind, override }) => {
+      const { alpha: original, board } = createSharedBoardWorkflows();
+      const definition = workflowDefinitionSchema.parse(original.definition);
+      for (const step of definition.steps) {
+        if (step.kind !== "agent") continue;
+        for (const launch of step.launchActions) {
+          if (launch.id === "alpha_write_revise") launch.template.kind = kind;
+        }
+      }
+      const alpha = createTaskWorkflow(
+        definition,
+        original.workflowTemplates.map((template) =>
+          template.id === "messages.write_revise"
+            ? {
+                ...template,
+                purpose: kind,
+                template: "Declared policy for {{task.id}}: {{humanFeedback}}",
+              }
+            : template,
+        ),
+        workflowRoleCatalog([original]),
+      );
+      const task = createWorkflowTaskCardFixture(alpha, board, {
+        status: "alpha_work",
+        artifactSummary: {
+          ...alpha.emptyArtifactSummary(),
+          alpha_review: { present: true, verdict: "revise" },
+        },
+      });
+      const state = createHumanReviewFeedbackState([task], task.id, {
+        kind: "launch",
+        launchActionId: "alpha_write_revise",
+      });
+      expect(state.confirmLabel).toBe("alpha Revise");
+      state.message = "Revise this draft.";
+      const templateId = promptOverrideKey({
+        ownerKind: "workflow",
+        ownerId: alpha.definition.id,
+        promptId: "messages.write_revise",
+      });
+      const connection = createTestClientConnection({
+        client: {
+          workspaceGetRepoConfig: async () =>
+            repoConfigFixture({
+              workspaceId: "workspace",
+              workspaceName: "Workspace",
+              repoPath: "/repo",
+              promptOverrides: override
+                ? {
+                    [templateId]: {
+                      enabled: true,
+                      baseVersion: 1,
+                      template: "Repo policy for {{task.id}}: {{humanFeedback}}",
+                    },
+                  }
+                : {},
+            }),
+          workspaceGetSettingsSnapshot: async () =>
+            createSettingsSnapshotFixture({
+              globalPromptOverrides: override
+                ? {
+                    [templateId]: {
+                      enabled: true,
+                      baseVersion: 1,
+                      template: "Global policy for {{task.id}}: {{humanFeedback}}",
+                    },
+                  }
+                : {},
+            }),
+        },
+      });
+      try {
+        const hostLaunch = mock(async (request: WorkflowLaunchRequest) => ({
+          workspaceId: request.workspaceId,
+          repoPath: request.repoPath,
+          taskId: request.taskId,
+          role: state.launch!.role,
+          status: "completed" as const,
+          startMode: "fresh" as const,
+          session: {
+            ...STARTED_SESSION,
+            startedAt: "2026-10-28T00:00:00.000Z",
+            status: "idle" as const,
+          },
+        }));
+        const start = mock(async (request: HumanReviewFeedbackStartRequest) =>
+          startSessionWorkflow({
+            request: await prepareSessionStartInstruction({
+              queryClient: connection.queryClient,
+              workspaceId: "workspace",
+              task,
+              request,
+            }),
+            decision: {
+              startMode: "fresh",
+              selectedModel: { runtimeKind: "opencode", providerId: "openai", modelId: "model" },
+            },
+            workspaceId: "workspace",
+            repoPath: "/repo",
+            client: { agentSessionWorkflowLaunch: hostLaunch },
+            sendAgentMessage: async () => null,
+          }),
+        );
+        await submitHumanReviewFeedback({
+          applyFeedbackEvent: unexpectedRequestChanges,
+          feedback: createFeedbackFake(),
+          state,
+          builderSessions: [],
+          startRequestChangesSession: start,
+        });
+        expect(start).toHaveBeenCalledTimes(1);
+        expect(start.mock.calls[0]?.[0]).toMatchObject({
+          launchActionId: "alpha_write_revise",
+          humanFeedback: "Revise this draft.",
+          postStartAction: kind === "kickoff" ? "kickoff" : "send_message",
+        });
+        expect(start.mock.calls[0]?.[0]).not.toHaveProperty("beforeStartAction");
+        if (kind === "message")
+          expect(hostLaunch.mock.calls[0]?.[0].instruction).toEqual({
+            kind: "message",
+            parts: [
+              {
+                kind: "text",
+                text: `${override ? "Repo" : "Declared"} policy for ${task.id}: Revise this draft.`,
+              },
+            ],
+          });
+        else
+          expect(hostLaunch.mock.calls[0]?.[0].instruction).toEqual({
+            kind: "kickoff",
+            feedback: "Revise this draft.",
+          });
+      } finally {
+        await connection.dispose();
+      }
+    },
+  );
 
   test("submitHumanReviewFeedback rejects blank messages before starting the shared workflow", async () => {
     const feedback = createFeedbackFake();
     const startRequestChangesSession = mock(async () => STARTED_SESSION);
 
     const result = await submitHumanReviewFeedback({
+      applyFeedbackEvent: unexpectedRequestChanges,
       feedback,
       state: createState({ message: "   " }),
       builderSessions: [createBuilderSession({ externalSessionId: "builder-session-1" })],
@@ -80,6 +243,7 @@ describe("human-review-feedback-flow", () => {
     const builderSessions = [latestBuilderSession, previousBuilderSession];
 
     const result = await submitHumanReviewFeedback({
+      applyFeedbackEvent: unexpectedRequestChanges,
       feedback: createFeedbackFake(),
       state: createState({ message: "  Use the standard request-changes workflow.  " }),
       builderSessions,
@@ -98,11 +262,7 @@ describe("human-review-feedback-flow", () => {
           workingDirectory: "/tmp/repo/worktree",
         },
         postStartAction: "kickoff",
-        message: "Use the standard request-changes workflow.",
-        beforeStartAction: {
-          action: "human_request_changes",
-          note: "Use the standard request-changes workflow.",
-        },
+        humanFeedback: "Use the standard request-changes workflow.",
       }),
     );
     expect(startRequestChangesSession).toHaveBeenCalledWith(
@@ -133,6 +293,7 @@ describe("human-review-feedback-flow", () => {
     const startRequestChangesSession = mock(async () => STARTED_SESSION);
 
     await submitHumanReviewFeedback({
+      applyFeedbackEvent: unexpectedRequestChanges,
       feedback: createFeedbackFake(),
       state: createState({ message: "Start this in a new builder session." }),
       builderSessions: [],
@@ -151,6 +312,7 @@ describe("human-review-feedback-flow", () => {
     const startRequestChangesSession = mock(async () => undefined);
 
     const result = await submitHumanReviewFeedback({
+      applyFeedbackEvent: unexpectedRequestChanges,
       feedback: createFeedbackFake(),
       state: createState({ message: "Keep editing if I cancel the second step." }),
       builderSessions: [createBuilderSession({ externalSessionId: "builder-session-1" })],
@@ -165,6 +327,7 @@ describe("human-review-feedback-flow", () => {
     const startRequestChangesSession = mock(async () => STARTED_SESSION);
 
     await submitHumanReviewFeedback({
+      applyFeedbackEvent: unexpectedRequestChanges,
       feedback: createFeedbackFake(),
       state: createState({
         message: "Address the requested changes in the shared flow.",
@@ -176,7 +339,7 @@ describe("human-review-feedback-flow", () => {
     expect(startRequestChangesSession).toHaveBeenCalledWith(
       expect.objectContaining({
         launchActionId: "build_after_human_request_changes",
-        message: "Address the requested changes in the shared flow.",
+        humanFeedback: "Address the requested changes in the shared flow.",
       }),
     );
   });

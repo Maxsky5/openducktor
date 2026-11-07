@@ -19,7 +19,12 @@ const event = (id: string): Extract<ExternalTaskSyncEvent, { kind: "external_tas
   boardChanges: null,
   repoPath: "/repo",
   taskId: `task-${id}`,
-  taskSnapshot: { id: `task-${id}`, title: "Task", status: "open" },
+  taskSnapshot: {
+    workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+    id: `task-${id}`,
+    title: "Task",
+    status: "open",
+  },
   emittedAt: "2026-04-10T13:00:00.000Z",
 });
 
@@ -205,7 +210,14 @@ describe("createTaskEventStream", () => {
     for (const frame of received) {
       expect(frame).toMatchObject({
         type: "change",
-        event: { taskSnapshot: { id: "task-1", title: "Task", status: "open" } },
+        event: {
+          taskSnapshot: {
+            workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+            id: "task-1",
+            title: "Task",
+            status: "open",
+          },
+        },
       });
     }
     first.unsubscribe();
@@ -396,10 +408,22 @@ describe("createTaskEventStream", () => {
       statusChanges: [
         {
           previousStatus: "open",
-          task: { id: "task-1", title: "Committed title", status: "spec_ready" },
+          task: {
+            workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+            id: "task-1",
+            title: "Committed title",
+            status: "spec_ready",
+          },
         },
       ],
-      taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
+      taskSnapshots: [
+        {
+          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          id: "task-1",
+          title: "Task 1",
+          status: "open",
+        },
+      ],
       emittedAt: "2026-04-10T13:00:00.000Z",
     };
 
@@ -419,7 +443,14 @@ describe("createTaskEventStream", () => {
       throw new Error("expected task update frame");
     }
     expect(change.event.taskIds).toEqual(["task-1"]);
-    expect(change.event.taskSnapshots).toEqual([{ id: "task-1", title: "Task 1", status: "open" }]);
+    expect(change.event.taskSnapshots).toEqual([
+      {
+        workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+        id: "task-1",
+        title: "Task 1",
+        status: "open",
+      },
+    ]);
     expect(Object.isFrozen(change)).toBe(true);
     expect(Object.isFrozen(change.cursor)).toBe(true);
     expect(Object.isFrozen(change.event)).toBe(true);
@@ -429,7 +460,12 @@ describe("createTaskEventStream", () => {
     expect(change.event.statusChanges).toEqual([
       {
         previousStatus: "open",
-        task: { id: "task-1", title: "Committed title", status: "spec_ready" },
+        task: {
+          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          id: "task-1",
+          title: "Committed title",
+          status: "spec_ready",
+        },
       },
     ]);
     expect(Object.isFrozen(change.event.statusChanges)).toBe(true);
@@ -468,7 +504,12 @@ describe("createTaskEventStream", () => {
         return repoPathReads === 1 ? "/validated-repo" : "/unchecked-repo";
       },
       taskId: "task-1",
-      taskSnapshot: { id: "task-1", title: "Task", status: "open" },
+      taskSnapshot: {
+        workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+        id: "task-1",
+        title: "Task",
+        status: "open",
+      },
       emittedAt: "2026-04-10T13:00:00.000Z",
     };
 

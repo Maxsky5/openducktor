@@ -1,6 +1,7 @@
+import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow-settings";
 import {
-  type BuiltinPromptRoleTabId,
-  type BuiltinPromptTemplateId as AgentPromptTemplateId,
+  type WorkflowPromptRoleTabId,
+  type WorkflowPromptTemplateId as AgentPromptTemplateId,
 } from "@openducktor/workflows";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useMemo } from "react";
@@ -21,8 +22,8 @@ type SettingsModalPromptValidation = {
   hasPromptValidationErrors: boolean;
   selectedRepoPromptValidationErrors: Partial<Record<AgentPromptTemplateId, string>>;
   selectedRepoPromptValidationErrorCount: number;
-  globalPromptRoleTabErrorCounts: Record<BuiltinPromptRoleTabId, number>;
-  selectedRepoPromptRoleTabErrorCounts: Record<BuiltinPromptRoleTabId, number>;
+  globalPromptRoleTabErrorCounts: Record<WorkflowPromptRoleTabId, number>;
+  selectedRepoPromptRoleTabErrorCounts: Record<WorkflowPromptRoleTabId, number>;
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
 };
 
@@ -30,12 +31,16 @@ export const useSettingsModalPromptValidation = ({
   snapshotDraft,
   selectedWorkspaceId,
 }: UseSettingsModalPromptValidationArgs): SettingsModalPromptValidation => {
+  const workflows = useWorkflowSettings();
   const promptValidationState = useMemo<PromptValidationState>(() => {
-    if (!snapshotDraft) {
+    if (!snapshotDraft || !workflows.data) {
       return EMPTY_PROMPT_VALIDATION_STATE;
     }
 
-    const globalErrors = buildPromptOverrideValidationErrors(snapshotDraft.globalPromptOverrides);
+    const globalErrors = buildPromptOverrideValidationErrors(
+      snapshotDraft.globalPromptOverrides,
+      workflows.data.templates,
+    );
     const globalErrorCount = Object.keys(globalErrors).length;
     let repoTotalErrorCount = 0;
     let totalErrorCount = globalErrorCount;
@@ -46,7 +51,10 @@ export const useSettingsModalPromptValidation = ({
     > = {};
     const repoErrorCountByWorkspaceId: Record<string, number> = {};
     for (const [workspaceId, repoConfig] of Object.entries(snapshotDraft.workspaces)) {
-      const repoErrors = buildPromptOverrideValidationErrors(repoConfig.promptOverrides);
+      const repoErrors = buildPromptOverrideValidationErrors(
+        repoConfig.promptOverrides,
+        workflows.data.templates,
+      );
       const repoErrorCount = Object.keys(repoErrors).length;
       if (repoErrorCount === 0) {
         continue;
@@ -65,7 +73,7 @@ export const useSettingsModalPromptValidation = ({
       repoTotalErrorCount,
       totalErrorCount,
     };
-  }, [snapshotDraft]);
+  }, [snapshotDraft, workflows.data]);
 
   const selectedRepoPromptValidationErrors = useMemo(
     () =>
@@ -81,13 +89,21 @@ export const useSettingsModalPromptValidation = ({
   const hasPromptValidationErrors = promptValidationState.totalErrorCount > 0;
 
   const globalPromptRoleTabErrorCounts = useMemo(
-    () => countPromptErrorsByRoleTab(promptValidationState.globalErrors),
-    [promptValidationState.globalErrors],
+    () =>
+      countPromptErrorsByRoleTab(
+        promptValidationState.globalErrors,
+        workflows.data?.promptTabs ?? [],
+      ),
+    [promptValidationState.globalErrors, workflows.data],
   );
 
   const selectedRepoPromptRoleTabErrorCounts = useMemo(
-    () => countPromptErrorsByRoleTab(selectedRepoPromptValidationErrors),
-    [selectedRepoPromptValidationErrors],
+    () =>
+      countPromptErrorsByRoleTab(
+        selectedRepoPromptValidationErrors,
+        workflows.data?.promptTabs ?? [],
+      ),
+    [selectedRepoPromptValidationErrors, workflows.data],
   );
 
   const settingsSectionErrorCountById = {

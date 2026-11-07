@@ -1,4 +1,3 @@
-import { BUILTIN_ROLE_IDS, BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { catalogModelOptionValue } from "@openducktor/frontend-core/sessions/model-selection/catalog-select-options";
@@ -18,9 +17,6 @@ export type RepoDefaultRole = keyof RepoSettingsInput["agentDefaults"];
 export type RepoAgentDefaultsInput = Partial<
   Record<RepoDefaultRole, RepoAgentDefaultDraft | null | undefined>
 >;
-
-export const ROLE_DEFAULTS: ReadonlyArray<{ role: RepoDefaultRole; label: string }> =
-  BUILTIN_ROLE_IDS.map((role) => ({ role, label: BUILTIN_ROLE_LABELS[role] }));
 
 export const ensureDraftAgentDefault = (
   value: RepoAgentDefaultDraft | null | undefined,

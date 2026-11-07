@@ -1,7 +1,7 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { skippedQueryOptions } from "@openducktor/frontend-core/queries/skipped-query";
 import type { RepoTaskData } from "@openducktor/frontend-core/queries/tasks";
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import {
   repoTaskDataQueryOptions,
   taskQueryKeys,

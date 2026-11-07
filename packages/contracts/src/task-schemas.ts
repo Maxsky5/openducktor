@@ -1,6 +1,8 @@
 import { workspaceRefSchema } from "./workspace-id-schemas";
 import { z } from "zod";
+import { workflowReferenceSchema } from "./workflow-reference-schemas";
 import {
+  directMergeRecordSchema,
   gitConflictSchema,
   gitMergeMethodSchema,
   gitTargetBranchSchema,
@@ -9,12 +11,10 @@ import {
 } from "./git-schemas";
 import { workflowArtifactIdSchema, workflowIdSchema } from "./workflow-condition-schemas";
 import { worktreeOwnersSchema } from "./workspace-session-schemas";
+import { issueTypeSchema } from "./issue-type-schemas";
 
 /** A state of the task workflow. The workflow of the task validates it. */
 export const taskStatusSchema = workflowIdSchema;
-
-/** A value of the `issueType` fact of the task workflow. */
-export const issueTypeSchema = workflowIdSchema;
 
 /** An action of the task workflow. */
 export const taskActionSchema = workflowIdSchema;
@@ -55,7 +55,7 @@ export type AgentWorkflowState = z.infer<typeof agentWorkflowStateSchema>;
 const agentWorkflowsSchema = z.record(workflowIdSchema, agentWorkflowStateSchema);
 export type AgentWorkflows = z.infer<typeof agentWorkflowsSchema>;
 
-export const taskCardSchema = z.object({
+export const taskRecordDataSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string().optional().default(""),
@@ -63,7 +63,6 @@ export const taskCardSchema = z.object({
   priority: taskPrioritySchema.default(2),
   issueType: issueTypeSchema,
   removeWorktreeOnClose: taskRemoveWorktreeOnCloseSchema.default(null),
-  availableActions: z.array(taskActionSchema),
   labels: z.array(z.string()).default([]),
   targetBranch: z.preprocess(
     (value) => (value === null ? undefined : value),
@@ -81,10 +80,29 @@ export const taskCardSchema = z.object({
     (value) => (value === null ? undefined : value),
     sourceIssueReferenceSchema.optional(),
   ),
+  /** The local direct merge of the task. Until the task closes, it waits for its publication. */
+  directMerge: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    directMergeRecordSchema.optional(),
+  ),
   artifactSummary: taskArtifactSummarySchema,
-  agentWorkflows: agentWorkflowsSchema,
   updatedAt: z.string(),
   createdAt: z.string(),
+});
+export type TaskRecordData = z.infer<typeof taskRecordDataSchema>;
+/** The evaluated flags of one step. The definition holds the step kind, label, and role. */
+const taskWorkflowStepStateSchema = z.strictObject({
+  id: workflowIdSchema,
+  required: z.boolean(),
+  available: z.boolean(),
+  completed: z.boolean(),
+});
+export type TaskWorkflowStepState = z.infer<typeof taskWorkflowStepStateSchema>;
+export const taskCardSchema = taskRecordDataSchema.extend({
+  workflow: workflowReferenceSchema,
+  workflowSteps: z.array(taskWorkflowStepStateSchema),
+  availableActions: z.array(taskActionSchema),
+  agentWorkflows: agentWorkflowsSchema,
 });
 export type TaskCard = z.infer<typeof taskCardSchema>;
 

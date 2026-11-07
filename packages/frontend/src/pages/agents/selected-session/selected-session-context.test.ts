@@ -1,4 +1,4 @@
-import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
+import { BUILTIN_ROLE_LABEL_BY_ROLE } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { describe, expect, mock, test } from "bun:test";
 import { getAgentSessionActivityStateFromSession } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import {
@@ -103,7 +103,7 @@ const createInput = (
       approvalReplyErrorByRequestId: {},
       onReplyApproval: async () => {},
     },
-    roleLabelByRole: BUILTIN_ROLE_LABELS,
+    roleLabelByRole: BUILTIN_ROLE_LABEL_BY_ROLE,
     ...inputOverrides,
   };
 };

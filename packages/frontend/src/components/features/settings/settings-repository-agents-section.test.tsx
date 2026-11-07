@@ -1,8 +1,9 @@
+import { WorkflowTestProvider } from "@/test-utils/workflow-provider";
 import { describe, expect, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, type SettingsRepoConfig } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
 import { resolveRepoAgentDefaultModelPickerSelection } from "@/components/features/repository/model-defaults/repository-agent-selection";
 import { RepositoryAgentsSection } from "./settings-repository-agents-section";
 
@@ -29,7 +30,7 @@ const repoConfig: SettingsRepoConfig = {
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
@@ -186,3 +187,6 @@ describe("RepositoryAgentsSection", () => {
     expect(html).toContain("Default Model runtime &quot;Codex&quot; is disabled.");
   });
 });
+
+const renderToStaticMarkup = (element: Parameters<typeof renderMarkup>[0]) =>
+  renderMarkup(<WorkflowTestProvider>{element}</WorkflowTestProvider>);

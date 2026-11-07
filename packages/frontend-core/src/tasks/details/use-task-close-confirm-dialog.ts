@@ -1,4 +1,6 @@
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { TaskCard as WireTaskCard } from "@openducktor/contracts";
+import type { OnTaskCommitted } from "../workflow/task-workflow-continuation";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
 import type { TaskConfirmDialogState } from "./task-confirm-dialog-types";
 import { useTaskAsyncConfirmDialog } from "./use-task-async-confirm-dialog";
@@ -9,8 +11,9 @@ import {
   useTaskCloseImpact,
   useTaskCloseLoader,
 } from "./use-task-close-impact";
+import { useConfirmedImpact } from "./use-confirmed-impact";
 
-export type CloseTaskRun = (taskId: string, options: CloseTaskOptions) => Promise<void>;
+export type CloseTaskRun = (taskId: string, options: CloseTaskOptions) => Promise<WireTaskCard>;
 
 export type TaskCloseConfirmDialogModel = Omit<TaskConfirmDialogState, "impact"> & {
   impact: TaskCloseImpact;
@@ -23,7 +26,7 @@ export type TaskCloseConfirmDialogModel = Omit<TaskConfirmDialogState, "impact">
 };
 
 export type UseTaskCloseConfirmDialogResult = {
-  openDialog: () => void;
+  openDialog: (onCommitted?: OnTaskCommitted) => void;
   dialog: TaskCloseConfirmDialogModel;
 };
 
@@ -35,6 +38,7 @@ type UseTaskCloseConfirmDialogOptions = {
   /** The close. Without it, Confirm does nothing. */
   run: CloseTaskRun | undefined;
   onSucceeded: () => void;
+  onCommitted?: OnTaskCommitted | undefined;
 };
 
 /** The shared close confirmation of a task, with its cleanup choice. */
@@ -44,6 +48,7 @@ export function useTaskCloseConfirmDialog({
   initiallyOpen = false,
   run,
   onSucceeded,
+  onCommitted,
 }: UseTaskCloseConfirmDialogOptions): UseTaskCloseConfirmDialogResult {
   const { removeWorktree, onRemoveWorktreeChange, resetChoice } = useTaskCloseChoice(
     task.removeWorktreeOnClose,
@@ -54,13 +59,14 @@ export function useTaskCloseConfirmDialog({
     scopeKey: task.id,
     run: run && removeWorktree !== null ? () => run(task.id, { removeWorktree }) : undefined,
     onSucceeded,
+    onCommitted,
   });
-  const impact = useTaskCloseImpact({ task, enabled: dialog.open });
+  const impact = useConfirmedImpact(useTaskCloseImpact({ task, enabled: dialog.open }), dialog);
   const isPreparing = useTaskCloseLoader(impact, removeWorktree);
   return {
-    openDialog: () => {
+    openDialog: (onCommitted) => {
       resetChoice();
-      openDialog();
+      openDialog(onCommitted);
     },
     dialog: {
       ...dialog,

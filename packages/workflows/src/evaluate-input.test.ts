@@ -8,7 +8,7 @@ describe("workflow input validation", () => {
     { name: "definition revision", change: { definitionRevision: 1 } },
   ])("checks $name on every query", ({ change }) => {
     const workflow = createWorkflow(publicationDefinition());
-    const input = { ...publicationInput("draft"), ...change };
+    const input = { ...publicationInput("open"), ...change };
     for (const query of [
       () => workflow.condition(true)(input),
       () => workflow.steps(input),
@@ -43,7 +43,7 @@ describe("workflow input validation", () => {
   ])("rejects a supplied $name fact even when the query does not use it", ({ facts, path }) => {
     const workflow = createWorkflow(publicationDefinition());
     expect(() =>
-      workflow.availableActions(publicationInput("published", facts)).includes("view-copy"),
+      workflow.availableActions(publicationInput("closed", facts)).includes("view-copy"),
     ).toThrow(
       expect.objectContaining({ code: "invalid_input", message: expect.stringContaining(path) }),
     );
@@ -71,9 +71,7 @@ describe("workflow input validation", () => {
     ({ artifacts, path }) => {
       const workflow = createWorkflow(publicationDefinition());
       expect(() =>
-        workflow
-          .availableActions(publicationInput("published", {}, artifacts))
-          .includes("view-copy"),
+        workflow.availableActions(publicationInput("closed", {}, artifacts)).includes("view-copy"),
       ).toThrow(
         expect.objectContaining({ code: "invalid_input", message: expect.stringContaining(path) }),
       );
@@ -85,12 +83,12 @@ describe("workflow input validation", () => {
     expect(() => workflow.steps(publicationInput("missing"))).toThrow(
       expect.objectContaining({ code: "unknown_state" }),
     );
-    expect(() => workflow.actionLabel(publicationInput("draft"), "missing")).toThrow(
+    expect(() => workflow.actionLabel(publicationInput("open"), "missing")).toThrow(
       expect.objectContaining({ code: "unknown_action" }),
     );
     for (const query of [
-      () => workflow.isEventAvailable(publicationInput("draft"), "missing"),
-      () => workflow.decide(publicationInput("draft"), "missing"),
+      () => workflow.isEventAvailable(publicationInput("open"), "missing"),
+      () => workflow.decide(publicationInput("open"), "missing"),
     ]) {
       try {
         query();

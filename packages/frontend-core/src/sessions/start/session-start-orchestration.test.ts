@@ -1,9 +1,17 @@
 import { describe, expect, test } from "bun:test";
+import { createTaskWorkflow, resolveWorkflowBoard } from "@openducktor/workflows";
+import {
+  createWorkflowTaskCardFixture,
+  reviewTaskDefinition,
+  reviewTaskPromptTemplates,
+  reviewTaskRoles,
+} from "@openducktor/workflows/test-support";
 import {
   createAgentSessionSummaryFixture,
   createTaskCardFixture,
 } from "../../test-support/shared-test-fixtures";
 import { buildSessionStartModalRequest } from "./session-start-orchestration";
+import type { SessionStartFlowRequest } from "./session-start-types";
 
 const BUILD_SELECTION = {
   runtimeKind: "opencode" as const,
@@ -53,7 +61,7 @@ describe("session-start-orchestration", () => {
       request: {
         taskId: "TASK-1",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         postStartAction: "kickoff",
       },
       selectedModel: BUILD_SELECTION,
@@ -61,6 +69,7 @@ describe("session-start-orchestration", () => {
       preferredSourceSession,
       selectedTask: createTaskCardFixture({
         id: "TASK-1",
+        status: "human_review",
         targetBranch: {
           remote: "origin",
           branch: "release/2026.04",
@@ -111,9 +120,10 @@ describe("session-start-orchestration", () => {
       request: {
         taskId: "TASK-1",
         role: "build",
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         postStartAction: "kickoff",
       },
+      selectedTask: createTaskCardFixture({ id: "TASK-1", status: "human_review" }),
       selectedModel: null,
       taskSessions: [latestSession, olderSession],
     });
@@ -124,6 +134,7 @@ describe("session-start-orchestration", () => {
   test("does not auto-build reusable options for fresh-only launch actions and preserves overrides", () => {
     const request = buildSessionStartModalRequest({
       source: "agent_studio",
+      selectedTask: createTaskCardFixture({ id: "TASK-1" }),
       request: {
         taskId: "TASK-1",
         role: "spec",
@@ -185,6 +196,7 @@ describe("session-start-orchestration", () => {
         initialSourceSession: sessionIdentity("builder-session-2"),
         postStartAction: "kickoff",
       },
+      selectedTask: createTaskCardFixture({ id: "TASK-1" }),
       selectedModel: null,
       taskSessions: [latestSession, preferredSourceSession],
       preferredSourceSession,
@@ -224,5 +236,42 @@ describe("session-start-orchestration", () => {
       branch: "release/2026.05",
     });
     expect(request.initialTargetBranchError).toBe("use the override instead");
+  });
+
+  test("assesses a feedback launch in the state that its event gives", () => {
+    const definition = reviewTaskDefinition();
+    const write = definition.steps.find(({ id }) => id === "write")!;
+    write.availableWhen = { stateIn: ["open", "writing", "paused"] };
+    const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
+    const board = resolveWorkflowBoard(
+      { states: workflow.definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
+      [workflow],
+    );
+    const selectedTask = createWorkflowTaskCardFixture(workflow, board, { status: "approval" });
+    const build = (eventId?: string) => {
+      const request: SessionStartFlowRequest = {
+        taskId: selectedTask.id,
+        role: "writer",
+        launchActionId: "write_feedback",
+        postStartAction: "kickoff",
+      };
+      if (eventId) request.beforeStartAction = { eventId };
+      return buildSessionStartModalRequest({
+        source: "task_action",
+        request,
+        selectedModel: BUILD_SELECTION,
+        taskSessions: [],
+        selectedTask,
+      });
+    };
+
+    expect(build("request-rewrite")).toMatchObject({
+      taskId: selectedTask.id,
+      role: "writer",
+      launchActionId: "write_feedback",
+    });
+    expect(() => build()).toThrow(
+      `Workflow step for role "writer" is unavailable for task "${selectedTask.id}".`,
+    );
   });
 });

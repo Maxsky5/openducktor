@@ -1,3 +1,4 @@
+import { workflowRoleIcon } from "@openducktor/workflows";
 import {
   Activity,
   CircleAlert,
@@ -6,7 +7,7 @@ import {
   type LucideIcon,
   MessagesSquare,
 } from "lucide-react";
-import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
+import { roleIconForHint } from "@/lib/agent-role-presentation";
 import type {
   SessionNavigationEntry,
   SessionNavigationGroupId,
@@ -20,7 +21,11 @@ export const SESSION_GROUP_ICONS = {
 
 export const sessionEntryIcon = (entry: SessionNavigationEntry): LucideIcon => {
   if (entry.target.kind === "task_session") {
-    return AGENT_ROLE_ICONS[entry.target.role];
+    return roleIconForHint(
+      entry.context.kind === "task"
+        ? workflowRoleIcon(entry.context.task.taskWorkflow, entry.target.role)
+        : undefined,
+    );
   }
   if (entry.target.kind === "workspace_session") return MessagesSquare;
   return ClipboardList;

@@ -1,5 +1,9 @@
 import { Effect } from "effect";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import {
+  errorMessage,
+  HostDependencyError,
+  HostValidationError,
+} from "../../../effect/host-errors";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 
 const WORKFLOW_HOOK_TIMEOUT_MS = 300_000;
@@ -60,31 +64,28 @@ const parseHookCommand = (hook: string): string[] => {
   }
   return tokens;
 };
-export const runHookCommandsAllowFailure = (
+const commandOutput = (stdout: string, stderr: string): string =>
+  [stdout, stderr]
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .join("\n");
+/** Runs the hooks in order. Returns the first failed hook and its output, or null. */
+const runHookCommandsAllowFailure = (
   systemCommands: SystemCommandPort,
-  hooks: string[],
+  hooks: readonly string[],
   cwd: string,
-): Effect.Effect<
-  {
-    hook: string;
-    stderr: string;
-  } | null,
-  never
-> =>
+): Effect.Effect<{ hook: string; output: string } | null, never> =>
   Effect.gen(function* () {
     for (const hook of hooks) {
       let argv: string[];
       try {
         argv = parseHookCommand(hook);
       } catch (error) {
-        return {
-          hook,
-          stderr: errorMessage(error),
-        };
+        return { hook, output: errorMessage(error) };
       }
       const [command, ...args] = argv;
       if (command === undefined) {
-        return { hook, stderr: "Hook command is empty. Provide an executable name." };
+        return { hook, output: "Hook command is empty. Provide an executable name." };
       }
       const commandResult = yield* Effect.result(
         systemCommands.runCommandAllowFailure(command, args, {
@@ -92,17 +93,55 @@ export const runHookCommandsAllowFailure = (
           timeoutMs: WORKFLOW_HOOK_TIMEOUT_MS,
         }),
       );
-      if (commandResult._tag === "Success") {
-        const result = commandResult.success;
-        if (!result.ok) {
-          return { hook, stderr: result.stderr };
-        }
-      } else {
+      if (commandResult._tag === "Failure") {
         return {
           hook,
-          stderr: `Failed to execute hook command: ${errorMessage(commandResult.failure)}`,
+          output: `Failed to execute hook command: ${errorMessage(commandResult.failure)}`,
         };
+      }
+      const result = commandResult.success;
+      if (!result.ok) {
+        const output = commandOutput(result.stdout, result.stderr);
+        const exit = result.exitCode == null ? "" : `\nExit code ${result.exitCode}.`;
+        return { hook, output: `${output}${exit}` };
       }
     }
     return null;
+  });
+
+/** The repository commands that run in a task worktree right before the host removes it. */
+export type BeforeWorktreeRemovalScript = {
+  commands: readonly string[];
+  systemCommands: SystemCommandPort | undefined;
+};
+
+/** Runs the before worktree removal script in the worktree. A failed command fails the removal. */
+export const runBeforeWorktreeRemovalScript = (
+  script: BeforeWorktreeRemovalScript,
+  worktreePath: string,
+) =>
+  Effect.gen(function* () {
+    const commands = script.commands.map((command) => command.trim()).filter(Boolean);
+    if (commands.length === 0) {
+      return;
+    }
+    if (!script.systemCommands) {
+      return yield* new HostDependencyError({
+        dependency: "systemCommands",
+        operation: "before worktree removal script",
+        message: "System command port is required to run the before worktree removal script.",
+      });
+    }
+    const failure = yield* runHookCommandsAllowFailure(
+      script.systemCommands,
+      commands,
+      worktreePath,
+    );
+    if (failure !== null) {
+      return yield* new HostValidationError({
+        field: "hooks.beforeWorktreeRemoval",
+        message: `Before worktree removal script command failed: ${failure.hook}\n${failure.output}\nOpenDucktor kept the worktree ${worktreePath}. Fix the command in the repository settings or its cause, then try again.`,
+        details: { worktreePath, hook: failure.hook },
+      });
+    }
   });

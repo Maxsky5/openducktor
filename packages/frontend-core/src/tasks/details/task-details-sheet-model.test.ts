@@ -1,8 +1,10 @@
+import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { describe, expect, test } from "bun:test";
 import { collectSingleTaskCleanupImpactTaskIds } from "./task-details-sheet-model";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const makeTask = (id: string, overrides: Partial<TaskCard> = {}): TaskCard => ({
+  ...createTaskCardFixture(),
   id,
   title: id,
   description: "",

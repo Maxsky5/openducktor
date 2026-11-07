@@ -2,7 +2,6 @@ import { createElement, type Context, type ReactNode, useContext, useMemo } from
 import { UNSAFE_LocationContext } from "react-router";
 import {
   ActiveWorkspaceContext,
-  DelegationStateContext,
   DocumentStateContext,
   TasksStateContext,
   TaskControlContext,
@@ -34,7 +33,6 @@ export function useSessionViewScope(): SessionViewScope {
     useBinding(TaskControlContext),
     useBinding(ChecksStateContext),
     useBinding(DocumentStateContext),
-    useBinding(DelegationStateContext),
     useBinding(AgentOperationsContext),
     useBinding(AgentSessionsContext),
     useBinding(AgentSessionReadModelStateContext),

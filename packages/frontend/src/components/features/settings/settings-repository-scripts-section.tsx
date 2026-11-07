@@ -62,9 +62,9 @@ export function RepositoryScriptsSection({
         />
       </div>
 
-      <RepositoryCleanupScriptSection
+      <RepositoryBeforeWorktreeRemovalScriptSection
         isDisabled={isDisabled}
-        postCompleteHooks={selectedRepoConfig.hooks.postComplete}
+        beforeWorktreeRemovalHooks={selectedRepoConfig.hooks.beforeWorktreeRemoval}
         onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
       />
 
@@ -77,30 +77,35 @@ export function RepositoryScriptsSection({
   );
 }
 
-function RepositoryCleanupScriptSection({
+function RepositoryBeforeWorktreeRemovalScriptSection({
   isDisabled,
-  postCompleteHooks,
+  beforeWorktreeRemovalHooks,
   onUpdateSelectedRepoConfig,
 }: {
   isDisabled: boolean;
-  postCompleteHooks: string[];
+  beforeWorktreeRemovalHooks: string[];
   onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
 }): ReactElement {
   return (
     <div className="grid gap-2">
-      <Label htmlFor="repo-post-complete-hooks">
-        Worktree cleanup script (one command per line)
+      <Label htmlFor="repo-before-worktree-removal-hooks">
+        Before worktree removal script (one command per line)
       </Label>
+      <p id="repo-before-worktree-removal-hooks-help" className="text-xs text-muted-foreground">
+        Runs in the task worktree right before OpenDucktor removes it. A failed command stops the
+        removal.
+      </p>
       <Textarea
-        id="repo-post-complete-hooks"
+        id="repo-before-worktree-removal-hooks"
+        aria-describedby="repo-before-worktree-removal-hooks-help"
         rows={4}
-        value={postCompleteHooks.join("\n")}
+        value={beforeWorktreeRemovalHooks.join("\n")}
         disabled={isDisabled}
         onChange={(event) => {
-          const postComplete = parseHookLines(event.currentTarget.value);
+          const beforeWorktreeRemoval = parseHookLines(event.currentTarget.value);
           onUpdateSelectedRepoConfig((repoConfig) => ({
             ...repoConfig,
-            hooks: { ...repoConfig.hooks, postComplete },
+            hooks: { ...repoConfig.hooks, beforeWorktreeRemoval },
           }));
         }}
       />

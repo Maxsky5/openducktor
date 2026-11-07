@@ -12,9 +12,10 @@ const skipped = (workspaceId: string): AutopilotOutcome => ({
   workspaceId,
   repoPath: "/repo",
   task: { id: "TASK-1", title: "Export" },
-  workflowId: "openducktor",
+  workflowId: "openducktor-spec-plan-build",
   eventId: "taskRejectedByQa",
   actionId: "startReviewQaFeedbacks",
+  actionLabel: "Start Builder QA feedback",
   occurredAt: "2026-10-10T00:00:00.000Z",
   reason: "The Builder session runs.",
 });

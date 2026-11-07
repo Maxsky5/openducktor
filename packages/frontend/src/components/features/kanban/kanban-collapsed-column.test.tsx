@@ -10,7 +10,11 @@ describe("KanbanCollapsedColumn", () => {
         <KanbanCollapsedColumn
           column={{
             id: "open",
+            label: "Backlog",
             title: "Backlog",
+            shortLabel: "Backlog",
+            tone: "neutral",
+            taskOrder: "priority_then_created",
             tasks: [],
           }}
         />

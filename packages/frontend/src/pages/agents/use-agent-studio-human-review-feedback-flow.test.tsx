@@ -8,7 +8,7 @@ import {
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioHumanReviewFeedbackFlow } from "./use-agent-studio-human-review-feedback-flow";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 enableReactActEnvironment();
 
@@ -48,7 +48,9 @@ const sessionWorkflowResult = (externalSessionId: string) => ({
 });
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  workspaceId: "workspace-1",
   taskId: "task-1",
+  workspaceRepoPath: "/repo",
   sessionsForTask: [],
   selectedTask: createTask(),
   startSessionRequest: async () => undefined,
@@ -70,7 +72,7 @@ const waitForFeedbackModal = async (
 const openFeedbackModal = async (harness: ReturnType<typeof createHookHarness>) => {
   await harness.mount();
   await harness.run((state) => {
-    state.openHumanReviewFeedback();
+    state.openHumanReviewFeedback("build_after_human_request_changes");
   });
   return waitForFeedbackModal(harness);
 };
@@ -178,8 +180,8 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       postStartAction: "kickoff";
       message?: string;
       beforeStartAction?: {
-        action: "human_request_changes";
-        note: string;
+        eventId: string;
+        note?: string;
       };
     }> = [];
     const startSessionRequest = mock(async (request) => {
@@ -216,11 +218,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
         workingDirectory: "/repo",
       },
       postStartAction: "kickoff",
-      message: "Ship the requested fixes.",
-      beforeStartAction: {
-        action: "human_request_changes",
-        note: "Ship the requested fixes.",
-      },
+      humanFeedback: "Ship the requested fixes.",
     });
     expect(startSessionRequests[0]?.existingSessionOptions.map((option) => option.value)).toEqual([
       agentSessionIdentityKey(newestSession),
@@ -271,7 +269,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       await harness.waitFor(() => toastErrorMock.mock.calls.length > 0);
 
       expect(startSessionRequest).toHaveBeenCalledTimes(1);
-      expect(toastErrorMock).toHaveBeenCalledWith("Failed to prepare the Builder session.", {
+      expect(toastErrorMock).toHaveBeenCalledWith("Failed to submit feedback.", {
         description: "start failed",
       });
       expect(harness.getLatest().humanReviewFeedbackModal?.open).toBe(true);

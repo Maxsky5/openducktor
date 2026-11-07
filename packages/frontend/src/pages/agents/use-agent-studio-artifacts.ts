@@ -1,7 +1,7 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { taskDocumentQueryOptions } from "@openducktor/frontend-core/queries/documents";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 /** Keep workflow reads active for the task, independent of its transcript and shown panel. */
 export function useAgentStudioArtifacts(

@@ -1,11 +1,12 @@
-import { BUILTIN_ROLE_LABELS, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
+import { specPlanBuildWorkflow, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type {
   AgentFileSearchResult,
   AgentModelSelection,
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { createRef } from "react";
-import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
+import { roleIconForHint } from "@/lib/agent-role-presentation";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { AgentRoleOption } from "../agent-studio-header.types";
 import type { AgentChatThreadModel } from "./agent-chat.types";
@@ -18,6 +19,7 @@ import { createTextSegment } from "@openducktor/frontend-core/drafts/agent-chat-
 import { baseSelection } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 
 const baseTask: TaskCard = {
+  ...createTaskCardFixture(),
   id: "task-1",
   title: "Add social login",
   description: "",
@@ -42,17 +44,21 @@ const baseTask: TaskCard = {
   updatedAt: "2026-02-20T10:00:00.000Z",
 };
 
-export const TEST_ROLE_OPTIONS: AgentRoleOption[] = [
-  { role: "spec", label: BUILTIN_ROLE_LABELS.spec, icon: AGENT_ROLE_ICONS.spec },
-  { role: "planner", label: BUILTIN_ROLE_LABELS.planner, icon: AGENT_ROLE_ICONS.planner },
-  { role: "build", label: BUILTIN_ROLE_LABELS.build, icon: AGENT_ROLE_ICONS.build },
-  { role: "qa", label: BUILTIN_ROLE_LABELS.qa, icon: AGENT_ROLE_ICONS.qa },
-];
+/** The label of each built-in role. */
+export const BUILTIN_ROLE_LABEL_BY_ROLE: Record<string, string> = Object.fromEntries(
+  specPlanBuildWorkflow.roles.map(({ id, label }) => [id, label]),
+);
 
-export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
-  ...baseTask,
-  ...overrides,
-});
+export const TEST_ROLE_OPTIONS: AgentRoleOption[] = (
+  ["spec", "planner", "build", "qa"] as const
+).map((role) => ({
+  role,
+  label: specPlanBuildWorkflow.role(role).label,
+  icon: roleIconForHint(specPlanBuildWorkflow.role(role).icon),
+}));
+
+export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard =>
+  createTaskCardFixture(baseTask, overrides);
 
 export const presentRegularToolCall = (
   toolName: string,

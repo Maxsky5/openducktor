@@ -1,11 +1,11 @@
 import { z } from "zod";
 import type { AgentStudioNavigationState } from "./agent-studio-navigation";
-import { BUILTIN_ROLE_IDS } from "@openducktor/workflows";
+import { workflowIdSchema } from "@openducktor/contracts";
 
 export const taskRouteStateSchema = z
   .object({
     sessionlessTask: z
-      .object({ workspaceId: z.string(), taskId: z.string(), role: z.enum(BUILTIN_ROLE_IDS) })
+      .object({ workspaceId: z.string(), taskId: z.string(), role: workflowIdSchema })
       .optional(),
   })
   .loose();

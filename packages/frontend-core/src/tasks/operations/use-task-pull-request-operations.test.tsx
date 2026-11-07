@@ -79,10 +79,7 @@ const createOperationsHarness = (options: OperationsHarnessOptions = {}) => {
   const notification = createNotificationPort();
   const pullRequestHostPort = options.pullRequestHostPort ?? createPullRequestHostPort();
   const runTaskMutation =
-    options.runTaskMutation ??
-    (async (mutationOptions) => {
-      await mutationOptions.run("/repo");
-    });
+    options.runTaskMutation ?? ((mutationOptions) => mutationOptions.run("/repo"));
   const cleanupEvents: string[] = [];
   const taskChatDraftCleanup: TaskPullRequestChatDraftCleanupPort =
     options.taskChatDraftCleanup ?? {
@@ -372,7 +369,7 @@ describe("useTaskPullRequestOperations", () => {
         {
           level: "success",
           title: "Pull request linked",
-          description: "PR #17 for task-1 (/repo).",
+          description: "PR #17 for task-1.",
         },
       ]);
     } finally {
@@ -429,11 +426,8 @@ describe("useTaskPullRequestOperations", () => {
   test("restores unlink progress after a workspace round trip and invalidates CI review data", async () => {
     const unlinkResult = createDeferred<{ ok: boolean }>();
     const taskPullRequestUnlink = mock(() => unlinkResult.promise);
-    const runTaskMutation = mock(
-      async (options: Parameters<TaskMutationRunner["runTaskMutation"]>[0]) => {
-        await options.run("/repo");
-      },
-    );
+    const runTaskMutation: TaskMutationRunner["runTaskMutation"] = (options) =>
+      options.run("/repo");
     const testHarness = createOperationsHarness({
       pullRequestHostPort: createPullRequestHostPort({ taskPullRequestUnlink }),
       runTaskMutation,
@@ -500,7 +494,7 @@ describe("useTaskPullRequestOperations", () => {
         {
           level: "warning",
           title: "No pull request found",
-          description: "No open pull request found for task-1 on feature/task-1 (/repo).",
+          description: "No open pull request found for task-1 on feature/task-1.",
         },
       ]);
     } finally {

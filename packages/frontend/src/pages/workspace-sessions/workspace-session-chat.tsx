@@ -270,6 +270,7 @@ export function WorkspaceSessionChat({
       readOnly: chatState.isReadOnly,
       readOnlyReason: chatState.readOnlyReason,
       error: recordsError,
+      waitsForMergePublication: false,
     }),
   });
   const surface = useAgentChatSurfaceModel({

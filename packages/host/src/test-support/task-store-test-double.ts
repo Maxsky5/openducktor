@@ -108,10 +108,13 @@ export const createTaskStoreTestDouble = (overrides: TaskStoreTestOverrides): Ta
     findTask: unexpectedTaskStoreCall("findTask"),
     listTaskReferences: unexpectedTaskStoreCall("listTaskReferences"),
     getTaskMetadata,
-    getTaskDelivery: (input) =>
-      getTaskMetadata(input).pipe(
-        Effect.map(({ pullRequest, directMerge }) => ({ pullRequest, directMerge })),
-      ),
+    // A double without task metadata has no pull request and no direct merge.
+    getTaskDelivery: overrides.getTaskMetadata
+      ? (input) =>
+          getTaskMetadata(input).pipe(
+            Effect.map(({ pullRequest, directMerge }) => ({ pullRequest, directMerge })),
+          )
+      : () => Effect.succeed({}),
     getWorkflowArtifact: unexpectedTaskStoreCall("getWorkflowArtifact"),
     listAgentSessionsForTasks: ({ taskIds, ...scope }) =>
       Effect.forEach(taskIds, (taskId) =>

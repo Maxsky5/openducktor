@@ -1,3 +1,8 @@
+import {
+  createSharedBoardWorkflows,
+  createWorkflowTaskCardFixture,
+} from "@openducktor/workflows/test-support";
+import { withEditedTaskWorkflow } from "@/test-utils/edited-task-workflow";
 import { describe, expect, test } from "bun:test";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
@@ -11,7 +16,6 @@ import {
   withGitConflictQuickAction,
 } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";
 import { createAgentSessionSummaryFixture } from "./agent-studio-test-utils";
-import type { BuiltinActionId as TaskAction } from "@openducktor/workflows";
 
 const buildSession = (
   overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {},
@@ -63,14 +67,67 @@ describe("agent-studio-quick-actions", () => {
     };
   };
 
+  test("keeps a plain event before its following feedback launch", () => {
+    const { alpha, board } = createSharedBoardWorkflows();
+    const task = withEditedTaskWorkflow(
+      createWorkflowTaskCardFixture(alpha, board, { status: "shared_review" }),
+      (definition) => {
+        const action = definition.actions.find(({ id }) => id === "alpha_hold");
+        if (!action || action.kind !== "event") throw new Error("Expected plain event action");
+        action.launchActionIds = ["alpha_write_revise"];
+      },
+    );
+    const options = buildAgentStudioQuickActions({
+      selectedTask: task,
+      sessionsForTask: [],
+      roleEnabledByTask: buildRoleEnabledMapForTask(task),
+      createSessionDisabled: false,
+    });
+    expect(
+      options.find(
+        (option) => option.kind === "task_action" && option.taskAction.action === "alpha_hold",
+      ),
+    ).toMatchObject({
+      kind: "task_action",
+      taskAction: { kind: "workflow", action: "alpha_hold" },
+    });
+  });
+
+  test("describes each action with the workflow description, never with its label", () => {
+    const options = buildAgentStudioQuickActions(buildPrActionArgs());
+
+    expect(
+      options.find(
+        (option) =>
+          option.kind === "task_action" && option.taskAction.action === "human_request_changes",
+      )?.description,
+    ).toBe("Send your feedback to the Builder, which applies the changes.");
+    expect(
+      options.find((option) => option.kind === "session_start" && option.role === "spec")
+        ?.description,
+    ).toBe("Start a Spec session that writes the task spec.");
+    for (const option of options) expect(option.description).not.toBe(option.label);
+  });
+
+  test("tells why a feedback action waits while a session runs", () => {
+    const options = buildAgentStudioQuickActions({
+      ...buildPrActionArgs(),
+      createSessionDisabled: true,
+    });
+    expect(
+      options.find(
+        (option) =>
+          option.kind === "task_action" && option.taskAction.action === "human_request_changes",
+      ),
+    ).toMatchObject({ disabled: true, disabledReason: "Wait for the current session to finish." });
+  });
+
   test("hides unsupported Pull Request generation", () => {
     const actions = buildSessionQuickActions({
       ...buildPrActionArgs(),
       gitProviderContext: null,
     });
-    expect(
-      actions.some((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toBe(false);
+    expect(actions.some((option) => option.launchActionId === "pull_request")).toBe(false);
   });
 
   test("disables Pull Request generation when provider health blocks use", () => {
@@ -78,9 +135,7 @@ describe("agent-studio-quick-actions", () => {
       ...buildPrActionArgs(),
       gitProviderContext: createGitProviderContextFixture({ available: false }),
     });
-    expect(
-      actions.find((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toMatchObject({
+    expect(actions.find((option) => option.launchActionId === "pull_request")).toMatchObject({
       disabled: true,
       disabledReason: "Sign in to GitHub CLI.",
     });
@@ -93,9 +148,7 @@ describe("agent-studio-quick-actions", () => {
       gitProviderReadError: "Could not load the current Git provider: connection failed",
     });
 
-    expect(
-      actions.find((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toMatchObject({
+    expect(actions.find((option) => option.launchActionId === "pull_request")).toMatchObject({
       disabled: true,
       disabledReason: "Could not load the current Git provider: connection failed",
     });
@@ -107,9 +160,7 @@ describe("agent-studio-quick-actions", () => {
       gitProviderReadError: "Could not load the current Git provider: connection failed",
     });
 
-    expect(
-      actions.find((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toMatchObject({
+    expect(actions.find((option) => option.launchActionId === "pull_request")).toMatchObject({
       disabled: true,
       disabledReason: "Could not load the current Git provider: connection failed",
     });
@@ -122,9 +173,7 @@ describe("agent-studio-quick-actions", () => {
       gitProviderReadError: "Could not load the current Git provider: connection failed",
     });
 
-    expect(
-      actions.some((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toBe(false);
+    expect(actions.some((option) => option.launchActionId === "pull_request")).toBe(false);
   });
 
   test("builds quick actions from backend actions, role workflows, and builder sessions", () => {
@@ -168,15 +217,21 @@ describe("agent-studio-quick-actions", () => {
       "planner_initial",
       "build_implementation_start",
       "qa_review",
-      "build_after_human_request_changes",
     ]);
     expect(
-      options.find((option) => option.launchActionId === "build_after_human_request_changes")
-        ?.requiresHumanFeedback,
-    ).toBe(true);
-    expect(
-      options.some((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toBe(false);
+      buildAgentStudioQuickActions({
+        selectedTask: task,
+        sessionsForTask,
+        roleEnabledByTask: buildRoleEnabledMapForTask(task),
+        createSessionDisabled: false,
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        kind: "task_action",
+        taskAction: { kind: "workflow", action: "human_request_changes" },
+      }),
+    );
+    expect(options.some((option) => option.launchActionId === "pull_request")).toBe(false);
     expect(selectPrimaryAgentStudioQuickAction(options)?.id).toBe("quick:spec_initial");
     expect(selectPrimaryAgentStudioQuickAction(options)?.label).toBe("Start Spec");
   });
@@ -184,7 +239,7 @@ describe("agent-studio-quick-actions", () => {
   test("selects the primary quick action from task workflow priority", () => {
     const baseTask = {
       id: "task-1",
-      availableActions: ["set_spec", "set_plan", "build_start", "qa_start"] satisfies TaskAction[],
+      availableActions: ["set_spec", "set_plan", "build_start", "qa_start"],
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: false },
         planner: { required: true, canSkip: false, available: true, completed: false },
@@ -246,26 +301,32 @@ describe("agent-studio-quick-actions", () => {
       gitProviderContext: createGitProviderContextFixture(),
     });
     expect(selectPrimaryAgentStudioQuickAction(humanReviewOptions)).toMatchObject({
-      launchActionId: "build_pull_request_generation",
+      launchActionId: "pull_request",
       label: "Generate Pull Request",
     });
     expect(humanReviewOptions[0]).toMatchObject({
-      launchActionId: "build_pull_request_generation",
+      launchActionId: "pull_request",
       initialSourceSession: expect.objectContaining({
         externalSessionId: humanReviewBuilderSession.externalSessionId,
       }),
     });
     expect(humanReviewOptions.map((option) => option.launchActionId)).toEqual([
-      "build_pull_request_generation",
-      "build_after_human_request_changes",
+      "pull_request",
       "qa_review",
       "build_implementation_start",
       "spec_initial",
       "planner_initial",
     ]);
     expect(
-      humanReviewOptions.filter(
-        (option) => option.launchActionId === "build_after_human_request_changes",
+      buildAgentStudioQuickActions({
+        selectedTask: humanReviewTask,
+        sessionsForTask: [humanReviewBuilderSession],
+        roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
+        createSessionDisabled: false,
+        gitProviderContext: createGitProviderContextFixture(),
+      }).filter(
+        (option) =>
+          option.kind === "task_action" && option.taskAction.action === "human_request_changes",
       ),
     ).toHaveLength(1);
 
@@ -291,18 +352,27 @@ describe("agent-studio-quick-actions", () => {
       gitProviderContext: createGitProviderContextFixture(),
     });
 
-    expect(selectPrimaryAgentStudioQuickAction(humanReviewWithPullRequestOptions)).toMatchObject({
-      launchActionId: "build_after_human_request_changes",
+    expect(
+      selectPrimaryAgentStudioQuickAction(
+        buildAgentStudioQuickActions({
+          selectedTask: humanReviewTaskWithPullRequest,
+          sessionsForTask: [],
+          roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTaskWithPullRequest),
+          createSessionDisabled: false,
+          gitProviderContext: createGitProviderContextFixture(),
+        }),
+      ),
+    ).toMatchObject({
+      kind: "task_action",
+      taskAction: { kind: "workflow", action: "human_request_changes" },
       label: "Request Changes",
-      requiresHumanFeedback: true,
     });
     expect(humanReviewWithPullRequestOptions.map((option) => option.launchActionId)).toEqual([
-      "build_after_human_request_changes",
       "qa_review",
       "build_implementation_start",
       "spec_initial",
       "planner_initial",
-      "build_pull_request_generation",
+      "pull_request",
     ]);
   });
 
@@ -370,7 +440,7 @@ describe("agent-studio-quick-actions", () => {
       );
 
       expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         disabled: true,
       });
     });
@@ -387,7 +457,13 @@ describe("agent-studio-quick-actions", () => {
 
     test("leads with Close Task and its marker for a merged task branch", () => {
       const options = buildAgentStudioQuickActions(
-        buildReviewArgs({ mergedTarget: "origin/main" }),
+        buildReviewArgs({
+          mergedTarget: "origin/main",
+          selectedTask: buildTask({
+            ...buildReviewArgs().selectedTask!,
+            availableActions: ["human_approve", "human_request_changes"],
+          }),
+        }),
       );
 
       expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
@@ -459,9 +535,7 @@ describe("agent-studio-quick-actions", () => {
       launchActionId: "qa_review",
     });
     expect(
-      aiReviewWithoutPullRequestOptions.some(
-        (option) => option.launchActionId === "build_pull_request_generation",
-      ),
+      aiReviewWithoutPullRequestOptions.some((option) => option.launchActionId === "pull_request"),
     ).toBe(false);
 
     const aiReviewTaskWithPullRequest = buildTask({
@@ -488,17 +562,21 @@ describe("agent-studio-quick-actions", () => {
       launchActionId: "qa_review",
     });
     expect(
-      aiReviewWithPullRequestOptions.some(
-        (option) => option.launchActionId === "build_pull_request_generation",
-      ),
+      aiReviewWithPullRequestOptions.some((option) => option.launchActionId === "pull_request"),
     ).toBe(false);
     expect(
-      aiReviewWithPullRequestOptions.find(
-        (option) => option.launchActionId === "build_after_human_request_changes",
-      ),
-    ).toMatchObject({
-      requiresHumanFeedback: true,
-    });
+      buildAgentStudioQuickActions({
+        selectedTask: aiReviewTaskWithPullRequest,
+        sessionsForTask: [],
+        roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTaskWithPullRequest),
+        createSessionDisabled: false,
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        kind: "task_action",
+        taskAction: { kind: "workflow", action: "human_request_changes" },
+      }),
+    );
 
     const qaRejectedTask = buildTask({
       id: "task-1",
@@ -580,7 +658,15 @@ describe("agent-studio-quick-actions", () => {
 
     expect(
       buildGitConflictQuickAction({
-        selectedTask: buildTask({ id: "task-1" }),
+        selectedTask: buildTask({
+          id: "task-1",
+          agentWorkflows: {
+            spec: { required: true, canSkip: false, available: false, completed: true },
+            planner: { required: true, canSkip: false, available: false, completed: true },
+            build: { required: true, canSkip: false, available: true, completed: false },
+            qa: { required: true, canSkip: false, available: false, completed: false },
+          },
+        }),
         roleEnabledByTask,
         createSessionDisabled: true,
       }),
@@ -620,9 +706,7 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
 
-    expect(
-      nonReviewOptions.some((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toBe(false);
+    expect(nonReviewOptions.some((option) => option.launchActionId === "pull_request")).toBe(false);
 
     const aiReviewTask = buildTask({
       id: "task-1",
@@ -652,9 +736,7 @@ describe("agent-studio-quick-actions", () => {
       createSessionDisabled: false,
     });
 
-    expect(
-      aiReviewOptions.some((option) => option.launchActionId === "build_pull_request_generation"),
-    ).toBe(false);
+    expect(aiReviewOptions.some((option) => option.launchActionId === "pull_request")).toBe(false);
 
     const humanReviewTask = buildTask({
       ...aiReviewTask,
@@ -680,7 +762,7 @@ describe("agent-studio-quick-actions", () => {
 
     expect(humanReviewOptions).toContainEqual(
       expect.objectContaining({
-        launchActionId: "build_pull_request_generation",
+        launchActionId: "pull_request",
         initialSourceSession: expect.objectContaining({
           externalSessionId: humanReviewBuilderSession.externalSessionId,
         }),
@@ -709,23 +791,32 @@ describe("agent-studio-quick-actions", () => {
     });
 
     expect(options[0]).toMatchObject({
-      launchActionId: "build_pull_request_generation",
+      launchActionId: "pull_request",
       disabled: true,
       disabledReason: "Requires an existing Builder session.",
     });
     expect(options.map((option) => option.launchActionId)).toEqual([
-      "build_pull_request_generation",
-      "build_after_human_request_changes",
+      "pull_request",
       "qa_review",
       "build_implementation_start",
       "spec_initial",
       "planner_initial",
     ]);
-    expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({
-      launchActionId: "build_after_human_request_changes",
+    expect(
+      selectPrimaryAgentStudioQuickAction(
+        buildAgentStudioQuickActions({
+          selectedTask: task,
+          sessionsForTask: [],
+          roleEnabledByTask: buildRoleEnabledMapForTask(task),
+          createSessionDisabled: false,
+          gitProviderContext: createGitProviderContextFixture(),
+        }),
+      ),
+    ).toMatchObject({
+      kind: "task_action",
+      taskAction: { kind: "workflow", action: "human_request_changes" },
       label: "Request Changes",
       disabled: false,
-      requiresHumanFeedback: true,
     });
   });
 
@@ -783,10 +874,7 @@ describe("agent-studio-quick-actions", () => {
       }),
     ).toBeNull();
     expect(
-      options.some(
-        (option) =>
-          option.role === "build" || option.launchActionId === "build_pull_request_generation",
-      ),
+      options.some((option) => option.role === "build" || option.launchActionId === "pull_request"),
     ).toBe(false);
   });
 });

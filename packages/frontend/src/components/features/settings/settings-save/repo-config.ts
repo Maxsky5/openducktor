@@ -23,7 +23,7 @@ export const prepareRepoConfigForSave = (repo: SettingsRepoConfig): SettingsRepo
     worktreeBasePath: trimmedNonEmpty(repo.worktreeBasePath ?? "") ?? undefined,
     branchPrefix: trimmedNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
     defaultTargetBranch: normalizeTargetBranch(repo.defaultTargetBranch),
-    hooks: { postComplete: dropBlankLines(repo.hooks.postComplete) },
+    hooks: { beforeWorktreeRemoval: dropBlankLines(repo.hooks.beforeWorktreeRemoval) },
     worktreeCopyPaths: dropBlankLines(repo.worktreeCopyPaths),
     promptOverrides: preparePromptOverridesForSave(repo.promptOverrides),
   };

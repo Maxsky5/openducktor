@@ -2,6 +2,7 @@ import { createTaskWorkflow } from "@openducktor/workflows";
 import {
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
+  reviewTaskRoles,
 } from "@openducktor/workflows/test-support";
 import { builtinTaskWorkflows, singleTaskWorkflow } from "../../../test-support/task-workflows";
 import type { TaskCard } from "@openducktor/contracts";
@@ -10,6 +11,9 @@ import { HostOperationError } from "../../../effect/host-errors";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
 import { createTaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
 import { completeTaskClosure } from "./task-closure";
+import { coreTaskTransition } from "./task-workflow-events";
+
+const closeDecision = coreTaskTransition(builtinTaskWorkflows, "close");
 
 const closureDependencies = () => ({
   workspaceId: "repo",
@@ -17,8 +21,7 @@ const closureDependencies = () => ({
     canonicalizePath: (path: string) => Effect.succeed(path),
   },
   taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
-  taskWorkflows: builtinTaskWorkflows,
-  effect: "task.close" as const,
+  decide: closeDecision,
 });
 
 const closedTask = (): TaskCard => ({
@@ -29,6 +32,8 @@ const closedTask = (): TaskCard => ({
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
+  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflowSteps: [],
   availableActions: [],
   labels: [],
   artifactSummary: {
@@ -144,8 +149,7 @@ test("holds the task lifecycle guard across cleanup and closure", async () => {
       repoPath: "/repo-link",
       taskId: "task-1",
       taskSessionLifecycleCoordinator,
-      taskWorkflows: builtinTaskWorkflows,
-      effect: "task.close",
+      decide: closeDecision,
       taskStore,
     }),
   );
@@ -194,8 +198,7 @@ test("does not begin cleanup while another task lifecycle operation is active", 
         repoPath: "/repo-link",
         taskId: "task-1",
         taskSessionLifecycleCoordinator,
-        taskWorkflows: builtinTaskWorkflows,
-        effect: "task.close",
+        decide: closeDecision,
         taskStore,
       }),
     ),
@@ -206,21 +209,17 @@ test("does not begin cleanup while another task lifecycle operation is active", 
   expect(transitioned).toBe(false);
 });
 
-test("commits the signal and source role of the closing event", async () => {
+test("closes a task of a workflow that declares no close event", async () => {
   const transitions: unknown[] = [];
   const definition = reviewTaskDefinition();
-  const closing = definition.events.find((event) => event.effect === "task.close")!;
-  closing.outcomes = [
-    { when: true, to: "published", signal: "reviewAccepted", sourceRole: "editor" },
-  ];
-  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
   const taskStore: Pick<TaskStorePort, "transitionTask"> = {
     transitionTask: (input) =>
       Effect.fromResult(
         input.decide({
           ...closedTask(),
           status: "approval",
-          issueType: "article",
+          issueType: "feature",
           artifactSummary: workflow.emptyArtifactSummary(),
         }),
       ).pipe(
@@ -242,8 +241,7 @@ test("commits the signal and source role of the closing event", async () => {
       cleanup: Effect.void,
       operation: "close task",
       repoPath: "/repo",
-      taskWorkflows: singleTaskWorkflow(workflow),
-      effect: "task.close",
+      decide: coreTaskTransition(singleTaskWorkflow(workflow), "close"),
       taskId: "task-1",
       taskStore,
     }),
@@ -253,8 +251,8 @@ test("commits the signal and source role of the closing event", async () => {
     {
       repoPath: "/repo",
       taskId: "task-1",
-      status: "published",
-      cause: { signal: "reviewAccepted", sourceRole: "editor" },
+      status: "closed",
+      cause: {},
     },
   ]);
 });

@@ -1,12 +1,20 @@
+import {
+  createSharedBoardWorkflows,
+  createWorkflowTaskCardFixture,
+} from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
-import { mapToKanbanColumns, type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import {
+  SPEC_PLAN_BUILD_BOARD,
+  mapToKanbanColumns,
+  type ResolvedTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { buildBoardColumns, columnChoiceLabel, resolveSelectedColumnId } from "./board-columns";
 
 const task = (id: string, status: TaskCard["status"]): TaskCard =>
   createTaskCardFixture({ id, title: id, status });
 
-const columnsOf = (tasks: TaskCard[]) => mapToKanbanColumns(tasks);
+const columnsOf = (tasks: TaskCard[]) => mapToKanbanColumns(tasks, SPEC_PLAN_BUILD_BOARD);
 
 describe("buildBoardColumns", () => {
   test("keeps the desktop columns and titles in order", () => {
@@ -114,4 +122,30 @@ describe("columnChoiceLabel", () => {
     );
     expect(columnChoiceLabel({ title: "Done", tasks: [] })).toBe("Done, 0 tasks");
   });
+});
+
+test("mobile lanes use the same explicit shared board for both workflows", () => {
+  const { alpha, beta, board } = createSharedBoardWorkflows();
+  const tasks = [alpha, beta].map((workflow) =>
+    createWorkflowTaskCardFixture(workflow, board, {
+      id: workflow.definition.id,
+      status: "shared_review",
+    }),
+  );
+  const columns = buildBoardColumns({
+    columns: mapToKanbanColumns(tasks, board),
+    emptyColumnDisplay: "show",
+    doneVisibleDays: 1,
+    filterActive: false,
+    creationStateId: "open",
+  });
+  expect(columns.map(({ id }) => id)).toEqual(board.states.map(({ id }) => id));
+  expect(columns.find(({ id }) => id === "shared_review")!.tasks.map(({ id }) => id)).toEqual([
+    "alpha",
+    "beta",
+  ]);
+  expect(columns.find(({ id }) => id === "open")!.acceptsNewTask).toBe(true);
+  expect(columns.find(({ id }) => id === "beta_work")!.acceptsNewTask).toBe(false);
+  expect(columns.find(({ id }) => id === "closed")!.closed).toBe(true);
+  expect(columns.filter(({ title }) => title === "Writing")).toHaveLength(2);
 });

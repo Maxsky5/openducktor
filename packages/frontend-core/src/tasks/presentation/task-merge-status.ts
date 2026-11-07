@@ -1,11 +1,9 @@
 import type { TaskMergeStatus, TaskMergeStatusSnapshot } from "@openducktor/contracts";
-import {
-  type BuiltinTaskCard as TaskCard,
-  isMergeDetectionCandidateStatus,
-} from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { plural } from "../../lib/plural";
 import { canonicalTargetBranch } from "../../lib/target-branch";
 import { humanDate } from "./task-display";
+import { canRunCoreTaskActions } from "../workflow/core-task-actions";
 
 export type TaskMergeStatusView = {
   kind: "merged" | "not_merged" | "not_checked" | "failed";
@@ -49,12 +47,12 @@ export const describeTaskMergeStatus = (
  * last result is merged, its status is a candidate status, and it can close.
  */
 export const mergedTaskTarget = (
-  task: Pick<TaskCard, "status" | "availableActions">,
+  task: Pick<TaskCard, "status" | "taskWorkflow">,
   status: TaskMergeStatus | undefined,
 ): string | null =>
   status?.result.kind === "merged" &&
-  isMergeDetectionCandidateStatus(task.status) &&
-  task.availableActions.includes("close_task")
+  task.taskWorkflow.detectsMerge(task.status) &&
+  canRunCoreTaskActions(task)
     ? mergeTargetLabel(status)
     : null;
 
@@ -63,16 +61,17 @@ export const mergedTaskTarget = (
  * only while it can still close, so a task that the user closed shows nothing.
  */
 export const buildAutoCloseFailures = (
-  tasks: readonly Pick<TaskCard, "id" | "availableActions">[],
+  tasks: readonly Pick<TaskCard, "id" | "status">[],
   snapshot: TaskMergeStatusSnapshot | undefined,
 ): ReadonlyMap<string, string> => {
   const failures = new Map<string, string>();
-  if (!snapshot) return failures;
-  const closable = new Set(
-    tasks.filter((task) => task.availableActions.includes("close_task")).map((task) => task.id),
-  );
-  for (const { taskId, message } of snapshot.autoCloseFailures)
-    if (closable.has(taskId)) failures.set(taskId, autoCloseFailureText(message));
+  if (!snapshot || snapshot.autoCloseFailures.length === 0) return failures;
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
+  for (const { taskId, message } of snapshot.autoCloseFailures) {
+    const task = tasksById.get(taskId);
+    if (!task) continue;
+    if (canRunCoreTaskActions(task)) failures.set(taskId, autoCloseFailureText(message));
+  }
   return failures;
 };
 

@@ -1,8 +1,8 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type {
   TaskWorkflowAction,
-  BuiltinRoleId as AgentRole,
-  BuiltinTaskCard as TaskCard,
+  WorkflowRoleId as AgentRole,
+  ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import { type ComponentProps, type ReactElement, useEffect, useRef, useState } from "react";
 import type {
@@ -92,7 +92,6 @@ export function TaskDetailsSheetContent(
   useTaskDetailsCloseRegistration(workflowActions?.registerTaskDetailsClose, taskId, onOpenChange);
   const viewModel = useTaskDetailsSheetViewModel(
     createTaskDetailsViewModelOptions({
-      activeWorkspace,
       task,
       open,
       onOpenChange,
@@ -115,13 +114,17 @@ export function TaskDetailsSheetContent(
   const footerProps = getTaskDetailsFooterProps({
     task,
     onOpenChange,
-    detailActions: taskDetailsWorkflowActions(viewModel.removeWorktreeConfirm.isAvailable),
+    detailActions: taskDetailsWorkflowActions(task),
     hasActiveSession,
     activeSessionRole,
     historicalSessionRoles,
     onEdit: onEdit && ((editTaskId) => claimDialog(() => onEdit(editTaskId))),
     onDelete,
     runWorkflowAction: (action) => claimDialog(() => viewModel.runWorkflowAction(action)),
+    runCoreTaskAction: workflowActions ? viewModel.runCoreTaskAction : undefined,
+    openRemoveWorktreeDialog: viewModel.removeWorktreeConfirm.isAvailable
+      ? viewModel.removeWorktreeConfirm.openDialog
+      : undefined,
     openDeleteDialog: viewModel.deleteConfirm.openDialog,
   });
 
@@ -204,7 +207,6 @@ function getActiveTaskSessionContext(
 }
 
 function createTaskDetailsViewModelOptions({
-  activeWorkspace,
   task,
   open,
   onOpenChange,
@@ -213,7 +215,6 @@ function createTaskDetailsViewModelOptions({
   historicalSessions,
   taskSessions,
 }: {
-  activeWorkspace: TaskDetailsSheetProps["activeWorkspace"];
   task: TaskCard;
   open: boolean;
   onOpenChange: TaskDetailsSheetProps["onOpenChange"];
@@ -223,7 +224,6 @@ function createTaskDetailsViewModelOptions({
   taskSessions: KanbanTaskSession[];
 }): Parameters<typeof useTaskDetailsSheetViewModel>[0] {
   return {
-    activeWorkspace: activeWorkspace ?? null,
     task,
     open,
     onOpenChange,
@@ -297,6 +297,8 @@ function getTaskDetailsFooterProps({
   onEdit,
   onDelete,
   runWorkflowAction,
+  runCoreTaskAction,
+  openRemoveWorktreeDialog,
   openDeleteDialog,
 }: {
   task: NonNullable<TaskDetailsSheetProps["task"]>;
@@ -308,6 +310,8 @@ function getTaskDetailsFooterProps({
   onEdit: TaskDetailsSheetProps["onEdit"];
   onDelete: TaskWorkflowActions["onDelete"] | undefined;
   runWorkflowAction: TaskDetailsViewModel["runWorkflowAction"];
+  runCoreTaskAction: TaskDetailsViewModel["runCoreTaskAction"] | undefined;
+  openRemoveWorktreeDialog: (() => void) | undefined;
   openDeleteDialog: TaskDetailsViewModel["deleteConfirm"]["openDialog"];
 }): TaskDetailsSheetFooterProps {
   const footerProps: TaskDetailsSheetFooterProps = {
@@ -325,6 +329,12 @@ function getTaskDetailsFooterProps({
   }
   if (onEdit) {
     footerProps.onEdit = onEdit;
+  }
+  if (runCoreTaskAction) {
+    footerProps.onCoreTaskAction = runCoreTaskAction;
+  }
+  if (openRemoveWorktreeDialog) {
+    footerProps.onRemoveWorktreeSelect = openRemoveWorktreeDialog;
   }
   if (onDelete) {
     footerProps.onDeleteSelect = openDeleteDialog;

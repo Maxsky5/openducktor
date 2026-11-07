@@ -1,4 +1,3 @@
-import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import { toast } from "sonner";
 import type { GitConflict, GitConflictAction } from "@openducktor/frontend-core/git/contracts";
@@ -98,7 +97,7 @@ export function useAgentStudioGitConflictController({
   setRebaseError,
   onResolveGitConflict,
   assistanceContextKey = "",
-  conflictRecipientLabel = BUILTIN_ROLE_LABELS.build,
+  conflictRecipientLabel = "agent",
   conflictAssistanceBlockedReason = null,
 }: UseAgentStudioGitConflictControllerArgs) {
   const host = useHostClient();

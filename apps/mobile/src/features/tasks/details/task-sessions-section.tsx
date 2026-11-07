@@ -66,7 +66,7 @@ export const TaskSessionsSection = memo(function TaskSessionsSection({
             return (
               <DetailsItem
                 key={row.key}
-                leading={<RoleTile role={group.role} />}
+                leading={<RoleTile hint={group.iconHint} />}
                 trailing={
                   row.statusTone === "neutral" ? null : (
                     <Badge label={row.statusLabel} tone={row.statusTone} dot={row.live} />

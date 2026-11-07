@@ -1,15 +1,19 @@
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { buildWorkflowRail } from "@openducktor/frontend-core/tasks/presentation/workflow-rail";
 import { describe, expect, mock, test } from "bun:test";
 import { Sparkles } from "lucide-react";
 import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
+  createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { buildAgentStudioHeaderModel, buildRoleLabelByRole } from "./agents-page-view-model";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const createTaskCard = (id: string): TaskCard => ({
+  ...createTaskCardFixture(),
   id,
   title: `Task ${id}`,
   description: "",
@@ -59,7 +63,7 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
 };
 
 describe("agents-page-view-model", () => {
-  test("buildRoleLabelByRole preserves defaults and applies provided labels", () => {
+  test("buildRoleLabelByRole uses only the declared labels", () => {
     const labels = buildRoleLabelByRole([
       { role: "spec", label: "Specification", icon: Sparkles },
       { role: "build", label: "Builder", icon: Sparkles },
@@ -67,8 +71,8 @@ describe("agents-page-view-model", () => {
 
     expect(labels.spec).toBe("Specification");
     expect(labels.build).toBe("Builder");
-    expect(labels.planner).toBe("Planner");
-    expect(labels.qa).toBe("QA");
+    expect(labels.planner).toBeUndefined();
+    expect(labels.qa).toBeUndefined();
   });
 
   test("buildAgentStudioHeaderModel keeps selector and workflow contracts", () => {
@@ -107,32 +111,11 @@ describe("agents-page-view-model", () => {
         { role: "planner", label: "Plan option", icon: Sparkles },
         { role: "spec", label: "Specification option", icon: Sparkles },
       ],
-      workflowStateByRole: {
-        spec: {
-          tone: "in_progress",
-          availability: "available",
-          completion: "in_progress",
-          liveSession: "waiting_input",
-        },
-        planner: {
-          tone: "available",
-          availability: "available",
-          completion: "not_started",
-          liveSession: "none",
-        },
-        build: {
-          tone: "blocked",
-          availability: "blocked",
-          completion: "not_started",
-          liveSession: "none",
-        },
-        qa: {
-          tone: "blocked",
-          availability: "blocked",
-          completion: "not_started",
-          liveSession: "none",
-        },
-      },
+      workflowRail: buildWorkflowRail(createTaskCard("task-1"), (role) =>
+        role === "spec"
+          ? { session: agentSessionIdentityKey(activeSessionSummary), liveSession: "waiting_input" }
+          : { session: null, liveSession: "none" },
+      ),
       selectedRole: "spec",
       workflowSessionByRole: {
         spec: activeSessionSummary,
@@ -186,32 +169,7 @@ describe("agents-page-view-model", () => {
       selectedTask: null,
       onOpenTaskDetails: mock(() => {}),
       roleOptions: [],
-      workflowStateByRole: {
-        spec: {
-          tone: "blocked",
-          availability: "blocked",
-          completion: "not_started",
-          liveSession: "none",
-        },
-        planner: {
-          tone: "blocked",
-          availability: "blocked",
-          completion: "not_started",
-          liveSession: "none",
-        },
-        build: {
-          tone: "blocked",
-          availability: "blocked",
-          completion: "not_started",
-          liveSession: "none",
-        },
-        qa: {
-          tone: "blocked",
-          availability: "blocked",
-          completion: "not_started",
-          liveSession: "none",
-        },
-      },
+      workflowRail: [],
       selectedRole: null,
       workflowSessionByRole: {
         spec: null,

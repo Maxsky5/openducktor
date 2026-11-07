@@ -2,15 +2,12 @@ import { workflowArtifactId } from "@openducktor/contracts";
 import type { TaskArtifactSaveResult, WorkflowTaskArtifact } from "@openducktor/contracts";
 import { boardEvent, eventCursor } from "../../queries/task-view-sync.test-support";
 import { describe, expect, mock, test } from "bun:test";
-import {
-  defaultSpecTemplateMarkdown,
-  type BuiltinTaskCard as TaskCard,
-} from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { documentQueryKeys, taskDocumentQueryOptions } from "../../queries/documents";
 import { taskArtifactsQueryOptions } from "../../queries/artifacts";
 import type { TaskDocumentPayload } from "../../types/task-documents";
-import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
+import { createTaskCardFixture, toWireTaskCard } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import { createTaskViewSync } from "../../queries/task-view-sync";
 import { taskQueryKeys, type RepoTaskData } from "../../queries/tasks";
@@ -19,6 +16,8 @@ import {
   type CreateDocumentOperationsArgs,
   type DocumentOperationsHost,
 } from "./use-document-operations";
+
+const specMarkdown = "# Purpose\n\nShip the saved specification.\n";
 
 const saveResult = (updatedAt: string): TaskArtifactSaveResult => ({
   updatedAt,
@@ -116,13 +115,13 @@ describe("createDocumentOperations", () => {
         host: { workflowArtifactSave: save },
       });
       try {
-        await operations.saveDocument("task-1", section, defaultSpecTemplateMarkdown);
+        await operations.saveDocument("task-1", section, specMarkdown);
         expect(queryClient.getQueryData(listOptions.queryKey)).toEqual({
           artifacts: [artifact()],
           canManageFree: false,
         });
         const content = queryClient.getQueryData(contentOptions.queryKey);
-        expect(content).toEqual({ markdown: defaultSpecTemplateMarkdown, updatedAt });
+        expect(content).toEqual({ markdown: specMarkdown, updatedAt });
         expect(readWorkflow).toHaveBeenCalledTimes(1);
       } finally {
         stopContent();
@@ -170,12 +169,10 @@ describe("createDocumentOperations", () => {
         updatedAt: timestamp,
       }));
       const sync = createTaskViewSync({ queryClient, ports: { listTasks, loadFreshDocument } });
-      const completion = operations
-        .saveDocument("task-1", section, defaultSpecTemplateMarkdown)
-        .then(
-          () => null,
-          (error: Error) => error,
-        );
+      const completion = operations.saveDocument("task-1", section, specMarkdown).then(
+        () => null,
+        (error: Error) => error,
+      );
       const apply = async (sequence: number, reset: boolean, written = true) => {
         const card = createTaskCardFixture({ id: initial.id, updatedAt: timestamp });
         card.artifactSummary[section] = reset
@@ -202,7 +199,7 @@ describe("createDocumentOperations", () => {
         if (change === "newer reset before reply") await apply(11, true);
         if (change.startsWith("own event")) await apply(10, false);
         if (change === "unrelated change after reply") await apply(11, false, false);
-        const newer = `${defaultSpecTemplateMarkdown}\nNewer content`;
+        const newer = `${specMarkdown}\nNewer content`;
         if (change === "newer save before reply") {
           const result = { updatedAt: timestamp, cursor: eventCursor(11) };
           const next = createOperations({
@@ -223,7 +220,7 @@ describe("createDocumentOperations", () => {
             ? ""
             : change === "newer save before reply"
               ? newer
-              : defaultSpecTemplateMarkdown,
+              : specMarkdown,
         );
         expect(listTasks).not.toHaveBeenCalled();
         expect(loadFreshDocument).not.toHaveBeenCalled();
@@ -248,7 +245,7 @@ describe("createDocumentOperations", () => {
         boardReadStarted = resolve;
       });
       const saved = {
-        markdown: defaultSpecTemplateMarkdown,
+        markdown: specMarkdown,
         updatedAt: "2026-04-10T13:12:00.000Z",
       };
       const { operations, queryClient } = createOperations({
@@ -380,12 +377,10 @@ describe("createDocumentOperations", () => {
         queryClient,
         ports: { listTasks, loadFreshDocument: loadDocument },
       });
-      const completion = operations
-        .saveDocument("task-1", section, defaultSpecTemplateMarkdown)
-        .then(
-          () => null,
-          (error: Error) => error,
-        );
+      const completion = operations.saveDocument("task-1", section, specMarkdown).then(
+        () => null,
+        (error: Error) => error,
+      );
       try {
         await sync.reconcileStreamSnapshot(
           activeRepoPath
@@ -416,7 +411,7 @@ describe("createDocumentOperations", () => {
         // A missing board card can also be a retained task outside the closed-task window.
         // A successful host save started after recovery still owns its completion.
         const later = {
-          markdown: defaultSpecTemplateMarkdown,
+          markdown: specMarkdown,
           updatedAt: "2026-04-10T13:12:00.000Z",
         };
         saveResponse = Promise.resolve(saveResult(later.updatedAt));
@@ -490,7 +485,7 @@ describe("createDocumentOperations", () => {
         ports: { listTasks, loadFreshDocument },
       });
       const saved = {
-        markdown: defaultSpecTemplateMarkdown,
+        markdown: specMarkdown,
         updatedAt: "2026-04-10T13:10:00.000Z",
       };
       const completion = operations.saveDocument("task-1", section, saved.markdown).then(
@@ -523,11 +518,18 @@ describe("createDocumentOperations", () => {
               taskSnapshots:
                 change === "removed"
                   ? []
-                  : [{ id: card.id, title: card.title, status: card.status }],
+                  : [
+                      {
+                        id: card.id,
+                        title: card.title,
+                        status: card.status,
+                        workflow: card.workflow,
+                      },
+                    ],
               statusChanges: [],
               boardChanges: {
                 artifactChanges: [],
-                cards: change === "removed" ? [] : [card],
+                cards: change === "removed" ? [] : [toWireTaskCard(card)],
                 doneVisibleDays: 1,
               },
               emittedAt: committedAt,
@@ -554,7 +556,9 @@ describe("createDocumentOperations", () => {
         const board = queryClient.getQueryData<RepoTaskData>(
           taskQueryKeys.repoData({ workspaceId: "workspace-1", repoPath: "/repo-a" }),
         );
-        expect(board?.tasks).toEqual(change === "removed" ? [] : [card]);
+        expect(board?.tasks.map(toWireTaskCard)).toEqual(
+          change === "removed" ? [] : [toWireTaskCard(card)],
+        );
         const snapshotReads = change === "snapshot" || change === "snapshot-start" ? 1 : 0;
         expect(listTasks).toHaveBeenCalledTimes(snapshotReads);
         expect(loadFreshDocument).toHaveBeenCalledTimes(snapshotReads);

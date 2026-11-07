@@ -25,6 +25,7 @@ export const browserTabPanelOwner = (owner: BrowserTabOwner): SessionPanelOwner 
 export const placeBrowserTab = (
   layout: SessionPanelLayout,
   tab: BrowserTabSummary,
+  roleIds?: readonly string[],
 ): SessionPanelLayout => {
   const entry = browserTabEntry(tab.tabId);
   if (!tab.started || findPanelTab(layout, entry.id)) return layout;
@@ -34,5 +35,5 @@ export const placeBrowserTab = (
     });
   }
   if (tab.createdBy !== "agent") return layout;
-  return appendRightPanelEntry(layout, browserTabPanelOwner(tab.owner).kind, entry);
+  return appendRightPanelEntry(layout, browserTabPanelOwner(tab.owner).kind, entry, roleIds);
 };

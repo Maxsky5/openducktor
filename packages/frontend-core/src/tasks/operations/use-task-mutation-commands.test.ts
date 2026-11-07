@@ -1,5 +1,6 @@
 import { workspaceRefFixture } from "../../test-support/workspace-ref-fixture";
 import { describe, expect, mock, test } from "bun:test";
+import { createTestClientConnection } from "../../test-support/test-client-connection";
 import { QueryClient } from "@tanstack/react-query";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { taskQueryKeys } from "../../queries/tasks";
@@ -14,10 +15,9 @@ import {
   createTaskMutationCommands,
   type TaskMutationCommandHostPort,
 } from "./use-task-mutation-commands";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
-const createQueryClient = (): QueryClient =>
-  new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const createQueryClient = (): QueryClient => createTestClientConnection().queryClient;
 
 const createHostPort = (): TaskMutationCommandHostPort => ({
   taskCreate: async () => createTaskCardFixture(),
@@ -25,8 +25,6 @@ const createHostPort = (): TaskMutationCommandHostPort => ({
   taskDelete: async () => ({ ok: true }),
   taskClose: async () => createTaskCardFixture(),
   taskWorktreeRemove: async () => undefined,
-  taskTransition: async () => createTaskCardFixture(),
-  humanRequestChanges: async () => createTaskCardFixture(),
 });
 
 const createRunTaskMutation =
@@ -35,7 +33,7 @@ const createRunTaskMutation =
   ): TaskMutationRunner["runTaskMutation"] =>
   async (options) => {
     received.push(options);
-    await options.run("/repo");
+    return options.run("/repo");
   };
 
 describe("createTaskMutationCommands", () => {
@@ -56,9 +54,7 @@ describe("createTaskMutationCommands", () => {
       activeWorkspaceId: "workspace-1",
       queryClient: client,
       hostPort: { ...createHostPort(), taskUpdate: () => response },
-      runTaskMutation: async (options) => {
-        await options.run("/repo");
-      },
+      runTaskMutation: (options) => options.run("/repo"),
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
     try {
@@ -162,7 +158,7 @@ describe("createTaskMutationCommands", () => {
     const taskCreate = mock(async () => createTaskCardFixture());
     const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
       received.push(options);
-      await options.run("/current-repo");
+      return options.run("/current-repo");
     };
     const commands = createTaskMutationCommands({
       activeRepoPath: "/current-repo",
@@ -199,10 +195,11 @@ describe("createTaskMutationCommands", () => {
     const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
       received.push(options);
       try {
-        await options.run("/repo");
+        const result = await options.run("/repo");
         if (options.successTitle) {
           outcomes.push(`success:${options.successTitle}`);
         }
+        return result;
       } catch (error) {
         outcomes.push(`failure:${options.failureTitle}`);
         throw error;
@@ -352,17 +349,13 @@ describe("createTaskMutationCommands", () => {
     expect(queryClient.getQueryState(otherRepoIssueKey)?.isInvalidated).toBe(false);
   });
 
-  test("routes close and closed transition through cleanup after their host mutations", async () => {
+  test("routes close through cleanup after its host mutation", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
     const calls: string[] = [];
     const hostPort: TaskMutationCommandHostPort = {
       ...createHostPort(),
       taskClose: async (_repoPath, _taskId, removeWorktree) => {
         calls.push(`close:${removeWorktree}`);
-        return createTaskCardFixture();
-      },
-      taskTransition: async (_repoPath, _taskId, status, reason) => {
-        calls.push(`transition:${status}:${reason}`);
         return createTaskCardFixture();
       },
     };
@@ -384,16 +377,8 @@ describe("createTaskMutationCommands", () => {
     });
 
     await commands.closeTask("task-1", { removeWorktree: false });
-    await commands.transitionTask("task-2", "closed", "merged");
 
-    expect(calls).toEqual([
-      "cleanup:task-1:before",
-      "close:false",
-      "cleanup:task-1:after",
-      "cleanup:task-2:before",
-      "transition:closed:merged",
-      "cleanup:task-2:after",
-    ]);
+    expect(calls).toEqual(["cleanup:task-1:before", "close:false", "cleanup:task-1:after"]);
     expect(received[0]?.successDescription).toBe(
       "task-1. Its worktree and local branch were kept.",
     );

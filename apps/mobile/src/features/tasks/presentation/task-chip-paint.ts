@@ -1,7 +1,5 @@
-import {
-  type BuiltinIssueTypeId as IssueType,
-  type BuiltinStateId as TaskStatus,
-} from "@openducktor/workflows";
+import type { WorkflowIcon } from "@openducktor/contracts";
+import type { SharedBoardState } from "@openducktor/contracts";
 import type { PullRequest } from "@openducktor/contracts";
 import { toPriorityLevel } from "@openducktor/frontend-core/tasks/board/kanban-task-badge-model";
 import {
@@ -209,15 +207,14 @@ export const chipColors = (theme: AppTheme, paint: ChipPaint): ChipColors => {
   }
 };
 
-const ISSUE_TYPE_FAMILIES = {
-  bug: "rose",
-  feature: "sky",
-  task: null,
-} as const satisfies Record<IssueType, Family | null>;
+const ISSUE_TYPE_FAMILIES = new Map<WorkflowIcon, Family>([
+  ["bug", "rose"],
+  ["feature", "sky"],
+]);
 
-/** The desktop issue type paint: Bug rose, Feature sky, and Task neutral. */
-export const issueTypeChipPaint = (issueType: IssueType): ChipPaint =>
-  ISSUE_TYPE_FAMILIES[issueType] ?? "task-type";
+/** The desktop issue type paint: Bug rose, Feature sky, and other icons neutral. */
+export const issueTypeChipPaint = (hint: WorkflowIcon | undefined): ChipPaint =>
+  (hint && ISSUE_TYPE_FAMILIES.get(hint)) || "task-type";
 
 const PRIORITY_FAMILIES = {
   0: "rose",
@@ -232,7 +229,8 @@ export const priorityChipPaint = (priority: number): ChipPaint =>
   PRIORITY_FAMILIES[toPriorityLevel(priority)] ?? "muted";
 
 /** The desktop status badge paint, from the semantic status families of the desktop theme. */
-export const statusChipPaint = (status: TaskStatus): ChipPaint => `status-${statusTone(status)}`;
+export const statusChipPaint = (status: SharedBoardState): ChipPaint =>
+  `status-${statusTone(status)}`;
 
 /** The desktop pull request state icon colors: emerald, zinc, violet, and rose. */
 export const pullRequestIconColor = (theme: AppTheme, state: PullRequest["state"]): string => {

@@ -19,6 +19,7 @@ export type {
   WorkflowCondition,
 } from "./workflow-condition-schemas";
 export * from "./workflow-definition-schemas";
+export * from "./workflow-display-schemas";
 export type * from "./workflow-evaluation";
 export * from "./agent-session-schemas";
 export * from "./agent-workflow-schemas";
@@ -147,6 +148,7 @@ export * from "./subagent-schemas";
 export * from "./system-open-schemas";
 export * from "./task-asset-schemas";
 export * from "./task-merge-status-schemas";
+export * from "./issue-type-schemas";
 export * from "./task-schemas";
 export * from "./terminal-protocol";
 export * from "./terminal-schemas";
@@ -171,3 +173,4 @@ export * from "./artifact-preview-schemas";
 export * from "./odt-artifact-schemas";
 
 export * from "./session-startup-schemas";
+export * from "./workflow-client-schemas";

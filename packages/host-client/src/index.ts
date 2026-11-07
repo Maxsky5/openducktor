@@ -82,6 +82,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const agentRuntimeQueryClient = new HostAgentRuntimeQueryClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
   const hostClient = {
+    workflowCatalogGet: taskClient.workflowCatalogGet.bind(taskClient),
+    workspaceWorkflowGet: taskClient.workspaceWorkflowGet.bind(taskClient),
     notificationPublishAction: (occurrence: NotificationOccurrence) =>
       invokeFn("notification_publish_action", occurrence, selectedNotificationSchema),
     autopilotStateRead: (input: AutopilotStateReadInput) =>
@@ -248,9 +250,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     taskWorktreeRemove: taskClient.taskWorktreeRemove.bind(taskClient),
     taskMergeStatusGet: taskClient.taskMergeStatusGet.bind(taskClient),
     taskMergeStatusCheck: taskClient.taskMergeStatusCheck.bind(taskClient),
-    taskResetImplementation: taskClient.taskResetImplementation.bind(taskClient),
     taskReset: taskClient.taskReset.bind(taskClient),
-    taskTransition: taskClient.taskTransition.bind(taskClient),
     taskApplyEvent: taskClient.taskApplyEvent.bind(taskClient),
     taskMetadataGet: taskClient.taskMetadataGet.bind(taskClient),
     workflowArtifactGet: taskClient.workflowArtifactGet.bind(taskClient),
@@ -290,10 +290,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     runtimeStatus: agentClient.runtimeStatus.bind(agentClient),
     runtimeRestartImpact: agentClient.runtimeRestartImpact.bind(agentClient),
     runtimeRestart: agentClient.runtimeRestart.bind(agentClient),
-    buildStart: agentClient.buildStart.bind(agentClient),
-    buildBlocked: agentClient.buildBlocked.bind(agentClient),
-    buildResumed: agentClient.buildResumed.bind(agentClient),
-    buildCompleted: agentClient.buildCompleted.bind(agentClient),
     taskApprovalContextGet: agentClient.taskApprovalContextGet.bind(agentClient),
     taskDirectMerge: agentClient.taskDirectMerge.bind(agentClient),
     taskDirectMergeComplete: agentClient.taskDirectMergeComplete.bind(agentClient),
@@ -302,7 +298,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     taskPullRequestDetect: agentClient.taskPullRequestDetect.bind(agentClient),
     taskPullRequestLinkMerged: agentClient.taskPullRequestLinkMerged.bind(agentClient),
     repoPullRequestSync: agentClient.repoPullRequestSync.bind(agentClient),
-    humanRequestChanges: agentClient.humanRequestChanges.bind(agentClient),
     agentSessionStop: agentClient.agentSessionStop.bind(agentClient),
     agentSessionControlFork:
       agentSessionLiveClient.agentSessionControlFork.bind(agentSessionLiveClient),

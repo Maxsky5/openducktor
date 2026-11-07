@@ -1,3 +1,4 @@
+import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow-settings";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { type ReactElement, useMemo } from "react";
@@ -54,10 +55,15 @@ export function RepositoryDefaultModelBlock({
   onClearSelectedRepoDefaultModel,
 }: RepositoryDefaultModelBlockProps): ReactElement {
   const { isLoadingSettings, isSaving } = loadingState;
+  const workflows = useWorkflowSettings();
   const defaultModel = selectedRepoConfig.defaultModel ?? null;
   const runtimeDefinitions = useMemo(
-    () => filterRuntimeDefinitionsForDefaultSelection(availableRuntimeDefinitions),
-    [availableRuntimeDefinitions],
+    () =>
+      filterRuntimeDefinitionsForDefaultSelection(
+        availableRuntimeDefinitions,
+        workflows.data?.roles.map(({ definition }) => definition) ?? [],
+      ),
+    [availableRuntimeDefinitions, workflows.data],
   );
   const runtimeKind = resolveRuntimeKindSelection({
     runtimeDefinitions,

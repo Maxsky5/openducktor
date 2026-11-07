@@ -1,3 +1,5 @@
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
+
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
@@ -8,7 +10,10 @@ import {
   createRuntimeDefinitionsContextValue,
 } from "../../test-support/runtime-hook-harness";
 import { createFeedbackFake } from "../../test-support/feedback-fake";
-import { createRuntimeCatalogFixture } from "../../test-support/shared-test-fixtures";
+import {
+  createTaskCardFixture,
+  createRuntimeCatalogFixture,
+} from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import { createStartupLiveSourceFake } from "../../test-support/startup-live-source-fake";
 import {
@@ -21,7 +26,7 @@ import { observeStartupPreparation } from "../startup/startup-prepared-handoff";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const REQUEST_CONTEXT = {
-  launchActionId: "build_pull_request_generation",
+  launchActionId: "pull_request",
   role: "build",
   taskId: "TASK-1",
 } as const;
@@ -181,7 +186,7 @@ describe("buildSessionStartModalDecision", () => {
         selectedModel: null,
       }),
     ).toThrow(
-      "Starting a build build_pull_request_generation session for TASK-1 requires an explicit model selection.",
+      "Starting a build pull_request session for TASK-1 requires an explicit model selection.",
     );
 
     expect(() =>
@@ -194,9 +199,7 @@ describe("buildSessionStartModalDecision", () => {
         requestContext: REQUEST_CONTEXT,
         selectedModel: SELECTED_MODEL,
       }),
-    ).toThrow(
-      "Starting a build build_pull_request_generation session for TASK-1 requires a source session.",
-    );
+    ).toThrow("Starting a build pull_request session for TASK-1 requires a source session.");
   });
 
   test("keeps required guard errors ahead of invalid target branch parsing", () => {
@@ -212,7 +215,7 @@ describe("buildSessionStartModalDecision", () => {
         selectedModel: null,
       }),
     ).toThrow(
-      "Starting a build build_pull_request_generation session for TASK-1 requires an explicit model selection.",
+      "Starting a build pull_request session for TASK-1 requires an explicit model selection.",
     );
 
     expect(() =>
@@ -226,9 +229,7 @@ describe("buildSessionStartModalDecision", () => {
         requestContext: REQUEST_CONTEXT,
         selectedModel: null,
       }),
-    ).toThrow(
-      "Starting a build build_pull_request_generation session for TASK-1 requires a source session.",
-    );
+    ).toThrow("Starting a build pull_request session for TASK-1 requires a source session.");
 
     expect(() =>
       buildSessionStartModalDecision({
@@ -242,7 +243,7 @@ describe("buildSessionStartModalDecision", () => {
         selectedModel: null,
       }),
     ).toThrow(
-      "Starting a build build_pull_request_generation session for TASK-1 requires an explicit model selection.",
+      "Starting a build pull_request session for TASK-1 requires an explicit model selection.",
     );
 
     expect(() =>
@@ -256,9 +257,7 @@ describe("buildSessionStartModalDecision", () => {
         requestContext: REQUEST_CONTEXT,
         selectedModel: SELECTED_MODEL,
       }),
-    ).toThrow(
-      "Starting a build build_pull_request_generation session for TASK-1 requires a source session.",
-    );
+    ).toThrow("Starting a build pull_request session for TASK-1 requires a source session.");
   });
 });
 
@@ -291,6 +290,7 @@ describe("useSessionStartModalRunner", () => {
     );
     const request = {
       source: "agent_studio",
+      taskWorkflow: specPlanBuildWorkflow,
       taskId: "TASK-1",
       role: "build",
       launchActionId: "build_implementation_start",
@@ -347,6 +347,7 @@ describe("useSessionStartModalRunner", () => {
     );
     const request = {
       source: "agent_studio",
+      taskWorkflow: specPlanBuildWorkflow,
       taskId: "TASK-1",
       role: "build",
       launchActionId: "build_implementation_start",
@@ -413,6 +414,7 @@ describe("useSessionStartModalRunner failures", () => {
       );
       const request = {
         source: "agent_studio",
+        taskWorkflow: specPlanBuildWorkflow,
         taskId: "TASK-1",
         role: "build",
         launchActionId: "build_implementation_start",
@@ -554,6 +556,7 @@ test.each([
       callerPromise = runner.runSessionStartRequest(
         {
           source: "agent_studio",
+          taskWorkflow: specPlanBuildWorkflow,
           taskId: "TASK-1",
           role: "build",
           launchActionId: "build_implementation_start",
@@ -634,7 +637,8 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("accepts a runtime that supports the concrete selected start mode", () => {
     expect(() =>
       assertRuntimeSupportsSelectedStartMode({
-        launchActionId: "build_pull_request_generation",
+        taskWorkflow: specPlanBuildWorkflow,
+        launchActionId: "pull_request",
         role: "build",
         runtimeDescriptor: FORKLESS_RUNTIME,
         runtimeKind: FORKLESS_RUNTIME.kind,
@@ -647,7 +651,8 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   test("fails fast before launch when the selected runtime does not support the selected mode", () => {
     expect(() =>
       assertRuntimeSupportsSelectedStartMode({
-        launchActionId: "build_pull_request_generation",
+        taskWorkflow: specPlanBuildWorkflow,
+        launchActionId: "pull_request",
         role: "build",
         runtimeDescriptor: FORKLESS_RUNTIME,
         runtimeKind: FORKLESS_RUNTIME.kind,
@@ -655,13 +660,14 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
         taskId: "TASK-1",
       }),
     ).toThrow(
-      'Runtime "Reuse Runtime" does not support fork session starts for build_pull_request_generation. Select a compatible runtime or start mode.',
+      'Runtime "Reuse Runtime" does not support fork session starts for pull_request. Select a compatible runtime or start mode.',
     );
   });
 
   test("requires an available runtime for concrete non-reuse starts", () => {
     expect(() =>
       assertRuntimeSupportsSelectedStartMode({
+        taskWorkflow: specPlanBuildWorkflow,
         launchActionId: "build_implementation_start",
         role: "build",
         runtimeDescriptor: null,
@@ -737,6 +743,7 @@ test("ignores replaced requests and confirmation holds a synchronous lease", asy
     },
   );
   const request = {
+    taskWorkflow: specPlanBuildWorkflow,
     source: "agent_studio",
     taskId: "TASK-1",
     role: "build",
@@ -753,7 +760,7 @@ test("ignores replaced requests and confirmation holds a synchronous lease", asy
         ...request,
         kickoff: {
           workspaceId: null,
-          task: null,
+          task: createTaskCardFixture({ id: "TASK-1" }),
           request: { ...request, kickoffPrompt: "old prompt" },
         },
       },
@@ -767,7 +774,7 @@ test("ignores replaced requests and confirmation holds a synchronous lease", asy
         ...request,
         kickoff: {
           workspaceId: null,
-          task: null,
+          task: createTaskCardFixture({ id: "TASK-1" }),
           request: { ...request, kickoffPrompt: "current prompt" },
         },
       },
@@ -836,10 +843,11 @@ test("blocks confirmation while prompt settings load and uses the current branch
     },
   );
   const request = {
+    taskWorkflow: specPlanBuildWorkflow,
     source: "agent_studio",
     taskId: "TASK-1",
     role: "build",
-    launchActionId: "build_pull_request_generation",
+    launchActionId: "pull_request",
     postStartAction: "kickoff",
     selectedModel: SELECTED_MODEL,
   } as const;
@@ -852,7 +860,10 @@ test("blocks confirmation while prompt settings load and uses the current branch
   try {
     await harness.run((runner) => {
       void runner.runSessionStartRequest(
-        { ...request, kickoff: { workspaceId: "a", task: null, request } },
+        {
+          ...request,
+          kickoff: { workspaceId: "a", task: createTaskCardFixture({ id: "TASK-1" }), request },
+        },
         execute,
       );
     });
@@ -930,6 +941,7 @@ for (const changedScope of ["task", "workspace", "role"] as const) {
     });
     const request = {
       source: "agent_studio",
+      taskWorkflow: specPlanBuildWorkflow,
       taskId: "TASK-1",
       role: "build",
       launchActionId: "build_implementation_start",
@@ -1070,6 +1082,7 @@ test.each(["submit", "continue"] as const)(
     );
     const request = {
       source: "task_action",
+      taskWorkflow: specPlanBuildWorkflow,
       taskId: "TASK-1",
       role: "build",
       launchActionId: "build_implementation_start",

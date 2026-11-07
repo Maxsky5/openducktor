@@ -1,4 +1,5 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { workflowDocumentPlaceholder } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import {
   TasksStateContext,
@@ -196,11 +197,12 @@ const useEditorClose = (
 /** The footer action of the open section: create or save the task, or save the open document. */
 const primaryActionLabel = (controller: EditorController): string | null => {
   if (controller.isTypeStepVisible) return null;
-  if (controller.activeDocumentSection === "spec") {
-    return controller.isSavingDocument ? "Saving spec…" : "Save spec";
-  }
-  if (controller.activeDocumentSection === "plan") {
-    return controller.isSavingDocument ? "Saving plan…" : "Save plan";
+  if (controller.activeDocumentSection) {
+    const artifact = controller.taskWorkflow?.definition.artifacts.find(
+      ({ id }) => id === controller.activeDocumentSection,
+    );
+    const label = artifact?.shortLabel ?? artifact?.label ?? controller.activeDocumentSection;
+    return `${controller.isSavingDocument ? "Saving" : "Save"} ${label}`;
   }
   if (controller.mode === "create")
     return controller.isSubmitting ? "Creating task…" : "Create task";
@@ -313,8 +315,7 @@ function EditorSaveButton({
 }): ReactElement {
   const isTaskSection = controller.editSection === "details";
   const { activeDocument } = controller;
-  const documentSaveBlocked =
-    activeDocument === null || !activeDocument.loaded || activeDocument.isLoading;
+  const documentSaveBlocked = !activeDocument || !activeDocument.loaded || activeDocument.isLoading;
   const saveDisabled = taskEditorSaveDisabled({
     busy: controller.isBusy,
     locked: controller.isSaveOrRecoveryLocked,
@@ -403,13 +404,15 @@ function EditIntro({
       <Text variant="callout" tone="tertiary">
         {`Edit the details and documents of ${taskId ?? "this task"}.`}
       </Text>
-      <EditSectionSwitcher
-        section={controller.editSection}
-        unsavedSpec={controller.dirtyDocuments.spec}
-        unsavedPlan={controller.dirtyDocuments.plan}
-        disabled={controller.isFormDisabled}
-        onChange={controller.requestSectionChange}
-      />
+      {controller.taskWorkflow ? (
+        <EditSectionSwitcher
+          section={controller.editSection}
+          taskWorkflow={controller.taskWorkflow}
+          dirtyDocuments={controller.dirtyDocuments}
+          disabled={controller.isFormDisabled}
+          onChange={controller.requestSectionChange}
+        />
+      ) : null}
     </>
   );
 }
@@ -428,6 +431,7 @@ function EditorContent({
   if (controller.isTypeStepVisible) {
     return (
       <IssueTypeGrid
+        choices={controller.issueTypeChoices}
         selected={controller.selectedCreateIssueType}
         disabled={controller.isFormDisabled}
         onSelect={controller.selectCreateIssueType}
@@ -456,14 +460,17 @@ function DocumentSection({
   controller: EditorController;
   section: NonNullable<EditorController["activeDocumentSection"]>;
   document: NonNullable<EditorController["activeDocument"]>;
-}): ReactElement {
-  const spec = section === "spec";
+}): ReactElement | null {
+  const artifact = controller.taskWorkflow?.definition.artifacts.find(({ id }) => id === section);
+  if (!artifact) return null;
   return (
     <DocumentEditor
       key={section}
-      title={spec ? "Specification" : "Implementation plan"}
-      subtitle={spec ? "Edit the task's spec." : "Edit the task's implementation plan."}
-      placeholder={spec ? "# Purpose\n\nDescribe expected outcome..." : "## Milestones\n\n- ..."}
+      title={artifact.label}
+      subtitle={`Edit the ${artifact.label.toLowerCase()} for this task.`}
+      placeholder={
+        controller.taskWorkflow ? workflowDocumentPlaceholder(section, controller.taskWorkflow) : ""
+      }
       markdown={controller.activeDraft}
       view={controller.views[section] === "preview" ? "preview" : "write"}
       onViewChange={(view) => controller.setDocumentView(section, view)}
@@ -514,6 +521,7 @@ function TaskFields({
     <>
       <IssueTypeField
         issueType={state.issueType}
+        choices={controller.issueTypeChoices}
         disabled={isFormDisabled}
         onChange={mode === "create" ? showTypeStep : null}
       />
@@ -549,16 +557,25 @@ const MemoLabelsField = memo(LabelsField);
 
 const IssueTypeField = memo(function IssueTypeField({
   issueType,
+  choices,
   disabled,
   onChange,
 }: {
   issueType: EditorController["state"]["issueType"];
+  choices: EditorController["issueTypeChoices"];
   disabled: boolean;
   onChange: (() => void) | null;
 }): ReactElement {
+  const choice = choices.find(({ value }) => value === issueType);
+  if (!choice)
+    return (
+      <Text variant="footnote" tone="secondary">
+        Select an issue type from the task workflow.
+      </Text>
+    );
   return (
-    <FormField label="Issue type" required>
-      <IssueTypeSummary issueType={issueType} disabled={disabled} onChange={onChange} />
+    <FormField label="Issue Type" required>
+      <IssueTypeSummary choice={choice} disabled={disabled} onChange={onChange} />
     </FormField>
   );
 });

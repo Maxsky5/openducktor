@@ -7,13 +7,13 @@ import {
 
 describe("session start errors", () => {
   test("names the role and the settings location for a missing default model", () => {
-    expect(missingSessionDefaultModelError("build")).toBe(
+    expect(missingSessionDefaultModelError("Builder")).toBe(
       "No model is configured for the Builder session. Set a Builder default or the repository Default Model in Settings > Repositories > Agents.",
     );
   });
 
   test("names the role and runtime for an unavailable default model", () => {
-    expect(unavailableSessionDefaultModelError({ role: "qa", runtimeKind: "codex" })).toBe(
+    expect(unavailableSessionDefaultModelError({ role: "QA", runtimeKind: "codex" })).toBe(
       "The saved QA default or repository Default Model is not available for runtime codex. Update it in Settings > Repositories > Agents.",
     );
   });
@@ -21,7 +21,7 @@ describe("session start errors", () => {
   test("names the role, runtime, cause, and settings location for an unloadable catalog", () => {
     expect(
       unavailableSessionDefaultCatalogError({
-        role: "build",
+        role: "Builder",
         runtimeKind: "codex",
         causeDetail: "Cannot resolve the selected runtime. Start it from the runtime controls.",
       }),
@@ -33,7 +33,7 @@ describe("session start errors", () => {
   test("omits the cause detail when the cause has no message", () => {
     expect(
       unavailableSessionDefaultCatalogError({
-        role: "qa",
+        role: "QA",
         runtimeKind: "opencode",
         causeDetail: "   ",
       }),

@@ -508,7 +508,10 @@ describe("AgentChatComposer", () => {
       );
 
       const card = readComposerCard(html);
-      expect(card.querySelector('[aria-label="Message composer"]')?.textContent).toBe(placeholder);
+      // The placeholder shows beside the empty editing host.
+      expect(
+        card.querySelector('[aria-label="Message composer"]')?.parentElement?.textContent,
+      ).toBe(placeholder);
       expect(card.querySelector('[aria-label="Send message"]')).not.toBeNull();
       expect(html.includes("Queued follow-up")).toBe(overrides.messageQueue !== undefined);
     });

@@ -8,7 +8,7 @@ import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-se
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 import { buildPaletteTaskView } from "./command-palette-task-model";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const record = (
   externalSessionId: string,
@@ -49,13 +49,7 @@ const ready = (records: AgentSessionRecord[]) =>
 const inProgressTask = (overrides: Partial<TaskCard> = {}): TaskCard =>
   createTaskCardFixture({
     status: "in_progress",
-    availableActions: [
-      "build_start",
-      "open_builder",
-      "reset_implementation",
-      "reset_task",
-      "close_task",
-    ],
+    availableActions: ["build_start", "open_builder", "reset_implementation"],
     ...overrides,
   });
 
@@ -122,10 +116,11 @@ describe("command palette task model", () => {
     expect(failed.open).toBeNull();
     expect(failed.sessionsNote).toBe("Sessions could not load: Host offline");
     expect(failed.actions.map((action) => action.key)).toEqual([
+      "close_task",
       "edit",
       "details",
       "copy-id",
-      "reset-task",
+      "reset_task",
       "delete",
     ]);
   });
@@ -147,18 +142,11 @@ describe("command palette task model", () => {
     ]);
   });
 
-  test("lists session actions, workflow steps, and task actions, destructive last, without Close Task", () => {
+  test("lists session actions, workflow steps, and task actions of the palette, destructive last", () => {
     const builder = record("build-1", "build", "2026-03-04T00:00:00.000Z");
     const view = buildPaletteTaskView({
       task: inProgressTask({
-        availableActions: [
-          "build_start",
-          "open_builder",
-          "qa_start",
-          "reset_implementation",
-          "reset_task",
-          "close_task",
-        ],
+        availableActions: ["build_start", "open_builder", "qa_start", "reset_implementation"],
       }),
       sessions: ready([builder]),
       live: liveState([]),
@@ -169,16 +157,17 @@ describe("command palette task model", () => {
       "session:build",
       "workflow:build_start",
       "workflow:qa_start",
+      "close_task",
       "edit",
       "details",
       "copy-id",
       "workflow:reset_implementation",
-      "reset-task",
+      "reset_task",
       "delete",
     ]);
     expect(view.actions.find((action) => action.key === "latest")?.detail).toBe("Builder");
     expect(view.actions.filter((action) => action.destructive).map((action) => action.key)).toEqual(
-      ["workflow:reset_implementation", "reset-task", "delete"],
+      ["workflow:reset_implementation", "reset_task", "delete"],
     );
   });
 });

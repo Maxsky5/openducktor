@@ -1,4 +1,4 @@
-import { mcpBridgeDiscoveryFileSchema } from "@openducktor/contracts";
+import { mcpBridgeDiscoveryFileSchema, type OdtHostBridgeReady } from "@openducktor/contracts";
 import { readFile } from "node:fs/promises";
 import { type RuntimeCallerSource, readRuntimeCallerSource } from "./runtime-caller";
 import { OdtHostBridgeClient } from "./host-bridge-client";
@@ -15,6 +15,8 @@ class ConfiguredWorkspaceNotFoundError extends Error {}
 export type OdtStoreOptions = {
   workspaceId?: string;
   hostUrl: string;
+  /** The states that are not terminal in the host workflows, from the ready reply. */
+  activeStatuses: readonly string[];
   hostToken?: string;
   forbidWorkspaceIdInput?: boolean;
   /** Set only when an OpenDucktor runtime started this process. */
@@ -31,13 +33,14 @@ export type OdtStoreContext = {
 type DiscoveredHostConnection = {
   hostUrl: string;
   hostToken: string;
+  ready: OdtHostBridgeReady;
 };
 
 const validateExplicitHostUrl = async (
   hostUrl: string,
   workspaceId?: string,
   hostToken?: string,
-): Promise<string> => {
+): Promise<OdtHostBridgeReady> => {
   try {
     new URL(hostUrl);
   } catch {
@@ -45,8 +48,7 @@ const validateExplicitHostUrl = async (
   }
 
   const client = new OdtHostBridgeClient({ baseUrl: hostUrl, appToken: hostToken });
-  await validateHostConnection(client, workspaceId);
-  return hostUrl;
+  return validateHostConnection(client, workspaceId);
 };
 
 const readBooleanEnv = (name: string): boolean | undefined => {
@@ -90,10 +92,9 @@ const validateConfiguredWorkspace = async (
 const validateHostConnection = async (
   client: OdtHostBridgeClient,
   workspaceId?: string,
-): Promise<void> => {
+): Promise<OdtHostBridgeReady> => {
   if (!workspaceId) {
-    await client.ready();
-    return;
+    return client.ready();
   }
 
   const [readinessResult, workspaceResult] = await Promise.allSettled([
@@ -106,9 +107,13 @@ const validateHostConnection = async (
   if (workspaceResult.status === "rejected") {
     throw workspaceResult.reason;
   }
+  return readinessResult.value;
 };
 
-const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredHostConnection => {
+const parseDiscoveryFile = (
+  payload: string,
+  discoveryPath: string,
+): Omit<DiscoveredHostConnection, "ready"> => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(payload);
@@ -177,10 +182,10 @@ const discoverHostConnection = async (
     appToken: candidateHostToken,
   });
   try {
-    await validateHostConnection(client, workspaceId);
     return {
       hostToken: candidateHostToken,
       hostUrl: discovered.hostUrl,
+      ready: await validateHostConnection(client, workspaceId),
     };
   } catch (error) {
     if (error instanceof ConfiguredWorkspaceNotFoundError) {
@@ -209,19 +214,24 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
     normalizeOptionalInput(process.env[HOST_TOKEN_ENV]) ??
     (hostTokenFile ? await readHostTokenFromFile(hostTokenFile) : undefined);
   let hostUrl: string;
+  let ready: OdtHostBridgeReady;
   if (explicitHostUrl) {
-    hostUrl = await validateExplicitHostUrl(explicitHostUrl, workspaceId, resolvedHostToken);
+    hostUrl = explicitHostUrl;
+    ready = await validateExplicitHostUrl(explicitHostUrl, workspaceId, resolvedHostToken);
   } else {
     const discovered = await discoverHostConnection(workspaceId, resolvedHostToken);
     hostUrl = discovered.hostUrl;
     resolvedHostToken = discovered.hostToken;
+    ready = discovered.ready;
   }
+  const { activeStatuses } = ready;
   const workspaceIdInputMode =
     forbidWorkspaceIdInput !== undefined ? { forbidWorkspaceIdInput } : {};
 
   if (!workspaceId) {
     const options: OdtStoreOptions = {
       hostUrl,
+      activeStatuses,
       ...workspaceIdInputMode,
     };
     if (resolvedHostToken) {
@@ -236,6 +246,7 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   const options: OdtStoreOptions = {
     workspaceId,
     hostUrl,
+    activeStatuses,
     ...workspaceIdInputMode,
   };
   if (resolvedHostToken) {

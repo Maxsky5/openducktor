@@ -18,9 +18,9 @@ describe("odt workflow tools", () => {
     );
     expect(normalizeOdtWorkflowToolName("OpenDucktor_ODT_SET_TASK_ARTIFACT")).toBeNull();
     expect(normalizeOdtWorkflowToolName("functions.openducktor_odt_set_task_artifact")).toBeNull();
-    expect(normalizeOdtWorkflowToolName("customprefix_odt_build_completed")).toBeNull();
+    expect(normalizeOdtWorkflowToolName("customprefix_odt_apply_workflow_event")).toBeNull();
     expect(normalizeOdtWorkflowToolName("customprefix_odt_")).toBeNull();
-    expect(normalizeOdtWorkflowToolName("customprefix_odt_build_completed_extra")).toBeNull();
+    expect(normalizeOdtWorkflowToolName("customprefix_odt_apply_workflow_event_extra")).toBeNull();
     expect(normalizeOdtWorkflowToolName("ODT_")).toBeNull();
     expect(normalizeOdtWorkflowToolName("read")).toBeNull();
   });
@@ -48,21 +48,21 @@ describe("odt workflow tools", () => {
   });
 
   test("detects workflow tool ids", () => {
-    expect(isOdtWorkflowToolName("odt_build_completed")).toBe(true);
-    expect(isOdtWorkflowToolName("openducktor_odt_build_completed")).toBe(false);
-    expect(isOdtWorkflowToolName("functions.openducktor_odt_build_completed")).toBe(false);
+    expect(isOdtWorkflowToolName("odt_apply_workflow_event")).toBe(true);
+    expect(isOdtWorkflowToolName("openducktor_odt_apply_workflow_event")).toBe(false);
+    expect(isOdtWorkflowToolName("functions.openducktor_odt_apply_workflow_event")).toBe(false);
     expect(
-      isOdtWorkflowToolName("openducktor_odt_build_completed", workflowToolAliasesByCanonical),
+      isOdtWorkflowToolName("openducktor_odt_apply_workflow_event", workflowToolAliasesByCanonical),
     ).toBe(true);
     expect(
       isOdtWorkflowToolName(
-        "functions.openducktor_odt_build_completed",
+        "functions.openducktor_odt_apply_workflow_event",
         workflowToolAliasesByCanonical,
       ),
     ).toBe(true);
-    expect(isOdtWorkflowToolName("customprefix_odt_build_completed")).toBe(false);
+    expect(isOdtWorkflowToolName("customprefix_odt_apply_workflow_event")).toBe(false);
     expect(isOdtWorkflowToolName("glob")).toBe(false);
-    expect(isOdtWorkflowMutationToolName("odt_build_completed")).toBe(true);
+    expect(isOdtWorkflowMutationToolName("odt_apply_workflow_event")).toBe(true);
     expect(isOdtWorkflowMutationToolName("odt_read_task")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_read_task_assets")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_read_task_artifacts")).toBe(false);

@@ -1,4 +1,4 @@
-import type { BuiltinPromptRoleTabId } from "@openducktor/workflows";
+import type { WorkflowPromptRoleTabId } from "@openducktor/workflows";
 import { RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RuntimeImpactDialog } from "@/components/features/runtimes/runtime-impact-dialog";
@@ -179,11 +179,11 @@ function SettingsDialog({
     setNavigation((current) => ({ ...current, repositorySection }));
   };
 
-  const handleGlobalPromptRoleTabChange = (globalPromptRoleTab: BuiltinPromptRoleTabId): void => {
+  const handleGlobalPromptRoleTabChange = (globalPromptRoleTab: WorkflowPromptRoleTabId): void => {
     setNavigation((current) => ({ ...current, globalPromptRoleTab }));
   };
 
-  const handleRepoPromptRoleTabChange = (repoPromptRoleTab: BuiltinPromptRoleTabId): void => {
+  const handleRepoPromptRoleTabChange = (repoPromptRoleTab: WorkflowPromptRoleTabId): void => {
     setNavigation((current) => ({ ...current, repoPromptRoleTab }));
   };
 

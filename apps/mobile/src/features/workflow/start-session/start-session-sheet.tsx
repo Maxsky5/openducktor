@@ -1,11 +1,11 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
-  BUILTIN_LAUNCH_ACTION_IDS,
-  getSessionLaunchAction,
-  type BuiltinLaunchActionId as SessionLaunchActionId,
+  isPullRequestLaunch,
+  resolveWorkflowAction,
+  type ResolvedTaskCard,
+  type WorkflowLaunchActionId as SessionLaunchActionId,
 } from "@openducktor/workflows";
-import type { UseTaskSessionStartFlowResult } from "@openducktor/frontend-core/tasks/workflow/use-task-session-start-flow";
 import { usePreventRemove } from "expo-router";
 import { type ReactElement, useCallback, useState } from "react";
 import { useFeedbackStore } from "@/app-shell/app-services";
@@ -14,25 +14,37 @@ import { useConfirmDiscard } from "@/ui/confirm-discard";
 import { EmptyState } from "@/ui/states";
 import { useTaskStartFlow } from "../use-task-start-flow";
 import { useWorkflowSheetLifecycle } from "../use-workflow-sheet-lifecycle";
+import { startChoicesCancel } from "../sheet-cancel";
 import { GroupedSheet } from "@/navigation/grouped-sheet";
 import { useWorkflowSheetParams, WorkflowSheetFrame } from "../workflow-sheet-frame";
 import { RepoSettingsNotice } from "./repo-settings-notice";
-import type { ClientFeedback } from "@openducktor/frontend-core/platform/client-feedback";
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import { SessionStartSheet } from "./session-start-sheet";
 
 const TITLE = "Start session";
 
-/** The flow call of each start action. The type makes a new action add its call here. */
-const START_ACTIONS = {
-  set_spec: (flow, taskId) => flow.onPlan(taskId, "set_spec"),
-  set_plan: (flow, taskId) => flow.onPlan(taskId, "set_plan"),
-  build_start: (flow, taskId) => flow.onDelegate(taskId),
-  qa_start: (flow, taskId) => flow.onQaStart(taskId),
-} satisfies Record<
-  StartSessionSheetAction,
-  (flow: UseTaskSessionStartFlowResult, taskId: string) => void
->;
+/** A task workflow action, or the session launch action of a desktop quick action. */
+type StartRequest =
+  | { kind: "action"; action: StartSessionSheetAction }
+  | { kind: "launch"; launch: SessionLaunchActionId };
+
+/** The launch that the sheet starts. The sheet cannot collect feedback or run another action. */
+const sheetLaunch = (task: ResolvedTaskCard, request: StartRequest) => {
+  const operation = request.kind === "action" ? resolveWorkflowAction(task, request.action) : null;
+  if (operation && operation.kind !== "session")
+    throw new Error(
+      "This action does not start a session. Close this sheet and use the task actions.",
+    );
+  const launch = request.kind === "launch" ? request.launch : operation!.launchActionId;
+  const choice = task.taskWorkflow.launchDefinition(launch);
+  if (choice.context === "human_feedback")
+    throw new Error("Use Request Changes to provide feedback before this session.");
+  return { launch };
+};
+
+const startRequestOf = (action: string | null, launch: string | null): StartRequest | null =>
+  action ? { kind: "action", action } : launch ? { kind: "launch", launch } : null;
+
 /**
  * The start sheet of a task workflow action or a quick action. Its params name the workspace,
  * the task, and the action.
@@ -60,22 +72,6 @@ export function StartSessionRoute(): ReactElement {
   );
 }
 
-const isStartAction = (value: string | null): value is StartSessionSheetAction =>
-  value !== null && Object.hasOwn(START_ACTIONS, value);
-const isLaunchAction = (value: string | null): value is SessionLaunchActionId =>
-  BUILTIN_LAUNCH_ACTION_IDS.some((launch) => launch === value);
-
-/** A task workflow action, or the session launch action of a desktop quick action. */
-type StartRequest =
-  | { kind: "action"; action: StartSessionSheetAction }
-  | { kind: "launch"; launch: SessionLaunchActionId };
-
-const startRequestOf = (action: string | null, launch: string | null): StartRequest | null => {
-  if (isStartAction(action)) return { kind: "action", action };
-  if (isLaunchAction(launch)) return { kind: "launch", launch };
-  return null;
-};
-
 function StartSessionContent({
   workspace,
   taskId,
@@ -93,7 +89,20 @@ function StartSessionContent({
   // The action opens the start choices, or opens an existing session directly. A quick action
   // starts its launch action as the desktop quick actions do.
   const run = () => {
-    if (task) runStartRequest(request, task.id, flow, feedback);
+    if (!task) return;
+    try {
+      const { launch } = sheetLaunch(task, request);
+      if (isPullRequestLaunch(launch)) {
+        void flow.onPullRequestGenerate(task.id).catch((cause) =>
+          feedback.show("error", "The pull request session did not start.", {
+            description: errorMessage(cause),
+          }),
+        );
+      } else flow.onLaunch(task.id, launch);
+    } catch (cause) {
+      feedback.show("error", "The session could not start", { description: errorMessage(cause) });
+      navigation.close();
+    }
   };
   // The sheet closes when the start choices close.
   useWorkflowSheetLifecycle({
@@ -103,7 +112,7 @@ function StartSessionContent({
     close: navigation.close,
   });
 
-  const choicesClose = useStartChoicesClose(modal);
+  const choicesClose = useStartChoicesClose(modal, navigation.close);
 
   if (!task) {
     return (
@@ -137,34 +146,12 @@ function StartSessionContent({
   );
 }
 
-const runStartRequest = (
-  request: StartRequest,
-  taskId: string,
-  flow: UseTaskSessionStartFlowResult,
-  feedback: ClientFeedback,
-): void => {
-  if (request.kind === "action") {
-    START_ACTIONS[request.action](flow, taskId);
-    return;
-  }
-  const { launch } = request;
-  if (launch === "build_pull_request_generation") {
-    flow.onPullRequestGenerate(taskId).catch((cause: unknown) =>
-      feedback.show("error", "The pull request session did not start.", {
-        description: errorMessage(cause),
-      }),
-    );
-    return;
-  }
-  void flow.startSessionIntent({
-    taskId,
-    role: getSessionLaunchAction(launch).role,
-    launchActionId: launch,
-    postStartAction: "kickoff",
-  });
-};
-
-const useStartChoicesClose = (modal: SessionStartModalModel | null) => {
+/**
+ * Cancel leaves the start choices as Back does: the route closes at once, with the form in place
+ * during the exit, and the unmount cancels the pending start. Closing the choices first would
+ * render the sheet without its form and close the route one effect later.
+ */
+const useStartChoicesClose = (modal: SessionStartModalModel | null, closeSheet: () => void) => {
   const confirmDiscard = useConfirmDiscard();
   const [edited, setEdited] = useState(false);
   const markEdited = useCallback(() => setEdited(true), []);
@@ -172,9 +159,13 @@ const useStartChoicesClose = (modal: SessionStartModalModel | null) => {
     modal?.phase.kind !== "progress" && edited && modal?.open === true && !modal.isStarting;
   // oxlint-disable-next-line react-compiler/immutability -- usePreventRemove calls back into the close that needs its result; the hook memoizes by hand
   const allowRemoval = usePreventRemove(asksBeforeClose, () => close());
+  const leave = () => {
+    if (modal && startChoicesCancel(modal.phase) === "close_step") modal.onOpenChange(false);
+    else closeSheet();
+  };
   const close = () => {
     if (!asksBeforeClose) {
-      modal?.onOpenChange(false);
+      leave();
       return;
     }
     void confirmDiscard({
@@ -183,7 +174,7 @@ const useStartChoicesClose = (modal: SessionStartModalModel | null) => {
     }).then((confirmed) => {
       if (!confirmed) return;
       allowRemoval();
-      modal?.onOpenChange(false);
+      leave();
     });
   };
   return { close, markEdited };

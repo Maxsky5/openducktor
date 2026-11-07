@@ -23,7 +23,7 @@ import {
   workflowArtifactLabel,
   workflowArtifactShortLabel,
   workflowDocumentPlaceholder,
-  type BuiltinTaskCard as TaskCard,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 
 const TaskDocumentEditor = lazy(async () => {
@@ -99,7 +99,10 @@ function TaskDocumentFooterActions({
   const isSaving = controller.isSavingDocument === controller.activeDocumentSection;
   const section = controller.activeDocumentSection;
   let saveLabel = "Saving…";
-  if (!isSaving) saveLabel = section ? `Save ${workflowArtifactShortLabel(section)}` : "Save";
+  if (!isSaving)
+    saveLabel = section
+      ? `Save ${workflowArtifactShortLabel(section, controller.taskWorkflow!)}`
+      : "Save";
 
   return (
     <>
@@ -196,8 +199,10 @@ function TaskCreateModalSectionNavigation({
       />
     );
   }
+  if (!controller.taskWorkflow) return <span />;
   return (
     <TaskEditSectionSwitcher
+      taskWorkflow={controller.taskWorkflow}
       section={controller.editSection}
       dirtyDocuments={controller.dirtyDocuments}
       disabled={controller.isFormDisabled}
@@ -213,9 +218,12 @@ function TaskCreateModalSectionContent({
   controller: TaskCreateModalController;
   task: TaskCard | null;
 }): ReactElement {
+  if (!controller.taskWorkflow)
+    return <p role="status">{controller.workflowRead.error ?? "Loading task workflow..."}</p>;
   if (controller.isTypeStepVisible) {
     return (
       <IssueTypeGrid
+        choices={controller.issueTypeChoices}
         selectedIssueType={controller.selectedCreateIssueType}
         onSelectIssueType={controller.selectCreateIssueType}
       />
@@ -227,11 +235,11 @@ function TaskCreateModalSectionContent({
       <Suspense fallback={<TaskDocumentEditorFallback />}>
         <TaskDocumentEditor
           key={section}
-          title={workflowArtifactLabel(section)}
-          subtitle={`Edit the ${workflowArtifactLabel(section).toLowerCase()} markdown for this task.`}
-          placeholder={workflowDocumentPlaceholder(section)}
+          title={workflowArtifactLabel(section, controller.taskWorkflow!)}
+          subtitle={`Edit the ${workflowArtifactLabel(section, controller.taskWorkflow!).toLowerCase()} markdown for this task.`}
+          placeholder={workflowDocumentPlaceholder(section, controller.taskWorkflow!)}
           markdown={controller.activeDraft}
-          view={controller.views[section]}
+          view={controller.views[section] ?? "split"}
           onViewChange={(nextView) => controller.setDocumentView(section, nextView)}
           updatedAt={controller.activeDocument?.updatedAt ?? null}
           isLoading={controller.activeDocument?.isLoading ?? false}
@@ -248,6 +256,7 @@ function TaskCreateModalSectionContent({
   }
   return (
     <TaskDetailsForm
+      issueTypeChoices={controller.issueTypeChoices}
       mode={controller.mode}
       disabled={controller.isSaveOrRecoveryLocked}
       state={controller.state}

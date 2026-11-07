@@ -1,4 +1,5 @@
 import type { RuntimeKind, SettingsSnapshot } from "@openducktor/contracts";
+import type { TaskWorkflowRole } from "@openducktor/workflows";
 import type { AgentSessionRuntimePolicy, AgentSessionScope } from "@openducktor/core";
 import {
   resolveAgentSessionRuntimePolicyFromSnapshot,
@@ -10,6 +11,7 @@ type LoadSettingsSnapshot = () => Promise<SettingsSnapshot>;
 export type ResolveSessionRuntimePolicySync = (input: {
   runtimeKind: RuntimeKind;
   sessionScope?: AgentSessionScope | null;
+  workflowRole?: TaskWorkflowRole;
 }) => AgentSessionRuntimePolicy;
 
 export const loadSessionRuntimePolicyResolver = async ({
@@ -30,7 +32,7 @@ export const loadSessionRuntimePolicyResolver = async ({
   }
 
   const snapshot = await loadSettingsSnapshot();
-  return ({ runtimeKind, sessionScope }) => {
+  return ({ runtimeKind, sessionScope, workflowRole }) => {
     const input: Parameters<typeof resolveAgentSessionRuntimePolicyFromSnapshot>[0] = {
       runtimeKind,
       snapshot,
@@ -38,6 +40,7 @@ export const loadSessionRuntimePolicyResolver = async ({
     if (sessionScope !== undefined) {
       input.sessionScope = sessionScope;
     }
+    if (workflowRole) input.workflowRole = workflowRole;
     return resolveAgentSessionRuntimePolicyFromSnapshot(input);
   };
 };

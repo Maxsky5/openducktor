@@ -1,3 +1,4 @@
+import { createWireTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { noTaskWorktreeOwners } from "../../test-support/worktree-owners-read";
 import "../../test-support/dom-environment";
@@ -56,7 +57,9 @@ describe("useTaskCloseConfirmDialog", () => {
         task: { ...task, removeWorktreeOnClose: choice },
         enabled: true,
         initiallyOpen: true,
-        run: mock(async () => {}),
+        run: mock(async (taskId: string) =>
+          createWireTaskCardFixture({ id: taskId, status: "closed" }),
+        ),
         onSucceeded: () => {},
       },
       { wrapper: createActiveWorkspaceWrapper(connection) },
@@ -114,7 +117,9 @@ describe("useTaskCloseConfirmDialog", () => {
         task: { ...task, removeWorktreeOnClose: false },
         enabled: true,
         initiallyOpen: true,
-        run: mock(async () => {}),
+        run: mock(async (taskId: string) =>
+          createWireTaskCardFixture({ id: taskId, status: "closed" }),
+        ),
         onSucceeded: () => {},
       },
       { wrapper: createActiveWorkspaceWrapper(connection) },
@@ -164,7 +169,14 @@ describe("useTaskCloseConfirmDialog", () => {
     });
     const harness = createHookHarness(
       useTaskCloseConfirmDialog,
-      { task, enabled: true, run: mock(async () => {}), onSucceeded: () => {} },
+      {
+        task,
+        enabled: true,
+        run: mock(async (taskId: string) =>
+          createWireTaskCardFixture({ id: taskId, status: "closed" }),
+        ),
+        onSucceeded: () => {},
+      },
       { wrapper: createActiveWorkspaceWrapper(connection) },
     );
 

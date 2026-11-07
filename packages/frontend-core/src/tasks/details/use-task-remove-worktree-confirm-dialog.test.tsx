@@ -14,7 +14,7 @@ enableReactActEnvironment();
 const task = createTaskCardFixture({
   id: "TASK-1",
   status: "closed",
-  availableActions: ["remove_worktree"],
+  availableActions: [],
 });
 
 describe("useTaskRemoveWorktreeConfirmDialog", () => {
@@ -160,6 +160,45 @@ describe("useTaskRemoveWorktreeConfirmDialog", () => {
       await harness.run((state) => state.dialog.onOpenChange(true));
       await harness.run((state) => state.dialog.onOpenChange(false));
       await waitFor(() => expect(harness.getLatest().isAvailable).toBe(false));
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("offers the removal only for a closed task, without a workflow action", async () => {
+    const impactGet = mock(async () => ({
+      worktreePaths: ["/worktrees/TASK-1"],
+      branchNames: ["odt/TASK-1"],
+      uncommittedFileCount: 0,
+      mergeCandidate: false,
+      branchOid: "tip",
+    }));
+    const connection = createTestClientConnection({
+      client: {
+        taskWorktreeOwnersGet: async () => noTaskWorktreeOwners,
+        taskWorktreeCleanupImpactGet: impactGet,
+        terminalList: async () => ({ hostInstanceId: "host", revision: 1, terminals: [] }),
+      },
+    });
+    const Wrapper = createActiveWorkspaceWrapper(connection);
+    const harness = createHookHarness(
+      useTaskRemoveWorktreeConfirmDialog,
+      {
+        task: createTaskCardFixture({ id: "TASK-1", status: "human_review", availableActions: [] }),
+        enabled: true,
+        run: mock(async (_taskId: string) => {}),
+      },
+      { wrapper: Wrapper },
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().isAvailable).toBe(false);
+      expect(impactGet).not.toHaveBeenCalled();
+
+      await harness.update({ task, enabled: true, run: mock(async (_taskId: string) => {}) });
+      await waitFor(() => expect(harness.getLatest().isAvailable).toBe(true));
+      expect(impactGet).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

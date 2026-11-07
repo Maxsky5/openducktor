@@ -1,13 +1,11 @@
+import type { TaskCard as WireTaskCard } from "@openducktor/contracts";
 import type {
   GitTargetBranch,
   TaskAssetDescriptionMutation,
   TaskCreateInput,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
-import type {
-  BuiltinStateId as TaskStatus,
-  BuiltinTaskCard as TaskCard,
-} from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "./task-close";
 import type { TaskPullRequestOperations } from "./task-pull-request";
 
@@ -26,17 +24,11 @@ export type TasksStateContextValue = TaskPullRequestOperations & {
   ) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
-  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<void>;
+  closeTask: (taskId: string, options: CloseTaskOptions) => Promise<WireTaskCard>;
   /** Removes the worktree and local branches of a closed task. */
   removeTaskWorktree: (taskId: string) => Promise<void>;
-  resetTaskImplementation: (taskId: string) => Promise<void>;
-  resetTask: (taskId: string) => Promise<void>;
-  transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
-  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
-};
-
-export type DelegationStateContextValue = {
-  delegateTask: (taskId: string) => Promise<void>;
+  resetTaskImplementation: (taskId: string, eventId: string) => Promise<WireTaskCard>;
+  resetTask: (taskId: string) => Promise<WireTaskCard>;
 };
 
 /** Reads and saves the workflow documents of the active workspace by artifact code. */

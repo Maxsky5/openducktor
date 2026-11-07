@@ -38,13 +38,16 @@ export const createTaskPullRequestManagementUseCases = ({
         }),
       );
       const current = yield* taskStore.getTask(input);
-      yield* requirePullRequestManagement(taskWorkflows.forTask(current), current);
+      yield* requirePullRequestManagement(current);
       const metadata = yield* taskStore.getTaskMetadata(input);
-      if (metadata.pullRequest !== undefined) {
+      const linked = metadata.pullRequest;
+      // An agent that updates its pull request saves it again. The pull request sync refreshes open records.
+      if (linked?.number === number) return linked;
+      if (linked !== undefined) {
         return yield* new HostValidationError({
-          field: "taskId",
-          message: `Task ${taskId} already has a linked pull request.`,
-          details: { repoPath, taskId },
+          field: "number",
+          message: `Task ${taskId} already has pull request #${linked.number}. Unlink it in the task details before you link #${number}.`,
+          details: { repoPath, taskId, linkedNumber: linked.number, number },
         });
       }
       yield* ensureNoDirectMergeEffect({
@@ -177,7 +180,7 @@ export const createTaskPullRequestManagementUseCases = ({
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const current = yield* taskStore.getTask(input);
-      yield* requirePullRequestManagement(taskWorkflows.forTask(current), current);
+      yield* requirePullRequestManagement(current);
       if (current.pullRequest === undefined) {
         return yield* new HostValidationError({
           field: "taskId",

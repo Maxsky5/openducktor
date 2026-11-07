@@ -2,16 +2,19 @@ import {
   resolveTaskCardActions,
   type TaskWorkflowAction,
   taskActionLabel,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 import { type ReactElement, type ReactNode, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import type { CoreTaskAction } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import {
-  TASK_ACTION_ICON,
+  coreTaskActionIcon,
+  coreTaskActionPrimaryVariant,
+  taskActionIcon,
   taskMenuActionVariant,
   taskPrimaryActionVariant,
 } from "./task-action-ui";
@@ -24,7 +27,7 @@ type ExtraTaskMenuAction = {
   label: string;
   icon: ReactElement;
   onSelect: () => void;
-  destructive?: boolean;
+  variant?: "ghost" | "destructiveGhost" | "warningGhost";
   disabled?: boolean;
 };
 
@@ -47,6 +50,8 @@ type TaskWorkflowActionGroupProps = {
   hideWhenEmpty?: boolean;
   actions?: ReturnType<typeof resolveTaskCardActions>;
   disabledActions?: readonly TaskWorkflowAction[];
+  /** A core task action that replaces the primary workflow action, such as Close Task when merged. */
+  leadingCoreAction?: { action: CoreTaskAction; onSelect: () => void } | undefined;
 };
 
 export function TaskWorkflowActionGroup(props: TaskWorkflowActionGroupProps): ReactElement | null {
@@ -65,9 +70,10 @@ export function TaskWorkflowActionGroup(props: TaskWorkflowActionGroupProps): Re
     hideWhenEmpty = false,
     actions,
     disabledActions = EMPTY_DISABLED_ACTIONS,
+    leadingCoreAction,
   } = props;
   const { primaryAction, secondaryActions, allActions } = getActions(props);
-  const hasWorkflowAction = allActions.length > 0;
+  const hasWorkflowAction = allActions.length > 0 || leadingCoreAction !== undefined;
   const hasExtraMenuAction = extraMenuActions.length > 0;
   const hasAnyAction = hasWorkflowAction || hasExtraMenuAction;
   const showMenu = secondaryActions.length > 0 || hasExtraMenuAction;
@@ -90,30 +96,39 @@ export function TaskWorkflowActionGroup(props: TaskWorkflowActionGroupProps): Re
     );
   }
 
-  const primary = primaryAction ?? allActions[0] ?? null;
+  const primary = leadingCoreAction ? null : (primaryAction ?? allActions[0] ?? null);
+  const buttonProps = {
+    size,
+    className: cn(expandPrimary ? "min-w-0 flex-1" : "", primaryClassName),
+    isKanbanCard: actions !== undefined,
+  };
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
+      {leadingCoreAction ? (
+        <PrimaryActionButton
+          {...buttonProps}
+          variant={coreTaskActionPrimaryVariant(leadingCoreAction.action)}
+          onSelect={leadingCoreAction.onSelect}
+        >
+          {coreTaskActionIcon(leadingCoreAction.action)}
+          {leadingCoreAction.action.label}
+        </PrimaryActionButton>
+      ) : null}
       {primary ? (
-        <Button
-          type="button"
-          size={size}
-          variant={taskPrimaryActionVariant(primary)}
-          className={cn(expandPrimary ? "min-w-0 flex-1" : "", primaryClassName)}
-          data-kanban-control={actions ? "primary" : undefined}
+        <PrimaryActionButton
+          {...buttonProps}
+          variant={taskPrimaryActionVariant(primary, task)}
           disabled={disabledActions.includes(primary)}
-          onClick={(event) => {
-            if (actions) event.stopPropagation();
-            onAction(primary);
-          }}
+          onSelect={() => onAction(primary)}
         >
           {primaryContent ?? (
             <>
-              {TASK_ACTION_ICON[primary]}
+              {taskActionIcon(primary, task)}
               {taskActionLabel(primary, task)}
             </>
           )}
-        </Button>
+        </PrimaryActionButton>
       ) : null}
 
       {showMenu ? (
@@ -134,6 +149,41 @@ export function TaskWorkflowActionGroup(props: TaskWorkflowActionGroupProps): Re
   );
 }
 
+function PrimaryActionButton({
+  size,
+  variant,
+  className,
+  isKanbanCard,
+  disabled,
+  onSelect,
+  children,
+}: {
+  size: "default" | "sm";
+  variant: "default" | "outline" | "destructive" | "warning";
+  className: string;
+  isKanbanCard: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <Button
+      type="button"
+      size={size}
+      variant={variant}
+      className={className}
+      data-kanban-control={isKanbanCard ? "primary" : undefined}
+      disabled={disabled}
+      onClick={(event) => {
+        if (isKanbanCard) event.stopPropagation();
+        onSelect();
+      }}
+    >
+      {children}
+    </Button>
+  );
+}
+
 const getActions = ({
   task,
   actions,
@@ -143,11 +193,13 @@ const getActions = ({
   historicalSessionRoles,
 }: TaskWorkflowActionGroupProps): ReturnType<typeof resolveTaskCardActions> => {
   if (actions) return actions;
-  const options: Parameters<typeof resolveTaskCardActions>[1] = { hasActiveSession };
-  if (includeActions) options.include = includeActions;
-  if (activeSessionRole) options.activeSessionRole = activeSessionRole;
-  if (historicalSessionRoles) options.historicalSessionRoles = historicalSessionRoles;
-  return resolveTaskCardActions(task, options);
+  return resolveTaskCardActions(task, {
+    hasActiveSession,
+    surface: "details",
+    include: includeActions,
+    activeSessionRole,
+    historicalSessionRoles,
+  });
 };
 
 type TaskWorkflowActionMenuProps = Required<
@@ -231,7 +283,7 @@ function TaskWorkflowActionMenu({
             <Button
               key={action}
               type="button"
-              variant={taskMenuActionVariant(action)}
+              variant={taskMenuActionVariant(action, task)}
               size="sm"
               className="h-8 w-full justify-start border border-transparent"
               data-kanban-control={isKanbanCard ? "menu" : undefined}
@@ -242,7 +294,7 @@ function TaskWorkflowActionMenu({
                 setMenuOpen(false);
               }}
             >
-              {TASK_ACTION_ICON[action]}
+              {taskActionIcon(action, task)}
               {taskActionLabel(action, task)}
             </Button>
           ))}
@@ -253,7 +305,7 @@ function TaskWorkflowActionMenu({
             <Button
               key={action.id}
               type="button"
-              variant={action.destructive ? "destructiveGhost" : "ghost"}
+              variant={action.variant ?? "ghost"}
               size="sm"
               className="h-8 w-full justify-start border border-transparent"
               disabled={action.disabled}

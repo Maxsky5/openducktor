@@ -1,3 +1,5 @@
+import { specPlanBuildWorkflow, roleDefaultPanel } from "@openducktor/workflows";
+
 import { describe, expect, test } from "bun:test";
 import type { BrowserTabSummary, TerminalSummary } from "@openducktor/contracts";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
@@ -101,9 +103,27 @@ describe("session panel layout", () => {
     const layout = reconciled(context());
 
     for (const role of ["spec", "planner", "qa"] as const) {
-      expect(selectedPanelTabId(layout, "right", context({ selectionKey: role }))).toBe("document");
+      expect(
+        selectedPanelTabId(
+          layout,
+          "right",
+          context({
+            selectionKey: role,
+            defaultRightSelection: roleDefaultPanel(role, specPlanBuildWorkflow),
+          }),
+        ),
+      ).toBe("document");
     }
-    expect(selectedPanelTabId(layout, "right", context({ selectionKey: "build" }))).toBe("diffs");
+    expect(
+      selectedPanelTabId(
+        layout,
+        "right",
+        context({
+          selectionKey: "build",
+          defaultRightSelection: roleDefaultPanel("build", specPlanBuildWorkflow),
+        }),
+      ),
+    ).toBe("diffs");
   });
 
   test("keeps the same layout when the user selects the selected tab", () => {
@@ -384,7 +404,10 @@ describe("session panel layout", () => {
   });
 
   test("selects the first tab, not the role default, when the remembered tab closes", () => {
-    const builder = context({ selectionKey: "build" });
+    const builder = context({
+      selectionKey: "build",
+      defaultRightSelection: roleDefaultPanel("build", specPlanBuildWorkflow),
+    });
     const spec = context({ selectionKey: "spec" });
     let layout = selectPanelTab(reconciled(builder), builder, "right", "files");
 

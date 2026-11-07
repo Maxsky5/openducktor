@@ -1,8 +1,8 @@
 import {
   resolveSessionContinuationLaunchAction,
-  type BuiltinLaunchActionId as SessionLaunchActionId,
-  type BuiltinRoleId as AgentRole,
-  type BuiltinTaskCard as TaskCard,
+  type WorkflowLaunchActionId as SessionLaunchActionId,
+  type WorkflowRoleId as AgentRole,
+  type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import { useCallback, useMemo } from "react";
 import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
@@ -39,8 +39,8 @@ type UseAgentStudioSelectedSessionViewArgs = {
   sessionExternalId: string | null;
   routeSessionResolution: AgentStudioRouteSessionResolution;
   hasExplicitRoleSelection: boolean;
-  roleSelection: AgentRole;
-  sessionlessRole: AgentRole;
+  roleSelection: AgentRole | null;
+  sessionlessRole: AgentRole | null;
   keepExplicitRoleSessionless: boolean;
   sessionIdentityFromRoute: AgentSessionIdentity | null;
   repoSettings: RepoSettingsInput | null;
@@ -49,8 +49,8 @@ type UseAgentStudioSelectedSessionViewArgs = {
 
 export type AgentStudioSelectedSessionView = {
   selectedSession: AgentStudioSelectedSessionState;
-  role: AgentRole;
-  launchActionId: SessionLaunchActionId;
+  role: AgentRole | null;
+  launchActionId: SessionLaunchActionId | null;
 };
 
 export function useAgentStudioSelectedSessionView({
@@ -205,7 +205,8 @@ export function useAgentStudioSelectedSessionView({
       !runtimeKind ||
       !externalSessionId ||
       !workingDirectory ||
-      !taskId
+      !taskId ||
+      !role
     )
       return;
     await host.agentSessionControlResume({
@@ -246,7 +247,10 @@ export function useAgentStudioSelectedSessionView({
   const selectedSessionModel = selectedSessionViewProjection.selectedModel;
   const transcriptState = selectedSessionViewProjection.transcriptState;
 
-  const launchActionId = resolveSessionContinuationLaunchAction(selection.role, selectedTask);
+  const launchActionId =
+    selection.role && selectedTask
+      ? resolveSessionContinuationLaunchAction(selection.role, selectedTask)
+      : null;
 
   const runtimeData = useSessionRuntimeData({
     repoPath: workspaceRepoPath,

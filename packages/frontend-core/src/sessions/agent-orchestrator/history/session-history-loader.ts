@@ -7,6 +7,7 @@ import type { UpdateSession } from "../events/session-event-types";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import {
   type LoadSettingsSnapshotForRuntimePolicy,
+  type LoadWorkflowRoleForRuntimePolicy,
   resolveRuntimeSessionContextRef,
 } from "../support/session-runtime-policy";
 import { requireBoundSessionAssociation } from "../support/session-runtime-ref";
@@ -31,6 +32,7 @@ type CreateLoadAgentSessionHistoryArgs = {
   updateSession: UpdateSession;
   loadSystemPromptContext: LoadSessionHistorySystemPromptContext;
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
+  loadWorkflowRole?: LoadWorkflowRoleForRuntimePolicy;
   historyReadGeneration: SessionHistoryReadGeneration;
 };
 
@@ -43,6 +45,7 @@ type LoadSessionHistoryIntoStoreArgs = {
   updateSession: UpdateSession;
   identity: AgentSessionIdentity;
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
+  loadWorkflowRole?: LoadWorkflowRoleForRuntimePolicy;
   loadSystemPromptContext?: LoadSessionHistorySystemPromptContext;
   isStaleRepoOperation: () => boolean;
   historyReadGeneration: SessionHistoryReadGeneration;
@@ -55,6 +58,7 @@ export const loadSessionHistoryIntoStore = async ({
   updateSession,
   identity,
   loadSettingsSnapshot,
+  loadWorkflowRole,
   loadSystemPromptContext,
   isStaleRepoOperation,
   historyReadGeneration,
@@ -117,6 +121,7 @@ export const loadSessionHistoryIntoStore = async ({
             "Settings snapshot loader is required to resolve session runtime policy.",
           );
         }),
+      loadWorkflowRole,
     );
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
@@ -174,6 +179,7 @@ export const createLoadAgentSessionHistory =
     updateSession,
     loadSystemPromptContext,
     loadSettingsSnapshot,
+    loadWorkflowRole,
     historyReadGeneration,
   }: CreateLoadAgentSessionHistoryArgs): ((
     identity: AgentSessionIdentity,
@@ -197,6 +203,7 @@ export const createLoadAgentSessionHistory =
         currentWorkspaceRepoPathRef.current !== repoPath,
     };
     if (loadSettingsSnapshot) input.loadSettingsSnapshot = loadSettingsSnapshot;
+    if (loadWorkflowRole) input.loadWorkflowRole = loadWorkflowRole;
     return loadSessionHistoryIntoStore(input);
   };
 

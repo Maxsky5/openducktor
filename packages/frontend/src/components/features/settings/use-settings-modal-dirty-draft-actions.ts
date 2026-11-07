@@ -159,7 +159,7 @@ export const useSettingsModalDirtyDraftActions = ({
 
   const updateSelectedRepoAgentDefault = useCallback(
     (
-      role: "spec" | "planner" | "build" | "qa",
+      role: string,
       field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
       value: string,
     ): void => {
@@ -171,7 +171,7 @@ export const useSettingsModalDirtyDraftActions = ({
   );
 
   const clearSelectedRepoAgentDefault = useCallback(
-    (role: "spec" | "planner" | "build" | "qa"): void => {
+    (role: string): void => {
       runDirtyAction(() => {
         draftActions.clearSelectedRepoAgentDefault(role);
       });

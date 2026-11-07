@@ -378,7 +378,7 @@ export const softGuardrailsSchema = z.object({
 export type SoftGuardrails = z.infer<typeof softGuardrailsSchema>;
 
 export const repoHooksSchema = z.object({
-  postComplete: z.array(z.string()).default([]),
+  beforeWorktreeRemoval: z.array(z.string()).default([]),
 });
 export type RepoHooks = z.infer<typeof repoHooksSchema>;
 
@@ -527,7 +527,7 @@ export const repoConfigSchema = z.object({
   branchPrefix: z.string().min(1).default(DEFAULT_BRANCH_PREFIX),
   defaultTargetBranch: gitTargetBranchSchema,
   git: repoGitConfigSchema.default({}),
-  hooks: repoHooksSchema.default({ postComplete: [] }),
+  hooks: repoHooksSchema.default({ beforeWorktreeRemoval: [] }),
   actions: repoActionsSchema.default(createEmptyRepoActions),
   worktreeCopyPaths: z.array(z.string()).default([]),
   promptOverrides: repoPromptOverridesSchema.default({}),
@@ -543,7 +543,7 @@ const persistedRepoConfigSchema = repoConfigSchema
     defaultModel: nullableToOptional(persistedAgentModelDefaultSchema),
     defaultTargetBranch: gitTargetBranchSchema.strict(),
     git: persistedRepoGitConfigSchema.default({}),
-    hooks: repoHooksSchema.strict().default({ postComplete: [] }),
+    hooks: repoHooksSchema.strict().default({ beforeWorktreeRemoval: [] }),
     actions: persistedRepoActionsSchema.default(createEmptyRepoActions),
     promptOverrides: persistedPromptOverridesSchema.default({}),
     agentDefaults: persistedRepoAgentDefaultsSchema.default({}),

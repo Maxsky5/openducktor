@@ -72,9 +72,10 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
     return () => observer.disconnect();
   }, [repairFocus]);
   const hasMatchingTasks = model.columns.some((column) => column.tasks.length > 0);
-  const isBoardLoading = model.isLoadingTasks || model.isSwitchingWorkspace;
+  const isBoardLoading = !model.loadError && (model.isLoadingTasks || model.isSwitchingWorkspace);
   const showBlockingLoader = isBoardLoading && !model.hasLoadedTasks;
-  const showNoMatch = model.filter.isActive && !hasMatchingTasks && !showBlockingLoader;
+  const showNoMatch =
+    !model.loadError && model.filter.isActive && !hasMatchingTasks && !showBlockingLoader;
 
   return (
     <section
@@ -92,6 +93,11 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
       className="relative min-h-0 min-w-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-busy={isBoardLoading}
     >
+      {model.loadError ? (
+        <p role="alert" className="p-4 text-sm text-destructive">
+          {model.loadError}
+        </p>
+      ) : null}
       <KanbanBoardNoMatch
         visible={showNoMatch}
         onClear={() => {
@@ -100,14 +106,12 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
           boardRef.current?.focus();
         }}
       />
-      {/* The lanes stay mounted under the no-match message, so they keep their scroll position. */}
+      {/* Keep lanes mounted so search changes retain their scroll position. */}
       <div
-        inert={showNoMatch}
         className={cn(
           "min-h-full w-full max-w-full overflow-x-auto overflow-y-visible transition-opacity duration-150",
           model.showHorizontalScrollbars === false && "hide-scrollbar",
           showBlockingLoader ? "opacity-0" : "opacity-100",
-          showNoMatch && "invisible",
         )}
       >
         <TooltipProvider delayDuration={120}>
@@ -138,12 +142,7 @@ type KanbanBoardNoMatchProps = {
  */
 function KanbanBoardNoMatch({ visible, onClear }: KanbanBoardNoMatchProps): ReactElement {
   return (
-    <div
-      className={cn(
-        visible &&
-          "absolute inset-x-0 top-0 z-10 flex flex-col items-center gap-3 px-4 py-16 text-center",
-      )}
-    >
+    <div className={cn(visible && "flex flex-col items-center gap-3 px-4 py-4 text-center")}>
       <p role="status" className="text-sm text-muted-foreground">
         {visible ? "No tasks match your search or filters" : null}
       </p>
@@ -180,14 +179,6 @@ function renderColumn(column: Column, model: KanbanPageContentModel): ReactEleme
       activeTaskSessionContextByTaskId={model.activeTaskSessionContextByTaskId}
       taskActivityStateByTaskId={model.taskActivityStateByTaskId}
       onOpenDetails={model.onOpenDetails}
-      onDelegate={model.onDelegate}
-      onOpenSession={model.onOpenSession}
-      onPlan={model.onPlan}
-      onQaStart={model.onQaStart}
-      onHumanApprove={model.onHumanApprove}
-      onHumanRequestChanges={model.onHumanRequestChanges}
-      onResetImplementation={model.onResetImplementation}
-      onCloseTask={model.onCloseTask}
     />
   );
 }

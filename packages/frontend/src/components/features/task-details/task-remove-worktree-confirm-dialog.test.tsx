@@ -57,4 +57,14 @@ describe("TaskRemoveWorktreeConfirmDialog", () => {
     expect(screen.queryByText(BRANCH_WARNING)).toBeNull();
     view.unmount();
   });
+
+  test("focuses the dialog, not the copy control, so the Copy tooltip stays closed", () => {
+    const view = renderDialog({ branchNames: ["odt/TASK-1"] });
+
+    const dialog = screen.getByRole("dialog", { name: "Remove worktree" });
+    expect(screen.getByRole("button", { name: "Copy task ID" })).toBeDefined();
+    expect(document.activeElement).toBe(dialog);
+    expect(screen.queryByRole("tooltip", { name: "Copy" })).toBeNull();
+    view.unmount();
+  });
 });

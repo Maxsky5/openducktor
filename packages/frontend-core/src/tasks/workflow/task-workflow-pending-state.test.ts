@@ -24,6 +24,7 @@ const approvalModal = (
   mode: "direct_merge",
   mergeMethod: "merge_commit",
   pullRequestDraftMode: "manual",
+  pullRequestRoleLabel: "Builder",
   pullRequestSupported: false,
   pullRequestAvailable: false,
   pullRequestUnavailableReason: null,

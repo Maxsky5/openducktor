@@ -5,10 +5,10 @@ import {
   workflowAgentSessionScope,
 } from "@openducktor/core";
 import {
-  builtinRoleId,
   resolveCodexRolePolicy,
   buildReadOnlyPermissionRejectionMessage,
 } from "@openducktor/workflows";
+import { BUILTIN_ROLE_IDS } from "@openducktor/workflows/test-support";
 import { agentSessionIdentityKey } from "../../../lib/agent-session-identity";
 import {
   type AgentSessionCollection,
@@ -65,6 +65,12 @@ import {
 } from "./session-lifecycle";
 import { handleAssistantDelta, handleAssistantPart } from "./session-parts";
 import { projectSessionTranscriptActivity } from "../session-read-model/agent-session-live-activity";
+
+const builtinRoleId = (role: string): (typeof BUILTIN_ROLE_IDS)[number] => {
+  const id = BUILTIN_ROLE_IDS.find((candidate) => candidate === role);
+  if (!id) throw new Error(`Session event tests use built-in roles, not "${role}".`);
+  return id;
+};
 
 const SESSION_EVENT_BATCH_WINDOW_MS = 0;
 
@@ -439,7 +445,7 @@ export const listenToAgentSessionEvents = (
         ((role) =>
           Promise.resolve(
             buildReadOnlyPermissionRejectionMessage({
-              role,
+              role: builtinRoleId(role),
               overrides: {},
             }),
           )),

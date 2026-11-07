@@ -32,9 +32,7 @@ export type SqliteTaskRepositoryContext = {
   workspaceId: string;
   taskWorkflows: TaskWorkflowResolver;
 };
-export const hostTerminalStates = (taskWorkflows: TaskWorkflowResolver): string[] => [
-  ...new Set(taskWorkflows.workflows.flatMap(({ terminalStates }) => terminalStates)),
-];
+
 export type SqliteTaskRepositoryContextProvider = <A>(
   scope: WorkspaceDatabaseScope,
   operation: string,
@@ -59,7 +57,6 @@ export const readWorkspaceSet = <A>(
   use: (context: {
     session: HostDatabaseSession;
     workspaceIds: string[];
-    terminalStates: string[];
   }) => Effect.Effect<A[], unknown>,
 ): Effect.Effect<A[], TaskStoreError> =>
   workspaces.length === 0
@@ -67,12 +64,8 @@ export const readWorkspaceSet = <A>(
     : readWorkspaces(
         workspaces.map((scope) => ({ ...scope, access })),
         operation,
-        ({ session, taskWorkflows }) =>
-          use({
-            session,
-            workspaceIds: workspaces.map(({ workspaceId }) => workspaceId),
-            terminalStates: hostTerminalStates(taskWorkflows),
-          }),
+        ({ session }) =>
+          use({ session, workspaceIds: workspaces.map(({ workspaceId }) => workspaceId) }),
       );
 export type SqliteHostDatabaseProvider = <A, E>(
   operation: string,

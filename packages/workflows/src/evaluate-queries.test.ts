@@ -7,7 +7,7 @@ describe("generic workflow launch, label, and order queries", () => {
     const workflow = createWorkflow(publicationDefinition());
     const draft = (verdict?: string) =>
       publicationInput(
-        "draft",
+        "open",
         {},
         {
           "first-review": verdict === undefined ? { present: false } : { present: true, verdict },
@@ -19,11 +19,19 @@ describe("generic workflow launch, label, and order queries", () => {
     expect(workflow.actionLaunchAction(draft("changes"), "start-writing")).toBe("revise-draft");
     expect(workflow.actionLaunchAction(draft(), "start-writing")).toBe("write-draft");
     expect(workflow.stepLaunchAction(draft(), "review-second")).toBe("review-second");
+    expect(workflow.selectLaunchAction(draft("changes"), ["write-draft", "revise-draft"])).toBe(
+      "revise-draft",
+    );
+    expect(workflow.selectLaunchAction(draft(), ["revise-draft", "write-draft"])).toBe(
+      "revise-draft",
+    );
+    expect(workflow.selectLaunchAction(draft("changes"), ["write-draft"])).toBe("write-draft");
+    expect(workflow.selectLaunchAction(draft(), [])).toBeNull();
   });
 
   test("reports steps and actions that start no session", () => {
     const workflow = createWorkflow(publicationDefinition());
-    const input = publicationInput("draft");
+    const input = publicationInput("open");
     expect(() => workflow.stepLaunchAction(input, "approve")).toThrow(
       expect.objectContaining({ code: "unknown_step" }),
     );
@@ -33,29 +41,32 @@ describe("generic workflow launch, label, and order queries", () => {
     expect(() => workflow.actionLaunchAction(input, "missing")).toThrow(
       expect.objectContaining({ code: "unknown_action" }),
     );
+    expect(() => workflow.selectLaunchAction(input, ["missing"])).toThrow(
+      expect.objectContaining({ code: "missing_launch_action" }),
+    );
   });
 
   test("uses the first matching label variant, else the action label", () => {
     const workflow = createWorkflow(publicationDefinition());
     expect(
       workflow.actionLabel(
-        publicationInput("draft", {}, { "first-review": { present: true, verdict: "changes" } }),
+        publicationInput("open", {}, { "first-review": { present: true, verdict: "changes" } }),
         "start-writing",
       ),
     ).toBe("Revise copy");
     expect(
       workflow.actionLabel(
-        publicationInput("draft", {}, { "first-review": { present: false } }),
+        publicationInput("open", {}, { "first-review": { present: false } }),
         "start-writing",
       ),
     ).toBe("Start writing");
-    expect(workflow.actionLabel(publicationInput("draft"), "view-copy")).toBe("View copy");
+    expect(workflow.actionLabel(publicationInput("open"), "view-copy")).toBe("View copy");
   });
 
   test("orders actions by the first priority rule, then the first order rule, then input order", () => {
     const workflow = createWorkflow(publicationDefinition());
     const actions = ["view-copy", "finish-second", "submit", "publish", "start-writing"];
-    expect(workflow.orderActions(publicationInput("draft", { hold: false }), actions)).toEqual([
+    expect(workflow.orderActions(publicationInput("open", { hold: false }), actions)).toEqual([
       "start-writing",
       "submit",
       "publish",
@@ -66,7 +77,7 @@ describe("generic workflow launch, label, and order queries", () => {
       workflow.orderActions(publicationInput("first-review", { hold: true }), actions),
     ).toEqual(["view-copy", "submit", "finish-second", "publish", "start-writing"]);
     expect(
-      workflow.orderActions(publicationInput("draft", { hold: false }), actions, ["view-copy"]),
+      workflow.orderActions(publicationInput("open", { hold: false }), actions, ["view-copy"]),
     ).toEqual(["view-copy", "publish", "submit", "finish-second", "start-writing"]);
   });
 });

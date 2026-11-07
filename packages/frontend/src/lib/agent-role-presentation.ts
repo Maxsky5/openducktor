@@ -1,9 +1,18 @@
+import type { WorkflowIcon } from "@openducktor/contracts";
+import { workflowRoleIcon } from "@openducktor/workflows";
 import {
-  BUILTIN_ROLE_IDS,
-  BUILTIN_ROLE_LABELS,
-  type BuiltinRoleId as AgentRole,
-} from "@openducktor/workflows";
-import { createLucideIcon, type LucideIcon } from "lucide-react";
+  ArrowUpRightFromSquare,
+  Bot,
+  Bug,
+  CircleCheckBig,
+  createLucideIcon,
+  FolderX,
+  ListTodo,
+  type LucideIcon,
+  RotateCcw,
+  Sparkles,
+  Undo2,
+} from "lucide-react";
 
 // Custom drawings on the lucide 24px grid, so role icons keep the same stroke and sizing as other app icons.
 export const SpecRoleIcon = createLucideIcon("role-spec", [
@@ -40,15 +49,31 @@ export const QaRoleIcon = createLucideIcon("role-qa", [
   ["path", { d: "m7.5 10.5 2 2 4-4", key: "check" }],
 ]);
 
-export const AGENT_ROLE_ICONS = {
-  spec: SpecRoleIcon,
-  planner: PlannerRoleIcon,
-  build: BuilderRoleIcon,
-  qa: QaRoleIcon,
-} satisfies Record<AgentRole, LucideIcon>;
+/** The desktop drawing of each workflow icon. */
+export const WORKFLOW_ICONS = {
+  specification: SpecRoleIcon,
+  planning: PlannerRoleIcon,
+  building: BuilderRoleIcon,
+  quality: QaRoleIcon,
+  agent: Bot,
+  open: ArrowUpRightFromSquare,
+  reset: RotateCcw,
+  complete: CircleCheckBig,
+  undo: Undo2,
+  remove_worktree: FolderX,
+  feature: Sparkles,
+  bug: Bug,
+  task: ListTodo,
+} satisfies Record<WorkflowIcon, LucideIcon>;
 
-export const ROLE_OPTIONS = BUILTIN_ROLE_IDS.map((role) => ({
-  role,
-  label: BUILTIN_ROLE_LABELS[role],
-  icon: AGENT_ROLE_ICONS[role],
-}));
+/** A role without a declared icon uses the generic agent drawing. */
+export const roleIconForHint = (hint: WorkflowIcon | undefined): LucideIcon =>
+  WORKFLOW_ICONS[hint ?? "agent"];
+export const roleOptionsForTask = (
+  task: import("@openducktor/workflows").ResolvedTaskCard | null,
+) =>
+  task?.taskWorkflow.roles.map((role) => ({
+    role: role.id,
+    label: role.label,
+    icon: roleIconForHint(workflowRoleIcon(task.taskWorkflow, role.id)),
+  })) ?? [];

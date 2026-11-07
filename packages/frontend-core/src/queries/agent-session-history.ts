@@ -10,6 +10,7 @@ import { normalizeWorkingDirectory } from "../lib/working-directory";
 import { resolveAgentSessionRuntimePolicy } from "../sessions/agent-orchestrator/support/session-runtime-policy";
 import { toRuntimeSessionRefWithPolicy } from "../sessions/agent-orchestrator/support/session-runtime-ref";
 import type { AgentSessionIdentity } from "../types/agent-orchestrator";
+import { loadTaskWorkflowRole } from "./task-workflow-context";
 import {
   getSessionHistoryFreshnessTracker,
   type SessionHistoryVersion,
@@ -64,11 +65,21 @@ export const runtimeSessionHistoryRefQueryOptions = (
       input.externalSessionId,
       input.sessionScope,
     ],
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
       const runtimePolicy = await resolveAgentSessionRuntimePolicy({
         runtimeKind: input.runtimeKind,
         sessionScope: input.sessionScope,
         loadSettingsSnapshot,
+        loadWorkflowRole: async (taskId, roleId) => {
+          if (input.sessionScope?.kind !== "workflow")
+            throw new Error("A workflow session scope is required to load its role.");
+          return loadTaskWorkflowRole(
+            client,
+            { workspaceId: input.sessionScope.workspaceId, repoPath: input.repoPath },
+            taskId,
+            roleId,
+          );
+        },
       });
       const sessionRef: PolicyBoundSessionRef = {
         ...toRuntimeSessionRefWithPolicy(input.repoPath, input, runtimePolicy),

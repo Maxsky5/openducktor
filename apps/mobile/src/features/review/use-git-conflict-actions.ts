@@ -1,3 +1,4 @@
+import { taskGitConflictLaunch } from "@openducktor/workflows";
 import { useRuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import {
   useClientConnection,
@@ -71,6 +72,7 @@ const useTaskBuilderSessions = (
   workspaceId: string,
   repoPath: string,
   taskId: string | null,
+  role: string | null,
 ): AgentSessionSummary[] | null => {
   const sessions = useAgentSessionsContext();
   const getSnapshot = useCallback(
@@ -86,9 +88,9 @@ const useTaskBuilderSessions = (
             (session) =>
               session.workspaceId === workspaceId &&
               session.taskId === taskId &&
-              session.role === "build",
+              session.role === role,
           ),
-    [snapshot, taskId, workspaceId],
+    [snapshot, taskId, workspaceId, role],
   );
 };
 
@@ -119,11 +121,18 @@ export function useGitConflictActions({
   const running = useRef(false);
   const { workspaceId } = owner.workspace;
   const { repoPath, task, record } = owner;
-  const builderSessions = useTaskBuilderSessions(workspaceId, repoPath, task?.id ?? null);
+  const conflictLaunch = task ? taskGitConflictLaunch(task) : null;
+  const builderSessions = useTaskBuilderSessions(
+    workspaceId,
+    repoPath,
+    task?.id ?? null,
+    conflictLaunch?.role ?? null,
+  );
   const runWorkflow = useSessionStartWorkflowRunner({ workspaceId, repoPath });
 
   const startConflictResolutionSession = useCallback(
     async (request: StartGitConflictResolutionSessionInput) => {
+      if (!task) throw new Error("Load the task workflow before asking for conflict assistance.");
       let decision: ResolvedSessionStartDecision;
       if (request.initialStartMode === "reuse" && request.initialSourceSession) {
         decision = { startMode: "reuse", sourceSession: request.initialSourceSession };
@@ -132,7 +141,8 @@ export function useGitConflictActions({
         decision = {
           startMode: "fresh",
           selectedModel: await resolveRequiredDefaultSessionSelection({
-            role: "build",
+            role: request.role,
+            roleLabel: task.taskWorkflow.role(request.role).label,
             repoSettings: toRepoSettingsInput(config),
             repoPath,
             loadRepoRuntimeCatalog,

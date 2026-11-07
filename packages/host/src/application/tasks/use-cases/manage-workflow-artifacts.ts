@@ -5,6 +5,7 @@ import {
   HostValidationError,
   type HostValidationErrorAggregate,
 } from "../../../effect/host-errors";
+import { blockUnpublishedDirectMerge } from "../support/direct-merge-block";
 import { decideTaskEventInput, decisionTransition } from "../support/task-workflow-events";
 import type { AtomicWorkflowArtifactWrite, TaskRecord } from "../../../ports/task-repository-ports";
 import type { WorkflowArtifactInput, WorkflowArtifactSaveInput } from "../task-inputs";
@@ -88,6 +89,10 @@ export const createWorkflowArtifactUseCases = ({
       const artifact = yield* requireWorkflowArtifact(workflow, code);
       yield* requireRoleWrites(workflow, code, updatedBy);
       const verdict = yield* Effect.fromResult(requireVerdict(artifact, input.verdict, submit));
+      // A submit can send a workflow event, which an unpublished direct merge blocks.
+      const { directMerge } = submit
+        ? yield* taskStore.getTaskDelivery(input)
+        : { directMerge: undefined };
       const save: AtomicWorkflowArtifactWrite<HostValidationErrorAggregate> = {
         workspaceId: input.workspaceId,
         repoPath,
@@ -119,13 +124,15 @@ export const createWorkflowArtifactUseCases = ({
           return eventId === undefined
             ? Result.succeed({ status: current.status, workflowId: workflow.definition.id })
             : Result.map(
-                decideTaskEventInput(
-                  `Saving the ${artifact.label} is`,
-                  workflow,
-                  eventId,
-                  current,
-                  { repoPath, taskId, code, issueType: current.issueType, status: current.status },
-                ),
+                blockUnpublishedDirectMerge(directMerge, repoPath, (task) =>
+                  decideTaskEventInput(`Saving the ${artifact.label} is`, workflow, eventId, task, {
+                    repoPath,
+                    taskId,
+                    code,
+                    issueType: task.issueType,
+                    status: task.status,
+                  }),
+                )(current),
                 (decision) => ({
                   ...decisionTransition(decision),
                   workflowId: workflow.definition.id,

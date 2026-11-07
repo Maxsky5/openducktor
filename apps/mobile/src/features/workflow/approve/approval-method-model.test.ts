@@ -48,6 +48,7 @@ const model = (patch: Partial<TaskApprovalApprovalModalModel>): TaskApprovalAppr
   mode: "direct_merge",
   mergeMethod: "merge_commit",
   pullRequestDraftMode: "generate_ai",
+  pullRequestRoleLabel: "Builder",
   pullRequestSupported: true,
   pullRequestAvailable: true,
   pullRequestUnavailableReason: null,

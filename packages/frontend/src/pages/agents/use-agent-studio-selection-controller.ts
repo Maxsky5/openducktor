@@ -1,10 +1,13 @@
-import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { taskWorkflowContextQueryOptions } from "@openducktor/frontend-core/queries/task-workflow-context";
+import { useMemo, useState } from "react";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import { useSelectedSessionContextLoad } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/use-selected-session-context-load";
 import { useSelectedSessionHistoryLoad } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/use-selected-session-history-load";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { resolveAgentStudioNavigationState } from "./agent-studio-navigation-state";
+import { AGENT_STUDIO_QUERY_KEYS } from "./query-sync/agent-studio-navigation";
 import { type AgentStudioRouteSessionResolution } from "./agents-page-selection";
 import {
   type AgentStudioSelectedSessionView,
@@ -12,8 +15,8 @@ import {
 } from "./selected-session/use-agent-studio-selected-session-view";
 import type { AgentStudioSelectionState } from "./shell/agent-studio-selection-state";
 import type {
-  BuiltinRoleId as AgentRole,
-  BuiltinTaskCard as TaskCard,
+  WorkflowRoleId as AgentRole,
+  ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 
 type UseAgentStudioSelectionControllerArgs = {
@@ -26,7 +29,7 @@ type UseAgentStudioSelectionControllerArgs = {
   taskIdParam: string;
   sessionExternalIdParam: string | null;
   hasExplicitRoleParam: boolean;
-  roleFromQuery: AgentRole;
+  roleFromQuery: AgentRole | null;
   selectionState: AgentStudioSelectionState;
   repoSettings: RepoSettingsInput | null;
   isLoadingRepoSettings: boolean;
@@ -66,34 +69,66 @@ export function useAgentStudioSelectionController({
   isLoadingRepoSettings,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
+  const selectedTaskIsListed = tasks.some(({ id }) => id === selectionState.taskId);
+  const retainedTask = useQuery({
+    ...taskWorkflowContextQueryOptions(
+      activeWorkspaceId && workspaceRepoPath
+        ? { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath }
+        : null,
+      selectionState.taskId,
+    ),
+    enabled:
+      !!workspaceRepoPath && !!selectionState.taskId && !isLoadingTasks && !selectedTaskIsListed,
+  });
+  const navigationTasks = useMemo(
+    () => (selectedTaskIsListed || !retainedTask.data ? tasks : [...tasks, retainedTask.data]),
+    [selectedTaskIsListed, retainedTask.data, tasks],
+  );
 
-  const navigationState = useMemo(
-    () =>
+  // A route session that the view found and then lost was deleted, for example by a reset. It
+  // is not a wrong link, so the view drops it from the route instead of reporting it missing.
+  const [lastFoundRouteSession, setLastFoundRouteSession] = useState<string | null>(null);
+  const navigationState = useMemo(() => {
+    const resolve = (routeSessionExternalId: string | null) =>
       resolveAgentStudioNavigationState({
         isWorkspaceRestorePending,
         isLoadingTasks,
         sessionReadModelLoadState,
-        tasks,
+        tasks: navigationTasks,
         sessions,
         taskIdParam,
-        sessionExternalIdParam,
+        sessionExternalIdParam: routeSessionExternalId,
         hasExplicitRoleParam,
         roleFromQuery,
         selectionState,
-      }),
-    [
-      hasExplicitRoleParam,
-      isLoadingTasks,
-      isWorkspaceRestorePending,
-      roleFromQuery,
-      selectionState,
-      sessionExternalIdParam,
-      sessionReadModelLoadState,
-      sessions,
-      taskIdParam,
-      tasks,
-    ],
-  );
+      });
+    const state = resolve(sessionExternalIdParam);
+    const resolution = state.routeSessionResolution;
+    if (resolution.kind !== "missing" || resolution.sessionExternalId !== lastFoundRouteSession)
+      return state;
+    return {
+      ...resolve(null),
+      queryUpdate: { [AGENT_STUDIO_QUERY_KEYS.session]: undefined, keepSessionless: true },
+    };
+  }, [
+    hasExplicitRoleParam,
+    isLoadingTasks,
+    isWorkspaceRestorePending,
+    lastFoundRouteSession,
+    roleFromQuery,
+    selectionState,
+    sessionExternalIdParam,
+    sessionReadModelLoadState,
+    sessions,
+    taskIdParam,
+    navigationTasks,
+  ]);
+  const foundRouteSession =
+    navigationState.routeSessionResolution.kind === "found"
+      ? navigationState.routeSessionResolution.session.externalSessionId
+      : null;
+  if (foundRouteSession !== null && foundRouteSession !== lastFoundRouteSession)
+    setLastFoundRouteSession(foundRouteSession);
 
   const selectedSessionView = useAgentStudioSelectedSessionView({
     workspaceId: activeWorkspaceId,
@@ -119,7 +154,9 @@ export function useAgentStudioSelectionController({
     runtimeReadinessState: selectedSessionView.selectedSession.runtimeReadiness.state,
   });
   const selectedSessionViewWithContextError = useMemo<AgentStudioSelectedSessionView>(() => {
-    if (contextLoadError === null) {
+    const metadataError = !selectedTaskIsListed ? (retainedTask.error?.message ?? null) : null;
+    const error = metadataError ?? contextLoadError;
+    if (error === null) {
       return selectedSessionView;
     }
     return {
@@ -128,12 +165,12 @@ export function useAgentStudioSelectionController({
         ...selectedSessionView.selectedSession,
         runtimeData: {
           ...selectedSessionView.selectedSession.runtimeData,
-          contextError: contextLoadError,
+          contextError: error,
         },
       },
     };
-  }, [contextLoadError, selectedSessionView]);
-  const isActiveTaskReady = Boolean(activeWorkspaceId && navigationState.view.taskId);
+  }, [contextLoadError, selectedSessionView, selectedTaskIsListed, retainedTask.error]);
+  const isActiveTaskReady = Boolean(activeWorkspaceId && navigationState.view.selectedTask);
 
   return useMemo<AgentStudioSelectionControllerResult>(
     () => ({

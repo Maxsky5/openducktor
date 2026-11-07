@@ -66,6 +66,7 @@ describe("tool input details", () => {
   test("defers workflow input and preserves it on reopen", () => {
     const view = render(<WorkflowToolMessage {...props} />);
     try {
+      fireEvent.click(view.getByRole("button", { name: `${props.displayName} details` }));
       const inputDetails = view.getByText("Input").closest("details");
       if (!inputDetails) throw new Error("Expected input details.");
       expect(view.container.querySelector("pre")).toBeNull();

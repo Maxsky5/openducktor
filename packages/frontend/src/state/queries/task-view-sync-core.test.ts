@@ -1,9 +1,10 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { workflowArtifactId } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import { CancelledError, QueryClient, QueryObserver } from "@tanstack/react-query";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import { createTaskCardFixture, toWireTaskCard } from "@/test-utils/shared-test-fixtures";
 import {
   documentQueryKeys,
   taskDocumentQueryOptions,
@@ -18,7 +19,7 @@ import {
 } from "@openducktor/frontend-core/queries/task-view-sync.test-support";
 import { type RepoTaskData, taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
@@ -27,7 +28,7 @@ const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPo
 });
 
 const createSync = (ports: TaskViewSyncPorts) => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queryClient = createTestClientConnection().queryClient;
   return { queryClient, sync: createTaskViewSync({ queryClient, ports }) };
 };
 
@@ -162,7 +163,7 @@ describe("TaskViewSync", () => {
         const data = queryClient.getQueryData<RepoTaskData>(
           taskQueryKeys.repoData(workspaceRefFixture(repoPath)),
         )!;
-        expect(data.tasks).toContainEqual(card);
+        expect(data.tasks.map(toWireTaskCard)).toContainEqual(toWireTaskCard(card));
         expect(data.tasks).toContainEqual(other);
         expect(listTasks).not.toHaveBeenCalled();
         expect(readObservedTasks).not.toHaveBeenCalled();
@@ -259,7 +260,7 @@ describe("TaskViewSync", () => {
 
   test("applies changed cards, deletion, and the closed-task window without deleting hidden task IDs", async () => {
     const { queryClient, sync } = createSync(createPorts());
-    const updated = createTaskCardFixture({ id: "updated", availableActions: ["close_task"] });
+    const updated = createTaskCardFixture({ id: "updated", availableActions: ["build_start"] });
     const expired = createTaskCardFixture({
       id: "expired",
       status: "closed",
@@ -293,9 +294,10 @@ describe("TaskViewSync", () => {
       eventCursor(),
     );
     expect(
-      queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(workspaceRefFixture("/repo")))
-        ?.tasks,
-    ).toEqual([updated, closed]);
+      queryClient
+        .getQueryData<RepoTaskData>(taskQueryKeys.repoData(workspaceRefFixture("/repo")))
+        ?.tasks.map(toWireTaskCard),
+    ).toEqual([updated, closed].map(toWireTaskCard));
     expect(
       queryClient.getQueryData<string[]>(taskQueryKeys.ids(workspaceRefFixture("/repo"))),
     ).toEqual(["expired", "updated", "closed"]);
@@ -465,9 +467,9 @@ describe("TaskViewSync", () => {
           expect(queryClient.getQueryData<typeof payload>(options.queryKey)).toEqual(payload);
           boardResult.resolve([card, other]);
           await boardRead;
-          expect(queryClient.getQueryData<RepoTaskData>(boardKey)?.tasks).toEqual(
-            expect.arrayContaining([changed, other]),
-          );
+          expect(
+            queryClient.getQueryData<RepoTaskData>(boardKey)?.tasks.map(toWireTaskCard),
+          ).toEqual(expect.arrayContaining([changed, other].map(toWireTaskCard)));
           expect(listTasks).toHaveBeenCalledTimes(baseline === "pending" ? 1 : 0);
         } finally {
           boardResult.resolve([card, other]);
@@ -980,9 +982,10 @@ describe("TaskViewSync", () => {
     );
 
     expect(
-      queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(workspaceRefFixture("/repo")))
-        ?.tasks,
-    ).toEqual([changed]);
+      queryClient
+        .getQueryData<RepoTaskData>(taskQueryKeys.repoData(workspaceRefFixture("/repo")))
+        ?.tasks.map(toWireTaskCard),
+    ).toEqual([toWireTaskCard(changed)]);
   });
 
   test("reads the lists of every open workspace again after a retention change", async () => {

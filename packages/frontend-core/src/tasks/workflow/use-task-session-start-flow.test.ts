@@ -1,4 +1,4 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
@@ -123,8 +123,8 @@ describe("useTaskSessionStartFlow", () => {
     const { harness } = createHarness(createArgs({ openTaskView, sessions }));
     await harness.mount();
     try {
-      await harness.run((flow) => flow.onBuild("TASK-1"));
-      await harness.run((flow) => flow.onQaOpen("TASK-1"));
+      await harness.run((flow) => flow.onOpenSession("TASK-1", "build"));
+      await harness.run((flow) => flow.onOpenSession("TASK-1", "qa"));
       expect(openTaskView.mock.calls).toEqual([
         [
           {
@@ -147,12 +147,25 @@ describe("useTaskSessionStartFlow", () => {
   });
 
   test("shows the start choices of a QA review before any launch", async () => {
-    const args = createArgs();
-    const { harness } = createHarness(args);
+    const args = createArgs({
+      tasks: [
+        createTaskCardFixture({
+          id: "TASK-1",
+          status: "ai_review",
+          agentWorkflows: {
+            qa: { required: true, canSkip: false, available: true, completed: false },
+          },
+        }),
+      ],
+    });
+    const { harness, feedback } = createHarness(args);
     await harness.mount();
     try {
-      await harness.run((flow) => flow.onQaStart("TASK-1"));
-      await harness.waitFor((flow) => flow.sessionStartModal !== null);
+      await harness.run((flow) => flow.onLaunch("TASK-1", "qa_review"));
+      await harness.waitFor((flow) => {
+        if (feedback.shownOf("error").length) throw new Error(JSON.stringify(feedback.shown));
+        return flow.sessionStartModal !== null;
+      });
       expect(harness.getLatest().sessionStartModal).toMatchObject({
         open: true,
         title: "Start QA session",
@@ -165,7 +178,7 @@ describe("useTaskSessionStartFlow", () => {
   });
 
   test.each(["submit", "continue"] as const)(
-    "a background %s keeps Request Changes feedback pending and never opens the session",
+    "a background %s keeps human feedback pending and never opens the session",
     async (transfer) => {
       const pending = Promise.withResolvers<void>();
       const session = builderSession("builder-1", "2026-02-22T10:00:00.000Z");
@@ -229,7 +242,7 @@ describe("useTaskSessionStartFlow", () => {
       let feedbackSettled = false;
       await harness.mount();
       try {
-        await harness.run((flow) => flow.onHumanRequestChanges("TASK-1"));
+        await harness.run((flow) => flow.onLaunch("TASK-1", "build_after_human_request_changes"));
         await harness.run((flow) => {
           flow.humanReviewFeedbackModal?.onMessageChange("Rename the export button.");
         });

@@ -2,7 +2,7 @@ import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
 } from "@openducktor/adapters-codex-app-server";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import {
   agentSessionTranscriptEventSchema,
   codexAppServerRuntimeStreamEventSchema,
@@ -83,7 +83,7 @@ export const createCodexImageSessionHarness = async (runtimeIds = ["runtime-live
   const options = {
     runtime: imageRuntime(runtimeIds[0]!),
     resolveWorkflowRolePolicy: ({ role }) => {
-      const workflowRole = builtinTaskWorkflow.role(role);
+      const workflowRole = specPlanBuildWorkflow.role(role);
       return { tools: workflowRole.tools, readOnly: workflowRole.workspaceAccess === "read" };
     },
     directoriesMatch: async (left, right) => left === right,

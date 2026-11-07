@@ -1,13 +1,12 @@
 import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
-import { runTaskWorkflowAction } from "@openducktor/frontend-core/tasks/workflow/run-task-workflow-action";
 import type { PaletteTaskCommand, PaletteTaskView } from "./command-palette-task-model";
 import type { PaletteTask } from "./command-palette-types";
 import type { WorkspaceIntent } from "./use-workspace-intent-runner";
 
 /**
  * The intent that runs a task command in the workspace of its task, through the handler of that
- * command. The details and the confirmations of Reset Task and Delete task open over the current
- * page.
+ * command. The details and the confirmations of Close Task, Reset Task, and Delete task open over
+ * the current page.
  */
 export const taskCommandIntent = (
   { workspace, task }: PaletteTask,
@@ -32,44 +31,20 @@ export const taskCommandIntent = (
             }),
           );
           return;
-        case "workflow": {
-          // Only actions with their own confirmation or modal. Reset Task and Close Task stay out.
-          const {
-            onPlan,
-            onQaStart,
-            onQaOpen,
-            onBuild,
-            onOpenSession,
-            onDelegate,
-            onHumanApprove,
-            onHumanRequestChanges,
-            onResetImplementation,
-          } = workflow;
-          runTaskWorkflowAction(
-            command.action,
-            taskId,
-            {
-              onPlan,
-              onQaStart,
-              onQaOpen,
-              onBuild,
-              onOpenSession,
-              onDelegate,
-              onHumanApprove,
-              onHumanRequestChanges,
-              onResetImplementation,
-            },
-            { resolveSessionOptions: (role) => taskView.sessionOptionsByRole[role] },
-          );
+        case "workflow":
+          workflow.runAction(task, command.action, {
+            sessionOptionsOf: (role) => taskView.sessionOptionsByRole[role],
+          });
           return;
-        }
+        case "core":
+          workflow.onConfirmTaskAction(taskId, command.action.confirmation);
+          return;
         case "edit":
           workflow.onEdit(taskId);
           return;
         case "details":
           workflow.onOpenTaskDetails(taskId);
           return;
-        case "reset_task":
         case "delete":
           workflow.onConfirmTaskAction(taskId, command.kind);
           return;

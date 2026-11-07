@@ -4,7 +4,7 @@ import type { TaskApprovalModalModel } from "@openducktor/frontend-core/tasks/ap
 import { useTaskApprovalReads } from "@openducktor/frontend-core/tasks/approval/use-task-approval-reads";
 import { TaskApprovalApprovalStage } from "./task-approval-approval-stage";
 import { TaskApprovalCompletionStage } from "./task-approval-completion-stage";
-import { TaskApprovalMissingBuilderWorktreeStage } from "./task-approval-missing-builder-stage";
+import { TaskApprovalMissingWorktreeStage } from "./task-approval-missing-worktree-stage";
 
 /** The approval modal content, with one loader until the reads of the approval end. */
 export function TaskApprovalModalPanel({ model }: { model: TaskApprovalModalModel }): ReactElement {
@@ -24,8 +24,8 @@ export function TaskApprovalModalPanel({ model }: { model: TaskApprovalModalMode
           mergeCheck={mergeCheck}
         />
       ) : null}
-      {model.stage === "missing_builder_worktree" ? (
-        <TaskApprovalMissingBuilderWorktreeStage
+      {model.stage === "missing_worktree" ? (
+        <TaskApprovalMissingWorktreeStage
           model={model}
           impact={impact.close}
           isPreparing={isPreparing}

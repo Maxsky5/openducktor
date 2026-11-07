@@ -33,7 +33,7 @@ export const appendImplementationResetCleanupProgress = <E>(
   progress: TaskCleanupProgressState,
 ) =>
   appendTaskCleanupProgress(error, {
-    operation: "task_reset_implementation",
+    operation: "worktree_reset",
     removedWorktrees: progress.removedWorktrees,
     deletedBranches: progress.deletedBranches,
     completedSteps: progress.completedSteps,
@@ -80,9 +80,9 @@ export const requireImplementationResetActivityGuard = (activity: Implementation
   return Effect.fail(
     new HostDependencyError({
       dependency: "taskActivityGuard",
-      operation: "task_reset_implementation",
+      operation: "worktree_reset",
       message:
-        "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
+        "worktree.reset requires runtime session activity checks for task sessions that may use the canonical worktree.",
       details: { repoPath: activity.repoPath, taskId: activity.taskId },
     }),
   );

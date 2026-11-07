@@ -80,6 +80,7 @@ function AgentStudioQuickActionsMenu({
   return (
     <QuickActionsMenu
       canOpenActionsMenu={canOpenActionsMenu}
+      workflowSteps={model.workflowSteps}
       isOpen={effectiveQuickActionsMenuOpen}
       onOpenChange={handleQuickActionsMenuOpenChange}
       agentStudioReady={model.agentStudioReady}

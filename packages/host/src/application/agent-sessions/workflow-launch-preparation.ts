@@ -10,9 +10,10 @@ import type {
   PreparedWorkflowDecision,
   WorkflowLaunchPreparationDependencies,
 } from "./workflow-launch-types";
-import { findCatalogModel, resolveSavedModelAlias } from "@openducktor/core";
 import {
+  isPullRequestLaunch,
   requirePullRequestTarget,
+  type TaskFacts,
   type TaskWorkflow,
   type TaskWorkflowLaunchAction,
 } from "@openducktor/workflows";
@@ -23,6 +24,12 @@ import type { TaskRecord } from "../../ports/task-repository-ports";
 import { validateTaskSessionWorkflowAvailable } from "../tasks/support/task-session-workflow-validation";
 import { resolveRuntimeDescriptorForTaskSession } from "../tasks/support/task-worktree-cleanup";
 import { findWorkflowSession } from "./task-workflow-session-storage";
+import {
+  decideAutomaticLaunch,
+  launchValidationError,
+  resolveAutomaticLaunch,
+  withSpeed,
+} from "./workflow-automatic-launch";
 
 export const prepareWorkflowLaunch = (
   deps: WorkflowLaunchPreparationDependencies,
@@ -38,10 +45,33 @@ export const prepareWorkflowLaunch = (
       taskId: request.taskId,
     });
     const workflow = deps.taskWorkflows.forTask(task);
-    const action = yield* requireLaunchAction(workflow, request);
+    const launch =
+      request.policy.kind === "manual"
+        ? {
+            kind: "resolved" as const,
+            action: yield* requireLaunchAction(workflow, { policy: request.policy }),
+            latest: undefined,
+          }
+        : yield* resolveAutomaticLaunch(deps, workflow, request, request.policy.actionId, repoPath);
+    if (launch.kind === "skipped") return launch;
+    const { action } = launch;
     const actionId = action.id;
     const roleLabel = workflow.role(action.role).label;
-    yield* validateTaskSessionWorkflowAvailable(workflow, task, action.role, repoPath);
+    if (request.beforeStartAction && action.context !== "human_feedback")
+      return yield* launchValidationError(
+        `Action '${actionId}' collects no human feedback, so it cannot commit event '${request.beforeStartAction.eventId}' before its start. Start the launch without that event.`,
+      );
+    // A launch that follows an event runs in the state that the event gives. The event must be
+    // allowed now; the host commits it below, after runtime admission.
+    const beforeStartEventId = request.beforeStartAction?.eventId;
+    const launchTask =
+      beforeStartEventId === undefined
+        ? task
+        : yield* Effect.try({
+            try: () => workflow.taskAfterEvent(beforeStartEventId, task),
+            catch: (cause) => launchValidationError(errorMessage(cause)),
+          });
+    yield* validateLaunchAvailable(workflow, launchTask, action, repoPath);
     const settings = yield* deps.settingsConfig.readGlobalConfig();
     const overrides = workflow.prompts.mergeOverrides({
       globalOverrides: settings.globalPromptOverrides,
@@ -67,12 +97,8 @@ export const prepareWorkflowLaunch = (
           `Action '${actionId}' does not define a kickoff prompt.`,
         );
     }
-    if (request.beforeStartAction && action.context !== "human_feedback")
-      return yield* launchValidationError(
-        "Human request changes requires the Apply Human Changes action.",
-      );
     const targetBranch = request.targetBranch ?? task.targetBranch ?? config.defaultTargetBranch;
-    if (action.context === "pull_request") {
+    if (isPullRequestLaunch(action.id)) {
       const unavailable = yield* pullRequestUnavailableReason(deps, {
         workspaceId: config.workspaceId,
         repoPath,
@@ -94,9 +120,10 @@ export const prepareWorkflowLaunch = (
             ? request.instruction.text
             : workflow.prompts.kickoffPrompt({
                 launchActionId: action.id,
+                role: action.role,
                 task: toPromptTask(task),
                 humanFeedback: feedback || undefined,
-                targetBranch: action.context === "pull_request" ? targetBranch : undefined,
+                targetBranch: isPullRequestLaunch(action.id) ? targetBranch : undefined,
                 overrides,
               }).prompt,
         catch: (cause) => toHostOperationError(cause, "workflow-launch.instruction"),
@@ -113,6 +140,7 @@ export const prepareWorkflowLaunch = (
             repoPath,
             config,
             action,
+            latest: launch.latest,
             alwaysStartQaReviewsFresh: settings.autopilot.alwaysStartQaReviewsFresh,
           });
     if (resolved.kind === "skipped") return resolved;
@@ -198,12 +226,13 @@ export const prepareWorkflowLaunch = (
         `Runtime '${runtimeKind}' does not support '${decision.startMode}'. Select a supported launch mode.`,
       );
     yield* deps.registry.requireReady(runtimeKind);
+    // The event commits through the workflow event path, so its host effects run first.
     if (request.beforeStartAction) {
-      yield* deps.tasks.humanRequestChanges({
+      yield* deps.tasks.applyTaskEvent({
         workspaceId: request.workspaceId,
         repoPath,
         taskId: request.taskId,
-        note: request.beforeStartAction.note,
+        eventId: request.beforeStartAction.eventId,
       });
     }
     if (request.targetBranch) {
@@ -219,7 +248,7 @@ export const prepareWorkflowLaunch = (
       repoPath,
       taskId: request.taskId,
     });
-    yield* validateTaskSessionWorkflowAvailable(workflow, task, action.role, repoPath);
+    yield* validateLaunchAvailable(workflow, task, action, repoPath);
     const systemPrompt = workflow.prompts.systemPrompt({
       role: action.role,
       task: toPromptTask(task),
@@ -248,22 +277,54 @@ export const isStartupRepair = (
   request.startup !== undefined &&
   startMode === "reuse";
 
-const launchValidationError = (message: string) =>
-  new HostValidationError({ field: "workflowLaunch", message });
-/** The launch action of a manual start, or the launch action of an Autopilot automation. */
+/**
+ * The launch action of a manual start. A manual start of the core pull request launch names the
+ * role of its source session.
+ */
 export const requireLaunchAction = (
   workflow: TaskWorkflow,
-  request: Pick<WorkflowLaunchAttemptRequest, "policy">,
+  request: Pick<WorkflowLaunchRequest, "policy">,
 ): Effect.Effect<TaskWorkflowLaunchAction, HostValidationError> =>
   Effect.try({
-    try: () =>
-      workflow.launchAction(
-        request.policy.kind === "manual"
-          ? request.policy.actionId
-          : workflow.automation(request.policy.actionId).launchActionId,
-      ),
+    try: () => workflow.launchAction(request.policy.actionId, request.policy.role),
     catch: (cause) => launchValidationError(errorMessage(cause)),
   });
+
+/**
+ * The role that the result of a launch names before the launch runs. An automatic launch names
+ * the first candidate role of its automation until it selects its source session.
+ */
+export const requireInitialLaunchRole = (
+  workflow: TaskWorkflow,
+  request: Pick<WorkflowLaunchAttemptRequest, "policy">,
+): Effect.Effect<string, HostValidationError> =>
+  request.policy.kind === "manual"
+    ? requireLaunchAction(workflow, { policy: request.policy }).pipe(Effect.map(({ role }) => role))
+    : Effect.try({
+        try: () => workflow.automation(request.policy.actionId).roles[0]!,
+        catch: (cause) => launchValidationError(errorMessage(cause)),
+      });
+
+/**
+ * The core pull request launch runs while the task is not closed and its approval is available.
+ * A workflow launch runs while the step of its role is available.
+ */
+const validateLaunchAvailable = (
+  workflow: TaskWorkflow,
+  task: TaskFacts,
+  action: TaskWorkflowLaunchAction,
+  repoPath: string,
+) => {
+  if (!isPullRequestLaunch(action.id))
+    return validateTaskSessionWorkflowAvailable(workflow, task, action.role, repoPath);
+  return workflow.pullRequestLaunchAvailable(task)
+    ? Effect.void
+    : Effect.fail(
+        launchValidationError(
+          `Pull request generation is not available for task ${task.id} in its current state. Move the task to a state where it can be approved.`,
+        ),
+      );
+};
 
 export const resolveLaunchWorkspace = (
   deps: Pick<WorkflowLaunchPreparationDependencies, "settings" | "git">,
@@ -278,156 +339,6 @@ export const resolveLaunchWorkspace = (
         `Workspace '${request.workspaceId}' belongs to '${repoPath}', not '${request.repoPath}'.`,
       );
     return { config, repoPath };
-  });
-
-/** Autopilot applies the same start rules as the manual start modal. */
-const decideAutomaticLaunch = (
-  deps: WorkflowLaunchPreparationDependencies,
-  {
-    request,
-    workflow,
-    actionId,
-    repoPath,
-    config,
-    action,
-    alwaysStartQaReviewsFresh,
-  }: {
-    request: WorkflowLaunchAttemptRequest;
-    workflow: TaskWorkflow;
-    actionId: string;
-    repoPath: string;
-    config: RepoConfig;
-    action: TaskWorkflowLaunchAction;
-    alwaysStartQaReviewsFresh: boolean;
-  },
-) =>
-  Effect.gen(function* () {
-    const { startMode } = workflow.automation(actionId);
-    const { role, startModes: allowedStartModes } = action;
-    const records = yield* deps.tasks.agentSessionsList({
-      workspaceId: request.workspaceId,
-      repoPath,
-      taskId: request.taskId,
-    });
-    const latest = records
-      .filter((record) => record.role === role)
-      .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))[0];
-    const sourceSession = latest && {
-      externalSessionId: latest.externalSessionId,
-      runtimeKind: latest.runtimeKind,
-      workingDirectory: latest.workingDirectory,
-    };
-    const configuredModel = () =>
-      resolveConfiguredDefaultModel(deps, repoPath, config, role, request.workspaceId);
-    const canStartFresh = allowedStartModes.includes("fresh");
-    // A role that writes a review starts each Autopilot review fresh when the setting asks for it.
-    const forceFresh =
-      canStartFresh &&
-      alwaysStartQaReviewsFresh &&
-      workflow.role(role).writes.some((code) => workflow.artifact(code)?.kind === "review");
-    if (startMode === "fork" && !forceFresh) {
-      if (!sourceSession)
-        return {
-          kind: "skipped" as const,
-          reason: `No ${role} session is available to fork for task '${request.taskId}'.`,
-        };
-      const decision: WorkflowLaunchDecision = {
-        startMode: "fork",
-        sourceSession,
-        // A fork starts at standard speed.
-        selectedModel: latest.selectedModel
-          ? withSpeed(latest.selectedModel, null)
-          : yield* configuredModel(),
-      };
-      return { kind: "decided" as const, decision };
-    }
-    const reuse = startMode === "reuse" && !forceFresh;
-    const continuation =
-      reuse || action.requiresWorktree
-        ? yield* deps.worktrees.getTaskWorktree({
-            workspaceId: request.workspaceId,
-            repoPath,
-            taskId: request.taskId,
-          })
-        : null;
-    const roleLabel = workflow.role(role).label;
-    if (action.requiresWorktree && !continuation)
-      return {
-        kind: "skipped" as const,
-        reason: `${roleLabel} continuation cannot start until a task worktree exists for task ${request.taskId}.`,
-      };
-    if (reuse) {
-      if (
-        continuation &&
-        sourceSession &&
-        normalizePathForComparison(sourceSession.workingDirectory) ===
-          normalizePathForComparison(continuation.workingDirectory)
-      ) {
-        const decision: WorkflowLaunchDecision = { startMode: "reuse", sourceSession };
-        return { kind: "decided" as const, decision };
-      }
-      // An action that also starts fresh starts fresh when no session can continue the task.
-      if (!canStartFresh)
-        return {
-          kind: "skipped" as const,
-          reason: `No ${roleLabel} session in the task worktree is available to reuse for task ${request.taskId}.`,
-        };
-    }
-    const decision: WorkflowLaunchDecision = {
-      startMode: "fresh",
-      selectedModel: yield* configuredModel(),
-    };
-    return { kind: "decided" as const, decision };
-  });
-
-/** Checks the configured default against the runtime catalog and fills its default variant. */
-const resolveConfiguredDefaultModel = (
-  deps: WorkflowLaunchPreparationDependencies,
-  repoPath: string,
-  config: RepoConfig,
-  role: string,
-  workspaceId: string,
-) =>
-  Effect.gen(function* () {
-    const savedDefault = config.agentDefaults[role] ?? config.defaultModel;
-    if (!savedDefault)
-      return yield* launchValidationError(
-        `Configure the ${role} role default or repository default model in workspace '${workspaceId}'.`,
-      );
-    const runtimeKind = savedDefault.runtimeKind;
-    const { models } = yield* deps.queries.loadRuntimeCatalog({
-      repoPath,
-      runtimeKind,
-      workingDirectory: repoPath,
-    });
-    if (models?.status !== "available")
-      return yield* launchValidationError(
-        `The ${role} default model for runtime ${runtimeKind} could not load: ${models?.status === "failed" ? models.message : "the runtime returned no model catalog."} Update the default in repository settings.`,
-      );
-    const configured = resolveSavedModelAlias(models.catalog, savedDefault);
-    const entry = findCatalogModel(models.catalog, configured);
-    const profiles = models.catalog.profiles ?? [];
-    const profileAvailable =
-      configured.profileId === undefined ||
-      profiles.length === 0 ||
-      profiles.some(
-        (profile) =>
-          (profile.id ?? profile.name) === configured.profileId &&
-          !profile.hidden &&
-          profile.mode !== "subagent",
-      );
-    if (
-      !entry ||
-      (configured.variant !== undefined && !entry.variants.includes(configured.variant)) ||
-      !profileAvailable
-    )
-      return yield* launchValidationError(
-        `The ${role} default model '${configured.providerId}/${configured.modelId}' is not available for runtime ${runtimeKind}. Update the default in repository settings.`,
-      );
-    const model: AgentSessionModelSelection = { ...configured };
-    const variant = configured.variant ?? entry.variants[0];
-    if (variant) model.variant = variant;
-    return model;
   });
 
 /**
@@ -452,14 +363,6 @@ const pullRequestUnavailableReason = (
       Effect.succeed(`Could not load the current Git provider: ${errorMessage(cause)}`),
     ),
   );
-
-const withSpeed = (
-  model: AgentSessionModelSelection,
-  speed: string | null,
-): AgentSessionModelSelection => {
-  const { speed: _speed, ...selection } = model;
-  return speed === null ? selection : { ...selection, speed };
-};
 
 const toPromptTask = (task: TaskRecord) => ({
   taskId: task.id,

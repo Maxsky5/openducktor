@@ -33,7 +33,8 @@ test("reset separates the kept task from removed work and names worktree loss", 
     }),
   );
   expect(copy.subject).toEqual({ id: "ODT-2", title: "Fix login" });
-  expect(copy.description).toContain("Backlog");
+  expect(copy.description).toBe("Move this task back to the start of its workflow.");
+  expect(copy.changes).toContain("Remove all task sessions");
   expect(copy.changes).toContain("Delete 1 linked worktree and related local branches");
   expect(copy.changes).toContain("Stop 1 running agent session");
   expect(copy.changes).toContain("Close 2 terminals");
@@ -68,7 +69,10 @@ const implementation = (
 ): TaskResetImplementationCopyInput => ({
   taskId: "ODT-5",
   taskTitle: "Fix login",
+  actionLabel: "Reset Implementation",
   targetStatusLabel: "Ready for Dev",
+  worktreeRoleLabels: ["Builder", "QA"],
+  dropsLocalMerge: false,
   activeSessionCount: 0,
   activeSessionCountError: null,
   hasCanonicalWorktree: false,
@@ -85,7 +89,7 @@ test("implementation reset names its target and preserves the current checkout a
   );
   expect(copy.description).toContain("Ready for Dev");
   expect(copy.kept).toContain("Current worktree, its branch and ignored files");
-  expect(copy.kept).toContain("Spec, plan and artifacts you added");
+  expect(copy.kept).toContain("Other task artifacts");
   expect(copy.changes).toContain("Delete 2 older worktrees and related local branches");
   expect(copy.changes).toContain(
     "Reset tracked files to the latest local base commit and delete untracked files",
@@ -95,9 +99,37 @@ test("implementation reset names its target and preserves the current checkout a
 
 test("implementation reset does not claim a checkout stays when none exists", () => {
   const copy = buildTaskResetImplementationConfirmCopy(implementation());
-  expect(copy.kept).toEqual(["Spec, plan and artifacts you added"]);
+  expect(copy.kept).toEqual(["Other task artifacts"]);
   expect(copy.changes).toContain("Remove related local branches");
   expect(copy.warning).not.toContain("untracked");
+});
+
+test("implementation reset uses the workflow's action and role names and names a dropped local merge", () => {
+  const copy = buildTaskResetImplementationConfirmCopy(
+    implementation({
+      actionLabel: "Restart Build",
+      worktreeRoleLabels: ["Coder", "Reviewer"],
+      dropsLocalMerge: true,
+    }),
+  );
+  expect(copy.title).toBe("Restart Build");
+  expect(copy.confirmLabel.idle).toBe("Restart Build");
+  expect(copy.changes).toContain("Remove the Coder and Reviewer session history");
+  expect(copy.changes).toContain(
+    "Drop the record of the unpublished local merge. The merge commit stays on the local target branch",
+  );
+  expect(copy.warning).toContain("The Coder and Reviewer session history cannot be recovered.");
+});
+
+test("implementation reset lists one or three worktree roles in plain English", () => {
+  const one = buildTaskResetImplementationConfirmCopy(
+    implementation({ worktreeRoleLabels: ["Builder"] }),
+  );
+  const three = buildTaskResetImplementationConfirmCopy(
+    implementation({ worktreeRoleLabels: ["Builder", "QA", "Fixer"] }),
+  );
+  expect(one.changes).toContain("Remove the Builder session history");
+  expect(three.changes).toContain("Remove the Builder, QA, and Fixer session history");
 });
 
 describe("taskResetImplementationConfirmState", () => {

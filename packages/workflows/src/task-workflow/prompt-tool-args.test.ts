@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { agentToolNameValues, ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
-import { builtinWorkflow } from "../builtin/definition";
+import { specPlanBuildWorkflow } from "../builtin/spec-plan-build/workflow";
 import { formatOdtToolArgs as formatArgs } from "./prompt-tool-args";
 
 const formatOdtToolArgs = (toolName: Parameters<typeof formatArgs>[1]) =>
-  formatArgs(builtinWorkflow.definition, toolName);
+  formatArgs(specPlanBuildWorkflow.definition, toolName);
 
 /** Reads the top-level argument names. Nested object members are not arguments. */
 const parseArgNames = (toolArgs: string): string[] => {
@@ -41,10 +41,10 @@ describe("formatOdtToolArgs", () => {
 
   test("formats required, optional, enum, array, and literal argument types", () => {
     expect(formatOdtToolArgs("odt_create_task")).toBe(
-      'odt_create_task({"title": string, "issueType": "task"|"feature"|"bug", "priority": number, "description"?: string, "labels"?: string[]})',
+      'odt_create_task({"title": string, "issueType": "feature"|"bug"|"task", "priority": number, "description"?: string, "labels"?: string[]})',
     );
     expect(formatOdtToolArgs("odt_search_tasks")).toBe(
-      'odt_search_tasks({"priority"?: number, "issueType"?: "task"|"feature"|"bug", "status"?: "open"|"spec_ready"|"ready_for_dev"|"in_progress"|"blocked"|"ai_review"|"human_review", "title"?: string, "tags"?: string[], "limit"?: number})',
+      'odt_search_tasks({"priority"?: number, "issueType"?: "feature"|"bug"|"task", "status"?: "open"|"spec_ready"|"ready_for_dev"|"in_progress"|"blocked"|"ai_review"|"human_review", "title"?: string, "tags"?: string[], "limit"?: number})',
     );
     expect(formatOdtToolArgs("odt_read_task")).toBe('odt_read_task({"taskId": string})');
     expect(formatOdtToolArgs("odt_read_task_assets")).toBe(

@@ -20,7 +20,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
@@ -93,7 +93,7 @@ describe("useAgentStudioRepoSettings", () => {
       branchPrefix: "codex/",
       defaultModel: null,
       defaultTargetBranch: { remote: "origin", branch: "main" },
-      postCompleteHooks: [],
+      beforeWorktreeRemovalHooks: [],
       actions: { items: [], defaultActionId: null },
       worktreeCopyPaths: [],
       agentDefaults: {

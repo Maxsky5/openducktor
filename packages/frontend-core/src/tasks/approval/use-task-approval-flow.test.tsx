@@ -1,4 +1,5 @@
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { createWireTaskCardFixture } from "../../test-support/shared-test-fixtures";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
@@ -27,12 +28,13 @@ import {
   createGitProviderContextFixture,
   createSettingsSnapshotFixture,
   createTaskCardFixture as createSharedTaskCardFixture,
+  toWireTaskCard,
 } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
-  TaskApprovalMissingBuilderWorktreeModalModel,
+  TaskApprovalMissingWorktreeModalModel,
 } from "./task-approval-types";
 import { useTaskApprovalFlow } from "./use-task-approval-flow";
 
@@ -57,10 +59,10 @@ const defaultTaskApprovalContextGet = async (
 type TaskDirectMerge = HostClient["taskDirectMerge"];
 const defaultTaskDirectMerge: TaskDirectMerge = async () => ({
   outcome: "completed" as const,
-  task: createTaskCardFixture({ id: "TASK-1", status: "closed" }),
+  task: toWireTaskCard(createTaskCardFixture({ id: "TASK-1", status: "closed" })),
 });
 const defaultTaskDirectMergeComplete = async () =>
-  createTaskCardFixture({ id: "TASK-1", status: "closed" });
+  toWireTaskCard(createTaskCardFixture({ id: "TASK-1", status: "closed" }));
 const defaultTaskPullRequestUpsert = async () => ({
   providerId: "github" as const,
   number: 17,
@@ -80,7 +82,8 @@ const defaultGitPushBranch: GitPushBranch = async () => ({
   output: "",
 });
 const defaultGitAbortConflict: HostClient["gitAbortConflict"] = async () => ({ output: "" });
-const defaultCloseTask = async (_taskId: string, _options: { removeWorktree: boolean }) => {};
+const defaultCloseTask = async (taskId: string, _options: { removeWorktree: boolean }) =>
+  createWireTaskCardFixture({ id: taskId, status: "closed" });
 const defaultOpenResetImplementation = (_taskId: string) => true;
 const createDefaultAgentSessions = (): Awaited<ReturnType<HostClient["agentSessionsList"]>> => [
   {
@@ -194,7 +197,7 @@ const registerDependencySpies = (): void => {
       branchPrefix: "odt/",
       defaultTargetBranch: { remote: "origin", branch: "main" },
       git: {},
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       actions: { items: [], defaultActionId: null },
       promptOverrides: {},
       worktreeCopyPaths: [],
@@ -293,12 +296,10 @@ const createReadyTaskApprovalContextResult = (
   approvalContext: createTaskApprovalContextFixture(overrides),
 });
 
-const createMissingBuilderWorktreeApprovalContextResult = (
-  overrides: Partial<
-    Extract<TaskApprovalContextLoadResult, { outcome: "missing_builder_worktree" }>
-  > = {},
+const createMissingWorktreeApprovalContextResult = (
+  overrides: Partial<Extract<TaskApprovalContextLoadResult, { outcome: "missing_worktree" }>> = {},
 ): TaskApprovalContextLoadResult => ({
-  outcome: "missing_builder_worktree",
+  outcome: "missing_worktree",
   taskId: "TASK-1",
   taskStatus: "human_review",
   ...overrides,
@@ -338,7 +339,6 @@ const createUseTaskApprovalFlowArgs = (
   gitProviderContextError: null,
   loadGitProviderContext: async () => null,
   requestPullRequestGeneration: async () => undefined,
-  refreshTasks: async () => {},
   closeTask: closeTaskMock,
   openResetImplementation: openResetImplementationMock,
   showPullRequestCreated,
@@ -376,10 +376,10 @@ const expectCompletionModal = (): TaskApprovalCompletionModalModel => {
   return modal;
 };
 
-const expectMissingBuilderWorktreeModal = (): TaskApprovalMissingBuilderWorktreeModalModel => {
+const expectMissingWorktreeModal = (): TaskApprovalMissingWorktreeModalModel => {
   const modal = latestHarnessValue?.taskApprovalModal;
-  expect(modal?.stage).toBe("missing_builder_worktree");
-  if (modal?.stage !== "missing_builder_worktree") {
+  expect(modal?.stage).toBe("missing_worktree");
+  if (modal?.stage !== "missing_worktree") {
     throw new Error("Expected missing-builder-worktree modal");
   }
   return modal;
@@ -676,7 +676,6 @@ describe("useTaskApprovalFlow", () => {
             }),
           ],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -743,7 +742,6 @@ describe("useTaskApprovalFlow", () => {
             }),
           ],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -800,7 +798,6 @@ describe("useTaskApprovalFlow", () => {
             }),
           ],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1022,7 +1019,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1043,9 +1039,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("opens the recovery modal when the builder worktree is missing", async () => {
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult(),
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(createMissingWorktreeApprovalContextResult());
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
@@ -1057,7 +1051,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1071,7 +1064,7 @@ describe("useTaskApprovalFlow", () => {
     });
     await waitForTaskApprovalModalLoaded();
 
-    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("missing_builder_worktree");
+    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("missing_worktree");
     expect(toastErrorMock).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -1096,7 +1089,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1122,6 +1114,8 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("opens with Close Task selected for a merged task branch and closes with the cleanup choice", async () => {
+    const continuation = createDeferred<void>();
+    const onCommitted = mock(() => continuation.promise);
     taskApprovalContextGetMock.mockResolvedValueOnce(createReadyTaskApprovalContextResult());
     hostClientFakes.taskMergeStatusGet = async (scope) => ({
       ...scope,
@@ -1146,7 +1140,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           closeTask: closeTaskMock,
         }),
       );
@@ -1156,7 +1149,7 @@ describe("useTaskApprovalFlow", () => {
     const harness = await mountApprovalHarness(Harness);
 
     await act(async () => {
-      latestHarnessValue?.openTaskApproval("TASK-1");
+      latestHarnessValue?.openTaskApproval("TASK-1", { onCommitted });
       await Promise.resolve();
     });
     await waitForTaskApprovalModalLoaded();
@@ -1172,6 +1165,9 @@ describe("useTaskApprovalFlow", () => {
 
     expect(closeTaskMock).toHaveBeenCalledWith("TASK-1", { removeWorktree: false });
     expect(taskDirectMergeMock).not.toHaveBeenCalled();
+    expect(onCommitted).toHaveBeenCalledTimes(1);
+    expect(expectApprovalModal().isSubmitting).toBe(true);
+    await act(async () => continuation.resolve());
     await waitForTaskApprovalModalClosed();
 
     await act(async () => {
@@ -1189,9 +1185,7 @@ describe("useTaskApprovalFlow", () => {
         reason: "Run `gh auth login` to connect GitHub.",
       },
     } satisfies RepositoryGitProviderContext;
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult(),
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(createMissingWorktreeApprovalContextResult());
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
@@ -1205,7 +1199,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           closeTask: closeTaskMock,
         }),
       );
@@ -1221,7 +1214,7 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      expectMissingBuilderWorktreeModal().onCloseMissingBuilderWorktree();
+      expectMissingWorktreeModal().onCloseMissingWorktree();
       await Promise.resolve();
     });
 
@@ -1234,9 +1227,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("keeps the recovery modal open when completion fails from missing-builder-worktree recovery", async () => {
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult(),
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(createMissingWorktreeApprovalContextResult());
     closeTaskMock.mockImplementationOnce(async () => {
       throw new Error("Task is no longer reviewable");
     });
@@ -1251,7 +1242,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           closeTask: closeTaskMock,
         }),
       );
@@ -1267,11 +1257,11 @@ describe("useTaskApprovalFlow", () => {
     await waitForTaskApprovalModalLoaded();
 
     await act(async () => {
-      expectMissingBuilderWorktreeModal().onCloseMissingBuilderWorktree();
+      expectMissingWorktreeModal().onCloseMissingWorktree();
       await Promise.resolve();
     });
 
-    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("missing_builder_worktree");
+    expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("missing_worktree");
     expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
     expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe(
       "Task is no longer reviewable",
@@ -1285,9 +1275,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("only closes the recovery modal after reset handoff succeeds", async () => {
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult(),
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(createMissingWorktreeApprovalContextResult());
     openResetImplementationMock.mockReturnValueOnce(false).mockReturnValueOnce(true);
 
     const Harness = (): ReactElement | null => {
@@ -1298,9 +1286,15 @@ describe("useTaskApprovalFlow", () => {
             workspaceName: "Repo",
             repoPath: "/repo",
           },
-          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          tasks: [
+            createTaskCardFixture({
+              id: "TASK-1",
+              title: "Task",
+              status: "human_review",
+              availableActions: ["reset_implementation"],
+            }),
+          ],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           openResetImplementation: openResetImplementationMock,
         }),
       );
@@ -1314,22 +1308,74 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
     await waitForTaskApprovalModalLoaded();
+    // The reset control uses the label of the workflow action that resets the worktree.
+    expect(expectMissingWorktreeModal().resetLabel).toBe("Reset Implementation");
 
     await act(async () => {
-      expectMissingBuilderWorktreeModal().onResetMissingBuilderWorktree();
+      expectMissingWorktreeModal().onResetMissingWorktree();
       await Promise.resolve();
     });
 
-    expect(openResetImplementationMock).toHaveBeenNthCalledWith(1, "TASK-1");
+    expect(openResetImplementationMock).toHaveBeenNthCalledWith(
+      1,
+      "TASK-1",
+      "reset-implementation",
+    );
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
 
     await act(async () => {
-      expectMissingBuilderWorktreeModal().onResetMissingBuilderWorktree();
+      expectMissingWorktreeModal().onResetMissingWorktree();
       await Promise.resolve();
     });
 
-    expect(openResetImplementationMock).toHaveBeenNthCalledWith(2, "TASK-1");
+    expect(openResetImplementationMock).toHaveBeenNthCalledWith(
+      2,
+      "TASK-1",
+      "reset-implementation",
+    );
     await waitForTaskApprovalModalClosed();
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("keeps the recovery modal when the task offers no worktree reset", async () => {
+    taskApprovalContextGetMock.mockResolvedValueOnce(createMissingWorktreeApprovalContextResult());
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          activeWorkspace: {
+            workspaceId: "workspace-repo",
+            workspaceName: "Repo",
+            repoPath: "/repo",
+          },
+          tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+          requestPullRequestGeneration: async () => undefined,
+          openResetImplementation: openResetImplementationMock,
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+    // Without a worktree reset action, the platforms hide the reset control.
+    expect(expectMissingWorktreeModal().resetLabel).toBeNull();
+
+    await act(async () => {
+      expectMissingWorktreeModal().onResetMissingWorktree();
+      await Promise.resolve();
+    });
+
+    expect(openResetImplementationMock).not.toHaveBeenCalled();
+    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
 
     await act(async () => {
       await harness.unmount();
@@ -1351,7 +1397,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           closeTask: closeTaskMock,
         }),
       );
@@ -1409,7 +1454,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1467,7 +1511,6 @@ describe("useTaskApprovalFlow", () => {
             createTaskCardFixture({ id: "TASK-2", title: "Task 2" }),
           ],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1515,7 +1558,7 @@ describe("useTaskApprovalFlow", () => {
   test("publishes and completes a pending direct merge", async () => {
     taskDirectMergeMock.mockResolvedValueOnce({
       outcome: "completed" as const,
-      task: createTaskCardFixture({ id: "TASK-1", status: "human_review" }),
+      task: toWireTaskCard(createTaskCardFixture({ id: "TASK-1", status: "human_review" })),
     });
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
@@ -1550,7 +1593,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1621,7 +1663,6 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("closes after direct merge without offering a push step for local-only target branches", async () => {
-    const refreshTasksMock = mock(async () => {});
     const storage = createMemoryClientStorage();
     const draftIdentity = createDraftIdentity("builder-session");
     writeTestDraft(storage, draftIdentity, "direct merge draft");
@@ -1642,7 +1683,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: refreshTasksMock,
         }),
       );
       return null;
@@ -1676,7 +1716,6 @@ describe("useTaskApprovalFlow", () => {
       },
     );
     expect(gitPushBranchMock).not.toHaveBeenCalled();
-    expect(refreshTasksMock).toHaveBeenCalledTimes(1);
     expect(taskDirectMergeCompleteMock).not.toHaveBeenCalled();
     expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
     await waitForTaskApprovalModalClosed();
@@ -1705,7 +1744,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1778,7 +1816,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1835,7 +1872,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1886,7 +1922,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1939,7 +1974,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -1999,7 +2033,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           onResolveGitConflict: onResolveGitConflictMock,
         }),
       );
@@ -2067,7 +2100,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           onResolveGitConflict: onResolveGitConflictMock,
         }),
       );
@@ -2131,7 +2163,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
           onResolveGitConflict: onResolveGitConflictMock,
         }),
       );
@@ -2170,7 +2201,6 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("creates a pull request manually, refreshes tasks, and closes the modal", async () => {
-    const refreshTasksMock = mock(async () => {});
     taskApprovalContextGetMock.mockResolvedValueOnce(createReadyTaskApprovalContextResult());
 
     const Harness = (): ReactElement | null => {
@@ -2191,7 +2221,6 @@ describe("useTaskApprovalFlow", () => {
             }),
           ],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: refreshTasksMock,
         }),
       );
       return null;
@@ -2225,7 +2254,6 @@ describe("useTaskApprovalFlow", () => {
       "Ship approval flow",
       "Task description",
     );
-    expect(refreshTasksMock).toHaveBeenCalledTimes(1);
     await waitForTaskApprovalModalClosed();
     expect(toastSuccessMock).toHaveBeenCalledWith(
       "Pull request created",
@@ -2238,7 +2266,6 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("closes the approval modal only after AI pull request generation starts a builder session", async () => {
-    const refreshTasksMock = mock(async () => {});
     const requestPullRequestGenerationDeferred = createDeferred<string | undefined>();
     const requestPullRequestGenerationMock = mock(
       async () => requestPullRequestGenerationDeferred.promise,
@@ -2257,7 +2284,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: requestPullRequestGenerationMock,
-          refreshTasks: refreshTasksMock,
         }),
       );
       return null;
@@ -2283,7 +2309,6 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(true);
     expect(requestPullRequestGenerationMock).toHaveBeenCalledWith("TASK-1");
     expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
-    expect(refreshTasksMock).not.toHaveBeenCalled();
     expect(toastSuccessMock).not.toHaveBeenCalled();
 
     requestPullRequestGenerationDeferred.resolve("builder-session-pr");
@@ -2316,7 +2341,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: requestPullRequestGenerationMock,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -2387,7 +2411,6 @@ describe("useTaskApprovalFlow", () => {
             createTaskCardFixture({ id: "TASK-2", title: "Task 2" }),
           ],
           requestPullRequestGeneration: requestPullRequestGenerationMock,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -2471,7 +2494,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: requestPullRequestGenerationMock,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -2535,7 +2557,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;
@@ -2600,7 +2621,6 @@ describe("useTaskApprovalFlow", () => {
           },
           tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
           requestPullRequestGeneration: async () => undefined,
-          refreshTasks: async () => {},
         }),
       );
       return null;

@@ -1,4 +1,4 @@
-import type { WorkflowEventEffect } from "@openducktor/contracts";
+import { type IssueType, TASK_CLOSED_STATE, TASK_OPEN_STATE } from "@openducktor/contracts";
 import type {
   TaskEventDecision,
   TaskEventDenial,
@@ -9,9 +9,9 @@ import type {
 import { Effect, Result } from "effect";
 import { TaskPolicyError } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
+import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 
 export type AdmittedTaskEvent = Exclude<TaskEventDecision, { kind: "denied" }>;
-export type HostEffect = Exclude<WorkflowEventEffect, "status.set">;
 
 /** Re-evaluates policy against the row locked by the repository write transaction. */
 export const decideTaskTransition = (workflow: TaskWorkflow, eventId: string, task: TaskFacts) => {
@@ -22,36 +22,6 @@ export const decideTaskTransition = (workflow: TaskWorkflow, eventId: string, ta
         ...decisionTransition(decision),
         workflowId: workflow.definition.id,
       });
-};
-
-export const decideEffectTransition = (
-  workflow: TaskWorkflow,
-  effect: HostEffect,
-  task: TaskFacts,
-) => {
-  const eventId = workflow.effectEvent(effect);
-  return eventId === undefined
-    ? Result.fail(
-        TaskPolicyError.policy(
-          `Task workflow "${workflow.definition.id}" has no event with the ${effect} effect. Add one to use this command.`,
-        ),
-      )
-    : decideTaskTransition(workflow, eventId, task);
-};
-
-/** The event of a host effect. A workflow without that event cannot run the command. */
-export const requireEffectEvent = (
-  workflow: TaskWorkflow,
-  effect: HostEffect,
-): Effect.Effect<string, TaskPolicyError> => {
-  const eventId = workflow.effectEvent(effect);
-  return eventId === undefined
-    ? Effect.fail(
-        TaskPolicyError.policy(
-          `Task workflow "${workflow.definition.id}" has no event with the ${effect} effect. Add one to use this command.`,
-        ),
-      )
-    : Effect.succeed(eventId);
 };
 
 /** Decides a named workflow event. A denial fails with its task policy error. */
@@ -66,15 +36,41 @@ export const requireTaskEvent = (
     : Effect.succeed(decision);
 };
 
-/** Decides the event of a host effect. */
-export const requireEffect = (
-  workflow: TaskWorkflow,
-  effect: HostEffect,
+/** An OpenDucktor task action that every workflow has, without a workflow event. */
+export type CoreTaskAction = "close" | "reset";
+
+/**
+ * Decides a core task action. Close Task moves any task to `closed`, and a closed task stays
+ * unchanged. Reset Task moves any task except a closed one to `open`.
+ */
+export const decideCoreTaskAction = (
+  action: CoreTaskAction,
   task: TaskFacts,
-): Effect.Effect<AdmittedTaskEvent, TaskPolicyError> =>
-  requireEffectEvent(workflow, effect).pipe(
-    Effect.flatMap((eventId) => requireTaskEvent(workflow, eventId, task)),
+): Result.Result<AdmittedTaskEvent, HostValidationError<{ taskId: string; status: string }>> => {
+  if (action === "reset" && task.status === TASK_CLOSED_STATE)
+    return Result.fail(
+      new HostValidationError({
+        field: "taskId",
+        message: `Task ${task.id} is closed, so it cannot reset. Reset only a task that is not closed.`,
+        details: { taskId: task.id, status: task.status },
+      }),
+    );
+  const to = action === "close" ? TASK_CLOSED_STATE : TASK_OPEN_STATE;
+  return Result.succeed(
+    task.status === to
+      ? { kind: "unchanged", status: task.status }
+      : { kind: "transition", from: task.status, to, cause: {} },
   );
+};
+
+/** The store decision of a core task action, made again for each locked task row. */
+export const coreTaskTransition =
+  (taskWorkflows: Pick<TaskWorkflowResolver, "forTask">, action: CoreTaskAction) =>
+  (task: TaskFacts) =>
+    Result.map(decideCoreTaskAction(action, task), (decision) => ({
+      ...decisionTransition(decision),
+      workflowId: taskWorkflows.forTask(task).definition.id,
+    }));
 
 /** The store write of an admitted event. A repeat writes the current status without a cause. */
 export const decisionTransition = (decision: AdmittedTaskEvent) => ({
@@ -82,35 +78,49 @@ export const decisionTransition = (decision: AdmittedTaskEvent) => ({
   cause: decision.kind === "transition" ? decision.cause : {},
 });
 
+/**
+ * Pull request management is an OpenDucktor feature, so no workflow event controls it. A closed
+ * task keeps its pull request.
+ */
 export const requirePullRequestManagement = (
-  workflow: TaskWorkflow,
   task: TaskFacts,
 ): Effect.Effect<void, TaskPolicyError> =>
-  Effect.gen(function* () {
-    const eventId = yield* requireEffectEvent(workflow, "pull_request.manage");
-    if (workflow.isEventAvailable(eventId, task)) return;
-    return yield* TaskPolicyError.policy(
-      `Pull request management is only available from ${formatStatusList(workflow.eventSourceStates(eventId))}.`,
-    );
-  });
+  task.status === TASK_CLOSED_STATE
+    ? Effect.fail(
+        TaskPolicyError.policy(
+          `Task ${task.id} is closed, so its pull request cannot change. Manage pull requests only for a task that is not closed.`,
+        ),
+      )
+    : Effect.void;
 
-/** A person approves only an open task that the approval event admits. */
-export const requireHumanReviewStatus = (
+/** A person approves only a task that is not closed and whose workflow approval is available. */
+export const requireApprovalAvailable = (
   workflow: TaskWorkflow,
   task: TaskFacts,
-): Effect.Effect<void, TaskPolicyError | HostValidationError> =>
-  Effect.gen(function* () {
-    const eventId = yield* requireEffectEvent(workflow, "review.approve");
-    if (!workflow.isTerminalState(task.status) && workflow.isEventAvailable(eventId, task)) return;
-    const reviewStatuses = workflow
-      .eventSourceStates(eventId)
-      .filter((status) => !workflow.isTerminalState(status));
-    return yield* new HostValidationError({
-      message: `Human approval is only allowed from ${formatStatusList(reviewStatuses)}.`,
-    });
-  });
+): Effect.Effect<void, HostValidationError> => {
+  if (task.status !== TASK_CLOSED_STATE && workflow.approvalAvailable(task)) return Effect.void;
+  if (workflow.approvalAction === undefined)
+    return Effect.fail(
+      new HostValidationError({
+        message: `Task workflow "${workflow.definition.id}" has no approval action. Add one to approve its tasks.`,
+      }),
+    );
+  const approvalStates = workflow.definition.states
+    .map(({ id }) => id)
+    .filter(
+      (status) => status !== TASK_CLOSED_STATE && workflow.approvalAvailable({ ...task, status }),
+    );
+  return Effect.fail(
+    new HostValidationError({
+      message:
+        approvalStates.length === 0
+          ? `Human approval is not available for task ${task.id}. Complete the workflow steps that its approval needs first.`
+          : `Human approval is only allowed from ${formatStatusList(approvalStates)}.`,
+    }),
+  );
+};
 
-export const taskEventPolicyError = (
+const taskEventPolicyError = (
   eventId: string,
   task: TaskFacts,
   denial: TaskEventDenial,
@@ -124,18 +134,6 @@ export const taskEventPolicyError = (
     `${eventId} is not allowed for task ${task.id} (${task.issueType}) from ${task.status}. ${recovery}`,
   );
 };
-
-/** Decides the event of a host effect for a command that reports a denial as invalid input. */
-export const requireEffectInput = <Details extends object>(
-  subject: string,
-  workflow: TaskWorkflow,
-  effect: HostEffect,
-  task: TaskFacts,
-  details: Details,
-): Effect.Effect<AdmittedTaskEvent, TaskPolicyError | HostValidationError<Details>> =>
-  requireEffectEvent(workflow, effect).pipe(
-    Effect.flatMap((eventId) => requireTaskEventInput(subject, workflow, eventId, task, details)),
-  );
 
 /** Decides a named event for a command that reports a status denial as invalid input. */
 export const requireTaskEventInput = <Details extends object>(
@@ -171,7 +169,7 @@ export const decideTaskEventInput = <Details extends object>(
 /** An issue type must be one of the task workflow. */
 export const requireWorkflowIssueType = (
   workflow: TaskWorkflow,
-  issueType: string,
+  issueType: IssueType,
 ): Effect.Effect<void, HostValidationError<{ issueType: string }>> =>
   workflow.issueTypes.includes(issueType)
     ? Effect.void

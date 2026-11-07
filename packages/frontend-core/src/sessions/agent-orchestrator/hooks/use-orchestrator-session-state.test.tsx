@@ -1,3 +1,4 @@
+import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import "../../../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
@@ -7,9 +8,10 @@ import { createSessionMessagesState } from "../support/messages";
 import { createHookHarness as createSharedHookHarness } from "../../../test-support/react-hook-harness";
 import type { AgentSessionState } from "../../../types/agent-orchestrator";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const taskFixture: TaskCard = {
+  ...createTaskCardFixture(),
   id: "task-1",
   title: "Task",
   description: "",
@@ -114,6 +116,7 @@ const createHookHarness = (initialArgs: HookArgs) => {
 describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
   test("keeps task refs synchronized with latest hook inputs", async () => {
     const nextTask: TaskCard = {
+      ...createTaskCardFixture(),
       ...taskFixture,
       id: "task-2",
       title: "Task 2",

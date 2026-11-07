@@ -104,7 +104,7 @@ For a new free code, the MCP caller chooses the code and supplies `name`, `fileN
 
 This release replaces document-named public tools and fields without aliases. `odt_read_task_documents` becomes `odt_read_task_artifacts`. `documentSummary` becomes `artifactSummary`, and task read `documents` becomes `artifacts`. All workflow saves use `odt_set_task_artifact` with a workflow code. Update custom prompt overrides to use the current reader, setter, and code inputs.
 
-The MCP bridge uses version 3. The remote host protocol uses version 4. Update the host, clients, and MCP package together. Incompatible peers fail with an update action instead of translating old requests.
+The MCP bridge uses version 4. The remote host protocol uses version 4. Update the host, clients, and MCP package together. Incompatible peers fail with an update action instead of translating old requests.
 
 The SQLite migration copies workflow content, revisions, timestamps, provenance, and QA verdicts into `tasks_artifacts`, then removes `task_documents`. It preserves workflow Markdown as text and stores free files as BLOBs. All hosts that share an upgraded workspace must use the new schema. An older binary cannot use the migrated database. Downgrade requires a compatible database backup.
 

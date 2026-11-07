@@ -1,12 +1,12 @@
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { TASK_DOCUMENT_STALE_TIME_MS, documentQueryKeys } from "../../queries/documents";
 import { taskEditorDraftKey, type RetainedTaskDocument } from "./task-editor-drafts";
-import { byDocumentCode, type BuiltinDocumentCode } from "@openducktor/workflows";
+import { type WorkflowDocumentCode } from "@openducktor/workflows";
 import { useCallback, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import type { DocumentEditorView } from "./task-composer-types";
 
 /** The workflow documents that the composer edits. */
-export type TaskDocumentSection = BuiltinDocumentCode;
+export type TaskDocumentSection = WorkflowDocumentCode;
 
 type DocumentSectionState = {
   serverMarkdown: string;
@@ -31,6 +31,7 @@ type UseTaskDocumentEditorStateArgs = {
   taskId: string | null;
   repoPath: string | null;
   activeSection: TaskDocumentSection | null;
+  documentCodes: readonly string[];
   loadDocument: (taskId: string, code: TaskDocumentSection) => Promise<TaskDocumentPayload>;
   loadTimeoutMs?: number;
   workspaceId?: string | null;
@@ -53,6 +54,7 @@ type TaskDocumentEditorContext = {
   open: boolean;
   taskId: string | null;
   repoPath: string | null;
+  documentCodes: readonly string[];
   workspaceId: string | null;
   queryClient: QueryClient;
   retainedDrafts: Map<string, RetainedTaskDocument> | undefined;
@@ -108,20 +110,34 @@ type TaskDocumentEditorAction =
     };
 
 const createInitialDocumentState = (context: TaskDocumentEditorContext): TaskDocumentEditorState =>
-  byDocumentCode((code) => {
-    const cached = freshDocument(context, code);
-    return {
-      serverMarkdown: cached?.markdown ?? "",
-      draftMarkdown: cached?.markdown ?? "",
-      updatedAt: cached?.updatedAt ?? null,
-      isLoading: false,
-      // Check freshness again when this section first opens.
-      loaded: false,
-      error: cached?.error ?? null,
-    };
-  });
+  Object.fromEntries(
+    context.documentCodes.map((code) => {
+      const cached = freshDocument(context, code);
+      return [
+        code,
+        {
+          serverMarkdown: cached?.markdown ?? "",
+          draftMarkdown: cached?.markdown ?? "",
+          updatedAt: cached?.updatedAt ?? null,
+          isLoading: false,
+          // Check freshness again when this section first opens.
+          loaded: false,
+          error: cached?.error ?? null,
+        },
+      ];
+    }),
+  );
 
-const createInitialViewState = (): TaskDocumentViewState => byDocumentCode(() => "split");
+const createInitialViewState = (context: TaskDocumentEditorContext): TaskDocumentViewState =>
+  Object.fromEntries(context.documentCodes.map((code) => [code, "split"]));
+const createDocumentSectionState = (): DocumentSectionState => ({
+  serverMarkdown: "",
+  draftMarkdown: "",
+  updatedAt: null,
+  isLoading: false,
+  loaded: false,
+  error: null,
+});
 
 const createTaskDocumentEditorLocalState = (
   context: TaskDocumentEditorContext,
@@ -129,14 +145,16 @@ const createTaskDocumentEditorLocalState = (
   const initial = createInitialDocumentState(context);
   return {
     context,
-    documents: byDocumentCode((code) => {
-      if (context.workspaceId === null || context.taskId === null) return initial[code];
-      const retained = context.retainedDrafts?.get(
-        taskEditorDraftKey(context.workspaceId, context.taskId, code),
-      );
-      return retained ? { ...initial[code], ...retained } : initial[code];
-    }),
-    views: createInitialViewState(),
+    documents: Object.fromEntries(
+      Object.entries(initial).map(([code, document]) => {
+        if (context.workspaceId === null || context.taskId === null) return [code, document];
+        const retained = context.retainedDrafts?.get(
+          taskEditorDraftKey(context.workspaceId, context.taskId, code),
+        );
+        return [code, retained ? { ...document, ...retained } : document];
+      }),
+    ),
+    views: createInitialViewState(context),
   };
 };
 
@@ -153,7 +171,7 @@ const updateDocumentSection = (
 ) =>
   ({
     ...documents,
-    [section]: update(documents[section]),
+    [section]: update(documents[section] ?? createDocumentSectionState()),
   }) satisfies TaskDocumentEditorState;
 
 const taskDocumentEditorReducer = (
@@ -264,6 +282,7 @@ export function useTaskDocumentEditorState({
   taskId,
   repoPath,
   activeSection,
+  documentCodes,
   loadDocument,
   loadTimeoutMs = DOCUMENT_LOAD_TIMEOUT_MS,
   workspaceId = null,
@@ -271,8 +290,8 @@ export function useTaskDocumentEditorState({
 }: UseTaskDocumentEditorStateArgs): UseTaskDocumentEditorStateResult {
   const queryClient = useQueryClient();
   const editorContext = useMemo<TaskDocumentEditorContext>(
-    () => ({ open, taskId, repoPath, workspaceId, queryClient, retainedDrafts }),
-    [open, taskId, repoPath, workspaceId, queryClient, retainedDrafts],
+    () => ({ open, taskId, repoPath, workspaceId, documentCodes, queryClient, retainedDrafts }),
+    [open, taskId, repoPath, workspaceId, documentCodes, queryClient, retainedDrafts],
   );
   const [localState, dispatchLocalState] = useReducer(
     taskDocumentEditorReducer,
@@ -329,7 +348,7 @@ export function useTaskDocumentEditorState({
       return currentSections satisfies Record<TaskDocumentSection, boolean>;
     }
 
-    const nextSections = byDocumentCode(() => false);
+    const nextSections: Record<TaskDocumentSection, boolean> = {};
     sectionsByContext.set(context, nextSections);
     return nextSections satisfies Record<TaskDocumentSection, boolean>;
   }, []);
@@ -342,8 +361,8 @@ export function useTaskDocumentEditorState({
       }
 
       const inFlightSections = getInFlightSectionsForContext(loadContext);
-      const current = documentsRef.current[section];
-      if (inFlightSections[section] || (!force && current.loaded)) {
+      const current = documentsRef.current[section] ?? createDocumentSectionState();
+      if (inFlightSections[section] || (!force && current?.loaded)) {
         return Promise.resolve();
       }
 
@@ -416,7 +435,7 @@ export function useTaskDocumentEditorState({
   const updateDraft = useCallback(
     (section: TaskDocumentSection, markdown: string): void => {
       if (editorContext.workspaceId !== null && editorContext.taskId !== null) {
-        const current = documentsRef.current[section];
+        const current = documentsRef.current[section] ?? createDocumentSectionState();
         const key = taskEditorDraftKey(editorContext.workspaceId, editorContext.taskId, section);
         if (markdown === current.serverMarkdown) editorContext.retainedDrafts?.delete(key);
         else

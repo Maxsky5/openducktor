@@ -8,6 +8,8 @@ import { z } from "zod";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { mcpToolPayloadSchema, type McpToolPayload, OdtToolError } from "./tool-results";
 
+const TEST_ACTIVE_STATUSES = ["open", "in_progress", "blocked"];
+
 const jsonResponse = (payload: McpToolPayload, init: ResponseInit = {}): Response =>
   new Response(JSON.stringify(payload), {
     headers: { "Content-Type": "application/json" },
@@ -59,6 +61,7 @@ describe("OdtHostBridgeClient", () => {
       return jsonResponse({
         bridgeVersion: ODT_MCP_BRIDGE_VERSION,
         toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+        activeStatuses: TEST_ACTIVE_STATUSES,
       });
     };
 
@@ -73,6 +76,7 @@ describe("OdtHostBridgeClient", () => {
     await expect(client.ready()).resolves.toEqual({
       bridgeVersion: ODT_MCP_BRIDGE_VERSION,
       toolNames: Object.keys(ODT_TOOL_SCHEMAS),
+      activeStatuses: TEST_ACTIVE_STATUSES,
     });
     expect(requests).toEqual([
       {
@@ -123,6 +127,7 @@ describe("OdtHostBridgeClient", () => {
       jsonResponse({
         bridgeVersion: ODT_MCP_BRIDGE_VERSION,
         toolNames: ["odt_read_task"],
+        activeStatuses: TEST_ACTIVE_STATUSES,
       });
     const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
 
@@ -174,9 +179,10 @@ describe("OdtHostBridgeClient", () => {
     const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
 
     try {
-      await client.call("odt_build_blocked", "repo", {
+      await client.call("odt_apply_workflow_event", "repo", {
         taskId: "task-1",
-        reason: "needs a product decision",
+        eventId: "build-blocked",
+        note: "needs a product decision",
       });
       throw new Error("Expected call() to reject.");
     } catch (error) {
@@ -207,9 +213,10 @@ describe("OdtHostBridgeClient", () => {
     const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
 
     try {
-      await client.call("odt_build_blocked", "repo", {
+      await client.call("odt_apply_workflow_event", "repo", {
         taskId: "task-1",
-        reason: "needs a product decision",
+        eventId: "build-blocked",
+        note: "needs a product decision",
       });
       throw new Error("Expected call() to reject.");
     } catch (error) {
@@ -275,9 +282,10 @@ describe("OdtHostBridgeClient", () => {
     const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
 
     try {
-      await client.call("odt_build_blocked", "repo", {
+      await client.call("odt_apply_workflow_event", "repo", {
         taskId: "task-1",
-        reason: "needs a product decision",
+        eventId: "build-blocked",
+        note: "needs a product decision",
       });
       throw new Error("Expected call() to reject.");
     } catch (error) {
@@ -285,9 +293,9 @@ describe("OdtHostBridgeClient", () => {
         throw error;
       }
       expect(error.code).toBe("ODT_HOST_BRIDGE_ERROR");
-      expect(error.message).toBe("host odt_build_blocked failed with HTTP 400 Bad Request");
+      expect(error.message).toBe("host odt_apply_workflow_event failed with HTTP 400 Bad Request");
       expect(error.details).toEqual({
-        action: "host odt_build_blocked",
+        action: "host odt_apply_workflow_event",
         status: 400,
         statusText: "Bad Request",
       });

@@ -99,6 +99,24 @@ describe("session panel layout store", () => {
     expect(store.takeReadError(owner)).toBeNull();
   });
 
+  test("saves and restores the selection of a custom workflow role", () => {
+    const owner = taskOwner();
+
+    store.update(owner, (layout) => ({
+      ...layout,
+      panels: { right: [{ id: "diffs", kind: "diffs" }], bottom: [] },
+      selectedRight: { alpha_writer: "diffs" },
+    }));
+
+    expect(savedRecord(owner)).toMatchObject({ selectedRight: { alpha_writer: "diffs" } });
+    const restoredOwner = taskOwner("task-2");
+    storage.setItem(
+      sessionPanelLayoutStorageKey(restoredOwner),
+      JSON.stringify(savedRecord(owner)),
+    );
+    expect(store.read(restoredOwner).selectedRight).toEqual({ alpha_writer: "diffs" });
+  });
+
   test("saves browser tabs with their selections, and restores them", () => {
     const owner = taskOwner();
 

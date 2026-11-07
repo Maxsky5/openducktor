@@ -139,7 +139,7 @@ const repoSettings: RepoSettingsInput = {
     profileId: "",
   },
   defaultTargetBranch: { remote: "origin", branch: "main" },
-  postCompleteHooks: [],
+  beforeWorktreeRemovalHooks: [],
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   agentDefaults: {
@@ -327,6 +327,53 @@ describe("useAgentStudioSelectionController", () => {
   afterEach(async () => {
     configureShellBridge(createUnavailableShellBridge());
     sessionStore = createAgentSessionsStore(workspaceRepoPath);
+  });
+
+  test("drops a found route session that a reset deletes, without reporting it missing", async () => {
+    const session = createSession("task-1", "session-1");
+    const args = (sessions: AgentSessionSummary[]) =>
+      createBaseArgs({
+        activeWorkspaceId: "workspace-1",
+        workspaceRepoPath,
+        sessions,
+        sessionExternalIdParam: sessionExternalIdParam(session),
+        hasExplicitRoleParam: true,
+      });
+    const harness = createHookHarness(args([session]));
+    try {
+      await harness.mount();
+      expect(harness.getLatest().routeSessionResolution.kind).toBe("found");
+
+      await harness.update(args([]));
+
+      const latest = harness.getLatest();
+      expect(latest.routeSessionResolution).toEqual({ kind: "none" });
+      expect(latest.queryUpdate).toEqual({ session: undefined, keepSessionless: true });
+      expect(latest.view.selectedSession.transcriptState.kind).not.toBe("failed");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reports a route session that the task never had as missing", async () => {
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId: "workspace-1",
+        workspaceRepoPath,
+        sessions: [],
+        sessionExternalIdParam: "session-unknown",
+        hasExplicitRoleParam: true,
+      }),
+    );
+    try {
+      await harness.mount();
+      expect(harness.getLatest().routeSessionResolution).toEqual({
+        kind: "missing",
+        sessionExternalId: "session-unknown",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("does not resolve a session without its task route context", async () => {

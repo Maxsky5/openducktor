@@ -47,7 +47,7 @@ const createService = (gitOverrides: Partial<GitPort>) => {
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath: "/repo",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
     }),
     runtimeDefinitionsService: createRuntimeDefinitionsService(),
     runtimeRegistry: createBuildStartRuntimeRegistry(calls),
@@ -168,7 +168,7 @@ const createNewWorktreeService = (calls: unknown[], worktreeActions: WorktreeAct
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath: "/repo",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       worktreeCopyPaths: [".env"],
       actions,
     }),

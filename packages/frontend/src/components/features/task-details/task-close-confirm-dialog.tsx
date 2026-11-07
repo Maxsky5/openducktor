@@ -54,7 +54,7 @@ export function TaskCloseConfirmDialog({
             disabled={operation.isPending}
           />
           {operation.error ? (
-            <p className="text-sm text-destructive-muted">{operation.error}</p>
+            <p className="whitespace-pre-line text-sm text-destructive-muted">{operation.error}</p>
           ) : null}
         </DialogBody>
 

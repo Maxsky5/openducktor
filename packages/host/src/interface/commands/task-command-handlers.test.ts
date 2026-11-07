@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import type {
-  BuildSessionBootstrap,
   PullRequest,
   TaskApprovalContextLoadResult,
   TaskCard,
@@ -28,6 +27,8 @@ const taskFixture: TaskCard = {
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
+  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflowSteps: [],
   availableActions: [],
   labels: [],
   pullRequest: undefined,
@@ -56,7 +57,7 @@ const pullRequestFixture: PullRequest = {
   updatedAt: "2026-05-10T10:00:00.000Z",
 };
 const approvalContextFixture: TaskApprovalContextLoadResult = {
-  outcome: "missing_builder_worktree",
+  outcome: "missing_worktree",
   taskId: taskFixture.id,
   taskStatus: taskFixture.status,
 };
@@ -72,10 +73,6 @@ const directMergeFixture: TaskDirectMergeResult = {
 const metadataFixture: TaskMetadataPayload = {
   artifacts: { spec: artifactFixture, plan: artifactFixture },
   agentSessions: [],
-};
-const buildSessionFixture: BuildSessionBootstrap = {
-  runtimeKind: "opencode",
-  workingDirectory: "/repo/task-1",
 };
 
 const runHandler = <T>(
@@ -277,62 +274,6 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildBlocked(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "build_blocked", input });
-            return taskFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      buildStart(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "build_start", input });
-            return buildSessionFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      buildCompleted(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "build_completed", input });
-            return taskFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      buildResumed(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "build_resumed", input });
-            return taskFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       createTask(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -365,20 +306,6 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_close", input });
-            return taskFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      resetImplementation(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "task_reset_implementation", input });
             return taskFixture;
           },
           catch: (cause) =>
@@ -431,20 +358,6 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      humanRequestChanges(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "human_request_changes", input });
-            return taskFixture;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       workflowArtifactGet(input) {
         return Effect.sync(() => {
           calls.push({ command: "workflow_artifact_get", input });
@@ -479,20 +392,6 @@ describe("createTaskCommandHandlers", () => {
           try: async () => {
             calls.push({ command: "repo_pull_request_sync_detailed", input });
             return { ran: true as const, changedTaskIds: [], autoCloseFailures: [] };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "task_transition", input });
-            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -546,15 +445,6 @@ describe("createTaskCommandHandlers", () => {
           repoPath: "/repo",
           taskId: "task-1",
           removeWorktree: false,
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.task_reset_implementation?.({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
         }),
       ),
     ).resolves.toBeDefined();
@@ -685,56 +575,11 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.task_transition?.({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          status: "in_progress",
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
         handlers.task_apply_event?.({
           workspaceId: "repo",
           repoPath: "/repo",
           taskId: "task-1",
           eventId: "defer",
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.build_blocked?.({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          reason: "Blocked",
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.build_start?.({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          runtimeKind: "opencode",
-        }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.build_resumed?.({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      runHandler(
-        handlers.build_completed?.({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          input: { summary: "Done" },
         }),
       ),
     ).resolves.toBeDefined();
@@ -751,16 +596,6 @@ describe("createTaskCommandHandlers", () => {
     await expect(
       runHandler(handlers.repo_pull_request_sync?.({ workspaceId: "repo", repoPath: "/repo" })),
     ).resolves.toEqual({ ok: true });
-    await expect(
-      runHandler(
-        handlers.human_request_changes?.({
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          note: "Please adjust",
-        }),
-      ),
-    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.workflow_artifact_save?.({
@@ -815,10 +650,6 @@ describe("createTaskCommandHandlers", () => {
       {
         command: "task_close",
         input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", removeWorktree: false },
-      },
-      {
-        command: "task_reset_implementation",
-        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "task_reset",
@@ -909,33 +740,8 @@ describe("createTaskCommandHandlers", () => {
         },
       },
       {
-        command: "task_transition",
-        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", status: "in_progress" },
-      },
-      {
         command: "task_apply_event",
         input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", eventId: "defer" },
-      },
-      {
-        command: "build_blocked",
-        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", reason: "Blocked" },
-      },
-      {
-        command: "build_start",
-        input: {
-          workspaceId: "repo",
-          repoPath: "/repo",
-          taskId: "task-1",
-          runtimeKind: "opencode",
-        },
-      },
-      {
-        command: "build_resumed",
-        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" },
-      },
-      {
-        command: "build_completed",
-        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", summary: "Done" },
       },
       {
         command: "task_update",
@@ -949,10 +755,6 @@ describe("createTaskCommandHandlers", () => {
       {
         command: "repo_pull_request_sync",
         input: { workspaceId: "repo", repoPath: "/repo" },
-      },
-      {
-        command: "human_request_changes",
-        input: { workspaceId: "repo", repoPath: "/repo", taskId: "task-1", note: "Please adjust" },
       },
       {
         command: "workflow_artifact_save",

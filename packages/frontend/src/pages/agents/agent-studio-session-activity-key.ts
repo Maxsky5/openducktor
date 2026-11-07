@@ -2,12 +2,12 @@ import {
   type AgentSessionIdentityLike,
   agentSessionIdentityKey,
 } from "@openducktor/frontend-core/lib/agent-session-identity";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 export type AgentStudioSessionActivityKeyParams = {
   workspaceId: string | null;
   taskId: string;
-  role: AgentRole;
+  role: AgentRole | null;
   session: AgentSessionIdentityLike | null | undefined;
 };
 

@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { parseMarkdownDocument } from "@/rich-content/markdown/markdown-document";
 import type { DocumentSource } from "./document-rows";
-import { documentPanelState, formatDocumentUpdatedAt } from "./documents-panel-model";
+import {
+  documentPanelState,
+  documentMenuItems,
+  formatDocumentUpdatedAt,
+} from "./documents-panel-model";
 
 const MARKDOWN = "# Plan\n\nFirst step.\n\n- one\n- two";
 
@@ -50,4 +54,14 @@ describe("formatDocumentUpdatedAt", () => {
     expect(formatDocumentUpdatedAt(null)).toBeNull();
     expect(formatDocumentUpdatedAt("not a date")).toBeNull();
   });
+});
+
+test("the document menu retains declared numeric artifact order and selection", () => {
+  const sources = new Map(
+    ["10", "2"].map((key) => [key, source({ key, title: `Document ${key}` })]),
+  );
+  expect(documentMenuItems(sources, "2").map(({ id, checked }) => ({ id, checked }))).toEqual([
+    { id: "10", checked: false },
+    { id: "2", checked: true },
+  ]);
 });

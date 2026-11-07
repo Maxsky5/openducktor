@@ -447,6 +447,48 @@
       }
     },
     {
+      "files": [
+        "apps/mobile/src/**/*.ts",
+        "apps/mobile/src/**/*.tsx",
+        "packages/frontend-core/src/**/*.ts",
+        "packages/frontend-core/src/**/*.tsx",
+        "packages/contracts/src/**/*.ts",
+        "packages/core/src/**/*.ts",
+        "packages/host-client/src/**/*.ts",
+        "packages/workflows/src/**/*.ts"
+      ],
+      "rules": {
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "Intl",
+            "property": "ListFormat",
+            "message": "Hermes on mobile has no Intl.ListFormat, so the mobile app stops. Join the list in code."
+          },
+          {
+            "object": "Intl",
+            "property": "PluralRules",
+            "message": "Hermes on mobile has no Intl.PluralRules, so the mobile app stops. Use plural of lib/plural."
+          },
+          {
+            "object": "Intl",
+            "property": "RelativeTimeFormat",
+            "message": "Hermes on mobile has no Intl.RelativeTimeFormat, so the mobile app stops. Use lib/relative-time."
+          },
+          {
+            "object": "Intl",
+            "property": "DisplayNames",
+            "message": "Hermes on mobile has no Intl.DisplayNames, so the mobile app stops."
+          },
+          {
+            "object": "Intl",
+            "property": "Locale",
+            "message": "Hermes on mobile has no Intl.Locale, so the mobile app stops."
+          }
+        ]
+      }
+    },
+    {
       "files": ["packages/workflows/src/**/*.ts"],
       "rules": {
         "architecture/allowed-imports": [

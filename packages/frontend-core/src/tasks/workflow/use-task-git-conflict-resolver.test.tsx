@@ -46,7 +46,7 @@ const repoConfig = (workspaceId: string): RepoConfig => ({
   branchPrefix: "odt/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   promptOverrides: {},
   worktreeCopyPaths: [],
@@ -204,11 +204,15 @@ describe("useTaskGitConflictResolver", () => {
       expect(request?.existingSessionOptions?.map((option) => option.value)).toEqual([
         agentSessionIdentityKey(builder),
       ]);
-      expect(openBuilderSession).toHaveBeenCalledWith("task-1", {
-        externalSessionId: "build-1",
-        runtimeKind: "opencode",
-        workingDirectory: CONFLICT_DIRECTORY,
-      });
+      expect(openBuilderSession).toHaveBeenCalledWith(
+        "task-1",
+        {
+          externalSessionId: "build-1",
+          runtimeKind: "opencode",
+          workingDirectory: CONFLICT_DIRECTORY,
+        },
+        "build",
+      );
 
       request?.assertBeforeLaunch?.();
       await harness.update({

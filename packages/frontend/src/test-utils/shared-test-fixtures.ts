@@ -1,10 +1,20 @@
+import {
+  createTaskActionRunner,
+  type TaskActionRunnerHandlers,
+} from "@openducktor/frontend-core/tasks/workflow/task-action-runner";
 import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import {
   createObservedCheckFixture,
+  createWireTaskCardFixture,
   createWorkspaceRecordFixture,
 } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import type { TasksStateContextValue } from "@openducktor/frontend-core/types/state-slices";
+import {
+  SPEC_PLAN_BUILD_BOARD,
+  type KanbanColumn,
+  type ResolvedTaskCard,
+} from "@openducktor/workflows";
 import type {
   ChecksStateContextValue,
   WorkspacePresenceContextValue,
@@ -13,39 +23,68 @@ import type {
 
 export * from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 
-/** Task workflow actions that do nothing, for views that only need the action context. */
+/** A column of the built-in board with its tasks. Explicit fields win. */
+export const createKanbanColumnFixture = (
+  id: string,
+  tasks: ResolvedTaskCard[] = [],
+  overrides: Partial<Omit<KanbanColumn, "id" | "tasks">> = {},
+): KanbanColumn => {
+  const state = SPEC_PLAN_BUILD_BOARD.states.find((candidate) => candidate.id === id);
+  if (!state) throw new Error(`The built-in board has no state "${id}".`);
+  return { ...state, ...overrides, id, tasks };
+};
+
+/**
+ * Task workflow actions that do nothing, for views that only need the action context. The shared
+ * runner calls the context handlers of the fixture and the given runner handlers.
+ */
 export const createTaskWorkflowActionsFixture = (
   overrides: Partial<TaskWorkflowActions> = {},
-): TaskWorkflowActions => ({
-  onCreateTask: () => {},
-  onPlan: () => {},
-  onQaStart: () => {},
-  onQaOpen: () => {},
-  onBuild: () => {},
-  onOpenSession: () => {},
-  onDelegate: () => {},
-  onEdit: () => {},
-  onOpenTaskDetails: () => {},
-  onHumanApprove: () => {},
-  onHumanRequestChanges: () => {},
-  onResetImplementation: () => {},
-  onResetTask: async () => {},
-  onCloseTask: async () => {},
-  onRemoveTaskWorktree: async () => {},
-  onDelete: async () => {},
-  onConfirmTaskAction: () => {},
-  onDetectPullRequest: () => {},
-  onUnlinkPullRequest: () => {},
-  detectingPullRequestTaskIds: new Set<string>(),
-  unlinkingPullRequestTaskIds: new Set<string>(),
-  gitProviderContext: undefined,
-  gitProviderReadError: null,
-  registerTaskDetailsClose: () => () => {},
-  claimWorkflowDialog: (_owner, run) => run(),
-  taskSessionsByTaskId: new Map(),
-  activeTaskSessionContextByTaskId: new Map(),
-  ...overrides,
-});
+  runner: Partial<TaskActionRunnerHandlers> = {},
+): TaskWorkflowActions => {
+  const actions: TaskWorkflowActions = {
+    runAction: (task, action, options) =>
+      createTaskActionRunner({
+        onLaunch: actions.onLaunch,
+        onApplyEvent: () => {},
+        onOpenTaskDetails: actions.onOpenTaskDetails,
+        onOpenSession: actions.onOpenSession,
+        onHumanApprove: () => {},
+        onHumanFeedback: () => {},
+        onConfirm: (taskId, confirmation) => {
+          if (confirmation !== "reset_implementation")
+            actions.onConfirmTaskAction(taskId, confirmation);
+        },
+        continueTaskWorkflow: async () => {},
+        showError: (title, description) => {
+          throw new Error(`${title}: ${description}`);
+        },
+        ...runner,
+      })(task, action, options),
+    onLaunch: () => {},
+    onCreateTask: () => {},
+    onOpenSession: () => {},
+    onEdit: () => {},
+    onOpenTaskDetails: () => {},
+    onResetTask: async (taskId) => createWireTaskCardFixture({ id: taskId }),
+    onCloseTask: async (taskId) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
+    onRemoveTaskWorktree: async () => {},
+    onDelete: async () => {},
+    onConfirmTaskAction: () => {},
+    onDetectPullRequest: () => {},
+    onUnlinkPullRequest: () => {},
+    detectingPullRequestTaskIds: new Set<string>(),
+    unlinkingPullRequestTaskIds: new Set<string>(),
+    gitProviderContext: undefined,
+    gitProviderReadError: null,
+    registerTaskDetailsClose: () => () => {},
+    claimWorkflowDialog: (_owner, run) => run(),
+    taskSessionsByTaskId: new Map(),
+    activeTaskSessionContextByTaskId: new Map(),
+    ...overrides,
+  };
+  return actions;
+};
 
 export const createChecksStateFixture = (
   overrides: Partial<ChecksStateContextValue> = {},
@@ -81,12 +120,10 @@ export const createTasksStateFixture = (
   updateTask: async () => undefined,
   setTaskTargetBranch: async () => undefined,
   deleteTask: async () => undefined,
-  closeTask: async () => undefined,
+  closeTask: async (taskId) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
   removeTaskWorktree: async () => undefined,
-  resetTaskImplementation: async () => undefined,
-  resetTask: async () => undefined,
-  transitionTask: async () => undefined,
-  humanRequestChangesTask: async () => undefined,
+  resetTaskImplementation: async (taskId) => createWireTaskCardFixture({ id: taskId }),
+  resetTask: async (taskId) => createWireTaskCardFixture({ id: taskId }),
   ...overrides,
 });
 

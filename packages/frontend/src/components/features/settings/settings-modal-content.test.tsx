@@ -1,3 +1,4 @@
+import { WorkflowTestProvider } from "@/test-utils/workflow-provider";
 import { describe, expect, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
@@ -8,7 +9,7 @@ import {
 } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act, createElement, useState } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -173,7 +174,7 @@ describe("settings modal content", () => {
         removed: {
           ...createRepoSettingsConfigFixture("removed", "/removed"),
           workspaceName: "Removed repository",
-          hooks: { postComplete: ["UNSAVED cleanup command"] },
+          hooks: { beforeWorktreeRemoval: ["UNSAVED cleanup command"] },
         },
       },
     });
@@ -225,7 +226,7 @@ describe("settings modal content", () => {
       });
 
       const cleanupField = screen.getByLabelText<HTMLTextAreaElement>(
-        "Worktree cleanup script (one command per line)",
+        "Before worktree removal script (one command per line)",
       );
       expect(cleanupField.value).toBe("UNSAVED cleanup command");
       expect(cleanupField.disabled).toBe(false);
@@ -246,7 +247,7 @@ describe("settings modal content", () => {
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
-          hooks: { postComplete: ["bun run clean"] },
+          hooks: { beforeWorktreeRemoval: ["bun run clean"] },
           actions: {
             items: [
               {
@@ -304,10 +305,10 @@ describe("settings modal content", () => {
     );
 
     expect(scriptsHtml).toContain("Actions are repository commands");
-    expect(scriptsHtml).toContain("Worktree cleanup script");
+    expect(scriptsHtml).toContain("Before worktree removal script");
     expect(scriptsHtml).toContain("Files copied to worktrees");
     expect(configurationHtml).not.toContain("Actions are repository commands");
-    expect(configurationHtml).not.toContain("Worktree cleanup script");
+    expect(configurationHtml).not.toContain("Before worktree removal script");
     expect(configurationHtml).not.toContain("Files copied to worktrees");
   });
 
@@ -327,7 +328,7 @@ describe("settings modal content", () => {
           repository: { host: "github.com", owner: "openai", name: "saved" },
         },
       },
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       actions: { items: [], defaultActionId: null },
       worktreeCopyPaths: [],
       promptOverrides: {},
@@ -802,3 +803,6 @@ describe("settings modal content", () => {
     expect(html).toContain("Failed to load settings");
   });
 });
+
+const renderToStaticMarkup = (element: Parameters<typeof renderMarkup>[0]) =>
+  renderMarkup(<WorkflowTestProvider>{element}</WorkflowTestProvider>);

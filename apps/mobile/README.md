@@ -35,7 +35,7 @@ flowchart TD
 | Rich content | `src/rich-content/` | Markdown, code, diffs, images, isolated WebView pages |
 | UI kit and theme | `src/ui/`, `src/theme/` | Components, semantic colors, the type ramp, motion tokens, light and dark themes |
 | Native modules | `modules/` | `openducktor-network` (HTTP), `openducktor-keyboard` (hardware Enter), `openducktor-scroll` (Android scroll redraw) |
-| Config plugins | `plugins/` | Android network security, Android release signing, iOS release signing |
+| Config plugins | `plugins/` | Android network security, Android release signing, Android bundle inputs, iOS release signing |
 
 ### Design system
 
@@ -57,6 +57,7 @@ flowchart TD
 - Route sheets use `SheetScreen`, because Android form sheets have no navigation bar.
 - A compact sheet that fits its content turns off the native resize animation on Android. The comment of `compactSheetOptions` in `src/navigation/sheet-options.ts` gives the reason.
 - A route sheet closes through its `useNavigation` object. This sends the action to the native navigator without the state queue of the global router. A guarded form calls the release function of `usePreventRemove` before it closes. Full-height Android forms use the native 150 ms fade. Other route sheets keep their native detents and swipe gestures.
+- Cancel on the last open step of a workflow sheet closes the route at once, as Back does. The unmount drops the step state. If Cancel closes the step state first, the sheet shows a frame without its form and closes one effect later. `src/features/workflow/sheet-cancel.ts` names the steps that close through their model.
 - `InPlaceSheet` and `ConfirmDialogHost` use `ModalWindow`. On Android, it fades on the UI thread and keeps the window and its content until the exit ends. A caller that must unmount the sheet waits for `onDismiss`. iOS keeps its native presentation. A closed model picker builds no catalog rows before its first open.
 - A window lower than 500 points, such as a phone in landscape, keeps its height for content. `useCompactHeight` of `src/ui/use-wide-layout.ts` reports it. In this layout:
   - The tabs move to a navigation rail on the left edge. The create button sits in the middle of the rail's right edge, and its fan opens to the right.
@@ -135,6 +136,8 @@ Follow these rules, or sheets and screens open and close late. React Native show
 
 `src/platform/install-globals.ts` runs before all other app code. It supplies a streaming UTF-8 `TextDecoder`, a grapheme `Intl.Segmenter`, `Array.prototype.toSorted`, and `crypto` when Hermes or React Native does not have them. Then it checks every global and built-in that shared code needs, and startup stops with the name of each missing one.
 
+Hermes has no `Intl.ListFormat`, `Intl.PluralRules`, `Intl.RelativeTimeFormat`, `Intl.DisplayNames`, or `Intl.Locale`. With inline requires, a module that calls one stops the app when a screen first uses the module. The `no-restricted-properties` lint rule rejects them in the app and in the shared packages that it bundles.
+
 ### Task artifacts
 
 - The Artifacts work view follows [task artifacts](../../docs/task-artifacts.md#mobile-app).
@@ -149,7 +152,7 @@ Follow these rules, or sheets and screens open and close late. React Native show
 
 The `ios` and `android` commands build the isolated pages first, so a new clone needs no other step.
 
-The app needs a protocol 6 host with Remote control turned on. Scan its pairing QR code to connect directly, or enter its address and six-digit code. Typing the sixth digit connects. Tap a digit to replace it; a corrected full code waits for Connect. A failure shows its reason and next action in a callout below the code. Saved access needs no new code after restart or suspension. Wrong, expired, used, or revoked access keeps the address and asks for a current code. Codes and credentials do not encrypt HTTP traffic. Use HTTPS or a protected network. On the host, open Host connection or Settings, Remote control, turn it on, and select Add device. Then copy the address or open the QR code tab.
+The app needs a protocol 7 host with Remote control turned on. Scan its pairing QR code to connect directly, or enter its address and six-digit code. Typing the sixth digit connects. Tap a digit to replace it; a corrected full code waits for Connect. A failure shows its reason and next action in a callout below the code. Saved access needs no new code after restart or suspension. Wrong, expired, used, or revoked access keeps the address and asks for a current code. Codes and credentials do not encrypt HTTP traffic. Use HTTPS or a protected network. On the host, open Host connection or Settings, Remote control, turn it on, and select Add device. Then copy the address or open the QR code tab.
 
 ### Android setup
 
@@ -229,6 +232,7 @@ Run these commands in `apps/mobile`. `bun run ios`, `bun run android`, and `bun 
 - `metro.config.js` turns on `inlineRequires`, so a module runs when the app first uses one of its imports. The first frame then runs only the modules that it needs. Imports only for their effects keep their place and order.
 - `metro.config.js` resolves three imports to empty modules, because the app never runs them on the device: `katex` from `micromark-extension-math`, `expo-symbols` from Expo Router, and the locale index of Zod. The isolated pages, which render math, build with Bun.
 - `package.json` sets the Reanimated static flags `ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS` and `IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS`. An animation of a transform, an opacity, or a color then updates the native view directly, without a React Native commit on each frame. A change of these flags needs a native build.
+- The React Native Gradle task that makes the Android release bundle tracks only the sources of `apps/mobile`. `plugins/with-android-workspace-bundle-inputs.js` adds the `packages/*` sources as inputs, so a change in a shared package makes a new bundle. An `android/` folder from before this plugin needs `bun run native`, or the release build can ship an old bundle.
 
 ## Testing
 

@@ -1,50 +1,31 @@
-import type { WorkflowDefinition } from "@openducktor/contracts";
+import type { AgentRoleDefinition, WorkflowDefinition } from "@openducktor/contracts";
 import { createTaskWorkflow, type TaskWorkflow } from "../src/task-workflow/task-workflow";
 import type { PromptTemplate } from "../src/task-workflow/task-prompts";
 
 const drafted = { artifact: "draft", present: true } as const;
 const accepted = { artifact: "review", verdict: "accept" } as const;
 const revised = { artifact: "review", verdict: "revise" } as const;
-const open = ["backlog", "writing", "paused", "reviewing", "approval"];
+const active = ["open", "writing", "paused", "reviewing", "approval"];
 
 /**
- * A second task workflow for tests. Its IDs differ from the built-in IDs, and it has two
- * terminal states, so a test catches code that assumes the built-in workflow.
+ * A second task workflow for tests. Its IDs differ from the built-in IDs, except the core states,
+ * so a test catches code that assumes the built-in workflow.
  */
 export const reviewTaskDefinition = (): WorkflowDefinition => ({
   schemaVersion: 1,
   id: "review",
   revision: 1,
   label: "Review",
-  initialState: "backlog",
-  facts: [{ id: "issueType", type: "enum", values: ["article", "fix"] }],
-  roles: [
-    {
-      id: "writer",
-      label: "Writer",
-      tools: [
-        "odt_read_task",
-        "odt_read_task_artifacts",
-        "odt_set_task_artifact",
-        "odt_build_blocked",
-        "odt_build_resumed",
-        "odt_build_completed",
-      ],
-      writes: ["draft"],
-      workspaceAccess: "write",
-      location: "task_worktree",
-      runtimeScopes: ["build"],
-    },
-    {
-      id: "editor",
-      label: "Editor",
-      tools: ["odt_read_task", "odt_read_task_artifacts", "odt_set_task_artifact"],
-      writes: ["review"],
-      workspaceAccess: "read",
-      location: "repository",
-      runtimeScopes: ["workspace"],
-    },
+  facts: [],
+  issueTypes: [
+    { id: "feature", label: "Article" },
+    { id: "bug", label: "Fix" },
   ],
+  roles: [
+    { id: "writer", writes: ["draft"] },
+    { id: "editor", writes: ["review"] },
+  ],
+  pullRequestRoles: [],
   artifacts: [
     { id: "draft", label: "Draft", kind: "document", saveEventId: "submit-draft" },
     {
@@ -59,7 +40,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
     },
   ],
   states: [
-    { id: "backlog", label: "Backlog" },
+    { id: "open", label: "Backlog" },
     { id: "writing", label: "Writing", studioRole: "writer" },
     { id: "paused", label: "Paused" },
     {
@@ -77,11 +58,11 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
         role: "editor",
       },
     },
-    { id: "approval", label: "Approval" },
+    { id: "approval", label: "Approval", mergeDetection: true },
     {
-      id: "published",
-      label: "Published",
-      terminal: true,
+      id: "closed",
+      label: "Done",
+      tone: "success",
       notification: {
         kind: "workflow.published",
         defaultSetting: { enabled: true, target: "in_app", sound: "none" },
@@ -93,7 +74,6 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
         route: "kanban",
       },
     },
-    { id: "shelved", label: "Shelved", terminal: true },
   ],
   steps: [
     {
@@ -105,7 +85,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       inputs: [],
       outputs: ["draft"],
       requiredWhen: true,
-      availableWhen: { stateIn: open },
+      availableWhen: { stateIn: active },
       completedWhen: drafted,
       launchActions: [
         {
@@ -113,7 +93,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
           label: "Start writing",
           startModes: ["fresh"],
           defaultStartMode: "fresh",
-          template: { kind: "kickoff", id: "kickoff.write_start" },
+          template: { kind: "kickoff", id: "messages.write_start" },
           targetBranch: true,
         },
         {
@@ -121,8 +101,17 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
           label: "Revise draft",
           startModes: ["fresh", "reuse", "fork"],
           defaultStartMode: "reuse",
-          template: { kind: "kickoff", id: "kickoff.write_revise" },
+          template: { kind: "kickoff", id: "messages.write_revise" },
           selectWhen: revised,
+          requiresWorktree: true,
+        },
+        {
+          id: "write_feedback",
+          label: "Apply feedback",
+          startModes: ["fresh", "reuse"],
+          defaultStartMode: "reuse",
+          template: { kind: "kickoff", id: "messages.write_feedback" },
+          context: "human_feedback",
           requiresWorktree: true,
         },
       ],
@@ -143,7 +132,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
           label: "Review draft",
           startModes: ["fresh", "reuse"],
           defaultStartMode: "fresh",
-          template: { kind: "kickoff", id: "kickoff.edit_review" },
+          template: { kind: "kickoff", id: "messages.edit_review" },
         },
       ],
     },
@@ -155,7 +144,7 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       label: "Write",
       stepId: "write",
       launchActionIds: ["write_start", "write_revise"],
-      availableWhen: { stateIn: ["backlog", "writing", "paused"] },
+      availableWhen: { stateIn: ["open", "writing", "paused"] },
     },
     {
       id: "request_review",
@@ -167,13 +156,25 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
     },
     {
       id: "approve",
-      kind: "event",
+      kind: "approval",
       label: "Approve",
-      eventId: "approve-copy",
-      availableWhen: true,
+      availableWhen: { stateIn: ["approval"] },
     },
-    { id: "shelve", kind: "event", label: "Shelve", eventId: "shelve", availableWhen: true },
-    { id: "restart", kind: "event", label: "Restart", eventId: "restart", availableWhen: true },
+    {
+      id: "request_rewrite",
+      kind: "event",
+      label: "Request rewrite",
+      eventId: "request-rewrite",
+      launchActionIds: ["write_feedback"],
+      availableWhen: { stateIn: ["approval"] },
+    },
+    {
+      id: "drop_review",
+      kind: "event",
+      label: "Drop review",
+      eventId: "drop-review",
+      availableWhen: { stateIn: ["writing", "paused", "reviewing", "approval"] },
+    },
     {
       id: "hold",
       kind: "event",
@@ -184,38 +185,23 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
   ],
   events: [
     {
-      id: "move-writing",
-      from: ["backlog", "paused"],
-      guards: [],
-      outcomes: [{ when: true, to: "writing" }],
-      effect: "status.set",
-    },
-    {
       id: "hold",
       from: ["reviewing", "approval"],
       guards: [],
       outcomes: [{ when: true, to: "paused" }],
     },
     {
-      id: "move-approval",
-      from: ["reviewing"],
-      guards: [],
-      outcomes: [{ when: true, to: "approval" }],
-      effect: "status.set",
-    },
-    {
       id: "start-writing",
-      from: ["backlog", "writing", "paused"],
+      from: ["open", "writing", "paused"],
       guards: [],
       outcomes: [
-        { when: { stateIn: ["backlog"] }, to: "writing" },
+        { when: { stateIn: ["open"] }, to: "writing" },
         { when: true, to: null },
       ],
-      effect: "build.start",
     },
     {
       id: "submit-draft",
-      from: open,
+      from: active,
       guards: [],
       outcomes: [
         { when: { stateIn: ["writing"] }, to: "reviewing", signal: "draftSubmitted" },
@@ -242,91 +228,34 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
         { when: { stateIn: ["reviewing"] }, to: null },
         { when: true, to: "reviewing", signal: "draftSubmitted", sourceRole: "writer" },
       ],
-      effect: "build.completed",
+      agent: { roles: ["writer"], note: "optional", description: "Submit the draft for review." },
     },
     {
       id: "pause-writing",
       from: ["writing", "paused"],
       guards: [],
       outcomes: [{ when: true, to: "paused" }],
-      effect: "build.blocked",
+      agent: { roles: ["writer"], note: "required", description: "Pause the writing." },
     },
     {
       id: "resume-writing",
       from: ["paused", "writing"],
       guards: [],
       outcomes: [{ when: true, to: "writing" }],
-      effect: "build.resumed",
-    },
-    {
-      id: "approve-copy",
-      from: ["approval", "published"],
-      guards: [],
-      outcomes: [{ when: true, to: "published" }],
-      effect: "review.approve",
+      agent: { roles: ["writer"], note: "optional", description: "Resume the writing." },
     },
     {
       id: "request-rewrite",
       from: ["approval"],
       guards: [],
       outcomes: [{ when: true, to: "writing" }],
-      effect: "review.request_changes",
-    },
-    {
-      id: "shelve",
-      from: [...open, "shelved"],
-      guards: [],
-      outcomes: [{ when: true, to: "shelved" }],
-      effect: "task.close",
-    },
-    {
-      id: "restart",
-      from: open,
-      guards: [],
-      outcomes: [{ when: true, to: "backlog" }],
-      effect: "task.reset",
     },
     {
       id: "drop-review",
       from: ["writing", "paused", "reviewing", "approval"],
       guards: [],
       outcomes: [{ when: true, to: "writing" }],
-      effect: "implementation.reset",
-    },
-    {
-      id: "manage-pr",
-      from: ["writing", "approval"],
-      guards: [],
-      outcomes: [{ when: true, to: null }],
-      effect: "pull_request.manage",
-    },
-    {
-      id: "pr-merged",
-      from: ["approval", "published"],
-      guards: [],
-      outcomes: [{ when: true, to: "published" }],
-      effect: "pull_request.merged",
-    },
-    {
-      id: "merge-local",
-      from: ["approval"],
-      guards: [],
-      outcomes: [{ when: true, to: "published" }],
-      effect: "direct_merge.local",
-    },
-    {
-      id: "merge-publish",
-      from: ["approval"],
-      guards: [],
-      outcomes: [{ when: true, to: "approval" }],
-      effect: "direct_merge.publish",
-    },
-    {
-      id: "merge-done",
-      from: ["approval", "published"],
-      guards: [],
-      outcomes: [{ when: true, to: "published" }],
-      effect: "direct_merge.completed",
+      effects: ["worktree.reset"],
     },
   ],
   signals: [
@@ -364,10 +293,9 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
       startMode: "fork",
     },
   ],
-  actionOrder: [
-    { when: true, actions: ["start_write", "request_review", "approve", "shelve", "restart"] },
-  ],
+  actionOrder: [{ when: true, actions: ["start_write", "request_review", "approve"] }],
   actionPriority: [],
+  launchOrder: [],
 });
 
 const template = (
@@ -376,21 +304,59 @@ const template = (
   text: string,
 ): PromptTemplate => ({ id, purpose, builtinVersion: 1, template: text });
 
+const systemPrompt = (label: string, text: string) => ({
+  builtinVersion: 1,
+  template: text,
+  label,
+  description: "",
+});
+
+/** The role catalog of the review workflow of the tests. */
+export const reviewTaskRoles: readonly AgentRoleDefinition[] = [
+  {
+    id: "writer",
+    label: "Writer",
+    tools: [
+      "odt_read_task",
+      "odt_read_task_artifacts",
+      "odt_set_task_artifact",
+      "odt_apply_workflow_event",
+    ],
+    workspaceAccess: "write",
+    location: "task_worktree",
+    runtimeScopes: ["build"],
+    systemPrompt: systemPrompt("Writer system prompt", "You are the {{role}} of task {{task.id}}."),
+  },
+  {
+    id: "editor",
+    label: "Editor",
+    tools: ["odt_read_task", "odt_read_task_artifacts", "odt_set_task_artifact"],
+    workspaceAccess: "read",
+    location: "repository",
+    runtimeScopes: ["workspace"],
+    systemPrompt: systemPrompt("Editor system prompt", "You review task {{task.id}} as {{role}}."),
+  },
+];
+
 export const reviewTaskPromptTemplates: readonly PromptTemplate[] = [
-  template("system.role.writer.base", "system", "You are the {{role}} of task {{task.id}}."),
-  template("system.role.editor.base", "system", "You review task {{task.id}} as {{role}}."),
-  template("system.shared.workflow_guards", "system", "Follow the review workflow."),
-  template("system.shared.tool_protocol", "system", "Tools:\n{{role.allowedTools}}"),
+  template("workflow.rules", "system", "Follow the review workflow."),
+  template("workflow.tool_rules", "system", "Tools:\n{{role.allowedTools}}"),
   template(
-    "system.shared.task_context",
+    "workflow.task_context",
     "system",
     "Task {{task.id}}: {{task.title}} ({{task.issueType}}, {{task.status}})",
   ),
-  template("permission.read_only.reject", "permission", "The {{role}} cannot change files."),
-  template("kickoff.write_start", "kickoff", "Write the draft for {{task.id}}."),
-  template("kickoff.write_revise", "kickoff", "Revise the draft for {{task.id}}."),
-  template("kickoff.edit_review", "kickoff", "Review the draft of {{task.id}}."),
+  template("workflow.read_only_rejection", "permission", "The {{role}} cannot change files."),
+  template("messages.write_start", "kickoff", "Write the draft for {{task.id}}."),
+  template("messages.write_revise", "kickoff", "Revise the draft for {{task.id}}."),
+  template("messages.edit_review", "kickoff", "Review the draft of {{task.id}}."),
+  template("messages.write_feedback", "kickoff", "Apply this feedback: {{humanFeedback}}"),
+  template(
+    "messages.pull_request",
+    "kickoff",
+    "Publish the pull request of {{task.id}} against {{git.targetBranch}}.",
+  ),
 ];
 
 export const createReviewTaskWorkflow = (): TaskWorkflow =>
-  createTaskWorkflow(reviewTaskDefinition(), reviewTaskPromptTemplates);
+  createTaskWorkflow(reviewTaskDefinition(), reviewTaskPromptTemplates, reviewTaskRoles);

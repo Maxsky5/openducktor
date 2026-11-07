@@ -17,7 +17,7 @@ import {
   createTaskCardFixture as createSharedTaskCardFixture,
 } from "../../test-support/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "../../types/agent-orchestrator";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 const ORCHESTRATOR_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
   title: "Task",

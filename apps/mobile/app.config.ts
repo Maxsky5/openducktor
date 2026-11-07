@@ -172,6 +172,7 @@ const config: ExpoConfig = {
     "./plugins/with-android-network-security.js",
     ["./plugins/with-android-theme-colors.js", NATIVE_COLORS],
     "./plugins/with-android-release-signing.js",
+    "./plugins/with-android-workspace-bundle-inputs.js",
     "./plugins/with-ios-release-signing.js",
   ],
   // Releases ship through the stores only; the app has no over-the-air updates.

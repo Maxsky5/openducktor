@@ -75,12 +75,13 @@ const held: AutopilotState = {
   outcomes: [
     {
       outcomeId: "recovered",
-      workflowId: "openducktor",
+      workflowId: "openducktor-spec-plan-build",
       workspaceId: "alpha",
       repoPath: "/repo",
       task: { id: "task", title: "Task" },
       eventId: "taskProgressedToAiReview",
       actionId: "startQa",
+      actionLabel: "Start QA",
       occurredAt: "2026-10-10T00:00:00.000Z",
       kind: "skipped",
       reason: "The task moved on.",

@@ -2,10 +2,19 @@ import { z } from "zod";
 
 import { runtimeSupportedScopeSchema } from "./agent-runtime-schemas";
 import { agentSessionStartModeSchema, agentToolNameSchema } from "./agent-workflow-schemas";
+import { issueTypeSchema } from "./issue-type-schemas";
+import { agentPromptPlaceholderSchema, WORKFLOW_MESSAGE_PROMPT_PREFIX } from "./prompt-schemas";
 import {
   notificationKindSettingSchema,
   workflowNotificationKindSchema,
 } from "./notification-schemas";
+import {
+  workflowActionEmphasisSchema,
+  workflowActionSurfaceSchema,
+  workflowIconSchema,
+  workflowSessionActivitySchema,
+  workflowToneSchema,
+} from "./workflow-display-schemas";
 import {
   workflowArtifactIdSchema,
   workflowConditionSchema,
@@ -13,16 +22,45 @@ import {
   workflowIdSchema,
 } from "./workflow-condition-schemas";
 
-/** A role works in the repository or in the task worktree, and may write only there. */
-export const workflowRoleDefinitionSchema = z.strictObject({
+/**
+ * The system prompt of an agent role. The role owns it, so its prompt ID is always "system".
+ * Overrides keep its required placeholders.
+ */
+export const agentRoleSystemPromptSchema = z.strictObject({
+  builtinVersion: z.number().int().positive(),
+  template: z.string(),
+  requiredPlaceholders: z.array(agentPromptPlaceholderSchema).optional(),
+  label: z.string(),
+  description: z.string(),
+});
+export type AgentRoleSystemPrompt = z.infer<typeof agentRoleSystemPromptSchema>;
+
+/**
+ * An agent role of the host role catalog. Workflows bind roles by ID, so one role keeps its tools,
+ * access, prompt, and settings in every workflow that uses it.
+ */
+export const agentRoleDefinitionSchema = z.strictObject({
   id: workflowIdSchema,
   label: z.string(),
   tools: z.array(agentToolNameSchema),
-  /** Workflow artifacts that the role may save. */
-  writes: z.array(workflowArtifactIdSchema),
   workspaceAccess: z.enum(["read", "write"]),
+  /** A role works in the repository or in the task worktree, and may write only there. */
   location: z.enum(["repository", "task_worktree"]),
   runtimeScopes: z.array(runtimeSupportedScopeSchema),
+  systemPrompt: agentRoleSystemPromptSchema,
+  icon: workflowIconSchema.optional(),
+  /** The Agent Studio side panel that opens first. The default is the document panel. */
+  defaultPanel: z.enum(["document", "diffs"]).optional(),
+});
+export type AgentRoleDefinition = z.infer<typeof agentRoleDefinitionSchema>;
+
+/** A catalog role that a workflow uses, with what the role may do in this workflow. */
+export const workflowRoleDefinitionSchema = z.strictObject({
+  id: workflowIdSchema,
+  /** Workflow artifacts that the role may save. */
+  writes: z.array(workflowArtifactIdSchema),
+  /** The document that the side panel shows first. The default is the first output of the step. */
+  defaultArtifact: workflowArtifactIdSchema.optional(),
 });
 export type WorkflowRoleDefinition = z.infer<typeof workflowRoleDefinitionSchema>;
 
@@ -46,6 +84,8 @@ export const workflowArtifactDefinitionSchema = z.discriminatedUnion("kind", [
     kind: z.literal("document"),
     /** The event that a save sends. Without it, a save changes only the document. */
     saveEventId: workflowIdSchema.optional(),
+    /** The editor text before the user writes. */
+    placeholder: z.string().optional(),
   }),
   z.strictObject({
     id: workflowArtifactIdSchema,
@@ -74,23 +114,52 @@ export const workflowStateNotificationSchema = z.strictObject({
 });
 export type WorkflowStateNotification = z.infer<typeof workflowStateNotificationSchema>;
 
-/** No event can leave a terminal state. Events may list it as a source to admit repeats. */
+/** The core state of every workflow where a new or reset task starts. */
+export const TASK_OPEN_STATE = "open";
+/**
+ * The core terminal state of every workflow. Close Task moves a task to it. No event can leave it.
+ * Events may list it as a source to admit repeats.
+ */
+export const TASK_CLOSED_STATE = "closed";
+/**
+ * The core launch that creates or updates the pull request of a task. OpenDucktor owns it, so no
+ * workflow declares it. Workflow automations and launch order rules can name it.
+ */
+export const PULL_REQUEST_LAUNCH_ID = "pull_request";
+
+/**
+ * A workflow state. Every workflow declares the core states `open` and `closed` with its other
+ * states, so it gives their labels, tone, and notification.
+ */
 export const workflowStateDefinitionSchema = z.strictObject({
   id: workflowIdSchema,
   label: z.string(),
   title: z.string().optional(),
   /** A compact label for narrow lists. The default is the label. */
   shortLabel: z.string().optional(),
-  terminal: z.boolean().optional(),
+  /** The column and badge tone. The default is neutral. */
+  tone: workflowToneSchema.optional(),
   notification: workflowStateNotificationSchema.optional(),
   /** The default Agent Studio role. Without it, the first required and available step decides. */
   studioRole: workflowIdSchema.optional(),
+  /** The roles whose latest session Agent Studio opens first. The default is the Studio role. */
+  historyRoles: z.array(workflowIdSchema).optional(),
+  /**
+   * Open the latest session of any role when no history role has one. The default is true only
+   * in `closed`.
+   */
+  historyLatest: z.boolean().optional(),
+  /** Merge detection checks the task branch of a task in this state. The default is false. */
+  mergeDetection: z.boolean().optional(),
 });
 export type WorkflowStateDefinition = z.infer<typeof workflowStateDefinitionSchema>;
 
 export const workflowPromptTemplateRefSchema = z.strictObject({
   kind: z.enum(["kickoff", "message"]),
-  id: workflowIdSchema,
+  id: workflowIdSchema.refine(
+    (id) => id.startsWith(WORKFLOW_MESSAGE_PROMPT_PREFIX),
+    `A launch action prompt ID starts with "${WORKFLOW_MESSAGE_PROMPT_PREFIX}".`,
+  ),
 });
 
 /** One way to start or continue an agent session for a step. */
@@ -103,11 +172,16 @@ export const workflowLaunchActionDefinitionSchema = z.strictObject({
   /** The first candidate whose condition matches is the default. Without a match, the first one is. */
   selectWhen: workflowConditionSchema.optional(),
   /** Extra prompt context that the session start must collect. */
-  context: z.enum(["human_feedback", "pull_request"]).optional(),
+  context: z.enum(["human_feedback"]).optional(),
   /** The user chooses the task target branch before the start. */
   targetBranch: z.boolean().optional(),
   /** An automatic continuation needs an existing task worktree. */
   requiresWorktree: z.boolean().optional(),
+  /** An extra control in Agent Studio or in the Git conflict panel. Without it, only the step shows it. */
+  surface: z.enum(["studio", "git_conflict"]).optional(),
+  /** When the extra control shows. The default is always. */
+  showWhen: workflowConditionSchema.optional(),
+  description: z.string().optional(),
 });
 export type WorkflowLaunchActionDefinition = z.infer<typeof workflowLaunchActionDefinitionSchema>;
 
@@ -123,8 +197,21 @@ const workflowStepDefinitionFields = {
 };
 
 /** The launch actions are the candidates for the default continuation of the step. */
+/**
+ * A progress display rule of an agent step. The first matching rule decides each display property.
+ * A rule matches when its condition matches and the live session of the step role is in `session`.
+ */
+export const workflowStepDisplayRuleSchema = z.strictObject({
+  when: workflowConditionSchema,
+  session: z.array(workflowSessionActivitySchema).optional(),
+  completion: z.enum(["not_started", "in_progress", "done", "rejected"]).optional(),
+  attention: z.enum(["none", "needs_input"]).optional(),
+});
+export type WorkflowStepDisplayRule = z.infer<typeof workflowStepDisplayRuleSchema>;
+
 export const workflowAgentStepDefinitionSchema = z.strictObject({
   ...workflowStepDefinitionFields,
+  displayRules: z.array(workflowStepDisplayRuleSchema).optional(),
   kind: z.literal("agent"),
   roleId: workflowIdSchema,
   launchActions: z.array(workflowLaunchActionDefinitionSchema).min(1),
@@ -156,14 +243,24 @@ const workflowActionDefinitionFields = {
   id: workflowIdSchema,
   label: z.string(),
   labels: z.array(workflowLabelVariantSchema).optional(),
+  /** One sentence that tells what the action does. Menus show it under the label. */
+  description: z.string().optional(),
   stepId: workflowIdSchema.optional(),
   availableWhen: workflowConditionSchema,
+  /** The surfaces that show the action. The default is every surface. */
+  surfaces: z.array(workflowActionSurfaceSchema).optional(),
+  /** The default is neutral. */
+  emphasis: workflowActionEmphasisSchema.optional(),
+  icon: workflowIconSchema.optional(),
+  /** The base label in Agent Studio. Label variants still apply. */
+  studioLabel: z.string().optional(),
 };
 
 /**
  * An action is available only when its condition matches and its event, if any, admits the input.
  * An event action sends its event. A session action starts one of its launch actions. A view action
- * changes no state. A view action with a step opens the latest session of the step role.
+ * changes no state. A view action with a step opens the latest session of the step role. An
+ * approval action opens the OpenDucktor approval. The workflow only gives when it is available.
  */
 export const workflowActionDefinitionSchema = z.discriminatedUnion("kind", [
   z.strictObject({
@@ -182,6 +279,12 @@ export const workflowActionDefinitionSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     ...workflowActionDefinitionFields,
     kind: z.literal("view"),
+    /** The destination of a view action without a step. The default is the task details. */
+    target: z.enum(["task_details"]).optional(),
+  }),
+  z.strictObject({
+    ...workflowActionDefinitionFields,
+    kind: z.literal("approval"),
   }),
 ]);
 export type WorkflowActionDefinition = z.infer<typeof workflowActionDefinitionSchema>;
@@ -204,36 +307,42 @@ export const workflowEventGuardSchema = z.strictObject({
 export type WorkflowEventGuard = z.infer<typeof workflowEventGuardSchema>;
 
 /**
- * The host effects. A host command finds its event through its effect and runs the effect when the
- * event admits the task. A `status.set` event moves the task to the state of its one outcome.
+ * The host effects. The host owns them, and any workflow event can run them. The host runs the
+ * effects of an event in order, then commits the event. When an effect fails, the host commits
+ * nothing.
+ *
+ * - `worktree.reset`: stops the sessions of the worktree roles, runs the cleanup script, removes
+ *   their other worktrees and branches, restores the task worktree to its start point, and clears
+ *   the sessions of the worktree roles, the review artifacts, the pull request link, and the merge
+ *   record.
  */
-export const workflowEventEffectValues = [
-  "status.set",
-  "build.start",
-  "build.blocked",
-  "build.resumed",
-  "build.completed",
-  "review.approve",
-  "review.request_changes",
-  "task.close",
-  "task.reset",
-  "implementation.reset",
-  "pull_request.manage",
-  "pull_request.merged",
-  "direct_merge.local",
-  "direct_merge.publish",
-  "direct_merge.completed",
-] as const;
-export const workflowEventEffectSchema = z.enum(workflowEventEffectValues);
-export type WorkflowEventEffect = z.infer<typeof workflowEventEffectSchema>;
+export const HOST_EFFECT_IDS = ["worktree.reset"] as const;
+export const hostEffectIdSchema = z.enum(HOST_EFFECT_IDS);
+export type HostEffectId = z.infer<typeof hostEffectIdSchema>;
 
-/** Guards run in order after the source check. The first matching outcome decides the result. */
+/**
+ * An event that agents of the roles may send with `odt_apply_workflow_event`. The role prompt
+ * lists it with its description. A required note tells why the agent sends the event.
+ */
+export const workflowAgentEventSchema = z.strictObject({
+  roles: z.array(workflowIdSchema).min(1),
+  description: z.string().trim().min(1),
+  note: z.enum(["required", "optional"]),
+});
+export type WorkflowAgentEvent = z.infer<typeof workflowAgentEventSchema>;
+
+/**
+ * Guards run in order after the source check. The first matching outcome decides the result. The
+ * host runs the effects in order before it commits the event. Without effects, the event only
+ * changes the state. An agent event cannot have effects.
+ */
 export const workflowEventDefinitionSchema = z.strictObject({
   id: workflowIdSchema,
   from: z.array(workflowIdSchema).min(1),
   guards: z.array(workflowEventGuardSchema),
   outcomes: z.array(workflowEventOutcomeSchema).min(1),
-  effect: workflowEventEffectSchema.optional(),
+  effects: z.array(hostEffectIdSchema).optional(),
+  agent: workflowAgentEventSchema.optional(),
 });
 export type WorkflowEventDefinition = z.infer<typeof workflowEventDefinitionSchema>;
 
@@ -257,6 +366,29 @@ export const workflowAutomationDefinitionSchema = z.strictObject({
 });
 export type WorkflowAutomationDefinition = z.infer<typeof workflowAutomationDefinitionSchema>;
 
+/** A task issue type and its display. The task workflow derives the `issueType` fact from them. */
+/** An issue type that a task workflow supports, with what the workflow shows for it. */
+export const workflowIssueTypeDefinitionSchema = z.strictObject({
+  id: issueTypeSchema,
+  label: z.string(),
+  description: z.string().optional(),
+  /** Writing advice in the task form. */
+  guidance: z.string().optional(),
+  icon: workflowIconSchema.optional(),
+});
+export type WorkflowIssueTypeDefinition = z.infer<typeof workflowIssueTypeDefinitionSchema>;
+
+/**
+ * The display order of launch candidates. The first rule whose condition and pull request
+ * presence match orders the candidates; other candidates follow in declaration order.
+ */
+export const workflowLaunchOrderRuleSchema = z.strictObject({
+  when: workflowConditionSchema,
+  pullRequest: z.boolean().optional(),
+  order: z.array(workflowIdSchema),
+});
+export type WorkflowLaunchOrderRule = z.infer<typeof workflowLaunchOrderRuleSchema>;
+
 /** The first rule whose condition matches gives the action list. */
 export const workflowActionRuleSchema = z.strictObject({
   when: workflowConditionSchema,
@@ -273,11 +405,17 @@ export const workflowDefinitionSchema = z.strictObject({
   id: workflowIdSchema,
   revision: z.number().int().positive(),
   label: z.string(),
-  facts: z.array(workflowFactDefinitionSchema),
+  /** Facts of a generic workflow. A task workflow declares `issueTypes` instead. */
+  facts: z.array(workflowFactDefinitionSchema).default([]),
+  issueTypes: z.array(workflowIssueTypeDefinitionSchema).default([]),
+  /** The issue type that a new task form or an import proposes. The default is the first one. */
+  defaultIssueType: issueTypeSchema.optional(),
   roles: z.array(workflowRoleDefinitionSchema),
+  /** Roles whose sessions can create the pull request. Empty: every task session. */
+  pullRequestRoles: z.array(workflowIdSchema).default([]),
   artifacts: z.array(workflowArtifactDefinitionSchema),
+  /** The states, with the core states `open` and `closed`. A task starts in `open`. */
   states: z.array(workflowStateDefinitionSchema),
-  initialState: workflowIdSchema,
   steps: z.array(workflowStepDefinitionSchema),
   actions: z.array(workflowActionDefinitionSchema),
   events: z.array(workflowEventDefinitionSchema),
@@ -285,6 +423,7 @@ export const workflowDefinitionSchema = z.strictObject({
   automations: z.array(workflowAutomationDefinitionSchema),
   actionOrder: z.array(workflowActionRuleSchema),
   actionPriority: z.array(workflowActionRuleSchema),
+  launchOrder: z.array(workflowLaunchOrderRuleSchema).default([]),
 });
 export type WorkflowDefinition = z.infer<typeof workflowDefinitionSchema>;
 
@@ -293,3 +432,4 @@ type DeepReadonly<Value> = Value extends object
   : Value;
 
 export type CompiledWorkflowDefinition = DeepReadonly<WorkflowDefinition>;
+export type CompiledAgentRoleDefinition = DeepReadonly<AgentRoleDefinition>;

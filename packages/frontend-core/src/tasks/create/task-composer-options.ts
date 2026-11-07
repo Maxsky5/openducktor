@@ -1,33 +1,25 @@
 import type {
-  BuiltinIssueTypeId as IssueType,
-  BuiltinTaskCard as TaskCard,
+  TaskWorkflow,
+  WorkflowIssueTypeId as IssueType,
+  ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import type { SelectOption } from "../../lib/select-option";
-import {
-  ISSUE_TYPE_LABELS,
-  PRIORITY_LABELS,
-  PRIORITY_LEVELS,
-} from "../board/kanban-task-badge-model";
+import { PRIORITY_LABELS, PRIORITY_LEVELS } from "../board/kanban-task-badge-model";
 import type { ComposerState, IssueTypeChoice, PriorityOption } from "./task-composer-types";
 
-/** The issue types in display order. */
-export const ISSUE_TYPE_CHOICES: readonly IssueTypeChoice[] = [
-  {
-    value: "feature",
-    label: ISSUE_TYPE_LABELS.feature,
-    description: "Add or improve a feature.",
-  },
-  {
-    value: "bug",
-    label: ISSUE_TYPE_LABELS.bug,
-    description: "Fix something that does not work.",
-  },
-  {
-    value: "task",
-    label: ISSUE_TYPE_LABELS.task,
-    description: "General work or upkeep.",
-  },
-];
+/** The issue type that a new task or an import proposes. */
+export const defaultIssueType = (workflow: TaskWorkflow | undefined): IssueType | undefined =>
+  workflow?.definition.defaultIssueType ?? workflow?.definition.issueTypes[0]?.id;
+
+/** The declared issue types of a workflow, in declaration order. */
+export const issueTypeChoices = (workflow: TaskWorkflow | undefined): IssueTypeChoice[] =>
+  workflow?.definition.issueTypes.map((type) => ({
+    value: type.id,
+    label: type.label,
+    description: type.description ?? "",
+    guidance: type.guidance ?? type.description ?? "",
+    icon: type.icon,
+  })) ?? [];
 
 export const PRIORITY_OPTIONS: PriorityOption[] = PRIORITY_LEVELS.map((value) => ({
   value,
@@ -54,13 +46,6 @@ export const toComposerState = (task?: TaskCard | null): ComposerState => {
     description: task.description,
     labels: task.labels,
   };
-};
-
-export const issueTypeGuidance = (issueType: IssueType): string => {
-  if (issueType === "bug") {
-    return "Describe how to reproduce the bug, what it affects and what should happen.";
-  }
-  return "Describe the work and how you will know it is done.";
 };
 
 /** The labels of the tasks, once each, in alphabetical order. */

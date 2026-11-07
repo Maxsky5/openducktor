@@ -20,6 +20,7 @@ import {
   requireDependencies,
 } from "../support/required-task-dependencies";
 import { validateTaskSessionWorkflowAvailable } from "../support/task-session-workflow-validation";
+import { requireNoUnpublishedDirectMerge } from "../support/direct-merge-block";
 import { requireTaskEvent, requireWorkflowRole } from "../support/task-workflow-events";
 import { resolveRuntimeDescriptorForTaskSession } from "../support/task-worktree-cleanup";
 import { failOperationAfterRollback } from "../support/task-worktree-rollback";
@@ -182,7 +183,14 @@ export const createTaskSessionStartPreparationService = ({
           Effect.gen(function* () {
             yield* validateTaskSessionWorkflowAvailable(workflow, task, role, canonicalRepoPath);
             const startEvent = workflow.roleStartEvent(role);
-            if (startEvent !== undefined) yield* requireTaskEvent(workflow, startEvent, task);
+            if (startEvent !== undefined) {
+              yield* requireTaskEvent(workflow, startEvent, task);
+              yield* requireNoUnpublishedDirectMerge(
+                taskStore,
+                { workspaceId: input.workspaceId, repoPath: canonicalInputRepoPath, taskId },
+                task.status,
+              );
+            }
             yield* Effect.scoped(
               Effect.gen(function* () {
                 yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([worktreePath]);

@@ -69,7 +69,8 @@ test("activity still saves after another host closes the running session's task"
       secondStore.transitionTask({
         ...database.scope,
         taskId: task.id,
-        decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
+        decide: () =>
+          Result.succeed({ status: "closed", workflowId: "openducktor-spec-plan-build" }),
       }),
     );
     const closed = await Effect.runPromise(

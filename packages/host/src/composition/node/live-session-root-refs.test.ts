@@ -72,7 +72,8 @@ test("reload roots recover workflow roles and repository scope from persisted ow
       harness.store.transitionTask({
         ...harness.scope,
         taskId: closed.id,
-        decide: () => Result.succeed({ status: "closed", workflowId: "openducktor" }),
+        decide: () =>
+          Result.succeed({ status: "closed", workflowId: "openducktor-spec-plan-build" }),
       }),
     );
     const history = await Effect.runPromise(
@@ -136,7 +137,7 @@ test("reload roots recover workflow roles and repository scope from persisted ow
       harness.store.transitionTask({
         ...harness.scope,
         taskId: closed.id,
-        decide: () => Result.succeed({ status: "open", workflowId: "openducktor" }),
+        decide: () => Result.succeed({ status: "open", workflowId: "openducktor-spec-plan-build" }),
       }),
     );
     expect(await Effect.runPromise(readRoots(repoPath))).toContainEqual({

@@ -157,7 +157,7 @@ describe("Claude background ordinary tool parts", () => {
   test("keeps overlapping MCP and workflow calls separate, including failure and stop", () => {
     const { parts, send } = live();
     send(toolUse("mcp-1", "mcp__server__long_call", { query: "one" }));
-    send(toolUse("workflow-1", "mcp__openducktor__odt_build_completed", { taskId: "task-1" }));
+    send(toolUse("workflow-1", "mcp__openducktor__odt_apply_workflow_event", { taskId: "task-1" }));
     send(
       snapshot([
         { task_id: "task-mcp", task_type: "mcp_task", description: "Fetch report" },

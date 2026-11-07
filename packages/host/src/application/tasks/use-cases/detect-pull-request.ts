@@ -32,7 +32,7 @@ export const createTaskPullRequestDetectionUseCase = ({
       );
       const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
-      yield* requirePullRequestManagement(workflow, current);
+      yield* requirePullRequestManagement(current);
       const metadata = yield* taskStore.getTaskDelivery(input);
       if (metadata.pullRequest !== undefined) {
         return yield* Effect.fail(

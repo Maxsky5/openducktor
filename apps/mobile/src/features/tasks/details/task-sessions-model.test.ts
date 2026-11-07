@@ -1,3 +1,4 @@
+import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
@@ -39,13 +40,14 @@ const summary = (
 describe("groupTaskSessions", () => {
   test("groups sessions by Workflow Role in workflow order, newest first", () => {
     const groups = groupTaskSessions(
-      { workspaceId: "ws-1", taskId: "TASK-1" },
+      createTaskCardFixture({ id: "TASK-1" }),
       [
         record("b-old", "build", "2026-10-01T08:00:00.000Z"),
         record("s-1", "spec", "2026-09-30T08:00:00.000Z"),
         record("b-new", "build", "2026-10-01T12:00:00.000Z"),
       ],
       [],
+      "ws-1",
     );
     expect(groups.map((group) => group.roleLabel)).toEqual(["Spec", "Builder"]);
     expect(groups[1]?.rows.map((row) => row.identity.externalSessionId)).toEqual([
@@ -63,9 +65,10 @@ describe("groupTaskSessions", () => {
   test("orders sessions that started together by identity, as the desktop selector", () => {
     const startedAt = "2026-10-01T08:00:00.000Z";
     const groups = groupTaskSessions(
-      { workspaceId: "ws-1", taskId: "TASK-1" },
+      createTaskCardFixture({ id: "TASK-1" }),
       [record("b-a", "build", startedAt), record("b-b", "build", startedAt)],
       [],
+      "ws-1",
     );
     expect(groups[0]?.rows.map((row) => [row.identity.externalSessionId, row.label])).toEqual([
       ["b-b", "Builder #2"],
@@ -75,7 +78,7 @@ describe("groupTaskSessions", () => {
 
   test("shows the live status and adds live sessions that the history does not list yet", () => {
     const groups = groupTaskSessions(
-      { workspaceId: "ws-1", taskId: "TASK-1" },
+      createTaskCardFixture({ id: "TASK-1" }),
       [record("b-1", "build", "2026-10-01T08:00:00.000Z")],
       [
         summary("b-1", "build", "waiting_input"),
@@ -83,6 +86,7 @@ describe("groupTaskSessions", () => {
         summary("other", "qa", "running", "TASK-2"),
         { ...summary("foreign", "qa", "running"), workspaceId: "ws-2" },
       ],
+      "ws-1",
     );
     expect(groups.map((group) => group.role)).toEqual(["build", "qa"]);
     expect(groups[0]?.rows[0]).toMatchObject({

@@ -68,7 +68,7 @@ OPENDUCKTOR_CHANNEL=dev OPENDUCKTOR_DEV_INSTANCE=<instance-id> bunx @openducktor
 1. Read the default workspace from `--workspace-id` or `ODT_WORKSPACE_ID`.
 2. Use an explicit host URL and token when present. Otherwise, read the selected discovery file.
 3. Check the host bridge.
-4. Call authenticated `odt_mcp_ready`.
+4. Call authenticated `odt_mcp_ready`. The reply gives the bridge version, the tool names, and the states other than `closed` in the host workflows.
 5. When a default workspace exists, call `odt_get_workspaces` at the same time and require both calls to succeed.
 6. Check that every required ODT tool is present.
 7. Start MCP stdio only after all checks pass.
@@ -93,9 +93,7 @@ Public tools:
 
 Workflow tools on the same server:
 
-- `odt_build_blocked`
-- `odt_build_resumed`
-- `odt_build_completed`
+- `odt_apply_workflow_event`
 - `odt_set_pull_request`
 
 Task-bound sessions with the Spec Agent, Planner Agent, Builder Agent, or QA Agent role do not get `odt_get_workspaces`. They can call `odt_create_task`, `odt_search_tasks`, and `odt_update_task` in their startup workspace and omit `workspaceId`. `odt_update_task` is the only task-bound tool that may target a task other than the session task.
@@ -111,6 +109,10 @@ Task-bound sessions with the Spec Agent, Planner Agent, Builder Agent, or QA Age
 
 Every role can write free artifacts. The host resolves the native caller to its root session before checking workflow codes. Repository sessions and external clients have no workflow role restriction. See [artifact actions](task-workflow-actions.md#artifact-actions) for revision and approval rules.
 
+`odt_apply_workflow_event` sends a workflow event that the task workflow declares for agents. [Send a workflow event](#send-a-workflow-event) describes it.
+
+`odt_set_task_artifact`, `odt_delete_task_artifact`, and `odt_apply_workflow_event` send the native caller of a managed session to the host. The host resolves the caller to its root session. A task session can act only on its own task.
+
 External clients do not get the `odt_browser_*` tools. [Browser tools](#browser-tools) describes them.
 
 ## Tool listing
@@ -120,6 +122,7 @@ The tool list keeps tool descriptions short, because runtimes send the whole lis
 - `annotations.readOnlyHint: true` marks the tools that change nothing. A client can run them without an approval.
 - A server that forbids `workspaceId` input hides `workspaceId` in the tool schemas. It sends no server instructions, because Codex repeats them in front of each tool description. Other servers send one sentence about `workspaceId`.
 - The listed input and output schemas omit the `$schema` URL, UUID patterns, and size limits. The server still checks each input with the full schema.
+- `issueType` lists the fixed issue types. The `status` filter of `odt_search_tasks` lists the states other than `closed` in the host workflows, from the `odt_mcp_ready` reply. The host checks each value against the workflow of the task.
 
 ## Browser tools
 
@@ -300,7 +303,7 @@ All four workflow roles can create, rename, replace, and delete free artifacts. 
 | `odt_set_task_artifact` | Required `code`; optional `name`, `fileName`, `mediaType`, `content`, `dataBase64`, `verdict`. | `{ artifact }` with saved metadata. |
 | `odt_delete_task_artifact` | `code` | Deleted code and event cursor. |
 
-For `spec`, `plan`, and `qaReport`, put the complete Markdown text directly in `content`. The format is fixed as `text/markdown`. Set also accepts the Markdown's UTF-8 bytes through `dataBase64`. It rejects `name`, `fileName`, and `mediaType`. A `qaReport` write also requires `verdict: "approved"` or `verdict: "rejected"`. Other codes reject `verdict`. Workflow saves keep the existing domain operations, provenance, and status transitions. Build completion still uses `odt_build_completed`.
+For `spec`, `plan`, and `qaReport`, put the complete Markdown text directly in `content`. The format is fixed as `text/markdown`. Set also accepts the Markdown's UTF-8 bytes through `dataBase64`. It rejects `name`, `fileName`, and `mediaType`. A `qaReport` write also requires `verdict: "approved"` or `verdict: "rejected"`. Other codes reject `verdict`. Workflow saves keep the existing domain operations, provenance, and status transitions. Build completion uses `odt_apply_workflow_event` with `eventId: "build-completed"`.
 
 ```json
 {
@@ -319,9 +322,29 @@ Set returns `{ artifact }` with the saved artifact's public metadata, including 
 
 Artifact ownership checks require the requested workspace and task. Managed setter calls also require the native caller's root session and enforce its workflow role. Task agents must still use their locked session task. The removed specialized workflow writers have no aliases.
 
-The MCP bridge and remote protocol use version 3. Update incompatible clients and hosts together. The removed `odt_read_task_documents` tool has no alias. Custom prompt overrides remain user-owned and must use the new tool names.
+The MCP bridge uses version 4. Update incompatible clients and hosts together. The removed `odt_read_task_documents`, `odt_build_blocked`, `odt_build_resumed`, and `odt_build_completed` tools have no alias. Custom prompt overrides remain user-owned and must use the new tool names.
 
 The MCP stdio input cap is 64 MiB to accept escaped text within the decoded limit. The adapter sends content as base64 to the host. Set bridge requests have a 16 MiB envelope; other requests keep their 1 MiB limit. Each artifact response stays below 10 MiB of serialized JSON-RPC bytes, including all requested artifacts, without truncating original content. If a response exceeds the limit, request fewer artifacts or open a single oversized artifact in the app.
+
+## Send a workflow event
+
+`odt_apply_workflow_event` requires `taskId` and `eventId`. `note` is optional unless the event requires it. It also requires `workspaceId` when the process has no default workspace.
+
+```json
+{ "taskId": "repo-123", "eventId": "build-blocked", "note": "The API contract needs a product decision." }
+```
+
+A workflow declares the events that agents can send. Each event names the roles that can send it, a description, and if it requires a note. The system prompt of a role lists its events. An agent event has no host effects, so it only changes the task state. The built-in workflow lets the Builder role send `build-blocked`, `build-resumed`, and `build-completed`. `build-blocked` requires a note.
+
+The host checks each call:
+
+- The event must be an agent event of the task workflow. Otherwise the call fails with `TASK_POLICY_ERROR`.
+- A managed task session can send only the events of its role, and only for its own task.
+- An external client or a repository session can send every agent event.
+- A required note must be present.
+- The workflow guards of the event apply. A denial fails with `TASK_TRANSITION_NOT_ALLOWED`.
+
+The host commits the event through the same workflow event commit as the other events, so a local merge that waits for its publication blocks it. The host does not store the note. The result is `{ task, eventId, note? }` and echoes the note.
 
 ## Ownership
 

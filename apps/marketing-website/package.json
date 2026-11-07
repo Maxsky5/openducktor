@@ -8,7 +8,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "typecheck": "astro check --minimumFailingSeverity warning",
-    "test": "bun test --preload ../../tools/bun-test-preload.ts --timeout 1000 ./tests",
+    "test": "bun test --timeout 1000 ./tests",
     "test:browser": "playwright test",
     "format": "prettier --write 'src/**/*.astro'",
     "format:check": "prettier --check 'src/**/*.astro'",

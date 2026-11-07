@@ -6,10 +6,13 @@ import {
   workflowDefinitionSchema,
   repoConfigSchema,
 } from "@openducktor/contracts";
-import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
-import { createTaskWorkflow } from "@openducktor/workflows";
+import {
+  specPlanBuildPromptKey,
+  createReviewTaskWorkflow,
+} from "@openducktor/workflows/test-support";
+import { createTaskWorkflow, workflowRoleCatalog } from "@openducktor/workflows";
 import type { z } from "zod";
-import { createTaskWorkflowResolver } from "../composition/node/task-workflow-composition";
+import { createTaskWorkflowResolver } from "../application/tasks/task-workflows";
 import { singleTaskWorkflow } from "../test-support/task-workflows";
 import { applyTaskWorkflowSettings } from "./workflow-settings";
 import { repoConfigFixture } from "../test-support/repo-config-fixture";
@@ -30,7 +33,8 @@ describe("applyTaskWorkflowSettings", () => {
   test("keeps rules with equal signal IDs in separate workflows", () => {
     const second = createTaskWorkflow(
       workflowDefinitionSchema.parse({ ...review.definition, id: "another-review" }),
-      review.prompts.templates,
+      review.workflowTemplates,
+      workflowRoleCatalog([review]),
     );
     const applied = applyTaskWorkflowSettings(
       config({
@@ -46,6 +50,11 @@ describe("applyTaskWorkflowSettings", () => {
         },
       }),
       createTaskWorkflowResolver({
+        forWorkspace: () => ({
+          workflows: [review, second],
+          board: singleTaskWorkflow(review).forWorkspace({ workspaceId: "repo", repoPath: "/repo" })
+            .board,
+        }),
         forTask: () => review,
         forNewTask: () => review,
         workflows: [review, second],
@@ -129,11 +138,13 @@ describe("applyTaskWorkflowSettings", () => {
     expect(() =>
       applyTaskWorkflowSettings(
         config({
-          globalPromptOverrides: { "kickoff.qa_review": { template: "x", baseVersion: 1 } },
+          globalPromptOverrides: {
+            [specPlanBuildPromptKey("messages.qa_review")]: { template: "x", baseVersion: 1 },
+          },
         }),
         reviewWorkflows,
       ),
-    ).toThrow('Unknown prompt template "kickoff.qa_review"');
+    ).toThrow(`Unknown prompt "${specPlanBuildPromptKey("messages.qa_review")}"`);
     expect(() =>
       applyTaskWorkflowSettings(
         config({

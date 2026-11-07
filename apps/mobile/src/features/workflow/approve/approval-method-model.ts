@@ -2,8 +2,8 @@ import {
   getTaskApprovalSubmitState,
   TASK_APPROVAL_COPY as COPY,
   TASK_APPROVAL_MERGE_METHOD_OPTIONS,
-  TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS,
   taskApprovalModeOptions,
+  taskApprovalPullRequestDraftOptions,
   taskApprovalPullRequestUnavailableMessage,
 } from "@openducktor/frontend-core/tasks/approval/task-approval-copy";
 import type { TaskApprovalApprovalModalModel } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
@@ -15,7 +15,7 @@ export type ApprovalChoices = {
   /** Shown while Direct Merge is the mode. */
   mergeMethods: typeof TASK_APPROVAL_MERGE_METHOD_OPTIONS | null;
   /** Shown while Pull Request is the mode and the provider can create one. */
-  draftModes: typeof TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS | null;
+  draftModes: ReturnType<typeof taskApprovalPullRequestDraftOptions> | null;
   /** True while a manual pull request needs its title and description. */
   showPullRequestFields: boolean;
   /** True while a squash merge needs its commit message. */
@@ -65,7 +65,9 @@ export const approvalChoices = (
     modes: taskApprovalModeOptions(model),
     mergeMethods: directMerge ? TASK_APPROVAL_MERGE_METHOD_OPTIONS : null,
     draftModes:
-      pullRequest && model.pullRequestAvailable ? TASK_APPROVAL_PULL_REQUEST_DRAFT_OPTIONS : null,
+      pullRequest && model.pullRequestAvailable
+        ? taskApprovalPullRequestDraftOptions(model.pullRequestRoleLabel)
+        : null,
     showPullRequestFields:
       pullRequest && model.pullRequestAvailable && model.pullRequestDraftMode === "manual",
     showSquashMessage: directMerge && model.mergeMethod === "squash",

@@ -2,7 +2,7 @@ import { workspaceRefFixture } from "../test-support/workspace-ref-fixture";
 import { expect, mock, test } from "bun:test";
 import { QueryObserver } from "@tanstack/react-query";
 import { createTestClientConnection } from "../test-support/test-client-connection";
-import { createTaskCardFixture } from "../test-support/shared-test-fixtures";
+import { createWireTaskCardFixture, toWireTaskCard } from "../test-support/shared-test-fixtures";
 import { createTaskViewSync } from "./task-view-sync";
 import { boardEvent, eventCursor } from "./task-view-sync.test-support";
 import {
@@ -12,8 +12,11 @@ import {
   unfilteredRepoTaskDataQueryOptions,
 } from "./tasks";
 
+/** Cached cards hold their compiled workflow, so compare the host card data. */
+const wire = (data: RepoTaskData | undefined) => data && { tasks: data.tasks.map(toWireTaskCard) };
+
 test("complete task views keep omitted closed tasks current through events and recovery", async () => {
-  const closed = createTaskCardFixture({ id: "closed-task", status: "closed" });
+  const closed = createWireTaskCardFixture({ id: "closed-task", status: "closed" });
   let tasks = [closed];
   const listAll = mock(async () => tasks);
   const connection = createTestClientConnection({
@@ -35,14 +38,14 @@ test("complete task views keep omitted closed tasks current through events and r
     expect(client.getQueryData(taskQueryKeys.repoData(workspaceRefFixture("/repo")))).toEqual({
       tasks: [],
     });
-    expect(client.getQueryData(options.queryKey)).toEqual({ tasks: [closed] });
+    expect(wire(client.getQueryData(options.queryKey))).toEqual({ tasks: [closed] });
 
-    const unrelated = createTaskCardFixture({ id: "other-task" });
+    const unrelated = createWireTaskCardFixture({ id: "other-task" });
     await sync.reconcileExternalEvent(
       boardEvent(workspaceRefFixture("/repo"), [unrelated]),
       eventCursor(1),
     );
-    expect(client.getQueryData(options.queryKey)?.tasks).toContainEqual(closed);
+    expect(wire(client.getQueryData(options.queryKey))?.tasks).toContainEqual(closed);
     expect(listAll).toHaveBeenCalledTimes(1);
 
     tasks = [{ ...closed, title: "Edited outside the board" }];
@@ -50,23 +53,23 @@ test("complete task views keep omitted closed tasks current through events and r
       boardEvent(workspaceRefFixture("/repo"), tasks),
       eventCursor(2),
     );
-    expect(client.getQueryData(options.queryKey)?.tasks).toContainEqual(tasks[0]);
+    expect(wire(client.getQueryData(options.queryKey))?.tasks).toContainEqual(tasks[0]);
     expect(
-      client.getQueryData<RepoTaskData>(taskQueryKeys.repoData(workspaceRefFixture("/repo")))
+      wire(client.getQueryData<RepoTaskData>(taskQueryKeys.repoData(workspaceRefFixture("/repo"))))
         ?.tasks,
     ).not.toContainEqual(tasks[0]);
     expect(listAll).toHaveBeenCalledTimes(1);
 
     tasks = [{ ...closed, title: "Edited during a stream gap" }];
     await sync.reconcileStreamSnapshot([workspaceRefFixture("/repo")]);
-    expect(client.getQueryData(options.queryKey)).toEqual({ tasks });
+    expect(wire(client.getQueryData(options.queryKey))).toEqual({ tasks });
 
     tasks = [];
     await sync.refreshManually(workspaceRefFixture("/repo"));
-    expect(client.getQueryData(options.queryKey)).toEqual({ tasks: [] });
+    expect(wire(client.getQueryData(options.queryKey))).toEqual({ tasks: [] });
     expect(listAll).toHaveBeenCalledTimes(3);
     await sync.releaseWorkspace(workspaceRefFixture("/repo"));
-    expect(client.getQueryData(options.queryKey)).toBeUndefined();
+    expect(wire(client.getQueryData(options.queryKey))).toBeUndefined();
   } finally {
     stop();
     client.clear();
@@ -74,7 +77,7 @@ test("complete task views keep omitted closed tasks current through events and r
 });
 
 test("task events patch hidden complete lists without reading them", async () => {
-  const closed = createTaskCardFixture({ id: "closed-task", status: "closed" });
+  const closed = createWireTaskCardFixture({ id: "closed-task", status: "closed" });
   const listAll = mock(async () => [closed]);
   const connection = createTestClientConnection({ client: { tasksListAll: listAll } });
   const client = connection.queryClient;
@@ -93,7 +96,7 @@ test("task events patch hidden complete lists without reading them", async () =>
       boardEvent(workspaceRefFixture("/repo"), [updated]),
       eventCursor(1),
     );
-    expect(client.getQueryData(options.queryKey)).toEqual({ tasks: [updated] });
+    expect(wire(client.getQueryData(options.queryKey))).toEqual({ tasks: [updated] });
     expect(listAll).toHaveBeenCalledTimes(1);
   } finally {
     client.clear();
@@ -103,7 +106,7 @@ test("task events patch hidden complete lists without reading them", async () =>
 test.each([false, true])(
   "an inactive complete list stays stale after a gap when the board read fails=%s",
   async (failBoard) => {
-    const closed = createTaskCardFixture({ id: "closed-task", status: "closed" });
+    const closed = createWireTaskCardFixture({ id: "closed-task", status: "closed" });
     let tasks = [closed];
     const listAll = mock(async () => tasks);
     const connection = createTestClientConnection({ client: { tasksListAll: listAll } });
@@ -124,12 +127,12 @@ test.each([false, true])(
       tasks = [{ ...closed, title: "Missed during the gap" }];
       await sync.reconcileStreamSnapshot([workspaceRefFixture("/repo")]);
       await sync.reconcileExternalEvent(
-        boardEvent(workspaceRefFixture("/repo"), [createTaskCardFixture({ id: "other-task" })]),
+        boardEvent(workspaceRefFixture("/repo"), [createWireTaskCardFixture({ id: "other-task" })]),
         eventCursor(1),
       );
       expect(client.getQueryState(options.queryKey)?.isInvalidated).toBe(true);
       expect(listAll).toHaveBeenCalledTimes(1);
-      expect(await client.fetchQuery(options)).toEqual({ tasks });
+      expect(wire(await client.fetchQuery(options))).toEqual({ tasks });
       expect(listAll).toHaveBeenCalledTimes(2);
     } finally {
       client.clear();
@@ -138,7 +141,7 @@ test.each([false, true])(
 );
 
 test("a failed complete-list recovery waits for a full read before applying later events", async () => {
-  const closed = createTaskCardFixture({ id: "closed-task", status: "closed" });
+  const closed = createWireTaskCardFixture({ id: "closed-task", status: "closed" });
   const failure = new Error("Task store is unavailable");
   let fail = false;
   const connection = createTestClientConnection({
@@ -169,7 +172,7 @@ test("a failed complete-list recovery waits for a full read before applying late
       eventCursor(1),
     );
     expect(client.getQueryState(options.queryKey)?.error).toBe(failure);
-    expect(client.getQueryData(options.queryKey)).toEqual({ tasks: [closed] });
+    expect(wire(client.getQueryData(options.queryKey))).toEqual({ tasks: [closed] });
     fail = false;
     await sync.refreshManually(workspaceRefFixture("/repo"));
     expect(client.getQueryState(options.queryKey)?.status).toBe("success");
@@ -180,7 +183,7 @@ test("a failed complete-list recovery waits for a full read before applying late
 });
 
 test("a late complete-list read cannot replace a committed task event", async () => {
-  const closed = createTaskCardFixture({ id: "closed-task", status: "closed" });
+  const closed = createWireTaskCardFixture({ id: "closed-task", status: "closed" });
   const pending = Promise.withResolvers<(typeof closed)[]>();
   const listAll = mock(async () => (listAll.mock.calls.length === 1 ? [closed] : pending.promise));
   const connection = createTestClientConnection({ client: { tasksListAll: listAll } });
@@ -203,7 +206,7 @@ test("a late complete-list read cannot replace a committed task event", async ()
     );
     pending.resolve([closed]);
     await read;
-    expect(client.getQueryData(options.queryKey)).toEqual({ tasks: [updated] });
+    expect(wire(client.getQueryData(options.queryKey))).toEqual({ tasks: [updated] });
     expect(listAll).toHaveBeenCalledTimes(2);
   } finally {
     pending.resolve([closed]);

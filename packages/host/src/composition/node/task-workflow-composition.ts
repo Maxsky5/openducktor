@@ -1,33 +1,18 @@
 import type { WorkflowRolePolicyResolver } from "@openducktor/core";
-import { builtinTaskWorkflow } from "@openducktor/workflows";
-import { Effect } from "effect";
-import { HostValidationError } from "../../effect/host-errors";
+import {
+  BUILTIN_TASK_WORKFLOWS,
+  SPEC_PLAN_BUILD_BOARD_LAYOUT,
+  specPlanBuildWorkflow,
+} from "@openducktor/workflows";
+import { createTaskWorkflowResolver } from "../../application/tasks/task-workflows";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 
-/** Adds the lookup by workflow ID to the task workflows of a resolver. */
-export const createTaskWorkflowResolver = (
-  resolver: Omit<TaskWorkflowResolver, "forWorkflowId">,
-): TaskWorkflowResolver => ({
-  ...resolver,
-  forWorkflowId: (workflowId) => {
-    const workflow = resolver.workflows.find((value) => value.definition.id === workflowId);
-    return workflow
-      ? Effect.succeed(workflow)
-      : Effect.fail(
-          new HostValidationError({
-            field: "workflowId",
-            message: `Task workflow "${workflowId}" is not available on this host.`,
-            details: { workflowId },
-          }),
-        );
-  },
-});
-
-/** Every task follows the built-in task workflow until tasks name their workflow. */
+/** Every task follows the Spec, Plan, Build workflow until tasks name their workflow. */
 export const builtinTaskWorkflowResolver = createTaskWorkflowResolver({
-  forTask: () => builtinTaskWorkflow,
-  forNewTask: () => builtinTaskWorkflow,
-  workflows: [builtinTaskWorkflow],
+  forTask: () => specPlanBuildWorkflow,
+  forNewTask: () => specPlanBuildWorkflow,
+  workflows: BUILTIN_TASK_WORKFLOWS,
+  forWorkspace: () => ({ board: SPEC_PLAN_BUILD_BOARD_LAYOUT, workflows: BUILTIN_TASK_WORKFLOWS }),
 });
 
 /** The tools and workspace access of a role in the task workflow of the session task. */

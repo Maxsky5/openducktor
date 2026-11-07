@@ -40,8 +40,6 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
     removeTaskWorktree,
     resetTaskImplementation,
     resetTask,
-    transitionTask,
-    humanRequestChangesTask,
   } = useTaskOperations({
     activeWorkspace,
   });
@@ -70,8 +68,6 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
       removeTaskWorktree,
       resetTaskImplementation,
       resetTask,
-      transitionTask,
-      humanRequestChangesTask,
     }),
     [
       createTask,
@@ -79,7 +75,6 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
       closeTask,
       deleteTask,
       detectingPullRequestTaskIds,
-      humanRequestChangesTask,
       removeTaskWorktree,
       tasksAreCurrent,
       isForegroundLoadingTasks,
@@ -95,7 +90,6 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
       syncPullRequests,
       unlinkPullRequest,
       tasks,
-      transitionTask,
       updateTask,
       setTaskTargetBranch,
     ],

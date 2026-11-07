@@ -207,6 +207,7 @@ export const ICONS = {
   unlink: "unlink",
   "wand-sparkles": "wand-sparkles",
   "wifi-off": "wifi-off",
+  workflow: "workflow",
   wrench: "wrench",
   x: "x",
   "x-circle": "x-circle",

@@ -178,19 +178,14 @@ describe("OpenCode tool strategy catalog", () => {
         expectedPreview: "task-42",
       },
       {
-        canonicalName: "odt_build_blocked",
-        rawInput: { taskId: "task-42", reason: "Waiting for design input" },
-        expectedPreview: "Waiting for design input",
+        canonicalName: "odt_apply_workflow_event",
+        rawInput: { taskId: "task-42", eventId: "build-blocked", note: "Waiting for design input" },
+        expectedPreview: "build-blocked · Waiting for design input",
       },
       {
-        canonicalName: "odt_build_resumed",
-        rawInput: { taskId: "task-42" },
-        expectedPreview: "task-42",
-      },
-      {
-        canonicalName: "odt_build_completed",
-        rawInput: { taskId: "task-42", summary: "Catalog complete" },
-        expectedPreview: "Catalog complete",
+        canonicalName: "odt_apply_workflow_event",
+        rawInput: { taskId: "task-42", eventId: "build-resumed" },
+        expectedPreview: "build-resumed",
       },
       {
         canonicalName: "odt_set_pull_request",

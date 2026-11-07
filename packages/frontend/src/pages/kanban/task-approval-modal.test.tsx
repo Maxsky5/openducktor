@@ -19,7 +19,7 @@ import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures
 import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
-  TaskApprovalMissingBuilderWorktreeModalModel,
+  TaskApprovalMissingWorktreeModalModel,
 } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
 import { TaskApprovalModal } from "./task-approval-modal";
 import { TaskApprovalModalPanel } from "./task-approval-modal-panel";
@@ -147,6 +147,7 @@ const createApprovalModel = (
   mode: "direct_merge",
   mergeMethod: "merge_commit",
   pullRequestDraftMode: "manual",
+  pullRequestRoleLabel: "Builder",
   pullRequestSupported: true,
   pullRequestAvailable: true,
   pullRequestUnavailableReason: null,
@@ -177,11 +178,12 @@ const createApprovalModel = (
   ...overrides,
 });
 
-const createMissingBuilderWorktreeModel = (
-  overrides: Partial<TaskApprovalMissingBuilderWorktreeModalModel> = {},
-): TaskApprovalMissingBuilderWorktreeModalModel => ({
+const createMissingWorktreeModel = (
+  overrides: Partial<TaskApprovalMissingWorktreeModalModel> = {},
+): TaskApprovalMissingWorktreeModalModel => ({
   open: true,
-  stage: "missing_builder_worktree",
+  stage: "missing_worktree",
+  resetLabel: "Reset Implementation",
   taskId: "TASK-1",
   isSubmitting: false,
   errorMessage: null,
@@ -190,8 +192,8 @@ const createMissingBuilderWorktreeModel = (
   removeWorktree: true,
   onRemoveWorktreeChange: noop,
   onOpenChange: noop,
-  onCloseMissingBuilderWorktree: noop,
-  onResetMissingBuilderWorktree: noop,
+  onCloseMissingWorktree: noop,
+  onResetMissingWorktree: noop,
   ...overrides,
 });
 
@@ -220,10 +222,10 @@ describe("TaskApprovalModal", () => {
     approval.unmount();
 
     const missingBuilder = render(
-      createElement(ModalWithProviders, { model: createMissingBuilderWorktreeModel() }),
+      createElement(ModalWithProviders, { model: createMissingWorktreeModel() }),
     );
-    expect(screen.getByText("Builder worktree missing")).toBeTruthy();
-    expect(screen.getByText(/The Builder worktree is gone/)).toBeTruthy();
+    expect(screen.getByText("Task worktree missing")).toBeTruthy();
+    expect(screen.getByText(/use Reset Implementation to start the work again/)).toBeTruthy();
     missingBuilder.unmount();
   });
 
@@ -261,18 +263,30 @@ describe("TaskApprovalModal", () => {
     view.unmount();
   });
 
-  test("renders recovery copy when the builder worktree is missing", () => {
+  test("renders recovery copy when the task worktree is missing", () => {
     const html = renderToStaticMarkup(
       createElement(PanelWithProviders, {
-        model: createMissingBuilderWorktreeModel(),
+        model: createMissingWorktreeModel(),
       }),
     );
 
-    expect(html).toContain("Reset implementation");
+    // The reset control uses the label of the workflow action that resets the worktree.
+    expect(html).toContain("Reset Implementation</button>");
     // Close task replaces Complete Task and shows the shared close content.
     expect(html).toContain("Close task");
     expect(html).not.toContain("Complete Task");
     expect(html).toContain("Remove worktree and branch");
+  });
+
+  test("hides the reset control when the workflow has no worktree reset action", () => {
+    const html = renderToStaticMarkup(
+      createElement(PanelWithProviders, {
+        model: createMissingWorktreeModel({ resetLabel: null }),
+      }),
+    );
+
+    expect(html).not.toContain("Reset Implementation");
+    expect(html).toContain("Close task");
   });
 
   test("shows the shared close content with Close task selected", () => {
@@ -753,7 +767,7 @@ describe("TaskApprovalModal", () => {
 
     expect(html).toContain("Ask Builder");
     expect(html).toContain("Let Builder create or update the pull request.");
-    expect(html).toContain("Next, choose the Builder session to fork.");
+    expect(html).toContain("Next, choose the Builder session to use.");
     expect(html).toContain("Choose Builder session");
     expect(html).not.toContain("generate the pull request title and description");
   });

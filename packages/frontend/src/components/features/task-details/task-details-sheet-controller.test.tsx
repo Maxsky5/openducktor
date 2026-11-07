@@ -1,3 +1,5 @@
+import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
+import { createTaskWorkflowActionsFixture } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { render as renderUi, waitFor } from "@testing-library/react";
@@ -9,6 +11,7 @@ import {
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
+import { toWireTaskCard } from "@/test-utils/shared-test-fixtures";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
   TaskWorkflowActionsContext,
@@ -18,7 +21,7 @@ import { RECENT_ITEMS_STORAGE_KEY } from "@/features/command-palette/constants";
 import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-controller";
 
 import { QueryProvider } from "@/test-utils/query-provider";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 const render = (element: ReactElement) =>
   renderUi(element, {
     wrapper: ({ children }) => createElement(QueryProvider, null, children),
@@ -43,35 +46,29 @@ const activeWorkspace = {
 const taskDetailsSheetRenderMock = mock((_props: TaskDetailsSheetRenderProps) => null);
 let taskDetailsSheetSpy: { mockRestore(): void };
 
-const createWorkflowActions = (onDelete: TaskWorkflowActions["onDelete"]): TaskWorkflowActions => ({
-  onCreateTask: () => {},
-  onPlan: () => {},
-  onQaStart: () => {},
-  onQaOpen: () => {},
-  onBuild: () => {},
-  onOpenSession: () => {},
-  onDelegate: () => {},
-  onEdit: () => {},
-  onOpenTaskDetails: () => {},
-  onHumanApprove: () => {},
-  onHumanRequestChanges: () => {},
-  onResetImplementation: () => {},
-  onResetTask: async () => {},
-  onCloseTask: async () => {},
-  onRemoveTaskWorktree: async () => {},
-  onDelete,
-  onConfirmTaskAction: () => {},
-  onDetectPullRequest: () => {},
-  onUnlinkPullRequest: () => {},
-  detectingPullRequestTaskIds: new Set<string>(),
-  unlinkingPullRequestTaskIds: new Set<string>(),
-  gitProviderContext: undefined,
-  gitProviderReadError: null,
-  registerTaskDetailsClose: () => () => {},
-  claimWorkflowDialog: (_owner, run) => run(),
-  taskSessionsByTaskId: new Map(),
-  activeTaskSessionContextByTaskId: new Map(),
-});
+const createWorkflowActions = (onDelete: TaskWorkflowActions["onDelete"]): TaskWorkflowActions =>
+  createTaskWorkflowActionsFixture({
+    onLaunch: () => {},
+    onCreateTask: () => {},
+    onOpenSession: () => {},
+    onEdit: () => {},
+    onOpenTaskDetails: () => {},
+    onResetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
+    onCloseTask: async (taskId: string) =>
+      createWireTaskCardFixture({ id: taskId, status: "closed" }),
+    onRemoveTaskWorktree: async () => {},
+    onDelete,
+    onConfirmTaskAction: () => {},
+    onDetectPullRequest: () => {},
+    onUnlinkPullRequest: () => {},
+    detectingPullRequestTaskIds: new Set<string>(),
+    unlinkingPullRequestTaskIds: new Set<string>(),
+    gitProviderContext: undefined,
+    gitProviderReadError: null,
+    registerTaskDetailsClose: () => () => {},
+    taskSessionsByTaskId: new Map(),
+    activeTaskSessionContextByTaskId: new Map(),
+  });
 
 async function importMockedTaskDetailsSheetController(): Promise<TaskDetailsSheetControllerComponent> {
   const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");
@@ -290,7 +287,7 @@ describe("TaskDetailsSheetController", () => {
     const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
     const task = createTaskCardFixture({ id: "closed-task", status: "closed" });
     const connection = createTestClientConnection({
-      client: { tasksList: async () => [], tasksListAll: async () => [task] },
+      client: { tasksList: async () => [], tasksListAll: async () => [toWireTaskCard(task)] },
     });
     const client = connection.queryClient;
     client.setQueryData(taskQueryKeys.repoData(activeWorkspace), {
@@ -307,9 +304,13 @@ describe("TaskDetailsSheetController", () => {
       wrapper: ({ children }) => createElement(ClientConnectionProvider, { connection }, children),
     });
     await act(async () => ref.current?.openTask(task.id));
+    // The sheet gets the host read of the task, which carries its own compiled workflow.
     await waitFor(() => {
       expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
-        expect.objectContaining({ task, open: true }),
+        expect.objectContaining({
+          task: expect.objectContaining({ id: task.id, status: "closed" }),
+          open: true,
+        }),
       );
     });
     await act(async () => rendered.rerender(controller(next)));

@@ -6,13 +6,18 @@ import type {
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import type { AgentMessageSendOptions, AgentSessionIdentity } from "../../types/agent-orchestrator";
 import type {
-  BuiltinLaunchActionId as SessionLaunchActionId,
-  BuiltinRoleId as AgentRole,
+  WorkflowLaunchActionId as SessionLaunchActionId,
+  WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 
 export type SessionStartExistingSessionOption = {
   value: string;
   sourceSession: AgentSessionIdentity;
+  /**
+   * The role of the source session when it can differ from the role of the request, as for the
+   * core pull request launch. The start then runs as this role.
+   */
+  role?: AgentRole;
   label: string;
   description: string;
   secondaryLabel?: string;
@@ -66,14 +71,18 @@ export type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null
 
 export type SessionStartPostAction = "none" | "kickoff" | "send_message";
 
+/** A workflow event that the host commits before the session starts. */
 export type SessionStartBeforeAction = {
-  action: "human_request_changes";
-  note: string;
+  eventId: string;
+  note?: string;
 };
 
 export type SessionStartFlowRequest = Omit<NewSessionStartRequest, "selectedModel"> & {
   initialStartMode?: AgentSessionStartMode;
   postStartAction: SessionStartPostAction;
+  /** Collected context for the declared prompt, not a complete instruction. */
+  humanFeedback?: string;
+  /** A complete message instruction, such as Git conflict assistance. */
   message?: string;
   parts?: AgentSessionUserMessagePart[];
   assertBeforeLaunch?: () => void;

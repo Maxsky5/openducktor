@@ -1,6 +1,5 @@
-import { builtinWorkflow, workflowToolInputSchema } from "@openducktor/workflows";
 import { z } from "zod";
-import { type ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
+import { ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
 
 const listedToolObjectSchema = z.record(z.string(), z.json());
 
@@ -69,21 +68,31 @@ const compactListedSchema = (schema: JsonObject): JsonObject => {
   return compact;
 };
 
+/** The input schema of a tool. `odt_search_tasks` names the active states of the host workflows. */
+const hintedInputSchema = (
+  toolName: RegisteredToolName,
+  activeStatuses: readonly string[],
+): z.ZodType => {
+  if (toolName !== "odt_search_tasks") return ODT_TOOL_SCHEMAS[toolName];
+  const search = ODT_TOOL_SCHEMAS.odt_search_tasks;
+  return search.safeExtend({
+    status: z.enum(activeStatuses).optional().describe("A state that is not terminal."),
+  });
+};
+
 /**
- * The listed input schema of a tool. It names the issue types and active states of the built-in
- * task workflow as a hint. The server validates input with the generic schema, and the host
- * checks the values against the task workflow.
+ * The listed input schema of a tool. It names the active states of the host workflows as a hint.
+ * The server validates input with the generic schema, and the host checks the values against the
+ * task workflow.
  */
 export const getListedToolInputSchema = (
   toolName: RegisteredToolName,
-  options: { hideWorkspaceId: boolean },
+  options: { hideWorkspaceId: boolean; activeStatuses: readonly string[] },
 ): ListedToolSchema => {
   const jsonSchema = listedToolSchemaSchema.parse(
     compactListedSchema(
       jsonObjectSchema.parse(
-        z.toJSONSchema(workflowToolInputSchema(builtinWorkflow.definition, toolName), {
-          io: "input",
-        }),
+        z.toJSONSchema(hintedInputSchema(toolName, options.activeStatuses), { io: "input" }),
       ),
     ),
   );

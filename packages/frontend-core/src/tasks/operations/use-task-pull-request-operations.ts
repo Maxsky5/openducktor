@@ -13,7 +13,7 @@ import type { RunTaskMutationWithChatDraftCleanupInput } from "./task-chat-draft
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import { requireActiveRepo, requireWorkspaceRef } from "./task-operations-model";
 import type { UseTaskOperationsResult } from "./task-operations-types";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "../../types/task-close";
 
 export type TaskPullRequestHostPort = Pick<
@@ -180,7 +180,7 @@ export function useTaskPullRequestOperations({
           await invalidatePullRequestReviewContextQueries(queryClient);
           if (operationsRef.current.get(taskKey(operation)) !== operation) return;
           feedback.show("success", "Pull request linked", {
-            description: `PR #${result.pullRequest.number} for ${taskId} (${repoPath}).`,
+            description: `PR #${result.pullRequest.number} for ${taskId}.`,
           });
         } else if (result.outcome === "merged") {
           updateOperation(operation, {
@@ -203,7 +203,7 @@ export function useTaskPullRequestOperations({
           }
         } else {
           feedback.show("warning", "No pull request found", {
-            description: `No open pull request found for ${taskId} on ${result.sourceBranch} (${repoPath}).`,
+            description: `No open pull request found for ${taskId} on ${result.sourceBranch}.`,
           });
         }
       } catch (error) {

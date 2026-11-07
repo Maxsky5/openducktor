@@ -117,96 +117,6 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).toContain(formatTime(timestamp));
   });
 
-  test("uses runtime part timing for workflow duration display", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "tool-1",
-          role: "tool",
-          content: "Tool openducktor_odt_set_spec completed",
-          timestamp: "2026-02-20T19:01:00.000Z",
-          meta: {
-            kind: "tool",
-            partId: "part-1",
-            callId: "call-1",
-            tool: "openducktor_odt_set_spec",
-            toolType: "workflow",
-            status: "completed",
-            input: { taskId: "fairnest-abc", markdown: "# Spec" },
-            output: "ok",
-            startedAtMs: 1_000,
-            endedAtMs: 2_500,
-            inputReadyAtMs: Date.parse("2026-02-20T19:00:30.000Z"),
-            observedStartedAtMs: Date.parse("2026-02-20T19:00:00.000Z"),
-            observedEndedAtMs: Date.parse("2026-02-20T19:01:00.000Z"),
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain("1.5s");
-    expect(html).not.toContain("30s");
-  });
-
-  test("falls back to part timing when observed timing is absent", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "tool-2",
-          role: "tool",
-          content: "Tool openducktor_odt_set_spec completed",
-          timestamp: "2026-02-20T19:00:02.500Z",
-          meta: {
-            kind: "tool",
-            partId: "part-2",
-            callId: "call-2",
-            tool: "openducktor_odt_set_spec",
-            toolType: "workflow",
-            status: "completed",
-            input: { taskId: "fairnest-def", markdown: "# Spec" },
-            output: "ok",
-            startedAtMs: 1_000,
-            endedAtMs: 2_500,
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain("1.5s");
-  });
-
-  test("renders failed workflow tool pill aligned cleanly without centered ml-auto", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "tool-failed",
-          role: "tool",
-          content: "Tool openducktor_odt_set_pull_request failed",
-          timestamp: "2026-02-20T19:00:02.500Z",
-          meta: {
-            kind: "tool",
-            partId: "part-failed",
-            callId: "call-failed",
-            tool: "openducktor_odt_set_pull_request",
-            toolType: "workflow",
-            status: "error",
-            input: { taskId: "fairnest-def" },
-            error: "Branch conflict",
-            startedAtMs: 1_000,
-            endedAtMs: 2_500,
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain("FAILED");
-    expect(html).not.toContain("ml-auto rounded-full");
-    expect(html).toContain("rounded-full border");
-    expect(html).toContain("1.5s");
-    expect(html).toMatch(/<details\b[^>]*\bopen\b/);
-    expect(html).not.toContain(">Activity<");
-  });
-
   test("shows failed, stopped, and unknown background outcomes on tool cards", () => {
     const renderCard = (
       toolType: "bash" | "workflow",
@@ -223,7 +133,7 @@ describe("AgentChatMessageCard tool presentation", () => {
               kind: "tool",
               partId: `${toolType}-${outcome}`,
               callId: `${toolType}-${outcome}`,
-              tool: toolType === "bash" ? "Bash" : "openducktor_odt_build_completed",
+              tool: toolType === "bash" ? "Bash" : "openducktor_odt_apply_workflow_event",
               toolType,
               status: "error",
               error:
@@ -251,30 +161,37 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(renderCard("workflow", "unknown")).not.toContain("CANCELLED");
   });
 
-  test("auto-opens failed ODT workflow tool error details", () => {
+  test("shows the error message of a failed ODT read in the error tone of the tool row", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
-          id: "tool-wf-failed",
+          id: "tool-read-failed",
           role: "tool",
-          content: "Tool openducktor_odt_set_spec failed",
-          timestamp: "2026-02-22T10:20:36.000Z",
+          content: "Tool odt_read_task failed",
+          timestamp: "2026-02-22T10:20:37.000Z",
           meta: {
             kind: "tool",
-            partId: "part-wf-failed",
-            callId: "call-wf-failed",
-            tool: "openducktor_odt_set_spec",
+            partId: "part-read-failed",
+            callId: "call-read-failed",
+            tool: "odt_read_task",
             toolType: "workflow",
             status: "error",
             input: { taskId: "task-x" },
-            error: "Task already has a spec",
+            error: JSON.stringify({
+              ok: false,
+              error: { code: "ODT_HOST_BRIDGE_ERROR", message: "Task task-x was not found." },
+            }),
           },
         },
       }),
     );
 
-    expect(html).toMatch(/<details\b[^>]*\bopen\b/);
-    expect(html).toContain("Task already has a spec");
+    const document = new DOMParser().parseFromString(html, "text/html");
+    const line = Array.from(document.querySelectorAll("p")).find(
+      (element) => element.textContent === "Task task-x was not found.",
+    );
+    expect(line?.classList.contains("text-destructive-muted")).toBe(true);
+    expect(html).not.toMatch(/<details\b[^>]*\bopen\b/);
   });
 
   test("keeps regular failed tool errors collapsed", () => {
@@ -590,6 +507,7 @@ describe("AgentChatMessageCard tool presentation", () => {
           presentToolCall: () => ({
             kind: "workflow",
             displayName: "Deploy release",
+            odtTool: null,
           }),
           supportedApprovalReplyOutcomes: null,
         },
@@ -746,95 +664,6 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).toContain("+2");
   });
 
-  test("renders workflow tool executing state with blue styling and running label", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "tool-4",
-          role: "tool",
-          content: "Tool openducktor_odt_build_completed running",
-          timestamp: "2026-02-22T10:21:00.000Z",
-          meta: {
-            kind: "tool",
-            partId: "part-4",
-            callId: "call-4",
-            tool: "openducktor_odt_build_completed",
-            toolType: "workflow",
-            status: "pending",
-            input: { taskId: "fairnest-98a" },
-            output: "",
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain('aria-label="Running tool"');
-    expect(html).toContain("border-info-border");
-    expect(html).not.toContain("border-pending-border");
-    expect(html).toContain("RUNNING");
-    expect(html).toContain("build_completed");
-  });
-
-  test("shows progress while the model prepares workflow tool arguments", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "tool-preparing",
-          role: "tool",
-          content: "Tool openducktor_odt_set_plan pending",
-          timestamp: "2026-02-22T10:21:10.000Z",
-          meta: {
-            kind: "tool",
-            partId: "part-preparing",
-            callId: "call-preparing",
-            tool: "openducktor_odt_set_plan",
-            toolType: "workflow",
-            status: "pending",
-            inputStreaming: true,
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain("PREPARING");
-    expect(html).toContain('aria-label="Preparing tool"');
-    expect(html).toContain("border-info-border");
-    expect(html).not.toContain("QUEUED");
-    expect(html).not.toContain("RUNNING");
-  });
-
-  test("renders pending workflow tools as preparing with completed arguments", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "tool-queued",
-          role: "tool",
-          content: "Tool openducktor_odt_set_plan pending",
-          timestamp: "2026-02-22T10:21:10.000Z",
-          meta: {
-            kind: "tool",
-            partId: "part-queued",
-            callId: "call-queued",
-            tool: "openducktor_odt_set_plan",
-            toolType: "workflow",
-            status: "pending",
-            inputStreaming: false,
-            input: { taskId: "fairnest-98a" },
-            output: "",
-          },
-        },
-      }),
-    );
-
-    expect(html).not.toContain('aria-label="Preparing tool"');
-    expect(html).not.toContain('aria-label="Running tool"');
-    expect(html).toContain("border-pending-border");
-    expect(html).not.toContain("border-info-border");
-    expect(html).toContain("PREPARING");
-    expect(html).not.toContain("QUEUED");
-    expect(html).not.toContain("RUNNING");
-  });
-
   test.each([true, false, undefined])(
     "distinguishes pending tool activity without visible status text for inputStreaming: %s",
     (inputStreaming) => {
@@ -877,96 +706,4 @@ describe("AgentChatMessageCard tool presentation", () => {
       expect(html).not.toContain('aria-label="Running tool"');
     },
   );
-
-  test("renders workflow MCP validation failures as destructive error details", () => {
-    const validationError =
-      'MCP error -32602: Input validation error: Invalid arguments for tool odt_set_pull_request: [{"path":["workspaceId"],"message":"Invalid input: expected never, received string"}]';
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "tool-5",
-          role: "tool",
-          content: "Tool odt_set_pull_request failed",
-          timestamp: "2026-02-22T10:21:30.000Z",
-          meta: {
-            kind: "tool",
-            partId: "part-5",
-            callId: "call-5",
-            tool: "odt_set_pull_request",
-            toolType: "workflow",
-            status: "error",
-            input: {
-              taskId: "fairnest-99z",
-              workspaceId: "repo",
-              providerId: "github",
-              number: 12,
-            },
-            error: validationError,
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain("border-destructive-border");
-    expect(html).not.toContain("border-success-border");
-    expect(html).not.toContain("border-cancelled-border");
-    expect(html).toContain("FAILED");
-    expect(html).toContain("odt_set_pull_request");
-    expect(html).toContain("workspaceId");
-    expect(html).toContain("Input validation error");
-  });
-
-  test("renders workflow status-guard rejections as error styling", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "tool-guard",
-          role: "tool",
-          content: "Tool odt_set_spec completed",
-          timestamp: "2026-02-22T10:21:35.000Z",
-          meta: {
-            kind: "tool",
-            partId: "part-guard",
-            callId: "call-guard",
-            tool: "odt_set_spec",
-            toolType: "workflow",
-            status: "error",
-            input: { taskId: "fairnest-99z" },
-            error:
-              "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: closed)",
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain("border-destructive-border");
-    expect(html).not.toContain("border-success-border");
-  });
-
-  test("renders cancelled workflow tools with orange styling", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "tool-cancelled",
-          role: "tool",
-          content: "Tool odt_set_plan failed",
-          timestamp: "2026-02-22T10:21:40.000Z",
-          meta: {
-            kind: "tool",
-            partId: "part-cancelled",
-            callId: "call-cancelled",
-            tool: "odt_set_plan",
-            toolType: "workflow",
-            status: "error",
-            input: { taskId: "fairnest-cancelled" },
-            error: "Request cancelled by user",
-            output: "",
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain("border-cancelled-border");
-    expect(html).not.toContain("border-destructive-border");
-  });
 });

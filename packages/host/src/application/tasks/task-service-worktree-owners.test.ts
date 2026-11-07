@@ -44,7 +44,7 @@ const createService = (status: "in_progress" | "closed", reads: unknown[]) => {
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath: "/repo",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
     }),
     worktreeOwners: reader,
   });

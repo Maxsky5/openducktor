@@ -19,8 +19,8 @@ const baseState: ComposerState = {
 
 describe("task-create-modal-model", () => {
   test("detects document sections", () => {
-    expect(isDocumentSection("spec")).toBe(true);
-    expect(isDocumentSection("plan")).toBe(true);
+    expect(isDocumentSection({ artifactCode: "spec" })).toBe(true);
+    expect(isDocumentSection({ artifactCode: "plan" })).toBe(true);
     expect(isDocumentSection("details")).toBe(false);
   });
 

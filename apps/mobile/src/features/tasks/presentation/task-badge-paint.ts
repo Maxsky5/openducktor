@@ -1,7 +1,9 @@
-import { type BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
-import type { PullRequest } from "@openducktor/contracts";
+import type {
+  PullRequest,
+  WorkflowIcon,
+  WorkflowIssueTypeDefinition,
+} from "@openducktor/contracts";
 import {
-  ISSUE_TYPE_LABELS,
   PRIORITY_LABELS,
   type PriorityLevel,
   toPriorityLevel,
@@ -17,13 +19,19 @@ import type { Tone } from "@/ui/tones";
 export type BadgePaint = { label: string; tone: Tone; icon: IconName };
 
 /** The desktop issue type badges: Feature sky, Bug rose, and Task neutral. */
-const ISSUE_TYPE_PAINT = {
-  feature: { label: ISSUE_TYPE_LABELS.feature, tone: "info", icon: "sparkles" },
-  bug: { label: ISSUE_TYPE_LABELS.bug, tone: "destructive", icon: "bug" },
-  task: { label: ISSUE_TYPE_LABELS.task, tone: "neutral", icon: "square-check" },
-} as const satisfies Record<IssueType, BadgePaint>;
+const ISSUE_TYPE_PAINT = new Map<WorkflowIcon, Omit<BadgePaint, "label">>([
+  ["feature", { tone: "info", icon: "sparkles" }],
+  ["bug", { tone: "destructive", icon: "bug" }],
+  ["task", { tone: "neutral", icon: "square-check" }],
+]);
+const NEUTRAL_ISSUE_TYPE_PAINT: Omit<BadgePaint, "label"> = { tone: "neutral", icon: "file-text" };
 
-export const issueTypePaint = (issueType: IssueType): BadgePaint => ISSUE_TYPE_PAINT[issueType];
+export const issueTypePaint = (
+  choice: Pick<WorkflowIssueTypeDefinition, "icon" | "label">,
+): BadgePaint => ({
+  ...((choice.icon && ISSUE_TYPE_PAINT.get(choice.icon)) || NEUTRAL_ISSUE_TYPE_PAINT),
+  label: choice.label,
+});
 
 /** The desktop priority colors: P0 rose, P1 orange, P2 amber, P3 sky, and P4 neutral. */
 const PRIORITY_TONES = {

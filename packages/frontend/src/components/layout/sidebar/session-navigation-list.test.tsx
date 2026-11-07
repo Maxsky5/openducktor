@@ -1,3 +1,4 @@
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as cssPresence from "@/components/ui/css-presence";
@@ -180,7 +181,7 @@ describe("SessionNavigationList", () => {
     ({ requests }) => {
       const entry = taskSessionEntry("blocked", { attention: ["blocked", ...requests] });
       if (entry.context.kind !== "task") throw new Error("Expected a task session.");
-      entry.context.task.status = "blocked";
+      entry.context.task = createTaskCardFixture({ ...entry.context.task, status: "blocked" });
       renderList(navigationModel({ needs_you: [entry] }));
 
       const row = screen.getByRole("button", { name: /Task blocked/ });

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import {
   collectKnownLabels,
-  ISSUE_TYPE_CHOICES,
+  defaultIssueType,
+  issueTypeChoices,
   toComposerState,
   toPrioritySelectOptions,
 } from "./task-composer-options";
@@ -47,7 +49,15 @@ describe("task composer options", () => {
   });
 
   test("offers each issue type of the workflow", () => {
-    expect(ISSUE_TYPE_CHOICES.map((choice) => choice.value)).toEqual(["feature", "bug", "task"]);
+    expect(
+      issueTypeChoices(specPlanBuildWorkflow).map(({ value, label }) => ({ value, label })),
+    ).toEqual([
+      { value: "feature", label: "Feature" },
+      { value: "bug", label: "Bug" },
+      { value: "task", label: "Task" },
+    ]);
+    expect(defaultIssueType(specPlanBuildWorkflow)).toBe("task");
+    expect(issueTypeChoices(undefined)).toEqual([]);
   });
 
   test("labels each priority with its hint", () => {

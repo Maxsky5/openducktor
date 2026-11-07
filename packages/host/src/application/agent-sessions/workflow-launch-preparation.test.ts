@@ -2,9 +2,11 @@ import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import type { AgentSessionStartMode, WorkflowLaunchRequest } from "@openducktor/contracts";
 import { createTaskWorkflow } from "@openducktor/workflows";
+import { specPlanBuildPromptKey, rolePromptKey } from "@openducktor/workflows/test-support";
 import {
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
+  reviewTaskRoles,
 } from "@openducktor/workflows/test-support";
 import { reviewTaskWorkflows, singleTaskWorkflow } from "../../test-support/task-workflows";
 import {
@@ -36,7 +38,7 @@ test("a fresh target outside the canonical task worktree fails before any task m
       decision: { startMode: "fresh", selectedModel: modelFor("codex"), targetWorkingDirectory },
     },
     instruction: { kind: "kickoff", feedback: "Required changes" },
-    beforeStartAction: { action: "human_request_changes", note: "Required changes" },
+    beforeStartAction: { eventId: "human-request-changes" },
   });
   const rejected = await Effect.runPromise(h.service.launch(request("/other")));
   expect(rejected).toMatchObject({
@@ -46,20 +48,48 @@ test("a fresh target outside the canonical task worktree fails before any task m
   expect(rejected.session).toBeUndefined();
   expect(h.getTask().status).toBe("human_review");
   expect(h.starts).toHaveLength(0);
+  expect(h.appliedEvents).toEqual([]);
 
   const accepted = await Effect.runPromise(h.service.launch(request("/worktrees/task")));
   expect(accepted).toMatchObject({
     status: "completed",
     session: { externalSessionId: "session-1", workingDirectory: "/worktrees/task" },
   });
+  expect(h.appliedEvents).toEqual(["human-request-changes"]);
   expect(h.getTask().status).toBe("in_progress");
+});
+
+test("a launch without the human feedback context cannot commit an event before its start", async () => {
+  const h = await createLaunchHarness();
+  h.setTaskStatus("human_review");
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("codex"),
+      policy: {
+        kind: "manual",
+        actionId: "qa_review",
+        decision: { startMode: "fresh", selectedModel: modelFor("codex") },
+      },
+      beforeStartAction: { eventId: "human-request-changes" },
+    }),
+  );
+  expect(result).toMatchObject({
+    status: "failed",
+    failure: {
+      message:
+        "Action 'qa_review' collects no human feedback, so it cannot commit event 'human-request-changes' before its start. Start the launch without that event.",
+    },
+  });
+  expect(h.appliedEvents).toEqual([]);
+  expect(h.getTask().status).toBe("human_review");
+  expect(h.starts).toHaveLength(0);
 });
 
 test("a saved override with an unsupported placeholder fails before any task mutation", async () => {
   const h = await createLaunchHarness();
   h.setTaskStatus("human_review");
   h.setPromptOverrides({
-    "system.shared.task_context": {
+    [specPlanBuildPromptKey("workflow.task_context")]: {
       template: "Task {{task.id}}, QA required: {{task.qaRequired}}",
       baseVersion: 1,
     },
@@ -73,14 +103,14 @@ test("a saved override with an unsupported placeholder fails before any task mut
         decision: { startMode: "fresh", selectedModel: modelFor("codex") },
       },
       instruction: { kind: "kickoff", feedback: "Required changes" },
-      beforeStartAction: { action: "human_request_changes", note: "Required changes" },
+      beforeStartAction: { eventId: "human-request-changes" },
     }),
   );
   expect(result).toMatchObject({
     status: "failed",
     failure: {
       message:
-        'Prompt template "system.shared.task_context" uses unsupported placeholder "task.qaRequired". Edit or disable this prompt override in Settings.',
+        'The prompt "workflow.task_context" uses unsupported placeholder "task.qaRequired". Edit or disable this prompt override in Settings.',
     },
   });
   expect(h.getTask().status).toBe("human_review");
@@ -216,7 +246,7 @@ test("a pre-start publication failure fails the launch after the task mutation w
         decision: { startMode: "fresh", selectedModel: modelFor("codex") },
       },
       instruction: { kind: "kickoff", text: "Apply feedback", feedback: "Review feedback" },
-      beforeStartAction: { action: "human_request_changes", note: "Review feedback" },
+      beforeStartAction: { eventId: "human-request-changes" },
     }),
   );
   expect(result).toMatchObject({
@@ -260,17 +290,17 @@ test("automatic model and prompt selection uses role and repository overrides on
   const h = await createLaunchHarness();
   h.setModelDefault(undefined);
   h.config.agentDefaults.build = modelFor("codex");
-  h.settings.globalPromptOverrides["kickoff.build_implementation_start"] = {
+  h.settings.globalPromptOverrides[specPlanBuildPromptKey("messages.build_start")] = {
     template: "Global kickoff",
     baseVersion: 1,
     enabled: true,
   };
-  h.config.promptOverrides["kickoff.build_implementation_start"] = {
+  h.config.promptOverrides[specPlanBuildPromptKey("messages.build_start")] = {
     template: "Repository kickoff {{task.id}}",
     baseVersion: 1,
     enabled: true,
   };
-  h.config.promptOverrides["system.role.build.base"] = {
+  h.config.promptOverrides[rolePromptKey("build")] = {
     template: "Repository system",
     baseVersion: 1,
     enabled: true,
@@ -298,18 +328,20 @@ test("automatic Pull Request launch skips missing prerequisites and forks the la
     policy: { kind: "automatic", actionId: "startGeneratePullRequest" },
     instruction: { kind: "kickoff" },
   };
+  const sourceMissing = await Effect.runPromise(h.launchAutomatic(request));
+  expect(sourceMissing).toMatchObject({
+    status: "skipped",
+    skipReason: "No Builder session is available to create the pull request for task task.",
+  });
+  const builderModel = { ...modelFor("codex"), modelId: "retired-builder-model" };
+  h.addTaskSession("builder", { selectedModel: builderModel });
   const providerMissing = await Effect.runPromise(h.launchAutomatic(request));
   expect(providerMissing.status).toBe("skipped");
   expect(providerMissing.skipReason).toContain("does not support Pull Requests");
-  h.enablePullRequests();
-  const sourceMissing = await Effect.runPromise(h.launchAutomatic(request));
-  expect(sourceMissing.status).toBe("skipped");
-  expect(sourceMissing.skipReason).toContain("No build session");
   expect(h.starts).toHaveLength(0);
   expect(h.forks).toHaveLength(0);
 
-  const builderModel = { ...modelFor("codex"), modelId: "retired-builder-model" };
-  h.addTaskSession("builder", { selectedModel: builderModel });
+  h.enablePullRequests();
   const forked = await Effect.runPromise(h.launchAutomatic(request));
   expect(forked).toMatchObject({
     status: "completed",
@@ -319,6 +351,143 @@ test("automatic Pull Request launch skips missing prerequisites and forks the la
   });
   expect(h.forks).toEqual(["builder"]);
   expect(h.catalogLoads()).toBe(0);
+});
+
+const launchPullRequestAutomation = async (
+  pullRequestRoles: string[],
+  sessions: { id: string; role: string; startedAt: string }[],
+) => {
+  const definition = reviewTaskDefinition();
+  definition.pullRequestRoles = pullRequestRoles;
+  definition.automations.push({
+    id: "startPullRequest",
+    label: "Generate Pull Request",
+    description: "Generate the pull request.",
+    launchActionId: "pull_request",
+  });
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
+  const h = await createLaunchHarness("codex", {
+    taskWorkflows: singleTaskWorkflow(workflow),
+    task: { issueType: "feature", status: "approval" },
+  });
+  h.enablePullRequests();
+  for (const { id, role, startedAt } of sessions) h.addTaskSession(id, { role, startedAt });
+  const result = await Effect.runPromise(
+    h.launchAutomatic({
+      ...requestFor("codex"),
+      policy: { kind: "automatic", actionId: "startPullRequest" },
+      instruction: { kind: "kickoff" },
+    }),
+  );
+  return { h, result };
+};
+
+test.each([
+  [["writer", "editor"], "writer"],
+  [[], "writer"],
+  [["writer", "editor"], "editor"],
+  [[], "editor"],
+] as const)(
+  "automatic Pull Request launch with pull request roles %p continues the latest %s session",
+  async (pullRequestRoles, latestRole) => {
+    const older = "2026-10-03T12:00:00.000Z";
+    const newer = "2026-10-03T13:00:00.000Z";
+    const { h, result } = await launchPullRequestAutomation(
+      [...pullRequestRoles],
+      [
+        { id: "writer-1", role: "writer", startedAt: latestRole === "writer" ? newer : older },
+        { id: "editor-1", role: "editor", startedAt: latestRole === "editor" ? newer : older },
+      ],
+    );
+    expect(result).toMatchObject({
+      status: "completed",
+      role: latestRole,
+      startMode: "reuse",
+      session: { externalSessionId: `${latestRole}-1` },
+    });
+    expect(h.starts).toHaveLength(0);
+    expect(h.sends).toHaveLength(1);
+  },
+);
+
+test("automatic Pull Request launch ignores a newer session of a role that cannot create it", async () => {
+  const { result } = await launchPullRequestAutomation(
+    ["writer"],
+    [
+      { id: "writer-1", role: "writer", startedAt: "2026-10-03T12:00:00.000Z" },
+      { id: "editor-1", role: "editor", startedAt: "2026-10-03T13:00:00.000Z" },
+    ],
+  );
+  expect(result).toMatchObject({
+    status: "completed",
+    role: "writer",
+    session: { externalSessionId: "writer-1" },
+  });
+});
+
+test("automatic Pull Request launch skips when no pull request role has a session", async () => {
+  const { h, result } = await launchPullRequestAutomation([], []);
+  expect(result).toMatchObject({
+    status: "skipped",
+    skipReason:
+      "No Writer or Editor session is available to create the pull request for task task.",
+  });
+  expect(h.starts).toHaveLength(0);
+  expect(h.forks).toHaveLength(0);
+  expect(h.sends).toHaveLength(0);
+});
+
+test("a manual Pull Request launch runs only as a pull request role of its source session", async () => {
+  const h = await createLaunchHarness();
+  h.enablePullRequests();
+  h.setTaskStatus("human_review");
+  const qaSession = h.addTaskSession("qa-session", { role: "qa" });
+  const launch = (role: string | undefined) => {
+    const policy: WorkflowLaunchRequest["policy"] = {
+      kind: "manual",
+      actionId: "pull_request",
+      decision: { startMode: "reuse", sourceSession: qaSession },
+    };
+    if (role !== undefined) policy.role = role;
+    return h.service.launch({ ...requestFor("codex"), policy, instruction: { kind: "kickoff" } });
+  };
+  expect((await Effect.runPromise(Effect.flip(launch(undefined)))).message).toContain(
+    "needs the role of its session",
+  );
+  expect((await Effect.runPromise(Effect.flip(launch("qa")))).message).toContain(
+    'Role "qa" cannot create pull requests',
+  );
+  expect(await Effect.runPromise(launch("build"))).toMatchObject({
+    status: "failed",
+    failure: { message: expect.stringContaining("does not own the selected build source") },
+  });
+  expect(h.sends).toHaveLength(0);
+});
+
+test("a manual Pull Request launch fails while the task approval is not available", async () => {
+  const h = await createLaunchHarness();
+  h.enablePullRequests();
+  h.setTaskStatus("in_progress");
+  const sourceSession = h.addTaskSession("builder");
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("codex"),
+      policy: {
+        kind: "manual",
+        actionId: "pull_request",
+        role: "build",
+        decision: { startMode: "reuse", sourceSession },
+      },
+      instruction: { kind: "kickoff" },
+    }),
+  );
+  expect(result).toMatchObject({
+    status: "failed",
+    failure: {
+      message: expect.stringContaining("Pull request generation is not available for task"),
+    },
+  });
+  expect(h.sends).toHaveLength(0);
 });
 
 test("automatic Pull Request launch skips when the Git provider is not enabled", async () => {
@@ -397,7 +566,7 @@ test.each(["opencode", "codex", "claude"] as const)(
 test("a custom workflow launch starts its step role with the prompts of that workflow", async () => {
   const h = await createLaunchHarness("codex", {
     taskWorkflows: reviewTaskWorkflows,
-    task: { issueType: "article", status: "backlog" },
+    task: { issueType: "feature", status: "open" },
   });
   const result = await Effect.runPromise(
     h.service.launch({
@@ -428,11 +597,11 @@ test("automatic launch checks the worktree of an action that needs it without re
   definition.automations = definition.automations.map((automation) =>
     automation.id === "startRevision" ? { ...automation, startMode: "fresh" as const } : automation,
   );
-  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
   const launch = async (worktreeExists: boolean) => {
     const h = await createLaunchHarness("codex", {
       taskWorkflows: singleTaskWorkflow(workflow),
-      task: { issueType: "article", status: "writing" },
+      task: { issueType: "feature", status: "writing" },
     });
     h.setWorktreeExists(worktreeExists);
     return Effect.runPromise(
@@ -474,10 +643,10 @@ const launchCustomAutomation = async ({
   definition.automations = definition.automations.map(
     ({ startMode: _startMode, ...automation }) => automation,
   );
-  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates);
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
   const h = await createLaunchHarness("codex", {
     taskWorkflows: singleTaskWorkflow(workflow),
-    task: { issueType: "article", status },
+    task: { issueType: "feature", status },
   });
   h.settings.autopilot.alwaysStartQaReviewsFresh = freshReviews;
   if (roleSession) h.addTaskSession(`${role}-1`, { role });
@@ -555,3 +724,43 @@ test.each([
     expect(result).toMatchObject({ status: "completed", role: "editor", startMode });
   },
 );
+
+test("a feedback launch runs when its step is available in the state that its event gives", async () => {
+  const definition = reviewTaskDefinition();
+  const write = definition.steps.find(({ id }) => id === "write")!;
+  write.availableWhen = { stateIn: ["open", "writing", "paused"] };
+  const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
+  const launchFeedback = async (status: string, eventId: string) => {
+    const h = await createLaunchHarness("codex", {
+      taskWorkflows: singleTaskWorkflow(workflow),
+      task: { issueType: "feature", status },
+    });
+    const result = await Effect.runPromise(
+      h.service.launch({
+        ...requestFor("codex"),
+        policy: {
+          kind: "manual",
+          actionId: "write_feedback",
+          decision: { startMode: "fresh", selectedModel: modelFor("codex") },
+        },
+        instruction: { kind: "kickoff", feedback: "Shorten the intro" },
+        beforeStartAction: { eventId },
+      }),
+    );
+    return { h, result };
+  };
+
+  const accepted = await launchFeedback("approval", "request-rewrite");
+  expect(accepted.result).toMatchObject({ status: "completed", role: "writer" });
+  expect(accepted.h.appliedEvents).toEqual(["request-rewrite"]);
+  expect(accepted.h.getTask().status).toBe("writing");
+
+  const rejected = await launchFeedback("reviewing", "accept-review");
+  expect(rejected.result).toMatchObject({
+    status: "failed",
+    failure: { message: "writer workflow is not available for task task." },
+  });
+  expect(rejected.h.appliedEvents).toEqual([]);
+  expect(rejected.h.getTask().status).toBe("reviewing");
+  expect(rejected.h.starts).toHaveLength(0);
+});

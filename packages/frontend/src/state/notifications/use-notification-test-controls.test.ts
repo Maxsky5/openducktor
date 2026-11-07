@@ -10,7 +10,7 @@ import {
   describeNotificationOsCapability,
   useNotificationTestControls,
 } from "./use-notification-test-controls";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 const capability = (
   overrides: Partial<NotificationOsCapability> = {},
@@ -49,7 +49,7 @@ test.each([
       subscribeClicks: () => () => {},
       dispose: () => {},
     };
-    const settings = { ...createBuiltinNotificationSettings(), volumePercent: 50 };
+    const settings = { ...createSpecPlanBuildNotificationSettings(), volumePercent: 50 };
     const runtime = createNotificationRuntime({
       bridge,
       publishAction: async (occurrence) => ({

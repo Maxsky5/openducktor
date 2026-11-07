@@ -1,12 +1,11 @@
-import { BUILTIN_STATE_IDS } from "@openducktor/workflows";
 import type { ReactElement } from "react";
 import { KANBAN_LANE_WIDTH_CLASS } from "@/components/features/kanban/kanban-layout";
-import { laneTheme } from "@/components/features/kanban/kanban-theme";
+import { LOADING_LANE_THEME } from "@/components/features/kanban/kanban-theme";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-const LOADING_LANE_PREVIEWS = BUILTIN_STATE_IDS.map((id) => {
-  const theme = laneTheme(id);
+const LOADING_LANE_PREVIEWS = [0, 1, 2, 3].map((id) => {
+  const theme = LOADING_LANE_THEME;
   return {
     id,
     accentClass: theme.headerAccentClass,

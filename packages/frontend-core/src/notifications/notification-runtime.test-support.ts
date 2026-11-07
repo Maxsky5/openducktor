@@ -1,3 +1,4 @@
+import { builtinNotificationPresentation } from "../test-support/workflow-fixtures";
 import { mock } from "bun:test";
 import type { NotificationOccurrence, NotificationSettings } from "@openducktor/contracts";
 import type { NotificationBridge } from "../platform/notification-bridge";
@@ -32,6 +33,7 @@ export const createBridge = (overrides: Partial<NotificationBridge> = {}): Notif
 export const workflowClosedOccurrence = (suffix: string): NotificationOccurrence => ({
   occurrenceId: `workflow.closed:/repo:task-1:${suffix}`,
   kind: "workflow.closed",
+  ...builtinNotificationPresentation("workflow.closed"),
   repoPath: "/repo",
   repositoryLabel: "Repo",
   task: { id: "task-1", title: "Build notifications" },

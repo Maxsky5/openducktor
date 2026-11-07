@@ -1,7 +1,6 @@
 import type { StartupStep } from "@openducktor/contracts";
 import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
 import { terminalCommandSucceeded } from "@openducktor/frontend-core/terminals/terminal-command-result";
-import { BUILTIN_ROLE_LABELS, builtinRoleId } from "@openducktor/workflows";
 import { basenameForPath } from "@openducktor/path-support";
 import { actionResultText } from "./action-result-text";
 import {
@@ -43,8 +42,7 @@ export function startupActivity(attempt: StartupAttempt): string | undefined {
 
 export function startupTitle(attempt: StartupAttempt): string {
   const scope = attempt.origin.scope;
-  const subject =
-    scope.kind === "task" ? `${BUILTIN_ROLE_LABELS[builtinRoleId(scope.role)]} session` : "Chat";
+  const subject = scope.kind === "task" ? `${attempt.roleLabel ?? "Task"} session` : "Chat";
   switch (attempt.status.phase) {
     case "ready":
       return startupCurrentStep(attempt)

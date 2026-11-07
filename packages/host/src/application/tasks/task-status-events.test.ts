@@ -1,4 +1,4 @@
-import { builtinTaskWorkflow, type TransitionCause } from "@openducktor/workflows";
+import { specPlanBuildWorkflow, type TransitionCause } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { noMergeDetection, syncWorkspace } from "./sync/task-sync-service.test-support";
@@ -36,7 +36,7 @@ const transition = (
     decide: () =>
       Result.succeed({
         status,
-        workflowId: builtinTaskWorkflow.definition.id,
+        workflowId: specPlanBuildWorkflow.definition.id,
         ...(cause && { cause }),
       }),
   });
@@ -52,8 +52,6 @@ const createServices = (
   const base = createTaskServiceWithMutationProgressTestDouble({
     listTasks: (input) =>
       store.listTasks(input).pipe(Effect.map((tasks) => enrichTasks(builtinTaskWorkflows, tasks))),
-    transitionTask: (input) =>
-      transition(store, input).pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task))),
     ...overrides,
   });
   const sync = createTaskSyncService({
@@ -102,7 +100,6 @@ const createServices = (
     failures,
     sync,
     service: createEventPublishingTaskService({
-      taskWorkflows: builtinTaskWorkflows,
       taskService: base,
       taskSyncService: sync,
     }),
@@ -118,8 +115,8 @@ const deferred = () => {
 };
 
 test.each([
-  ["buildCompleted", "in_progress", "build"],
-  ["buildCompleted", "blocked", "build"],
+  ["build-completed", "in_progress", "build"],
+  ["build-completed", "blocked", "build"],
   ["qaApproved", "blocked", "qa"],
   ["qaApproved", "ai_review", "qa"],
 ] as const)(
@@ -144,14 +141,14 @@ test.each([
           taskWorkflows: builtinTaskWorkflows,
           taskStore: store,
         }).workflowArtifactSave,
-        buildCompleted: () =>
+        applyAgentEvent: () =>
           transition(store, {
             repoPath,
             workspaceId,
             taskId: task.id,
             status: "human_review",
             cause: { signal: "taskProgressedToHumanReview", sourceRole: "build" },
-          }).pipe(Effect.map((task) => enrichTask(builtinTaskWorkflow, task))),
+          }).pipe(Effect.map((task) => enrichTask(specPlanBuildWorkflow, task))),
       });
       await Effect.runPromise(
         operation === "qaApproved"
@@ -168,7 +165,14 @@ test.each([
                 submit: true,
               })
               .pipe(Effect.asVoid)
-          : service.buildCompleted({ workspaceId, repoPath, taskId: task.id }).pipe(Effect.asVoid),
+          : service
+              .applyAgentEvent({
+                workspaceId,
+                repoPath,
+                taskId: task.id,
+                eventId: "build-completed",
+              })
+              .pipe(Effect.asVoid),
       );
       expect(events).toMatchObject([
         {
@@ -208,25 +212,26 @@ test.each([false, true])(
             taskId: task.id,
             status: "ready_for_dev",
           }).pipe(Effect.as({ ran: true, changedTaskIds: [task.id], autoCloseFailures: [] })),
-        transitionTask: (input) =>
+        // The test event ID names the target status.
+        applyTaskEvent: ({ eventId, ...scope }) =>
           Effect.gen(function* () {
-            const result = yield* transition(store, input);
-            if (input.status === "spec_ready") {
+            const result = yield* transition(store, { ...scope, status: eventId });
+            if (eventId === "spec_ready") {
               committed.resolve();
               yield* Effect.promise(() => release.promise);
             }
-            return enrichTask(builtinTaskWorkflow, result);
+            return { task: enrichTask(specPlanBuildWorkflow, result), artifactChanges: [] };
           }),
       });
       const first = Effect.runPromise(
-        service.transitionTask({ workspaceId, repoPath, taskId: task.id, status: "spec_ready" }),
+        service.applyTaskEvent({ workspaceId, repoPath, taskId: task.id, eventId: "spec_ready" }),
       );
       await committed.promise;
       const secondStarted = deferred();
       const secondMutation = viaSync
         ? sync.syncRepoPullRequests(repoPath, workspaceId).pipe(Effect.asVoid)
         : service
-            .transitionTask({ workspaceId, repoPath, taskId: task.id, status: "ready_for_dev" })
+            .applyTaskEvent({ workspaceId, repoPath, taskId: task.id, eventId: "ready_for_dev" })
             .pipe(Effect.asVoid);
       const second = Effect.runFork(
         Effect.sync(secondStarted.resolve).pipe(Effect.andThen(secondMutation)),
@@ -256,7 +261,12 @@ test.each([false, true])(
       ]);
       // A metadata/no-op status update must not repeat either transition.
       await Effect.runPromise(
-        service.transitionTask({ workspaceId, repoPath, taskId: task.id, status: "ready_for_dev" }),
+        service.applyTaskEvent({
+          workspaceId,
+          repoPath,
+          taskId: task.id,
+          eventId: "ready_for_dev",
+        }),
       );
       expect(
         events.flatMap((event) => (event.kind === "tasks_updated" ? event.statusChanges : [])),
@@ -281,11 +291,11 @@ test("publishes committed transitions when the rest of a mutation fails", async 
       }),
     );
     const failure = new HostOperationError({
-      operation: "build-completed",
+      operation: "worktree_reset.cleanup",
       message: "Cleanup failed",
     });
     const { service, events, failures } = createServices(harness, {
-      buildCompleted: (input) =>
+      applyTaskEvent: (input) =>
         Effect.gen(function* () {
           yield* transition(store, {
             workspaceId: input.workspaceId,
@@ -294,14 +304,21 @@ test("publishes committed transitions when the rest of a mutation fails", async 
             status: "spec_ready",
           });
           return yield* new TaskMutationProgressFailure({
-            operation: "build-completed",
+            operation: "apply-task-event",
             changes: { taskIds: [input.taskId], removedTaskIds: [] },
             failure,
           });
         }),
     });
     const result = await Effect.runPromise(
-      Effect.result(service.buildCompleted({ workspaceId, repoPath, taskId: task.id })),
+      Effect.result(
+        service.applyTaskEvent({
+          workspaceId,
+          repoPath,
+          taskId: task.id,
+          eventId: "reset-implementation",
+        }),
+      ),
     );
     expect(result._tag).toBe("Failure");
     if (result._tag === "Failure") expect(result.failure).toBe(failure);
@@ -336,7 +353,7 @@ test("records QA transitions only after the entire SQLite transaction commits", 
       repoPath,
       taskId: task.id,
       decide: () =>
-        Result.succeed({ status: "human_review", workflowId: builtinTaskWorkflow.definition.id }),
+        Result.succeed({ status: "human_review", workflowId: specPlanBuildWorkflow.definition.id }),
       verdict: "approved" as const,
       markdown: "Approved",
     };
@@ -370,7 +387,15 @@ test("records QA transitions only after the entire SQLite transaction commits", 
     );
     expect(completed.result._tag).toBe("Success");
     expect(completed.statusChanges).toEqual([
-      { previousStatus: "open", task: { id: task.id, title: "Task", status: "human_review" } },
+      {
+        previousStatus: "open",
+        task: {
+          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          id: task.id,
+          title: "Task",
+          status: "human_review",
+        },
+      },
     ]);
   } finally {
     await harness.cleanup();

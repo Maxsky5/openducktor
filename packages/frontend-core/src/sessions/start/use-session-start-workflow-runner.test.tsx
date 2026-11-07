@@ -1,5 +1,17 @@
+import {
+  specPlanBuildWorkflow,
+  createTaskWorkflow,
+  taskWorkflowDescriptor,
+  workflowRoleCatalog,
+} from "@openducktor/workflows";
+import { promptOverrideKey } from "@openducktor/contracts";
+import {
+  createSettingsSnapshotFixture,
+  createTaskCardFixture,
+} from "../../test-support/shared-test-fixtures";
 import "../../test-support/dom-environment";
 import { expect, mock, test } from "bun:test";
+import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
@@ -22,6 +34,8 @@ import { taskWorktreeQueryOptions } from "../../queries/build-runtime";
 import { terminalQueryKeys } from "../../queries/terminals";
 import type { AgentOperationsContextValue } from "../../types/session-slices";
 import { useSessionStartWorkflowRunner } from "./use-session-start-workflow-runner";
+import { useSessionStartContext } from "./use-session-start-context";
+import type { SessionStartNotificationPublisher } from "./session-start-orchestration";
 import { createAgentOperationsFixture } from "../../test-support/agent-operations-fixture";
 import { createStartupLiveSourceFake } from "../../test-support/startup-live-source-fake";
 import type { AgentMessageSendReceipt } from "../../types/agent-orchestrator";
@@ -70,7 +84,7 @@ test("a local launch guard leaves confirmed unsaved feedback without dispatch", 
     await act(async () => {
       try {
         await view.result.current({
-          task: null,
+          task: createTaskCardFixture({ id: "task" }),
           request: {
             taskId: "task",
             role: "build",
@@ -183,14 +197,14 @@ test.each([
     try {
       await act(async () => {
         await view.result.current({
-          task: null,
+          task: createTaskCardFixture({ id: "task" }),
           request: {
             taskId: "task",
             role: "build",
             launchActionId: "build_after_human_request_changes",
             postStartAction: "send_message",
             message: "Continue",
-            beforeStartAction: { action: "human_request_changes", note: "Fix this" },
+            beforeStartAction: { eventId: "human-request-changes" },
           },
           decision: {
             startMode: "fresh",
@@ -344,7 +358,7 @@ test.each(["completed", "failed", "disconnected"] as const)(
       await act(async () => {
         try {
           await view.result.current({
-            task: null,
+            task: createTaskCardFixture({ id: "task-1" }),
             request: {
               taskId: "task",
               role: "build",
@@ -448,7 +462,7 @@ test.each(["acknowledged", "uncertain", "refused", "not_sent"] as const)(
     try {
       await act(async () => {
         const started = await view.result.current({
-          task: null,
+          task: createTaskCardFixture({ id: "task" }),
           request: {
             taskId: "task",
             role: "build",
@@ -582,3 +596,196 @@ test.each(["acknowledged", "uncertain", "refused", "not_sent"] as const)(
     }
   },
 );
+
+test.each([
+  { context: "none" as const, override: false },
+  { context: "none" as const, override: true },
+  { context: "human_feedback" as const, override: false },
+  { context: "human_feedback" as const, override: true },
+])(
+  "renders declared message instructions at the shared launch interface: %j",
+  async ({ context, override }) => {
+    const descriptor = taskWorkflowDescriptor(specPlanBuildWorkflow);
+    const step = descriptor.definition.steps.find(
+      (step) => step.kind === "agent" && step.roleId === "build",
+    );
+    if (step?.kind !== "agent") throw new Error("Missing Builder fixture step");
+    const launch = step.launchActions.find(({ id }) => id === "build_implementation_start");
+    if (!launch) throw new Error("Missing Builder fixture launch");
+    launch.template = { kind: "message", id: "messages.custom_feedback" };
+    if (context === "none") delete launch.context;
+    else launch.context = context;
+    const samples = {
+      none: { contents: "{{role}}", required: [] as const, expected: "build" },
+      human_feedback: {
+        contents: "{{humanFeedback}}",
+        required: ["humanFeedback"] as const,
+        expected: "Revise the introduction.",
+      },
+    };
+    const { contents, required, expected } = samples[context];
+    descriptor.templates.push({
+      id: "messages.custom_feedback",
+      purpose: "message",
+      builtinVersion: 1,
+      template: `Default {{task.id}}: ${contents}`,
+      label: "Custom feedback",
+      description: "Custom feedback",
+      roleIds: ["build"],
+      requiredPlaceholders: [...required],
+    });
+    const taskWorkflow = createTaskWorkflow(
+      descriptor.definition,
+      descriptor.templates,
+      workflowRoleCatalog([specPlanBuildWorkflow]),
+    );
+    const dispatch = mock(
+      async (_request: WorkflowLaunchRequest): Promise<WorkflowLaunchResult> => {
+        throw new Error("Host refused the test launch");
+      },
+    );
+    const connection = createConnection({
+      agentSessionWorkflowLaunch: dispatch,
+      workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+      workspaceGetRepoConfig: async () =>
+        repoConfigFixture({
+          workspaceId: workspace.workspaceId,
+          workspaceName: "Workspace",
+          repoPath: workspace.repoPath,
+          branchPrefix: "odt",
+          promptOverrides: override
+            ? {
+                [promptOverrideKey({
+                  ownerKind: "workflow",
+                  ownerId: descriptor.definition.id,
+                  promptId: "messages.custom_feedback",
+                })]: {
+                  template: `Override {{task.id}}: ${contents}`,
+                  baseVersion: 1,
+                  enabled: true,
+                },
+              }
+            : {},
+        }),
+    });
+    const view = renderHook(() => useSessionStartWorkflowRunner(workspace), {
+      wrapper: createWrapper(connection),
+    });
+    try {
+      await act(async () => {
+        try {
+          await view.result.current({
+            task: { ...createTaskCardFixture({ id: "task" }), taskWorkflow },
+            request: {
+              taskId: "task",
+              role: "build",
+              launchActionId: launch.id,
+              postStartAction: "send_message",
+              humanFeedback: "  Revise the introduction.  ",
+            },
+            decision: {
+              startMode: "fresh",
+              targetBranch: { remote: "origin", branch: "chosen" },
+              selectedModel: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+            },
+          });
+        } catch (cause) {
+          expect(cause).toMatchObject({ message: "Host refused the test launch" });
+        }
+      });
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(dispatch.mock.calls[0]?.[0].instruction).toEqual({
+        kind: "message",
+        parts: [
+          {
+            kind: "text",
+            text: `${override ? "Override" : "Default"} task: ${expected}`,
+          },
+        ],
+      });
+    } finally {
+      view.unmount();
+      await connection.dispose();
+    }
+  },
+);
+
+test.each([
+  { change: "owner unmounts", launches: true },
+  { change: "workspace changes", launches: false },
+] as const)("a background start after its $change", async ({ change, launches }) => {
+  const agentSessionWorkflowLaunch = mock(
+    async (request: WorkflowLaunchRequest): Promise<WorkflowLaunchResult> => ({
+      workspaceId: request.workspaceId,
+      repoPath: request.repoPath,
+      taskId: request.taskId,
+      role: "build",
+      status: "completed",
+      startMode: "fresh",
+      session: {
+        externalSessionId: "native",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/task-worktree",
+        startedAt: "2026-10-08T00:00:00Z",
+        status: "idle",
+      },
+    }),
+  );
+  const notifications: SessionStartNotificationPublisher = {
+    publishSessionStarted: mock(() => {}),
+    publishSessionError: mock(async () => true),
+    markInAppFeedbackHandled: mock(() => {}),
+    reportFailure: mock(() => {}),
+  };
+  const connection = createConnection({ agentSessionWorkflowLaunch });
+  const wrapper = createWrapper(connection);
+  const runnerView = renderHook(
+    () => useSessionStartWorkflowRunner({ ...workspace, notifications }),
+    { wrapper },
+  );
+  // The start form owns the context, as on mobile, where a background start closes its sheet.
+  const owner = renderHook(({ key }) => useSessionStartContext(key), {
+    initialProps: { key: workspace.workspaceId },
+  });
+  // The confirmation of the form calls the check of the render that showed it.
+  const isCurrent = owner.result.current;
+  if (change === "workspace changes") owner.rerender({ key: "other-workspace" });
+  let error: unknown;
+  try {
+    await act(async () => {
+      const start = runnerView.result.current({
+        task: createTaskCardFixture({ id: "task" }),
+        request: {
+          taskId: "task",
+          role: "build",
+          launchActionId: "build_implementation_start",
+          postStartAction: "none",
+        },
+        decision: {
+          startMode: "fresh",
+          selectedModel: { runtimeKind: "codex", providerId: "provider", modelId: "model" },
+        },
+        isCurrent,
+      });
+      if (change === "owner unmounts") owner.unmount();
+      await start.catch((cause: unknown) => {
+        error = cause;
+      });
+    });
+    if (launches) {
+      expect(error).toBeUndefined();
+      expect(agentSessionWorkflowLaunch).toHaveBeenCalledTimes(1);
+      expect(notifications.publishSessionStarted).toHaveBeenCalledTimes(1);
+    } else {
+      expect(error).toMatchObject({
+        message: "The session start context changed. Start again in the current workspace.",
+      });
+      expect(agentSessionWorkflowLaunch).not.toHaveBeenCalled();
+      expect(notifications.publishSessionStarted).not.toHaveBeenCalled();
+    }
+  } finally {
+    if (change === "workspace changes") owner.unmount();
+    runnerView.unmount();
+    await connection.dispose();
+  }
+});

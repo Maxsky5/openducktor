@@ -7,10 +7,11 @@ import {
   useReducer,
   useRef,
 } from "react";
-import type { AgentChatModel, AgentChatSurfaceModel } from "./agent-chat.types";
+import type { AgentChatSurfaceModel } from "./agent-chat.types";
 import { AgentChatComposer, type AgentChatComposerHandle } from "./agent-chat-composer";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { AgentChatThreads } from "./agent-chat-threads";
+import { ChatWorkflowContext } from "./agent-chat-workflow-context";
 
 const MemoizedAgentChatThreads = memo(AgentChatThreads);
 const MemoizedAgentChatComposer = memo(AgentChatComposer);
@@ -203,7 +204,9 @@ export function AgentChatSurface({
             </div>
           ) : null}
           <AgentChatSettingsProvider value={model.chatSettings}>
-            <MemoizedAgentChatThreads model={model.thread} visitKey={visitKey} />
+            <ChatWorkflowContext.Provider value={model.thread.workflowTask ?? null}>
+              <MemoizedAgentChatThreads model={model.thread} visitKey={visitKey} />
+            </ChatWorkflowContext.Provider>
             {supportsComposer && composerModel ? (
               <MemoizedAgentChatComposer ref={composerRef} model={composerModel} />
             ) : null}
@@ -219,7 +222,7 @@ export function AgentChat({
   header,
   visitKey = 0,
 }: {
-  model: AgentChatModel;
+  model: AgentChatSurfaceModel;
   header?: ReactNode;
   visitKey?: number;
 }): ReactElement {

@@ -93,7 +93,7 @@ const createHarness = ({
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath: "/repo",
-      hooks: { postComplete: [] },
+      hooks: { beforeWorktreeRemoval: [] },
       defaultTargetBranch: { remote: "origin", branch: "main" },
     }),
     taskStore: {
@@ -339,11 +339,10 @@ describe("direct merge completion session guard", () => {
     async (status) => {
       const { service, calls } = createHarness({ status });
       const result = await Effect.runPromise(Effect.result(service.completeDirectMerge(input)));
-      expect(result._tag).toBe(status === "blocked" ? "Failure" : "Success");
-      expect(calls.filter((call) => call === "closed")).toHaveLength(
-        status === "human_review" ? 1 : 0,
-      );
-      expect(calls.includes("cleanup")).toBe(status === "human_review");
+      expect(result._tag).toBe("Success");
+      // The publication closes a task in any state, and a closed task stays closed.
+      expect(calls.filter((call) => call === "closed")).toHaveLength(status === "closed" ? 0 : 1);
+      expect(calls.includes("cleanup")).toBe(status !== "closed");
     },
   );
 
@@ -384,7 +383,7 @@ describe("direct merge completion session guard", () => {
             Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "start session")),
           );
           const block = yield* Effect.result(
-            service.buildBlocked({ ...input, reason: "Needs work" }),
+            service.applyAgentEvent({ ...input, eventId: "build-blocked" }),
           );
           expect(start._tag).toBe("Failure");
           expect(block._tag).toBe("Failure");

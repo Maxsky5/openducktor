@@ -131,6 +131,7 @@ const createLocalChanges = (): GitLocalChanges => ({
 });
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  conflictRecipientLabel: "Builder",
   repoPath: "/repo",
   workingDir: null,
   branch: "feature/task-10",

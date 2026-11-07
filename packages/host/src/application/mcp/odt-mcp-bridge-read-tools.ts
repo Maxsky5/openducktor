@@ -1,6 +1,7 @@
 import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
+  TASK_CLOSED_STATE,
   workflowArtifactId,
   type ArtifactReadRequest,
 } from "@openducktor/contracts";
@@ -58,7 +59,7 @@ const executeSearchTasks: OdtMcpReadToolHandler = (context, input) =>
       });
     }
     const openStates = workflows.flatMap(({ definition }) =>
-      definition.states.flatMap(({ id, terminal }) => (terminal ? [] : [id])),
+      definition.states.flatMap(({ id }) => (id === TASK_CLOSED_STATE ? [] : [id])),
     );
     if (parsed.status !== undefined && !openStates.includes(parsed.status)) {
       return yield* new HostValidationError({

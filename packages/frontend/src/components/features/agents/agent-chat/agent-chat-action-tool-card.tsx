@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { ToolMessageTiming, type ToolMessageActivity } from "./agent-chat-tool-message-timing";
 import { FullToolPartDetails } from "./agent-chat-tool-part-details";
+import { readToolCallError } from "@openducktor/frontend-core/sessions/messages/tool-call-error";
+import { compactText } from "@openducktor/frontend-core/sessions/messages/tool-text-utils";
 import { getToolDuration } from "@openducktor/frontend-core/sessions/messages/tool-duration";
 import {
   getToolLifecyclePhase,
@@ -14,6 +16,9 @@ import {
 
 /** A detail of an action tool call. A section with no text does not show. */
 export type ActionToolSection = { label: string; text: string; tone?: "error" };
+
+/** A section that the card shows, and whether it is open at first. */
+type ShownActionToolSection = ActionToolSection & { open: boolean };
 
 /** The screenshots of an action. A card that reads them from the host loads them on request. */
 export type ActionToolScreenshots = {
@@ -40,7 +45,7 @@ type ActionToolCardProps = {
 
 /**
  * One tool call that acts on a screen, such as Computer Use or a browser action: a card with the
- * action, its screenshots, and its details.
+ * action, its screenshots, the error message of a failed call, and its details.
  */
 export const ActionToolCard = ({
   meta,
@@ -55,7 +60,16 @@ export const ActionToolCard = ({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const isFailed = isToolMessageFailure(meta);
-  const shownSections = shownActionToolSections(sections(meta));
+  // The message of a failed call shows under the row, so its Error box stays closed. Other error
+  // text, such as the reason of a cancelled call, shows at once.
+  const error = readToolCallError(meta);
+  const showSections = (shown: ToolMeta): readonly ShownActionToolSection[] =>
+    sections(shown).flatMap((section) =>
+      section.text.length > 0
+        ? [{ ...section, open: error === null && section.tone === "error" }]
+        : [],
+    );
+  const shownSections = showSections(meta);
 
   const summary = (
     <ActionToolSummary
@@ -96,9 +110,7 @@ export const ActionToolCard = ({
             <div className="mt-2 space-y-2">
               {meta.detailsOmitted ? (
                 <FullToolPartDetails meta={meta}>
-                  {(full) => (
-                    <ActionToolDetails sections={shownActionToolSections(sections(full))} />
-                  )}
+                  {(full) => <ActionToolDetails sections={showSections(full)} />}
                 </FullToolPartDetails>
               ) : (
                 <ActionToolDetails sections={shownSections} />
@@ -109,6 +121,12 @@ export const ActionToolCard = ({
       ) : (
         summary
       )}
+      {error ? (
+        // The Error box holds all of a long error, so the line shows its start.
+        <p className="mt-1 break-words text-xs font-medium text-destructive-surface-foreground">
+          {compactText(error.message, 220)}
+        </p>
+      ) : null}
       <ActionToolScreenshotPreview
         label={label}
         screenshots={screenshots}
@@ -119,14 +137,10 @@ export const ActionToolCard = ({
   );
 };
 
-const shownActionToolSections = (
-  sections: readonly ActionToolSection[],
-): readonly ActionToolSection[] => sections.filter((section) => section.text.length > 0);
-
 const ActionToolDetails = ({
   sections,
 }: {
-  sections: readonly ActionToolSection[];
+  sections: readonly ShownActionToolSection[];
 }): ReactElement => (
   <>
     {sections.map((section) => (
@@ -262,11 +276,11 @@ const SECTION_APPEARANCE = {
   },
 } as const;
 
-/** A detail that the user opens, such as a long page snapshot. An error shows at once. */
-const ActionToolDetail = ({ section }: { section: ActionToolSection }): ReactElement => {
+/** A detail that the user opens, such as a long page snapshot. */
+const ActionToolDetail = ({ section }: { section: ShownActionToolSection }): ReactElement => {
   const { frameClassName, textClassName } = SECTION_APPEARANCE[section.tone ?? "default"];
   return (
-    <details className={cn("rounded border", frameClassName)} open={section.tone === "error"}>
+    <details className={cn("rounded border", frameClassName)} open={section.open}>
       <summary className={cn("cursor-pointer px-2 py-1 text-xs font-medium", textClassName)}>
         {section.label}
       </summary>

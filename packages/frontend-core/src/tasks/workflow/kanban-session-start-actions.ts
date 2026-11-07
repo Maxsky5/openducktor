@@ -5,7 +5,7 @@ import type {
 } from "../../sessions/start/session-start-orchestration";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import type { SessionStartFlowRequest } from "../../sessions/start/session-start-types";
-import type { BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
 type StartKanbanSessionFlowInput = {
   startupAttemptId?: string;
@@ -42,7 +42,9 @@ export const startKanbanSessionFlow = async ({
   if (isCurrent) workflowInput.isCurrent = isCurrent;
   const workflow = await runSessionStartWorkflow(workflowInput);
   const conflictContextChanged =
-    request.launchActionId === "build_rebase_conflict_resolution" && isCurrent && !isCurrent();
+    task?.taskWorkflow.launchDefinition(request.launchActionId).surface === "git_conflict" &&
+    isCurrent &&
+    !isCurrent();
   if (!startInBackground && !conflictContextChanged) {
     await openStartedSession(request, workflow);
   }

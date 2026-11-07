@@ -38,6 +38,7 @@ import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import {
+  createWireTaskCardFixture,
   createAgentSessionFixture,
   createHostRuntimeStatusFixture,
   createSettingsSnapshotFixture,
@@ -88,6 +89,10 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
   });
   const connection = createTestClientConnection({
     client: {
+      tasksListAll: async () => [
+        createWireTaskCardFixture({ id: "a" }),
+        createWireTaskCardFixture({ id: "b" }),
+      ],
       filesystemReadTextFile: read,
       filesystemWriteTextFile: write,
       gitCanonicalizePath: canonicalize,

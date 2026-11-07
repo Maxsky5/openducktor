@@ -15,8 +15,6 @@ import {
   runtimeRestartResultSchema,
   type AgentSessionStopTarget,
   agentSessionStopTargetSchema,
-  type BuildSessionBootstrap,
-  buildSessionBootstrapSchema,
   type PullRequest,
   pullRequestSchema,
   type GitCheck,
@@ -44,7 +42,7 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn, InvokeOptions } from "./invoke-utils";
 import { arrayResultSchema, booleanResultSchema, okResultSchema } from "./invoke-utils";
-import { type BuiltinTaskCard as TaskCard, builtinTaskCardSchema } from "@openducktor/workflows";
+import { type TaskCard, taskCardSchema } from "@openducktor/contracts";
 
 const taskStoreCheck = async (
   invokeFn: InvokeFn,
@@ -106,70 +104,6 @@ const runtimeRestart = async (
   return invokeFn("runtime_restart", { runtimeKind, confirmation }, runtimeRestartResultSchema);
 };
 
-const buildStart = async (
-  invokeFn: InvokeFn,
-  scope: WorkspaceRef,
-  taskId: string,
-  runtimeKind: RuntimeKind,
-): Promise<BuildSessionBootstrap> => {
-  return invokeFn(
-    "build_start",
-    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, runtimeKind },
-    buildSessionBootstrapSchema,
-  );
-};
-
-const buildBlocked = async (
-  invokeFn: InvokeFn,
-  scope: WorkspaceRef,
-  taskId: string,
-  reason: string,
-): Promise<TaskCard> => {
-  return invokeFn(
-    "build_blocked",
-    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, reason },
-    builtinTaskCardSchema,
-  );
-};
-
-const buildResumed = async (
-  invokeFn: InvokeFn,
-  scope: WorkspaceRef,
-  taskId: string,
-): Promise<TaskCard> => {
-  return invokeFn(
-    "build_resumed",
-    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId },
-    builtinTaskCardSchema,
-  );
-};
-
-const buildCompleted = async (
-  invokeFn: InvokeFn,
-  scope: WorkspaceRef,
-  taskId: string,
-  summary?: string,
-): Promise<TaskCard> => {
-  return invokeFn(
-    "build_completed",
-    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, input: { summary } },
-    builtinTaskCardSchema,
-  );
-};
-
-const humanRequestChanges = async (
-  invokeFn: InvokeFn,
-  scope: WorkspaceRef,
-  taskId: string,
-  note?: string,
-): Promise<TaskCard> => {
-  return invokeFn(
-    "human_request_changes",
-    { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskId, note },
-    builtinTaskCardSchema,
-  );
-};
-
 const taskApprovalContextGet = async (
   invokeFn: InvokeFn,
   scope: WorkspaceRef,
@@ -212,7 +146,7 @@ const taskDirectMergeComplete = async (
       removeWorktree,
       publicationConsent,
     }),
-    builtinTaskCardSchema,
+    taskCardSchema,
   );
 };
 
@@ -267,7 +201,7 @@ const taskPullRequestLinkMerged = async (
       pullRequest,
       removeWorktree,
     },
-    builtinTaskCardSchema,
+    taskCardSchema,
   );
 };
 
@@ -340,30 +274,6 @@ export class HostAgentClient {
     confirmation: string,
   ): Promise<RuntimeRestartResult> {
     return runtimeRestart(this.invokeFn, runtimeKind, confirmation);
-  }
-
-  async buildStart(
-    scope: WorkspaceRef,
-    taskId: string,
-    runtimeKind: RuntimeKind,
-  ): Promise<BuildSessionBootstrap> {
-    return buildStart(this.invokeFn, scope, taskId, runtimeKind);
-  }
-
-  async buildBlocked(scope: WorkspaceRef, taskId: string, reason: string): Promise<TaskCard> {
-    return buildBlocked(this.invokeFn, scope, taskId, reason);
-  }
-
-  async buildResumed(scope: WorkspaceRef, taskId: string): Promise<TaskCard> {
-    return buildResumed(this.invokeFn, scope, taskId);
-  }
-
-  async buildCompleted(scope: WorkspaceRef, taskId: string, summary?: string): Promise<TaskCard> {
-    return buildCompleted(this.invokeFn, scope, taskId, summary);
-  }
-
-  async humanRequestChanges(scope: WorkspaceRef, taskId: string, note?: string): Promise<TaskCard> {
-    return humanRequestChanges(this.invokeFn, scope, taskId, note);
   }
 
   async taskApprovalContextGet(

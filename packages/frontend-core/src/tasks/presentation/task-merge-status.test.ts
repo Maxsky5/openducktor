@@ -49,7 +49,7 @@ describe("taskMergeCheckResultText", () => {
 });
 
 describe("buildAutoCloseFailures", () => {
-  test("shows the failure only for a task that can still close", () => {
+  test("shows the failure only for a task that the core Close Task can still close", () => {
     const failure = (taskId: string) => ({
       taskId,
       message: "Archive the chat first.",
@@ -58,19 +58,19 @@ describe("buildAutoCloseFailures", () => {
 
     const failures = buildAutoCloseFailures(
       [
-        { id: "open", availableActions: ["close_task"] },
-        { id: "closed", availableActions: [] },
+        { id: "review", status: "human_review" },
+        { id: "closed", status: "closed" },
       ],
       {
         workspaceId: "workspace-1",
         repoPath: "/repo",
         tasks: [],
-        autoCloseFailures: [failure("open"), failure("closed"), failure("unknown")],
+        autoCloseFailures: [failure("review"), failure("closed"), failure("unknown")],
       },
     );
 
     expect([...failures]).toEqual([
-      ["open", "Pull request merged, but the task did not close. Archive the chat first."],
+      ["review", "Pull request merged, but the task did not close. Archive the chat first."],
     ]);
   });
 });

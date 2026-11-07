@@ -1,5 +1,5 @@
-import { pullRequestSchema } from "@openducktor/contracts";
-import { and, asc, desc, eq, inArray, notInArray } from "drizzle-orm";
+import { pullRequestSchema, TASK_CLOSED_STATE } from "@openducktor/contracts";
+import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 import { Effect } from "effect";
 import { pullRequestFromRow } from "./sqlite-task-delivery-rows";
 import { validateWithSchema } from "./sqlite-task-store-validation";
@@ -8,7 +8,6 @@ import { taskPullRequests, tasks, type HostDatabaseSession } from "./sqlite-host
 export const listPullRequestSyncCandidatesInDatabase = (
   session: HostDatabaseSession,
   workspaceId: string,
-  terminalStates: readonly string[],
 ) =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
@@ -26,7 +25,7 @@ export const listPullRequestSyncCandidatesInDatabase = (
           .where(
             and(
               eq(tasks.workspaceId, workspaceId),
-              notInArray(tasks.status, [...terminalStates]),
+              ne(tasks.status, TASK_CLOSED_STATE),
               inArray(taskPullRequests.state, ["open", "draft"]),
             ),
           )

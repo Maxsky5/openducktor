@@ -1,3 +1,4 @@
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
@@ -12,11 +13,7 @@ import { createTaskCleanupProgressState } from "../support/task-cleanup-progress
 import { runTaskRuntimeCleanup } from "../support/task-cleanup-support";
 import { completeTaskClosure } from "../support/task-closure";
 import { ensureNoDirectMergeEffect } from "../support/direct-merge-block";
-import {
-  requireEffectEvent,
-  requirePullRequestManagement,
-  taskEventPolicyError,
-} from "../support/task-workflow-events";
+import { coreTaskTransition, requirePullRequestManagement } from "../support/task-workflow-events";
 import { enrichTask } from "../support/task-workflow-helpers";
 import { cleanupConfirmedMergeClose } from "../support/task-close-cleanup";
 import {
@@ -32,6 +29,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   gitProviderResolver,
   taskStore,
   settingsConfig,
+  systemCommands,
   taskActivityGuard,
   taskSessionLifecycleCoordinator,
   taskWorktreeService,
@@ -43,7 +41,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   linkMergedPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, pullRequest, removeWorktree } = input;
-
       const current = yield* taskStore.getTask(input);
       const metadata = yield* taskStore.getTaskMetadata(input);
       const sameExistingPullRequest =
@@ -74,9 +71,8 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         });
       }
       const workflow = taskWorkflows.forTask(current);
-      const closeEvent = yield* requireEffectEvent(workflow, "pull_request.merged");
-      const closure = workflow.decide(closeEvent, current);
-      if (closure.kind === "unchanged" && sameExistingPullRequest) {
+      // A merged pull request closes the task. A closed task with this pull request is done.
+      if (current.status === TASK_CLOSED_STATE && sameExistingPullRequest) {
         return enrichTask(workflow, current);
       }
 
@@ -84,13 +80,14 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         requireLinkMergedPullRequestDependencies({
           gitPort,
           settingsConfig,
+          systemCommands,
           taskWorktreeService,
           terminalService,
           worktreeFiles,
           workspaceSettingsService,
         }),
       );
-      yield* requirePullRequestManagement(workflow, current);
+      yield* requirePullRequestManagement(current);
       yield* ensureNoDirectMergeEffect({
         operation: "link_merged_pull_request",
         repoPath,
@@ -141,7 +138,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           }
         }
       }
-
       if (hasTaskBranch) {
         yield* requireWorktreeFiles(dependencies.worktreeFiles);
       }
@@ -153,9 +149,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
       });
       const postLink = yield* Effect.result(
         Effect.gen(function* () {
-          if (closure.kind === "denied") {
-            return yield* taskEventPolicyError(closeEvent, current, closure);
-          }
           const cleanupEffect = hasTaskBranch
             ? cleanupConfirmedMergeClose({
                 workspaceId: input.workspaceId,
@@ -181,8 +174,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
             gitPort: dependencies.gitPort,
             operation: "link merged pull request",
             repoPath,
-            taskWorkflows,
-            effect: "pull_request.merged",
+            decide: coreTaskTransition(taskWorkflows, "close"),
             taskId,
             taskSessionLifecycleCoordinator,
             taskStore,

@@ -13,6 +13,7 @@ import { WorkflowRail, WorkflowRailPreview } from "./agent-studio-header-workflo
 import type { AgentWorkflowStep } from "./agent-studio-header.types";
 import type { WorkflowRailStep } from "@/types/agent-workflow";
 import { deriveSessionHistorySelectionFocusBehavior } from "./agent-studio-header-session-history-model";
+import { CLOSE_TASK_ACTION } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
@@ -46,12 +47,15 @@ const roleIcon = (index: number) => {
 
 const noPullRequest: PullRequest | null = null;
 
-type BuiltinWorkflowFixture = Omit<AgentWorkflowStep, "id" | "hint" | "attentionVariant">;
+type BuiltinWorkflowFixture = Omit<
+  AgentWorkflowStep,
+  "id" | "hint" | "attentionVariant" | "role"
+> & { role: string };
 
 const presentWorkflowStep = (step: BuiltinWorkflowFixture): AgentWorkflowStep => ({
   ...step,
   id: step.role,
-  ...workflowStepRailState(step),
+  ...workflowStepRailState({ state: step.state, hasSession: step.sessionValue !== null }),
 });
 
 const buildModel = () => ({
@@ -153,9 +157,9 @@ const buildModel = () => ({
     },
     {
       kind: "session_start" as const,
-      id: "quick:build_pull_request_generation",
+      id: "quick:pull_request",
       role: "build" as const,
-      launchActionId: "build_pull_request_generation" as const,
+      launchActionId: "pull_request" as const,
       label: "Generate Pull Request",
       description: "Reuse or fork a Builder session to create or update a pull request.",
       postStartAction: "kickoff" as const,
@@ -197,7 +201,7 @@ const renderWorkflow = (
       disabled: !model.agentStudioReady,
       onStepSelect: model.onWorkflowStepSelect,
       ...props,
-      steps: (props.steps ?? model.workflowSteps).map(presentWorkflowStep),
+      steps: props.steps ? props.steps.map(presentWorkflowStep) : model.workflowSteps,
     }),
   );
 };
@@ -619,7 +623,7 @@ describe("AgentStudioHeader", () => {
     const approveTask = {
       kind: "task_action" as const,
       id: "task:human_approve",
-      taskAction: "human_approve" as const,
+      taskAction: { kind: "workflow" as const, action: "human_approve" },
       placement: "trailing" as const,
       label: "Approve Task",
       description: "Open the approval flow to merge, open a pull request, or close the task.",
@@ -657,7 +661,10 @@ describe("AgentStudioHeader", () => {
     });
 
     expect(onQuickAction).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "task_action", taskAction: "human_approve" }),
+      expect.objectContaining({
+        kind: "task_action",
+        taskAction: { kind: "workflow", action: "human_approve" },
+      }),
     );
   });
 
@@ -667,6 +674,7 @@ describe("AgentStudioHeader", () => {
       id: "quick:build_rebase_conflict_resolution",
       role: "build" as const,
       launchActionId: "build_rebase_conflict_resolution" as const,
+      surface: "git_conflict" as const,
       label: "Resolve Git Conflict",
       description: "Ask Builder to resolve the active git conflict.",
       postStartAction: "send_message" as const,
@@ -675,7 +683,7 @@ describe("AgentStudioHeader", () => {
     const closeTask = {
       kind: "task_action" as const,
       id: "task:close_task",
-      taskAction: "close_task" as const,
+      taskAction: { kind: "core" as const, action: CLOSE_TASK_ACTION },
       placement: "leading" as const,
       label: "Close Task",
       description: "The task branch is merged into origin/main.",
@@ -895,6 +903,7 @@ describe("AgentStudioHeader", () => {
               id: "quick:build_rebase_conflict_resolution",
               role: "build" as const,
               launchActionId: "build_rebase_conflict_resolution" as const,
+              surface: "git_conflict" as const,
               label: "Resolve Git Conflict",
               description: "Ask Builder to resolve the active git conflict.",
               postStartAction: "send_message" as const,
@@ -906,6 +915,7 @@ describe("AgentStudioHeader", () => {
             id: "quick:build_rebase_conflict_resolution",
             role: "build" as const,
             launchActionId: "build_rebase_conflict_resolution" as const,
+            surface: "git_conflict" as const,
             label: "Resolve Git Conflict",
             description: "Ask Builder to resolve the active git conflict.",
             postStartAction: "send_message" as const,
@@ -934,6 +944,7 @@ describe("AgentStudioHeader", () => {
         null,
         createElement(QuickActionsMenu, {
           canOpenActionsMenu: true,
+          workflowSteps: buildModel().workflowSteps,
           isOpen: true,
           onOpenChange: () => {},
           agentStudioReady: true,
@@ -944,6 +955,7 @@ describe("AgentStudioHeader", () => {
               id: "quick:build_rebase_conflict_resolution",
               role: "build" as const,
               launchActionId: "build_rebase_conflict_resolution" as const,
+              surface: "git_conflict" as const,
               label: "Resolve Git Conflict",
               description: "Ask Builder to resolve the active git conflict.",
               postStartAction: "send_message" as const,
@@ -955,6 +967,7 @@ describe("AgentStudioHeader", () => {
             id: "quick:build_rebase_conflict_resolution",
             role: "build" as const,
             launchActionId: "build_rebase_conflict_resolution" as const,
+            surface: "git_conflict" as const,
             label: "Resolve Git Conflict",
             description: "Ask Builder to resolve the active git conflict.",
             postStartAction: "send_message" as const,

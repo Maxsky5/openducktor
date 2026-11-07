@@ -1,3 +1,4 @@
+import type { OnTaskCommitted } from "../workflow/task-workflow-continuation";
 import { useCallback, useRef, useState } from "react";
 import type { GitConflict, GitConflictAction } from "../../git/contracts";
 import { abortGitConflict, isAbortableGitConflict } from "../../git/conflicts/abort-git-conflict";
@@ -20,6 +21,7 @@ interface TaskApprovalGitConflictState {
   taskId: string | null;
   conflict: GitConflict | null;
   conflictAction: GitConflictAction;
+  onCommitted?: OnTaskCommitted | undefined;
 }
 
 type OpenTaskApproval = (taskId: string, options?: TaskApprovalOpenOptions) => void;
@@ -57,14 +59,18 @@ export function useTaskApprovalGitConflictFlow({
     setGitConflictState(INITIAL_GIT_CONFLICT_STATE);
   }, []);
 
-  const openGitConflictDialog = useCallback((taskId: string, conflict: GitConflict): void => {
-    setGitConflictState({
-      open: true,
-      taskId,
-      conflict,
-      conflictAction: null,
-    });
-  }, []);
+  const openGitConflictDialog = useCallback(
+    (taskId: string, conflict: GitConflict, onCommitted?: OnTaskCommitted): void => {
+      setGitConflictState({
+        open: true,
+        taskId,
+        conflict,
+        onCommitted,
+        conflictAction: null,
+      });
+    },
+    [],
+  );
 
   const abortConflict = useCallback((): void => {
     if (!workspaceRepoPath || !gitConflictState.conflict || reservation.current) {
@@ -100,6 +106,7 @@ export function useTaskApprovalGitConflictFlow({
         if (taskId) {
           openTaskApproval(taskId, {
             mode: "direct_merge",
+            onCommitted: gitConflictState.onCommitted,
           });
         }
       } finally {
@@ -179,6 +186,10 @@ export function useTaskApprovalGitConflictFlow({
     openGitConflictDialog,
   } satisfies {
     taskGitConflictDialog: TaskGitConflictDialogModel | null;
-    openGitConflictDialog: (taskId: string, conflict: GitConflict) => void;
+    openGitConflictDialog: (
+      taskId: string,
+      conflict: GitConflict,
+      onCommitted?: OnTaskCommitted,
+    ) => void;
   };
 }

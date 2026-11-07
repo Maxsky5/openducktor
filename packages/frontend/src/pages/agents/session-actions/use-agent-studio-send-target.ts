@@ -23,16 +23,16 @@ import {
   type AgentStudioQueryUpdate as QueryUpdate,
 } from "../query-sync/agent-studio-navigation";
 import type {
-  BuiltinLaunchActionId as SessionLaunchActionId,
-  BuiltinRoleId as AgentRole,
-  BuiltinTaskCard as TaskCard,
+  WorkflowLaunchActionId as SessionLaunchActionId,
+  WorkflowRoleId as AgentRole,
+  ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 
 type UseAgentStudioSendTargetArgs = {
   workspaceId: string | null;
   taskId: string;
-  role: AgentRole;
-  launchActionId: SessionLaunchActionId;
+  role: AgentRole | null;
+  launchActionId: SessionLaunchActionId | null;
   selectionForNewSession: AgentModelSelection | null;
   selectedTask: TaskCard | null;
   canStartSession: boolean;
@@ -119,7 +119,7 @@ export function useAgentStudioSendTarget({
             },
           };
         }
-        if (!canStartSession || !selectionForNewSession?.runtimeKind)
+        if (!role || !launchActionId || !canStartSession || !selectionForNewSession?.runtimeKind)
           throw new Error("Select an available runtime and model before sending a message.");
         const launch = await startPreparedSession({
           request: {

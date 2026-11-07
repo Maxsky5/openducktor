@@ -5,7 +5,9 @@ import {
   applyWorkspaceSettingsPatch,
   diffSettingsSnapshot,
   globalConfigSchema,
+  promptOverrideKey,
   repoConfigSchema,
+  ROLE_INSTRUCTIONS_PROMPT_ID,
   retainSettingsSnapshotUpdateTargets,
 } from "@openducktor/contracts";
 import {
@@ -13,6 +15,13 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { rebaseSettingsDraft } from "./settings-draft-rebase";
+
+const rolePrompt = (roleId: string) =>
+  promptOverrideKey({ ownerKind: "role", ownerId: roleId, promptId: ROLE_INSTRUCTIONS_PROMPT_ID });
+const REMOVED_PROMPT = rolePrompt("removed");
+const CLEAN_PROMPT = rolePrompt("clean");
+const CURRENT_PROMPT = rolePrompt("current");
+const LOCAL_PROMPT = rolePrompt("local");
 
 test("keeps edits of a removed workspace by ID while refreshing saved fields", () => {
   const baseline = createSettingsSnapshotFixture({
@@ -133,14 +142,14 @@ test("does not recreate edited nested records removed by a refresh", () => {
   const model = { runtimeKind: "codex" as const, providerId: "openai", modelId: "original" };
   const baseline = createSettingsSnapshotFixture({
     globalPromptOverrides: {
-      removed: { ...prompt },
-      clean: { ...prompt },
-      current: { ...prompt },
+      [REMOVED_PROMPT]: { ...prompt },
+      [CLEAN_PROMPT]: { ...prompt },
+      [CURRENT_PROMPT]: { ...prompt },
     },
     workspaces: {
       current: {
         ...createRepoSettingsConfigFixture("current", "/repos/current"),
-        promptOverrides: { removed: { ...prompt } },
+        promptOverrides: { [REMOVED_PROMPT]: { ...prompt } },
         agentDefaults: { removed: model },
       },
     },
@@ -149,20 +158,20 @@ test("does not recreate edited nested records removed by a refresh", () => {
   baseline.agentRuntimes.claude.roleOverrides = { removed: { permissionMode: "default" } };
   baseline.agentRuntimes.opencode.roleOverrides = { removed: { rules: [] } };
   const draft = structuredClone(baseline);
-  draft.globalPromptOverrides.removed!.template = "Unsaved prompt";
-  draft.globalPromptOverrides.current!.template = "Unsaved current prompt";
-  draft.globalPromptOverrides.local = { ...prompt, template: "New prompt" };
+  draft.globalPromptOverrides[REMOVED_PROMPT]!.template = "Unsaved prompt";
+  draft.globalPromptOverrides[CURRENT_PROMPT]!.template = "Unsaved current prompt";
+  draft.globalPromptOverrides[LOCAL_PROMPT] = { ...prompt, template: "New prompt" };
   draft.agentRuntimes.codex.roleOverrides.removed!.sandboxMode = "workspace-write";
   draft.agentRuntimes.claude.roleOverrides.removed!.permissionMode = "acceptEdits";
   draft.agentRuntimes.opencode.roleOverrides.removed!.rules = [
     { permission: "edit", pattern: "*", action: "allow" },
   ];
-  draft.workspaces.current!.promptOverrides.removed!.template = "Unsaved workspace prompt";
+  draft.workspaces.current!.promptOverrides[REMOVED_PROMPT]!.template = "Unsaved workspace prompt";
   draft.workspaces.current!.agentDefaults.removed!.modelId = "unsaved-model";
   const fresh = structuredClone(baseline);
   fresh.theme = "dark";
   fresh.globalPromptOverrides = {
-    current: { template: "Foreign prompt", baseVersion: 2 },
+    [CURRENT_PROMPT]: { template: "Foreign prompt", baseVersion: 2 },
   };
   fresh.agentRuntimes.codex.roleOverrides = {};
   fresh.agentRuntimes.claude.roleOverrides = {};
@@ -170,10 +179,10 @@ test("does not recreate edited nested records removed by a refresh", () => {
   fresh.workspaces.current!.promptOverrides = {};
   fresh.workspaces.current!.agentDefaults = {};
   const originalEdits = {
-    create: { local: { template: "New prompt", baseVersion: 1 } },
+    create: { [LOCAL_PROMPT]: { template: "New prompt", baseVersion: 1 } },
     update: {
-      removed: { template: "Unsaved prompt" },
-      current: { template: "Unsaved current prompt" },
+      [REMOVED_PROMPT]: { template: "Unsaved prompt" },
+      [CURRENT_PROMPT]: { template: "Unsaved current prompt" },
     },
   };
   expect(diffSettingsSnapshot(baseline, draft).global?.globalPromptOverrides).toEqual(
@@ -205,39 +214,39 @@ test("does not recreate edited nested records removed by a refresh", () => {
   expect(edits.workspaces).toEqual({
     current: {
       expectedRepoPath: "/repos/current",
-      promptOverrides: { update: { removed: { template: "Unsaved workspace prompt" } } },
+      promptOverrides: { update: { [REMOVED_PROMPT]: { template: "Unsaved workspace prompt" } } },
       agentDefaults: { update: { removed: { modelId: "unsaved-model" } } },
     },
   });
-  for (const global of [
-    { globalPromptOverrides: edits.global?.globalPromptOverrides },
-    { agentRuntimes: { codex: edits.global?.agentRuntimes?.codex } },
-    { agentRuntimes: { claude: edits.global?.agentRuntimes?.claude } },
-    { agentRuntimes: { opencode: edits.global?.agentRuntimes?.opencode } },
-  ])
+  for (const [global, record] of [
+    [{ globalPromptOverrides: edits.global?.globalPromptOverrides }, REMOVED_PROMPT],
+    [{ agentRuntimes: { codex: edits.global?.agentRuntimes?.codex } }, "removed"],
+    [{ agentRuntimes: { claude: edits.global?.agentRuntimes?.claude } }, "removed"],
+    [{ agentRuntimes: { opencode: edits.global?.agentRuntimes?.opencode } }, "removed"],
+  ] as const)
     expect(() =>
       applyGlobalSettingsPatch(
         globalConfigSchema.parse({ ...fresh, version: 4 }),
         global,
         "request",
       ),
-    ).toThrow("Settings record removed no longer exists");
-  for (const fields of [
-    { promptOverrides: edits.workspaces?.current?.promptOverrides },
-    { agentDefaults: edits.workspaces?.current?.agentDefaults },
-  ])
+    ).toThrow(`Settings record ${record} no longer exists`);
+  for (const [fields, record] of [
+    [{ promptOverrides: edits.workspaces?.current?.promptOverrides }, REMOVED_PROMPT],
+    [{ agentDefaults: edits.workspaces?.current?.agentDefaults }, "removed"],
+  ] as const)
     expect(() =>
       applyWorkspaceSettingsPatch(repoConfigSchema.parse(fresh.workspaces.current), {
         expectedRepoPath: "/repos/current",
         ...fields,
       }),
-    ).toThrow("Settings record removed no longer exists");
-  expect(rebased.globalPromptOverrides.current).toEqual({
+    ).toThrow(`Settings record ${record} no longer exists`);
+  expect(rebased.globalPromptOverrides[CURRENT_PROMPT]).toEqual({
     template: "Unsaved current prompt",
     baseVersion: 2,
   });
-  expect(rebased.globalPromptOverrides.clean).toBeUndefined();
-  expect(editBaseline.globalPromptOverrides.clean).toBeUndefined();
+  expect(rebased.globalPromptOverrides[CLEAN_PROMPT]).toBeUndefined();
+  expect(editBaseline.globalPromptOverrides[CLEAN_PROMPT]).toBeUndefined();
   expect(rebased.theme).toBe("dark");
   expect(
     diffSettingsSnapshot(

@@ -66,7 +66,10 @@ describe("single-task session queries", () => {
       await Effect.runPromise(
         store.saveWorkflowArtifact({
           decide: (current) =>
-            Result.succeed({ status: current.status, workflowId: "openducktor" }),
+            Result.succeed({
+              status: current.status,
+              workflowId: "openducktor-spec-plan-build",
+            }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...input,
@@ -77,7 +80,10 @@ describe("single-task session queries", () => {
       await Effect.runPromise(
         store.saveWorkflowArtifact({
           decide: (current) =>
-            Result.succeed({ status: current.status, workflowId: "openducktor" }),
+            Result.succeed({
+              status: current.status,
+              workflowId: "openducktor-spec-plan-build",
+            }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...input,
@@ -87,7 +93,11 @@ describe("single-task session queries", () => {
       );
       await Effect.runPromise(
         store.saveWorkflowArtifact({
-          decide: () => Result.succeed({ status: "human_review", workflowId: "openducktor" }),
+          decide: () =>
+            Result.succeed({
+              status: "human_review",
+              workflowId: "openducktor-spec-plan-build",
+            }),
           sourceTool: "workflow_artifact_save",
           updatedBy: "user",
           ...input,

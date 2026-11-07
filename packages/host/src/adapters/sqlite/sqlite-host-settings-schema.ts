@@ -14,6 +14,9 @@ import {
 
 import { runtimeSettingsSchema } from "./sqlite-runtime-settings-schema";
 import { booleanCheck, column, enumCheck } from "./sqlite-schema-sql";
+
+/** A prompt override belongs to the prompt of one role or one workflow. */
+const PROMPT_OWNER_KINDS = ["role", "workflow"] as const;
 export * from "./sqlite-runtime-settings-schema";
 
 export const workspaces = sqliteTable(
@@ -70,8 +73,8 @@ export const workspaceRoleDefaults = sqliteTable(
   (table) => [primaryKey({ columns: [table.workspaceId, table.roleId] })],
 );
 
-export const workspaceBuildCompletionCommands = sqliteTable(
-  "workspace_build_completion_commands",
+export const workspaceBeforeWorktreeRemovalCommands = sqliteTable(
+  "workspace_before_worktree_removal_commands",
   {
     workspaceId: text("workspace_id")
       .notNull()
@@ -81,7 +84,10 @@ export const workspaceBuildCompletionCommands = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.workspaceId, table.position] }),
-    check("chk_workspace_build_completion_commands_position", sql`${column(table.position)} >= 0`),
+    check(
+      "chk_workspace_before_worktree_removal_commands_position",
+      sql`${column(table.position)} >= 0`,
+    ),
   ],
 );
 
@@ -136,13 +142,21 @@ export const workspacePromptOverrides = sqliteTable(
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => workspaces.workspaceId, { onDelete: "cascade" }),
-    templateId: text("template_id").notNull(),
+    ownerKind: text("owner_kind", { enum: PROMPT_OWNER_KINDS }).notNull(),
+    ownerId: text("owner_id").notNull(),
+    promptId: text("prompt_id").notNull(),
     template: text("template").notNull(),
     baseVersion: integer("base_version").notNull(),
     enabled: integer("enabled", { mode: "boolean" }),
   },
   (table) => [
-    primaryKey({ columns: [table.workspaceId, table.templateId] }),
+    primaryKey({
+      columns: [table.workspaceId, table.ownerKind, table.ownerId, table.promptId],
+    }),
+    check(
+      "chk_workspace_prompt_overrides_owner_kind",
+      enumCheck(table.ownerKind, PROMPT_OWNER_KINDS),
+    ),
     check("chk_workspace_prompt_overrides_base_version", sql`${column(table.baseVersion)} >= 1`),
     check("chk_workspace_prompt_overrides_enabled", booleanCheck(table.enabled)),
   ],
@@ -356,12 +370,16 @@ export const customAgentRoles = sqliteTable(
 export const globalPromptOverrides = sqliteTable(
   "global_prompt_overrides",
   {
-    templateId: text("template_id").primaryKey().notNull(),
+    ownerKind: text("owner_kind", { enum: PROMPT_OWNER_KINDS }).notNull(),
+    ownerId: text("owner_id").notNull(),
+    promptId: text("prompt_id").notNull(),
     template: text("template").notNull(),
     baseVersion: integer("base_version").notNull(),
     enabled: integer("enabled", { mode: "boolean" }),
   },
   (table) => [
+    primaryKey({ columns: [table.ownerKind, table.ownerId, table.promptId] }),
+    check("chk_global_prompt_overrides_owner_kind", enumCheck(table.ownerKind, PROMPT_OWNER_KINDS)),
     check("chk_global_prompt_overrides_base_version", sql`${column(table.baseVersion)} >= 1`),
     check("chk_global_prompt_overrides_enabled", booleanCheck(table.enabled)),
   ],
@@ -437,7 +455,7 @@ export const hostSettingsSchema = {
   workspaces,
   workspaceDefaultModels,
   workspaceRoleDefaults,
-  workspaceBuildCompletionCommands,
+  workspaceBeforeWorktreeRemovalCommands,
   workspaceActions,
   workspaceCopyPaths,
   workspacePromptOverrides,

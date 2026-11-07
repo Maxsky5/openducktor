@@ -32,7 +32,7 @@ import { SETTINGS_SECTIONS } from "@/components/features/settings/settings-modal
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
 import { THEME_PREFERENCE_LABELS } from "@/components/layout/theme-preference";
 import { useTheme } from "@/components/layout/theme-provider";
-import { useWorkspaceDialogs } from "@/components/layout/workspace-dialogs";
+import { useWorkspaceDialogs } from "@/components/layout/workspace-dialogs-context";
 import { WorkspaceTile } from "@/components/layout/workspace-tile";
 import {
   issueImportActionLabel,
@@ -44,7 +44,7 @@ import { taskCreationBlockedReason } from "@openducktor/frontend-core/tasks/boar
 import { KANBAN_PATH } from "@/pages/kanban/kanban-task-link";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";
-import { useManualMergeCheckState } from "@/state/providers/manual-merge-check-provider";
+import { useManualMergeCheckState } from "@/state/providers/manual-merge-check-context";
 import { useManualPullRequestSyncState } from "@/state/providers/manual-pull-request-sync-provider";
 import {
   classifyDiagnosticsQueryError,

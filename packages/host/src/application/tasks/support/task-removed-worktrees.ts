@@ -1,3 +1,4 @@
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import type {
   AgentSessionRecord,
   RepoConfig,
@@ -73,12 +74,12 @@ export const collectRemovedWorktreePaths = (
     const closeDependencies = taskWorktreeService
       ? { ...dependencies, taskWorktreeService }
       : dependencies;
-    // Close returns early for a terminal task, so it removes nothing there. Remove worktree runs
+    // Close returns early for a closed task, so it removes nothing there. Remove worktree runs
     // only for a closed task, and removes the same worktrees as a close.
     const paths = yield* Effect.forEach(
       operation === "remove_worktree"
         ? targets
-        : targets.filter(({ task, workflow }) => !workflow.isTerminalState(task.status)),
+        : targets.filter(({ task }) => task.status !== TASK_CLOSED_STATE),
       ({ task, sessions, workflow }) =>
         collectCloseWorktreePaths(
           closeDependencies,

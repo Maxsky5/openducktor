@@ -1,7 +1,7 @@
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { formatElapsedAgo, formatElapsedShort } from "../../lib/relative-time";
 import { statusLabel } from "../../tasks/presentation/task-status-presentation";
-import { BUILTIN_ROLE_LABELS, taskNeedsInput } from "@openducktor/workflows";
+import { taskNeedsInput, workflowRoleLabel } from "@openducktor/workflows";
 import type {
   SessionNavigationAttentionReason,
   SessionNavigationEntry,
@@ -54,8 +54,11 @@ export const sessionEntryTypeLabel = (entry: SessionNavigationEntry): string => 
   return "Blocked task";
 };
 
-export const sessionEntryRoleLabel = (entry: SessionNavigationEntry): string | null =>
-  entry.target.kind === "task_session" ? BUILTIN_ROLE_LABELS[entry.target.role] : null;
+export const sessionEntryRoleLabel = (entry: SessionNavigationEntry): string | null => {
+  const target = entry.target;
+  if (target.kind !== "task_session" || entry.context.kind !== "task") return null;
+  return workflowRoleLabel(entry.context.task.taskWorkflow, target.role);
+};
 
 export const sessionEntryRuntimeLabel = (entry: SessionNavigationEntry): string | null =>
   entry.runtimeKind === null ? null : RUNTIME_DESCRIPTORS_BY_KIND[entry.runtimeKind].label;
@@ -91,7 +94,7 @@ export const sessionEntryAccessibleName = (entry: SessionNavigationEntry): strin
   ];
   const runtime = sessionEntryRuntimeLabel(entry);
   if (entry.context.kind === "task")
-    parts.push(`Task status: ${statusLabel(entry.context.task.status)}`);
+    parts.push(`Task status: ${statusLabel(entry.context.task.sharedState)}`);
   if (runtime) parts.push(`${runtime} runtime`);
   if (entry.fault) parts.push(`Observation fault: ${entry.fault}`);
   return parts.join(", ");

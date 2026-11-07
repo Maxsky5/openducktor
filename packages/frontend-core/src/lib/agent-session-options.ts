@@ -2,7 +2,7 @@ import { formatAgentSessionActivityStateLabel } from "./agent-session-activity-s
 import { agentSessionIdentityKey } from "./agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "../types/agent-orchestrator";
 import type { AgentSessionActivityState } from "../types/agent-session-activity";
-import type { BuiltinRoleId as AgentRole } from "@openducktor/workflows";
+import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 
 export type AgentSessionRecencySummary = AgentSessionIdentity &
   Pick<AgentSessionState, "startedAt">;

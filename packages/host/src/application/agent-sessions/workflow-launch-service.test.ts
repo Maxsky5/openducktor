@@ -225,7 +225,7 @@ test.each(["write_start", "unknown_action"])(
   async (actionId) => {
     const h = await createLaunchHarness("codex", {
       taskWorkflows: reviewTaskWorkflows,
-      task: { issueType: "article", status: "backlog" },
+      task: { issueType: "feature", status: "open" },
     });
     const request: WorkflowLaunchRequest = {
       ...requestFor("codex"),
@@ -596,7 +596,8 @@ test.each(runtimeKinds)(
         ...requestFor(kind),
         policy: {
           kind: "manual",
-          actionId: "build_pull_request_generation",
+          actionId: "pull_request",
+          role: "build",
           decision: { startMode: "fork", sourceSession, selectedModel: modelFor(kind) },
         },
       }),
@@ -641,7 +642,7 @@ test("a reuse launch refuses a source session that waits for blocking input", as
         decision: { startMode: "reuse", sourceSession },
       },
       instruction: { kind: "kickoff", feedback: "Rename the helper." },
-      beforeStartAction: { action: "human_request_changes", note: "Rename the helper." },
+      beforeStartAction: { eventId: "human-request-changes" },
     }),
   );
   expect(result).toMatchObject({

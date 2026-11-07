@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { BUILTIN_NOTIFICATION_KINDS } from "@openducktor/workflows";
+import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow-settings";
 import {
   NOTIFICATION_KIND_DESCRIPTIONS,
   NOTIFICATION_KIND_LABELS,
@@ -29,6 +29,13 @@ import {
   resolveNotificationCuePickerValue,
 } from "./settings-notification-sound-options";
 import { NotificationSoundPicker } from "./settings-notification-sound-picker";
+
+const AGENT_NOTIFICATION_KINDS = AGENT_NOTIFICATION_KIND_VALUES.map((id) => ({
+  id,
+  key: id,
+  label: NOTIFICATION_KIND_LABELS[id],
+  description: NOTIFICATION_KIND_DESCRIPTIONS[id],
+}));
 
 type SegmentedOption<Value extends string> = {
   value: Value;
@@ -109,6 +116,8 @@ function SettingsRadioGroup<Value extends string>({
 
 type NotificationKindRowProps = {
   kind: SettingsNotificationKind;
+  label: string;
+  description: string;
   settings: NotificationSettings;
   disabled: boolean;
   onUpdate: (updater: (current: NotificationSettings) => NotificationSettings) => void;
@@ -117,6 +126,8 @@ type NotificationKindRowProps = {
 
 function NotificationKindRow({
   kind,
+  label: kindLabel,
+  description,
   settings,
   disabled,
   onUpdate,
@@ -130,7 +141,6 @@ function NotificationKindRow({
     kindSettings.sound === "inherit" || kindSettings.sound === "none"
       ? kindSettings.sound
       : resolveNotificationCuePickerValue(kindSettings.sound);
-  const kindLabel = NOTIFICATION_KIND_LABELS[kind];
   const updateKind = (next: Partial<typeof kindSettings>): void => {
     onUpdate((current) => ({
       ...current,
@@ -145,7 +155,7 @@ function NotificationKindRow({
     <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-start xl:grid-cols-[minmax(15rem,1fr)_15rem_minmax(12rem,14rem)_4rem] xl:items-center">
       <div className="min-w-0 sm:col-span-2 xl:col-span-1">
         <p className="text-sm font-medium text-foreground">{kindLabel}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{NOTIFICATION_KIND_DESCRIPTIONS[kind]}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       </div>
       <div className="col-span-2 grid min-w-0 content-start gap-2 sm:col-span-1 sm:col-start-1 xl:col-start-2">
         <Label className="text-xs text-muted-foreground xl:sr-only">Delivery</Label>
@@ -183,7 +193,12 @@ function NotificationKindRow({
 
 type NotificationKindGroupProps = {
   title: string;
-  kinds: readonly SettingsNotificationKind[];
+  kinds: readonly {
+    id: SettingsNotificationKind;
+    label: string;
+    description: string;
+    key: string;
+  }[];
   settings: NotificationSettings;
   disabled: boolean;
   onUpdate: (updater: (current: NotificationSettings) => NotificationSettings) => void;
@@ -211,8 +226,10 @@ const NotificationKindGroup = memo(function NotificationKindGroup({
         <div className="divide-y divide-border">
           {kinds.map((kind) => (
             <NotificationKindRow
-              key={kind}
-              kind={kind}
+              key={kind.key}
+              kind={kind.id}
+              label={kind.label}
+              description={kind.description}
               settings={settings}
               disabled={disabled}
               onUpdate={onUpdate}
@@ -266,11 +283,19 @@ type SettingsNotificationsSectionProps = {
   onUpdateNotifications: (updater: (current: NotificationSettings) => NotificationSettings) => void;
 };
 
+const TASK_NOTIFICATION_KINDS = TASK_NOTIFICATION_KIND_VALUES.map((id) => ({
+  id,
+  key: id,
+  label: NOTIFICATION_KIND_LABELS[id],
+  description: NOTIFICATION_KIND_DESCRIPTIONS[id],
+}));
+
 export function SettingsNotificationsSection({
   notifications,
   disabled,
   onUpdateNotifications,
 }: SettingsNotificationsSectionProps): ReactElement {
+  const workflows = useWorkflowSettings();
   const notificationRuntime = useNotificationContext();
   const {
     capability,
@@ -436,15 +461,34 @@ export function SettingsNotificationsSection({
 
       <NotificationKindGroup
         title="Agent activity"
-        kinds={AGENT_NOTIFICATION_KIND_VALUES}
+        kinds={AGENT_NOTIFICATION_KINDS}
         settings={notifications}
         disabled={disabled}
         onUpdate={onUpdateNotifications}
         onPreview={previewCue}
       />
+      {workflows.error ? (
+        <p role="alert">{workflows.error.message}</p>
+      ) : !workflows.data ? (
+        <p role="status">Loading workflow notifications...</p>
+      ) : null}
       <NotificationKindGroup
         title="Workflow changes"
-        kinds={BUILTIN_NOTIFICATION_KINDS}
+        kinds={
+          workflows.data?.workflows.flatMap((taskWorkflow) =>
+            taskWorkflow.definition.states.flatMap((state) =>
+              state.notification
+                ? [
+                    {
+                      ...state.notification,
+                      id: state.notification.kind,
+                      key: `${taskWorkflow.reference.id}:${taskWorkflow.reference.revision}:${state.id}`,
+                    },
+                  ]
+                : [],
+            ),
+          ) ?? []
+        }
         settings={notifications}
         disabled={disabled}
         onUpdate={onUpdateNotifications}
@@ -452,7 +496,7 @@ export function SettingsNotificationsSection({
       />
       <NotificationKindGroup
         title="Pull request sync"
-        kinds={TASK_NOTIFICATION_KIND_VALUES}
+        kinds={TASK_NOTIFICATION_KINDS}
         settings={notifications}
         disabled={disabled}
         onUpdate={onUpdateNotifications}

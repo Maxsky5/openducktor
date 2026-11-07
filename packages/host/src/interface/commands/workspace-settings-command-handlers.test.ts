@@ -15,7 +15,7 @@ import {
 } from "../router/host-command-router";
 
 import { createWorkspaceSettingsCommandHandlers } from "./workspace-settings-command-handlers";
-import { createBuiltinNotificationSettings } from "@openducktor/workflows";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
@@ -122,7 +122,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               branchPrefix: "odt",
               defaultTargetBranch: { remote: "origin", branch: "main" },
               git: {},
-              hooks: { postComplete: [] },
+              hooks: { beforeWorktreeRemoval: [] },
               actions: { items: [], defaultActionId: null },
               worktreeCopyPaths: [],
               promptOverrides: {},
@@ -147,7 +147,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
-          hooks: { postComplete: [] },
+          hooks: { beforeWorktreeRemoval: [] },
           actions: { items: [], defaultActionId: null },
           worktreeCopyPaths: [],
           promptOverrides: {},
@@ -168,7 +168,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               branchPrefix: "odt",
               defaultTargetBranch: { remote: "origin", branch: "main" },
               git: {},
-              hooks: { postComplete: [] },
+              hooks: { beforeWorktreeRemoval: [] },
               actions: { items: [], defaultActionId: null },
               worktreeCopyPaths: [],
               promptOverrides: {},
@@ -208,7 +208,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             reusablePrompts: [],
             kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
             autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
-            notifications: createBuiltinNotificationSettings(),
+            notifications: createSpecPlanBuildNotificationSettings(),
             agentRuntimes: DEFAULT_AGENT_RUNTIMES,
             agentModelFavorites: [],
             workspaces: {},

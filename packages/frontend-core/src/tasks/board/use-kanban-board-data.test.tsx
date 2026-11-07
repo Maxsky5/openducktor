@@ -1,5 +1,11 @@
+import { createWireTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { workspaceRefFixture } from "../../test-support/workspace-ref-fixture";
-import { type BuiltinTaskCard as TaskCard } from "@openducktor/workflows";
+import { workflowQueryKeys } from "../../queries/workflows";
+import {
+  builtinCompiledCatalogFixture,
+  builtinWorkspaceWorkflowsFixture,
+} from "../../test-support/workflow-fixtures";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord, SettingsSnapshot } from "@openducktor/contracts";
@@ -37,12 +43,10 @@ const tasksState = (tasks: TaskCard[]): TasksStateContextValue => ({
   updateTask: async () => {},
   setTaskTargetBranch: async () => {},
   deleteTask: async () => {},
-  closeTask: async () => {},
+  closeTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
   removeTaskWorktree: async () => {},
-  resetTaskImplementation: async () => {},
-  resetTask: async () => {},
-  transitionTask: async () => {},
-  humanRequestChangesTask: async () => {},
+  resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
+  resetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
 });
 
 const session = (externalSessionId: string): AgentSessionRecord => ({
@@ -104,6 +108,7 @@ describe("useKanbanBoardData", () => {
     );
     try {
       await harness.mount();
+      await harness.waitFor((board) => !board.isLoadingTasks);
       const board = harness.getLatest();
       expect(board.kanbanTasks).toBe(tasks);
       expect(board.matchingTasks).toBe(tasks);
@@ -127,6 +132,75 @@ describe("useKanbanBoardData", () => {
       await harness.waitFor((board) => !board.isLoadingTasks);
     } finally {
       await harness.unmount();
+    }
+  });
+
+  test("stops the foreground loader when workflow metadata fails before tasks load", async () => {
+    const connection = createTestClientConnection({
+      client: {
+        workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        workflowCatalogGet: async () => {
+          throw new Error("Host workflow catalog is invalid. Restart the host.");
+        },
+      },
+    });
+    const harness = createHookHarness(useKanbanBoardData, BOARD, {
+      wrapper: ({ children }: PropsWithChildren) => (
+        <ClientConnectionProvider connection={connection}>
+          <TasksStateContext value={{ ...tasksState([]), isForegroundLoadingTasks: true }}>
+            {children}
+          </TasksStateContext>
+        </ClientConnectionProvider>
+      ),
+    });
+    try {
+      await harness.mount();
+      await harness.waitFor((board) => board.workflowQuery.isError);
+      expect(harness.getLatest().isLoadingTasks).toBe(false);
+      expect(harness.getLatest().kanbanTasks).toEqual([]);
+    } finally {
+      await harness.unmount();
+      await connection.dispose();
+    }
+  });
+
+  test("reports a failed refreshed context when its cached revision is absent from the new catalog", async () => {
+    const connection = createTestClientConnection({
+      client: {
+        workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        workspaceWorkflowGet: async () => {
+          throw new Error("Workspace board is unavailable");
+        },
+      },
+    });
+    connection.queryClient.setQueryData(workflowQueryKeys.catalog, {
+      ...builtinCompiledCatalogFixture,
+      workflows: new Map(),
+    });
+    connection.queryClient.setQueryData(
+      workflowQueryKeys.workspace(BOARD),
+      builtinWorkspaceWorkflowsFixture,
+    );
+    await connection.queryClient.invalidateQueries({
+      queryKey: workflowQueryKeys.workspace(BOARD),
+      refetchType: "none",
+    });
+    const harness = createHookHarness(useKanbanBoardData, BOARD, {
+      wrapper: ({ children }: PropsWithChildren) => (
+        <ClientConnectionProvider connection={connection}>
+          <TasksStateContext value={tasksState([])}>{children}</TasksStateContext>
+        </ClientConnectionProvider>
+      ),
+    });
+    try {
+      await harness.mount();
+      await harness.waitFor((board) => board.workflowQuery.isError);
+      expect(harness.getLatest().creationStateId).toBeNull();
+      expect(harness.getLatest().isLoadingTasks).toBe(false);
+      expect(harness.getLatest().kanbanTasks).toEqual([]);
+    } finally {
+      await harness.unmount();
+      await connection.dispose();
     }
   });
 

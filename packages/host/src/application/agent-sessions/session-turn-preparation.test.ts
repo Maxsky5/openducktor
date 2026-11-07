@@ -6,7 +6,7 @@ import {
   type AgentMessageTarget,
   type AgentSessionModelSelection,
 } from "@openducktor/contracts";
-import { emptyArtifactSummary } from "@openducktor/workflows";
+import { emptyArtifactSummary } from "@openducktor/workflows/test-support";
 import { Effect } from "effect";
 import { createSessionTurnPreparation } from "./session-turn-preparation";
 import { taskCardFixture } from "../../test-support/task-card-fixture";

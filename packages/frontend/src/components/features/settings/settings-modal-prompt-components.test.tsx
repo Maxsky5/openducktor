@@ -1,5 +1,6 @@
+import { WorkflowTestProvider } from "@/test-utils/workflow-provider";
 import { describe, expect, test } from "bun:test";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
 import { PromptOverrideCard, PromptRoleTabs } from "./settings-modal-prompt-components";
 
 const noop = () => undefined;
@@ -9,8 +10,9 @@ describe("PromptOverrideCard", () => {
     const markup = renderToStaticMarkup(
       <PromptOverrideCard
         label="Spec kickoff"
+        owner="Workflow: Spec, Plan, Build"
         description="Prompt used to start spec sessions."
-        inheritedPreview={{ sourceLabel: "Builtin prompt", template: "builtin prompt" }}
+        inheritedPreview={{ sourceLabel: "Built-in prompt", template: "builtin prompt" }}
         disabled={false}
         canClearOverride={false}
         onToggleEnabled={noop}
@@ -28,6 +30,7 @@ describe("PromptOverrideCard", () => {
     const markup = renderToStaticMarkup(
       <PromptOverrideCard
         label="Spec kickoff"
+        owner="Workflow: Spec, Plan, Build"
         description="Prompt used to start spec sessions."
         override={{ template: "reusable prompt", baseVersion: 2, enabled: true }}
         disabled={false}
@@ -40,6 +43,26 @@ describe("PromptOverrideCard", () => {
 
     expect(markup).toContain(">reusable prompt</textarea>");
   });
+
+  test("names the prompt owner and labels the override editor", () => {
+    const markup = renderToStaticMarkup(
+      <PromptOverrideCard
+        label="Spec kickoff"
+        owner="Workflow: Spec, Plan, Build"
+        description="Prompt used to start spec sessions."
+        disabled={false}
+        canClearOverride={false}
+        onToggleEnabled={noop}
+        onTemplateChange={noop}
+        onClearOverride={noop}
+      />,
+    );
+
+    expect(markup).toContain("Workflow: Spec, Plan, Build");
+    const editorId = /<textarea[^>]*id="([^"]+)"/.exec(markup)?.[1];
+    expect(editorId).toBeDefined();
+    expect(markup).toContain(`for="${editorId}"`);
+  });
 });
 
 describe("PromptRoleTabs", () => {
@@ -48,7 +71,7 @@ describe("PromptRoleTabs", () => {
       <PromptRoleTabs
         value="spec"
         disabled={false}
-        errorCounts={{ shared: 0, spec: 1, planner: 0, build: 0, qa: 0 }}
+        errorCounts={{ shared: 0, "role:spec": 1, planner: 0, build: 0, qa: 0 }}
         onChange={noop}
       />,
     );
@@ -59,3 +82,6 @@ describe("PromptRoleTabs", () => {
     expect(markup).toContain("1 prompt placeholder error");
   });
 });
+
+const renderToStaticMarkup = (element: Parameters<typeof renderMarkup>[0]) =>
+  renderMarkup(<WorkflowTestProvider>{element}</WorkflowTestProvider>);

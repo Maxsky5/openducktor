@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useWorkspaceState } from "@/state/app-state-provider";
-import { useManualMergeCheckState } from "@/state/providers/manual-merge-check-provider";
+import { useManualMergeCheckState } from "@/state/providers/manual-merge-check-context";
 import type { WorkspaceScopeTarget } from "@/types/workspace-scope";
 import { ScopeChoiceButton, ScopeWarning } from "./workspace-scope-choice";
 

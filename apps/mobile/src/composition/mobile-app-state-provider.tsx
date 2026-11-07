@@ -1,6 +1,5 @@
 import { AgentStudioStateProvider } from "@openducktor/frontend-core/app-state/providers/agent-studio-state-provider";
 import { AppRuntimeProvider } from "@openducktor/frontend-core/app-state/providers/app-runtime-provider";
-import { DelegationStateProvider } from "@openducktor/frontend-core/app-state/providers/delegation-state-provider";
 import { HostRuntimeStatusProvider } from "@openducktor/frontend-core/app-state/providers/host-runtime-status-provider";
 import { DocumentStateProvider } from "@openducktor/frontend-core/app-state/providers/document-state-provider";
 import { TasksStateProvider } from "@openducktor/frontend-core/app-state/providers/tasks-state-provider";
@@ -50,21 +49,19 @@ export function MobileAppStateProvider({ children }: PropsWithChildren): ReactEl
           <TasksStateProvider>
             <WorkspaceSelectionProvider>
               <WorkspaceActivityProvider>
-                <DelegationStateProvider>
-                  <AgentStudioStateProvider agentEngine={agentEngine} keepActiveTranscriptsCurrent>
-                    <TaskStreamOwner />
-                    <SettingsRefreshOwner />
-                    <VisibleSessionTargetProvider>
-                      <SessionReadStateProvider visibility={appStateVisibility}>
-                        <AgentChatTranscriptCacheProvider
-                          prepareActiveSessions={prepareActiveSessions}
-                        >
-                          {children}
-                        </AgentChatTranscriptCacheProvider>
-                      </SessionReadStateProvider>
-                    </VisibleSessionTargetProvider>
-                  </AgentStudioStateProvider>
-                </DelegationStateProvider>
+                <AgentStudioStateProvider agentEngine={agentEngine} keepActiveTranscriptsCurrent>
+                  <TaskStreamOwner />
+                  <SettingsRefreshOwner />
+                  <VisibleSessionTargetProvider>
+                    <SessionReadStateProvider visibility={appStateVisibility}>
+                      <AgentChatTranscriptCacheProvider
+                        prepareActiveSessions={prepareActiveSessions}
+                      >
+                        {children}
+                      </AgentChatTranscriptCacheProvider>
+                    </SessionReadStateProvider>
+                  </VisibleSessionTargetProvider>
+                </AgentStudioStateProvider>
               </WorkspaceActivityProvider>
             </WorkspaceSelectionProvider>
           </TasksStateProvider>

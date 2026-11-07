@@ -40,7 +40,7 @@ test.each(["not_configured", "disabled"] as const)(
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",
         repoPath: "/repo",
-        hooks: { postComplete: [] },
+        hooks: { beforeWorktreeRemoval: [] },
         git:
           reason === "disabled"
             ? {
@@ -161,7 +161,7 @@ const giteaDescriptor: GitProviderDescriptor = {
 const workspaceSettingsService = createBuildWorkspaceSettingsService({
   workspaceId: "repo",
   repoPath: "/repo",
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   git: {
     provider: {
       id: "gitea",

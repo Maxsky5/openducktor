@@ -11,10 +11,11 @@ import {
   directMergeCompletionStageDescription,
   getDirectMergeCompletionContextError,
   directMergeCompletionConfirmDisabled,
-  missingBuilderWorktreeConfirmDisabled,
+  missingWorktreeConfirmDisabled,
   TASK_APPROVAL_COPY as COPY,
   type TaskApprovalTextWithCode,
   taskApprovalCompletionNextStepText,
+  taskApprovalGeneratePullRequestNotice,
   taskApprovalLocalMergeReadyText,
   taskApprovalPublicationCommitLabel,
   taskApprovalSquashCommitHint,
@@ -30,7 +31,7 @@ import type {
 import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
-  TaskApprovalMissingBuilderWorktreeModalModel,
+  TaskApprovalMissingWorktreeModalModel,
   TaskApprovalModalModel,
   TaskGitConflictDialogModel,
 } from "@openducktor/frontend-core/tasks/approval/task-approval-types";
@@ -384,7 +385,7 @@ function PullRequestChoices({
       {choices.draftModes && model.pullRequestDraftMode === "generate_ai" ? (
         <FormPanel muted>
           <Text variant="subhead" tone="tertiary">
-            {COPY.generatePullRequestNotice}
+            {taskApprovalGeneratePullRequestNotice(model.pullRequestRoleLabel)}
           </Text>
         </FormPanel>
       ) : null}
@@ -392,14 +393,14 @@ function PullRequestChoices({
   );
 }
 
-/** The builder worktree is gone: close the task, or reset the implementation. */
+/** The task worktree is gone: close the task, or run the workflow action that resets it. */
 export function MissingWorktreeStep({
   model,
   impact,
   isPreparing,
   mergeCheck,
 }: {
-  model: TaskApprovalMissingBuilderWorktreeModalModel;
+  model: TaskApprovalMissingWorktreeModalModel;
   impact: TaskCloseImpact;
   /** A read of the approval still runs, so the step shows the loader. */
   isPreparing: boolean;
@@ -409,16 +410,18 @@ export function MissingWorktreeStep({
   return (
     <ActionForm
       secondary={
-        <Button
-          label={COPY.resetImplementation}
-          icon="rotate-ccw"
-          variant="destructive"
-          size="lg"
-          disabled={busy}
-          accessibilityHint="Asks you to confirm the reset first."
-          onPress={model.onResetMissingBuilderWorktree}
-          fill
-        />
+        model.resetLabel ? (
+          <Button
+            label={model.resetLabel}
+            icon="rotate-ccw"
+            variant="destructive"
+            size="lg"
+            disabled={busy}
+            accessibilityHint="Asks you to confirm the reset first."
+            onPress={model.onResetMissingWorktree}
+            fill
+          />
+        ) : undefined
       }
       primary={
         <Button
@@ -428,8 +431,8 @@ export function MissingWorktreeStep({
           size="lg"
           loading={busy}
           command
-          disabled={missingBuilderWorktreeConfirmDisabled(model, impact, isPreparing)}
-          onPress={model.onCloseMissingBuilderWorktree}
+          disabled={missingWorktreeConfirmDisabled(model, impact, isPreparing)}
+          onPress={model.onCloseMissingWorktree}
           fill
         />
       }

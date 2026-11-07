@@ -16,7 +16,7 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
@@ -61,21 +61,24 @@ const waitForDialogToClose = async (): Promise<void> => {
 };
 
 describe("RepositoryScriptsSection", () => {
-  test("keeps the cleanup script and copied files and edits them as draft lines", () => {
+  test("keeps the before worktree removal script and copied files and edits them as draft lines", () => {
     const { rendered, getLatestRepoConfig } = renderStatefulSection(createRepoConfig());
 
     try {
       expect(screen.getByRole("heading", { name: "Actions" })).toBeTruthy();
       expect(screen.queryByText("Worktree setup script (one command per line)")).toBeNull();
 
-      fireEvent.change(screen.getByLabelText("Worktree cleanup script (one command per line)"), {
-        target: { value: "bun run clean\n" },
-      });
+      fireEvent.change(
+        screen.getByLabelText("Before worktree removal script (one command per line)"),
+        {
+          target: { value: "bun run clean\n" },
+        },
+      );
       fireEvent.change(screen.getByLabelText("Files copied to worktrees (one path per line)"), {
         target: { value: ".env\n" },
       });
 
-      expect(getLatestRepoConfig().hooks.postComplete).toEqual(["bun run clean", ""]);
+      expect(getLatestRepoConfig().hooks.beforeWorktreeRemoval).toEqual(["bun run clean", ""]);
       expect(getLatestRepoConfig().worktreeCopyPaths).toEqual([".env", ""]);
     } finally {
       rendered.unmount();
@@ -312,8 +315,9 @@ describe("RepositoryScriptsSection", () => {
         expect(screen.getByRole("button", { name }).hasAttribute("disabled")).toBe(true);
       }
       expect(
-        screen.getByLabelText<HTMLTextAreaElement>("Worktree cleanup script (one command per line)")
-          .disabled,
+        screen.getByLabelText<HTMLTextAreaElement>(
+          "Before worktree removal script (one command per line)",
+        ).disabled,
       ).toBe(true);
     } finally {
       rendered.unmount();

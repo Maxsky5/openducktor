@@ -1,3 +1,4 @@
+import { specPlanBuildWorkflow, SPEC_PLAN_BUILD_BOARD } from "@openducktor/workflows";
 import {
   type ChatSettings,
   DEFAULT_AGENT_RUNTIMES,
@@ -14,6 +15,8 @@ import {
   settingsRepoConfigSchema,
   type SettingsRepoConfig,
   type SettingsSnapshot,
+  type TaskCard as WireTaskCard,
+  taskCardSchema,
   type TaskStoreCheck,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
@@ -40,10 +43,8 @@ import type {
 } from "../types/agent-orchestrator";
 import type { HostRuntimeStatusMap, ObservedCheck } from "../types/diagnostics";
 import type { HostRuntimeStatusContextValue } from "../types/session-slices";
-import {
-  type BuiltinTaskCard as TaskCard,
-  createBuiltinNotificationSettings,
-} from "@openducktor/workflows";
+import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 export type RuntimeCatalogFixtureSurfaces = {
   models?: AgentModelCatalog;
@@ -106,7 +107,18 @@ export type SettingsSnapshotFixtureOverrides = Omit<
   kanban?: Partial<SettingsSnapshot["kanban"]>;
 };
 
-const BASE_TASK_CARD_FIXTURE: TaskCard = {
+type TaskCardFixture = TaskCard & {
+  agentWorkflows: Record<"spec" | "planner" | "build" | "qa", TaskCard["agentWorkflows"][string]>;
+};
+
+const BASE_TASK_CARD_FIXTURE: TaskCardFixture = {
+  workflow: {
+    id: specPlanBuildWorkflow.definition.id,
+    revision: specPlanBuildWorkflow.definition.revision,
+  },
+  workflowSteps: [],
+  taskWorkflow: specPlanBuildWorkflow,
+  sharedState: SPEC_PLAN_BUILD_BOARD.states[0]!,
   id: "task-1",
   title: "Task",
   description: "",
@@ -266,10 +278,10 @@ export const createSettingsSnapshotFixture = (
       rules: [],
     },
     notifications: {
-      ...createBuiltinNotificationSettings(),
+      ...createSpecPlanBuildNotificationSettings(),
       ...notifications,
       kinds: {
-        ...createBuiltinNotificationSettings().kinds,
+        ...createSpecPlanBuildNotificationSettings().kinds,
         ...notifications?.kinds,
       },
     },
@@ -334,8 +346,8 @@ export const createTaskStoreCheckFixture = (
 export const createTaskCardFixture = (
   defaults: Partial<TaskCard> = {},
   overrides: Partial<TaskCard> = {},
-): TaskCard => {
-  const merged = {
+): TaskCardFixture => {
+  const merged: TaskCardFixture = {
     ...BASE_TASK_CARD_FIXTURE,
     ...defaults,
     ...overrides,
@@ -369,10 +381,53 @@ export const createTaskCardFixture = (
         ...overrides.agentWorkflows?.qa,
       },
     },
-  } satisfies TaskCard;
+  } satisfies TaskCardFixture;
 
-  return structuredClone(merged);
+  merged.sharedState = SPEC_PLAN_BUILD_BOARD.states.find(({ id }) => id === merged.status)!;
+  const flags = new Map(
+    specPlanBuildWorkflow.project(merged).workflowSteps.map((step) => [step.id, step]),
+  );
+  merged.workflowSteps = specPlanBuildWorkflow.definition.steps.map((step) => {
+    const projected = flags.get(step.id)!;
+    const role = step.kind === "agent" ? merged.agentWorkflows[step.roleId] : undefined;
+    const state = role ?? projected;
+    const view = {
+      id: step.id,
+      label: step.label,
+      inputs: [...step.inputs],
+      outputs: [...step.outputs],
+      required: state.required,
+      available: state.available,
+      completed: state.completed,
+    };
+    return step.kind === "agent"
+      ? { ...view, kind: "agent" as const, roleId: step.roleId }
+      : { ...view, kind: "human" as const };
+  });
+
+  // The compiled workflow holds functions, so only the card data is cloned.
+  const { taskWorkflow, ...data } = merged;
+  return { ...structuredClone(data), taskWorkflow };
 };
+
+/** The host wire card of a task card fixture: no compiled workflow, board state, or step views. */
+export const toWireTaskCard = (card: TaskCard | WireTaskCard): WireTaskCard =>
+  // The card schema strips the client-only fields.
+  taskCardSchema.parse({
+    ...card,
+    workflowSteps: card.workflowSteps.map(({ id, required, available, completed }) => ({
+      id,
+      required,
+      available,
+      completed,
+    })),
+  });
+
+/** A host wire card of the built-in workflow, as a host read or command returns it. */
+export const createWireTaskCardFixture = (
+  defaults: Partial<TaskCard> = {},
+  overrides: Partial<TaskCard> = {},
+): WireTaskCard => toWireTaskCard(createTaskCardFixture(defaults, overrides));
 
 type AgentSessionFixtureMessages = SessionMessagesState | AgentChatMessage[];
 

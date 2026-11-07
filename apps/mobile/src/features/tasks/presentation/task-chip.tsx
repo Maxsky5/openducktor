@@ -1,4 +1,4 @@
-import { type BuiltinIssueTypeId as IssueType } from "@openducktor/workflows";
+import type { WorkflowIcon } from "@openducktor/contracts";
 import { memo, type ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -113,15 +113,15 @@ export const TaskChip = memo(function TaskChip({
 
 /** The Lucide icon of an issue type in its desktop icon color, as the compact desktop card. */
 export const IssueTypeMark = memo(function IssueTypeMark({
-  issueType,
+  hint,
   icon,
   size = 15,
 }: {
-  issueType: IssueType;
+  hint?: WorkflowIcon | undefined;
   icon: IconName;
   size?: number;
 }): ReactElement {
-  const painted = paintStyles(useAppTheme(), issueTypeChipPaint(issueType));
+  const painted = paintStyles(useAppTheme(), issueTypeChipPaint(hint));
   return <Icon name={icon} size={size} colorStyle={painted.icon} />;
 });
 

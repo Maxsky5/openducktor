@@ -24,6 +24,7 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type { SettingsConfigView, SettingsConfigPort } from "../../ports/settings-config-port";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type { TaskService } from "../tasks/task-service";
 import type {
@@ -44,7 +45,8 @@ type Attempt = {
   notificationTarget: { workspaceId: string; repoPath: string; repositoryLabel: string };
   generation: number;
   sequence: number;
-  workflowId: string;
+  /** The exact workflow of the committed change. */
+  workflow: TaskWorkflow;
   /** The mutation gate key of the mutation that committed the change. */
   gateKey: string;
   task: { id: string; title: string };
@@ -133,14 +135,14 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
       const closedDuringSettingsRead = workspaceSkip(attempt);
       if (closedDuringSettingsRead) return closedDuringSettingsRead;
       const rule = settings.rules.find(
-        (rule) => rule.workflowId === attempt.workflowId && rule.eventId === attempt.eventId,
+        (rule) =>
+          rule.workflowId === attempt.workflow.reference.id && rule.eventId === attempt.eventId,
       );
       if (!rule?.actionIds.includes(attempt.actionId))
         return skip("The Autopilot rule was disabled before the action started.");
       const latest = latestChanges.get(attempt.workspaceId)?.get(attempt.task.id);
       if (latest && latest.sequence !== attempt.sequence) {
-        const workflow = yield* deps.taskWorkflows.forWorkflowId(attempt.workflowId);
-        const state = workflow.state(latest.status);
+        const state = attempt.workflow.state(latest.status);
         return skip(`The task moved to ${state.title ?? state.label} before the action started.`);
       }
       return { start: true as const };
@@ -155,9 +157,10 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
       workspaceId: attempt.workspaceId,
       repoPath: attempt.repoPath,
       task: attempt.task,
-      workflowId: attempt.workflowId,
+      workflowId: attempt.workflow.reference.id,
       eventId: attempt.eventId,
       actionId: attempt.actionId,
+      actionLabel: attempt.workflow.automation(attempt.actionId).label,
       occurredAt: new Date().toISOString(),
     };
     // A launch can report an empty text, but clients accept an outcome only with text.
@@ -185,14 +188,16 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
   const notify = (attempt: Attempt, outcome: AutopilotOutcome): Effect.Effect<string | null> =>
     Effect.gen(function* () {
       const target = attempt.notificationTarget;
-      const workflow = yield* deps.taskWorkflows.forWorkflowId(outcome.workflowId);
-      const { role } = workflow.automation(outcome.actionId);
+      // The launch names the role of the session that it used. A launch that failed before it
+      // ran names the first candidate role of the automation.
+      const launch = outcome.kind === "skipped" ? undefined : outcome.launch;
+      const role = launch?.role ?? attempt.workflow.automation(outcome.actionId).roles[0]!;
       const input = {
         launchAttemptId: outcome.outcomeId,
         taskId: outcome.task.id,
         taskTitle: outcome.task.title,
         role,
-        roleLabel: workflow.role(role).label,
+        roleLabel: attempt.workflow.role(role).label,
       };
       let occurrence: NotificationActionOccurrence | null = null;
       if (outcome.kind === "started") {
@@ -241,7 +246,7 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
         held = new Map();
         outcomes.set(attempt.workspaceId, held);
       }
-      held.set(JSON.stringify([attempt.task.id, attempt.workflowId, attempt.actionId]), {
+      held.set(JSON.stringify([attempt.task.id, attempt.workflow.reference.id, attempt.actionId]), {
         outcome,
         recoveryClaimed: false,
       });
@@ -305,7 +310,7 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
       repoPath,
       statusChange,
       signal,
-      workflowId,
+      workflow,
       autopilotSettings,
     }: CommittedTaskStatusChange,
     notificationTarget: Attempt["notificationTarget"],
@@ -315,8 +320,9 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
     const eventId = signal;
     if (!eventId) return;
     const rule = autopilotSettings.rules.find(
-      (value) => value.workflowId === workflowId && value.eventId === eventId,
+      (value) => value.workflowId === workflow.id && value.eventId === eventId,
     );
+    const taskWorkflow = deps.taskWorkflows.forReference(workflow);
     for (const actionId of rule?.actionIds ?? [])
       runInBackground(
         runAttempt({
@@ -324,7 +330,7 @@ export const createAutopilotService = (deps: AutopilotServiceDependencies) => {
           workspaceId,
           repoPath,
           notificationTarget,
-          workflowId,
+          workflow: taskWorkflow,
           generation,
           sequence,
           gateKey: repoPath,

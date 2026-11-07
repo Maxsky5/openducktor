@@ -13,6 +13,7 @@ import type {
 } from "../../types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "../../types/session-slices";
 import { toAgentSessionIdentity } from "../../lib/agent-session-identity";
+import { isPullRequestLaunch } from "@openducktor/workflows";
 import type { ResolvedSessionStartDecision, SessionStartFlowRequest } from "./session-start-types";
 import type { HostClient } from "@openducktor/host-client";
 export type { SessionStartBeforeAction, SessionStartPostAction } from "./session-start-types";
@@ -62,6 +63,8 @@ export const startSessionWorkflow = async ({
     },
     instruction: { kind: "none" },
   };
+  // Any pull request role can run the core pull request launch, so it names the source role.
+  if (isPullRequestLaunch(request.launchActionId)) launch.policy.role = request.role;
   if (request.postStartAction === "send_message")
     launch.instruction = {
       kind: "message",
@@ -70,7 +73,7 @@ export const startSessionWorkflow = async ({
   if (request.postStartAction === "kickoff") {
     launch.instruction = { kind: "kickoff" };
     if (decision.kickoffPrompt !== undefined) launch.instruction.text = decision.kickoffPrompt;
-    if (request.message) launch.instruction.feedback = request.message;
+    if (request.humanFeedback) launch.instruction.feedback = request.humanFeedback;
   }
   if (decision.targetBranch) launch.targetBranch = decision.targetBranch;
   if (request.beforeStartAction) launch.beforeStartAction = request.beforeStartAction;

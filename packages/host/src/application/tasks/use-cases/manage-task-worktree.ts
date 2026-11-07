@@ -1,6 +1,7 @@
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { getScopedRepoConfig } from "../support/scoped-repo-config";
 import { Effect } from "effect";
-import { isMergeDetectionCandidate } from "../../../domain/task";
+import { hasCheckableTaskBranch } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
@@ -30,6 +31,7 @@ export const createTaskWorktreeUseCases = ({
   taskStore,
   taskWorkflows,
   settingsConfig,
+  systemCommands,
   terminalService,
   taskWorktreeService,
   worktreeFiles,
@@ -103,10 +105,12 @@ export const createTaskWorktreeUseCases = ({
         worktreePaths,
         branchNames: relatedTips.map(localBranchName).sort(),
         uncommittedFileCount,
-        mergeCandidate: isMergeDetectionCandidate(task, {
-          taskBranch,
-          hasPendingDirectMerge: metadata.directMerge !== undefined,
-        }),
+        mergeCandidate:
+          taskWorkflows.forTask(task).detectsMerge(task.status) &&
+          hasCheckableTaskBranch({
+            taskBranch,
+            hasPendingDirectMerge: metadata.directMerge !== undefined,
+          }),
         branchOid: taskBranch.kind === "found" ? taskBranch.oid : null,
       };
     });
@@ -117,7 +121,7 @@ export const createTaskWorktreeUseCases = ({
     return Effect.gen(function* () {
       const task = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(task);
-      if (!workflow.isTerminalState(task.status)) {
+      if (task.status !== TASK_CLOSED_STATE) {
         return yield* new HostValidationError({
           field: "taskId",
           message: `Task ${taskId} is not closed. Close the task to remove its worktree.`,
@@ -155,6 +159,10 @@ export const createTaskWorktreeUseCases = ({
       });
       const progress = createTaskCleanupProgressState();
       yield* runTaskLocalCleanup({
+        beforeWorktreeRemoval: {
+          commands: repoConfig.hooks.beforeWorktreeRemoval,
+          systemCommands,
+        },
         workspaceId: input.workspaceId,
         branchNames,
         gitPort: dependencies.gitPort,

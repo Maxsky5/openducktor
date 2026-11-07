@@ -69,13 +69,24 @@ The command palette is in `packages/frontend/src/features/command-palette`. `Wor
 - Run an action of a task, chat, or workspace through `useWorkspaceIntentRunner`. It makes the workspace active before the action runs.
 - Run a task action on the current page. Only an action that opens a session goes to another page.
 - Open the task details through `onOpenTaskDetails` of the task workflow actions. `TaskWorkflowActionsProvider` shows the shared details sheet. The Kanban page, Agent Studio, and the palette use it. The sheet closes when the page changes.
+- Run a declared workflow action through `runAction`. `resolveTaskActionDestination` in `packages/frontend-core/src/tasks/workflow/task-action-destination.ts` gives its client operation, and `createTaskActionRunner` runs it for every client and surface. Desktop and mobile give only their own handlers, such as routes or dialogs. A surface adds its session options, and a surface that must keep focus, such as the non-modal details sheet, adds its own confirmations. The runner builds the continuation of a confirmed event.
+- An event action whose event has the `worktree.reset` host effect opens the Reset Implementation confirmation. The confirmation sends the event ID with `taskApplyEvent`, and names the state that the event gives.
+- An event action with a following launch that has the `human_feedback` context opens the human feedback form. The form does not depend on a host effect.
+- Remove Worktree is a core task action, not a workflow action. The details read the worktree and own its confirmation, so only the details show it.
+- Other command owners give the task card that their host command returned to `onCommitted`. `continueTaskWorkflow` selects the following launch from that card. Do not read the task list after a command: the task stream updates every task view.
+- A pull request approval starts no following launch, because the approval event runs only when the pull request merges.
+- Build every workflow rail with `buildWorkflowRail` in `packages/frontend-core/src/tasks/presentation/workflow-rail.ts`. A surface gives only the session of each role. Agent Studio, session previews, and mobile choose that session differently.
+- Use `useHumanReviewFeedback` in `packages/frontend-core/src/tasks/workflow/use-human-review-feedback.ts` for every human feedback form.
+- A feedback event with a following launch selects that launch with `launchAfterEvent`, in the state that the event gives. The launch request carries `beforeStartAction` with the event ID, so the host commits the event only after the launch passes its checks. A canceled start keeps the form, its message, and the task state.
+- A feedback launch that an available event action starts next also sends the event of that action in `beforeStartAction`.
+- A feedback event without a following launch commits the event alone with `taskApplyEvent`.
 - Open the Reset Task and Delete confirmations through `onConfirmTaskAction`. `TaskWorkflowActionsProvider` shows them on any page, with the same dialogs as the task details sheet.
 - Open the Rename and Archive dialogs of a chat through `useSessionMenu`. The sidebar and the palette share these dialogs. Chat actions other than Open chat do not make the workspace active.
 - Add an app action to `useCommandPaletteActions`. Give it other words in `keywords`, so that search finds it.
 - Use `useCommandPalettePageCommand` for a command that exists only on one page, such as the panel toggles of a session page.
 - The shortcut does nothing while a `Dialog` or `Sheet` is open. `hasOpenDialog` in `components/ui/open-dialogs.ts` reports this state.
 - Keep the Recent list device-local. It is UI state in the storage of the client connection, not task data. A remote host keeps it in connection memory.
-- Do not show `close_task` in the palette.
+- Show the core Close Task and Reset Task from `coreTaskActions(task)` in the palette task actions, not as workflow actions.
 - Show and hide the palette and its workspace list without motion.
 
 ## Hardcoded color exceptions

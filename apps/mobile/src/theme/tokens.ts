@@ -1,4 +1,4 @@
-import type { KanbanColumnId } from "@openducktor/workflows";
+import type { WorkflowTone } from "@openducktor/contracts";
 import { type Insets, Platform, type TextStyle, type ViewStyle } from "react-native";
 import { type CSSStyle, cubicBezier, Easing } from "react-native-reanimated";
 import { withAlpha } from "./color-alpha";
@@ -245,17 +245,6 @@ const buildTones = (c: SemanticColors) => {
   } satisfies Record<Tone, ToneColors>;
 };
 
-const LANE_TONES = {
-  open: "neutral",
-  spec_ready: "pending",
-  ready_for_dev: "info",
-  in_progress: "warning",
-  blocked: "destructive",
-  ai_review: "review",
-  human_review: "approval",
-  closed: "success",
-} as const satisfies Record<KanbanColumnId, Tone>;
-
 /** Mixes two `#rrggbb` colors. `amount` is the share of `top`. */
 const mix = (top: string, bottom: string, amount: number): string => {
   const channel = (hex: string, index: number) =>
@@ -279,25 +268,26 @@ const buildLanes = (
   c: SemanticColors,
   tones: Record<Tone, ToneColors>,
 ) => {
-  const lane = (columnId: KanbanColumnId): LaneColors => {
-    const tone = tones[LANE_TONES[columnId]];
+  const lane = (laneTone: WorkflowTone): LaneColors => {
+    const tone = tones[laneTone];
     // A dark wash has an alpha channel; the lane blends only its solid accent into the canvas.
+    const neutral = laneTone === "neutral";
     const wash =
       scheme === "light"
-        ? mix(tone.surface.slice(0, 7), c.background, columnId === "open" ? 0 : 0.7)
-        : mix(tone.accent, c.background, columnId === "open" ? 0 : 0.07);
+        ? mix(tone.surface.slice(0, 7), c.background, neutral ? 0 : 0.7)
+        : mix(tone.accent, c.background, neutral ? 0 : 0.07);
     return { wash, border: tone.border, accent: tone.accent, text: tone.text };
   };
   return {
-    open: lane("open"),
-    spec_ready: lane("spec_ready"),
-    ready_for_dev: lane("ready_for_dev"),
-    in_progress: lane("in_progress"),
-    blocked: lane("blocked"),
-    ai_review: lane("ai_review"),
-    human_review: lane("human_review"),
-    closed: lane("closed"),
-  } satisfies Record<KanbanColumnId, LaneColors>;
+    neutral: lane("neutral"),
+    pending: lane("pending"),
+    info: lane("info"),
+    warning: lane("warning"),
+    destructive: lane("destructive"),
+    review: lane("review"),
+    approval: lane("approval"),
+    success: lane("success"),
+  } satisfies Record<WorkflowTone, LaneColors>;
 };
 
 const buildTheme = (scheme: "light" | "dark") => {

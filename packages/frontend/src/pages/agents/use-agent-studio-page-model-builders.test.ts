@@ -1,4 +1,4 @@
-import { BUILTIN_ROLE_LABELS } from "@openducktor/workflows";
+import { BUILTIN_ROLE_LABEL_BY_ROLE } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { describe, expect, test } from "bun:test";
 import {
   agentSessionIdentityKey,
@@ -17,7 +17,7 @@ const createSession = (
     ...overrides,
   });
 
-const roleLabelByRole = { ...BUILTIN_ROLE_LABELS } as const;
+const roleLabelByRole = { ...BUILTIN_ROLE_LABEL_BY_ROLE } as const;
 
 const selectedIdentityFromSession = (session: AgentSessionSummary | null = null) =>
   session ? toAgentSessionIdentity(session) : null;
@@ -148,7 +148,7 @@ describe("use-agent-studio-page-model-builders", () => {
     expect(optionIds).toContain("build:build_after_human_request_changes:message_first");
     expect(context.sessionCreateOptions.every((option) => option.disabled)).toBe(true);
     expect(context.primaryQuickAction).toMatchObject({
-      launchActionId: "build_pull_request_generation",
+      launchActionId: "pull_request",
       label: "Generate Pull Request",
       disabled: true,
       disabledReason: "Wait for the current session to finish.",

@@ -220,7 +220,7 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
-  hooks: { postComplete: [] },
+  hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
@@ -259,11 +259,31 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   autopilot: {
     alwaysStartQaReviewsFresh: false,
     rules: [
-      { workflowId: "openducktor", eventId: "taskProgressedToSpecReady", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskProgressedToReadyForDev", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskProgressedToAiReview", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskRejectedByQa", actionIds: [] },
-      { workflowId: "openducktor", eventId: "taskProgressedToHumanReview", actionIds: [] },
+      {
+        workflowId: "openducktor-spec-plan-build",
+        eventId: "taskProgressedToSpecReady",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-spec-plan-build",
+        eventId: "taskProgressedToReadyForDev",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-spec-plan-build",
+        eventId: "taskProgressedToAiReview",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-spec-plan-build",
+        eventId: "taskRejectedByQa",
+        actionIds: [],
+      },
+      {
+        workflowId: "openducktor-spec-plan-build",
+        eventId: "taskProgressedToHumanReview",
+        actionIds: [],
+      },
     ],
   },
   agentRuntimes: agentRuntimes({ opencode: true }),
@@ -584,7 +604,7 @@ const createTaskStore = (): TaskStorePort =>
             description: "",
             status: "open",
             priority: 2,
-            issueType: "task",
+            issueType: "task" as const,
             removeWorktreeOnClose: null,
             availableActions: [],
             labels: [],
@@ -1627,13 +1647,6 @@ describe("createElectronHostCommandRouter", () => {
     expect(await router.invoke("tasks_list", workspace)).toEqual([
       expect.objectContaining({ id: task.id, title: "Task 1" }),
     ]);
-    expect(
-      await router.invoke("task_transition", { ...taskRef, status: "in_progress" }),
-    ).toMatchObject({
-      id: task.id,
-      status: "in_progress",
-      availableActions: expect.arrayContaining(["open_builder"]),
-    });
     expect(await router.invoke("task_metadata_get", taskRef)).toMatchObject({
       artifacts: {},
       agentSessions: [],
@@ -1687,7 +1700,7 @@ describe("createElectronHostCommandRouter", () => {
     ).toMatchObject({ id: "task-1", status: "open" });
   });
 
-  test("resets a task implementation through the host router", async () => {
+  test("resets a task implementation with its workflow event through the host router", async () => {
     const resetImplementationTaskStore = createTaskStore();
     const resetImplementationRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -1713,10 +1726,11 @@ describe("createElectronHostCommandRouter", () => {
       },
     });
     expect(
-      await resetImplementationRouter.invoke("task_reset_implementation", {
+      await resetImplementationRouter.invoke("task_apply_event", {
         workspaceId: "repo",
         repoPath,
         taskId: "task-1",
+        eventId: "reset-implementation",
       }),
     ).toMatchObject({ id: "task-1", status: "ready_for_dev" });
   });
@@ -2213,11 +2227,11 @@ describe("createElectronHostCommandRouter", () => {
       ).toMatchObject({ markdown, revision: 1 });
     }
     expect(
-      await reviewRouter.invoke("human_request_changes", {
+      await reviewRouter.invoke("task_apply_event", {
         workspaceId: "repo",
         repoPath,
         taskId: "task-1",
-        note: "Please adjust",
+        eventId: "human-request-changes",
       }),
     ).toMatchObject({
       id: "task-1",
@@ -2238,13 +2252,6 @@ describe("createElectronHostCommandRouter", () => {
 
   test("runs a direct merge through the host router", async () => {
     await mkdir(path.join(worktreeBasePath, "task-1"), { recursive: true });
-    // The default router runs the commands that need no special fakes.
-    const router = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      taskStore: createTaskStore(),
-    });
     const directMergeStartRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: {
@@ -2336,99 +2343,9 @@ describe("createElectronHostCommandRouter", () => {
         },
       }),
     ).toMatchObject({
+      // A merge with a publish target keeps the task state until its publication.
       outcome: "completed",
-      task: { id: "task-1", status: "human_review" },
-    });
-
-    expect(
-      await router.invoke("build_resumed", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-      }),
-    ).toMatchObject({
-      id: "task-1",
-      status: "in_progress",
-      availableActions: expect.arrayContaining(["open_builder"]),
-    });
-  });
-
-  test("records a completed build through the host router", async () => {
-    const completionRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      config: globalConfig({
-        workspaces: {
-          repo: repoConfig({
-            hooks: { postComplete: [] },
-          }),
-        },
-        workspaceOrder: ["repo"],
-      }),
-      systemCommands: createSystemCommands(),
-      taskStore: withGetTaskFromList({
-        ...createTaskStore(),
-        listTasks: () =>
-          Effect.succeed([
-            {
-              id: "task-1",
-              title: "Task 1",
-              description: "",
-              status: "in_progress",
-              priority: 2,
-              issueType: "task",
-              removeWorktreeOnClose: null,
-              availableActions: [],
-              labels: [],
-              artifactSummary: {
-                spec: { present: false },
-                plan: { present: false },
-                qaReport: { present: false },
-              },
-              agentWorkflows: {
-                spec: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                planner: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                build: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-                qa: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-              },
-              updatedAt: "2026-01-02T00:00:00Z",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-      }),
-    });
-    expect(
-      await completionRouter.invoke("build_completed", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-        input: { summary: "Done" },
-      }),
-    ).toMatchObject({
-      id: "task-1",
-      status: "ai_review",
-      availableActions: expect.arrayContaining(["qa_start"]),
+      task: { id: "task-1", status: "ai_review" },
     });
   });
 
@@ -2626,80 +2543,13 @@ describe("createElectronHostCommandRouter", () => {
     expect(removedMergedWorktreePaths).toEqual([path.join(worktreeBasePath, "task-1")]);
   });
 
-  test("blocks a build and updates a task through the host router", async () => {
+  test("updates a task through the host router", async () => {
     // The default router runs the commands that need no special fakes.
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
       taskStore: createTaskStore(),
-    });
-    const blockRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      taskStore: withGetTaskFromList({
-        ...createTaskStore(),
-        listTasks: () =>
-          Effect.succeed([
-            {
-              id: "task-1",
-              title: "Task 1",
-              description: "",
-              status: "in_progress",
-              priority: 2,
-              issueType: "task",
-              removeWorktreeOnClose: null,
-              availableActions: [],
-              labels: [],
-              artifactSummary: {
-                spec: { present: false },
-                plan: { present: false },
-                qaReport: { present: false },
-              },
-              agentWorkflows: {
-                spec: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                planner: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                build: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-                qa: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-              },
-              updatedAt: "2026-01-02T00:00:00Z",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-      }),
-    });
-    expect(
-      await blockRouter.invoke("build_blocked", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-        reason: "Blocked by dependency",
-      }),
-    ).toMatchObject({
-      id: "task-1",
-      status: "blocked",
-      availableActions: expect.arrayContaining(["open_builder"]),
     });
     expect(
       await router.invoke("task_update", {
@@ -2711,52 +2561,7 @@ describe("createElectronHostCommandRouter", () => {
     ).toMatchObject({
       id: "task-1",
       title: "Updated task",
-      availableActions: [
-        "view_details",
-        "set_spec",
-        "set_plan",
-        "build_start",
-        "reset_task",
-        "close_task",
-      ],
+      availableActions: ["view_details", "set_spec", "set_plan", "build_start"],
     });
-  });
-
-  test("registers migrated build start host command", async () => {
-    const config = globalConfig({
-      workspaces: { repo: repoConfig() },
-      workspaceOrder: ["repo"],
-    });
-    const runtimeStarter = createRuntimeStarter();
-    const worktreeFiles = createWorktreeFiles({ pathIsWithinRoot: () => Effect.succeed(true) });
-    const router = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      runtimeHealth: createRuntimeHealth(),
-      runtimeStarter,
-      config,
-      taskStore: createTaskStore(),
-      worktreeFiles,
-    });
-
-    try {
-      await router.initialize();
-      await waitForRuntimeState(router, ["opencode"], "ready");
-      expect(
-        await router.invoke("build_start", {
-          workspaceId: "repo",
-          repoPath,
-          taskId: "task-1",
-          runtimeKind: "opencode",
-        }),
-      ).toEqual({
-        runtimeKind: "opencode",
-        workingDirectory: path.join(worktreeBasePath, "task-1"),
-      });
-      expect(runtimeStarter.starts.map((start) => start.runtimeKind)).toEqual(["opencode"]);
-    } finally {
-      await router.dispose();
-    }
   });
 });

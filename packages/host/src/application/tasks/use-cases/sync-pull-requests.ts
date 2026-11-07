@@ -26,6 +26,7 @@ export const createTaskPullRequestSyncUseCases = ({
   taskStore,
   taskWorkflows,
   settingsConfig,
+  systemCommands,
   taskActivityGuard,
   taskSessionLifecycleCoordinator,
   taskWorktreeService,
@@ -101,6 +102,7 @@ export const createTaskPullRequestSyncUseCases = ({
                 {
                   gitPort,
                   settingsConfig,
+                  systemCommands,
                   taskWorktreeService,
                   terminalService,
                   workspaceSettingsService,

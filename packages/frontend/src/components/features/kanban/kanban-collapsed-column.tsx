@@ -13,7 +13,7 @@ type KanbanCollapsedColumnProps = {
 };
 
 export function KanbanCollapsedColumn({ column }: KanbanCollapsedColumnProps): ReactElement {
-  const theme = laneTheme(column.id);
+  const theme = laneTheme(column.tone);
   const label = `${column.title} column is empty and collapsed`;
   const accentClass = theme.collapsedAccentClass ?? theme.headerAccentClass;
 

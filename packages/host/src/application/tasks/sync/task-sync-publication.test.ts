@@ -88,7 +88,12 @@ describe("committed task event publication", () => {
     });
     const committed = {
       previousStatus: "open",
-      task: { id: "task-1", title: "Title at commit", status: "spec_ready" },
+      task: {
+        id: "task-1",
+        title: "Title at commit",
+        status: "spec_ready",
+        workflow: { id: "openducktor-spec-plan-build", revision: 1 },
+      },
     };
     await Effect.runPromise(
       service.publishTasksUpdated(
@@ -103,7 +108,14 @@ describe("committed task event publication", () => {
         kind: "tasks_updated",
         taskIds: ["task-1", "task-2"],
         removedTaskIds: ["task-2"],
-        taskSnapshots: [{ id: "task-1", title: "Current title", status: "ready_for_dev" }],
+        taskSnapshots: [
+          {
+            id: "task-1",
+            title: "Current title",
+            status: "ready_for_dev",
+            workflow: task().workflow,
+          },
+        ],
         statusChanges: [committed],
       }),
     ]);
@@ -125,7 +137,12 @@ describe("committed task event publication", () => {
     const committed = {
       previousStatus: "in_progress",
       sourceRole: "build",
-      task: { id: "task-1", title: "Task", status: "human_review" },
+      task: {
+        id: "task-1",
+        title: "Task",
+        status: "human_review",
+        workflow: { id: "openducktor-spec-plan-build", revision: 1 },
+      },
     };
     await expect(
       Effect.runPromise(

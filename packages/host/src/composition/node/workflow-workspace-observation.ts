@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { WorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import {
@@ -58,17 +59,24 @@ export const workflowShutdown = (
     );
 
 /** Observe admitted workspaces before native runtimes can publish pending work. */
-export const initializeWorkflowObservation = (
-  settings: WorkspaceSettingsService,
-  live: AgentSessionLiveStateService,
-) =>
-  settings.getSettingsSnapshot().pipe(
-    Effect.flatMap((snapshot) =>
-      Effect.forEach(
-        Object.values(snapshot.workspaces),
-        (config) => live.refresh({ repoPath: config.repoPath }),
-        { discard: true },
+export const createWorkflowObservationInitializer =
+  (
+    admission: Pick<WorkspaceAdmissionService, "initialize">,
+    settings: WorkspaceSettingsService,
+    live: AgentSessionLiveStateService,
+  ) =>
+  () =>
+    admission.initialize().pipe(
+      Effect.andThen(
+        settings.getSettingsSnapshot().pipe(
+          Effect.flatMap((snapshot) =>
+            Effect.forEach(
+              Object.values(snapshot.workspaces),
+              (config) => live.refresh({ repoPath: config.repoPath }),
+              { discard: true },
+            ),
+          ),
+          Effect.mapError((cause) => toHostOperationError(cause, "host.initialize-observation")),
+        ),
       ),
-    ),
-    Effect.mapError((cause) => toHostOperationError(cause, "host.initialize-observation")),
-  );
+    );
