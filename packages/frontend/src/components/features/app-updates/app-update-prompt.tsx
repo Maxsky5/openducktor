@@ -273,7 +273,10 @@ export function AppUpdatePrompt(): ReactElement | null {
   } = getAppUpdatePromptView(state, controller);
 
   return (
-    <div className="pointer-events-none fixed right-4 bottom-4 z-[80] w-[min(360px,calc(100vw-2rem))]">
+    <div
+      className="pointer-events-none fixed right-4 bottom-4 z-[80] w-[min(360px,calc(100vw-2rem))]"
+      data-page-occluder=""
+    >
       <Card className="light pointer-events-auto overflow-hidden border-border bg-popover shadow-lg backdrop-blur-none supports-[backdrop-filter]:bg-popover">
         <p role="status" aria-live="polite" className="sr-only">
           {liveRegionText}

@@ -118,6 +118,7 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
     registry,
     requireLive: tabs.requireLive,
     stageImage: input.stageImage,
+    reportFailure: input.reportFailure,
   });
   const hub = createBrowserClientHub({ tabs, picker });
   const pages = createBrowserAgentPages({

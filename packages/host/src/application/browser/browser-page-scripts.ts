@@ -67,6 +67,14 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
   layer.style.setProperty("overflow", "hidden", "important");
   overlay.appendChild(layer);
 
+  /* A transparent layer captures every pointer of the top frame, also over an iframe. */
+  const pickerCapture = document.createElement("div");
+  pickerCapture.style.setProperty("position", "absolute", "important");
+  pickerCapture.style.setProperty("inset", "0", "important");
+  pickerCapture.style.setProperty("pointer-events", "none", "important");
+  pickerCapture.style.setProperty("cursor", "crosshair", "important");
+  overlay.appendChild(pickerCapture);
+
   const boxElement = () => {
     const element = document.createElement("div");
     element.style.setProperty("position", "absolute", "important");
@@ -159,14 +167,24 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
     if (pickerActive === active) return;
     pickerActive = active;
     syncPickerListeners();
+    // The capture layer keeps the pointers that would go to an iframe. The hit test hides it, and
+    // the markers ignore pointer events, so Chromium finds the page element under the pointer.
+    pickerCapture.style.setProperty("pointer-events", active ? "auto" : "none", "important");
+    for (const marker of markers.values()) {
+      marker.style.setProperty("pointer-events", active ? "none" : "auto", "important");
+    }
     if (!active) {
       hoverPoint = null;
       pickerTarget.hidden = true;
       selectionLayer.replaceChildren();
     }
   };
+  globalThis.__odtPickerHitTest = (hidden) => {
+    // Only the transparent capture layer hides. The highlight and the markers stay visible.
+    pickerCapture.style.setProperty("visibility", hidden ? "hidden" : "visible", "important");
+  };
   globalThis.__odtPickerTarget = (target) => {
-    if (!target) {
+    if (!pickerActive || !target) {
       pickerTarget.hidden = true;
       return;
     }
@@ -176,6 +194,7 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
     pickerLabel.style.setProperty("top", target.box.y >= 21 ? "-21px" : "0", "important");
   };
   globalThis.__odtPickerSelection = (boxes) => {
+    if (!pickerActive) return;
     const elements = boxes.map((box) => {
       const element = boxElement();
       element.style.setProperty("border-radius", "2px", "important");
@@ -201,7 +220,7 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
     marker.textContent = String(number);
     marker.setAttribute("aria-label", "Annotation " + number);
     marker.style.setProperty("position", "absolute", "important");
-    marker.style.setProperty("pointer-events", "auto", "important");
+    marker.style.setProperty("pointer-events", pickerActive ? "none" : "auto", "important");
     marker.style.setProperty("cursor", "pointer", "important");
     marker.style.setProperty("box-sizing", "border-box", "important");
     marker.style.setProperty("width", "20px", "important");
@@ -272,6 +291,9 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
   new MutationObserver(scheduleAnchors).observe(document, { subtree: true, childList: true, attributes: true });
   globalThis.__odtSetAnchors = (next) => {
     anchors = next;
+    // Report the boxes of a new anchor set even when they match the last report, so a client that
+    // just asked for anchors receives them.
+    lastAnchorReport = "";
     reportAnchors();
   };
   globalThis.__odtRevealAnchor = (annotationId) => {

@@ -22,6 +22,7 @@ export const NO_PAGE_OCCLUDERS: readonly PageOccluderBox[] = [];
 let occluders: readonly PageOccluderBox[] = NO_PAGE_OCCLUDERS;
 const listeners = new Set<() => void>();
 let observer: MutationObserver | null = null;
+let frame = 0;
 
 const boxOf = (element: Element): PageOccluderBox => {
   const rect = element.getBoundingClientRect();
@@ -41,12 +42,28 @@ const sameBoxes = (a: readonly PageOccluderBox[], b: readonly PageOccluderBox[])
     );
   });
 
-/** Reads the open overlays. It runs only when an overlay appears or leaves the document. */
+/** Reads the open overlays. It runs only when an overlay appears, leaves, or moves. */
 const refreshOccluders = (): void => {
   const next = Array.from(document.querySelectorAll(OCCLUDER_SELECTOR), boxOf);
-  if (sameBoxes(occluders, next)) return;
+  if (sameBoxes(occluders, next)) {
+    startTicking();
+    return;
+  }
   occluders = next;
+  startTicking();
   for (const listener of listeners) listener();
+};
+
+/** Re-measures an open overlay every frame, because animations, scroll, and resize move it. */
+const tickOccluders = (): void => {
+  frame = 0;
+  refreshOccluders();
+};
+
+const startTicking = (): void => {
+  if (frame === 0 && occluders.length > 0) {
+    frame = requestAnimationFrame(tickOccluders);
+  }
 };
 
 const containsOccluder = (node: Node): boolean =>
@@ -97,6 +114,10 @@ const subscribe = (listener: () => void): (() => void) => {
     if (listeners.size === 0) {
       observer?.disconnect();
       observer = null;
+      if (frame !== 0) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+      }
     }
   };
 };

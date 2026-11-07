@@ -20,6 +20,38 @@ describe("usePageOccluders", () => {
     await waitFor(() => expect(result.current).toEqual([]));
   });
 
+  test("follows an overlay that moves while it stays open", async () => {
+    const { result } = renderHook(() => usePageOccluders());
+    const overlay = document.createElement("div");
+    overlay.setAttribute("data-page-occluder", "");
+    let left = 10;
+    overlay.getBoundingClientRect = () =>
+      // SAFETY: happy-dom returns zeros for a detached box, so the test supplies the rectangle.
+      ({
+        left,
+        top: 20,
+        right: left + 100,
+        bottom: 120,
+        width: 100,
+        height: 100,
+        x: left,
+        y: 20,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    act(() => {
+      document.body.append(overlay);
+    });
+    await waitFor(() => expect(result.current[0]?.left).toBe(10));
+
+    left = 40;
+    await waitFor(() => expect(result.current[0]?.left).toBe(40));
+
+    act(() => {
+      overlay.remove();
+    });
+    await waitFor(() => expect(result.current).toEqual([]));
+  });
+
   test("ignores document changes that hold no overlay", async () => {
     const { result } = renderHook(() => usePageOccluders());
     const change = document.createElement("div");

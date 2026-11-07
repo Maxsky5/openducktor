@@ -74,11 +74,13 @@ export const createElectronBrowserViewPort = (): ElectronBrowserViewPort => {
     if (keeper !== null && !keeper.isDestroyed()) {
       return keeper;
     }
+    const linux = process.platform === "linux";
     const window = new electron.BaseWindow({
       width: KEEPER_SIZE,
       height: KEEPER_SIZE,
-      x: 0,
-      y: 0,
+      // Linux ignores window opacity, so keep its keeper outside every screen.
+      x: linux ? -KEEPER_SIZE : 0,
+      y: linux ? -KEEPER_SIZE : 0,
       show: false,
       frame: false,
       skipTaskbar: true,
@@ -87,10 +89,14 @@ export const createElectronBrowserViewPort = (): ElectronBrowserViewPort => {
       // so a focusable keeper still gives the focus to no one.
       focusable: true,
     });
-    window.setHiddenInMissionControl(true);
+    if (process.platform === "darwin") {
+      window.setHiddenInMissionControl(true);
+    }
     window.setIgnoreMouseEvents(true);
     window.showInactive();
-    window.setOpacity(0);
+    if (!linux) {
+      window.setOpacity(0);
+    }
     window.setAlwaysOnTop(true, "floating");
     keeper = window;
     return window;

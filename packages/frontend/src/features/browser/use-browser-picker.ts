@@ -34,7 +34,9 @@ export const useBrowserPicker = (channel: BrowserChannel, tabId: string, live: b
 
   const setEnabled = (enabled: boolean): void => {
     if (state.active === enabled) return;
-    setState(enabled ? { active: true, selection: [] } : IDLE);
+    setState((current) =>
+      enabled ? { active: true, selection: [] } : { active: false, selection: current.selection },
+    );
     hostClient.browserPickerSet({ tabId, enabled }).catch((cause: unknown) => {
       if (enabled) setState(IDLE);
       reportPickerFailure(cause);
@@ -51,11 +53,27 @@ export const useBrowserPicker = (channel: BrowserChannel, tabId: string, live: b
           return;
         }
         if (message.type === "picker_off" && message.tabId === tabId) {
-          setState(IDLE);
+          // Escape in the page stops the picking but keeps the elements that the user picked,
+          // so the comment box still opens for them.
+          setState((current) => ({ active: false, selection: current.selection }));
         }
       }),
     [channel, tabId],
   );
+
+  // The toolbar keeps the keyboard focus, so Escape never reaches the page script. Stop the
+  // picker from the window too, where the toolbar and every other host control can cancel it.
+  useEffect(() => {
+    if (!state.active) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      setState((current) => ({ active: false, selection: current.selection }));
+      hostClient.browserPickerSet({ tabId, enabled: false }).catch(reportPickerFailure);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [hostClient, tabId, state.active]);
 
   useEffect(
     () => () => {

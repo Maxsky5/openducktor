@@ -179,6 +179,7 @@ export const createElectronBrowserEngine = (
       view: null,
       viewWindowId: null,
       viewBox: DEFAULT_VIEW_BOX,
+      focusOnShow: false,
       wakeHolds: 0,
       permissionRequests: new Set(),
       allowUnloadOnce: false,
@@ -190,20 +191,39 @@ export const createElectronBrowserEngine = (
   /** Shows a view in its window, or keeps it in the keeper while no panel shows it. */
   const applyView = (tab: EngineTab): void => {
     const view = tab.view;
+    // An agent action keeps its page unthrottled while it runs. A page that no agent uses runs
+    // normally, and Chromium throttles it only while the user does not see it. A popup window has
+    // its page in the binding, not in a view.
+    const guest = view?.webContents ?? tab.binding?.guest ?? null;
+    if (guest !== null && !guest.isDestroyed()) {
+      guest.setBackgroundThrottling(tab.wakeHolds === 0);
+    }
     if (view === null) {
       return;
     }
-    // An agent action keeps its page unthrottled while it runs. A page that no agent uses runs
-    // normally, and Chromium throttles it only while the user does not see it.
-    view.webContents.setBackgroundThrottling(tab.wakeHolds === 0);
     if (tab.viewWindowId !== null) {
       if (input.viewPort.showInWindow(view, tab.viewWindowId, tab.viewBox)) {
+        if (tab.focusOnShow) {
+          tab.focusOnShow = false;
+          view.webContents.focus();
+        }
         return;
       }
       // The window closed while the renderer still listed its tabs.
       tab.viewWindowId = null;
     }
     input.viewPort.showInKeeper(view, tab.wakeHolds > 0);
+  };
+
+  /** Moves the pages of a window to the keeper, so a window that lost its renderer shows none. */
+  const detachWindowViews = (webContentsId: number): void => {
+    for (const tab of tabs.values()) {
+      if (tab.viewWindowId === webContentsId) {
+        tab.viewWindowId = null;
+        tab.focusOnShow = false;
+        applyView(tab);
+      }
+    }
   };
 
   /** Takes control of a page and reports the tab as attached. */
@@ -510,6 +530,7 @@ export const createElectronBrowserEngine = (
         const tab = yield* surfaceOf(senderId, tabId, "electron.browser.set_surface");
         if (!surface.visible) {
           tab.viewWindowId = null;
+          tab.focusOnShow = false;
           applyView(tab);
           return;
         }
@@ -534,13 +555,19 @@ export const createElectronBrowserEngine = (
     focusPage: (senderId, tabId) =>
       Effect.gen(function* () {
         const tab = yield* surfaceOf(senderId, tabId, "electron.browser.focus_page");
-        if (tab.viewWindowId !== senderId || tab.view === null) {
+        if (tab.view === null) {
           return yield* new BrowserEngineError({
             code: "not_ready",
             operation: "electron.browser.focus_page",
             message: "This page does not show in the window yet.",
             tabId,
           });
+        }
+        if (tab.viewWindowId !== senderId) {
+          // An overlay can hide the page when a dialog closes and asks for the focus again. Keep
+          // the request until the page shows, so the dialog close does not lose the focus.
+          tab.focusOnShow = true;
+          return;
         }
         tab.view.webContents.focus();
       }),
@@ -558,7 +585,10 @@ export const createElectronBrowserEngine = (
         return yield* Effect.tryPromise({
           try: async () => {
             const image = await guest.capturePage();
-            return `data:image/jpeg;base64,${image.toJPEG(PAGE_SNAPSHOT_JPEG_QUALITY).toString("base64")}`;
+            const jpeg = image.toJPEG(PAGE_SNAPSHOT_JPEG_QUALITY);
+            // A page that has not painted yet returns an empty image, which is no snapshot.
+            if (jpeg.length === 0) throw new Error("The page snapshot is empty.");
+            return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
           },
           catch: (cause) =>
             new BrowserEngineError({
@@ -680,25 +710,23 @@ export const createElectronBrowserEngine = (
         listeners.clear();
       }),
     addMainWindow: windows.add,
-    setMainWindowLoaded: windows.setLoaded,
+    setMainWindowLoaded: (webContentsId, loaded) => {
+      if (!loaded) detachWindowViews(webContentsId);
+      windows.setLoaded(webContentsId, loaded);
+    },
     removeMainWindow: (webContentsId) => {
       windows.remove(webContentsId);
       if (windows.size() === 0) {
         // The app quits when its last OpenDucktor window closes. A keeper window would keep
-        // `window-all-closed` from firing, so the pages end and the keeper closes first.
+        // `window-all-closed` from firing, so the pages end and the keeper closes first. The tabs
+        // stay saved, so the next start restores them like a normal service disposal does.
         for (const tab of Array.from(tabs.values())) {
           endPage(tab);
-          emit({ type: "tab_ended", tabId: tab.tabId });
         }
         input.viewPort.closeKeeper();
         return;
       }
-      for (const tab of tabs.values()) {
-        if (tab.viewWindowId === webContentsId) {
-          tab.viewWindowId = null;
-          applyView(tab);
-        }
-      }
+      detachWindowViews(webContentsId);
     },
     isMainWindow: windows.has,
     prepareWorkspace,

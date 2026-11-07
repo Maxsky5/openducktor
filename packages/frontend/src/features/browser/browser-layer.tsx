@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import { browserDevToolsUrlQueryOptions } from "@/state/queries/browser";
 import { useBrowserDevToolsStore } from "./browser-devtools-store";
 import {
@@ -150,9 +151,10 @@ function SurfaceFrame({
   );
   return (
     <div
-      className={
-        hidden ? "pointer-events-none absolute overflow-hidden" : "absolute overflow-hidden"
-      }
+      className={cn(
+        "absolute overflow-hidden",
+        hidden ? "pointer-events-none invisible" : "pointer-events-auto",
+      )}
       data-browser-surface={surfaceKey}
       style={{
         left: placement.left,

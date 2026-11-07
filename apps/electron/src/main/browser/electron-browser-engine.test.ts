@@ -108,6 +108,21 @@ describe("Electron browser engine pages", () => {
     expect(harness.viewPort.kept.at(-1)).toEqual({ view, visible: false });
   });
 
+  test("keeps the pages in the keeper while its window has no renderer", async () => {
+    const harness = createEngineHarness();
+    await createTab(harness);
+    const view = harness.view();
+    await Effect.runPromise(harness.engine.setSurface(MAIN_WINDOW_ID, TAB_ID, surface(true)));
+    const kept = harness.viewPort.kept.length;
+
+    harness.engine.setMainWindowLoaded(MAIN_WINDOW_ID, false);
+
+    expect(harness.viewPort.kept).toHaveLength(kept + 1);
+    expect(harness.viewPort.kept.at(-1)).toEqual({ view, visible: false });
+    harness.engine.setMainWindowLoaded(MAIN_WINDOW_ID, true);
+    expect(harness.viewPort.kept).toHaveLength(kept + 1);
+  });
+
   test("rounds a fractional box and refuses a shown page without one", async () => {
     const harness = createEngineHarness();
     await createTab(harness);
@@ -142,16 +157,18 @@ describe("Electron browser engine pages", () => {
     );
   });
 
-  test("gives the keyboard focus to a page only after the user shows it", async () => {
+  test("gives the keyboard focus to a page, and keeps a hidden focus request", async () => {
     const harness = createEngineHarness();
     await createTab(harness);
     const guest = harness.page();
 
-    const hidden = await Effect.runPromiseExit(harness.engine.focusPage(MAIN_WINDOW_ID, TAB_ID));
-    expect(Exit.isFailure(hidden) && JSON.stringify(hidden.cause)).toContain("not_ready");
+    await Effect.runPromise(harness.engine.focusPage(MAIN_WINDOW_ID, TAB_ID));
+    expect(guest.focused).toBe(0);
 
     await Effect.runPromise(harness.engine.setSurface(MAIN_WINDOW_ID, TAB_ID, surface(true)));
-    await Effect.runPromise(harness.engine.focusPage(MAIN_WINDOW_ID, TAB_ID));
+    expect(guest.focused).toBe(1);
+    await Effect.runPromise(harness.engine.setSurface(MAIN_WINDOW_ID, TAB_ID, surface(false)));
+    await Effect.runPromise(harness.engine.setSurface(MAIN_WINDOW_ID, TAB_ID, surface(true)));
     expect(guest.focused).toBe(1);
   });
 
@@ -163,6 +180,18 @@ describe("Electron browser engine pages", () => {
     );
     const missing = await Effect.runPromiseExit(harness.engine.capturePage("missing"));
     expect(Exit.isFailure(missing) && JSON.stringify(missing.cause)).toContain("tab_not_found");
+  });
+
+  test("refuses an empty page snapshot", async () => {
+    const harness = createEngineHarness();
+    await createTab(harness);
+    harness.page().snapshotJpeg = Buffer.alloc(0);
+
+    const exit = await Effect.runPromiseExit(harness.engine.capturePage(TAB_ID));
+
+    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain(
+      "The page snapshot is empty.",
+    );
   });
 
   test("ends the tab when its page closes", async () => {
@@ -201,7 +230,8 @@ describe("Electron browser engine pages", () => {
 
     expect(guest.closed).toBe(1);
     expect(harness.viewPort.keeperCloses).toBe(1);
-    expect(harness.events).toContainEqual({ type: "tab_ended", tabId: TAB_ID });
+    // The tabs stay saved, so the next start restores them like a service disposal does.
+    expect(harness.events).not.toContainEqual({ type: "tab_ended", tabId: TAB_ID });
     expect(harness.engine.hasLiveTab(TAB_ID)).toBe(false);
   });
 
@@ -597,6 +627,27 @@ describe("Electron browser engine popups", () => {
     expect([window.shown, window.focused]).toEqual([1, 1]);
     await Effect.runPromise(harness.engine.closeTab(popupTabId));
     expect(popupGuest.destroyed).toBe(true);
+  });
+
+  test("keeps a popup page unthrottled while a wake hold is open", async () => {
+    const harness = createEngineHarness();
+    await createTab(harness);
+    const opener = harness.page();
+    opener.windowOpenHandler?.({ url: "https://auth.example/login", disposition: "new-window" });
+    const popupGuest = new FakeGuest(300, harness.workspaceSession);
+    const window = new FakePopupWindow(popupGuest);
+    opener.emit("did-create-window", window, { url: "https://auth.example/login" });
+    await harness.flush();
+    const popup = harness.events.find((event) => event.type === "popup_opened");
+    if (popup?.type !== "popup_opened") throw new Error("The popup tab is missing.");
+    expect(popupGuest.backgroundThrottling).toBe(true);
+
+    const scope = await Effect.runPromise(Scope.make());
+    await Effect.runPromise(harness.engine.holdWake(popup.tabId).pipe(Scope.provide(scope)));
+    expect(popupGuest.backgroundThrottling).toBe(false);
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+
+    expect(popupGuest.backgroundThrottling).toBe(true);
   });
 
   test("ends a popup window tab whose page closes while it attaches", async () => {

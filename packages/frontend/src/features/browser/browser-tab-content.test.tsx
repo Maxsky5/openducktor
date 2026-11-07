@@ -357,6 +357,12 @@ describe("BrowserTabContent", () => {
         ],
       }),
     );
+    // The comment box hides the native page, so it waits until the picker stops.
+    expect(screen.queryByRole("textbox", { name: "Annotation comment" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Annotate" }));
+    await waitFor(() =>
+      expect(pickerSet).toHaveBeenLastCalledWith({ tabId: TAB_ID, enabled: false }),
+    );
     fireEvent.change(await screen.findByRole("textbox", { name: "Annotation comment" }), {
       target: { value: "Make it blue" },
     });
@@ -373,6 +379,49 @@ describe("BrowserTabContent", () => {
       ).toEqual(["Make it blue"]),
     );
     expect(channel.sent).toContainEqual({ type: "picker_clear", tabId: TAB_ID });
+    overlayHost.remove();
+  });
+
+  test("stops annotating on Escape while the toolbar keeps the focus", async () => {
+    const { electronRuntime, pickerSet } = renderTab(
+      createBrowserTabSummaryFixture({ tabId: TAB_ID }),
+    );
+    await waitFor(() => expect(electronRuntime().channel.status()).toBe("connected"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Annotate" }));
+    await waitFor(() => expect(pickerSet).toHaveBeenCalledWith({ tabId: TAB_ID, enabled: true }));
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() =>
+      expect(pickerSet).toHaveBeenLastCalledWith({ tabId: TAB_ID, enabled: false }),
+    );
+  });
+
+  test("keeps the picked elements when Escape comes from the page", async () => {
+    const { electronRuntime, channel } = renderTab(
+      createBrowserTabSummaryFixture({ tabId: TAB_ID }),
+    );
+    await waitFor(() => expect(electronRuntime().channel.status()).toBe("connected"));
+    const overlayHost = document.createElement("div");
+    document.body.append(overlayHost);
+    act(() => {
+      electronRuntime().overlays.register(browserSurfaceKey(TAB_ID), overlayHost);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Annotate" }));
+    act(() =>
+      channel.receive({
+        type: "picker_selection",
+        tabId: TAB_ID,
+        selection: [
+          { nodeRef: "7", box: { x: 10, y: 20, width: 80, height: 30 }, label: "button" },
+        ],
+      }),
+    );
+    act(() => channel.receive({ type: "picker_off", tabId: TAB_ID }));
+
+    expect(await screen.findByRole("textbox", { name: "Annotation comment" })).toBeTruthy();
     overlayHost.remove();
   });
 });
