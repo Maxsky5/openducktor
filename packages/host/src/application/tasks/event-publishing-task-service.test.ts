@@ -1,3 +1,4 @@
+import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { createTaskEventStream } from "../../events/task-event-stream";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { noMergeDetection } from "./sync/task-sync-service.test-support";
@@ -23,7 +24,7 @@ const taskCard = (): TaskCard => ({
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
-  workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+  workflow: specPlanBuildReference(),
   workflowSteps: [],
   availableActions: [],
   labels: [],
@@ -407,7 +408,7 @@ describe("createEventPublishingTaskService", () => {
           Effect.fail(
             new TaskCreationProgressFailure(
               {
-                workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+                workflow: specPlanBuildReference(),
                 id: "task-1",
                 title: "Created",
                 status: "open",

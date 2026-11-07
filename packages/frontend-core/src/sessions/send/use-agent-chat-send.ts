@@ -190,7 +190,8 @@ export function useAgentChatSend({
           stageAttachment: stageSendAttachment,
         });
         if (!parts || !isCurrentRecipient()) return false;
-        assertGoalCommandAllowed(parts, runtimeDescriptor, runtimeVersion);
+        // Without a session, the target refuses a system command with its own reason.
+        if (identity) assertGoalCommandAllowed(parts, runtimeDescriptor, runtimeVersion);
         const resolved = await target.resolve(parts);
         if (!resolved) return false;
         if ("result" in resolved) return resolved.result;
@@ -215,6 +216,7 @@ export function useAgentChatSend({
       }
     },
     [
+      identity,
       isSessionWorking,
       foregroundTurnActive,
       isWaitingInput,

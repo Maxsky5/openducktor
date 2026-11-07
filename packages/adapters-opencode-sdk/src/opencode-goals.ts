@@ -1,4 +1,4 @@
-import type { OpenCodeClient, V2Event } from "@opencode/client";
+import { isRpcError, type OpenCodeClient, type V2Event } from "@opencode/client";
 import type { AgentSessionGoal } from "@openducktor/contracts";
 import type { AgentSessionGoalCommand } from "@openducktor/core";
 import { z } from "zod";
@@ -28,22 +28,24 @@ const projectGoal = (goal: z.infer<typeof nativeGoalSchema> | null): AgentSessio
   return projected;
 };
 
-/** Reads the goal of a session through the plugin RPC. `null`: the session has no goal. */
+/**
+ * Reads the goal of a session through the plugin RPC. `null`: the session has no goal. The goal
+ * plugin is not a protected plugin, so a user config can turn it off. OpenCode then answers with
+ * `rpc.unavailable`, and the server has no goals, so the session has none either.
+ */
 export const readOpenCodeGoal = async (
   client: OpenCodeClient,
   sessionID: string,
   directory: string,
-): Promise<AgentSessionGoal | null> =>
-  projectGoal(
-    goalReadSchema.parse(
-      await client.rpc.call({
-        rpcID: GOAL_RPC_ID,
-        method: "get",
-        location: { directory },
-        input: { sessionID },
-      }),
-    ).output,
-  );
+): Promise<AgentSessionGoal | null> => {
+  const response = await client.rpc
+    .call({ rpcID: GOAL_RPC_ID, method: "get", location: { directory }, input: { sessionID } })
+    .catch((cause: unknown) => {
+      if (isRpcError(cause) && cause.type === "rpc.unavailable") return { output: null };
+      throw cause;
+    });
+  return projectGoal(goalReadSchema.parse(response).output);
+};
 
 /** The new goal of a `changed` event. `null`: the goal was cleared. */
 export const readOpenCodeGoalChange = (
@@ -53,3 +55,10 @@ export const readOpenCodeGoalChange = (
 /** The argument text of the native `/goal` command. */
 export const openCodeGoalCommandText = (command: AgentSessionGoalCommand): string =>
   command.kind === "set" ? command.objective : command.kind;
+
+/**
+ * OpenCode has no `/goal` command when a config turns the goal plugin off. Its native error names
+ * no reason, so this message says how to turn goals on again.
+ */
+export const OPENCODE_GOAL_PLUGIN_OFF_MESSAGE =
+  'OpenCode has no /goal command, because its config turns the goal plugin off. Remove "-opencode.goal" from "plugins" in the OpenCode config, then try again.';

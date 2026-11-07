@@ -139,15 +139,22 @@ const modelFrame = { type: "assistant", parent_tool_use_id: null, message: { con
 const result = { type: "result", subtype: "success" };
 
 describe("Claude goal commands", () => {
-  test("a set settles when its record appears in the transcript", async () => {
+  test("a set settles at the first model frame, before Claude writes its record", async () => {
     const { session, observe, append, events } = await createSession([message("user", "u1", null)]);
     const wait = beginClaudeGoalCommand(session, { kind: "set", objective: OBJECTIVE });
     observe(goalReply(OBJECTIVE, `Goal set: ${OBJECTIVE}`));
-    await append(goalRecord("g1", "u1", { met: false, sentinel: true }));
     observe(modelFrame);
     await wait.outcome;
     expect(readClaudeSessionGoal(session)).toEqual({ objective: OBJECTIVE, ended: false });
-    expect(events.at(-1)?.goal).toEqual({ objective: OBJECTIVE, ended: false });
+    expect(events).toEqual([
+      expect.objectContaining({ goal: { objective: OBJECTIVE, ended: false } }),
+    ]);
+
+    // The record that Claude writes later changes nothing.
+    await append(goalRecord("g1", "u1", { met: false, sentinel: true }));
+    observe(result);
+    await session.goalTracking?.reads;
+    expect(events).toHaveLength(1);
   });
 
   test("a set without a record at the turn result fails with the command reply", async () => {
@@ -162,14 +169,12 @@ describe("Claude goal commands", () => {
     expect(readClaudeSessionGoal(session)).toBeNull();
   });
 
-  test("a set whose record comes late checks again at the turn result", async () => {
-    const { session, observe, append, settled } = await createSession();
+  test("a set whose turn ends before the model answers finds its record at the result", async () => {
+    const { session, observe, append } = await createSession();
     const wait = beginClaudeGoalCommand(session, { kind: "set", objective: OBJECTIVE });
     observe(goalReply(OBJECTIVE, `Goal set: ${OBJECTIVE}`));
-    observe(modelFrame);
-    await settled();
     await append(goalRecord("g1", null, { met: false, sentinel: true }));
-    observe(result);
+    observe({ type: "result", subtype: "error_during_execution" });
     await wait.outcome;
     expect(readClaudeSessionGoal(session)).toEqual({ objective: OBJECTIVE, ended: false });
   });

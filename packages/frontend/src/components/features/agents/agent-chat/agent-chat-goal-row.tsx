@@ -1,5 +1,8 @@
-import type { AgentSessionGoalControlAction, AgentSessionGoalStatus } from "@openducktor/contracts";
-import { AGENT_SESSION_GOAL_ACTION_LABELS } from "@openducktor/frontend-core/sessions/goals/agent-session-goal-row";
+import type { AgentSessionGoalControlAction } from "@openducktor/contracts";
+import {
+  AGENT_SESSION_GOAL_ACTION_LABELS,
+  type AgentSessionGoalTone,
+} from "@openducktor/frontend-core/sessions/goals/agent-session-goal-row";
 import type { AgentSessionGoalRowModel } from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
 import { ChevronDown, LoaderCircle, Pause, Play, Target, X } from "lucide-react";
 import { type ReactElement, useId, useState } from "react";
@@ -7,15 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-const STATUS_CLASS_NAMES = {
-  active: "text-emerald-700 dark:text-emerald-400",
-  paused: "text-amber-700 dark:text-amber-400",
-  blocked: "text-rose-700 dark:text-rose-400",
-  limit_reached: "text-rose-700 dark:text-rose-400",
-  complete: "text-emerald-700 dark:text-emerald-400",
-  waiting_for_message: "text-sky-700 dark:text-sky-400",
-  ended: "text-muted-foreground",
-} satisfies Record<AgentSessionGoalStatus, string>;
+const TONE_CLASS_NAMES = {
+  success: "text-emerald-700 dark:text-emerald-400",
+  warning: "text-amber-700 dark:text-amber-400",
+  danger: "text-rose-700 dark:text-rose-400",
+  info: "text-sky-700 dark:text-sky-400",
+  muted: "text-muted-foreground",
+} satisfies Record<AgentSessionGoalTone, string>;
 
 const ACTION_ICONS = {
   pause: Pause,
@@ -37,7 +38,7 @@ export function AgentChatGoalRow({ model }: { model: AgentSessionGoalRowModel })
           <div className="flex items-start gap-2">
             <Target className="mt-[3px] size-3.5 shrink-0" aria-hidden="true" />
             <span className="shrink-0 font-medium text-foreground">Goal</span>
-            <span className={cn("shrink-0 font-medium", STATUS_CLASS_NAMES[model.status])}>
+            <span className={cn("shrink-0 font-medium", TONE_CLASS_NAMES[model.tone])}>
               {model.statusLabel}
             </span>
             <button

@@ -15,7 +15,7 @@ import {
   type NotificationStreamFrame,
   type WorkspaceSession,
 } from "@openducktor/contracts";
-import { emptyArtifactSummary } from "@openducktor/workflows/test-support";
+import { emptyArtifactSummary, specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { Stream, Effect } from "effect";
 import { HostOperationError, HostPathAccessError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
@@ -103,7 +103,7 @@ const transition = (
     {
       previousStatus: "in_progress",
       task: {
-        workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+        workflow: specPlanBuildReference(),
         id: "task",
         title: "Task",
         status: "blocked",
@@ -520,7 +520,7 @@ test("two browsers add no notification baseline reads and share ordered committe
         {
           previousStatus: "blocked",
           task: {
-            workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+            workflow: specPlanBuildReference(),
             id: "task",
             title: "Task",
             status: "in_progress",
@@ -529,7 +529,7 @@ test("two browsers add no notification baseline reads and share ordered committe
         {
           previousStatus: "in_progress",
           task: {
-            workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+            workflow: specPlanBuildReference(),
             id: "task",
             title: "Task",
             status: "blocked",
@@ -765,7 +765,7 @@ test.each(["baseline", "committed"] as const)(
           ...transition("task-renamed"),
           taskSnapshots: [
             {
-              workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+              workflow: specPlanBuildReference(),
               id: task.id,
               title: "Updated task",
               status: task.status,

@@ -1,3 +1,4 @@
+import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, mock, test } from "bun:test";
 import type {
@@ -53,7 +54,7 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   issueType: "task",
   removeWorktreeOnClose: null,
   labels: [],
-  workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+  workflow: specPlanBuildReference(),
   workflowSteps: [],
   availableActions: [],
   artifactSummary: {

@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import {
   ClientError,
+  isCommandNotFoundError,
   type OpenCodeClient,
   type SessionInfo,
   type ModelRef,
@@ -60,7 +61,7 @@ import {
 } from "./opencode-permissions";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
-import { openCodeGoalCommandText } from "./opencode-goals";
+import { OPENCODE_GOAL_PLUGIN_OFF_MESSAGE, openCodeGoalCommandText } from "./opencode-goals";
 import { iso, modelSelection, projectInboxUser } from "./opencode-message-projection";
 import {
   readReplyForkBoundary,
@@ -696,7 +697,11 @@ export class OpencodeSdkAdapter {
       submitted = true;
       input.onWorkIssued?.();
       options.onSent?.();
-      await sending;
+      await sending.catch((cause: Error) => {
+        if (isCommandNotFoundError(cause))
+          throw new Error(OPENCODE_GOAL_PLUGIN_OFF_MESSAGE, { cause });
+        throw cause;
+      });
       input.onWorkAccepted?.();
     }).catch((cause: Error) => {
       if (!submitted) throw new AgentSessionMessageRefusedError(cause);

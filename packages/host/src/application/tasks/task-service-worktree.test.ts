@@ -1,3 +1,4 @@
+import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import { type GitBranch, type TaskCard, type TaskMetadataPayload } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -26,7 +27,7 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
-  workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+  workflow: specPlanBuildReference(),
   workflowSteps: [],
   availableActions: [],
   labels: [],

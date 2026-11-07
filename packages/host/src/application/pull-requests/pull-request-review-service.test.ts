@@ -1,3 +1,4 @@
+import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { describe, expect, mock, test } from "bun:test";
 import {
   type GitProviderId,
@@ -42,7 +43,7 @@ const makeTask = (pullRequest: PullRequest | undefined): TaskCard => {
     priority: 2,
     issueType: "task",
     removeWorktreeOnClose: null,
-    workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+    workflow: specPlanBuildReference(),
     workflowSteps: [],
     availableActions: [],
     labels: [],

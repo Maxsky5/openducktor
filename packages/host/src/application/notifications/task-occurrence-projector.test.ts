@@ -1,3 +1,4 @@
+import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import { builtinTaskWorkflows, reviewTaskWorkflows } from "../../test-support/task-workflows";
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
@@ -7,7 +8,7 @@ const event = (
   eventId: string,
   status: string,
   previousStatus: string = "open",
-  workflow = { id: "openducktor-spec-plan-build", revision: 3 },
+  workflow = specPlanBuildReference(),
 ): Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }> => ({
   eventId,
   kind: "tasks_updated",
@@ -125,7 +126,7 @@ test("keeps repeated destinations within one mutation distinct and suppresses re
     {
       previousStatus: "in_progress",
       task: {
-        workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+        workflow: specPlanBuildReference(),
         id: "task-1",
         title: "Task",
         status: "blocked",
@@ -134,7 +135,7 @@ test("keeps repeated destinations within one mutation distinct and suppresses re
     {
       previousStatus: "blocked",
       task: {
-        workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+        workflow: specPlanBuildReference(),
         id: "task-1",
         title: "Task",
         status: "in_progress",
@@ -143,7 +144,7 @@ test("keeps repeated destinations within one mutation distinct and suppresses re
     {
       previousStatus: "in_progress",
       task: {
-        workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+        workflow: specPlanBuildReference(),
         id: "task-1",
         title: "Task",
         status: "blocked",

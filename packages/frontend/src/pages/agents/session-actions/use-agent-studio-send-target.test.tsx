@@ -1,6 +1,7 @@
 import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
 import { describe, expect, mock, test } from "bun:test";
 import {
+  GOAL_SLASH_COMMAND,
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   type ReusablePrompt,
 } from "@openducktor/contracts";
@@ -94,6 +95,14 @@ const createDraft = (text: string): AgentChatComposerDraft => ({
 
 const createCompactionDraft = (): AgentChatComposerDraft => ({
   segments: [createSlashCommandSegment(MANUAL_SESSION_COMPACTION_SLASH_COMMAND)],
+  attachments: [],
+});
+
+const createGoalDraft = (): AgentChatComposerDraft => ({
+  segments: [
+    createSlashCommandSegment({ ...GOAL_SLASH_COMMAND, hints: [...GOAL_SLASH_COMMAND.hints] }),
+    createTextSegment(" Ship it"),
+  ],
   attachments: [],
 });
 
@@ -276,6 +285,28 @@ describe("useAgentStudioSendTarget", () => {
       }
     },
   );
+
+  test("blocks a goal command without a selected session", async () => {
+    const sendAgentMessage = mock(async () => null);
+    const runSessionStartWorkflow = mock(createBaseArgs().startPreparedSession);
+    const harness = createTaskHarness({
+      ...createBaseArgs(),
+      selectedSessionIdentity: null,
+      sendAgentMessage,
+      startPreparedSession: runSessionStartWorkflow,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(createGoalDraft(), "default")).rejects.toThrow(
+        "/goal requires an existing selected session.",
+      );
+    });
+
+    expect(sendAgentMessage).not.toHaveBeenCalled();
+    expect(runSessionStartWorkflow).not.toHaveBeenCalled();
+    await harness.unmount();
+  });
 
   test("blocks system compaction without a selected session", async () => {
     const sendAgentMessage = mock(async () => null);

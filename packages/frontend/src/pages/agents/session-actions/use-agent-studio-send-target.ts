@@ -4,6 +4,10 @@ import {
   classifySystemSlashCommandInvocation,
 } from "@openducktor/core";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
+import {
+  GOAL_SLASH_COMMAND,
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+} from "@openducktor/contracts";
 import { useEffect, useMemo, useRef } from "react";
 import type { AgentChatSendTarget } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
 import {
@@ -215,6 +219,9 @@ const requireSystemCommandTarget = (
 ): void => {
   const invocation = classifySystemSlashCommandInvocation(parts);
   if (invocation.kind === "not_system" || selectedSessionIdentity) return;
-  const trigger = invocation.kind === "goal" ? "goal" : "compact";
+  const trigger =
+    invocation.kind === "goal"
+      ? GOAL_SLASH_COMMAND.trigger
+      : MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger;
   throw new Error(`/${trigger} requires an existing selected session.`);
 };

@@ -4,12 +4,8 @@ import type {
   AgentSessionScope,
   AgentSessionUserMessagePart,
 } from "@openducktor/contracts";
-import {
-  type AgentSessionGoalCommand,
-  type AgentUserMessagePart,
-  classifySystemSlashCommandInvocation,
-  goalCommandStartsWork,
-} from "@openducktor/core";
+import { type AgentSessionGoalCommand, goalCommandStartsWork } from "@openducktor/core";
+import { classifySessionMessageSystemCommand } from "./session-message-system-command";
 import { Effect } from "effect";
 import {
   type HostError,
@@ -49,9 +45,7 @@ export const createSessionGoalCommands = ({
   const commandOf = (parts: AgentSessionUserMessagePart[]) =>
     Effect.try({
       try: () => {
-        // SAFETY: Parsed parts never hold an explicit undefined field, which is the only
-        // difference between the contract parts and the core parts.
-        const invocation = classifySystemSlashCommandInvocation(parts as AgentUserMessagePart[]);
+        const invocation = classifySessionMessageSystemCommand(parts);
         return invocation.kind === "goal" ? invocation.command : null;
       },
       catch: (cause) =>

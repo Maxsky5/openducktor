@@ -100,11 +100,8 @@ type PendingGoalCommand = {
   /** The text of the goal command reply, which carries the refusal reason. */
   output?: string;
   replied: boolean;
-  /** A set waits for its record. It checks at the first turn frame, then at the turn result. */
-  checkAt: "reply" | "result";
+  /** A set that ended with no model turn reads the transcript before it reports a refusal. */
   checking: boolean;
-  /** A turn result came while a check ran. */
-  resultSeen: boolean;
   readonly settle: (error?: Error) => void;
 };
 
@@ -282,11 +279,12 @@ const isTurnFrame = (message: SDKMessage): boolean =>
 
 /**
  * Follows the goal through the SDK stream of a root session. The reply of a `/goal` command
- * settles a clear. A set settles when its record appears in the transcript. Claude writes the
- * transcript with a short delay, so a set checks at the first frame of its goal turn and again
- * at the turn result. A result without the record means that Claude refused the goal, and the
- * command reply names the reason. Each turn result with a goal reads the new records, because
- * Claude checks the goal at the end of the turn.
+ * settles a clear. Claude starts a model turn after a `/goal <condition>` only when it set the
+ * goal, and it answers a refusal with text alone. So the first model frame after the reply settles
+ * a set. A result with no model frame reads the transcript: a set record there means that the
+ * turn failed before the model answered, and no record means a refusal, which the reply names.
+ * Each turn result with a goal reads the new records, because Claude checks the goal at the end of
+ * the turn.
  */
 export const observeClaudeGoalFrame = ({
   emit,
@@ -327,31 +325,27 @@ export const observeClaudeGoalFrame = ({
       if (tracking.pending) tracking.pending.settle(error);
       else onFailure(error);
     });
-  if (pending?.kind === "set" && pending.replied && pending.checking) {
-    if (message.type === "result") pending.resultSeen = true;
-    return;
-  }
-  if (
-    pending?.kind === "set" &&
-    pending.replied &&
-    (message.type === "result" || (pending.checkAt === "reply" && isTurnFrame(message)))
-  ) {
-    const atResult = message.type === "result";
-    pending.resultSeen = atResult;
-    pending.checking = true;
-    void read().then(() => {
-      if (tracking.pending !== pending) return;
-      pending.checking = false;
-      if (pending.resultSeen)
+  if (pending?.kind === "set" && pending.replied && !pending.checking) {
+    if (isTurnFrame(message) && pending.objective !== undefined) {
+      const before = tracking.goal;
+      tracking.goal = { objective: pending.objective, ended: false };
+      tracking.clearsSent = 0;
+      if (!sameGoal(before, tracking.goal)) emit(goalEvent(session, now(), tracking.goal));
+      pending.settle();
+      return;
+    }
+    if (message.type === "result") {
+      pending.checking = true;
+      void read().then(() =>
         pending.settle(
           new HostValidationError({
             field: "goal",
             message: pending.output || "Claude did not set the goal.",
           }),
-        );
-      else pending.checkAt = "result";
-    });
-    return;
+        ),
+      );
+      return;
+    }
   }
   if (message.type === "result" && tracking.goal && !tracking.goal.ended) void read();
 };
@@ -380,9 +374,7 @@ export const beginClaudeGoalCommand = (
     kind: command.kind,
     objective: command.kind === "set" ? command.objective : undefined,
     replied: false,
-    checkAt: "reply",
     checking: false,
-    resultSeen: false,
     settle: (error) => {
       if (tracking.pending !== pending) return;
       tracking.pending = null;

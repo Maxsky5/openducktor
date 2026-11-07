@@ -169,6 +169,10 @@ The runtime owns the goal state. OpenDucktor stores no goal data and runs no goa
 | OpenCode 2.2.1 or later | `opencode.goal` plugin, `/goal` command, `rpc.opencode.goal.changed` event | OpenCode pauses the goal with "Stopped by the user" | Plugin `get` |
 | Claude | `/goal` input and `goal_status` transcript records | Keeps the goal; the next message continues it | Last `goal_status` record of the resumed chain |
 
+- Claude answers a refused `/goal <condition>` with text alone, and starts a model turn only after it sets the goal. The first model frame after the command reply therefore confirms a set. Claude writes its transcript on a 100 ms timer, so the adapter does not wait for the `goal_status` record before it confirms.
+- Codex marks the goal `blocked` when a turn fails, so the session goes idle. After an interrupt that did not pause the goal, Codex starts the next goal turn when the thread is idle.
+- The OpenCode goal plugin `opencode.goal` is not a protected plugin, so a config entry `"-opencode.goal"` in `plugins` turns it off. The goal read then fails with `rpc.unavailable`, and the adapter reports no goal. A `/goal` command fails with `CommandNotFoundError`, and the adapter names the config entry in the reason.
+
 ### History
 
 | Field | Meaning |

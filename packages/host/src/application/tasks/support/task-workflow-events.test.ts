@@ -1,5 +1,8 @@
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
-import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
+import {
+  createReviewTaskWorkflow,
+  specPlanBuildReference,
+} from "@openducktor/workflows/test-support";
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Effect, Result } from "effect";
@@ -31,7 +34,7 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
     plan: { present: false },
     qaReport: { present: false },
   },
-  workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+  workflow: specPlanBuildReference(),
   workflowSteps: [],
   availableActions: [],
   agentWorkflows: {

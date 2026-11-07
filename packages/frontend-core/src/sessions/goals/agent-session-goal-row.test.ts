@@ -7,14 +7,20 @@ describe("buildAgentSessionGoalRow", () => {
   });
 
   test.each([
-    { status: "active", label: "Active", actions: ["pause", "clear"] },
-    { status: "paused", label: "Paused", actions: ["resume", "clear"] },
-    { status: "blocked", label: "Blocked", actions: ["resume", "clear"] },
-    { status: "limit_reached", label: "Limit reached", actions: ["resume", "clear"] },
-    { status: "complete", label: "Complete", actions: ["clear"] },
-  ] as const)("labels $status and offers $actions", ({ status, label, actions }) => {
+    { status: "active", label: "Active", tone: "success", actions: ["pause", "clear"] },
+    { status: "paused", label: "Paused", tone: "warning", actions: ["resume", "clear"] },
+    { status: "blocked", label: "Blocked", tone: "danger", actions: ["resume", "clear"] },
+    {
+      status: "limit_reached",
+      label: "Limit reached",
+      tone: "danger",
+      actions: ["resume", "clear"],
+    },
+    { status: "complete", label: "Complete", tone: "success", actions: ["clear"] },
+  ] as const)("labels $status and offers $actions", ({ status, label, tone, actions }) => {
     expect(buildAgentSessionGoalRow({ objective: "Ship", status }, true)).toMatchObject({
       statusLabel: label,
+      tone,
       actions,
       detail: null,
     });

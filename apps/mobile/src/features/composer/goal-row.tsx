@@ -1,15 +1,16 @@
-import type { AgentSessionGoalControlAction, AgentSessionGoalStatus } from "@openducktor/contracts";
+import type { AgentSessionGoalControlAction } from "@openducktor/contracts";
 import { AGENT_SESSION_GOAL_ACTION_LABELS } from "@openducktor/frontend-core/sessions/goals/agent-session-goal-row";
 import type { AgentSessionGoalRowModel } from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
 import { type ReactElement, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
-import { type AppTheme, touchSlop } from "@/theme/tokens";
+import { touchSlop } from "@/theme/tokens";
 import { Icon, type IconName } from "@/ui/icon";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
+import { goalActionsOpen, goalToneColor, pressGoalAction } from "./goal-row-state";
 
 /** The desktop `-mb-1.5`: the row tucks under the composer card. */
 const TUCK = 6;
@@ -20,23 +21,6 @@ const ACTION_ICONS = {
   resume: "play",
   clear: "x",
 } satisfies Record<AgentSessionGoalControlAction, IconName>;
-
-const statusColor = (theme: AppTheme, status: AgentSessionGoalStatus): string => {
-  switch (status) {
-    case "active":
-    case "complete":
-      return theme.desktop.successMuted;
-    case "paused":
-      return theme.desktop.warningMuted;
-    case "blocked":
-    case "limit_reached":
-      return theme.desktop.destructiveMuted;
-    case "waiting_for_message":
-      return theme.desktop.infoMuted;
-    case "ended":
-      return theme.desktop.mutedForeground;
-  }
-};
 
 /**
  * The goal of the session on the top edge of the composer, as the desktop goal row: the status,
@@ -59,7 +43,7 @@ export function GoalRow({
           <Icon name="target" size={14} colorValue={theme.desktop.mutedForeground} />
         </View>
         <Text style={styles.label}>Goal</Text>
-        <Text style={[styles.status, { color: statusColor(theme, model.status) }]}>
+        <Text style={[styles.status, { color: goalToneColor(theme, model.tone) }]}>
           {model.statusLabel}
         </Text>
         <Touchable
@@ -80,10 +64,8 @@ export function GoalRow({
               key={action}
               action={action}
               pending={model.pendingAction === action}
-              disabled={!commandsOpen || model.pendingAction !== null}
-              onPress={() => {
-                if (commandsOpen) model.onAction(action);
-              }}
+              disabled={!goalActionsOpen(model, commandsOpen)}
+              onPress={() => pressGoalAction(model, commandsOpen, action)}
             />
           ))}
         </View>

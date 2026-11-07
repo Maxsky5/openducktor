@@ -31,6 +31,7 @@ const goalServer = (
     goal?: typeof nativeGoal | null;
     active?: boolean;
     command?: () => Response;
+    goalRead?: () => Response;
   } = {},
 ) =>
   prepareFixture((request) => {
@@ -41,7 +42,8 @@ const goalServer = (
         urls: [],
         paths: { tmp: "/tmp" },
       });
-    if (isGoalRead(request)) return Response.json({ output: options.goal ?? null });
+    if (isGoalRead(request))
+      return options.goalRead?.() ?? Response.json({ output: options.goal ?? null });
     if (request.url.pathname === "/api/session/active")
       return Response.json({ data: options.active ? { [ref.externalSessionId]: true } : {} });
     if (isGoalCommand(request)) return options.command?.() ?? noContent();
@@ -84,6 +86,46 @@ describe("OpenCode goals", () => {
       );
       expect(fixture.requests.some(isGoalRead)).toBe(false);
       expect(fixture.requests.some(isGoalCommand)).toBe(false);
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("reads no goal when the user config turns the goal plugin off", async () => {
+    const fixture = goalServer({
+      goalRead: () =>
+        Response.json(
+          {
+            _tag: "RpcError",
+            type: "rpc.unavailable",
+            message: "RPC is unavailable: opencode.goal",
+          },
+          { status: 400 },
+        ),
+    });
+    const runtime = await fixture.prepare();
+    try {
+      const read = await runtime.connection.readSessionSources(ref.repoPath, [sessionInput]);
+      expect(read.sources[0]?.goal).toBeNull();
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("fails the session read on another goal read failure", async () => {
+    const fixture = goalServer({
+      goalRead: () =>
+        Response.json(
+          { _tag: "RpcInternalError", type: "rpc.internal", message: "goal storage failed" },
+          { status: 500 },
+        ),
+    });
+    const runtime = await fixture.prepare();
+    try {
+      const read = await runtime.connection
+        .readSessionSources(ref.repoPath, [sessionInput])
+        .catch((cause: unknown) => cause);
+      expect(String(JSON.stringify(read))).toContain("goal storage failed");
     } finally {
       await runtime.release();
     }
@@ -192,6 +234,23 @@ describe("OpenCode goals", () => {
         delivery: "queue",
       });
       expect(statuses).toEqual(["busy"]);
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test("names the plugin config when OpenCode has no /goal command", async () => {
+    const fixture = goalServer({
+      command: () =>
+        Response.json({ _tag: "CommandNotFoundError", command: "goal" }, { status: 404 }),
+    });
+    const runtime = await fixture.prepare();
+    try {
+      await runtime.connection.resumeSession(sessionInput);
+      const result = await runtime.connection
+        .controlGoal({ ...sessionInput, command: { kind: "pause" } })
+        .catch((cause: unknown) => cause);
+      expect(String(result)).toContain('Remove "-opencode.goal" from "plugins"');
     } finally {
       await runtime.release();
     }

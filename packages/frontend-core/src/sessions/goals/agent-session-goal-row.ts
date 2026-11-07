@@ -14,6 +14,19 @@ const STATUS_LABELS = {
   ended: "Goal ended",
 } satisfies Record<AgentSessionGoalStatus, string>;
 
+/** The color family of a goal status, which each client maps to its own theme colors. */
+export type AgentSessionGoalTone = "success" | "warning" | "danger" | "info" | "muted";
+
+const STATUS_TONES = {
+  active: "success",
+  paused: "warning",
+  blocked: "danger",
+  limit_reached: "danger",
+  complete: "success",
+  waiting_for_message: "info",
+  ended: "muted",
+} satisfies Record<AgentSessionGoalStatus, AgentSessionGoalTone>;
+
 const RESUMABLE_STATUSES = new Set<AgentSessionGoalStatus>(["paused", "blocked", "limit_reached"]);
 
 export const WAITING_FOR_MESSAGE_DETAIL = "Your next message continues the goal.";
@@ -23,6 +36,7 @@ export type AgentSessionGoalRow = {
   readonly objective: string;
   readonly status: AgentSessionGoalStatus;
   readonly statusLabel: string;
+  readonly tone: AgentSessionGoalTone;
   /** The runtime reason, or how a waiting goal continues. */
   readonly detail: string | null;
   readonly actions: readonly AgentSessionGoalControlAction[];
@@ -41,6 +55,7 @@ export const buildAgentSessionGoalRow = (
     objective: goal.objective,
     status: goal.status,
     statusLabel: STATUS_LABELS[goal.status],
+    tone: STATUS_TONES[goal.status],
     detail:
       goal.status === "waiting_for_message" ? WAITING_FOR_MESSAGE_DETAIL : (goal.reason ?? null),
     actions,

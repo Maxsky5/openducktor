@@ -3,7 +3,10 @@ import { type NotificationOccurrence, type NotificationSettings } from "@openduc
 import { createNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
 import { createBrowserNotificationBridge } from "./browser-notification-bridge";
 import { createBrowserNotificationCoordinator } from "./browser-notification-coordinator";
-import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
+import {
+  createSpecPlanBuildNotificationSettings,
+  specPlanBuildReference,
+} from "@openducktor/workflows/test-support";
 
 type CoordinatorMessage =
   | {
@@ -324,7 +327,7 @@ const observeSettlement = async (promise: Promise<unknown>): Promise<string> =>
 const occurrence: NotificationOccurrence = {
   occurrenceId: "workflow.closed:/repo:task-1:event-1",
   kind: "workflow.closed",
-  workflow: { id: "openducktor-spec-plan-build", revision: 3 },
+  workflow: specPlanBuildReference(),
   copy: { title: "Task closed", body: "Task moved to Closed." },
   repoPath: "/repo",
   repositoryLabel: "Repo",

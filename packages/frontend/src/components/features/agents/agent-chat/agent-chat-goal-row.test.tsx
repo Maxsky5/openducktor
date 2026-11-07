@@ -7,6 +7,7 @@ const rowModel = (overrides: Partial<AgentSessionGoalRowModel> = {}): AgentSessi
   objective: "Ship the goal feature with tests",
   status: "paused",
   statusLabel: "Paused",
+  tone: "warning",
   detail: "Stopped by the user",
   actions: ["resume", "clear"],
   pendingAction: null,
