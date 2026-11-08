@@ -395,15 +395,6 @@ body:has([data-separator="active"]) [data-browser-surface] {
   content: none;
 }
 
-@keyframes odt-border-ray-run {
-  from {
-    stroke-dashoffset: 0;
-  }
-  to {
-    stroke-dashoffset: calc(var(--odt-border-ray-perimeter) * -1);
-  }
-}
-
 @keyframes odt-task-tab-status-glow {
   0%,
   100% {
@@ -487,30 +478,24 @@ body:has([data-separator="active"]) [data-browser-surface] {
     0 0 18px color-mix(in srgb, var(--color-warning-ring) 30%, transparent);
 }
 
-.kanban-active-session-ray,
+/* Transform animations move the bars, so the ray keeps running while the main thread is busy. */
 .odt-border-ray {
-  overflow: visible;
-  --odt-border-ray-turn-duration: 3000ms;
-  --odt-border-ray-perimeter: 2262.539816339745px;
-  --odt-border-ray-length: 320px;
-  --odt-border-ray-stroke-width: 4.4;
   --odt-border-ray-color: var(--status-running);
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
 }
 
 .odt-border-ray-segment {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-  shape-rendering: geometricPrecision;
-  stroke-dasharray: var(--odt-border-ray-length)
-    calc(var(--odt-border-ray-perimeter) - var(--odt-border-ray-length));
-  animation: odt-border-ray-run var(--odt-border-ray-turn-duration) linear infinite;
+  position: absolute;
+  inset: 0;
 }
 
-.odt-border-ray-segment {
-  stroke: var(--odt-border-ray-color);
-  stroke-width: var(--odt-border-ray-stroke-width);
+.odt-border-ray-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--odt-border-ray-color);
 }
 
 .xterm .live-region {
@@ -548,8 +533,7 @@ body:has([data-separator="active"]) [data-browser-surface] {
 @media (prefers-reduced-motion: reduce) {
   .onboarding-stage-enter,
   .running-status-dot::before,
-  .running-status-dot::after,
-  .odt-border-ray-segment {
+  .running-status-dot::after {
     animation: none;
   }
 }

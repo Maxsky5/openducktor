@@ -710,7 +710,6 @@ describe("AgentChatComposer", () => {
 
     expect(html).toContain('class="odt-border-ray"');
     expect(html).toContain("--odt-border-ray-color:#d97706");
-    expect(html).toContain("--odt-border-ray-stroke-width:2.6");
   });
 
   test("renders a Codex-colored border ray while a no-profile Codex session is working", () => {
