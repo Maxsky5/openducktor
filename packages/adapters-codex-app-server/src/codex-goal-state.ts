@@ -15,6 +15,8 @@ type ThreadGoalState = {
   revision: number;
   /** An accepted set or resume waits for its goal update. */
   activating: boolean;
+  /** Set and resume requests that Codex has not answered yet. */
+  pendingActivations: number;
   /** The thread has no running turn, and Codex starts the next goal turn by itself. */
   waiting: boolean;
 };
@@ -42,7 +44,7 @@ export class CodexGoalState {
     }
     let state = threads.get(threadId);
     if (!state) {
-      state = { goal: null, revision: 0, activating: false, waiting: false };
+      state = { goal: null, revision: 0, activating: false, pendingActivations: 0, waiting: false };
       threads.set(threadId, state);
     }
     return state;
@@ -58,11 +60,26 @@ export class CodexGoalState {
     return this.peek(runtimeId, threadId)?.goal?.status === "active";
   }
 
-  /** The goal is active, or an accepted set or resume waits for its goal update. */
+  /**
+   * The goal is active, or a set or resume can make it active: Codex has not answered the request,
+   * or its goal update has not arrived. Stop pauses the goal in each case.
+   */
   mayBeActive(runtimeId: string, threadId: string): boolean {
+    const state = this.peek(runtimeId, threadId);
     return (
-      this.isActive(runtimeId, threadId) || this.peek(runtimeId, threadId)?.activating === true
+      this.isActive(runtimeId, threadId) ||
+      state?.activating === true ||
+      (state?.pendingActivations ?? 0) > 0
     );
+  }
+
+  /** Records a set or resume request until Codex answers it. Call the result when it answers. */
+  beginActivation(runtimeId: string, threadId: string): () => void {
+    const state = this.thread(runtimeId, threadId);
+    state.pendingActivations += 1;
+    return () => {
+      state.pendingActivations -= 1;
+    };
   }
 
   revision(runtimeId: string, threadId: string): number {

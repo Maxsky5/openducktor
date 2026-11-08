@@ -205,8 +205,10 @@ export class CodexRuntimeSessionEvents {
   private readonly contextUsage: CodexContextUsageTracker;
   private readonly goalState = new CodexGoalState();
   /** The goal reads of the adapter. Only Codex goal notifications change a goal. */
-  readonly goals: Pick<CodexGoalState, "goal" | "mayBeActive" | "revision" | "acceptActivation"> =
-    this.goalState;
+  readonly goals: Pick<
+    CodexGoalState,
+    "goal" | "mayBeActive" | "revision" | "beginActivation" | "acceptActivation"
+  > = this.goalState;
   /** The user messages of the current turn of each session, by runtime and thread. */
   private readonly turnMessageIdsByRuntimeId = new Map<string, Map<string, string[]>>();
 

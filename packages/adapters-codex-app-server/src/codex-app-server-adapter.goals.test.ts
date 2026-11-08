@@ -272,6 +272,25 @@ describe("CodexAppServerAdapter goals", () => {
     }
   });
 
+  test("pauses a goal before Stop while Codex has not answered a Resume", async () => {
+    const session = await startGoalSession();
+    try {
+      await session.emitGoal({ status: "paused" });
+      session.transport.beforeGoalAnswer = async () => {
+        session.transport.beforeGoalAnswer = null;
+        await session.adapter.pauseGoalForStop(session.ref);
+      };
+      await session.adapter.controlGoal({ ...session.ref, command: { kind: "resume" } });
+
+      expect(goalCalls(session).map(({ params }) => params)).toEqual([
+        { threadId: THREAD_ID, origin: "user", status: "active" },
+        { threadId: THREAD_ID, origin: "user", status: "paused" },
+      ]);
+    } finally {
+      session.unsubscribe();
+    }
+  });
+
   test("does not wait for a goal turn when Codex reports the goal as not active first", async () => {
     const session = await startGoalSession();
     session.transport.beforeGoalAnswer = () => session.emitGoal({ status: "budgetLimited" });

@@ -1018,12 +1018,13 @@ export class CodexAppServerAdapter
   ): Promise<void> {
     const { goals } = this.runtimeEvents;
     const revisionBefore = goals.revision(session.runtimeId, session.threadId);
+    const endActivation = goals.beginActivation(session.runtimeId, session.threadId);
     try {
       await runCodexGoalCommand(
         this.runtimeClients.clientForRuntime(session.runtimeId),
         session.threadId,
         { kind: "set", objective },
-      );
+      ).finally(endActivation);
       goals.acceptActivation(session.runtimeId, session.threadId, revisionBefore);
     } catch (cause) {
       const reason = cause instanceof Error ? cause.message : String(cause);
@@ -1048,6 +1049,10 @@ export class CodexAppServerAdapter
     (options.assertCurrent ?? input.workStartGuard?.assertCurrent)?.();
     const { goals } = this.runtimeEvents;
     const revisionBefore = goals.revision(session.runtimeId, session.threadId);
+    // A Stop while Codex has not answered a set or resume still pauses the goal.
+    const endActivation = goalCommandStartsWork(input.command)
+      ? goals.beginActivation(session.runtimeId, session.threadId)
+      : () => {};
     await runCodexGoalCommand(
       this.runtimeClients.clientForRuntime(session.runtimeId),
       session.threadId,
@@ -1058,7 +1063,7 @@ export class CodexAppServerAdapter
           options.onSent?.();
         },
       },
-    );
+    ).finally(endActivation);
     markAgentWorkAccepted(input);
     if (
       goalCommandStartsWork(input.command) &&
