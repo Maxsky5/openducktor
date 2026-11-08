@@ -20,11 +20,10 @@ import {
   toStartedSessionRoot,
 } from "../../application/agent-sessions/agent-session-control-summary";
 import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
-import { errorMessage, type HostError, toHostOperationError } from "../../effect/host-errors";
+import { type HostError, toHostOperationError } from "../../effect/host-errors";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import {
   AgentSessionMessageAcceptedError,
-  messageAcceptedFailure,
   toAgentSessionSendError,
 } from "../../ports/agent-session-send-error";
 import type {
@@ -167,31 +166,6 @@ export const createOpenCodeSessionControlAdapter = ({
     if (input.systemPrompt) request.systemPrompt = input.systemPrompt;
     return request;
   };
-
-  /**
-   * Goal mode of a launch: the goal kickoff joins the turn that the first message started. A
-   * failure keeps the accepted message, so the user sets the goal with `/goal` instead.
-   */
-  const setLaunchGoal = (
-    input: Parameters<AgentSessionControlAdapterPort["sendUserMessage"]>[0],
-    accepted: AcceptedAgentInput,
-    objective: string,
-  ): Effect.Effect<AcceptedAgentInput, HostError> =>
-    Effect.tryPromise({
-      try: () =>
-        connection.controlGoal(
-          goalRequest({ ...input, command: { kind: "set", objective } }, undefined),
-          { delivery: "steer" },
-        ),
-      catch: (cause) => {
-        const reason = errorMessage(cause);
-        return messageAcceptedFailure(
-          toSessionRef(input),
-          accepted,
-          "live_update",
-        )(new Error(`OpenCode did not set the goal: ${reason} Send /goal ${objective} to set it.`));
-      },
-    }).pipe(Effect.as(accepted));
 
   const controls: AgentSessionControlAdapterPort = {
     startSession: (input) => {
@@ -362,11 +336,6 @@ export const createOpenCodeSessionControlAdapter = ({
                       ),
                   ),
                 ),
-          ),
-          Effect.flatMap((accepted) =>
-            options?.goal
-              ? setLaunchGoal(input, accepted, options.goal.objective)
-              : Effect.succeed(accepted),
           ),
         ),
       );

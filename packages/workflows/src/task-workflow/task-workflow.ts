@@ -281,11 +281,11 @@ export const createTaskWorkflow = (
   }
   for (const launch of agentSteps.flatMap((step) => step.launchActions)) {
     const placeholder =
-      launch.goal && unsupportedGoalObjectivePlaceholder(launch.goal.defaultObjective);
+      launch.goal && unsupportedGoalObjectivePlaceholder({ ...launch, goal: launch.goal });
     if (placeholder)
       throw new WorkflowEvaluationError(
         "invalid_definition",
-        `The default goal of launch action "${launch.id}" in task workflow "${definition.id}" uses placeholder "${placeholder}". Use only {{task.id}} and {{task.title}}.`,
+        `The default goal of launch action "${launch.id}" in task workflow "${definition.id}" uses placeholder "${placeholder}". Use only {{task.id}} and {{task.title}}, and {{humanFeedback}} in a launch that collects human feedback.`,
       );
   }
   const workflowLaunchAction = lookup(

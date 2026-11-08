@@ -47,7 +47,10 @@ import type { AutomaticWorkflowLaunchRequest } from "../workflow-launch-types";
 export type AutomaticLaunchInput = Omit<AutomaticWorkflowLaunchRequest, "policy"> & {
   policy: Omit<AutomaticWorkflowLaunchRequest["policy"], "startCheck">;
 };
-import type { AgentSessionSendOptions } from "../../../ports/agent-session-live-adapter-port";
+import type {
+  AgentSessionControlGoalInput,
+  AgentSessionSendOptions,
+} from "../../../ports/agent-session-live-adapter-port";
 import {
   AgentSessionMessageAcceptedError,
   AgentSessionMessageRejectedError,
@@ -120,6 +123,7 @@ export const createLaunchHarness = async (
     stops: string[] = [];
   const sends: AgentSessionControlSendInput[] = [];
   const sendOptions: Array<AgentSessionSendOptions | undefined> = [];
+  const goalCommands: AgentSessionControlGoalInput[] = [];
   const publications: string[] = [];
   const appliedEvents: string[] = [];
   const removedWorktrees: string[] = [];
@@ -231,6 +235,12 @@ export const createLaunchHarness = async (
               model: input.model ? { ...input.model, runtimeKind } : undefined,
             });
           input.onWorkAccepted?.();
+        }),
+      controlGoal: (input, options) =>
+        Effect.sync(() => {
+          goalCommands.push(input);
+          options?.onSent?.();
+          return { type: "command_accepted" as const, commandName: "goal" };
         }),
       sendUserMessage: (input, options) =>
         Effect.gen(function* () {
@@ -735,6 +745,7 @@ export const createLaunchHarness = async (
     stops,
     sends,
     sendOptions,
+    goalCommands,
     publications,
     appliedEvents,
     removedWorktrees,

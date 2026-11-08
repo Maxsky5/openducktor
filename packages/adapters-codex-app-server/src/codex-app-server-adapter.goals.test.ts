@@ -11,7 +11,6 @@ import {
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
 } from "./codex-app-server-adapter.test-harness";
-import { CodexMessageAcceptedError } from "./codex-message-accepted-error";
 
 const THREAD_ID = "thread/start-runtime-live";
 
@@ -323,41 +322,6 @@ describe("CodexAppServerAdapter goals", () => {
       await flushCodexAdapterWork();
 
       expect(session.snapshot()?.activity).toBe("idle");
-    } finally {
-      session.unsubscribe();
-    }
-  });
-
-  test("sets the goal of a launch after Codex starts the turn of the first message", async () => {
-    const session = await startGoalSession();
-    try {
-      await session.adapter.sendUserMessage(
-        codexUserMessageInput({ parts: [{ kind: "text", text: "Implement the task" }] }),
-        { goal: { objective: "Implement task task-1" } },
-      );
-      const methods = session.transport.calls.map(({ method }) => method);
-      expect(methods.slice(methods.indexOf("turn/start"))).toEqual([
-        "turn/start",
-        "thread/goal/set",
-      ]);
-      expect(goalCalls(session)[0]?.params).toEqual({
-        threadId: THREAD_ID,
-        origin: "user",
-        status: "active",
-        objective: "Implement task task-1",
-      });
-
-      session.transport.goalError = codexRpcError("goals feature is disabled");
-      const sending = session.adapter.sendUserMessage(
-        codexUserMessageInput({ parts: [{ kind: "text", text: "Again" }] }),
-        { goal: { objective: "Implement task task-1" } },
-      );
-      await expect(sending).rejects.toBeInstanceOf(CodexMessageAcceptedError);
-      await expect(sending).rejects.toMatchObject({
-        acceptedMessage: { message: "Again" },
-        message:
-          "Codex could not set the goal: goals feature is disabled. Send /goal Implement task task-1 to set the goal.",
-      });
     } finally {
       session.unsubscribe();
     }

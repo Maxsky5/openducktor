@@ -159,7 +159,7 @@ The runtime owns the goal state. OpenDucktor stores no goal data and runs no goa
 
 - The adapter reports the native goal in the `goal` field of the live snapshot. No field means no goal. Statuses are `active`, `paused`, `blocked`, `limit_reached`, `complete`, `waiting_for_message`, and `ended`, with an optional runtime `reason`.
 - `controlGoal` runs one native goal action: set, pause, resume, or clear. It returns `command_accepted` with `commandName: "goal"` after the runtime accepts the action. It fails with the runtime reason when the runtime refuses. It never writes the snapshot goal.
-- A `sendUserMessage` call with the `goal` send option sets that goal with the first message of a workflow launch. A goal failure after the runtime accepted the message raises `AgentSessionMessageAcceptedError`, which tells the user to send `/goal <objective>`.
+- Goal mode of a workflow launch calls `controlGoal` with `set` instead of `sendUserMessage`. The launch holds its new session as running, so it skips the busy check of a `/goal` message.
 - At resume, the adapter publishes the goal that its runtime restores.
 - When the runtime starts the next goal turn by itself, the adapter emits `session_turn_finished` at each turn end. It keeps `activity: "running"` with `foregroundTurnActive: false` until the next turn starts. It emits `session_idle` only when the goal can no longer continue.
 

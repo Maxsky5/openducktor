@@ -161,34 +161,7 @@ export const createClaudeMessageControls = ({
     });
 
   return {
-    /** Goal mode of a launch sets the goal first. The message then joins the goal turn. */
-    sendUserMessage: (
-      input: AgentSessionControlSendInput,
-      options?: AgentSessionSendOptions,
-    ): Effect.Effect<AcceptedAgentUserMessage, HostError> => {
-      const goal = options?.goal;
-      if (!goal) return sendAndPublish(input, options);
-      const target: GoalTarget = {
-        repoPath: input.repoPath,
-        runtimeKind: input.runtimeKind,
-        workingDirectory: input.workingDirectory,
-        externalSessionId: input.externalSessionId,
-        sessionScope: input.sessionScope,
-      };
-      return runGoalCommand(
-        target,
-        { kind: "set", objective: goal.objective },
-        { assertCurrent: options.assertCurrent },
-      ).pipe(
-        Effect.andThen(requireSessionContext(input.externalSessionId)),
-        Effect.flatMap((session) =>
-          sendAndPublish(
-            { ...input, delivery: canStartUserTurn(session) ? "new_turn" : "steer" },
-            options,
-          ),
-        ),
-      );
-    },
+    sendUserMessage: sendAndPublish,
     controlGoal: (
       input: Parameters<AgentSessionControlAdapterPort["controlGoal"]>[0],
       options?: SendControls,

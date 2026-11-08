@@ -58,15 +58,16 @@ import { cn } from "@/lib/utils";
 
 export function SessionStartModal({ model }: { model: SessionStartModalModel }): ReactElement {
   const { open, title, description, onOpenChange } = model;
-  const kickoffDraft = useSessionStartKickoffDraft({
-    requestId: model.requestId,
-    open,
-    prompt: model.kickoffPrompt,
-  });
   const goalDraft = useSessionStartGoalDraft({
     requestId: model.requestId,
     open,
     goalMode: model.goalMode,
+  });
+  const kickoffDraft = useSessionStartKickoffDraft({
+    requestId: model.requestId,
+    open,
+    prompt: model.kickoffPrompt,
+    replacedByGoal: goalDraft.enabled,
   });
   const speed = useSessionStartSpeed(model);
   const startup = useStartupDialogAttempt(
@@ -264,15 +265,18 @@ function SessionStartForm({
             />
           ) : null}
 
-          <SessionStartKickoffField
-            draft={kickoffDraft}
-            disabled={isStarting}
-            loading={model.isKickoffPromptLoading}
-            error={model.kickoffPromptError}
-            onRetry={model.onRetryKickoffPrompt}
-          />
-
-          <SessionStartGoalField draft={goalDraft} disabled={isStarting} />
+          {/* One block: each reveal owns the space above it, so a closing field ends flush. */}
+          <div className="flex flex-col">
+            <SessionStartGoalField draft={goalDraft} disabled={isStarting} />
+            <SessionStartKickoffField
+              draft={kickoffDraft}
+              disabled={isStarting}
+              loading={model.isKickoffPromptLoading}
+              error={model.kickoffPromptError}
+              onRetry={model.onRetryKickoffPrompt}
+              className={goalDraft.offered ? "pt-5" : undefined}
+            />
+          </div>
         </fieldset>
       </DialogBody>
 

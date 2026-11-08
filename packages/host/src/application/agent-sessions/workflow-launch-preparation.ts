@@ -1,9 +1,11 @@
-import type {
-  AgentSessionModelSelection,
-  AgentSessionLiveRef,
-  RepoConfig,
-  WorkflowLaunchDecision,
-  WorkflowLaunchRequest,
+import {
+  type AgentSessionModelSelection,
+  type AgentSessionLiveRef,
+  type AgentSessionUserMessagePart,
+  GOAL_SLASH_COMMAND,
+  type RepoConfig,
+  type WorkflowLaunchDecision,
+  type WorkflowLaunchRequest,
 } from "@openducktor/contracts";
 import type {
   WorkflowLaunchAttemptRequest,
@@ -234,9 +236,9 @@ export const prepareWorkflowLaunch = (
         return yield* launchValidationError(
           `Action '${actionId}' does not offer Goal mode. Start it without a goal.`,
         );
-      if (request.instruction.kind === "none")
+      if (request.instruction.kind !== "kickoff" || request.instruction.text !== undefined)
         return yield* launchValidationError(
-          "Goal mode needs a first message. Start the session with its first message.",
+          "Goal mode replaces the first message. Start the session without a custom first message.",
         );
       const { version } = yield* deps.registry.status(runtimeKind);
       const goals = resolveRuntimeGoalAvailability(descriptor, version);
@@ -270,10 +272,11 @@ export const prepareWorkflowLaunch = (
       task: toPromptTask(task),
       overrides,
     }).prompt;
-    const parts =
-      request.instruction.kind === "kickoff"
-        ? [{ kind: "text" as const, text: yield* kickoffText(task) }]
-        : messageParts;
+    let parts = messageParts;
+    // Goal mode sends the goal instead of the kickoff, as a `/goal` message would.
+    if (request.goal) parts = goalCommandParts(request.goal.objective);
+    else if (request.instruction.kind === "kickoff")
+      parts = [{ kind: "text", text: yield* kickoffText(task) }];
     return {
       kind: "prepared" as const,
       action,
@@ -283,6 +286,11 @@ export const prepareWorkflowLaunch = (
       parts,
     };
   });
+
+const goalCommandParts = (objective: string): AgentSessionUserMessagePart[] => [
+  { kind: "slash_command", command: { ...GOAL_SLASH_COMMAND, hints: [] } },
+  { kind: "text", text: ` ${objective}` },
+];
 
 export const isStartupRepair = (
   request: WorkflowLaunchAttemptRequest,

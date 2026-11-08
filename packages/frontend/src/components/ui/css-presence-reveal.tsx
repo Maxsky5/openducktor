@@ -1,5 +1,4 @@
 import type { ReactElement, ReactNode } from "react";
-import { cn } from "@/lib/utils";
 import { CssPresenceList, useCssPresence } from "./css-presence";
 
 /**
@@ -12,7 +11,7 @@ export function CssPresenceReveal({
   children,
 }: {
   open: boolean;
-  className?: string;
+  className?: string | undefined;
   children: ReactNode;
 }): ReactElement {
   return (
@@ -36,9 +35,10 @@ function RevealContent({
   children: ReactNode;
 }): ReactElement {
   const { presenceProps } = useCssPresence();
+  // The inner box holds the space, so a closed reveal clips its padding with its height.
   return (
-    <div {...presenceProps} className={cn("css-presence css-presence-reveal", className)}>
-      {children}
+    <div {...presenceProps} className="css-presence css-presence-reveal">
+      <div className={className}>{children}</div>
     </div>
   );
 }

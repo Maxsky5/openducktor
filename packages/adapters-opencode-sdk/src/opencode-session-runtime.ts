@@ -100,13 +100,10 @@ export type OpencodeSessionRuntimeConnection = Pick<
   | "stopSession"
 > & {
   releaseSession: (ref: SessionRef) => Promise<void>;
-  /**
-   * Runs one native goal action. `delivery: "steer"` adds the kickoff of a new goal to the
-   * running turn, as a launch does after its first message.
-   */
+  /** Runs one native goal action. */
   controlGoal: (
     input: OpenCodeGoalControlInput,
-    options?: { onSent?: (() => void) | undefined; delivery?: "steer" },
+    options?: { onSent?: (() => void) | undefined },
   ) => Promise<void>;
   readSessionSources: (
     repoPath: string,
@@ -1144,7 +1141,7 @@ export const createPrepareOpencodeSessionRuntime =
         try {
           await (attachTails.get(goalInput.repoPath) ?? Promise.resolve());
           await controller.controlGoal(goalInput, {
-            delivery: goalOptions?.delivery ?? (working ? "steer" : "queue"),
+            delivery: working ? "steer" : "queue",
             onSent: () => {
               if (turn) turn.submitted = true;
               goalOptions?.onSent?.();

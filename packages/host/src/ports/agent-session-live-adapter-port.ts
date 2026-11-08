@@ -44,12 +44,6 @@ export type AgentSessionSendOptions = {
    * fails before this call, the runtime did not get the message.
    */
   readonly onSent?: () => void;
-  /**
-   * Goal mode of a workflow launch. The adapter sets this goal with the message, in the order
-   * that its runtime needs. A goal failure after the runtime accepted the message raises
-   * `AgentSessionMessageAcceptedError`.
-   */
-  readonly goal?: { readonly objective: string } | undefined;
 };
 
 /** One native goal action for a session. */

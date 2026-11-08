@@ -14,6 +14,8 @@ type SessionStartKickoffFieldProps = {
   loading: boolean | undefined;
   error: string | null | undefined;
   onRetry: (() => void) | undefined;
+  /** The space above the field. The field closes it when Goal mode replaces the message. */
+  className?: string | undefined;
 };
 
 export function SessionStartKickoffField({
@@ -22,6 +24,7 @@ export function SessionStartKickoffField({
   loading,
   error,
   onRetry,
+  className,
 }: SessionStartKickoffFieldProps): JSX.Element {
   return (
     <>
@@ -38,40 +41,38 @@ export function SessionStartKickoffField({
           </Button>
         </div>
       ) : null}
-      {draft.hasPrompt ? (
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <Switch
-              id="customize-kickoff"
-              checked={draft.enabled}
-              disabled={disabled}
-              onCheckedChange={draft.setEnabled}
-            />
-            <label htmlFor="customize-kickoff" className="text-sm font-medium">
-              Customize first message
-            </label>
-          </div>
-          <CssPresenceReveal open={draft.enabled} className="flex flex-col gap-1.5 pt-3">
-            <label htmlFor="kickoff-prompt" className="text-sm font-medium">
-              First message
-            </label>
-            <Textarea
-              id="kickoff-prompt"
-              value={draft.text}
-              disabled={disabled}
-              rows={8}
-              aria-invalid={draft.invalid}
-              aria-describedby={draft.invalid ? "kickoff-prompt-error" : undefined}
-              onChange={(event) => draft.setText(event.target.value)}
-            />
-            {draft.invalid ? (
-              <p id="kickoff-prompt-error" role="alert" className="text-sm text-destructive">
-                {BLANK_KICKOFF_PROMPT_ERROR}
-              </p>
-            ) : null}
-          </CssPresenceReveal>
+      <CssPresenceReveal open={draft.hasPrompt} className={className}>
+        <div className="flex items-center gap-2">
+          <Switch
+            id="customize-kickoff"
+            checked={draft.enabled}
+            disabled={disabled}
+            onCheckedChange={draft.setEnabled}
+          />
+          <label htmlFor="customize-kickoff" className="text-sm font-medium">
+            Customize first message
+          </label>
         </div>
-      ) : null}
+        <CssPresenceReveal open={draft.enabled} className="flex flex-col gap-1.5 pt-3">
+          <label htmlFor="kickoff-prompt" className="text-sm font-medium">
+            First message
+          </label>
+          <Textarea
+            id="kickoff-prompt"
+            value={draft.text}
+            disabled={disabled}
+            rows={8}
+            aria-invalid={draft.invalid}
+            aria-describedby={draft.invalid ? "kickoff-prompt-error" : undefined}
+            onChange={(event) => draft.setText(event.target.value)}
+          />
+          {draft.invalid ? (
+            <p id="kickoff-prompt-error" role="alert" className="text-sm text-destructive">
+              {BLANK_KICKOFF_PROMPT_ERROR}
+            </p>
+          ) : null}
+        </CssPresenceReveal>
+      </CssPresenceReveal>
     </>
   );
 }

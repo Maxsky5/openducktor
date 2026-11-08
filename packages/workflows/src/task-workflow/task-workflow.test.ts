@@ -36,17 +36,29 @@ describe("createTaskWorkflow", () => {
       SPEC_PLAN_BUILD_DEFINITION.steps.flatMap((step) =>
         step.kind === "agent"
           ? step.launchActions.flatMap((launch) => {
-              const objective = launchGoalObjective(launch, task);
+              const objective = launchGoalObjective(launch, task, "Rename the button.");
               return objective === undefined ? [] : [[launch.id, objective]];
             })
           : [],
       ),
     );
     expect(goals).toEqual({
-      build_implementation_start: 'Implement task task-7 "Add goals".',
-      build_after_qa_rejected:
-        'Fix the findings of the latest QA report for task task-7 "Add goals".',
-      build_after_human_request_changes: 'Apply the requested changes for task task-7 "Add goals".',
+      build_implementation_start: [
+        'Implement task task-7 "Add goals" as its description, spec, and implementation plan define.',
+        "",
+        "The goal is met when all of these are true:",
+        "- Each requirement and acceptance criterion of the task works in the code.",
+        "- Every check that the repository instructions require passes.",
+        "- odt_apply_workflow_event with eventId build-completed succeeded.",
+        "",
+        "Use taskId task-7 for every task-bound odt_* tool call. Change only what the task needs. Stop and ask the user when the task conflicts with the code, or a check fails for a cause outside the task.",
+      ].join("\n"),
+      build_after_qa_rejected: expect.stringContaining(
+        'Resolve the latest QA rejection of task task-7 "Add goals".',
+      ),
+      build_after_human_request_changes: expect.stringContaining(
+        'Apply the changes that human review requested for task task-7 "Add goals":\n\nRename the button.\n\nThe goal is met',
+      ),
     });
   });
 
@@ -60,6 +72,21 @@ describe("createTaskWorkflow", () => {
       };
     });
     expect(create).toThrow('uses placeholder "task.description"');
+  });
+
+  test("accepts {{humanFeedback}} in a default goal only for a launch that collects feedback", () => {
+    const withFeedbackGoal = (context: "human_feedback" | undefined) =>
+      withChange((definition) => {
+        const step = definition.steps.find((candidate) => candidate.kind === "agent");
+        if (step?.kind !== "agent") throw new Error("The review workflow has no agent step.");
+        step.launchActions[0] = {
+          ...step.launchActions[0]!,
+          context,
+          goal: { defaultObjective: "Apply {{humanFeedback}}" },
+        };
+      });
+    expect(withFeedbackGoal(undefined)).toThrow('uses placeholder "humanFeedback"');
+    expect(withFeedbackGoal("human_feedback")).not.toThrow();
   });
 
   test("reads states, roles, artifacts, and issue types from the definition", () => {

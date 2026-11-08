@@ -263,8 +263,6 @@ const toLivePendingQuestion = (
 type CodexSendOptions = {
   onSent?: () => void;
   assertCurrent?: (() => void) | undefined;
-  /** Goal mode of a launch. Codex sets the goal after it starts the turn of the message. */
-  goal?: { readonly objective: string } | undefined;
 };
 
 export type CodexGoalControlInput = SessionRef &
@@ -1000,39 +998,7 @@ export class CodexAppServerAdapter
       false,
     );
     if (!session) throw new Error("The Codex session closed before sending. Reopen the chat.");
-    const accepted = await this.sendUserMessageFromBoundSession(
-      input,
-      session,
-      systemInvocation,
-      options,
-    );
-    if (options.goal) await this.setLaunchGoal(session, accepted, options.goal.objective);
-    return accepted;
-  }
-
-  /** Sets the goal of a launch while the turn of its first message runs. */
-  private async setLaunchGoal(
-    session: CodexSessionState,
-    accepted: AcceptedAgentUserMessage,
-    objective: string,
-  ): Promise<void> {
-    const { goals } = this.runtimeEvents;
-    const revisionBefore = goals.revision(session.runtimeId, session.threadId);
-    const endActivation = goals.beginActivation(session.runtimeId, session.threadId);
-    try {
-      await runCodexGoalCommand(
-        this.runtimeClients.clientForRuntime(session.runtimeId),
-        session.threadId,
-        { kind: "set", objective },
-      ).finally(endActivation);
-      goals.acceptActivation(session.runtimeId, session.threadId, revisionBefore);
-    } catch (cause) {
-      const reason = cause instanceof Error ? cause.message : String(cause);
-      throw new CodexMessageAcceptedError(
-        accepted,
-        new Error(`${reason}. Send /goal ${objective} to set the goal.`, { cause }),
-      );
-    }
+    return this.sendUserMessageFromBoundSession(input, session, systemInvocation, options);
   }
 
   /**

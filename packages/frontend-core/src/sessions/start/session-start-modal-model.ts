@@ -38,7 +38,7 @@ export type SessionStartModalConfirmDraft = Omit<
 
 /** Goal mode of a launch that declares it. */
 export type SessionStartGoalMode = {
-  /** The default goal text, with the task ID and title filled in. */
+  /** The default goal text, with the task and any human feedback filled in. */
   defaultObjective: string;
   /** Why the selected runtime cannot use Goal mode, or null. */
   unavailableReason: string | null;

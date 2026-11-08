@@ -42,6 +42,24 @@ import {
 } from "./ids";
 import type { BuiltinRoleId } from "../roles/ids";
 
+/**
+ * A Builder goal states its outcome, its proof, its scope, and when to ask, as the OpenAI
+ * `define-goal` skill advises. Goal mode sends no kickoff, so the goal also names the submit step.
+ */
+const builderGoal = (outcome: string, criteria: string[], scope: string, askWhen: string) =>
+  [
+    outcome,
+    "",
+    "The goal is met when all of these are true:",
+    ...[
+      ...criteria,
+      "Every check that the repository instructions require passes.",
+      "odt_apply_workflow_event with eventId build-completed succeeded.",
+    ].map((criterion) => `- ${criterion}`),
+    "",
+    `Use taskId {{task.id}} for every task-bound odt_* tool call. ${scope} Stop and ask the user when ${askWhen}`,
+  ].join("\n");
+
 type SpecPlanBuildOutcome = {
   when: WorkflowCondition;
   to: SpecPlanBuildStateId | null;
@@ -468,7 +486,14 @@ const specPlanBuildSteps = [
         ...fresh(),
         template: { kind: "kickoff", id: "messages.build_start" },
         targetBranch: true,
-        goal: { defaultObjective: 'Implement task {{task.id}} "{{task.title}}".' },
+        goal: {
+          defaultObjective: builderGoal(
+            'Implement task {{task.id}} "{{task.title}}" as its description, spec, and implementation plan define.',
+            ["Each requirement and acceptance criterion of the task works in the code."],
+            "Change only what the task needs.",
+            "the task conflicts with the code, or a check fails for a cause outside the task.",
+          ),
+        },
       },
       {
         id: "build_after_qa_rejected",
@@ -478,8 +503,15 @@ const specPlanBuildSteps = [
         selectWhen: qaRejected,
         requiresWorktree: true,
         goal: {
-          defaultObjective:
-            'Fix the findings of the latest QA report for task {{task.id}} "{{task.title}}".',
+          defaultObjective: builderGoal(
+            'Resolve the latest QA rejection of task {{task.id}} "{{task.title}}".',
+            [
+              "Each finding of the latest QA report is checked against the current code.",
+              "Each valid finding in the task scope is fixed, and your summary gives the reason for each declined finding.",
+            ],
+            "Change only what the findings need.",
+            "a finding needs a product decision.",
+          ),
         },
       },
       {
@@ -494,7 +526,12 @@ const specPlanBuildSteps = [
         showWhen: false,
         description: "Address human review feedback.",
         goal: {
-          defaultObjective: 'Apply the requested changes for task {{task.id}} "{{task.title}}".',
+          defaultObjective: builderGoal(
+            'Apply the changes that human review requested for task {{task.id}} "{{task.title}}":\n\n{{humanFeedback}}',
+            ["Each requested change is in the code."],
+            "Change only what the requests need.",
+            "a request is unclear or conflicts with the spec.",
+          ),
         },
       },
       {

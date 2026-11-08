@@ -381,6 +381,34 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
+  test("Goal mode hides the first message and starts without it", () => {
+    const onConfirm = mock(() => {});
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          onConfirm,
+          kickoffPrompt: "Implement this task.",
+          goalMode: { defaultObjective: 'Implement task T-1 "Goals".', unavailableReason: null },
+        }),
+      }),
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Customize first message" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "First message" }), {
+      target: { value: "Only fix the tests." },
+    });
+
+    fireEvent.click(screen.getByRole("switch", { name: "Goal mode" }));
+    expect(screen.queryByRole("switch", { name: "Customize first message" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /start session/i }));
+    expect(onConfirm).toHaveBeenCalledWith({
+      runInBackground: false,
+      startMode: "fresh",
+      sourceSessionOptionValue: null,
+      goalObjective: 'Implement task T-1 "Goals".',
+    });
+    unmount();
+  });
+
   test("Goal mode stays off with the reason when the runtime has no goals", () => {
     const { unmount } = render(
       createElement(SessionStartModal, {

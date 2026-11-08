@@ -39,13 +39,20 @@ export function SessionStartGoalField({
         <label htmlFor="session-start-goal" className="text-sm font-medium">
           Goal
         </label>
+        <p id="session-start-goal-hint" className="text-sm text-muted-foreground">
+          The agent gets this goal instead of a first message, and works until the goal is met.
+        </p>
         <Textarea
           id="session-start-goal"
           value={draft.text}
           disabled={disabled}
-          rows={3}
+          rows={11}
           aria-invalid={draft.error !== null}
-          aria-describedby={draft.error ? "session-start-goal-error" : undefined}
+          aria-describedby={
+            draft.error
+              ? "session-start-goal-hint session-start-goal-error"
+              : "session-start-goal-hint"
+          }
           onChange={(event) => draft.setText(event.target.value)}
         />
         {draft.error ? (

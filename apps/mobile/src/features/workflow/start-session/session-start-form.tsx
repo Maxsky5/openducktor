@@ -21,7 +21,7 @@ import {
 import { useSessionStartSpeed } from "@openducktor/frontend-core/sessions/start/use-session-start-speed";
 import { type ReactElement, useMemo, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { useCommandBlocked } from "@/host-session/active-session-context";
 import { useAppTheme } from "@/theme/app-theme-context";
@@ -191,15 +191,16 @@ export function SessionStartForm({
 }): ReactElement {
   const model = useMemo(() => ({ ...shown, ...reportingChoices(shown, onEdit) }), [onEdit, shown]);
   const speed = useSessionStartSpeed(model);
-  const kickoff = useSessionStartKickoffDraft({
-    requestId: model.requestId,
-    open: model.open,
-    prompt: model.kickoffPrompt,
-  });
   const goal = useSessionStartGoalDraft({
     requestId: model.requestId,
     open: model.open,
     goalMode: model.goalMode,
+  });
+  const kickoff = useSessionStartKickoffDraft({
+    requestId: model.requestId,
+    open: model.open,
+    prompt: model.kickoffPrompt,
+    replacedByGoal: goal.enabled,
   });
   const availability = resolveSessionStartAvailability(model, {
     kickoffInvalid: kickoff.invalid,
@@ -313,10 +314,12 @@ export function SessionStartForm({
           </FormField>
         ) : null}
         {model.isKickoffPromptLoading ? <LoadingLine label="Loading first message…" /> : null}
-        {kickoff.hasPrompt ? (
-          <KickoffPromptField kickoff={kickoff} busy={busy} onEdit={onEdit} />
-        ) : null}
         <GoalModeField goal={goal} busy={busy} onEdit={onEdit} />
+        {kickoff.hasPrompt ? (
+          <Animated.View entering={REVEAL_ENTERING} exiting={REVEAL_EXITING} layout={REVEAL_LAYOUT}>
+            <KickoffPromptField kickoff={kickoff} busy={busy} onEdit={onEdit} />
+          </Animated.View>
+        ) : null}
       </FormBody>
     </ActionForm>
   );
@@ -501,7 +504,7 @@ function KickoffPromptField({
         />
       </View>
       {kickoff.enabled ? (
-        <Animated.View entering={FadeIn.duration(motion.base)}>
+        <Animated.View entering={REVEAL_ENTERING} exiting={REVEAL_EXITING}>
           <TextField
             label="First message"
             value={kickoff.text}
@@ -519,6 +522,11 @@ function KickoffPromptField({
     </View>
   );
 }
+
+// A field that a switch shows fades in and out, and the fields under it slide to their place.
+const REVEAL_ENTERING = FadeIn.duration(motion.base);
+const REVEAL_EXITING = FadeOut.duration(motion.fast);
+const REVEAL_LAYOUT = LinearTransition.duration(motion.base).easing(motion.easeOutCurve);
 
 /** The Goal mode switch of a launch that offers it, and the goal field while it is on. */
 function GoalModeField({
@@ -538,7 +546,7 @@ function GoalModeField({
           label="Goal mode"
           description={
             goal.unavailableReason ??
-            "The agent keeps working until the runtime finds the goal met."
+            "The agent gets a goal instead of a first message, and works until the goal is met."
           }
           value={goal.enabled}
           onValueChange={(enabled) => {
@@ -549,7 +557,7 @@ function GoalModeField({
         />
       </View>
       {goal.enabled ? (
-        <Animated.View entering={FadeIn.duration(motion.base)}>
+        <Animated.View entering={REVEAL_ENTERING} exiting={REVEAL_EXITING}>
           <TextField
             label="Goal"
             value={goal.text}

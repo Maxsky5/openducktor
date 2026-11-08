@@ -53,7 +53,10 @@ export type WorkflowLaunchDependencies = WorkflowLaunchPreparationDependencies &
   messageDelivery: Pick<AgentMessageDeliveryService, "submit">;
   /** `sendUserMessage` must apply the normal workflow send policy. */
   runtime: SessionLaunchRuntimePort &
-    Pick<AgentSessionLiveStateService, "publishTaskSessionRecords" | "updateSessionModel">;
+    Pick<
+      AgentSessionLiveStateService,
+      "publishTaskSessionRecords" | "updateSessionModel" | "controlGoal"
+    >;
 };
 
 /** Decides, when a waiting automatic launch gets its turn, whether it still starts. */

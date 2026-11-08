@@ -11,6 +11,7 @@ describe("useSessionStartKickoffDraft", () => {
       requestId: "one",
       open: true,
       prompt: "Build the task.",
+      replacedByGoal: false,
     } satisfies Props);
     await harness.mount();
     try {
@@ -23,7 +24,12 @@ describe("useSessionStartKickoffDraft", () => {
       expect(harness.getLatest()).toMatchObject({ enabled: true, text: "Build the task." });
       await harness.run((draft) => draft.setText("   "));
       expect(harness.getLatest()).toMatchObject({ invalid: true, value: "   " });
-      await harness.update({ requestId: "two", open: true, prompt: "Review the task." });
+      await harness.update({
+        requestId: "two",
+        open: true,
+        prompt: "Review the task.",
+        replacedByGoal: false,
+      });
       expect(harness.getLatest()).toMatchObject({
         enabled: false,
         invalid: false,
@@ -39,10 +45,36 @@ describe("useSessionStartKickoffDraft", () => {
       requestId: "one",
       open: true,
       prompt: " \n ",
+      replacedByGoal: false,
     } satisfies Props);
     await harness.mount();
     try {
       expect(harness.getLatest()).toMatchObject({ hasPrompt: false, value: undefined });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("Goal mode replaces the prompt and keeps the custom text for later", async () => {
+    const props: Props = {
+      requestId: "one",
+      open: true,
+      prompt: "Build the task.",
+      replacedByGoal: false,
+    };
+    const harness = createHookHarness(useSessionStartKickoffDraft, props);
+    await harness.mount();
+    try {
+      await harness.run((draft) => draft.setEnabled(true));
+      await harness.run((draft) => draft.setText(" "));
+      await harness.update({ ...props, replacedByGoal: true });
+      expect(harness.getLatest()).toMatchObject({
+        hasPrompt: false,
+        invalid: false,
+        value: undefined,
+      });
+      await harness.update(props);
+      expect(harness.getLatest()).toMatchObject({ enabled: true, text: " ", invalid: true });
     } finally {
       await harness.unmount();
     }

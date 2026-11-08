@@ -127,7 +127,6 @@ export const createRuntimeHarness = (
     readonly readSessionSources?: OpencodeSessionRuntimeConnection["readSessionSources"];
     /** Replaces the native runtime release after it records the call. */
     readonly release?: () => Promise<void>;
-    readonly controlGoalError?: Error;
   } = {},
 ): RuntimeHarness => {
   let listener: ((signal: OpencodeSessionRuntimeSignal) => void | Promise<void>) | null = null;
@@ -226,7 +225,6 @@ export const createRuntimeHarness = (
     },
     controlGoal: async (input, goalOptions) => {
       controlCalls.push({ operation: "goal", input });
-      if (options.controlGoalError) throw options.controlGoalError;
       goalOptions?.onSent?.();
     },
     stopSession: async (input) => {

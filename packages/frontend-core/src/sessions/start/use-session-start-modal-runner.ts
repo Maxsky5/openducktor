@@ -162,6 +162,7 @@ export function useSessionStartModalRunner({
     const defaultObjective = launchGoalObjective(
       intent.taskWorkflow.launchAction(intent.launchActionId, intent.role),
       task,
+      intent.kickoff?.request.humanFeedback,
     );
     if (defaultObjective === undefined) return undefined;
     return {

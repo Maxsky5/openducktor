@@ -2757,41 +2757,4 @@ describe("Claude host live-session adapter goals", () => {
     await Effect.runPromise(harness.adapter.controlGoal(goalInput({ kind: "clear" })));
     expect(await snapshotGoal()).toBeUndefined();
   });
-
-  test("sets the goal before the first message of a launch", async () => {
-    const { harness, sent, reply, observe, accept, transcript, snapshotGoal } = await goalHarness();
-    await Effect.runPromise(harness.adapter.startSession(startInput));
-    harness.setSendUserMessage((input) => {
-      sent.push(input);
-      if (sent.length === 1) {
-        setTimeout(async () => {
-          reply(OBJECTIVE, `Goal set: ${OBJECTIVE}`);
-          await appendFile(transcript, `${JSON.stringify(setRecord)}\n`);
-          observe({ type: "assistant", parent_tool_use_id: null, message: { content: [] } });
-        }, 0);
-        return accept("goal-1", `/goal ${OBJECTIVE}`);
-      }
-      return accept("message-1", "Start the build");
-    });
-    const accepted = await Effect.runPromise(
-      harness.adapter.sendUserMessage(
-        {
-          ...sessionRef,
-          sessionScope: startInput.sessionScope,
-          delivery: "new_turn",
-          parts: [{ kind: "text", text: "Start the build" }],
-          submissionId: "submission-1",
-        },
-        { goal: { objective: OBJECTIVE } },
-      ),
-    );
-    expect(accepted).toMatchObject({ messageId: "message-1" });
-    expect(sent.map((input) => input.parts.at(-1))).toEqual([
-      { kind: "text", text: ` ${OBJECTIVE}` },
-      { kind: "text", text: "Start the build" },
-    ]);
-    expect(sent[0]?.submissionId).toBeUndefined();
-    expect(sent[1]?.submissionId).toBe("submission-1");
-    expect(await snapshotGoal()).toEqual({ objective: OBJECTIVE, status: "waiting_for_message" });
-  });
 });

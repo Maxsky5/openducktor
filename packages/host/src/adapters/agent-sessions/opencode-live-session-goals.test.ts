@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
-import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
 import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import {
   createLifecycle,
@@ -117,45 +116,6 @@ describe("OpenCode live session goals", () => {
         input: expect.objectContaining({ ...ref, sessionScope, command: { kind: "pause" } }),
       });
       expect(await readGoal(adapter)).toBeUndefined();
-    } finally {
-      await Effect.runPromise(adapter.releaseRuntime());
-    }
-  });
-
-  test("sets the goal of a launch after the runtime accepts its first message", async () => {
-    const { adapter, harness } = await prepareAdapter();
-    try {
-      const accepted = await Effect.runPromise(
-        adapter.sendUserMessage(
-          { delivery: "new_turn", ...ref, sessionScope, parts: [{ kind: "text", text: "Hello" }] },
-          { goal: { objective: "Ship the release" } },
-        ),
-      );
-      expect(accepted).toMatchObject({ type: "user_message" });
-      expect(harness.controlCalls.map(({ operation }) => operation)).toEqual(["send", "goal"]);
-      expect(harness.controlCalls[1]?.input).toMatchObject({
-        command: { kind: "set", objective: "Ship the release" },
-      });
-    } finally {
-      await Effect.runPromise(adapter.releaseRuntime());
-    }
-  });
-
-  test("keeps the accepted message when the launch goal fails, and names /goal", async () => {
-    const harness = createRuntimeHarness({
-      controlGoalError: new Error("A goal objective is limited to 4000 characters."),
-    });
-    const { adapter } = await prepareAdapter(harness);
-    try {
-      const failure = await Effect.runPromise(
-        adapter.sendUserMessage(
-          { delivery: "new_turn", ...ref, sessionScope, parts: [{ kind: "text", text: "Hello" }] },
-          { goal: { objective: "Ship the release" } },
-        ),
-      ).catch((cause: unknown) => cause);
-      expect(failure).toBeInstanceOf(AgentSessionMessageAcceptedError);
-      expect(String(failure)).toContain("Do not send the message again.");
-      expect(String(failure)).toContain("Send /goal Ship the release to set it.");
     } finally {
       await Effect.runPromise(adapter.releaseRuntime());
     }

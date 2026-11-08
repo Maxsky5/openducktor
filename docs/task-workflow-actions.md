@@ -61,11 +61,13 @@ Stop also cancels Autopilot submissions that are still being prepared. A cancele
 
 A launch action that declares `goal` shows a Goal mode switch in its start form, in the desktop app, the browser runner, and the mobile app. The built-in Spec, Plan, Build workflow declares it for Start Implementation, Fix QA Rejection, and Apply Human Changes.
 
-- The switch is off each time the form opens. When it is on, the Goal field shows the default goal text of the launch with the task ID and title.
+- The switch is off each time the form opens. When it is on, the Goal field shows the default goal text of the launch with the task ID, the task title, and any human feedback.
+- Goal mode replaces the first message. When the switch is on, the form hides "Customize first message", and the agent receives only the goal.
+- Each built-in default goal follows the OpenAI `define-goal` skill. It states the outcome, the checks that prove it, the `build-completed` submit step, the task scope, and when the agent must stop and ask.
 - An empty goal or a goal over 4000 characters disables the start and shows the reason.
 - A runtime without goals, such as OpenCode older than 2.2.1, disables the switch and shows the reason with its update action.
-- The launch request carries `goal` only when the switch is on. The host accepts it only for a manual launch whose action declares `goal`, that sends a first message, and whose runtime has goals.
-- The runtime adapter sets the goal with the first message, in the order that its runtime needs. The agent receives the same first message as without Goal mode.
+- The launch request carries `goal` only when the switch is on. The host accepts it only for a manual kickoff launch without a custom first message, whose action declares `goal`, and whose runtime has goals.
+- The host sends no kickoff. It sets the goal with the runtime goal action, and the runtime starts the goal turn. If the start fails, the launch keeps `/goal <objective>` as its unsent instruction.
 - After the start, the goal is a normal session goal. Workflow events and task status changes do not end, pause, or clear it.
 - Autopilot starts never use Goal mode.
 

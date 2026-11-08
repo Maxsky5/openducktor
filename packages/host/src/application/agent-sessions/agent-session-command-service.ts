@@ -418,7 +418,7 @@ export const createAgentSessionCommandService = ({
             const accepted = yield* deliverWithOwner(
               owner,
               ref,
-              (guard) => runtime.sendUserMessage(request, { ...guard, goal: options?.goal }),
+              (guard) => runtime.sendUserMessage(request, guard),
               options?.onSent,
             );
             if (accepted.type === "command_accepted") return accepted;
