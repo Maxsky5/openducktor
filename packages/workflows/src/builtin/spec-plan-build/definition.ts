@@ -487,7 +487,6 @@ const specPlanBuildSteps = [
         template: { kind: "kickoff", id: "messages.build_start" },
         targetBranch: true,
         goal: {
-          template: { kind: "goal", id: "messages.build_goal" },
           defaultObjective: builderGoal(
             'Implement task {{task.id}} "{{task.title}}" as its description, spec, and implementation plan define.',
             ["Each requirement and acceptance criterion of the task works in the code."],
@@ -504,7 +503,6 @@ const specPlanBuildSteps = [
         selectWhen: qaRejected,
         requiresWorktree: true,
         goal: {
-          template: { kind: "goal", id: "messages.build_goal" },
           defaultObjective: builderGoal(
             'Resolve the latest QA rejection of task {{task.id}} "{{task.title}}".',
             [
@@ -528,7 +526,6 @@ const specPlanBuildSteps = [
         showWhen: false,
         description: "Address human review feedback.",
         goal: {
-          template: { kind: "goal", id: "messages.build_goal" },
           defaultObjective: builderGoal(
             'Apply the changes that human review requested for task {{task.id}} "{{task.title}}":\n\n{{humanFeedback}}',
             ["Each requested change is in the code."],

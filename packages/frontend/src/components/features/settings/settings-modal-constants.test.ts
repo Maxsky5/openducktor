@@ -5,6 +5,14 @@ import { describe, expect, test } from "bun:test";
 import { countPromptErrorsByRoleTab, REPOSITORY_SECTIONS } from "./settings-modal-constants";
 
 describe("settings-modal-constants", () => {
+  test("lists the goal prompt with the shared prompts, not with a role", () => {
+    const tabs = workflowSettingsData(builtinCompiledCatalogFixture).promptTabs;
+    const tabsWithGoalPrompt = tabs
+      .filter((tab) => tab.templates.some(({ id }) => id === "workflow.goal"))
+      .map(({ id }) => id);
+    expect(tabsWithGoalPrompt).toEqual(["shared"]);
+  });
+
   test("counts validation errors per prompt role tab", () => {
     const counts = countPromptErrorsByRoleTab(
       {

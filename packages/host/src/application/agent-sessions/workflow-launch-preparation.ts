@@ -242,7 +242,7 @@ export const prepareWorkflowLaunch = (
     if (request.goal) {
       if (request.policy.kind === "automatic")
         return yield* launchValidationError("Automatic starts cannot use Goal mode.");
-      if (!action.goal)
+      if (!action.goal || !workflow.prompts.hasGoalPrompt)
         return yield* launchValidationError(
           `Action '${actionId}' does not offer Goal mode. Start it without a goal.`,
         );

@@ -24,15 +24,12 @@ const reviewTask = (overrides: Partial<TaskFacts> = {}): TaskFacts => ({
 });
 
 const REVIEW_GOAL_TEMPLATE = {
-  id: "messages.review_goal",
+  id: "workflow.goal",
   purpose: "goal",
   builtinVersion: 1,
   template: "Write the goal of the review.",
 } as const;
-const reviewGoal = (defaultObjective: string) => ({
-  defaultObjective,
-  template: { kind: "goal" as const, id: REVIEW_GOAL_TEMPLATE.id },
-});
+const reviewGoal = (defaultObjective: string) => ({ defaultObjective });
 
 const withGoalChange = (change: (definition: WorkflowDefinition) => void) => {
   const definition = reviewTaskDefinition();
@@ -52,12 +49,13 @@ const withChange = (change: (definition: WorkflowDefinition) => void) => {
 };
 
 describe("createTaskWorkflow", () => {
-  test("shows the Builder goal prompt with the Builder prompts", () => {
+  test("shows the goal prompt with the shared workflow prompts", () => {
     const template = specPlanBuildWorkflow.prompts.templates.find(
-      ({ id }) => id === "messages.build_goal",
+      ({ id }) => id === "workflow.goal",
     );
     expect(template?.purpose).toBe("goal");
-    expect(specPlanBuildWorkflow.prompts.templateRoles("messages.build_goal")).toEqual(["build"]);
+    expect(specPlanBuildWorkflow.prompts.hasGoalPrompt).toBe(true);
+    expect(specPlanBuildWorkflow.prompts.templateRoles("workflow.goal")).toEqual([]);
   });
 
   test("declares Goal mode only for the implementation and rework launches", () => {
@@ -113,8 +111,16 @@ describe("createTaskWorkflow", () => {
       };
       return templates === "with goal prompt" ? withGoalChange(change) : withChange(change);
     };
-    expect(goalOn("without goal prompt")).toThrow('has no prompt template "messages.review_goal"');
+    const withoutPrompt = goalOn("without goal prompt")();
+    expect(withoutPrompt.prompts.hasGoalPrompt).toBe(false);
+    expect(() =>
+      withoutPrompt.prompts.goalPrompt({
+        launchActionId: "any",
+        task: { taskId: "task-1", title: "Review" },
+      }),
+    ).toThrow("has no goal prompt");
     const workflow = goalOn("with goal prompt")();
+    expect(workflow.prompts.hasGoalPrompt).toBe(true);
     const launchId = workflow.definition.steps.flatMap((step) =>
       step.kind === "agent" ? step.launchActions : [],
     )[0]!.id;
@@ -124,7 +130,7 @@ describe("createTaskWorkflow", () => {
         task: { taskId: "task-1", title: "Review" },
       }).prompt,
     ).toBe("Write the goal of the review.");
-    const goalTemplate = workflow.prompts.templates.find(({ id }) => id === "messages.review_goal");
+    const goalTemplate = workflow.prompts.templates.find(({ id }) => id === "workflow.goal");
     expect(goalTemplate?.purpose).toBe("goal");
     expect(
       workflow.prompts.goalPrompt({

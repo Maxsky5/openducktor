@@ -149,8 +149,8 @@ export const SPEC_PLAN_BUILD_PROMPT_TEMPLATES = {
     template:
       "Address the requested changes for this task.\n\nRequested changes from human review:\n{{humanFeedback}}\n\nSubmit the completed change with odt_apply_workflow_event with eventId build-completed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
-  "messages.build_goal": {
-    id: "messages.build_goal",
+  "workflow.goal": {
+    id: "workflow.goal",
     purpose: "goal",
     builtinVersion: 1,
     template: [

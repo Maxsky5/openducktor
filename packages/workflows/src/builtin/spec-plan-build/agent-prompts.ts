@@ -42,12 +42,10 @@ export type BuildAgentPromptInput = {
 
 /** The prompt of the Spec, Plan, Build workflow that a launch sends into a running session. */
 export type AgentMessageTemplateId = "messages.build_git_conflict";
-/** The prompt of the Spec, Plan, Build workflow that writes the goal of a Goal mode launch. */
-export type AgentGoalTemplateId = "messages.build_goal";
 /** The prompts of the Spec, Plan, Build workflow that start a session. */
 export type AgentKickoffTemplateId = Exclude<
   Extract<SpecPlanBuildPromptId, `messages.${string}`>,
-  AgentMessageTemplateId | AgentGoalTemplateId
+  AgentMessageTemplateId
 >;
 
 export type BuildAgentKickoffPromptInput = {

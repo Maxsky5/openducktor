@@ -140,7 +140,9 @@ export type TaskPrompts = {
   systemPrompt(input: SystemPromptInput): BuiltAgentPrompt;
   kickoffPrompt(input: KickoffPromptInput): BuiltAgentPrompt;
   messagePrompt(input: MessagePromptInput): BuiltAgentPrompt;
-  /** The goal prompt of a launch action that offers Goal mode. */
+  /** The workflow provides the goal prompt, so a launch action that declares `goal` offers Goal mode. */
+  readonly hasGoalPrompt: boolean;
+  /** The goal prompt of the workflow, which tells a model how to write the goal of a launch. */
   goalPrompt(input: GoalPromptInput): BuiltAgentPrompt;
   readOnlyRejection(input: { role: string; overrides?: RepoPromptOverrides | undefined }): string;
   /** The enabled repository override wins over the enabled global override. */
@@ -153,18 +155,6 @@ export type TaskPrompts = {
 };
 
 type LaunchTemplate = { templateId: string; kind: "kickoff" | "message" };
-
-/** The goal prompt of each launch action that offers Goal mode. */
-const goalTemplateIds = (definition: CompiledWorkflowDefinition) =>
-  new Map(
-    definition.steps.flatMap((step) =>
-      step.kind === "agent"
-        ? step.launchActions.flatMap((launch) =>
-            launch.goal ? [[launch.id, launch.goal.template.id] as const] : [],
-          )
-        : [],
-    ),
-  );
 
 /** How an error message names a prompt. */
 const promptName = (template: OwnedPromptTemplate, roleIds: readonly string[]): string =>
@@ -244,7 +234,6 @@ const checkTemplates = (
   definition: CompiledWorkflowDefinition,
   workflowTemplatesById: ReadonlyMap<string, OwnedPromptTemplate>,
   launchTemplates: ReadonlyMap<string, LaunchTemplate>,
-  goalTemplates: ReadonlyMap<string, string>,
 ): void => {
   const requireTemplate = (id: string, purpose: PromptPurpose, user: string) => {
     const template = workflowTemplatesById.get(id);
@@ -269,9 +258,8 @@ const checkTemplates = (
   for (const [launchActionId, launch] of launchTemplates) {
     requireTemplate(launch.templateId, launch.kind, `launch action "${launchActionId}"`);
   }
-  for (const [launchActionId, templateId] of goalTemplates) {
-    requireTemplate(templateId, "goal", `the Goal mode of launch action "${launchActionId}"`);
-  }
+  if (workflowTemplatesById.has(WORKFLOW_PROMPT_IDS.goal))
+    requireTemplate(WORKFLOW_PROMPT_IDS.goal, "goal", "Goal mode");
 };
 
 export const createTaskPrompts = (
@@ -331,8 +319,7 @@ export const createTaskPrompts = (
   const createsPullRequest = (roleId: string) =>
     rolesById.has(roleId) &&
     (definition.pullRequestRoles.length === 0 || definition.pullRequestRoles.includes(roleId));
-  const goalTemplates = goalTemplateIds(definition);
-  checkTemplates(definition, workflowTemplatesById, launchTemplates, goalTemplates);
+  checkTemplates(definition, workflowTemplatesById, launchTemplates);
   const templateRolesByKey = new Map(
     templates.map((entry) => {
       const templateRoles =
@@ -345,10 +332,7 @@ export const createTaskPrompts = (
                   (step) =>
                     step.kind === "agent" &&
                     step.roleId === role.id &&
-                    step.launchActions.some(
-                      (launch) =>
-                        launch.template.id === entry.id || launch.goal?.template.id === entry.id,
-                    ),
+                    step.launchActions.some((launch) => launch.template.id === entry.id),
                 ),
           )
           .map(({ id }) => id);
@@ -580,12 +564,12 @@ export const createTaskPrompts = (
         overrides,
       );
     },
+    hasGoalPrompt: workflowTemplatesById.has(WORKFLOW_PROMPT_IDS.goal),
     goalPrompt: ({ launchActionId, task, humanFeedback, overrides }) => {
-      const templateId = goalTemplates.get(launchActionId);
-      if (templateId === undefined)
-        throw new Error(`Launch action "${launchActionId}" does not offer Goal mode.`);
+      if (!workflowTemplatesById.has(WORKFLOW_PROMPT_IDS.goal))
+        throw new Error(`Task workflow "${definition.id}" has no goal prompt.`);
       return buildPrompt(
-        [workflowKey(templateId)],
+        [workflowKey(WORKFLOW_PROMPT_IDS.goal)],
         placeholderValues({ role: roleOfLaunch(launchActionId, undefined), task, humanFeedback }),
         overrides,
       );

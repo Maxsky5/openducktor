@@ -165,7 +165,14 @@ export function useSessionStartModalRunner({
   const goalAvailability = useRuntimeGoalAvailability(goalRuntimeKind);
   const goalMode = useMemo((): SessionStartGoalMode | undefined => {
     const task = intent?.kickoff?.task;
-    if (!intent || !task || intent.postStartAction === "none") return undefined;
+    // Goal mode needs the goal prompt of the workflow.
+    if (
+      !intent ||
+      !task ||
+      intent.postStartAction === "none" ||
+      !intent.taskWorkflow.prompts.hasGoalPrompt
+    )
+      return undefined;
     const defaultObjective = launchGoalObjective(
       intent.taskWorkflow.launchAction(intent.launchActionId, intent.role),
       task,
