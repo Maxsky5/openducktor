@@ -17,13 +17,14 @@ const STATUS_LABELS = {
 /** The color family of a goal status, which each client maps to its own theme colors. */
 export type AgentSessionGoalTone = "success" | "warning" | "danger" | "info" | "muted";
 
+/** Work in progress is blue, a met goal is green, and a goal that needs the user is amber. */
 const STATUS_TONES = {
-  active: "success",
+  active: "info",
   paused: "warning",
   blocked: "danger",
   limit_reached: "danger",
   complete: "success",
-  waiting_for_message: "info",
+  waiting_for_message: "warning",
   ended: "muted",
 } satisfies Record<AgentSessionGoalStatus, AgentSessionGoalTone>;
 

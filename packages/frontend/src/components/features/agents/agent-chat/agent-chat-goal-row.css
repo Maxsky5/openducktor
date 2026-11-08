@@ -32,27 +32,33 @@
 }
 
 /*
- * The objective shows one line. Expanded, it grows to its whole height. It stays wrapped while it
- * closes, and it gets its ellipsis only when the height transition ends.
+ * The status and the objective share one line. Expanded, the objective wraps under the icon and the
+ * line grows to its whole height. It stays wrapped while it closes, and it gets its ellipsis only
+ * when the height transition ends.
  */
-.goal-row-objective {
+.goal-row-line {
   interpolate-size: allow-keywords;
   height: 1lh;
   overflow: clip;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
   transition: height var(--queue-close) var(--queue-ease);
 }
 
-.goal-row-objective[data-expanded="true"] {
+.goal-row-line[data-expanded="true"] {
   height: auto;
   transition-duration: var(--queue-open);
 }
 
-.goal-row-objective[data-clamped="true"] {
+.goal-row-line[data-clamped="true"] {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.goal-row-icon {
+  vertical-align: -0.1875rem;
+  transition: color var(--queue-fade) var(--queue-ease);
 }
 
 .goal-row-chevron {
@@ -73,7 +79,7 @@
     filter: none;
   }
 
-  .goal-row-objective,
+  .goal-row-line,
   .goal-row-chevron {
     transition: none;
   }

@@ -26,7 +26,7 @@ import {
   resolveAgentChatSendDraftParts,
 } from "./agent-chat-send-draft";
 import { useClientConnection } from "../../connection/client-connection-react";
-import { assertGoalCommandAllowed } from "../goals/goal-send-rules";
+import { assertGoalCommandAllowed, promoteTypedGoalCommand } from "../goals/goal-send-rules";
 
 export type AgentChatResolvedTarget =
   | {
@@ -136,7 +136,7 @@ export function useAgentChatSend({
         const entry = queue?.entries.find((candidate) => candidate.submissionId === submissionId);
         if (!entry) throw new Error("This message is no longer in the queue.");
         const parts = await resolveAgentChatSendDraftParts({
-          draft,
+          draft: promoteTypedGoalCommand(draft, runtimeDescriptor, runtimeVersion),
           reusablePrompts,
           modelDescriptor: selectedModelDescriptor,
           supportsAttachments,
@@ -155,6 +155,8 @@ export function useAgentChatSend({
     selectedModelDescriptor,
     queue,
     reusablePrompts,
+    runtimeDescriptor,
+    runtimeVersion,
     identity,
     stageSendAttachment,
     supportsAttachments,
@@ -169,7 +171,7 @@ export function useAgentChatSend({
       const activity = target.activity.begin(target.activityKey);
       try {
         const parts = await resolveAgentChatSendDraftParts({
-          draft,
+          draft: promoteTypedGoalCommand(draft, runtimeDescriptor, runtimeVersion),
           reusablePrompts,
           // A steer joins the running turn, so the model of that turn checks the content.
           modelDescriptor: steersRunningTurn(

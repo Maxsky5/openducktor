@@ -312,9 +312,18 @@ function QueuedMessageBody({
   const inline: ReactNode[] = [];
   const attachments: ReactElement[] = [];
   const attachmentNames: string[] = [];
+  let previousInline: AgentSessionUserMessagePart | null = null;
   for (const { key, part } of keyedParts(parts)) {
     if (part.kind !== "attachment") {
+      // A command and its argument read as "/goal Ship", as in the transcript.
+      if (
+        previousInline?.kind === "slash_command" &&
+        part.kind === "text" &&
+        !/^\s/.test(part.text)
+      )
+        inline.push(" ");
       inline.push(renderInlinePart(key, part));
+      previousInline = part;
       continue;
     }
     attachmentNames.push(part.attachment.name);

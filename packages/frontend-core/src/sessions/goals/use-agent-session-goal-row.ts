@@ -23,6 +23,8 @@ type ActionState = {
   readonly sessionId: string;
   readonly pendingAction: AgentSessionGoalControlAction | null;
   readonly error: string | null;
+  /** The row when the action started. A clear can make the runtime work for a moment first. */
+  readonly rowAtAction: AgentSessionGoalRow | null;
 };
 
 /**
@@ -54,32 +56,39 @@ export const useAgentSessionGoalRow = ({
     (action: AgentSessionGoalControlAction) => {
       if (!session || !repoPath) return;
       const target = { sessionId: session.externalSessionId };
-      setState({ ...target, pendingAction: action, error: null });
+      setState({ ...target, pendingAction: action, error: null, rowAtAction: row });
       void (async () => {
         try {
           await host.agentSessionGoalControl({
             ...toBoundRuntimeSessionRef(repoPath, session, `${action} the goal`),
             action,
           });
-          setState({ ...target, pendingAction: null, error: null });
+          setState({ ...target, pendingAction: null, error: null, rowAtAction: null });
         } catch (cause) {
-          setState({ ...target, pendingAction: null, error: errorMessage(cause) });
+          setState({
+            ...target,
+            pendingAction: null,
+            error: errorMessage(cause),
+            rowAtAction: null,
+          });
         }
       })();
     },
-    [host, repoPath, session],
+    [host, repoPath, row, session],
   );
+  // A clear keeps the status that the user cleared, so the row never shows a short Active state.
+  const shownRow = current?.pendingAction === "clear" ? (current.rowAtAction ?? row) : row;
   return useMemo(
     () =>
-      row
+      row && shownRow
         ? {
-            ...row,
+            ...shownRow,
             pendingAction: current?.pendingAction ?? null,
             error: current?.error ?? null,
             onAction,
           }
         : null,
-    [current?.error, current?.pendingAction, onAction, row],
+    [current?.error, current?.pendingAction, onAction, row, shownRow],
   );
 };
 

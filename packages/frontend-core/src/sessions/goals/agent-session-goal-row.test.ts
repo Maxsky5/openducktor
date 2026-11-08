@@ -7,7 +7,7 @@ describe("buildAgentSessionGoalRow", () => {
   });
 
   test.each([
-    { status: "active", label: "Active", tone: "success", actions: ["pause", "clear"] },
+    { status: "active", label: "Active", tone: "info", actions: ["pause", "clear"] },
     { status: "paused", label: "Paused", tone: "warning", actions: ["resume", "clear"] },
     { status: "blocked", label: "Blocked", tone: "danger", actions: ["resume", "clear"] },
     {
@@ -47,6 +47,7 @@ describe("buildAgentSessionGoalRow", () => {
       buildAgentSessionGoalRow({ objective: "Ship", status: "waiting_for_message" }, false),
     ).toMatchObject({
       statusLabel: "Waiting for your message",
+      tone: "warning",
       detail: WAITING_FOR_MESSAGE_DETAIL,
     });
   });

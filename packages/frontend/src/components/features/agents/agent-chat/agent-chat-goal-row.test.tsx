@@ -32,24 +32,42 @@ describe("AgentChatGoalRow", () => {
     expect(onAction.mock.calls).toEqual([["resume"], ["clear"]]);
   });
 
-  test("expands the objective and disables actions while one runs", async () => {
-    render(
-      <AgentChatGoalRow
-        model={rowModel({ pendingAction: "clear", error: "No goal" })}
-        sessionKey="session"
-      />,
-    );
+  test("expands a cut objective and disables actions while one runs", async () => {
+    // The test DOM has no layout, so the line reports that it cuts its text.
+    const scrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth");
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", { configurable: true, value: 500 });
+    try {
+      render(
+        <AgentChatGoalRow
+          model={rowModel({ pendingAction: "clear", error: "No goal" })}
+          sessionKey="session"
+        />,
+      );
 
-    const toggle = screen.getByRole("button", { name: "Show the whole goal" });
-    const objective = screen.getByText("Ship the goal feature with tests");
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(objective.dataset.clamped).toBe("false");
-    expect(screen.getByRole("button", { name: "Resume goal" })).toHaveProperty("disabled", true);
-    expect(screen.getByRole("alert").textContent).toBe("No goal");
+      const toggle = screen.getByRole("button", { name: /Goal Paused Ship the goal feature/ });
+      const line = toggle.firstElementChild;
+      if (!(line instanceof HTMLElement)) throw new Error("The goal line is missing.");
+      await waitFor(() => expect(toggle.getAttribute("aria-expanded")).toBe("false"));
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      expect(line.dataset.clamped).toBe("false");
+      expect(screen.getByRole("button", { name: "Resume goal" })).toHaveProperty("disabled", true);
+      expect(screen.getByRole("alert").textContent).toBe("No goal");
 
-    fireEvent.click(screen.getByRole("button", { name: "Show less of the goal" }));
-    await waitFor(() => expect(objective.dataset.clamped).toBe("true"));
+      fireEvent.click(toggle);
+      await waitFor(() => expect(line.dataset.clamped).toBe("true"));
+    } finally {
+      if (scrollWidth) Object.defineProperty(HTMLElement.prototype, "scrollWidth", scrollWidth);
+      else Reflect.deleteProperty(HTMLElement.prototype, "scrollWidth");
+    }
+  });
+
+  test("offers no expand for an objective that fits", () => {
+    render(<AgentChatGoalRow model={rowModel()} sessionKey="session" />);
+
+    const line = screen.getByRole("button", { name: /Goal Paused/ });
+    expect(line).toHaveProperty("disabled", true);
+    expect(line.getAttribute("aria-expanded")).toBeNull();
   });
 
   test("shows no row without a goal", () => {
