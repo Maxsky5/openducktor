@@ -174,6 +174,7 @@ The runtime owns the goal state. OpenDucktor stores no goal data and runs no goa
 - Codex marks the goal `blocked` when a turn fails, so the session goes idle. After an interrupt that did not pause the goal, Codex starts the next goal turn when the thread is idle.
 - A release does not end a goal. Before task cleanup releases its sessions, it sends Stop to each session with an active goal. If a Stop fails, the cleanup releases no session.
 - The OpenCode goal plugin `opencode.goal` is not a protected plugin, so a config entry `"-opencode.goal"` in `plugins` turns it off. The goal read then fails with `rpc.unavailable`, and the adapter reports no goal. A `/goal` command fails with `CommandNotFoundError`, and the adapter names the config entry in the reason.
+- The OpenCode goal plugin writes no user message for `/goal <objective>`. It writes a synthetic message with `metadata.source: "goal"`, and only the message that starts a goal has a `description`. The adapter shows that message as the user message `/goal <objective>`, live and in history. It reads the objective from the `<untrusted_objective>` block and undoes the escapes of `&`, `<`, and `>`.
 
 ### History
 

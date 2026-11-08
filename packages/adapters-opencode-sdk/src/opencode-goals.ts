@@ -1,4 +1,9 @@
-import { isRpcError, type OpenCodeClient, type V2Event } from "@opencode/client";
+import {
+  isRpcError,
+  type OpenCodeClient,
+  type SessionMessageInfo,
+  type V2Event,
+} from "@opencode/client";
 import type { AgentSessionGoal } from "@openducktor/contracts";
 import type { AgentSessionGoalCommand } from "@openducktor/core";
 import { z } from "zod";
@@ -62,3 +67,23 @@ export const openCodeGoalCommandText = (command: AgentSessionGoalCommand): strin
  */
 export const OPENCODE_GOAL_PLUGIN_OFF_MESSAGE =
   'OpenCode has no /goal command, because its config turns the goal plugin off. Remove "-opencode.goal" from "plugins" in the OpenCode config, then try again.';
+
+const UNTRUSTED_OBJECTIVE = /<untrusted_objective>\n([\s\S]*?)\n<\/untrusted_objective>/;
+
+/**
+ * The objective of the message that the goal plugin writes when `/goal <objective>` sets a goal,
+ * or `null` for another message. The plugin writes no user message, so this message stands for the
+ * `/goal` message of the user, live and in history. The plugin escapes `&`, `<`, and `>`.
+ */
+export const readOpenCodeGoalKickoffObjective = (message: SessionMessageInfo): string | null => {
+  // The goal plugin gives a description only to the message that starts a new goal.
+  if (
+    message.type !== "synthetic" ||
+    message.description === undefined ||
+    message.metadata?.source !== "goal"
+  )
+    return null;
+  const escaped = UNTRUSTED_OBJECTIVE.exec(message.text)?.[1];
+  if (escaped === undefined) return null;
+  return escaped.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
+};
