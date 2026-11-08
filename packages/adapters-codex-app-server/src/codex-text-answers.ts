@@ -33,7 +33,7 @@ export class CodexTextAnswers {
     const answer = this.pending.get(key);
     if (!answer) return false;
     if (event.kind !== "notification") {
-      // The thread has no tools and no approvals, so a request or an unreadable event ends it.
+      // The thread asks for no approvals, so a request or an unreadable event ends it.
       this.pending.delete(key);
       answer.reject(
         new Error(

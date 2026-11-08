@@ -161,7 +161,7 @@ function SessionStartForm({
   const selectedVariant = selectedModelSelection?.variant ?? "";
   const availability = resolveSessionStartAvailability(model, {
     kickoffInvalid: kickoffDraft.invalid,
-    goalError: goalDraft.error,
+    goalError: goalDraft.blockedReason,
   });
   const {
     hasExistingSessionOptions,

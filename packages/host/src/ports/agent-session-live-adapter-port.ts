@@ -147,7 +147,7 @@ type AgentSessionLiveAdapterBase = {
     HostError
   >;
   readonly claudeToolCatalog?: import("./claude-tool-catalog-port").ClaudeToolCatalogPort;
-  readonly textGeneration?: import("./agent-text-generation-port").AgentTextGenerationPort;
+  readonly textGeneration: import("./agent-text-generation-port").AgentTextGenerationPort;
   readonly sessionImport: import("./runtime-session-import-port").RuntimeSessionImportPort;
   readonly queries: AgentRuntimeQueryAdapterPort;
   readonly beginGeneratedImageBatch: (

@@ -1,5 +1,6 @@
 import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { unexpectedSessionImport } from "../../test-support/session-import-test-doubles";
+import { unexpectedTextGeneration } from "../../test-support/text-generation-test-doubles";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
@@ -72,6 +73,7 @@ const createHarness = async (
   const adapter: AgentSessionRuntimeAdapterPort = {
     queries: unexpectedRuntimeQueries,
     sessionImport: unexpectedSessionImport,
+    textGeneration: unexpectedTextGeneration,
     supportsSessionControl: true,
     beginGeneratedImageBatch: () => Effect.die(new Error("Unexpected beginGeneratedImageBatch")),
     releaseGeneratedImageBatch: () =>

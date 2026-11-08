@@ -437,7 +437,13 @@ describe("SessionStartModal", () => {
       "disabled",
       true,
     );
+    // A start now would send the old goal text, so Start waits for the generated goal.
+    expect(screen.getByRole("button", { name: /start session/i })).toHaveProperty("disabled", true);
     await act(async () => finish("Task T-1 is done when its tests pass."));
+    expect(screen.getByRole("button", { name: /start session/i })).toHaveProperty(
+      "disabled",
+      false,
+    );
     expect(screen.getByRole("textbox", { name: "Goal" })).toHaveProperty(
       "value",
       "Task T-1 is done when its tests pass.",

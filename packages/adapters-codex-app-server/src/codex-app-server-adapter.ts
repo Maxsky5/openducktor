@@ -1018,9 +1018,10 @@ export class CodexAppServerAdapter
     const { goals } = this.runtimeEvents;
     const revisionBefore = goals.revision(session.runtimeId, session.threadId);
     const client = this.runtimeClients.clientForRuntime(session.runtimeId);
+    const startsWork = goalCommandStartsWork(input.command);
     // Codex starts goal turns itself, so they use the thread settings, not the settings of a
     // `turn/start`. The goal turns then run with the selected model, effort, and speed.
-    if (goalCommandStartsWork(input.command) && session.model) {
+    if (startsWork && session.model) {
       await client.threadSettingsUpdate({
         threadId: session.threadId,
         ...toTransportModelSelection(session.model),
@@ -1029,7 +1030,7 @@ export class CodexAppServerAdapter
       assertCurrent?.();
     }
     // A Stop while Codex has not answered a set or resume still pauses the goal.
-    const endActivation = goalCommandStartsWork(input.command)
+    const endActivation = startsWork
       ? goals.beginActivation(session.runtimeId, session.threadId)
       : () => {};
     await runCodexGoalCommand(client, session.threadId, input.command, {
@@ -1039,10 +1040,7 @@ export class CodexAppServerAdapter
       },
     }).finally(endActivation);
     markAgentWorkAccepted(input);
-    if (
-      goalCommandStartsWork(input.command) &&
-      goals.acceptActivation(session.runtimeId, session.threadId, revisionBefore)
-    ) {
+    if (startsWork && goals.acceptActivation(session.runtimeId, session.threadId, revisionBefore)) {
       this.runtimeEvents.waitForGoalTurn(session);
     }
     return GOAL_COMMAND_ACCEPTED;
@@ -1068,18 +1066,29 @@ export class CodexAppServerAdapter
       developerInstructions: input.instructions,
     });
     const { textAnswers } = this.runtimeEvents;
-    const answer = textAnswers.wait(runtimeId, thread.id);
-    try {
-      await client.turnStart({
+    // Wait before the turn request, so no event of the turn comes first. Await both together:
+    // the answer can fail while Codex still handles the turn request.
+    const answering = Promise.all([
+      textAnswers.wait(runtimeId, thread.id),
+      client.turnStart({
         threadId: thread.id,
         input: [{ type: "text", text: input.prompt, text_elements: [] }],
         ...transport,
-      });
-      return await answer;
-    } finally {
+      }),
+    ]);
+    let text: string;
+    try {
+      [text] = await answering;
+    } catch (cause) {
       textAnswers.forget(runtimeId, thread.id);
-      await client.threadUnsubscribe({ threadId: thread.id });
+      // The first error is the cause. A failed unsubscribe, for example after a runtime stop,
+      // must not replace it.
+      await client.threadUnsubscribe({ threadId: thread.id }).catch(() => undefined);
+      throw cause;
     }
+    textAnswers.forget(runtimeId, thread.id);
+    await client.threadUnsubscribe({ threadId: thread.id });
+    return text;
   }
 
   /**

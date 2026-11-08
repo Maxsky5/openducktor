@@ -1351,6 +1351,46 @@ test("Goal mode sends the goal instead of the kickoff", async () => {
   ]);
 });
 
+const goalReuseRequest = (
+  sourceSession: Omit<AgentSessionLiveRef, "repoPath">,
+): WorkflowLaunchRequest => ({
+  ...requestFor("codex"),
+  policy: {
+    kind: "manual",
+    actionId: "build_after_qa_rejected",
+    decision: { startMode: "reuse", sourceSession },
+  },
+  instruction: { kind: "kickoff" },
+  goal: { objective: "Fix the QA findings." },
+});
+
+test("Goal mode refuses to reuse a session during a turn that no goal drives", async () => {
+  const h = await createLaunchHarness("codex");
+  h.setTaskStatus("in_progress");
+  const source = h.addTaskSession("source", { live: true, working: true });
+  const result = await Effect.runPromise(h.service.launch(goalReuseRequest(source)));
+  expect(result.status).toBe("failed");
+  expect(JSON.stringify(result)).toContain(
+    "The selected session is working. Wait until the turn ends, or start a new session.",
+  );
+  expect(h.goalCommands).toEqual([]);
+});
+
+test("Goal mode reuses a session whose goal drives the running turn", async () => {
+  const h = await createLaunchHarness("codex");
+  h.setTaskStatus("in_progress");
+  const source = h.addTaskSession("source", { live: true, working: true });
+  h.live.get(agentSessionRefKey({ repoPath: "/repo", ...source }))!.goal = {
+    objective: "Ship the release.",
+    status: "active",
+  };
+  const result = await Effect.runPromise(h.service.launch(goalReuseRequest(source)));
+  expect(result).toMatchObject({ status: "completed", startMode: "reuse" });
+  expect(h.goalCommands).toMatchObject([
+    { command: { kind: "set", objective: "Fix the QA findings." } },
+  ]);
+});
+
 test.each([
   {
     name: "a launch action without Goal mode",

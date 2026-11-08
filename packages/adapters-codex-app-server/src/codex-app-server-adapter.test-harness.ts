@@ -422,6 +422,8 @@ export class RecordingTransport implements CodexJsonRpcTransport {
   /** Runs before a goal request answers, like a goal update that Codex sends first. */
   beforeGoalAnswer: (() => Promise<void>) | null = null;
   beforeSettingsAnswer: (() => Promise<void>) | null = null;
+  beforeTurnStartAnswer: (() => Promise<void>) | null = null;
+  unsubscribeError: Error | null = null;
   private turnStartCount = 0;
 
   constructor(
@@ -495,6 +497,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
       case "turn/interrupt":
         return {};
       case "thread/unsubscribe":
+        if (this.unsubscribeError) throw this.unsubscribeError;
         return { status: "unsubscribed" };
       case "thread/goal/set":
         if (this.goalError) throw this.goalError;
@@ -510,6 +513,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
         if (this.goalError) throw this.goalError;
         return { cleared: true };
       case "turn/start": {
+        await this.beforeTurnStartAnswer?.();
         if (!isPlainObject(params) || !Array.isArray(params.input)) {
           throw new Error("Invalid request: missing field `type`");
         }

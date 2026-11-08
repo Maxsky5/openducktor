@@ -1,4 +1,5 @@
 import { unexpectedSessionImport } from "../../test-support/session-import-test-doubles";
+import { unexpectedTextGeneration } from "../../test-support/text-generation-test-doubles";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
@@ -102,6 +103,7 @@ const createLiveSessionDependencies = ({
   const adapter: AgentSessionLiveAdapterPort = {
     queries: unexpectedRuntimeQueries,
     sessionImport: unexpectedSessionImport,
+    textGeneration: unexpectedTextGeneration,
     supportsSessionControl: false,
     beginGeneratedImageBatch: () => Effect.die(new Error("Unexpected beginGeneratedImageBatch")),
     releaseGeneratedImageBatch: () =>

@@ -58,10 +58,11 @@ describe("generateClaudeText", () => {
       skills: [],
       mcpServers: {},
       strictMcpConfig: true,
-      settingSources: [],
+      settings: { disableAllHooks: true },
       persistSession: false,
       maxTurns: 1,
     });
+    expect(claude.calls[0]?.options).not.toHaveProperty("settingSources");
   });
 
   test("reports the Claude errors of a failed answer", async () => {

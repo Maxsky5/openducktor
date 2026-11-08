@@ -1,5 +1,6 @@
 import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { unexpectedSessionImport } from "../../test-support/session-import-test-doubles";
+import { unexpectedTextGeneration } from "../../test-support/text-generation-test-doubles";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
@@ -65,6 +66,7 @@ const fakeAdapter = (input: {
   const adapter = {
     queries: unexpectedRuntimeQueries,
     sessionImport: unexpectedSessionImport,
+    textGeneration: unexpectedTextGeneration,
     supportsSessionControl: false,
     beginGeneratedImageBatch: () => Effect.die(new Error("Unexpected beginGeneratedImageBatch")),
     releaseGeneratedImageBatch: () =>
@@ -2198,6 +2200,7 @@ describe("createAgentSessionLiveStateService", () => {
       }),
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
+      textGeneration: unexpectedTextGeneration,
       supportsSessionControl: true,
       startSession: () => Effect.die(new Error("unexpected start")),
       resumeSession: (input) =>
@@ -2251,6 +2254,7 @@ describe("createAgentSessionLiveStateService", () => {
       ...fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [] }),
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
+      textGeneration: unexpectedTextGeneration,
       supportsSessionControl: true,
       startSession: () => Effect.die(new Error("unexpected start")),
       resumeSession: () => Effect.die(new Error("unexpected resume")),
@@ -2372,6 +2376,7 @@ describe("createAgentSessionLiveStateService", () => {
       }),
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
+      textGeneration: unexpectedTextGeneration,
       supportsSessionControl: true,
       startSession: () => Effect.die(new Error("unexpected start")),
       resumeSession: () => Effect.die(new Error("unexpected resume")),

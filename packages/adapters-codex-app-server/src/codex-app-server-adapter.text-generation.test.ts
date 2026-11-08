@@ -103,3 +103,18 @@ test("reports a failed turn", async () => {
   });
   await expect(generation).rejects.toThrow("Codex did not generate the text");
 });
+
+test("reports a runtime stop during the turn request, not the failed unsubscribe", async () => {
+  const stream = createRuntimeStreamSubscription();
+  const harness = createHarness({ subscribeEvents: stream.subscribeEvents });
+  const transport = harness.transportFactory("runtime-live");
+  transport.unsubscribeError = new Error("The Codex connection is closed.");
+  transport.beforeTurnStartAnswer = async () => {
+    harness.adapter.releaseRuntime("runtime-live");
+    throw new Error("The Codex connection is closed.");
+  };
+
+  await expect(harness.adapter.generateText("runtime-live", input)).rejects.toThrow(
+    "The Codex runtime stopped before it generated the text.",
+  );
+});

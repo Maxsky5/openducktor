@@ -19,6 +19,7 @@ import {
   type TaskWorkflowLaunchAction,
 } from "@openducktor/workflows";
 import { resolveRuntimeGoalAvailability } from "@openducktor/core";
+import { hasForegroundTurn, isGoalDrivingWork } from "./session-foreground-readiness";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import { errorMessage, HostValidationError, toHostOperationError } from "../../effect/host-errors";
@@ -202,6 +203,16 @@ export const prepareWorkflowLaunch = (
         )
           return yield* launchValidationError(
             "The selected session is waiting for an approval or question. Answer or reject it before sending a message.",
+          );
+        // A goal set during a turn stops that turn. Only a goal turn may give way to a new goal.
+        if (
+          request.goal &&
+          live.type === "live" &&
+          hasForegroundTurn(live.session) &&
+          !isGoalDrivingWork(live.session)
+        )
+          return yield* launchValidationError(
+            "The selected session is working. Wait until the turn ends, or start a new session.",
           );
         model = stored.selectedModel ?? undefined;
         if (decision.speed !== undefined) {

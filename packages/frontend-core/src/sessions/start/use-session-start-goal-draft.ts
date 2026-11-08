@@ -8,6 +8,7 @@ import {
 } from "./use-session-start-kickoff-draft";
 
 export const BLANK_GOAL_ERROR = "Enter a goal.";
+export const GOAL_GENERATION_RUNNING = "Wait for the generated goal.";
 
 /** The Goal mode switch and goal text of a start form. */
 export type SessionStartGoalDraft = {
@@ -19,6 +20,8 @@ export type SessionStartGoalDraft = {
   text: string;
   /** Why the start cannot use the goal text, or null. */
   error: string | null;
+  /** Why the start must wait: the goal text error, or a goal generation that runs. */
+  blockedReason: string | null;
   /** The goal objective that the start sets, or undefined with Goal mode off. */
   value: string | undefined;
   /** An agent writes the goal text. The result replaces the text. */
@@ -88,6 +91,7 @@ export function useSessionStartGoalDraft({
     enabled,
     text,
     error,
+    blockedReason: draft.generationId === null ? error : GOAL_GENERATION_RUNNING,
     value: enabled && error === null ? text.trim() : undefined,
     generation: {
       unavailableReason: generation?.kind === "unavailable" ? generation.reason : null,

@@ -18,8 +18,9 @@ type ClaudeTextRuntime = {
 };
 
 /**
- * One Claude answer with no tools, no MCP servers, no settings files, and no saved session.
- * The instructions replace the Claude Code system prompt.
+ * One Claude answer with no tools, no MCP servers, no hooks, and no saved session. It loads the
+ * settings files as sessions do, so it uses the same provider and authentication setup. The
+ * instructions replace the Claude Code system prompt.
  */
 export const generateClaudeText = async (
   input: AgentTextGenerationInput,
@@ -37,7 +38,7 @@ export const generateClaudeText = async (
     skills: [],
     mcpServers: {},
     strictMcpConfig: true,
-    settingSources: [],
+    settings: { disableAllHooks: true },
     persistSession: false,
     maxTurns: 1,
   };

@@ -194,7 +194,7 @@ export function SessionStartForm({
   const { goal, kickoff } = useSessionStartInstructionDrafts(model);
   const availability = resolveSessionStartAvailability(model, {
     kickoffInvalid: kickoff.invalid,
-    goalError: goal.error,
+    goalError: goal.blockedReason,
   });
 
   const sections = startFormSections(model);

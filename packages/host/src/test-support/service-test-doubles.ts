@@ -1,5 +1,6 @@
 import { withSettingsConfigMutationTestMethods } from "./settings-config-mutations";
 import { unexpectedSessionImport } from "./session-import-test-doubles";
+import { unexpectedTextGeneration } from "./text-generation-test-doubles";
 import { unexpectedRuntimeQueries } from "./runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../ports/agent-session-live-adapter-port";
 import { emptyWorktreeOwners } from "@openducktor/core";
@@ -34,6 +35,7 @@ export const createAgentSessionRuntimeAdapterTestDouble = <
 ): AgentSessionRuntimeAdapterPort => ({
   queries: unexpectedRuntimeQueries,
   sessionImport: unexpectedSessionImport,
+  textGeneration: unexpectedTextGeneration,
   supportsSessionControl: true,
   beginGeneratedImageBatch: unexpectedEffectCall("session adapter", "beginGeneratedImageBatch"),
   releaseGeneratedImageBatch: unexpectedEffectCall("session adapter", "releaseGeneratedImageBatch"),
