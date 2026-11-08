@@ -63,8 +63,16 @@ export type CreateClaudeAgentSdkServiceInput = {
   randomId?: () => string;
 };
 
-/** A goal that Claude reports. `ended`: Claude ended it, and the next message does not continue it. */
-export type ClaudeNativeGoal = { readonly objective: string; readonly ended: boolean };
+/**
+ * A goal that Claude reports. `ended`: Claude ended it, and the next message does not continue it.
+ * `outcome` tells why: Claude met the goal, or found it impossible. An ended goal without an outcome
+ * stopped for another reason, such as an unrecoverable error.
+ */
+export type ClaudeNativeGoal = {
+  readonly objective: string;
+  readonly ended: boolean;
+  readonly outcome?: "met" | "failed";
+};
 
 /** The adapter read a new goal state of the session from its transcript. `null`: no goal. */
 export type ClaudeGoalEvent = {

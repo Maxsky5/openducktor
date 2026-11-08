@@ -3,8 +3,7 @@ import type { ClaudeNativeGoal } from "../claude/claude-agent-sdk-types";
 
 /**
  * Projects the goal that Claude keeps for each session. Claude continues a set goal only while it
- * works, or with the next user message. It does not say why a goal ended, so the projection
- * never reports a complete goal.
+ * works, or with the next user message. A met goal is complete, and an impossible goal is blocked.
  */
 export const createClaudeGoalProjection = () => {
   const goalsByKey = new Map<string, ClaudeNativeGoal>();
@@ -23,6 +22,8 @@ export const createClaudeGoalProjection = () => {
       }
       let status: NonNullable<AgentSessionLiveSnapshot["goal"]>["status"] = "ended";
       if (!goal.ended) status = snapshot.activity === "idle" ? "waiting_for_message" : "active";
+      else if (goal.outcome === "met") status = "complete";
+      else if (goal.outcome === "failed") status = "blocked";
       next.goal = { objective: goal.objective, status };
       return next;
     },

@@ -2702,7 +2702,7 @@ describe("Claude host live-session adapter goals", () => {
     );
     observe({ type: "result", subtype: "success" });
     await goalSession.goalTracking?.reads;
-    expect(await snapshotGoal()).toEqual({ objective: OBJECTIVE, status: "ended" });
+    expect(await snapshotGoal()).toEqual({ objective: OBJECTIVE, status: "complete" });
     harness.setSendUserMessage(() => Effect.die("Claude needs no command for an ended goal."));
     await Effect.runPromise(harness.adapter.controlGoal(goalInput({ kind: "clear" })));
     expect(await snapshotGoal()).toBeUndefined();

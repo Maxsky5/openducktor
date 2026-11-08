@@ -194,7 +194,7 @@ describe("Claude goal commands", () => {
     expect(session.goalTracking?.goal ?? null).toBeNull();
   });
 
-  test("a turn result reads a met goal as ended", async () => {
+  test("a turn result reads a met goal as ended and met", async () => {
     const { session, observe, append, events, settled } = await createSession([
       goalRecord("g1", null, { met: false, sentinel: true }),
     ]);
@@ -202,7 +202,7 @@ describe("Claude goal commands", () => {
     await append(goalRecord("g2", "g1", { met: true }));
     observe(result);
     await settled();
-    expect(events.at(-1)?.goal).toEqual({ objective: OBJECTIVE, ended: true });
+    expect(events.at(-1)?.goal).toEqual({ objective: OBJECTIVE, ended: true, outcome: "met" });
     expect(forgetEndedClaudeGoal(session, "2026-11-07T10:00:01.000Z")?.goal).toBeNull();
   });
 
@@ -216,7 +216,7 @@ describe("Claude goal commands", () => {
     await settled();
 
     const restored = await restoreClaudeSessionGoal(session, "2026-11-07T10:00:01.000Z");
-    expect(restored.goal).toEqual({ objective: OBJECTIVE, ended: true });
+    expect(restored.goal).toEqual({ objective: OBJECTIVE, ended: true, outcome: "met" });
   });
 
   test("a clear that OpenDucktor did not send ends the goal", async () => {
@@ -243,7 +243,11 @@ describe("Claude goal commands", () => {
     await appendFile(path, `${partial.slice(20)}\n`);
     observe(result);
     await settled();
-    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, ended: true });
+    expect(session.goalTracking?.goal ?? null).toEqual({
+      objective: OBJECTIVE,
+      ended: true,
+      outcome: "met",
+    });
   });
 
   test("refuses a second goal action while one runs", async () => {

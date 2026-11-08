@@ -235,7 +235,8 @@ const sameGoal = (left: ClaudeNativeGoal | null, right: ClaudeNativeGoal | null)
   (left !== null &&
     right !== null &&
     left.objective === right.objective &&
-    left.ended === right.ended);
+    left.ended === right.ended &&
+    left.outcome === right.outcome);
 
 const applyRecord = (tracking: ClaudeGoalTracking, record: ClaudeGoalRecord): void => {
   const { objective } = record;
@@ -251,7 +252,7 @@ const applyRecord = (tracking: ClaudeGoalTracking, record: ClaudeGoalRecord): vo
       return;
     case "met":
     case "failed":
-      tracking.goal = { objective, ended: true };
+      tracking.goal = { objective, ended: true, outcome: record.kind };
       return;
     case "clear":
       if (tracking.clearsSent > 0) {
