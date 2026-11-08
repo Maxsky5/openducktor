@@ -7,32 +7,37 @@ import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-or
 import { memo, type ReactElement, useMemo } from "react";
 import { Text as NativeText, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { ReferenceChip } from "@/features/session/reference-chip";
+import {
+  type ReferenceChipKind,
+  referenceChipColors,
+  referenceChipIcon,
+} from "@/features/session/reference-chip-paint";
+import { useAppTheme } from "@/theme/app-theme-context";
+import { Icon } from "@/ui/icon";
 import { sansWeight } from "@/theme/tokens";
 import { Text } from "@/ui/text";
 import { AttachmentPreview } from "./attachment-preview";
 
 type ReferenceNode = Extract<UserMessageContentNode, { kind: "reference" }>;
 
-/** The desktop `renderUserMessageReferenceChip`: a file, skill, or subagent chip in the text. */
+/** Native text references wrap with the message and keep the full label selectable. */
 function InlineReference({ node }: { node: ReferenceNode }): ReactElement {
+  const theme = useAppTheme();
   const { part } = node;
-  const chip =
-    part.kind === "skill_mention" ? (
-      <ReferenceChip kind="skill" label={part.skill.name} />
-    ) : part.kind === "subagent_reference" ? (
-      <ReferenceChip kind="subagent" label={part.subagent.name} />
-    ) : (
-      <ReferenceChip kind="file" label={part.file.name} fileKind={part.file.kind} />
-    );
+  let kind: ReferenceChipKind = "file";
+  if (part.kind === "skill_mention") kind = "skill";
+  else if (part.kind === "subagent_reference") kind = "subagent";
+  const colors = referenceChipColors(theme, kind);
+  const icon = referenceChipIcon(kind, part.kind === "file_reference" ? part.file.kind : "default");
   return (
-    <View
-      style={styles.reference}
-      accessible
+    <NativeText
+      style={[styles.reference, { backgroundColor: colors.backgroundColor, color: colors.color }]}
       accessibilityLabel={`Reference ${userMessageReferenceLabel(part)}`}
     >
-      {chip}
-    </View>
+      {" "}
+      {icon ? <Icon name={icon} size={14} colorValue={colors.color} /> : null}
+      {` ${userMessageReferenceLabel(part)} `}
+    </NativeText>
   );
 }
 
@@ -141,8 +146,7 @@ const styles = StyleSheet.create((theme) => ({
     lineHeight: 24,
     color: theme.desktop.foreground,
   },
-  // The desktop `mx-1 align-middle` around a chip.
-  reference: { marginHorizontal: theme.space.xs, marginBottom: -6 },
+  reference: { ...sansWeight("medium"), fontSize: 12 },
   attachments: {
     flexDirection: "row",
     flexWrap: "wrap",

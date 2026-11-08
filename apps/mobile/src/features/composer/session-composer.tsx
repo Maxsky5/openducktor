@@ -408,7 +408,11 @@ function ComposerControls({
         />
       </View>
       <View style={styles.controlsEnd}>
-        {contextUsage ? <ContextUsageIndicator usage={contextUsage} /> : null}
+        {contextUsage ? (
+          <View style={styles.contextUsage}>
+            <ContextUsageIndicator usage={contextUsage} />
+          </View>
+        ) : null}
         {secondaryMode && hasContent ? (
           <SecondarySendButton composer={composer} mode={secondaryMode} onSend={onSend} />
         ) : null}
@@ -521,9 +525,8 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.space.sm,
     color: theme.desktop.mutedForeground,
   },
-  // The desktop bar: `flex flex-wrap items-end gap-2 px-2 pb-2 pt-1`. The gaps between controls
-  // hold their touch areas, so no touch area covers a neighbor: 28-point controls on the start,
-  // 28 and 32-point controls on the end.
+  // Each gap reserves the touch slop of its neighbors without adding visual space.
+  // The selector has horizontal padding, so its label stays clear of the attachment target.
   controls: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -537,12 +540,13 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 2 * touchSlop(28),
+    gap: touchSlop(28),
     minHeight: 32,
   },
+  contextUsage: { marginRight: touchSlop(28) - touchSlop(32) },
   controlsEnd: {
     flexDirection: "row",
     alignItems: "center",
-    gap: touchSlop(28) + touchSlop(32),
+    gap: 2 * touchSlop(32),
   },
 }));
