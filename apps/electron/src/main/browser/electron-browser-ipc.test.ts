@@ -41,7 +41,7 @@ const createService = () => {
   };
 };
 
-const createSender = (id = 7) => {
+const createSender = (id = 7, zoomFactor = 1) => {
   const sent: ElectronBrowserEventEnvelope[] = [];
   const listeners = new Map<string, Array<() => void>>();
   return {
@@ -50,6 +50,7 @@ const createSender = (id = 7) => {
     sender: {
       id,
       isDestroyed: () => false,
+      getZoomFactor: () => zoomFactor,
       send: (_channel: string, envelope: ElectronBrowserEventEnvelope) => sent.push(envelope),
       on: (event: string, listener: () => void) =>
         listeners.set(event, [...(listeners.get(event) ?? []), listener]),
@@ -59,7 +60,13 @@ const createSender = (id = 7) => {
   };
 };
 
-const hover: BrowserClientMessage = { type: "picker_hover", tabId: TAB_ID, x: 1, y: 2 };
+const hover: BrowserClientMessage = {
+  type: "picker_hover",
+  tabId: TAB_ID,
+  x: 1,
+  y: 2,
+  width: 400,
+};
 
 describe("Electron browser IPC controller", () => {
   test("connects one host client for each renderer client and routes frames", async () => {
@@ -131,7 +138,17 @@ describe("Electron browser IPC controller", () => {
 describe("registerElectronBrowserIpc", () => {
   const register = (isMainWindow: (id: number) => boolean) => {
     const handlers = new Map<string, ElectronBrowserIpcHandler>();
-    const binds: Array<[number, string, number]> = [];
+    const surfaces: Array<
+      [
+        number,
+        string,
+        {
+          visible: boolean;
+          bounds?: { x: number; y: number; width: number; height: number } | undefined;
+        },
+      ]
+    > = [];
+    const focused: Array<[number, string]> = [];
     const picks: Array<[number, { multiple: boolean; accept: string[] }]> = [];
     const loaded: Array<[number, boolean]> = [];
     const service = createService();
@@ -144,18 +161,24 @@ describe("registerElectronBrowserIpc", () => {
       engine: {
         isMainWindow,
         setMainWindowLoaded: (id, value) => loaded.push([id, value]),
-        bindGuest: (senderId, tabId, webContentsId) =>
-          webContentsId === 13
+        setSurface: (senderId, tabId, input) =>
+          tabId === "00000000-0000-4000-8000-000000000099"
             ? Effect.fail(
                 new BrowserEngineError({
-                  code: "operation_failed",
+                  code: "tab_not_found",
                   operation: "test",
-                  message: "The webview belongs to another window.",
+                  message: "The browser engine has no tab with this ID.",
+                  tabId,
                 }),
               )
             : Effect.sync(() => {
-                binds.push([senderId, tabId, webContentsId]);
+                surfaces.push([senderId, tabId, input]);
               }),
+        focusPage: (senderId, tabId) =>
+          Effect.sync(() => {
+            focused.push([senderId, tabId]);
+          }),
+        capturePage: () => Effect.succeed("data:image/png;base64,AAAA"),
       },
       pickFiles: async (senderId, request) => {
         picks.push([senderId, request]);
@@ -172,11 +195,11 @@ describe("registerElectronBrowserIpc", () => {
       if (!handler) throw new Error(`Missing handler for ${channel}.`);
       return handler({ sender }, arg);
     };
-    return { invoke, channels: [...handlers.keys()], binds, picks, service, loaded };
+    return { invoke, channels: [...handlers.keys()], surfaces, focused, picks, service, loaded };
   };
 
   test("refuses every browser channel to a sender that is not an OpenDucktor window", async () => {
-    const { invoke, channels, binds, picks, loaded, service } = register(() => false);
+    const { invoke, channels, surfaces, focused, picks, loaded, service } = register(() => false);
     const { sender } = createSender();
 
     expect(channels).not.toHaveLength(0);
@@ -186,7 +209,7 @@ describe("registerElectronBrowserIpc", () => {
         field: "sender",
       });
     }
-    expect([binds, picks, loaded, service.handled]).toEqual([[], [], [], []]);
+    expect([surfaces, focused, picks, loaded, service.handled]).toEqual([[], [], [], [], []]);
   });
 
   test("a window can show tabs once its renderer connects the browser channel", async () => {
@@ -198,16 +221,38 @@ describe("registerElectronBrowserIpc", () => {
     expect(loaded).toEqual([[sender.id, true]]);
   });
 
-  test("validates and forwards guest binds and file dialogs", async () => {
-    const { invoke, binds, picks } = register(() => true);
+  test("validates and forwards page surfaces, focus, captures, and file dialogs", async () => {
+    const { invoke, surfaces, focused, picks } = register(() => true);
     const { sender } = createSender();
-    await invoke("openducktor:browser:bind-guest", sender, { tabId: TAB_ID, webContentsId: 12 });
+    const bounds = { x: 10, y: 20, width: 800, height: 600 };
+    await invoke("openducktor:browser:set-surface", sender, {
+      tabId: TAB_ID,
+      visible: true,
+      bounds,
+    });
+    await invoke("openducktor:browser:set-surface", sender, { tabId: TAB_ID, visible: false });
+    const zoomed = createSender(7, 2);
+    await invoke("openducktor:browser:set-surface", zoomed.sender, {
+      tabId: TAB_ID,
+      visible: true,
+      bounds,
+    });
     await expect(
-      invoke("openducktor:browser:bind-guest", sender, { tabId: "x", webContentsId: 12 }),
+      invoke("openducktor:browser:set-surface", sender, { tabId: "x", visible: true, bounds }),
     ).rejects.toMatchObject({ field: "request" });
     await expect(
-      invoke("openducktor:browser:bind-guest", sender, { tabId: TAB_ID, webContentsId: 13 }),
-    ).rejects.toMatchObject({ message: "The webview belongs to another window." });
+      invoke("openducktor:browser:set-surface", sender, {
+        tabId: "00000000-0000-4000-8000-000000000099",
+        visible: false,
+      }),
+    ).rejects.toMatchObject({ message: "The browser engine has no tab with this ID." });
+    await invoke("openducktor:browser:focus-page", sender, { tabId: TAB_ID });
+    await expect(
+      invoke("openducktor:browser:focus-page", sender, { tabId: "x" }),
+    ).rejects.toMatchObject({ field: "request" });
+    expect(await invoke("openducktor:browser:capture-page", sender, { tabId: TAB_ID })).toBe(
+      "data:image/png;base64,AAAA",
+    );
     expect(
       await invoke("openducktor:browser:pick-files", sender, { multiple: true, accept: [".png"] }),
     ).toEqual(["/tmp/a.png"]);
@@ -216,7 +261,12 @@ describe("registerElectronBrowserIpc", () => {
     ).rejects.toMatchObject({
       field: "request",
     });
-    expect(binds).toEqual([[7, TAB_ID, 12]]);
+    expect(surfaces).toEqual([
+      [7, TAB_ID, { visible: true, bounds }],
+      [7, TAB_ID, { visible: false }],
+      [7, TAB_ID, { visible: true, bounds: { x: 20, y: 40, width: 1600, height: 1200 } }],
+    ]);
+    expect(focused).toEqual([[7, TAB_ID]]);
     expect(picks).toEqual([[7, { multiple: true, accept: [".png"] }]]);
   });
 

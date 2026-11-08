@@ -59,6 +59,43 @@ const fakePage = () => {
 };
 
 describe("browser agent actions", () => {
+  test("emulates page focus only while an agent action runs", async () => {
+    const { page } = fakePage();
+    const focus: Array<boolean | "action"> = [];
+    const session: CdpSession = {
+      ...fakeSession(),
+      send: (method, params) =>
+        Effect.sync(() => {
+          if (method === "Emulation.setFocusEmulationEnabled") {
+            focus.push(params?.enabled === true);
+          }
+          return {};
+        }),
+    };
+    const pages = createBrowserAgentPages({
+      engine: {
+        openSession: () => Effect.succeed(session),
+        holdWake: () => Effect.void,
+        reloadPage: () => Effect.void,
+        captureScreenshot: () => Effect.succeed({}),
+      },
+      automation: { connect: () => Effect.succeed(page) },
+      registry: { get: () => undefined, update: () => {}, subscribe: () => () => {} },
+      runJob: (job) => void Effect.runFork(job),
+    });
+    const act = () =>
+      pages.act(tabId(1), Effect.void, () =>
+        Effect.sync(() => {
+          focus.push("action");
+        }),
+      );
+
+    await Effect.runPromise(act());
+    await Effect.runPromise(act());
+
+    expect(focus).toEqual([true, "action", false, true, "action", false]);
+  });
+
   test("a release lets the running action finish, stops the queued action, then closes the client", async () => {
     const { page, closes } = fakePage();
     const automation: BrowserAutomationPort = { connect: () => Effect.succeed(page) };
@@ -72,7 +109,6 @@ describe("browser agent actions", () => {
       automation,
       registry: { get: () => undefined, update: () => {}, subscribe: () => () => {} },
       runJob: (job) => void Effect.runFork(job),
-      onPressing: () => {},
     });
     const started = Deferred.makeUnsafe<void>();
     const running = Deferred.makeUnsafe<void>();

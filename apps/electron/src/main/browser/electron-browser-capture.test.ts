@@ -61,7 +61,7 @@ const fakeConnection = (viewport: Partial<Record<string, number>> = {}) => {
       sent.push({ method, params });
       if (method === "Page.getLayoutMetrics") {
         return Promise.resolve({
-          visualViewport: { clientWidth: css.clientWidth * 2 },
+          visualViewport: { clientWidth: css.clientWidth * 2 * css.zoom },
           cssVisualViewport: css,
         });
       }
@@ -102,6 +102,17 @@ describe("captureGuestScreenshot", () => {
     });
 
     expect(decode(result)).toBe("jpeg 60 crop 0,0,780,1600 size 390x800");
+  });
+
+  test("cuts a clip of a zoomed page from the viewport screenshot", async () => {
+    // At page zoom 2 the viewport is 195 by 400 CSS pixels, and its screenshot is 780 by 1600.
+    const connection = fakeConnection({ clientWidth: 195, clientHeight: 400, zoom: 2 });
+
+    const result = await captureGuestScreenshot(connection, decodePng, {
+      clip: { x: 100, y: 350, width: 50, height: 25, scale: 1 },
+    });
+
+    expect(decode(result)).toBe("png crop 400,200,200,100 size 100x50");
   });
 
   test("keeps the crop inside the image", async () => {

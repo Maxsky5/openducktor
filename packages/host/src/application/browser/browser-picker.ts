@@ -87,6 +87,9 @@ export const createBrowserPicker = ({
     Effect.gen(function* () {
       const host = yield* requireLive(tabId, "browser.picker.set");
       const cdp = cdpFor(host.session, tabId, "browser.picker.set");
+      // The annotation markers of the page ignore the pointer while the picker is on, so the hit
+      // test finds the page element under a marker.
+      yield* host.evaluate(`globalThis.__odtPickerActive(${enabled})`);
       if (enabled) {
         yield* cdp("Animation.enable");
         yield* cdp("Animation.setPlaybackRate", { playbackRate: 0 });
@@ -99,11 +102,13 @@ export const createBrowserPicker = ({
     });
 
   /**
-   * The element under a point in CSS pixels of the viewport, with its box and label, or null when
-   * no element is there. `DOM.getNodeForLocation` takes document points, so the point gets the
-   * scroll offset. The box of `DOM.getBoxModel` is already in viewport points.
+   * The element under a point of the page area, with its box and label, or null when no element is
+   * there. The point and the box use the pixels of the client, whose page area is `width` wide: a
+   * zoomed OpenDucktor window draws more pixels than the page has. `DOM.getNodeForLocation` takes
+   * document points, so the point gets the scroll offset. The box of `DOM.getBoxModel` is already
+   * in viewport points.
    */
-  const hover = (tabId: string, x: number, y: number) =>
+  const hover = (tabId: string, x: number, y: number, width: number) =>
     Effect.gen(function* () {
       if (!enabledTabs.has(tabId)) {
         return null;
@@ -114,10 +119,11 @@ export const createBrowserPicker = ({
       const viewport = layoutMetricsResultSchema.parse(
         yield* cdp("Page.getLayoutMetrics"),
       ).cssVisualViewport;
+      const pagePixels = viewport.clientWidth / width;
       const located = yield* host.session
         .send("DOM.getNodeForLocation", {
-          x: Math.round(x + viewport.pageX),
-          y: Math.round(y + viewport.pageY),
+          x: Math.round(x * pagePixels + viewport.pageX),
+          y: Math.round(y * pagePixels + viewport.pageY),
           includeUserAgentShadowDOM: false,
           ignorePointerEventsNone: true,
         })
@@ -151,7 +157,12 @@ export const createBrowserPicker = ({
       yield* cdp("Runtime.releaseObject", { objectId });
       return {
         nodeRef: String(located.backendNodeId),
-        box,
+        box: {
+          x: box.x / pagePixels,
+          y: box.y / pagePixels,
+          width: box.width / pagePixels,
+          height: box.height / pagePixels,
+        },
         label: z.string().min(1).catch("element").parse(label.result.value),
       };
     });

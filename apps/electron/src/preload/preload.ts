@@ -27,7 +27,10 @@ import {
   ELECTRON_APP_UPDATE_GET_STATE_CHANNEL,
   ELECTRON_APP_UPDATE_INSTALL_CHANNEL,
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
-  ELECTRON_BROWSER_BIND_GUEST_CHANNEL,
+  ELECTRON_BROWSER_CAPTURE_PAGE_CHANNEL,
+  ELECTRON_BROWSER_FOCUS_PAGE_CHANNEL,
+  ELECTRON_BROWSER_SET_SURFACE_CHANNEL,
+  electronBrowserCapturePageResultSchema,
   ELECTRON_BROWSER_CONNECT_CHANNEL,
   ELECTRON_BROWSER_DISCONNECT_CHANNEL,
   ELECTRON_BROWSER_EVENT_CHANNEL,
@@ -151,8 +154,16 @@ const browser: OpenDucktorElectronBrowserApi = {
     ipcRenderer.on(ELECTRON_BROWSER_EVENT_CHANNEL, handleEvent);
     return () => ipcRenderer.off(ELECTRON_BROWSER_EVENT_CHANNEL, handleEvent);
   },
-  async bindGuest(tabId, webContentsId) {
-    await ipcRenderer.invoke(ELECTRON_BROWSER_BIND_GUEST_CHANNEL, { tabId, webContentsId });
+  async setSurface(input) {
+    await ipcRenderer.invoke(ELECTRON_BROWSER_SET_SURFACE_CHANNEL, input);
+  },
+  async focusPage(tabId) {
+    await ipcRenderer.invoke(ELECTRON_BROWSER_FOCUS_PAGE_CHANNEL, { tabId });
+  },
+  async capturePage(tabId) {
+    return electronBrowserCapturePageResultSchema.parse(
+      await ipcRenderer.invoke(ELECTRON_BROWSER_CAPTURE_PAGE_CHANNEL, { tabId }),
+    );
   },
   async pickFiles(input) {
     return electronBrowserPickFilesResultSchema.parse(

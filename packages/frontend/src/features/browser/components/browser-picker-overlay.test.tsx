@@ -44,8 +44,8 @@ const renderOverlay = (overrides: Partial<BrowserPickerOverlayProps> = {}) => {
   const props: BrowserPickerOverlayProps = {
     target: null,
     selected: [],
-    onPointerMove: mock((_x: number, _y: number) => {}),
-    onPick: mock((_shiftKey: boolean, _x: number, _y: number) => {}),
+    onPointerMove: mock((_x: number, _y: number, _width: number) => {}),
+    onPick: mock((_shiftKey: boolean, _x: number, _y: number, _width: number) => {}),
     onCancel: mock(() => {}),
     ...overrides,
   };
@@ -68,8 +68,8 @@ describe("BrowserPickerOverlay", () => {
     runFrames();
 
     expect(props.onPointerMove).toHaveBeenCalledTimes(2);
-    expect(props.onPointerMove).toHaveBeenNthCalledWith(1, 30, 40);
-    expect(props.onPointerMove).toHaveBeenNthCalledWith(2, 50, 50);
+    expect(props.onPointerMove).toHaveBeenNthCalledWith(1, 30, 40, 800);
+    expect(props.onPointerMove).toHaveBeenNthCalledWith(2, 50, 50, 800);
   });
 
   test("picks at the click point, adds with Shift-click, and turns off on Escape", () => {
@@ -79,8 +79,8 @@ describe("BrowserPickerOverlay", () => {
     fireEvent.click(overlay, { clientX: 150, clientY: 100, shiftKey: true });
     fireEvent.keyDown(overlay, { key: "Escape" });
 
-    expect(props.onPick).toHaveBeenNthCalledWith(1, false, 30, 40);
-    expect(props.onPick).toHaveBeenNthCalledWith(2, true, 50, 50);
+    expect(props.onPick).toHaveBeenNthCalledWith(1, false, 30, 40, 800);
+    expect(props.onPick).toHaveBeenNthCalledWith(2, true, 50, 50, 800);
     expect(props.onCancel).toHaveBeenCalledTimes(1);
   });
 

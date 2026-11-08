@@ -50,7 +50,7 @@ export const createBrowserClientHub = ({ tabs, picker }: BrowserClientHubInput) 
           return request(
             client,
             message.tabId,
-            picker.hover(message.tabId, message.x, message.y).pipe(
+            picker.hover(message.tabId, message.x, message.y, message.width).pipe(
               Effect.map((target) =>
                 client.send({
                   type: "picker_target",

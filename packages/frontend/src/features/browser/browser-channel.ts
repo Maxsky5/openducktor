@@ -5,7 +5,7 @@ import {
   encodeBrowserChannelMessage,
 } from "@openducktor/contracts";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import type { BrowserChannelConnection, WebviewBrowserBridge } from "@/lib/shell-bridge";
+import type { BrowserChannelConnection, ElectronBrowserBridge } from "@/lib/shell-bridge";
 
 export type BrowserChannelStatus = "connecting" | "connected" | "disconnected";
 
@@ -20,7 +20,7 @@ const MAX_RECONNECT_DELAY_MS = 2_000;
  * The channel drops a message while it is not connected. The owners of anchors send them again
  * when the channel connects, and a picker hover for a lost connection has no page to reach.
  */
-export const createBrowserChannel = (bridge: Pick<WebviewBrowserBridge, "connect">) => {
+export const createBrowserChannel = (bridge: Pick<ElectronBrowserBridge, "connect">) => {
   let connection: BrowserChannelConnection | null = null;
   let status: BrowserChannelStatus = "disconnected";
   let failure: string | null = null;

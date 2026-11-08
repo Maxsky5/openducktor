@@ -98,7 +98,6 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
     automation: input.automation,
     registry,
     runJob,
-    onPressing: (tabId, pressing) => hub.broadcast({ type: "agent_press", tabId, pressing }),
   });
   // The picker and the agent pages of a tab end with its page. The agent pages also end when the
   // user stops sharing the tab.
@@ -120,7 +119,19 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
     screenshots: input.screenshots,
     newTabId: newId,
     mark: (tabId, action, point) =>
-      hub.broadcast({ type: "agent_marker", tabId, action, x: point.x, y: point.y }),
+      runJob(
+        tabs.requireLive(tabId, "browser.agent.marker").pipe(
+          Effect.flatMap((host) =>
+            host.evaluate(
+              `globalThis.__odtAgentMarker(${JSON.stringify(action)}, ${point.x}, ${point.y})`,
+            ),
+          ),
+          Effect.asVoid,
+          Effect.catch((cause) =>
+            Effect.sync(() => input.reportFailure("browser.agent.marker", cause)),
+          ),
+        ),
+      ),
   });
 
   const unsubscribeEngine = engine.subscribe(engineEvents.handle);

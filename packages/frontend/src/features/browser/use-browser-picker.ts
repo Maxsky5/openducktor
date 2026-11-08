@@ -82,12 +82,13 @@ export const useBrowserPicker = (channel: BrowserChannel, tabId: string, live: b
     state,
     toggle: () => setEnabled(!state.active),
     stop: () => setEnabled(false),
-    hover: (x: number, y: number) => channel.send({ type: "picker_hover", tabId, x, y }),
+    hover: (x: number, y: number, width: number) =>
+      channel.send({ type: "picker_hover", tabId, x, y, width }),
     /**
      * Picks the element at the click point. A click can come before the host found the element
      * under a pointer that just moved, so the pick then waits for the host.
      */
-    pick: (shiftKey: boolean, x: number, y: number) => {
+    pick: (shiftKey: boolean, x: number, y: number, width: number) => {
       const point = { x, y };
       const known = lastTarget.current;
       if (known !== null && samePoint(known.point, point)) {
@@ -95,7 +96,7 @@ export const useBrowserPicker = (channel: BrowserChannel, tabId: string, live: b
         return;
       }
       pendingPick.current = { point, shiftKey };
-      channel.send({ type: "picker_hover", tabId, x, y });
+      channel.send({ type: "picker_hover", tabId, x, y, width });
     },
     clearSelection: () => setState((current) => ({ ...current, selection: [] })),
   };

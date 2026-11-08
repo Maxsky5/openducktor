@@ -4,6 +4,7 @@ import {
   type BrowserTabSummary,
 } from "@openducktor/contracts";
 import type { ReactElement, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   type BrowserAnnotation,
   BrowserAnnotationList,
@@ -17,24 +18,25 @@ import { BrowserPageArea, useDevToolsSize } from "./browser-devtools-dock";
 import { useBrowserDevToolsStore } from "./browser-devtools-store";
 import type { BrowserFrameControls } from "./browser-frame-display";
 import { BrowserNewTab } from "./browser-new-tab";
-import { PageOverlays } from "./browser-page-overlays";
 import {
   frameReplacement,
   pageReplacement,
   reportBrowserFailure,
 } from "./browser-page-replacement";
 import {
+  type ElectronBrowserRuntime,
   type FrameBrowserRuntime,
   useBrowserChannelStatus,
   useBrowserEngineState,
   useBrowserOverlayHost,
   useBrowserRuntime,
-  type WebviewBrowserRuntime,
 } from "./browser-runtime";
+import { BrowserSelectionCommentBox } from "./browser-selection-comment-box";
 import { BrowserSiteMenuContainer } from "./browser-site-menu-container";
 import { browserSurfaceKey } from "./browser-surface-registry";
-import { BrowserTabPromptBars } from "./browser-tab-prompts";
+import { BrowserTabPromptBars, BrowserTabPromptOverlays } from "./browser-tab-prompts";
 import { BrowserDownloadsMenu } from "./components/browser-downloads-menu";
+import { BrowserPickerOverlay } from "./components/browser-picker-overlay";
 import { BrowserToolbar, BrowserToolbarPlaceholder } from "./components/browser-toolbar";
 import { type BrowserAnchors, useBrowserAnchors } from "./use-browser-anchors";
 import { useBrowserPicker } from "./use-browser-picker";
@@ -57,8 +59,8 @@ export function BrowserTabContent(props: BrowserTabContentProps): ReactElement {
   // A new tab has no host summary for a moment. The placeholder keeps the toolbar in its place and
   // the page hidden, so the tab does not flash before its first page.
   if (tab === null) return <BrowserTabPlaceholder />;
-  return runtime.surface === "webview" ? (
-    <WebviewTabContent {...props} tab={tab} runtime={runtime} />
+  return runtime.surface === "electron" ? (
+    <ElectronTabContent {...props} tab={tab} runtime={runtime} />
   ) : (
     <FrameTabContent {...props} tab={tab} runtime={runtime} />
   );
@@ -77,14 +79,14 @@ function BrowserTabPlaceholder(): ReactElement {
   );
 }
 
-/** An Electron tab: its `<webview>` page, prompts, annotations, agent markers, and DevTools. */
-function WebviewTabContent({
+/** An Electron tab: its native page, prompts, annotations, and DevTools. */
+function ElectronTabContent({
   entry,
   tab,
   isShown,
   addressFocusRequest,
   runtime,
-}: ListedTabContentProps & { runtime: WebviewBrowserRuntime }): ReactElement {
+}: ListedTabContentProps & { runtime: ElectronBrowserRuntime }): ReactElement {
   const { channel } = runtime;
   const hostClient = useHostClient();
   const engine = useBrowserEngineState();
@@ -151,17 +153,34 @@ function WebviewTabContent({
           </div>
         }
       />
-      {overlayHost && replacement === null ? (
-        <PageOverlays
-          channel={channel}
-          tab={tab}
-          picker={picker}
-          ownerKey={ownerKey}
-          annotations={annotations}
-          anchors={anchors}
-          overlayHost={overlayHost}
-        />
-      ) : null}
+      {overlayHost && replacement === null
+        ? // oxlint-disable-next-line architecture/require-page-occluder -- The picker, the comment box, and the dialog prompt mark themselves.
+          createPortal(
+            <>
+              {/* While the picker is on, the page shows as its snapshot under the picker. */}
+              {picker.state.active ? (
+                <BrowserPickerOverlay
+                  target={picker.state.target}
+                  selected={picker.state.selection.map((element) => element.box)}
+                  onPointerMove={picker.hover}
+                  onPick={picker.pick}
+                  onCancel={picker.stop}
+                />
+              ) : null}
+              {picker.state.selection.length > 0 && ownerKey !== null ? (
+                <BrowserSelectionCommentBox
+                  tabId={entry.tabId}
+                  ownerKey={ownerKey}
+                  selection={picker.state.selection}
+                  bounds={{ width: overlayHost.clientWidth, height: overlayHost.clientHeight }}
+                  onDone={picker.clearSelection}
+                />
+              ) : null}
+              <BrowserTabPromptOverlays tab={tab} />
+            </>,
+            overlayHost,
+          )
+        : null}
     </div>
   );
 }

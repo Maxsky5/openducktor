@@ -24,6 +24,12 @@ type CdpProxyClientKind = "agent" | "devtools";
 export type CdpProxyClient = {
   /** One command from the client. */
   receive(message: CdpClientMessage): void;
+  /**
+   * Makes the page behave as focused, so agent input does not need the window focus. Chromium
+   * keeps an emulated page drawing at full speed, also while no panel shows it, so an agent turns
+   * it on only while one of its actions runs.
+   */
+  emulateFocus(enabled: boolean): Effect.Effect<void, BrowserServiceError>;
   close(): Effect.Effect<void>;
 };
 
@@ -33,17 +39,7 @@ export type CdpProxyClientInput = {
   send(message: BrowserAutomationMessage): void;
   /** Runs when the page session ends without a close from this side. */
   onEnded(): void;
-} & (
-  | {
-      kind: "agent";
-      /**
-       * `true` when a mouse press of the client starts, and `false` when the last running press
-       * got its reply. A press moves the window focus to an Electron `<webview>`.
-       */
-      onPressing(pressing: boolean): void;
-    }
-  | { kind: "devtools" }
-);
+} & ({ kind: "agent" } | { kind: "devtools" });
 
 /**
  * One CDP client of one tab, with its own Chromium session.
@@ -73,7 +69,6 @@ export const openCdpProxyClient = (
     );
     let closed = false;
     let pageAnnounced = false;
-    let pressesRunning = 0;
     /** Child targets that this client attached, such as out-of-process frames. */
     const childTargets = new Set<string>();
 
@@ -97,40 +92,7 @@ export const openCdpProxyClient = (
       }
     };
 
-    /** Counts the mouse presses of an agent client from the command to its reply. */
-    const trackPress = (request: CdpClientMessage): (() => void) => {
-      if (
-        input.kind !== "agent" ||
-        request.method !== "Input.dispatchMouseEvent" ||
-        !mousePressSchema.safeParse(request.params).success
-      ) {
-        return () => {};
-      }
-      const { onPressing } = input;
-      pressesRunning += 1;
-      if (pressesRunning === 1) onPressing(true);
-      return () => {
-        pressesRunning -= 1;
-        if (pressesRunning === 0) onPressing(false);
-      };
-    };
-
-    /**
-     * An Electron guest drops keyboard input until a mouse press reaches its page, also with focus
-     * emulation. A press with no button outside the page reaches it and fires no page events. It
-     * runs inside the press report, because a press moves the window focus to the `<webview>`.
-     */
-    const activateKeyboard = (childSessionId: string | undefined): Promise<void> =>
-      Promise.all(
-        KEYBOARD_ACTIVATION_PRESS.map((params) => {
-          const pressDone = trackPress({ id: 0, method: "Input.dispatchMouseEvent", params });
-          return session
-            .request("Input.dispatchMouseEvent", params, childSessionId)
-            .finally(pressDone);
-        }),
-      ).then(() => undefined);
-
-    /** The tab as a `page` target. An Electron guest reports itself as a `webview` target. */
+    /** The tab as a `page` target. */
     const pageTargetInfo = () =>
       session.request("Target.getTargetInfo").then((result) => {
         const info = targetInfoResultSchema.parse(result).targetInfo;
@@ -178,31 +140,25 @@ export const openCdpProxyClient = (
         reloadPage(request);
         return;
       }
+      // The proxy turns focus emulation on for each agent action. Playwright asks for it once when
+      // it connects, and that would keep the page drawing while no action runs.
+      if (input.kind === "agent" && request.method === "Emulation.setFocusEmulationEnabled") {
+        reply(request, {});
+        return;
+      }
       // Only the page session captures through the engine. A child session is a frame.
       if (request.method === "Page.captureScreenshot" && childSessionId === undefined) {
         captureScreenshot(request);
         return;
       }
-      // The activation commands go first, and a session runs its commands in order.
-      const keyboardReady =
-        input.kind === "agent" && isKeyboardInput(request)
-          ? activateKeyboard(childSessionId)
-          : null;
-      const pressDone = trackPress(request);
-      const result = session.request(request.method, request.params, childSessionId);
-      (keyboardReady === null ? result : keyboardReady.then(() => result)).then(
-        (value) => {
-          pressDone();
-          reply(request, value);
-        },
-        (cause: Error) => {
-          pressDone();
+      session.request(request.method, request.params, childSessionId).then(
+        (value) => reply(request, value),
+        (cause: Error) =>
           replyError(
             request,
             cause.message,
             cause instanceof CdpProtocolError && cause.code !== null ? cause.code : REFUSED_CODE,
-          );
-        },
+          ),
       );
     };
 
@@ -329,14 +285,6 @@ export const openCdpProxyClient = (
     };
 
     const unsubscribe = session.subscribe(forwardEvent);
-    yield* Scope.addFinalizer(
-      scope,
-      Effect.sync(() => {
-        // A press without a reply must not keep the focus guard of the renderer on.
-        if (input.kind === "agent" && pressesRunning > 0) input.onPressing(false);
-        pressesRunning = 0;
-      }),
-    );
     const unsubscribeDetach = session.onDetached(() => {
       if (closed) return;
       if (input.kind === "agent" && pageAnnounced) {
@@ -356,25 +304,22 @@ export const openCdpProxyClient = (
       }),
     );
 
-    if (input.kind === "agent") {
-      // Agent input must not need the window focus, so the page behaves as focused for this client.
-      yield* session.send("Emulation.setFocusEmulationEnabled", { enabled: true }).pipe(
-        Effect.tapError(() => Scope.close(scope, Exit.void)),
-        Effect.mapError(
-          (cause) =>
-            new BrowserServiceError({
-              code: "browser_engine_error",
-              operation: "browser.cdp_proxy.open",
-              message: `Could not prepare the page for agent input: ${cause.message}`,
-              tabId: input.tabId,
-              cause,
-            }),
-        ),
-      );
-    }
-
     return {
       receive,
+      emulateFocus: (enabled) =>
+        session.send("Emulation.setFocusEmulationEnabled", { enabled }).pipe(
+          Effect.asVoid,
+          Effect.mapError(
+            (cause) =>
+              new BrowserServiceError({
+                code: "browser_engine_error",
+                operation: "browser.cdp_proxy.emulate_focus",
+                message: `Could not prepare the page for agent input: ${cause.message}`,
+                tabId: input.tabId,
+                cause,
+              }),
+          ),
+        ),
       close: () =>
         Effect.suspend(() => {
           closed = true;
@@ -383,23 +328,6 @@ export const openCdpProxyClient = (
     } satisfies CdpProxyClient;
   });
 
-const mousePressSchema = z.object({ type: z.literal("mousePressed") });
-/** A key event that types. A key release alone types nothing. */
-const keyTypingEventSchema = z.object({ type: z.enum(["keyDown", "rawKeyDown", "char"]) });
-
-const isKeyboardInput = (request: CdpClientMessage): boolean =>
-  request.method === "Input.insertText" ||
-  request.method === "Input.imeSetComposition" ||
-  (request.method === "Input.dispatchKeyEvent" &&
-    keyTypingEventSchema.safeParse(request.params).success);
-
-const KEYBOARD_ACTIVATION_PRESS = (["mousePressed", "mouseReleased"] as const).map((type) => ({
-  type,
-  x: -1,
-  y: -1,
-  button: "none",
-  clickCount: 0,
-}));
 const targetIdParamsSchema = z.object({ targetId: z.string() });
 const attachedTargetSchema = z.object({ targetInfo: z.object({ targetId: z.string() }) });
 

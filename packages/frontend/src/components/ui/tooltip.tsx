@@ -37,6 +37,7 @@ function TooltipContent({
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
         data-slot="tooltip-content"
+        data-page-occluder=""
         sideOffset={sideOffset}
         className={cn(
           "bg-foreground text-background z-[80] w-fit origin-(--radix-tooltip-content-transform-origin) rounded-md px-3 py-1.5 text-xs text-balance",

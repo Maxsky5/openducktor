@@ -8,7 +8,6 @@ import {
   type OpenDucktorElectronTerminalApi,
   PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE,
 } from "../shared/electron-bridge-contract";
-import { electronBrowserPartition } from "../shared/electron-browser-partitions";
 import { createElectronTaskAssetUrl } from "../shared/electron-task-asset-url";
 
 export function withElectronNativeTheme(
@@ -149,15 +148,13 @@ export const createElectronShellBridge = (): ShellBridge => {
         return electronApi.editorClipboard.readText(type);
       },
     },
-    // Mount each browser tab as `<webview partition={partition(workspaceId)} src="about:blank"
-    // allowpopups>`, then call `bindGuest` with its `getWebContentsId()`. The engine takes control
-    // of the page first, then loads the tab URL, so the page never runs without the host.
     browser: {
-      surface: "webview",
-      partition: electronBrowserPartition,
+      surface: "electron",
       connect: (onFrame, onStateChange) =>
         connectFrameChannel(electronApi.browser, onFrame, onStateChange),
-      bindGuest: (tabId, webContentsId) => electronApi.browser.bindGuest(tabId, webContentsId),
+      setSurface: (input) => electronApi.browser.setSurface(input),
+      focusPage: (tabId) => electronApi.browser.focusPage(tabId),
+      capturePage: (tabId) => electronApi.browser.capturePage(tabId),
       pickFiles: (input) => electronApi.browser.pickFiles(input),
     },
     terminals: {

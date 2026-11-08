@@ -10,7 +10,7 @@ const TAB_ID = "10000000-0000-4000-8000-000000000001";
 
 describe("browser channel messages", () => {
   test("round-trips a client message and a server message", () => {
-    const hover = { type: "picker_hover", tabId: TAB_ID, x: 10, y: 20 } as const;
+    const hover = { type: "picker_hover", tabId: TAB_ID, x: 10, y: 20, width: 400 } as const;
     const shortcut = { type: "shortcut", shortcut: "command_palette" } as const;
 
     expect(decodeBrowserClientMessage(encodeBrowserChannelMessage(hover))).toEqual(hover);
@@ -27,6 +27,7 @@ describe("browser channel messages", () => {
   test("refuses a message over the size limit", () => {
     const anchors = Array.from({ length: 200 }, (_, index) => ({
       annotationId: `a${index}`,
+      number: index + 1,
       selectors: ["x".repeat(4_000)],
     }));
 

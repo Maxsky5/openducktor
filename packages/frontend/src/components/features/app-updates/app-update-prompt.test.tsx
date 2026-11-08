@@ -43,6 +43,8 @@ describe("AppUpdatePrompt", () => {
 
     expect(await screen.findByText("Updates unavailable")).toBeTruthy();
     expect(screen.getByText("Electron update feed configuration is missing.")).toBeTruthy();
+    // The native page must leave the area under the prompt, so the prompt stays clickable.
+    expect(screen.getByText("Updates unavailable").closest("[data-page-occluder]")).not.toBeNull();
   });
 
   test("shows concise development feedback for menu checks", async () => {

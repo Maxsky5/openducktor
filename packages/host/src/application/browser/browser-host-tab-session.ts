@@ -73,6 +73,8 @@ export type BrowserHostTabSession = {
   /** The last navigation that the host or the page started in the main frame. */
   lastNavigation(): BrowserHeldNavigation | null;
   noteNavigation(navigation: BrowserHeldNavigation): void;
+  /** Runs an expression in the isolated world of the page and returns its value. */
+  evaluate(expression: string): Effect.Effect<JSONType | undefined, BrowserServiceError>;
   /** The text that the user selected on the page or in a text field, or null without one. */
   readSelectedText(): Effect.Effect<string | null, BrowserServiceError>;
   setAnchors(anchors: readonly BrowserAnnotationAnchor[]): Effect.Effect<void, BrowserServiceError>;
@@ -358,6 +360,7 @@ export const startBrowserHostTabSession = (
       noteNavigation: (navigation) => {
         lastNavigation = navigation;
       },
+      evaluate: evaluateInHostWorld,
       readSelectedText: () =>
         evaluateInHostWorld("globalThis.__odtSelectedText()").pipe(
           Effect.flatMap((value) => {

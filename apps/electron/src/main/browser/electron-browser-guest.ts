@@ -42,7 +42,10 @@ export type GuestWindowOpenResponse =
   | {
       action: "allow";
       outlivesOpener: false;
-      overrideBrowserWindowOptions: { show: false };
+      overrideBrowserWindowOptions: {
+        show: false;
+        webPreferences: { focusOnNavigation: false };
+      };
     };
 
 /** An OpenDucktor popup window that Electron created for a `new-window` popup. */
@@ -57,26 +60,18 @@ export type ElectronPopupWindow = {
 
 type Listener<Args extends unknown[]> = (...args: Args) => void;
 
-export type ElectronGuestHost = {
-  readonly id: number;
-  isDestroyed(): boolean;
-  setBackgroundThrottling(allowed: boolean): void;
-};
-
 /** The Electron `WebContents` API of a guest page that the browser engine uses. */
 export type ElectronBrowserGuest = {
   readonly id: number;
   readonly debugger: ElectronCdpDebugger;
-  /** The OpenDucktor window page that holds a `<webview>` guest. */
-  readonly hostWebContents: ElectronGuestHost | null;
   readonly session: ElectronBrowserPartitionSession;
-  getType(): string;
   getURL(): string;
   isDestroyed(): boolean;
   loadURL(url: string): Promise<void>;
   reload(): void;
   reloadIgnoringCache(): void;
   close(): void;
+  focus(): void;
   setBackgroundThrottling(allowed: boolean): void;
   setWindowOpenHandler(handler: (details: GuestWindowOpenDetails) => GuestWindowOpenResponse): void;
   listenerCount(eventName: typeof RUN_DIALOG_EVENT): number;
@@ -121,11 +116,6 @@ export type BrowserGuestEvents = {
 
 export type BrowserGuestBinding = {
   readonly guest: ElectronBrowserGuest;
-  /**
-   * The window page that held the guest when it attached. Read it here: a destroyed guest throws
-   * on `hostWebContents`, and a window reload destroys every guest in it.
-   */
-  readonly host: ElectronGuestHost | null;
   readonly connection: ElectronDebuggerCdpConnection;
   readonly targetId: string;
   /** Stops the handlers. The guest page keeps running. */
@@ -278,12 +268,16 @@ export const prepareBrowserGuest = async (
         return { action: "deny" };
       }
       // Create the popup hidden, then show it without taking focus. Keep the inherited security
-      // settings: an override of `sandbox` drops `window.opener`.
+      // settings: an override of `sandbox` drops `window.opener`. The popup inherits no other
+      // web preference, so it needs `focusOnNavigation` too.
       if (details.disposition === "new-window") {
         return {
           action: "allow",
           outlivesOpener: false,
-          overrideBrowserWindowOptions: { show: false },
+          overrideBrowserWindowOptions: {
+            show: false,
+            webPreferences: { focusOnNavigation: false },
+          },
         };
       }
       // Every other popup becomes a panel tab without an opener link.
@@ -292,7 +286,9 @@ export const prepareBrowserGuest = async (
     });
     guest.on("did-create-window", (window, details) => {
       // A popup window has no browser layer, so its pages never attach a `<webview>`.
-      window.webContents.on("will-attach-webview", (event) => event.preventDefault());
+      window.webContents.on("will-attach-webview", (event: ElectronCancelableEvent) =>
+        event.preventDefault(),
+      );
       if (active) {
         window.showInactive();
         events.onPopupWindow(window, details.url);
@@ -309,7 +305,6 @@ export const prepareBrowserGuest = async (
 
     return {
       guest,
-      host: guest.hostWebContents,
       connection,
       targetId: targetInfo.targetId,
       release,

@@ -58,10 +58,11 @@ const renderCoordinator = async () => {
     createShellBridgeFixture({
       bridge: {
         browser: {
-          surface: "webview",
+          surface: "electron",
           connect: async () => ({ send: async () => {}, close: () => {} }),
-          partition: (workspaceId) => `persist:openducktor-browser-${workspaceId}`,
-          bindGuest: async () => {},
+          setSurface: async () => {},
+          focusPage: async () => {},
+          capturePage: async () => "data:image/png;base64,",
           pickFiles: async () => [],
         },
       },

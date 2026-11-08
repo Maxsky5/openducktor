@@ -581,6 +581,7 @@ export function AgentChatComposerEditor({
       {composerFileReferenceTooltip
         ? createPortal(
             <div
+              data-page-occluder=""
               className={cn(
                 "pointer-events-none fixed z-50 max-w-80 rounded-md bg-foreground px-3 py-1.5 text-xs text-background text-balance shadow-sm",
                 composerFileReferenceTooltip.side === "top"

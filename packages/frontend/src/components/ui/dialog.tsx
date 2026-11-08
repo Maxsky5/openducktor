@@ -33,6 +33,7 @@ function DialogOverlay({
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
+      data-page-occluder=""
       className={cn("fixed inset-0 z-[70] bg-black/45 backdrop-blur-sm", className)}
       {...props}
     />
@@ -114,6 +115,7 @@ function DialogContent({
       >
         <DialogPrimitive.Content
           data-slot="dialog-content"
+          data-page-occluder=""
           data-motion={motion}
           ref={setContentRef}
           className={cn(

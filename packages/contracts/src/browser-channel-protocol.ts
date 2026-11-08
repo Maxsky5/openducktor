@@ -15,6 +15,8 @@ const coordinateSchema = z.number();
 
 const browserAnnotationAnchorSchema = z.strictObject({
   annotationId: z.string().min(1).max(128),
+  /** The number that the page marker shows. */
+  number: z.number().int().min(1),
   selectors: z
     .array(withMaxUtf16Length(z.string().min(1), 4_096))
     .min(1)
@@ -28,6 +30,8 @@ const browserClientMessageSchema = z.discriminatedUnion("type", [
     tabId: browserTabIdSchema,
     x: coordinateSchema,
     y: coordinateSchema,
+    /** The width of the page area in the pixels of `x` and `y`, which can differ from the page. */
+    width: z.number().positive(),
   }),
   z.strictObject({
     type: z.literal("anchors"),
@@ -43,11 +47,8 @@ const browserClientMessageSchema = z.discriminatedUnion("type", [
 ]);
 export type BrowserClientMessage = z.infer<typeof browserClientMessageSchema>;
 
-const browserAgentMarkerActionSchema = z.enum(["click", "hover", "type"]);
-export type BrowserAgentMarkerAction = z.infer<typeof browserAgentMarkerActionSchema>;
-
 const browserServerMessageSchema = z.discriminatedUnion("type", [
-  /** The element at the point of a `picker_hover`, which names the same point. */
+  /** The element at the point of a `picker_hover`, which names the same point and pixels. */
   z.strictObject({
     type: z.literal("picker_target"),
     tabId: browserTabIdSchema,
@@ -71,33 +72,7 @@ const browserServerMessageSchema = z.discriminatedUnion("type", [
       }),
     ),
   }),
-  z.strictObject({
-    type: z.literal("agent_marker"),
-    tabId: browserTabIdSchema,
-    action: browserAgentMarkerActionSchema,
-    x: coordinateSchema,
-    y: coordinateSchema,
-  }),
-  /**
-   * Electron only. While `pressing` is true, an agent mouse press runs in the tab. A press moves
-   * the window focus to its `<webview>`, so the renderer gives the focus back to the element that
-   * the user had focused.
-   */
-  z.strictObject({
-    type: z.literal("agent_press"),
-    tabId: browserTabIdSchema,
-    pressing: z.boolean(),
-  }),
   z.strictObject({ type: z.literal("shortcut"), shortcut: browserForwardedShortcutIdSchema }),
-  /**
-   * Electron only. While `awake` is true, an agent or DevTools uses the tab, so a hidden
-   * `<webview>` must stay drawn (for example with `opacity: 0`) instead of `visibility: hidden`.
-   */
-  z.strictObject({
-    type: z.literal("surface_wake"),
-    tabId: browserTabIdSchema,
-    awake: z.boolean(),
-  }),
   z.strictObject({
     type: z.literal("protocol_error"),
     tabId: browserTabIdSchema.optional(),

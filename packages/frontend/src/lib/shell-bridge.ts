@@ -32,19 +32,29 @@ export type BrowserChannelConnection = {
   close(): void | Promise<void>;
 };
 
-/** Electron shows each tab in its own `<webview>`. */
-export type WebviewBrowserBridge = {
-  surface: "webview";
-  /** Opens the browser channel of this window: picker, anchors, agent markers, and shortcuts. */
+/** Electron shows each tab in a native page view that this bridge places over the page slot. */
+export type ElectronBrowserBridge = {
+  surface: "electron";
+  /** Opens the browser channel of this window: picker, anchors, markers, and shortcuts. */
   connect(
     onMessage: (message: Uint8Array) => void,
     onStateChange: (state: BrowserChannelState) => void,
     onFailure: (failure: BrowserFailure) => void,
   ): Promise<BrowserChannelConnection>;
-  /** The `<webview>` partition that holds the browser data of a workspace. */
-  partition(workspaceId: string): string;
-  /** Binds a mounted `<webview>` guest to its tab, so the host can drive the page. */
-  bindGuest(tabId: string, webContentsId: number): Promise<void>;
+  /**
+   * Places the page in its window, or moves it out of every window while no panel shows it. A
+   * covered page keeps its place and keeps drawing, but the user cannot see it.
+   */
+  setSurface(input: {
+    tabId: string;
+    visible: boolean;
+    covered?: boolean;
+    bounds?: { x: number; y: number; width: number; height: number };
+  }): Promise<void>;
+  /** Gives the page the keyboard focus after a user navigation. */
+  focusPage(tabId: string): Promise<void>;
+  /** A PNG data URL of the page as it shows, for a snapshot under a host overlay. */
+  capturePage(tabId: string): Promise<string>;
   /** Opens the OS file dialog. An empty list means that the user canceled. */
   pickFiles(input: { multiple: boolean; accept: readonly string[] }): Promise<string[]>;
 };
@@ -65,7 +75,7 @@ export type FrameBrowserBridge = {
   frames: BrowserFrameBridge | null;
 };
 
-export type BrowserBridge = WebviewBrowserBridge | FrameBrowserBridge;
+export type BrowserBridge = ElectronBrowserBridge | FrameBrowserBridge;
 
 export type ShellBridge = HostConnection & {
   dispose?: () => Promise<void>;

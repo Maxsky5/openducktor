@@ -18,18 +18,21 @@ export type BrowserPickerOverlayProps = {
   target: BrowserPickerTarget | null;
   /** The boxes of the selected elements. */
   selected: readonly BrowserBox[];
-  /** The pointer position in CSS pixels of the page area. At most once per animation frame. */
-  onPointerMove: (x: number, y: number) => void;
+  /**
+   * The pointer position in CSS pixels of the page area, which is `width` wide. At most once per
+   * animation frame.
+   */
+  onPointerMove: (x: number, y: number, width: number) => void;
   /** A click at a point of the page area. Shift-click adds or removes an element. */
-  onPick: (shiftKey: boolean, x: number, y: number) => void;
+  onPick: (shiftKey: boolean, x: number, y: number, width: number) => void;
   /** Escape turns the picker off. */
   onCancel: () => void;
 };
 
-/** A pointer position in CSS pixels of the page area. */
+/** A pointer position in CSS pixels of the page area, and the width of the area. */
 const pagePoint = (event: MouseEvent<HTMLDivElement>) => {
   const area = event.currentTarget.getBoundingClientRect();
-  return { x: event.clientX - area.left, y: event.clientY - area.top };
+  return { x: event.clientX - area.left, y: event.clientY - area.top, width: area.width };
 };
 
 /** The label sits above the box when there is room, and inside the box at the top edge. */
@@ -55,7 +58,7 @@ export function BrowserPickerOverlay({
 }: BrowserPickerOverlayProps): ReactElement {
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<number | null>(null);
-  const pointRef = useRef<{ x: number; y: number } | null>(null);
+  const pointRef = useRef<{ x: number; y: number; width: number } | null>(null);
   const hintId = useId();
 
   useEffect(() => {
@@ -72,7 +75,7 @@ export function BrowserPickerOverlay({
       frameRef.current = null;
       const point = pointRef.current;
       pointRef.current = null;
-      if (point) onPointerMove(point.x, point.y);
+      if (point) onPointerMove(point.x, point.y, point.width);
     });
   };
 
@@ -91,12 +94,13 @@ export function BrowserPickerOverlay({
       aria-describedby={hintId}
       tabIndex={-1}
       data-testid="browser-picker-overlay"
+      data-page-occluder=""
       className="pointer-events-auto absolute inset-0 z-10 cursor-crosshair overflow-hidden outline-none"
       onPointerMove={handlePointerMove}
       onClick={(event) => {
         event.preventDefault();
         const point = pagePoint(event);
-        onPick(event.shiftKey, point.x, point.y);
+        onPick(event.shiftKey, point.x, point.y, point.width);
       }}
       onContextMenu={(event) => event.preventDefault()}
       onKeyDown={handleKeyDown}

@@ -57,6 +57,24 @@ type ViewportClip = z.infer<typeof viewportClipRequestSchema>["clip"];
 type CssViewport = z.infer<typeof layoutMetricsSchema>["cssVisualViewport"];
 
 /**
+ * A PNG data URL of the page as it shows. A CDP screenshot draws the page at once, while
+ * `webContents.capturePage` can fail with `UnknownVizError` until the view has painted a frame.
+ * The snapshot replaces the live page under an overlay, so it is lossless: a JPEG would change
+ * the text and the colors that the user sees.
+ */
+export const capturePageImage = async (
+  connection: Pick<CdpConnection, "request">,
+): Promise<string> => {
+  const { data } = screenshotResultSchema.parse(
+    await connection.request("Page.captureScreenshot", { format: "png" }, ""),
+  );
+  if (data.length === 0) {
+    throw new Error("The page snapshot is empty.");
+  }
+  return `data:image/png;base64,${data}`;
+};
+
+/**
  * Runs CDP `Page.captureScreenshot` on a guest page. For a clip, Chromium draws the shown page at
  * the clip for one frame, and the user sees the page jump. So a PNG or JPEG clip inside the
  * viewport comes from a screenshot of the whole viewport, which Chromium takes as the page shows,
