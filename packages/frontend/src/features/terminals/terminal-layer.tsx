@@ -87,7 +87,6 @@ export function TerminalLayer({
             controller={terminals.controller}
             focusRequest={canInteract ? focusRequest : 0}
             active={canInteract}
-            shown={shown}
             platform={terminals.platform}
             onRetryCreate={retryTerminalCreation}
             onLifecycle={terminals.onLifecycle}
@@ -192,7 +191,6 @@ const TerminalViewport = memo(function TerminalViewport({
   controller,
   focusRequest,
   active,
-  shown,
   platform,
   onRetryCreate,
   onLifecycle,
@@ -204,7 +202,6 @@ const TerminalViewport = memo(function TerminalViewport({
   controller: TerminalSessionsModel["controller"];
   focusRequest: number;
   active: boolean;
-  shown: boolean;
   platform: AppPlatform | undefined;
   onRetryCreate: TerminalSessionsModel["onRetryCreate"];
   onLifecycle: TerminalSessionsModel["onLifecycle"];
@@ -280,7 +277,6 @@ const TerminalViewport = memo(function TerminalViewport({
             controller={controller}
             platform={platform}
             active={active}
-            shown={shown}
             focusRequest={focusRequest}
             onAttention={setAttention}
             onLifecycle={handleLifecycle}

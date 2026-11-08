@@ -127,7 +127,6 @@ const createLightweightBinding = () => {
       proposeDimensions: mock(() => ({ cols: 120, rows: 40 })),
     },
     resetLinkState: mock(() => undefined),
-    setVisible: mock(() => undefined),
     dispose: mock(() => undefined),
   };
   return {
@@ -177,7 +176,6 @@ describe("retained terminal rendering", () => {
         terminalId: "terminal-1",
         controller,
         isActive: () => true,
-        isVisible: () => true,
         getPlatform: () => "darwin",
         stageFile: async () => "/tmp/image.png",
         preparePathInput: async () => "/tmp/image.png",
@@ -232,7 +230,6 @@ describe("retained terminal rendering", () => {
         terminalId: "terminal-1",
         controller,
         isActive: () => true,
-        isVisible: () => true,
         getPlatform: () => "darwin",
         stageFile: async () => "/tmp/image.png",
         preparePathInput: async () => "/tmp/image.png",
@@ -321,7 +318,6 @@ describe("retained terminal rendering", () => {
           terminalId: "terminal-hidden-task",
           controller,
           isActive: () => active,
-          isVisible: () => active,
           getPlatform: () => "darwin",
           stageFile: async () => "/tmp/image.png",
           preparePathInput: async () => "/tmp/image.png",
@@ -418,7 +414,6 @@ describe("retained terminal rendering", () => {
         terminalId: "terminal-1",
         controller,
         isActive: () => true,
-        isVisible: () => true,
         getPlatform: () => "darwin",
         stageFile: async () => "/tmp/image.png",
         preparePathInput: async () => "/tmp/image.png",
@@ -518,7 +513,6 @@ describe("retained terminal rendering", () => {
           terminalId,
           controller,
           isActive: () => activeTerminalIds.has(terminalId),
-          isVisible: () => activeTerminalIds.has(terminalId),
           getPlatform: () => "darwin",
           stageFile: async () => "/tmp/image.png",
           preparePathInput: async () => "/tmp/image.png",
@@ -616,7 +610,6 @@ describe("retained terminal rendering", () => {
           terminalId,
           controller,
           isActive: () => activeTerminalId === terminalId,
-          isVisible: () => activeTerminalId === terminalId,
           getPlatform: () => "darwin",
           stageFile: async () => "/tmp/image.png",
           preparePathInput: async () => "/tmp/image.png",
@@ -634,13 +627,11 @@ describe("retained terminal rendering", () => {
         });
         retained.push({ container, mount });
         expect(container.querySelector(".xterm")).not.toBeNull();
-        expect(container.querySelectorAll(".xterm-accessibility")).toHaveLength(0);
         const listener = listeners.get(terminalId);
         if (!listener) throw new Error(`Expected ${terminalId} to subscribe.`);
         sendStaleBuffer(listener, terminalId);
         await hydrated;
         activeTerminalId = terminalId;
-        mount.setVisible(true);
         mount.activate(false);
         await nextFrame();
         expect(container.textContent).toContain(`${terminalId} stale log`);
@@ -677,7 +668,6 @@ describe("retained terminal rendering", () => {
       terminalId: "terminal-image-drop",
       controller,
       isActive: () => active,
-      isVisible: () => active,
       getPlatform: () => "darwin",
       stageFile: () => stagedPath,
       preparePathInput: async () => {

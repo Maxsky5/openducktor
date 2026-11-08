@@ -498,11 +498,6 @@ body:has([data-separator="active"]) [data-browser-surface] {
   background: var(--odt-border-ray-color);
 }
 
-.xterm .live-region {
-  /* Keep announcements from wrapping inside xterm's one-pixel hidden container. */
-  white-space: pre;
-}
-
 .odt-terminal-links .xterm-screen.xterm-cursor-pointer {
   cursor: text;
 }

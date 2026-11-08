@@ -196,13 +196,9 @@ Desktop terminals and startup output use the official WebGL addon through the sh
 
 A GPU initialization failure shows an actionable error and keeps output available with the standard renderer. Before the binding admits output, it releases the partial GPU context and replaces the failed emulator with one clean standard emulator. It does not retry GPU initialization. A later GPU context loss shows an error and returns the same emulator to standard rendering, preserving its output and transport. Binding disposal releases the GPU context through public DOM APIs.
 
-### Automatic announcements
+### Screen-reader mode
 
-xterm limits automatic screen-reader announcements by line feeds. A TUI can redraw with cursor controls and produce no line feeds, so its hidden announcement history can grow without that limit. The shared binding retains at most 8,192 UTF-16 code units of that history without splitting a surrogate pair. It adds a newline and xterm's localized `Terminal.strings.tooMuchOutput` notice when the history reaches the limit. Further updates keep that prefix and notice until a native keypress or focus loss starts a new budget.
-
-While the viewport is shown, the native assertive live region and accessible row tree remain available. Terminal output, scrollback, input, selection, and copying keep their existing behavior. The hidden live region uses `white-space: pre` to avoid wrapping text in its one-pixel box. The binding attaches the announcement observer after it chooses the final emulator and removes the observer and input listeners on disposal or failed setup.
-
-The retained viewport combines the existing `TerminalLayer` visibility with the existing `documentVisibility` owner, separately from input readiness. When the viewport or its document hides, the binding removes its announcement subscriptions and disables the public `screenReaderMode` option. This disposes xterm's pending speech text while output continues to update the same emulator and buffer. On reveal, the binding enables the option and binds a new announcement budget to the new native live region. The accessible rows show the current buffer without replaying hidden automatic speech. A shown read-only viewport in a visible document keeps screen-reader mode enabled.
+Terminals do not enable the xterm `screenReaderMode` option. In that mode, xterm keeps an accessible row tree and a live region in step with the screen. It rewrites the rows once per second during output and measures each row, which forces a page layout per row. A terminal mount and each resize also realign every row. These costs delay the session page, so terminals give up screen-reader support for speed. Output, scrollback, input, selection, and copying keep their behavior.
 
 ## Viewport
 
