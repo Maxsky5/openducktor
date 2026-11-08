@@ -9,7 +9,7 @@ const TAB_ID = "00000000-0000-4000-8000-000000000001";
 const BOX = { left: 12, top: 24, width: 640, height: 480 };
 
 const createBridge = () => {
-  const setSurface = mock(async () => {});
+  const setSurface = mock<ElectronBrowserBridge["setSurface"]>(async () => {});
   const capturePage = mock(async () => "data:image/png;base64,AAAA");
   const focusPage = mock(async () => {});
   return {
@@ -97,15 +97,17 @@ describe("ElectronPageSurface", () => {
 
   test("keeps the snapshot until the page is back in its window", async () => {
     const { bridge, setSurface } = createBridge();
+    let placed = (): void => {};
+    // Only a shown page waits for the test, so a late hide does not take its place.
+    setSurface.mockImplementation(async (input) => {
+      if (input.visible) {
+        await new Promise<void>((resolve) => {
+          placed = resolve;
+        });
+      }
+    });
     const { queryByTestId, rerenderSurface } = renderSurface(bridge, placement(true), true);
     await waitFor(() => expect(queryByTestId("browser-page-snapshot")).not.toBeNull());
-    let placed = (): void => {};
-    setSurface.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          placed = resolve;
-        }),
-    );
 
     rerenderSurface(placement(true), false);
     await waitFor(() =>
