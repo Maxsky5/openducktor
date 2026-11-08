@@ -1,5 +1,5 @@
 import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
-import { isAgentSessionBlockedOnInput } from "@openducktor/core";
+import { goalDrivesWork, isAgentSessionBlockedOnInput } from "@openducktor/core";
 
 export const isReadyForTurn = (session: AgentSessionLiveSnapshot): boolean =>
   !session.statusUnavailableReason &&
@@ -14,7 +14,7 @@ export const hasForegroundTurn = (session: AgentSessionLiveSnapshot): boolean =>
 
 /** An active goal drives the work, so the runtime starts each next turn by itself. */
 export const isGoalDrivingWork = (session: AgentSessionLiveSnapshot): boolean =>
-  session.goal?.status === "active" && session.activity !== "idle";
+  goalDrivesWork(session.goal, session.activity !== "idle");
 
 export const hasBlockingInput = (session: AgentSessionLiveSnapshot): boolean =>
   session.activity === "waiting_for_permission" ||

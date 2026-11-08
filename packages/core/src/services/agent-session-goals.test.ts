@@ -7,6 +7,7 @@ import {
 import {
   goalCommandBlockedReason,
   goalCommandStartsWork,
+  goalDrivesWork,
   resolveRuntimeGoalAvailability,
 } from "./agent-session-goals";
 
@@ -78,4 +79,11 @@ test("goalCommandStartsWork is true only for set and resume", () => {
   expect(goalCommandStartsWork({ kind: "resume" })).toBe(true);
   expect(goalCommandStartsWork({ kind: "pause" })).toBe(false);
   expect(goalCommandStartsWork({ kind: "clear" })).toBe(false);
+});
+
+test("only an active goal of a working session drives the work", () => {
+  expect(goalDrivesWork({ status: "active" }, true)).toBe(true);
+  expect(goalDrivesWork({ status: "active" }, false)).toBe(false);
+  expect(goalDrivesWork({ status: "paused" }, true)).toBe(false);
+  expect(goalDrivesWork(null, true)).toBe(false);
 });

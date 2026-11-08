@@ -7,6 +7,7 @@ import type {
 import {
   type AgentModelCatalog,
   BLOCKED_ON_INPUT_REASON,
+  goalDrivesWork,
   steeringPartsBlockedReason,
 } from "@openducktor/core";
 import {
@@ -45,7 +46,7 @@ export const hasOngoingWork = (
     goalRow?: { readonly status: AgentSessionGoalStatus } | null | undefined;
   },
 ): boolean =>
-  hasForegroundTurn(context) || (context.isSessionWorking && context.goalRow?.status === "active");
+  hasForegroundTurn(context) || goalDrivesWork(context.goalRow, context.isSessionWorking);
 
 /** A reusable prompt becomes text before it is sent, so only native commands block steering. */
 export const draftSteerBlockedReason = (

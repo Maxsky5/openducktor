@@ -1,4 +1,8 @@
-import type { AcceptedAgentInput, RuntimeDescriptor } from "@openducktor/contracts";
+import type {
+  AcceptedAgentInput,
+  AgentSessionGoalStatus,
+  RuntimeDescriptor,
+} from "@openducktor/contracts";
 import type { AgentDeliveryAvailability } from "./agent-message-delivery";
 import type { AgentSessionGoalCommand } from "./agent-system-slash-commands";
 import { compareRuntimeVersion } from "./runtime-version";
@@ -50,6 +54,15 @@ export const goalCommandBlockedReason = (
   }
   return null;
 };
+
+/**
+ * An active goal drives the work while the session works, so the runtime starts each next turn by
+ * itself. The host and the composer use this rule.
+ */
+export const goalDrivesWork = (
+  goal: { readonly status: AgentSessionGoalStatus } | null | undefined,
+  working: boolean,
+): boolean => working && goal?.status === "active";
 
 /** What a runtime adapter returns when it accepts a goal action. */
 export const GOAL_COMMAND_ACCEPTED = {
