@@ -154,12 +154,14 @@ export const workflowStateDefinitionSchema = z.strictObject({
 });
 export type WorkflowStateDefinition = z.infer<typeof workflowStateDefinitionSchema>;
 
+const launchPromptIdSchema = workflowIdSchema.refine(
+  (id) => id.startsWith(WORKFLOW_MESSAGE_PROMPT_PREFIX),
+  `A launch action prompt ID starts with "${WORKFLOW_MESSAGE_PROMPT_PREFIX}".`,
+);
+
 export const workflowPromptTemplateRefSchema = z.strictObject({
   kind: z.enum(["kickoff", "message"]),
-  id: workflowIdSchema.refine(
-    (id) => id.startsWith(WORKFLOW_MESSAGE_PROMPT_PREFIX),
-    `A launch action prompt ID starts with "${WORKFLOW_MESSAGE_PROMPT_PREFIX}".`,
-  ),
+  id: launchPromptIdSchema,
 });
 
 /** One way to start or continue an agent session for a step. */
@@ -182,8 +184,16 @@ export const workflowLaunchActionDefinitionSchema = z.strictObject({
   /** When the extra control shows. The default is always. */
   showWhen: workflowConditionSchema.optional(),
   description: z.string().optional(),
-  /** The launch offers Goal mode. The text can use `{{task.id}}` and `{{task.title}}`. */
-  goal: z.strictObject({ defaultObjective: z.string().trim().min(1) }).optional(),
+  /**
+   * The launch offers Goal mode. The default text can use `{{task.id}}` and `{{task.title}}`. The
+   * goal prompt tells a model how to write the goal of the task.
+   */
+  goal: z
+    .strictObject({
+      defaultObjective: z.string().trim().min(1),
+      template: z.strictObject({ kind: z.literal("goal"), id: launchPromptIdSchema }),
+    })
+    .optional(),
 });
 export type WorkflowLaunchActionDefinition = z.infer<typeof workflowLaunchActionDefinitionSchema>;
 

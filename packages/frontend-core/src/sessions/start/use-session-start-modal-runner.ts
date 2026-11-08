@@ -185,6 +185,8 @@ export function useSessionStartModalRunner({
                   workspace: { workspaceId, repoPath: workspaceRepoPath },
                   task,
                   taskWorkflow: intent.taskWorkflow,
+                  launchActionId: intent.launchActionId,
+                  humanFeedback: intent.kickoff?.request.humanFeedback,
                   defaultObjective,
                   model,
                 }),

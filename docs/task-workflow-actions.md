@@ -59,12 +59,12 @@ Stop also cancels Autopilot submissions that are still being prepared. A cancele
 
 ### Goal mode
 
-A launch action that declares `goal` shows a Goal mode switch in its start form, in the desktop app, the browser runner, and the mobile app. The built-in Spec, Plan, Build workflow declares it for Start Implementation, Fix QA Rejection, and Apply Human Changes.
+A launch action that declares `goal` shows a Goal mode switch in its start form, in the desktop app, the browser runner, and the mobile app. The `goal` names the goal prompt of the workflow, so a workflow without a goal prompt offers no Goal mode. The built-in Spec, Plan, Build workflow declares Goal mode for Start Implementation, Fix QA Rejection, and Apply Human Changes, with the "Builder Goal Writer" prompt.
 
 - The switch is off each time the form opens. When it is on, the Goal field shows the default goal text of the launch with the task ID, the task title, and any human feedback.
 - Goal mode replaces the first message. When the switch is on, the form hides "Customize first message", and the agent receives only the goal.
-- "Generate goal" asks the repository default model to write the goal from the task description, the workflow artifacts, the human feedback, and the default goal. The result replaces the goal text. Without a default model, the button is off and the form shows why. The generation uses `agent_runtime_generate_text`.
-- Each built-in default goal follows the OpenAI `define-goal` skill. It states the outcome, the checks that prove it, the `build-completed` submit step, the task scope, and when the agent must stop and ask.
+- "Generate goal" asks the repository default model to write the goal. The goal prompt of the launch, with its repository or global override, gives the instructions. The task description, the workflow artifacts, and the default goal are the material. The result replaces the goal text. Without a default model, the button is off and the form shows why. The generation uses `agent_runtime_generate_text`.
+- Each built-in default goal and the built-in goal prompt follow the OpenAI `define-goal` skill. It states the outcome, the checks that prove it, the `build-completed` submit step, the task scope, and when the agent must stop and ask.
 - An empty goal or a goal over 4000 characters disables the start and shows the reason.
 - A runtime without goals, such as OpenCode older than 2.2.1, disables the switch and shows the reason with its update action.
 - The launch request carries `goal` only when the switch is on. The host accepts it only for a manual kickoff launch without a custom first message, whose action declares `goal`, and whose runtime has goals.

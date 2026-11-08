@@ -28,7 +28,7 @@ export type WorkflowBoardDefinition = z.infer<typeof workflowBoardDefinitionSche
 
 const workflowPromptTemplateSchema = z.strictObject({
   id: workflowIdSchema,
-  purpose: z.enum(["system", "kickoff", "message", "permission"]),
+  purpose: z.enum(["system", "kickoff", "message", "permission", "goal"]),
   builtinVersion: z.number().int().positive(),
   template: z.string(),
   requiredPlaceholders: z.array(agentPromptPlaceholderSchema).optional(),

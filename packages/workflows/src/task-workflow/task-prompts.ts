@@ -16,7 +16,7 @@ import {
 import { formatOdtToolArgs } from "./prompt-tool-args";
 import { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./pull-request-launch";
 
-export type PromptPurpose = "system" | "kickoff" | "message" | "permission";
+export type PromptPurpose = "system" | "kickoff" | "message" | "permission" | "goal";
 
 /** A prompt that a workflow declares. Its ID is unique within the workflow. */
 export type PromptTemplate = {
@@ -108,6 +108,14 @@ export type KickoffPromptInput = {
   overrides?: RepoPromptOverrides | undefined;
 };
 
+/** The instructions that tell a model how to write the goal of a Goal mode launch. */
+export type GoalPromptInput = {
+  launchActionId: string;
+  task: PromptTaskContext;
+  humanFeedback?: string | undefined;
+  overrides?: RepoPromptOverrides | undefined;
+};
+
 export type MessagePromptInput = {
   launchActionId: string;
   /** The role of the session. The core pull request launch needs it. */
@@ -132,6 +140,8 @@ export type TaskPrompts = {
   systemPrompt(input: SystemPromptInput): BuiltAgentPrompt;
   kickoffPrompt(input: KickoffPromptInput): BuiltAgentPrompt;
   messagePrompt(input: MessagePromptInput): BuiltAgentPrompt;
+  /** The goal prompt of a launch action that offers Goal mode. */
+  goalPrompt(input: GoalPromptInput): BuiltAgentPrompt;
   readOnlyRejection(input: { role: string; overrides?: RepoPromptOverrides | undefined }): string;
   /** The enabled repository override wins over the enabled global override. */
   mergeOverrides(input: MergePromptOverridesInput): RepoPromptOverrides;
@@ -143,6 +153,18 @@ export type TaskPrompts = {
 };
 
 type LaunchTemplate = { templateId: string; kind: "kickoff" | "message" };
+
+/** The goal prompt of each launch action that offers Goal mode. */
+const goalTemplateIds = (definition: CompiledWorkflowDefinition) =>
+  new Map(
+    definition.steps.flatMap((step) =>
+      step.kind === "agent"
+        ? step.launchActions.flatMap((launch) =>
+            launch.goal ? [[launch.id, launch.goal.template.id] as const] : [],
+          )
+        : [],
+    ),
+  );
 
 /** How an error message names a prompt. */
 const promptName = (template: OwnedPromptTemplate, roleIds: readonly string[]): string =>
@@ -246,6 +268,9 @@ const checkTemplates = (
   for (const [launchActionId, launch] of launchTemplates) {
     requireTemplate(launch.templateId, launch.kind, `launch action "${launchActionId}"`);
   }
+  for (const [launchActionId, templateId] of goalTemplateIds(definition)) {
+    requireTemplate(templateId, "goal", `the Goal mode of launch action "${launchActionId}"`);
+  }
 };
 
 export const createTaskPrompts = (
@@ -318,7 +343,10 @@ export const createTaskPrompts = (
                   (step) =>
                     step.kind === "agent" &&
                     step.roleId === role.id &&
-                    step.launchActions.some((launch) => launch.template.id === entry.id),
+                    step.launchActions.some(
+                      (launch) =>
+                        launch.template.id === entry.id || launch.goal?.template.id === entry.id,
+                    ),
                 ),
           )
           .map(({ id }) => id);
@@ -547,6 +575,16 @@ export const createTaskPrompts = (
             ? requirePullRequestTarget(launch.templateId, targetBranch)
             : undefined,
         }),
+        overrides,
+      );
+    },
+    goalPrompt: ({ launchActionId, task, humanFeedback, overrides }) => {
+      const templateId = goalTemplateIds(definition).get(launchActionId);
+      if (templateId === undefined)
+        throw new Error(`Launch action "${launchActionId}" does not offer Goal mode.`);
+      return buildPrompt(
+        [workflowKey(templateId)],
+        placeholderValues({ role: roleOfLaunch(launchActionId, undefined), task, humanFeedback }),
         overrides,
       );
     },
