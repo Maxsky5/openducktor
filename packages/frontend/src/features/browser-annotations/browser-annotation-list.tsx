@@ -91,7 +91,7 @@ function BrowserAnnotationListItem({
         <button
           type="button"
           aria-label={`Show annotation ${annotation.number} on the page`}
-          className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-md p-1 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-default disabled:hover:bg-transparent"
+          className="flex min-w-0 flex-1 items-start gap-2 rounded-md p-1 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-default disabled:hover:bg-transparent"
           disabled={isOffPage}
           onClick={() => onSelect(annotation)}
         >

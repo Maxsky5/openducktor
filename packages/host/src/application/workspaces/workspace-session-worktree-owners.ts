@@ -56,7 +56,7 @@ export const requireNoWorktreeOwners = (
     if (lines.length === 0) return;
     return yield* new HostValidationError({
       field: "removeWorktree",
-      message: `Cannot remove this worktree. ${lines.map((line) => line.text).join(" ")} Turn off worktree removal to archive this chat.`,
+      message: `Cannot remove this worktree. ${lines.map((line) => line.text).join(" ")} Turn off worktree removal to archive this session.`,
     });
   });
 
@@ -83,7 +83,7 @@ export const readWorktreeOwners = (
     if (checkoutWorkspace !== undefined) {
       return yield* new HostValidationError({
         field: "removeWorktree",
-        message: `Cannot remove this worktree because workspace ${checkoutWorkspace} uses it as its repository checkout. Turn off worktree removal to archive this chat.`,
+        message: `Cannot remove this worktree because workspace ${checkoutWorkspace} uses it as its repository checkout. Turn off worktree removal to archive this session.`,
       });
     }
     return { sharedWith: [...owners.chats, ...owners.historyChats], taskOwners: owners.tasks };
@@ -198,7 +198,7 @@ const readChatOwners = (
           (cause) =>
             new HostOperationError({
               operation: "worktreeOwners.historyDependency",
-              message: `Cannot check the native history of saved Claude chats. ${cause.message}`,
+              message: `Cannot check the native history of saved Claude sessions. ${cause.message}`,
               cause,
             }),
         ),
@@ -216,7 +216,7 @@ const readChatOwners = (
       return [
         new HostOperationError({
           operation: "worktreeOwners.historyDependency",
-          message: `Cannot check the native history of saved chat “${chatOwner(candidate).title}” in workspace ${candidate.workspaceName}. ${read.error.message}`,
+          message: `Cannot check the native history of saved session “${chatOwner(candidate).title}” in workspace ${candidate.workspaceName}. ${read.error.message}`,
           cause: read.error,
           details: { workspaceId: candidate.session.workspaceId, sessionId: candidate.session.id },
         }),

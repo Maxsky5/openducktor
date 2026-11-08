@@ -20,7 +20,7 @@ export function WorkspaceSessionModelFields({
             {...model.modelPicker}
             selectionPolicy={
               disabled
-                ? { kind: "read_only", reason: "Creating chat." }
+                ? { kind: "read_only", reason: "Creating session." }
                 : model.modelPicker.selectionPolicy
             }
             triggerClassName="w-full justify-between"

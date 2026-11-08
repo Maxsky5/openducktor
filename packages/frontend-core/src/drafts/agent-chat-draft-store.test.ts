@@ -412,8 +412,8 @@ describe("agent chat draft store", () => {
 
     expect(setItem).toHaveBeenCalledTimes(2);
     expect(errors.map((error) => error.message)).toEqual([
-      expect.stringContaining("Failed to persist chat draft storage key"),
-      expect.stringContaining("Failed to persist chat draft storage key"),
+      expect.stringContaining("Failed to persist message draft storage key"),
+      expect.stringContaining("Failed to persist message draft storage key"),
     ]);
   });
 
@@ -427,7 +427,7 @@ describe("agent chat draft store", () => {
     const store = createStore({ storage, reportPersistenceError: () => {} });
     store.set(identity, "task-1", buildDraft("keep me"));
 
-    await expect(store.saveAll()).rejects.toThrow("Could not save a chat draft.");
+    await expect(store.saveAll()).rejects.toThrow("Could not save a message draft.");
     store.dispose();
 
     expect(store.readVersion(identity)).not.toBeNull();
@@ -454,7 +454,7 @@ describe("agent chat draft store", () => {
     expect(errors).toHaveLength(2);
     for (const error of errors) {
       expect(error).toBeInstanceOf(ChatDraftTooLargeError);
-      expect(error.message).toContain("This chat draft is too long to keep on this device");
+      expect(error.message).toContain("This message draft is too long to keep on this device");
     }
     expect(store.hydrate(identity, "task-1")).toEqual(
       buildDraft("x".repeat(AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES)),
@@ -471,7 +471,7 @@ describe("agent chat draft store", () => {
     store.set(identity, "task-1", buildDraft("keep me"));
 
     expect(() => store.clear(identity, { throwOnStorageError: true })).toThrow(
-      "Failed to remove chat draft storage key",
+      "Failed to remove message draft storage key",
     );
 
     expect(store.hydrate(identity, "task-1").segments[0]).toEqual(

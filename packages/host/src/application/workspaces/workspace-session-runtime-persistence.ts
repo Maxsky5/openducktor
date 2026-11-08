@@ -187,7 +187,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
               new HostOperationError({
                 operation: "workspaceSession.accepted-message.rename",
                 message:
-                  "The runtime session is not attached. The title stays on its prior value. Rename the chat or send a message to sync the titles.",
+                  "The runtime session is not attached. The title stays on its prior value. Rename the session or send a message to sync the titles.",
               }),
             ),
       ),
@@ -229,7 +229,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           return yield* Effect.fail(
             new HostOperationError({
               operation: "workspaceSession.accepted-message.persist",
-              message: `${saved.failure.message} The runtime session keeps the generated title and the Workspace Session has no saved title. Rename the chat or send a message to sync the titles.`,
+              message: `${saved.failure.message} The runtime session keeps the generated title and the Workspace Session has no saved title. Rename the session or send a message to sync the titles.`,
               cause: { storeFailure: saved.failure },
             }),
           );

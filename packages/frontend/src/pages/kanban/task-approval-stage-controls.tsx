@@ -79,7 +79,7 @@ export function OptionCard<TValue extends string>({
       disabled={disabled}
       onClick={() => onSelect(value)}
       className={cn(
-        "group grid cursor-pointer content-start gap-2 rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "group grid content-start gap-2 rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isSelected
           ? "border-info-border bg-info-surface shadow-sm"
           : "border-border bg-card text-foreground hover:border-input hover:bg-muted/60",

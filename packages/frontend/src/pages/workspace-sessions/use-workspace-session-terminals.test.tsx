@@ -44,7 +44,7 @@ test("a chat with a present worktree waits only for terminal discovery", () => {
 
 test("an archived chat or a removed chat worktree gives the reason that terminals cannot start", () => {
   expect(startBlockedReason(chat({ archivedAt: 2000 }))).toBe(
-    "This chat is archived. Restore the chat to use terminals.",
+    "This session is archived. Restore it to use terminals.",
   );
   expect(
     startBlockedReason(
@@ -57,5 +57,5 @@ test("an archived chat or a removed chat worktree gives the reason that terminal
         },
       }),
     ),
-  ).toBe("The worktree of this chat was removed. Restore the chat to create the worktree again.");
+  ).toBe("The worktree of this session was removed. Restore it to create the worktree again.");
 });

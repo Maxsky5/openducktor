@@ -450,7 +450,7 @@ describe("useAgentStudioSendTarget", () => {
         if (context === "task round trip") await harness.update(args);
         expect(input?.isCurrent?.()).toBe(false);
         expect(() => input?.request.assertBeforeLaunch?.()).toThrow(
-          "The original chat is no longer selected.",
+          "The original session is no longer selected.",
         );
         await harness.run(async () => {
           launched.resolve({ ...sessionIdentity("session-new"), postStartActionError: null });

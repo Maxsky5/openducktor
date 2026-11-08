@@ -25,7 +25,7 @@ export function IssueTypeGrid({
             key={option.value}
             type="button"
             className={cn(
-              "group grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-36 sm:grid-cols-[1fr_auto]",
+              "group grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-36 sm:grid-cols-[1fr_auto]",
               selected && option.accentClass,
             )}
             onClick={() => onSelectIssueType(option.value)}

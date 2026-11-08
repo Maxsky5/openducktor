@@ -36,20 +36,10 @@ export function TaskCreateDiscardDialog({
         </DialogBody>
 
         <DialogFooter className="mt-0 flex-row gap-2 border-t border-border pt-5">
-          <Button
-            type="button"
-            variant="outline"
-            className="cursor-pointer"
-            onClick={onKeepEditing}
-          >
+          <Button type="button" variant="outline" onClick={onKeepEditing}>
             Keep editing
           </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            className="cursor-pointer"
-            onClick={onDiscardChanges}
-          >
+          <Button type="button" variant="destructive" onClick={onDiscardChanges}>
             <Trash2 data-icon="inline-start" />
             Discard changes
           </Button>

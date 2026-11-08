@@ -37,7 +37,7 @@ export const QuestionSummaryTab = ({
           <button
             key={contentKey}
             type="button"
-            className="w-full cursor-pointer rounded-md px-2 py-1 text-left hover:bg-accent"
+            className="w-full rounded-md px-2 py-1 text-left hover:bg-accent"
             onClick={() => onSelectQuestion(index)}
           >
             <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

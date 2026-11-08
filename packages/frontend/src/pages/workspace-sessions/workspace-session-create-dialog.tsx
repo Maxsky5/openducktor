@@ -170,7 +170,7 @@ function ChatDialogFrame({
         <DialogHeader
           className={cn("border-b border-border px-6 py-4", showingProgress && "px-4 py-3")}
         >
-          <DialogTitle>New chat</DialogTitle>
+          <DialogTitle>New session</DialogTitle>
           <DialogDescription className={cn(showingProgress && "sr-only")}>
             {showingProgress
               ? "See progress as the session starts."
@@ -352,7 +352,7 @@ function WorkspaceSessionCreateForm({
             ) : (
               <MessageSquarePlus data-icon="inline-start" />
             )}
-            {starting ? "Creating chat…" : "Create chat"}
+            {starting ? "Creating session…" : "Create session"}
           </Button>
         </DialogFooter>
       </fieldset>

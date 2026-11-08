@@ -238,7 +238,7 @@ export const upsertAgentSession = (
       if (owner)
         return yield* new SqliteTaskStoreDataError({
           field: "externalSessionId",
-          message: `This runtime conversation already belongs to ${owner.kind === "task" ? `task ${owner.taskId}` : "a workspace chat"} in workspace ${owner.workspaceId}. Open it from its owner.`,
+          message: `This runtime conversation already belongs to ${owner.kind === "task" ? `task ${owner.taskId}` : "a workspace session"} in workspace ${owner.workspaceId}. Open it from its owner.`,
         });
     }
     if (existingIndex >= 0) {

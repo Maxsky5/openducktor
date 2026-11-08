@@ -176,7 +176,7 @@ export function DiffCommentBar({
           placeholder={
             recipientLabel === "Builder"
               ? "Add a comment for the Builder"
-              : "Add a comment for this chat"
+              : "Add a comment for this session"
           }
           saveLabel={composer.mode === "edit" ? "Save" : "Comment"}
           editing={composer.mode === "edit"}

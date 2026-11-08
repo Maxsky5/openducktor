@@ -1,9 +1,9 @@
 import { useRef, useState, type RefObject } from "react";
-import type { RemoteAccessBridge, RemoteAccessState } from "@openducktor/contracts";
+import type { RemoteAccessBridge } from "@openducktor/contracts";
 import { Button } from "@/components/ui/button";
 import { RemoteAccessFailure } from "@/components/features/remote-control/remote-access-failure";
 import { RemoteDevices } from "@/components/features/remote-control/remote-devices";
-import { connectedDevicesLabel } from "@/components/features/remote-control/remote-control-status";
+import { remoteControlSwitchDescription } from "@/components/features/remote-control/remote-control-status";
 import { useRemoteAccess } from "@/state/remote-access-provider";
 import { useRemoteAccessSetup, type RemoteAccessSetup } from "@/state/operations/remote-access";
 import { RemoteAccessForm } from "./settings-remote-access-form";
@@ -40,7 +40,7 @@ function RemoteAccessControls({ bridge }: { bridge: RemoteAccessBridge }) {
       <div aria-busy={pending}>
         <SettingsSwitchRow
           title="Enable Remote Control"
-          description={switchDescription(state, pending)}
+          description={remoteControlSwitchDescription(state, pending)}
           checked={status === "available"}
           disabled={!status || pending || unavailable}
           ariaLabel="Enable Remote Control"
@@ -99,12 +99,4 @@ function NetworkSettings({
       )}
     </section>
   );
-}
-
-function switchDescription(state: RemoteAccessState | undefined, pending: boolean) {
-  if (!state) return "Reading remote control status...";
-  if (pending) return "Updating remote control...";
-  if (state.status === "available") return `On. ${connectedDevicesLabel(state.connectedClients)}.`;
-  if (state.status === "failed") return "Off. Remote control could not start.";
-  return "Off. Other devices cannot connect.";
 }

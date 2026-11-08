@@ -1,0 +1,52 @@
+/*
+ * The video page: one scene on the page color of the website, with no page chrome. The renderer
+ * sets the size of the viewport to the size of the video.
+ */
+@font-face {
+  font-family: "Space Grotesk Variable";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: block;
+  src: url("@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url("@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+}
+/* The brand color and the page colors of apps/marketing-website/src/styles/tokens.css. */
+:root {
+  --brand: #5100ff;
+  --video-page: #fafbfe;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --video-page: #0d1421;
+  color-scheme: dark;
+}
+html,
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--video-page);
+}
+.video-frame {
+  position: relative;
+  overflow: hidden;
+}
+/* The scene keeps its design width, so its layout is the desktop layout. The transform scales it. */
+.video-fit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+}

@@ -223,6 +223,19 @@
       }
     },
     {
+      "files": ["packages/product-scenes/**/*.ts", "packages/product-scenes/**/*.tsx"],
+      "rules": {
+        "max-lines": [
+          "error",
+          {
+            "max": 400,
+            "skipBlankLines": false,
+            "skipComments": false
+          }
+        ]
+      }
+    },
+    {
       "files": ["packages/frontend/src/**/*.ts", "packages/frontend/src/**/*.tsx"],
       "rules": {
         "no-restricted-imports": [

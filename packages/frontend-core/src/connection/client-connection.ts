@@ -109,7 +109,7 @@ const chatDraftPersistenceReporter =
       return;
     }
     const maxKilobytes = Math.floor(AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES / 1024);
-    feedback.show("warning", "This chat draft is too long to keep on this device", {
+    feedback.show("warning", "This message draft is too long to keep on this device", {
       id: CHAT_DRAFT_TOO_LARGE_FEEDBACK_ID,
       description: `The app does not save drafts over ${maxKilobytes} KB. Shorten the draft or send it before you close the app.`,
     });

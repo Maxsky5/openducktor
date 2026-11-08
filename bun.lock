@@ -71,12 +71,16 @@
         "@fontsource/ibm-plex-mono": "^5.3.0",
         "@happy-dom/global-registrator": "^21.0.4",
         "@lucide/astro": "^1.59.0",
+        "@openducktor/product-scenes": "workspace:*",
         "@playwright/test": "^1.64.1",
         "@types/bun": "^1.4.3",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
         "astro": "^7.4.0",
-        "gsap": "^3.15.0",
         "prettier": "^3.9.10",
         "prettier-plugin-astro": "^0.14.1",
+        "react": "^19.3.1",
+        "react-dom": "^19.3.1",
         "sharp": "^0.35.4",
         "typescript": "^6.0.0",
         "wrangler": "4.151.1",
@@ -144,6 +148,7 @@
       },
       "devDependencies": {
         "@happy-dom/global-registrator": "^21.0.4",
+        "@openducktor/theme": "workspace:*",
         "@testing-library/react": "^16.3.3",
         "@types/mdast": "4.0.4",
         "@types/node": "^26.6.4",
@@ -222,6 +227,8 @@
         "@openducktor/frontend-core": "workspace:*",
         "@openducktor/host-client": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "@openducktor/product-scenes": "workspace:*",
+        "@openducktor/theme": "workspace:*",
         "@openducktor/workflows": "workspace:*",
         "@pierre/diffs": "1.5.2",
         "@pierre/trees": "1.0.0-beta.6",
@@ -439,6 +446,31 @@
         "bun-types": "^1.4.2",
       },
     },
+    "packages/product-scenes": {
+      "name": "@openducktor/product-scenes",
+      "version": "1.1.0",
+      "dependencies": {
+        "@openducktor/theme": "workspace:*",
+        "gsap": "^3.15.0",
+        "lucide-react": "1.59.0",
+      },
+      "devDependencies": {
+        "@fontsource-variable/space-grotesk": "^5.3.0",
+        "@fontsource/ibm-plex-mono": "^5.3.0",
+        "@happy-dom/global-registrator": "^21.0.4",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+        "bun-types": "^1.4.2",
+        "playwright-core": "1.64.1",
+        "react": "^19.3.1",
+        "react-dom": "^19.3.1",
+        "vite": "^8.3.4",
+      },
+      "peerDependencies": {
+        "react": "^19.3.1",
+        "react-dom": "^19.3.1",
+      },
+    },
     "packages/remote-host": {
       "name": "@openducktor/remote-host",
       "version": "1.1.0",
@@ -466,6 +498,13 @@
         "@openducktor/path-support": "workspace:*",
         "effect": "4.0.5",
       },
+      "devDependencies": {
+        "bun-types": "^1.4.2",
+      },
+    },
+    "packages/theme": {
+      "name": "@openducktor/theme",
+      "version": "1.1.0",
       "devDependencies": {
         "bun-types": "^1.4.2",
       },
@@ -1222,9 +1261,13 @@
 
     "@openducktor/path-support": ["@openducktor/path-support@workspace:packages/path-support"],
 
+    "@openducktor/product-scenes": ["@openducktor/product-scenes@workspace:packages/product-scenes"],
+
     "@openducktor/remote-host": ["@openducktor/remote-host@workspace:packages/remote-host"],
 
     "@openducktor/runtime-orchestration": ["@openducktor/runtime-orchestration@workspace:packages/runtime-orchestration"],
+
+    "@openducktor/theme": ["@openducktor/theme@workspace:packages/theme"],
 
     "@openducktor/web": ["@openducktor/web@workspace:packages/openducktor-web"],
 
@@ -4017,6 +4060,8 @@
     "@openducktor/marketing-website/@astrojs/check": ["@astrojs/check@0.9.10", "", { "dependencies": { "@astrojs/language-server": "^2.16.7", "chokidar": "^4.0.3", "kleur": "^4.1.5", "yargs": "^18.0.0" }, "peerDependencies": { "typescript": "^5.0.0 || ^6.0.0" }, "bin": { "astro-check": "./bin/astro-check.js" } }, "sha512-zgx/UQMozdjOa3bOxjgeCFdtpE3c9rRX6xHwa+2QXvy8z8Akifu2AtubHyv/zzC2znO8dl8fFWL4K+Ba9kS8HQ=="],
 
     "@openducktor/marketing-website/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
+
+    "@openducktor/product-scenes/lucide-react": ["lucide-react@1.59.0", "", { "peerDependencies": { "@types/react": "*", "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" }, "optionalPeers": ["@types/react"] }, "sha512-5qgMyyCPU6OvnKpLS2t693+ZtiqA8oaSweWoUows0BLFKFf6V75m4+CptpmohZHpD5IuOVIBXHBBiv2vpLJmtw=="],
 
     "@pierre/trees/@pierre/theming": ["@pierre/theming@1.0.0", "", { "peerDependencies": { "@pierre/theme": "^1.1.0", "@shikijs/themes": "^3.0.0 || ^4.0.0", "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0", "shiki": "^3.0.0 || ^4.0.0" }, "optionalPeers": ["@pierre/theme", "@shikijs/themes", "react", "react-dom", "shiki"] }, "sha512-WsdrnhKfjeyXGDikZmN9pkpeZ5S/cl6EE72feiSc0tlynT1tMYqXqouhuv/foK+PY9OEnebOAVRQn3+rAstR8g=="],
 

@@ -2,9 +2,11 @@ import type { MouseEvent } from "react";
 import type { Components } from "react-markdown";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { CheckIcon } from "lucide-react";
 import { openClickedLink } from "@/lib/link-open";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
+import { CHECKBOX_CLASS_NAME } from "./checkbox";
 
 export type MarkdownRendererVariant = "compact" | "document";
 type MarkdownComponentRegistry = {
@@ -21,6 +23,34 @@ const openMarkdownUrl = (url: string): void => {
 };
 
 const SHARED_COMPONENTS: Components = {
+  // A GFM task item shows the look of the app checkbox. The Markdown source owns its state, so it
+  // is a static, read-only box: a document can hold many items.
+  input: ({ node: _node, type, checked, className, ...props }) => {
+    if (type !== "checkbox") {
+      return <input {...props} type={type} checked={checked} className={className} />;
+    }
+    const isChecked = checked === true;
+    return (
+      <span
+        role="checkbox"
+        aria-checked={isChecked}
+        aria-disabled
+        aria-label={isChecked ? "Done" : "Not done"}
+        data-state={isChecked ? "checked" : "unchecked"}
+        className={cn(
+          CHECKBOX_CLASS_NAME,
+          "mr-2 inline-flex align-middle border-muted-foreground/60",
+          className,
+        )}
+      >
+        {isChecked ? (
+          <span className="flex items-center justify-center text-current">
+            <CheckIcon className="size-3.5" />
+          </span>
+        ) : null}
+      </span>
+    );
+  },
   a: ({ node: _node, children, className, href, ...props }) => {
     // A click asks where the link opens, or opens it where its modifier keys choose.
     const openLink = (event: MouseEvent<HTMLAnchorElement>): void => {
@@ -77,6 +107,13 @@ export const MARKDOWN_COMPONENTS: MarkdownComponentRegistry = {
   document: DOCUMENT_COMPONENTS,
 };
 
+/**
+ * A GFM task list shows its checkbox in place of the list bullet. A top-level task list starts at
+ * the left edge. A nested list keeps the list indent of the prose, so it shows its level.
+ */
+const TASK_LIST_CLASSES =
+  "[&_.contains-task-list]:list-none [&>.contains-task-list]:pl-0 [&_.task-list-item]:pl-0";
+
 export const MARKDOWN_CLASSES = {
   compact: cn(
     "markdown-body prose prose-sm max-w-none text-[13px] leading-relaxed text-foreground",
@@ -88,6 +125,7 @@ export const MARKDOWN_CLASSES = {
     "prose-code:before:content-none prose-code:after:content-none",
     "prose-pre:my-2 prose-pre:text-[11px] prose-pre:text-foreground",
     "prose-blockquote:my-2 prose-blockquote:border-input prose-blockquote:bg-muted/30 prose-blockquote:px-3 prose-blockquote:py-1 prose-blockquote:text-foreground",
+    TASK_LIST_CLASSES,
   ),
   document: cn(
     "markdown-body prose max-w-none text-sm leading-relaxed text-foreground",
@@ -100,5 +138,6 @@ export const MARKDOWN_CLASSES = {
     "prose-code:before:content-none prose-code:after:content-none",
     "prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0 prose-pre:text-foreground",
     "prose-blockquote:border-input prose-blockquote:bg-muted/30 prose-blockquote:px-3 prose-blockquote:py-1 prose-blockquote:text-foreground",
+    TASK_LIST_CLASSES,
   ),
 } satisfies Record<MarkdownRendererVariant, string>;

@@ -43,7 +43,7 @@ export const searchGroups = ({ actions, tasks, chats }: RankedMatches): PaletteG
   return [
     scoredGroup("actions", "Actions", actions, (item) => ({ kind: "action", item })),
     scoredGroup("tasks", "Tasks", tasks, (item) => ({ kind: "task", item })),
-    scoredGroup("chats", "Chats", chats, (item) => ({ kind: "chat", item })),
+    scoredGroup("chats", "Sessions", chats, (item) => ({ kind: "chat", item })),
   ]
     .filter(({ group }) => group.entries.length > 0)
     .toSorted((left, right) => right.score - left.score)

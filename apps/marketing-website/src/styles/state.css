@@ -2,10 +2,6 @@
   [hidden] {
     display: none;
   }
-  /* A part of a product view that a scene grows or shrinks shows only its visible height. */
-  .replica [data-resizing] {
-    overflow: hidden;
-  }
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -13,14 +9,5 @@
       animation: none;
       transition: none;
     }
-  }
-  /* animation-play-state does not inherit, so the pseudo-elements, such as the dot rings, need it too. */
-  [data-motion="paused"] .replica *,
-  [data-motion="paused"] .replica *::before,
-  [data-motion="paused"] .replica *::after,
-  .scene[data-motion="paused"] *,
-  .scene[data-motion="paused"] *::before,
-  .scene[data-motion="paused"] *::after {
-    animation-play-state: paused;
   }
 }

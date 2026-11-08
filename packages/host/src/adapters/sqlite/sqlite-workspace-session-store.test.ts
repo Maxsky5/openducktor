@@ -255,7 +255,7 @@ describe("SQLite Workspace Session store", () => {
           session: { ...makeSession(), externalSessionId: "runtime-archived-0" },
         }),
       ),
-    ).rejects.toThrow("archived chat");
+    ).rejects.toThrow("archived session");
   });
 
   test("serializes task ownership against import without leaving two owners", async () => {

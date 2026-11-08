@@ -20,11 +20,6 @@ export async function prepareAssets(): Promise<void> {
     new URL("../artwork/favicon.svg", import.meta.url),
     new URL("favicon.svg", publicDir),
   );
-  // The product views copy the app sidebar, so they keep the mark that the app shows.
-  await copyFile(
-    new URL("../../../packages/frontend/src/assets/openducktor-mark.svg", import.meta.url),
-    new URL("openducktor-mark.svg", publicDir),
-  );
   await copyFile(
     new URL("../artwork/lucide-license.txt", import.meta.url),
     new URL("lucide-license.txt", publicDir),

@@ -73,7 +73,7 @@ export const QuestionTab = ({
                 type="button"
                 disabled={disabled}
                 className={cn(
-                  "flex min-h-10 w-full cursor-pointer items-center rounded-md border px-2 py-1 text-left",
+                  "flex min-h-10 w-full items-center rounded-md border px-2 py-1 text-left",
                   isSelected
                     ? "border-muted-foreground bg-secondary text-foreground"
                     : "border-border bg-card text-foreground hover:border-input hover:bg-accent",

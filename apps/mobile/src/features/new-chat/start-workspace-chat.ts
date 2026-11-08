@@ -10,7 +10,7 @@ import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
 
 export const CHAT_START_WITHOUT_SESSION =
-  "The host started the chat without a runtime session. Open the chat again from Sessions.";
+  "The host started the session but returned no runtime session. Open it again from Sessions.";
 
 /**
  * Starts the runtime session of a saved chat with the shared start rules, and returns the session

@@ -149,8 +149,8 @@ describe("Workspace Session metadata UI", () => {
       </QueryProvider>,
     );
     try {
-      const dialog = view.getByRole("dialog", { name: "Rename chat" });
-      const header = view.getByRole("heading", { name: "Rename chat" }).parentElement;
+      const dialog = view.getByRole("dialog", { name: "Rename session" });
+      const header = view.getByRole("heading", { name: "Rename session" }).parentElement;
       const body = view.getByRole("textbox", { name: "Name" }).parentElement;
       const cancel = view.getByRole("button", { name: "Cancel" });
       const save = view.getByRole("button", { name: "Save" });
@@ -255,14 +255,17 @@ describe("Workspace Session metadata UI", () => {
       expect(view.getByRole("button", { name: "Cancel" }).closest("fieldset")?.disabled).toBe(true);
       fireEvent.click(saving);
       fireEvent.keyDown(title, { key: "Escape" });
-      expect(view.getByRole("dialog", { name: "Rename chat" })).toBeTruthy();
+      expect(view.getByRole("dialog", { name: "Rename session" })).toBeTruthy();
       expect(saved).toEqual([""]);
       await act(async () => {
         finish({ ...record(), manualTitle: null });
       });
-      await waitFor(() => expect(view.queryByRole("dialog", { name: "Rename chat" })).toBeNull(), {
-        timeout: 800,
-      });
+      await waitFor(
+        () => expect(view.queryByRole("dialog", { name: "Rename session" })).toBeNull(),
+        {
+          timeout: 800,
+        },
+      );
     } finally {
       view.unmount();
     }
@@ -303,7 +306,7 @@ describe("Workspace Session metadata UI", () => {
     );
     try {
       await view.findByRole("button", { name: "Restore Build API" }, { timeout: 800 });
-      const filter = view.getByRole("searchbox", { name: "Filter archived chats" });
+      const filter = view.getByRole("searchbox", { name: "Filter archived sessions" });
       fireEvent.change(filter, { target: { value: "  BUILD  " } });
       expect(view.queryByRole("button", { name: "Restore My session" })).toBeNull();
       expect(view.getByRole("button", { name: "Restore Build API" })).toBeTruthy();
@@ -311,13 +314,13 @@ describe("Workspace Session metadata UI", () => {
       expect(view.getByRole("button", { name: "Restore My session" })).toBeTruthy();
       expect(view.queryByRole("button", { name: "Restore Build API" })).toBeNull();
       fireEvent.change(filter, { target: { value: "unmatched" } });
-      expect(view.getByText("No chats match your filter.")).toBeTruthy();
+      expect(view.getByText("No sessions match your filter.")).toBeTruthy();
       fireEvent.change(filter, { target: { value: "" } });
       expect(view.getByRole("button", { name: "Restore My session" })).toBeTruthy();
       fireEvent.change(filter, { target: { value: "/OTHER" } });
       expect(reads).toBe(1);
       fireEvent.click(view.getByRole("button", { name: "Restore Build API" }));
-      await view.findByText("No chats match your filter.", {}, { timeout: 800 });
+      await view.findByText("No sessions match your filter.", {}, { timeout: 800 });
       expect(restored).toEqual(["session-2"]);
       expect(reads).toBe(2);
     } finally {
@@ -351,7 +354,7 @@ describe("Workspace Session metadata UI", () => {
         { name: "Restore My session" },
         { timeout: 800 },
       );
-      expect(view.getByRole("searchbox", { name: "Filter archived chats" })).toBeTruthy();
+      expect(view.getByRole("searchbox", { name: "Filter archived sessions" })).toBeTruthy();
       expect(view.queryByRole("link")).toBeNull();
       await act(async () => {
         fireEvent.click(restore);
@@ -362,8 +365,8 @@ describe("Workspace Session metadata UI", () => {
         archivedRecords = [];
         finish(record());
       });
-      await view.findByText("No archived chats.", {}, { timeout: 800 });
-      expect(view.getByRole("searchbox", { name: "Filter archived chats" })).toBeTruthy();
+      await view.findByText("No archived sessions.", {}, { timeout: 800 });
+      expect(view.getByRole("searchbox", { name: "Filter archived sessions" })).toBeTruthy();
     } finally {
       view.unmount();
     }
@@ -429,7 +432,7 @@ describe("Workspace Session metadata UI", () => {
       fireEvent.click(view.getByRole("button", { name: "Session actions" }));
       fireEvent.click(await view.findByRole("button", { name: "Rename" }, { timeout: 800 }));
       expect(
-        await view.findByRole("dialog", { name: "Rename chat" }, { timeout: 800 }),
+        await view.findByRole("dialog", { name: "Rename session" }, { timeout: 800 }),
       ).toBeTruthy();
       const title = view.getByRole("textbox", { name: "Name" });
       fireEvent.change(title, { target: { value: "Updated name" } });
@@ -446,7 +449,7 @@ describe("Workspace Session metadata UI", () => {
       await waitFor(() => expect(view.queryByText("Database unavailable")).toBeNull(), {
         timeout: 800,
       });
-      expect(view.queryByRole("dialog", { name: "Rename chat" })).toBeNull();
+      expect(view.queryByRole("dialog", { name: "Rename session" })).toBeNull();
     } finally {
       view.unmount();
     }

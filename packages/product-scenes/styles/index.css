@@ -1,0 +1,12 @@
+/*
+ * The base styles of every product scene: the order of the cascade layers, the reset of the host
+ * base styles, the desktop theme, the Tailwind palette values, the replica root, and the state
+ * rules. A host page imports this file before any other style of the scenes, so the layer order
+ * holds. A page that declares more layers declares these four in the same order first.
+ */
+@layer product, replica, views, state;
+@import "./reset.css";
+@import "./theme.css";
+@import "./palette.css";
+@import "./replica.css";
+@import "./state.css";

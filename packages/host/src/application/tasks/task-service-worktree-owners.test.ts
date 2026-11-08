@@ -19,7 +19,7 @@ const result: TaskWorktreeOwners = {
     chats: [{ workspaceId: "repo", sessionId: "chat-1", title: "Hi" }],
     historyChats: [],
   },
-  historyReadErrors: ["Cannot check the native history of saved chat “Fork”."],
+  historyReadErrors: ["Cannot check the native history of saved session “Fork”."],
 };
 
 const createService = (status: "in_progress" | "closed", reads: unknown[]) => {

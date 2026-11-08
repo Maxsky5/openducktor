@@ -83,7 +83,7 @@ export function useWorkspaceSessionTools({
     editable: isVisible,
     allowUpstream: contextMode === "repository",
     applyTarget,
-    helpText: "This choice applies only to this chat. The chat saves it.",
+    helpText: "This choice applies only to this session. The session saves it.",
   });
   const conflictedFiles = useMemo(
     () => collectUnmergedFilePaths(diffData.fileStatuses),

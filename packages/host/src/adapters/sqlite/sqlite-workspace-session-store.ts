@@ -221,7 +221,7 @@ export const createSqliteWorkspaceSessionStore = ({
                 message:
                   owner.kind === "task"
                     ? `This conversation belongs to task ${owner.taskId} (${owner.role}). Open it from that task.`
-                    : "This conversation belongs to an archived chat. Restore it from archived sessions.",
+                    : "This conversation belongs to an archived session. Restore it from archived sessions.",
               });
             }
             yield* transaction.execute(
@@ -331,7 +331,7 @@ export const createSqliteWorkspaceSessionStore = ({
               )
                 return yield* new HostValidationError({
                   field: "externalSessionId",
-                  message: "This runtime conversation already belongs to a chat or task.",
+                  message: "This runtime conversation already belongs to a session or task.",
                 });
             }
             yield* transaction.execute(
@@ -373,7 +373,7 @@ export const createSqliteWorkspaceSessionStore = ({
             if (owner)
               return yield* new HostValidationError({
                 field: "externalSessionId",
-                message: "This runtime conversation already belongs to another chat or task.",
+                message: "This runtime conversation already belongs to another session or task.",
               });
             const next = yield* validateRecord({
               ...current,

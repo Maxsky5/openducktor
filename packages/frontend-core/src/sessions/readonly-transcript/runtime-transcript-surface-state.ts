@@ -23,7 +23,7 @@ const deriveLoadError = ({
   | string
   | null => {
   if (chatSettingsError) {
-    return `Failed to load chat settings: ${errorMessageFromUnknown(
+    return `Failed to load session settings: ${errorMessageFromUnknown(
       chatSettingsError,
       "Settings read failed.",
     )}`;

@@ -156,7 +156,7 @@ const modelError = (model: NewChatModelState): string | null => {
     case "no_default":
       return "This repository has no Default Model. Choose a model, or set a Default Model in the repository settings on the host.";
     case "settings_failed":
-      return `The repository settings did not load, so the Default Model is unknown. ${model.message} Choose a model, or close and open New Chat again.`;
+      return `The repository settings did not load, so the Default Model is unknown. ${model.message} Choose a model, or close and open New Session again.`;
     case "not_in_catalog":
       return `${model.modelLabel} is not in the ${model.runtimeLabel} model catalog. Choose another model.`;
     case "catalog_failed":
@@ -191,7 +191,7 @@ const branchFieldError = (
 
 const firstBlockedReason = (form: NewChatForm, errors: NewChatFieldErrors): string => {
   const fieldError = errors.name ?? errors.model ?? errors.worktreeName ?? errors.branch;
-  if (fieldError) return "Fix the fields above to create the chat.";
+  if (fieldError) return "Fix the fields above to create the session.";
   if (form.model.kind === "loading") return "Loading the model catalog.";
   if (!form.rolesReady) return "Loading the custom roles.";
   if (!form.targetBranch)
@@ -203,7 +203,7 @@ const firstBlockedReason = (form: NewChatForm, errors: NewChatFieldErrors): stri
       if (!form.worktree.branchName) return "Choose a local branch.";
     }
   }
-  return "Complete the form to create the chat.";
+  return "Complete the form to create the session.";
 };
 
 /**

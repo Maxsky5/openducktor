@@ -40,7 +40,7 @@ import { ChatSheetStateScreen } from "./chat-sheet-states";
 import { useChatRecord } from "./use-chat-record";
 import { closeScreen } from "@/navigation/close-screen";
 
-const TITLE = "Archive chat";
+const TITLE = "Archive session";
 
 /** What happens to the worktree, under the worktree switch. The branch name is code. */
 function WorktreeNotice({
@@ -187,7 +187,7 @@ function ArchiveProblems({
       {archiveError ? (
         <Callout
           tone={unknown ? "warning" : "destructive"}
-          title={unknown ? RESULT_UNKNOWN_TITLE : "The chat was not archived"}
+          title={unknown ? RESULT_UNKNOWN_TITLE : "The session was not archived"}
           message={errorMessage(archiveError)}
         />
       ) : null}
@@ -289,7 +289,7 @@ function ArchiveChatRead({ params }: { params: ChatSheetParams }): ReactElement 
   const [confirmed, setConfirmed] = useState<ArchiveTarget | null>(null);
   // The sheet owns the command, so its result still closes the sheet after the form changes.
   const archive = useArchiveWorkspaceSession(() => {
-    feedback.show("success", "Chat archived.");
+    feedback.show("success", "Session archived.");
     if (mounted.current) closeScreen(navigation);
   });
   // An archived chat leaves the active list while the sheet closes; show nothing in that time.

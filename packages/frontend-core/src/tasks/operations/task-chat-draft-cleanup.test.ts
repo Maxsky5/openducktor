@@ -80,7 +80,7 @@ describe("createTaskChatDraftCleanup", () => {
     expect(feedback.shown).toEqual([
       {
         kind: "error",
-        message: "Task updated, but chat draft cleanup failed",
+        message: "Task updated, but message draft cleanup failed",
         options: { description: "storage remove failed" },
       },
     ]);
@@ -113,7 +113,7 @@ describe("createTaskChatDraftCleanup", () => {
     expect(feedback.shown).toEqual([
       {
         kind: "error",
-        message: "Task updated, but chat draft cleanup failed",
+        message: "Task updated, but message draft cleanup failed",
         options: { description: "session lookup failed" },
       },
     ]);

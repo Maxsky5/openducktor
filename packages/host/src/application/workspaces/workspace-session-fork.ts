@@ -74,7 +74,7 @@ export const createWorkspaceSessionFork = (deps: WorkspaceSessionForkDependencie
       if (initial.session.externalSessionId === null)
         return yield* new HostValidationError({
           field: "sessionId",
-          message: "Open a chat with a completed reply before forking.",
+          message: "Open a session with a completed reply before forking.",
         });
       const sourceRef = {
         repoPath: initial.ref.repoPath,
@@ -92,7 +92,7 @@ export const createWorkspaceSessionFork = (deps: WorkspaceSessionForkDependencie
             if (source.archivedAt !== null || source.externalSessionId === null)
               return yield* new HostValidationError({
                 field: "sessionId",
-                message: "Open an active chat with a completed reply before forking.",
+                message: "Open an active session with a completed reply before forking.",
               });
             if (
               source.externalSessionId !== sourceRef.externalSessionId ||
@@ -101,7 +101,7 @@ export const createWorkspaceSessionFork = (deps: WorkspaceSessionForkDependencie
             )
               return yield* new HostValidationError({
                 field: "sessionId",
-                message: "The source chat changed while the fork waited. Reopen it and retry.",
+                message: "The source session changed while the fork waited. Reopen it and retry.",
               });
             const parentExternalSessionId = source.externalSessionId;
             const sourcePath =
@@ -120,7 +120,7 @@ export const createWorkspaceSessionFork = (deps: WorkspaceSessionForkDependencie
                     return yield* new HostValidationError({
                       field: "model",
                       message:
-                        "The source chat has no accepted model settings. Select its model before forking.",
+                        "The source session has no accepted model settings. Select its model before forking.",
                     });
                   const model = source.selectedModel;
                   const id = crypto.randomUUID();
@@ -240,7 +240,7 @@ const forkAndSave = (
             return yield* new HostValidationError({
               field: "runtimeSession",
               message:
-                "The runtime did not return a distinct idle fork in the selected folder. Reopen the source chat and retry.",
+                "The runtime did not return a distinct idle fork in the selected folder. Reopen the source session and retry.",
             });
           const now = yield* Clock.currentTimeMillis;
           const ownershipScope = yield* resolveRuntimeOwnershipScope(deps, input);

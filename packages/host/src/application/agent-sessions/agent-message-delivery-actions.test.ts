@@ -115,7 +115,7 @@ describe("agent message delivery: queue actions and steering", () => {
       ),
     );
 
-    expect(failure?.message).toContain("belongs to another chat");
+    expect(failure?.message).toContain("belongs to another session");
     expect(harness.queueTexts()).toEqual(["first:queued"]);
   });
 

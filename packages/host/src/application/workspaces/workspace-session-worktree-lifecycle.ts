@@ -39,7 +39,7 @@ const validateRemovableBranch = (
     ) {
       return yield* new HostValidationError({
         field: "removeWorktree",
-        message: `Cannot delete protected branch ${branchName}. Turn off worktree removal to archive this chat.`,
+        message: `Cannot delete protected branch ${branchName}. Turn off worktree removal to archive this session.`,
       });
     }
   });
@@ -71,7 +71,8 @@ export const readWorkspaceSessionArchivePreview = (
     if (current.detached || !current.name) {
       return yield* new HostValidationError({
         field: "removeWorktree",
-        message: "This worktree has detached HEAD. Turn off worktree removal to archive this chat.",
+        message:
+          "This worktree has detached HEAD. Turn off worktree removal to archive this session.",
       });
     }
     yield* validateRemovableBranch(dependencies, config, current.name);
@@ -111,7 +112,7 @@ export const removeWorkspaceSessionWorktree = (
       if (current.detached || current.name !== target.branchName)
         return yield* new HostValidationError({
           field: "branchName",
-          message: "The worktree branch changed. Reopen Archive chat to confirm it.",
+          message: "The worktree branch changed. Reopen Archive session to confirm it.",
         });
       yield* git.removeWorktree(repoPath, worktreePath, true);
     }
@@ -159,7 +160,7 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
       if (!(yield* git.referenceExists(repoPath, startPoint))) {
         return yield* new HostValidationError({
           field: "targetBranch",
-          message: `Target branch ${canonicalTargetBranch(targetBranch)} is unavailable. Fetch it, or choose another target branch for this chat.`,
+          message: `Target branch ${canonicalTargetBranch(targetBranch)} is unavailable. Fetch it, or choose another target branch for this session.`,
         });
       }
       let acquired = false;

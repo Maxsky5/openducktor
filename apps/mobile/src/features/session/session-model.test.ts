@@ -244,7 +244,7 @@ describe("resolveSessionOwner", () => {
     });
     expect(resolution).toEqual({
       status: "error",
-      title: "Chats could not load",
+      title: "Sessions could not load",
       message: "Host closed the connection.",
       canRetry: true,
     });
@@ -301,7 +301,7 @@ describe("resolveSessionInteraction", () => {
       }).blockedReason,
     ).toBe("OpenCode is not installed.");
     expect(resolveSessionInteraction({ ...ready, archived: true }).blockedReason).toBe(
-      "This chat is archived. Restore it to send messages.",
+      "This session is archived. Restore it to send messages.",
     );
     expect(
       resolveSessionInteraction({

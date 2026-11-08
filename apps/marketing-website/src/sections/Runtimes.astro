@@ -1,10 +1,10 @@
 ---
-import RuntimeIcon from "../replica/ui/RuntimeIcon.astro";
+import Scene from "@openducktor/product-scenes/astro";
 import IconItem from "../ui/IconItem.astro";
 import IconList from "../ui/IconList.astro";
 import ProductFigure from "../ui/ProductFigure.astro";
+import RuntimeIcon from "../ui/RuntimeIcon.astro";
 import SectionHead from "../ui/SectionHead.astro";
-import RuntimesView from "../views/runtimes/RuntimesView.astro";
 import Split from "./Split.astro";
 
 const runtimes = [
@@ -48,7 +48,7 @@ const runtimes = [
       </IconList>
     </Fragment>
     <ProductFigure caption={["Settings", "Repositories", "Agents"]}>
-      <RuntimesView />
+      <Scene name="runtimes" />
     </ProductFigure>
   </Split>
 </section>

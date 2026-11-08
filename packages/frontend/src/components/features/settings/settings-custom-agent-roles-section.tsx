@@ -63,7 +63,7 @@ export function SettingsCustomAgentRolesSection({
   return (
     <SettingsListEditor
       title="Custom agent roles"
-      description="Reusable instructions for workspace chats."
+      description="Reusable instructions for workspace sessions."
       items={roles.map((role) => {
         const errors = validation.errorsById[role.id];
         const count = Number(Boolean(errors?.name)) + Number(Boolean(errors?.systemPrompt));
@@ -110,7 +110,7 @@ export function SettingsCustomAgentRolesSection({
             you use often.
           </p>
           <p className="text-xs text-muted-foreground">
-            Choose the role when you start a chat. Roles are available in every workspace.
+            Choose the role when you start a session. Roles are available in every workspace.
           </p>
         </SettingsListEditorEmptyState>
       )}
@@ -129,7 +129,7 @@ export function SettingsCustomAgentRolesSection({
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="px-6 py-4 text-sm text-muted-foreground">
-              Existing chats keep their original role. Save Settings to apply this deletion.
+              Existing sessions keep their original role. Save Settings to apply this deletion.
             </DialogBody>
             <DialogFooter className="mt-0 border-t border-border px-6 py-4">
               <Button type="button" variant="outline" onClick={() => setDeleteRoleId(null)}>
@@ -184,7 +184,7 @@ function CustomAgentRoleEditor({
   return (
     <SettingsListEditorCard
       title={roleLabel(role)}
-      description="Choose this role when you start a new workspace chat."
+      description="Choose this role when you start a new workspace session."
       disabled={disabled}
       onDelete={onDelete}
     >
@@ -203,7 +203,7 @@ function CustomAgentRoleEditor({
           <p className="text-xs text-destructive">{errors.name}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Shown in the role menu when you create a chat.
+            Shown in the role menu when you create a session.
           </p>
         )}
       </div>
@@ -222,7 +222,7 @@ function CustomAgentRoleEditor({
           <p className="text-xs text-destructive">{errors.systemPrompt}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            New chats use these instructions. Existing chats keep their original role.
+            New sessions use these instructions. Existing sessions keep their original role.
           </p>
         )}
       </div>

@@ -18,7 +18,12 @@ type HeaderTitleProps = {
   onOpenTaskDetails: (() => void) | null;
 };
 
-function HeaderTitle({ taskTitle, taskId, onOpenTaskDetails }: HeaderTitleProps): ReactElement {
+/** The task title and ID of the Agent Studio header. It reads no context. */
+export function AgentStudioHeaderTitle({
+  taskTitle,
+  taskId,
+  onOpenTaskDetails,
+}: HeaderTitleProps): ReactElement {
   const title = taskTitle?.trim() || "Task session";
   const id = taskId?.trim() || null;
   const canOpenTaskDetails = Boolean(id && onOpenTaskDetails);
@@ -121,7 +126,7 @@ export function AgentStudioHeader({
   return (
     <SessionPageHeader
       title={
-        <HeaderTitle
+        <AgentStudioHeaderTitle
           taskTitle={model.taskTitle}
           taskId={model.taskId}
           onOpenTaskDetails={model.onOpenTaskDetails}

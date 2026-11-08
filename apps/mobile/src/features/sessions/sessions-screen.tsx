@@ -144,7 +144,7 @@ function SessionsHeaderActions({
       <IconButton
         icon="archive"
         color="label"
-        accessibilityLabel="Archived Chats"
+        accessibilityLabel="Archived Sessions"
         disabled={workspace === null}
         onPress={() => router.push(routes.archivedChats())}
       />
@@ -437,7 +437,7 @@ function NoSessionsState({
       <EmptyState
         icon="messages-square"
         title="No Sessions Yet"
-        message="Start with New Task or New Chat. Sessions that run, wait for you, or finished recently show here."
+        message="Start with New Task or New Session. Sessions that run, wait for you, or finished recently show here."
         action={
           workspaceId ? (
             <>
@@ -447,7 +447,7 @@ function NoSessionsState({
                 onPress={() => router.push(routes.newTask(workspaceId))}
               />
               <Button
-                label="New Chat"
+                label="New Session"
                 icon="message-circle-plus"
                 variant="outline"
                 onPress={() => router.push(routes.newChat(workspaceId))}

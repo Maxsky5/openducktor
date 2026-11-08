@@ -29,7 +29,7 @@ The site is a static Astro build with no React hydration and no connection to th
 | Command palette | Kanban board with the command palette | The visitor searches across the workspaces, opens the actions of a task with Tab, and starts its Planner in the background. Then the visitor answers the question of a waiting Builder in the palette. A key display under the window shows each key. The palette opens, changes, and closes at once, as in the product. |
 | Runtimes | Settings, with the agent defaults of each role | The visitor opens the model picker of the Spec role. No model is a favorite, so the picker opens on the first runtime. The visitor chooses a model from another runtime. |
 | Autopilot | Kanban board with the empty lanes collapsed | A task goes from Backlog to Human Review, and nobody clicks. Autopilot starts each agent, and a notification shows each new agent session. QA rejects the first build, and the Builder fixes it with the QA report. The task waits for your approval. |
-| Features | Workspace chat, an MCP client, the prompt overrides, and the session page with the repository actions | The chat creates the missing tasks for a request. The visitor opens one of them from its card and starts its Builder in the background, so the chat stays on screen. An MCP client creates a task. A prompt override gets a placeholder check. Each repository action runs in a new terminal of the bottom panel, in the task worktree. |
+| Features | A workspace session, an MCP client, the prompt overrides, and the session page with the repository actions | The workspace session creates the missing tasks for a request. The visitor opens one of them from its card and starts its Builder in the background, so the workspace session stays on screen. An MCP client creates a task. A prompt override gets a placeholder check. Each repository action runs in a new terminal of the bottom panel, in the task worktree. |
 | Local | Diagnostics panel | The checks find the tools on the computer and the workspace files. The host starts one shared runtime of each kind, and the overview says that everything works. |
 | Install | The desktop app and the browser version, side by side. Each install method has a terminal with its command and a copy button. | The desktop terminals do not move. The browser version terminal types its command once and shows the start log of the web runner. Then it keeps its last frame. |
 | Questions and closing | None | The closing shows the duck parade: the OpenDucktor duck leads three ducklings, the coding agents that it runs. They swim in once, then float, and a light scans the visor of the lead duck. |
@@ -44,10 +44,10 @@ Builder read the product source for each view and compared the views with the ru
 | Session page, panels, and repository actions | `packages/frontend/src/components/features/agents` and `packages/frontend/src/pages/agents` |
 | Sidebar, workspace rail, and session preview | `packages/frontend/src/components/layout/sidebar`. The preview opens 180 ms after the pointer enters a row, to the right of the row, and the Reply here block answers a pending question. |
 | Command palette and fuzzy marks | `packages/frontend/src/features/command-palette` |
-| Workspace chat | `packages/frontend/src/components/features/agents/agent-chat` and `packages/frontend/src/pages/workspace-sessions` |
+| Workspace session | `packages/frontend/src/components/features/agents/agent-chat` and `packages/frontend/src/pages/workspace-sessions` |
 | Task details and the start of a session from them | `packages/frontend/src/components/features/task-details` and `packages/frontend/src/pages/kanban/use-kanban-session-start-flow.ts`. The start dialog takes focus, so the sheet closes. Run in background keeps the current page. |
 | Settings and prompt overrides | `packages/frontend/src/components/features/settings` |
-| Autopilot rules and starts | `packages/frontend/src/features/autopilot` and `packages/frontend/src/features/session-start/session-start-orchestration.ts` |
+| Autopilot rules and starts | `packages/frontend/src/features/autopilot` and `packages/frontend-core/src/sessions/start/session-start-orchestration.ts` |
 | Notifications | `packages/frontend/src/features/notifications`. A new or forked session shows "Session started." A resumed session shows no notification. |
 | Lane order in the board | `packages/frontend/src/pages/kanban/use-kanban-board-model.ts`. A task that waits for input shows first in its lane. |
 | Diagnostics | `packages/frontend/src/components/features/diagnostics` |
@@ -55,34 +55,36 @@ Builder read the product source for each view and compared the views with the ru
 | MCP call and result | `packages/openducktor-mcp`. The client window is generic and names no product. |
 | Web runner start log | `packages/openducktor-web/src/launcher.ts` and `packages/openducktor-web/src/logger.ts` |
 
-Two unit tests compare copies with the product source. `tests/copied-prompts.test.ts` checks the kickoff prompts, and `tests/copied-palette-match.test.ts` checks the rows and the marks of the palette search.
+Four unit tests in `packages/product-scenes/src/` compare copies with the product source. `copied-prompts.test.ts` checks the kickoff prompts and the QA prompts of the prompts scene. `copied-settings.test.ts` checks the section list, the prompt tabs, and the prompt cards of the prompts scene. `copied-palette-match.test.ts` checks the rows and the marks of the palette search. `copied-mark.test.ts` checks the brand mark.
 
 The views follow the product layout, labels, status colors, and controls. The tasks, the repository, the code, and the agent output are fictional. The model and provider names are also fictional, so the page claims no support for a specific model.
 
 The product screenshots in `docs/assets/screenshots/` are research evidence only. The build does not publish them.
 
-The components in `src/replica/` copy the product UI, and each folder in `src/views/` puts them together for one view. The controls in `src/replica/ui/`, such as the button and the switch, copy the components of `packages/frontend/src/components/ui/`. The fictional data is in `src/sample/`. These components do not import React, desktop state, host APIs, or runtime connections.
+The components in `packages/product-scenes/src/replicas/` copy the product UI. Each folder in `packages/product-scenes/src/scenes/` puts them together for one view. The site keeps `src/ui/RuntimeIcon.astro` for the runtime logos outside a view. The controls in `packages/product-scenes/src/replicas/ui/`, such as the button and the switch, copy the components of `packages/frontend/src/components/ui/`. The fictional data is in `packages/product-scenes/src/sample/` and in the `sample.ts` file of each scene. The app tour reads the tasks, the workspaces, and the session titles from the same modules. These components do not import desktop state, host APIs, or runtime connections. The React views of the package render to static HTML at build time, and the page loads no React.
 
 ## Motion
 
-The views play with GSAP and its ScrollTrigger plugin. The code in `src/motion/` has one job for each file:
+The views play with GSAP and its ScrollTrigger plugin. The code in `packages/product-scenes/src/motion/` has one job for each file:
 
 | File | Job |
 |---|---|
 | `preference.ts` | The reduced motion query and the pause control of the header. It has no GSAP, so a page without views, such as the 404 page, does not load GSAP. |
-| `player.ts` | The shared player: a view builds its first frame when the page loads, plays while it is in its part of the screen, and pauses with the control. |
-| `loop.ts`, `chapters.ts`, `once.ts` | The three ways to play: a loop, the workflow steps one after the other, and one play of the browser version terminal. |
+| `player.ts`, `scroll.ts` | The page players: a view builds its first frame when the page loads, plays while it is in its part of the screen, and pauses with the control. `scroll.ts` registers ScrollTrigger, and only the page players load it. |
+| `playback.ts` | The playback core of every player: the cross fade from the last frame, and the check of the length of a scene. |
+| `loop.ts`, `chapters.ts`, `once.ts` | The three ways to play: a loop, the workflow steps one after the other, and one play of the browser version terminal. `mountLoop` in `player.ts` plays a loop on the page. |
 | `scene.ts` | The tools of a scene builder: the fresh stage, the paused timeline, the templates of the view, and the end of the scene. |
 | `effects.ts`, `text.ts` | Shared tweens, such as a pop or a height change, and text steps, such as typed input and streamed model output. |
 | `frame.ts` | The cover that holds the last frame during a cross fade, with the scroll offsets of the frame. |
-| `dom.ts`, `tabs.ts`, `tokens.ts` | Typed queries that fail loudly, the keyboard pattern of the step tabs, and the named eases of the views. `dom.ts` has no GSAP, so the header and the brand links use it on every page. |
+| `dom.ts`, `tabs.ts`, `tokens.ts` | Typed queries that fail loudly, the keyboard pattern of the step tabs, and the named eases of the views. The site scripts, such as the header and the brand links, use their own typed queries in `src/ui/dom.ts`. |
 | `offset.ts` | The position of an element in a replica, with the translation that GSAP gives it. |
+| `mount.ts` | The mount with a handle: play, pause, seek, duration, and stop, for a host that controls a scene, such as the app tour or a frame renderer. It loads no ScrollTrigger, so the host gets no scroll listener. |
 
-The product parts that move have a controller next to their component, for example `src/replica/board/board.ts` for the Kanban board and `src/replica/studio/studio.ts` for the session page. The `scene.ts` file of each view builds the timeline of that view from these parts. The workflow steps have one file each in `src/views/workflow/`, and they share `session.ts`.
+The product parts that move have a controller next to their component, for example `packages/product-scenes/src/replicas/board/cards.ts` for the Kanban board and `packages/product-scenes/src/replicas/studio/studio.ts` for the session page. The `timeline.ts` file of each scene builds the timeline of that view from these parts. The workflow steps have one file each in `packages/product-scenes/src/scenes/workflow/`, and they share `session.ts`. The browser version terminal is site UI: `src/ui/web-runner.ts` plays it.
 
 Each loop restores the static markup and builds a new timeline. DOM changes from one loop cannot stay in the next loop. The last frame of a loop cross fades into the first frame of the next loop. A copy of the last frame covers the view and fades out, so the product window does not go blank. The next loop starts when the cross fade ends.
 
-The session page takes one frame record, and `src/sample/studio.ts` holds the last frame of each workflow step. The markup of a step renders its last frame, and the next step applies the same record at its start, so each step starts where the step before it ends. The transcripts are data in `src/sample/transcripts.ts`, with typed row ids for the scenes.
+The session page takes one frame record, and `packages/product-scenes/src/sample/studio.ts` holds the last frame of each workflow step. The markup of a step renders its last frame, and the next step applies the same record at its start, so each step starts where the step before it ends. The transcripts are data in `packages/product-scenes/src/sample/transcripts.ts`, with typed row ids for the scenes.
 
 The scenes follow the GSAP practices of the official GSAP skills:
 
@@ -107,11 +109,11 @@ The duck mark hops once on the water when the page opens, and it bobs when the v
 
 ## Theme and typography
 
-`scripts/product-theme.ts` extracts the light and dark token blocks from `packages/frontend/src/styles.css`. `src/replica/Replica.astro` imports them as the CSS module `virtual:openducktor/product-theme.css`, so Astro bundles and hashes them with the styles of the product views. A missing or changed block stops the build with an actionable error. The output includes no desktop selectors, Tailwind runtime, or JavaScript.
+`packages/product-scenes/scripts/build-theme.ts` writes the light and dark token blocks of `packages/theme/src/tokens.css` to `packages/product-scenes/styles/theme.css`, scoped to the root of each copied UI. A test fails when the file does not match its source, and a missing or changed block stops the script with an actionable error. The output includes no desktop selectors, Tailwind runtime, or JavaScript.
 
 The website styles use their own page tokens. The product views use the semantic tokens of the product, which apply only inside the root of each copied UI.
 
-`src/replica/studio/highlight.ts` colors the sample TypeScript at build time. It covers only the sample code and adds no client script.
+`packages/product-scenes/src/replicas/studio/highlight.ts` colors the sample TypeScript at build time. It covers only the sample code and adds no client script.
 
 The default is light for all system settings. The header switch changes the page and all product views. A reload restores light.
 
@@ -121,13 +123,13 @@ The default is light for all system settings. The header switch changes the page
 | IBM Plex Mono | `@fontsource/ibm-plex-mono`, SIL Open Font License 1.1 | Self-hosted Latin WOFF2 at weights 400 and 500, as in the desktop app. The page preloads weight 400 and publishes `/ibm-plex-mono-license.txt`. |
 | GSAP | `gsap` 3.15, GreenSock standard no-charge license | Bundled in the page scripts. The license forbids the removal of its notices, so the build keeps them. |
 | Duck mark and favicon | Website-owned `artwork/favicon.svg`, and `src/ui/Brand.astro` with the geometry of `src/ui/duck.ts` | A rubber duck with a night vision visor, on the violet tile of the app icon. The header, the footer, the favicon, and the sharing image use it. |
-| Product brand mark | `packages/frontend/src/assets/openducktor-mark.svg`, repository Apache 2.0 license | The product views copy the app sidebar, so they show the mark of the app, copied without modification. |
+| Product brand mark | `packages/frontend/src/assets/openducktor-mark.svg`, repository Apache 2.0 license | The product views copy the app sidebar, so they show the mark of the app. `packages/product-scenes/src/replicas/shell/openducktor-mark.svg` is an unmodified copy, and a test of the package compares it with the source. |
 | GitHub mark | [GitHub Brand Toolkit](https://brand.github.com/) | Inline mark on the header and opening links to the project repository. It identifies the link destination. |
-| Runtime brand marks | `packages/frontend/src/components/features/agents/agent-runtime-icon.tsx` | Static SVG geometry and brand colors in `src/replica/shell/RuntimeIcon.astro`. They identify the coding runtimes. |
-| Icons | `@lucide/astro`, ISC and inherited Feather MIT notices | Static inline SVG and `/lucide-license.txt`. |
+| Runtime brand marks | `packages/frontend/src/components/features/agents/agent-runtime-icon.tsx` | Static SVG geometry and brand colors in `packages/product-scenes/src/replicas/ui/RuntimeIcon.tsx` and `src/ui/RuntimeIcon.astro`. They identify the coding runtimes. |
+| Icons | `@lucide/astro` and `lucide-react` at the same version, ISC and inherited Feather MIT notices | Static inline SVG and `/lucide-license.txt`. |
 | Sharing image | Website-owned `artwork/open-graph.svg` | Generated 1200 by 630 PNG with factual copy and the light palette. |
 
-Asset preparation recreates the ignored `public/` directory, so removed designs cannot stay in the output. The CI path filters include the shared product theme and brand mark, because they change the build.
+Asset preparation recreates the ignored `public/` directory, so removed designs cannot stay in the output. The CI path filters include the product scenes and the shared product theme, because they change the build.
 
 ## Interaction and accessibility
 

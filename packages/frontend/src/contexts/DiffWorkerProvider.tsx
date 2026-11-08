@@ -17,7 +17,7 @@ const PRELOAD_LANGS: SupportedLanguages[] = [
 const PRELOAD_THEMES = ["pierre-light", "pierre-dark"] as const;
 
 /**
- * Mount once in the app shell so page and workspace switches keep the warm worker pool.
+ * `ApplicationOverlays` mounts it once, so page and workspace switches keep the warm worker pool.
  * It uses Pierre's built-in WorkerPoolContextProvider to create and pre-warm
  * Shiki WASM worker pools. PatchDiff / FileDiff components rendered below
  * automatically use the worker pool for off-main-thread syntax highlighting.

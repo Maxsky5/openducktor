@@ -36,7 +36,7 @@ import {
   SESSION_GROUP_ICON_CLASSES,
   SESSION_TITLE_CLASSES,
   sessionEntryIconClassName,
-  sessionEntrySurfaceClassName,
+  sessionRowClassName,
 } from "./session-navigation-styles";
 import { useSessionCommands } from "@/features/session-navigation/use-session-commands";
 import { SessionCommandIcon } from "./session-command-activity";
@@ -91,7 +91,7 @@ export function SessionNavigationList({
         ) : null}
         {!model.isLoading && model.issues.length === 0 && model.entryCount === 0 ? (
           <p className="px-1 text-sm text-sidebar-muted-foreground">
-            No sessions yet. Start with New task or New chat.
+            No sessions yet. Start with New task or New session.
           </p>
         ) : null}
         <SessionSourceIssues issues={model.issues} onRetry={onRetry} />
@@ -126,6 +126,109 @@ function SessionRowMetadata({
         </span>
       ) : null}
     </span>
+  );
+}
+
+/**
+ * The content of a session row: the status, workspace, task status, and time, then the role icon,
+ * title, and runtime. It reads no context, so the feature tour shows the same row.
+ */
+export function SessionRowContent({
+  entry,
+  unread,
+  now,
+  readStatusId,
+  commandCount,
+  isSelected,
+}: {
+  entry: SessionNavigationEntry;
+  unread: boolean;
+  now: number;
+  readStatusId: string;
+  commandCount: number;
+  isSelected: boolean;
+}): ReactElement {
+  const titleClassName = SESSION_TITLE_CLASSES[sessionEntryTitleTone(entry, unread)];
+  const task = entry.context.kind === "task" ? entry.context.task : null;
+  const Icon = sessionEntryIcon(entry);
+  return (
+    <>
+      <span className="flex w-full min-w-0 items-center gap-2">
+        <SessionEntryStatusDot entry={entry} unread={unread} id={readStatusId} />
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-4 text-sidebar-foreground">
+          {entry.workspace.workspaceName}
+        </span>
+        {task && (
+          <Badge
+            variant="outline"
+            className={cn(
+              "h-4 shrink-0 px-1.5 py-0 text-[10px] leading-none",
+              statusBadgeClassName(task.sharedState),
+            )}
+          >
+            {task.sharedState.shortLabel}
+          </Badge>
+        )}
+        <SessionRowMetadata entry={entry} now={now} />
+      </span>
+      <span className="flex w-full min-w-0 items-center gap-2">
+        <span className="relative flex size-4 shrink-0 items-center justify-center">
+          <Icon className={cn("size-4", sessionEntryIconClassName(entry))} aria-hidden="true" />
+        </span>
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate text-[13px] font-medium leading-5",
+            titleClassName,
+          )}
+        >
+          {entry.title}
+        </span>
+        <SessionCommandIcon count={commandCount} />
+        <SessionEntryRuntimeIcon entry={entry} />
+      </span>
+      {isSelected ? <SessionSelectionIndicator className="absolute -right-1 -top-1" /> : null}
+    </>
+  );
+}
+
+/** The classes of a session group header. */
+export const SESSION_GROUP_HEADER_CLASS_NAME =
+  "flex h-8 w-full items-center gap-2 rounded-md bg-muted/60 px-2.5 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-sidebar-ring";
+
+/** The content of a session group header. It reads no context, so the feature tour shows it too. */
+export function SessionGroupHeaderContent({
+  groupId,
+  count,
+  collapsed,
+}: {
+  groupId: SessionNavigationGroup["id"];
+  count: number;
+  collapsed: boolean;
+}): ReactElement {
+  const Icon = SESSION_GROUP_ICONS[groupId];
+  return (
+    <>
+      <Icon
+        className={cn("size-4 shrink-0", SESSION_GROUP_ICON_CLASSES[groupId])}
+        aria-hidden="true"
+      />
+      <span className="text-[13px] font-semibold text-sidebar-foreground">
+        {SESSION_GROUP_LABELS[groupId]}
+      </span>
+      <span
+        className={cn(
+          "ml-auto min-w-5 rounded-full px-1.5 text-center text-xs font-medium tabular-nums",
+          SESSION_GROUP_COUNT_CLASSES[groupId],
+        )}
+        aria-label={`${count} ${count === 1 ? "session" : "sessions"}`}
+      >
+        {count}
+      </span>
+      <ChevronDown
+        className={cn("size-3 shrink-0 text-sidebar-muted-foreground", collapsed && "-rotate-90")}
+        aria-hidden="true"
+      />
+    </>
   );
 }
 
@@ -164,9 +267,6 @@ const SessionRow = memo(function SessionRow({
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
 }): ReactElement {
   const unread = useSessionUnread(entry);
-  const titleClassName = SESSION_TITLE_CLASSES[sessionEntryTitleTone(entry, unread)];
-  const task = entry.context.kind === "task" ? entry.context.task : null;
-  const Icon = sessionEntryIcon(entry);
   const readStatusId = useId();
   const commands = useSessionCommands(entry);
   const commandCount = commands.status === "ready" ? commands.commands.length : 0;
@@ -185,44 +285,18 @@ const SessionRow = memo(function SessionRow({
         onClick={() => onOpen(entry)}
         className={cn(
           // The margin keeps the group header in view when the list scrolls to this row.
-          "relative flex w-full min-w-0 cursor-pointer scroll-mt-10 flex-col rounded-md px-2.5 py-1.5 text-left outline-none",
-          sessionEntrySurfaceClassName(entry, isSelected),
+          "scroll-mt-10",
+          sessionRowClassName(entry, isSelected),
         )}
       >
-        <span className="flex w-full min-w-0 items-center gap-2">
-          <SessionEntryStatusDot entry={entry} unread={unread} id={readStatusId} />
-          <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-4 text-sidebar-foreground">
-            {entry.workspace.workspaceName}
-          </span>
-          {task && (
-            <Badge
-              variant="outline"
-              className={cn(
-                "h-4 shrink-0 px-1.5 py-0 text-[10px] leading-none",
-                statusBadgeClassName(task.sharedState),
-              )}
-            >
-              {task.sharedState.shortLabel}
-            </Badge>
-          )}
-          <SessionRowMetadata entry={entry} now={now} />
-        </span>
-        <span className="flex w-full min-w-0 items-center gap-2">
-          <span className="relative flex size-4 shrink-0 items-center justify-center">
-            <Icon className={cn("size-4", sessionEntryIconClassName(entry))} aria-hidden="true" />
-          </span>
-          <span
-            className={cn(
-              "min-w-0 flex-1 truncate text-[13px] font-medium leading-5",
-              titleClassName,
-            )}
-          >
-            {entry.title}
-          </span>
-          <SessionCommandIcon count={commandCount} />
-          <SessionEntryRuntimeIcon entry={entry} />
-        </span>
-        {isSelected ? <SessionSelectionIndicator className="absolute -right-1 -top-1" /> : null}
+        <SessionRowContent
+          entry={entry}
+          unread={unread}
+          now={now}
+          readStatusId={readStatusId}
+          commandCount={commandCount}
+          isSelected={isSelected}
+        />
       </button>
     </SessionEntryPreview>
   );
@@ -241,7 +315,6 @@ function SessionGroupSection({
 }): ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const listId = `${useId()}-session-group`;
-  const Icon = SESSION_GROUP_ICONS[group.id];
   const label = SESSION_GROUP_LABELS[group.id];
   return (
     <SessionPresence as="section" label={label}>
@@ -251,28 +324,12 @@ function SessionGroupSection({
           aria-expanded={!collapsed}
           aria-controls={listId}
           onClick={() => setCollapsed((current) => !current)}
-          className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md bg-muted/60 px-2.5 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          className={SESSION_GROUP_HEADER_CLASS_NAME}
         >
-          <Icon
-            className={cn("size-4 shrink-0", SESSION_GROUP_ICON_CLASSES[group.id])}
-            aria-hidden="true"
-          />
-          <span className="text-[13px] font-semibold text-sidebar-foreground">{label}</span>
-          <span
-            className={cn(
-              "ml-auto min-w-5 rounded-full px-1.5 text-center text-xs font-medium tabular-nums",
-              SESSION_GROUP_COUNT_CLASSES[group.id],
-            )}
-            aria-label={`${group.entries.length} ${group.entries.length === 1 ? "session" : "sessions"}`}
-          >
-            {group.entries.length}
-          </span>
-          <ChevronDown
-            className={cn(
-              "size-3 shrink-0 text-sidebar-muted-foreground",
-              collapsed && "-rotate-90",
-            )}
-            aria-hidden="true"
+          <SessionGroupHeaderContent
+            groupId={group.id}
+            count={group.entries.length}
+            collapsed={collapsed}
           />
         </button>
         {collapsed ? null : (

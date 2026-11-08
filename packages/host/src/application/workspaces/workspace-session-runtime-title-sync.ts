@@ -58,7 +58,7 @@ export const syncTitleAfterTurn = (
             if (result.status === "not_attached")
               return yield* new HostOperationError({
                 operation: "workspaceSession.runtime-title.sync",
-                message: `${runtimeLabel} no longer holds this chat.`,
+                message: `${runtimeLabel} no longer holds this session.`,
               });
           }),
         );
@@ -66,7 +66,7 @@ export const syncTitleAfterTurn = (
         Effect.catch((failure) =>
           reportFailure(
             runtimeRef,
-            `Could not sync this Workspace Session title to ${runtimeLabel}. The message was accepted and the saved title remains. Reattach this chat or rename it to retry. ${failure.message}`,
+            `Could not sync this Workspace Session title to ${runtimeLabel}. The message was accepted and the saved title remains. Reattach this session or rename it to retry. ${failure.message}`,
             "workspaceSession.title.sync",
           ),
         ),

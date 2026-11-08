@@ -53,12 +53,12 @@ const WorkspaceSessionsPage = memo(function WorkspaceSessionsPage({
     <>
       {isWorkspaceReady && records.isPending ? (
         <p role="status" className="p-6 text-muted-foreground">
-          Loading chats…
+          Loading sessions…
         </p>
       ) : null}
       {isWorkspaceReady && !records.isPending && records.data === undefined ? (
         <div role="alert" className="space-y-3 p-6">
-          <p className="text-destructive">Could not load chats: {errorMessage(records.error)}</p>
+          <p className="text-destructive">Could not load sessions: {errorMessage(records.error)}</p>
           <Button variant="outline" onClick={() => void records.refetch()}>
             Retry
           </Button>

@@ -37,8 +37,8 @@ const workspaceActions = (
   },
   {
     id: "chat",
-    label: "New Chat",
-    accessibilityLabel: "New chat",
+    label: "New Session",
+    accessibilityLabel: "New session",
     icon: "message-circle-plus",
     blockedReason: null,
   },

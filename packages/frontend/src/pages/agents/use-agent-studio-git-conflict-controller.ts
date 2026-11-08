@@ -281,7 +281,7 @@ export function useAgentStudioGitConflictController({
 
     if (!onResolveGitConflict) {
       setRebaseError(
-        `Cannot contact ${conflictRecipientLabel}. Select a saved chat and try again.`,
+        `Cannot contact ${conflictRecipientLabel}. Select a saved session and try again.`,
       );
       return;
     }
@@ -333,7 +333,7 @@ export function useAgentStudioGitConflictController({
         return;
       const message = toErrorMessage(
         error,
-        `Failed to contact ${conflictRecipientLabel}. Reopen the chat and try again.`,
+        `Failed to contact ${conflictRecipientLabel}. Reopen the session and try again.`,
       );
       setRebaseError(message);
       toast.error(`Failed to contact ${conflictRecipientLabel}`, { description: message });

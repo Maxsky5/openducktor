@@ -115,7 +115,7 @@ function Harness({
                   <button
                     onClick={() => navigate("/sessions?workspace=beta&kind=workspace&session=chat")}
                   >
-                    Open chat
+                    Open session
                   </button>
                   {visits.map((href, index) => (
                     <button key={href} onClick={() => navigate(href)}>
@@ -491,7 +491,7 @@ test("task and chat switches keep their inputs and terminal viewports and stop h
     if (!(task instanceof HTMLInputElement)) throw new Error("Expected a task draft input");
     const terminal = view.container.querySelector("[data-terminal-viewport]");
     fireEvent.change(task, { target: { value: "Task draft" } });
-    fireEvent.click(view.getByRole("button", { name: "Open chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Open session" }));
     const chat = await view.findByLabelText("beta:workspace draft");
     if (!(chat instanceof HTMLInputElement)) throw new Error("Expected a chat draft input");
     expect(task.isConnected).toBe(true);

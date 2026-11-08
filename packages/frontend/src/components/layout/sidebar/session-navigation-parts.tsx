@@ -4,10 +4,8 @@ import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-ico
 import { Button } from "@/components/ui/button";
 import { RunningStatusDot } from "@/components/ui/running-status-dot";
 import { cn } from "@/lib/utils";
-import {
-  type SessionEntryDotTone,
-  sessionEntryDotTone,
-} from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
+import { SESSION_DOT_CLASSES } from "./session-navigation-styles";
+import { sessionEntryDotTone } from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
 import type {
   SessionNavigationEntry,
   SessionNavigationSourceIssue,
@@ -126,15 +124,6 @@ type SessionEntryStatusDotProps = {
   className?: string;
 };
 
-/** The read state dots. A running session shows the running dot instead. */
-const DOT_CLASSES = {
-  input_unread: "bg-status-input-unread",
-  input_read: "bg-status-input-read",
-  running: "bg-status-running",
-  unread: "bg-status-unread",
-  read: "bg-status-read",
-} satisfies Record<SessionEntryDotTone, string>;
-
 /** Activity and read state share one fixed space in both sidebar layouts. */
 export function SessionEntryStatusDot({
   entry,
@@ -156,7 +145,10 @@ export function SessionEntryStatusDot({
       {running ? (
         <RunningStatusDot size="sm" />
       ) : (
-        <span aria-hidden="true" className={cn("size-2.5 rounded-full", DOT_CLASSES[tone])} />
+        <span
+          aria-hidden="true"
+          className={cn("size-2.5 rounded-full", SESSION_DOT_CLASSES[tone])}
+        />
       )}
       <span className="sr-only">{label}</span>
     </span>

@@ -16,6 +16,7 @@ import {
 } from "@/components/layout/workspace-dialogs-context";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { useDialogPresence } from "@/components/ui/dialog";
+import { returnFocusOnClose } from "@/components/ui/open-dialogs";
 import { buildSessionNavigationHref } from "@/features/session-navigation/sessions-route";
 import { WorkspaceSessionCreateDialog } from "@/pages/workspace-sessions/workspace-session-create-dialog";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -81,12 +82,8 @@ export function WorkspaceDialogsProvider({ children }: PropsWithChildren): React
         chatDialog={chatDialog}
         onClose={() => setDialog(null)}
         onOpenSession={openSessionAfterSave}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          // Settings can open from an import dialog. Keep focus in that new dialog.
-          if (!document.activeElement?.closest('[role="dialog"][data-state="open"]'))
-            returnFocusRef.current?.focus();
-        }}
+        // Settings can open from an import dialog. Keep focus in that new dialog.
+        onCloseAutoFocus={returnFocusOnClose(() => returnFocusRef.current)}
       />
     </WorkspaceDialogsContext>
   );

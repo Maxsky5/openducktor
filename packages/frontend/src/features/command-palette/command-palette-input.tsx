@@ -62,7 +62,7 @@ export function CommandPaletteInput({
           {isLoading ? (
             <LoaderCircle
               className="size-4 shrink-0 animate-spin text-muted-foreground"
-              aria-label="Loading tasks and chats"
+              aria-label="Loading tasks and sessions"
             />
           ) : null}
           {children}
@@ -73,8 +73,8 @@ export function CommandPaletteInput({
 }
 
 const placeholderOf = (row: PaletteRowEntry | null): string => {
-  if (row === null) return "Search actions, tasks, and chats…";
-  return row.kind === "task" ? "Search task actions…" : "Search chat actions…";
+  if (row === null) return "Search actions, tasks, and sessions…";
+  return row.kind === "task" ? "Search task actions…" : "Search session actions…";
 };
 
 /** The task or chat of the action list, in the input row. Its button returns to the main list. */
@@ -91,7 +91,7 @@ export function RowChip({
         type="button"
         tabIndex={-1}
         aria-label="Back to all results"
-        className="flex size-5 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
+        className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
         onMouseDown={(event) => event.preventDefault()}
         onClick={onBack}
       >

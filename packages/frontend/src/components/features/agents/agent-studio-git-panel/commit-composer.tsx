@@ -110,7 +110,7 @@ export const CommitComposer = memo(function CommitComposer({
                 type="button"
                 // A disabled Commit keeps the primary color, dimmed like every disabled button.
                 className={cn(
-                  "flex h-full w-9 cursor-pointer items-center justify-center bg-primary text-primary-foreground outline-none transition-colors",
+                  "flex h-full w-9 items-center justify-center bg-primary text-primary-foreground outline-none transition-colors",
                   "enabled:hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary-foreground/70 focus-visible:ring-inset",
                   "disabled:cursor-not-allowed disabled:opacity-50",
                 )}

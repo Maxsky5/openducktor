@@ -85,6 +85,16 @@ export default defineConfig({
       },
     ],
   },
+  // The app and the product scenes of its tour use two versions of lucide-react. The dependency
+  // optimizer of the dev server finds a dependency by its name only, so it gives one version to
+  // both. A nested entry for each package keeps the version of each importer.
+  optimizeDeps: {
+    exclude: ["lucide-react"],
+    include: [
+      "@openducktor/frontend > lucide-react",
+      "@openducktor/frontend > @openducktor/product-scenes > lucide-react",
+    ],
+  },
   build: {
     chunkSizeWarningLimit: 500,
     reportCompressedSize: false,

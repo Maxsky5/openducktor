@@ -260,7 +260,7 @@ describe("task deletion after Approve", () => {
 
     const deletion = await Effect.runPromise(Effect.flip(harness.service.deleteTask(deleteInput)));
     expect(deletion.message).toBe(
-      "Cannot delete task task-1 because others still need its worktree. Saved chats work in a removed worktree: “Hi”. Archive these chats first.",
+      "Cannot delete task task-1 because others still need its worktree. Saved sessions work in a removed worktree: “Hi”. Archive these sessions first.",
     );
     expect(harness.isDeleted()).toBe(false);
     expect(harness.existingPaths.has(worktreePath)).toBe(true);

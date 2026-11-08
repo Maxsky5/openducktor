@@ -14,7 +14,7 @@ import { useModelSelectionActions } from "../../sessions/model-selection/use-mod
 import { useSpeedControl } from "../../sessions/model-selection/use-speed-control";
 
 const rejectSessionUpdate = (): never => {
-  throw new Error("A new chat has no session yet.");
+  throw new Error("The new session has not started yet.");
 };
 
 /**

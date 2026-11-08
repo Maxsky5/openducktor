@@ -113,7 +113,8 @@ const pendingInputs = (
   return pending;
 };
 
-const previewWorkflow = (
+/** The workflow rail steps of a task entry, and the session target of each role. */
+export const previewWorkflow = (
   entry: SessionNavigationEntry,
   projection: WorkspaceActivityProjection | null,
 ): Pick<SessionPreviewModel, "steps" | "roleTargets"> => {

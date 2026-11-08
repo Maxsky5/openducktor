@@ -228,7 +228,7 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
                     return yield* new HostOperationError({
                       operation: "task-workflow-session.fork.validate",
                       message:
-                        "The runtime did not return a distinct idle fork in the source checkout. Reopen the source chat and retry.",
+                        "The runtime did not return a distinct idle fork in the source checkout. Reopen the source session and retry.",
                     });
                   yield* progress.created(summary);
                   yield* progress.checkCanceled();

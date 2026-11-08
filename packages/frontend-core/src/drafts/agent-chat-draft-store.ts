@@ -25,7 +25,7 @@ export type AgentChatDraftCleanupTarget = AgentChatDraftSessionIdentity & {
 export class ChatDraftTooLargeError extends Error {
   constructor(readonly byteLength: number) {
     super(
-      `This chat draft is too long to keep on this device (${byteLength} bytes, maximum ${AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES} bytes). Shorten it or send it before you close the app.`,
+      `This message draft is too long to keep on this device (${byteLength} bytes, maximum ${AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES} bytes). Shorten it or send it before you close the app.`,
     );
     this.name = "ChatDraftTooLargeError";
   }
@@ -300,7 +300,7 @@ export const createAgentChatDraftStore = ({
         findUnpersistableAttachment(currentEntry.draft)?.id === unpersistableAttachment.id
       ) {
         throw new Error(
-          `Attachment "${unpersistableAttachment.name}" could not be prepared for chat draft persistence.`,
+          `Attachment "${unpersistableAttachment.name}" could not be prepared for message draft persistence.`,
         );
       }
     }
@@ -316,7 +316,7 @@ export const createAgentChatDraftStore = ({
     if (writeResult.status === "oversized")
       throw new ChatDraftTooLargeError(writeResult.byteLength);
     if (writeResult.status === "unpersistable_attachments") {
-      throw new Error("Chat draft contains attachments that cannot be persisted.");
+      throw new Error("Message draft contains attachments that cannot be persisted.");
     }
 
     entry.persistedVersion = version;
@@ -337,7 +337,7 @@ export const createAgentChatDraftStore = ({
       reportPersistenceError(
         error instanceof Error
           ? error
-          : new Error("Failed to clean expired chat drafts from storage.", { cause: error }),
+          : new Error("Failed to clean expired message drafts from storage.", { cause: error }),
       );
     }
   };
@@ -429,7 +429,7 @@ export const createAgentChatDraftStore = ({
     );
     const [first] = failed;
     if (!first) return;
-    const drafts = failed.length === 1 ? "a chat draft" : `${failed.length} chat drafts`;
+    const drafts = failed.length === 1 ? "a message draft" : `${failed.length} message drafts`;
     const reason = first.saveError?.message ?? "The draft changed while it was saved. Try again.";
     throw new Error(`Could not save ${drafts}. ${reason}`, { cause: first.saveError });
   };
@@ -489,7 +489,7 @@ export const createAgentChatDraftStore = ({
       }
 
       if (errors.length > 0) {
-        throw new Error(`Failed to clean ${errors.length} chat draft storage key(s).`, {
+        throw new Error(`Failed to clean ${errors.length} message draft storage key(s).`, {
           cause: errors[0],
         });
       }

@@ -1,0 +1,9 @@
+@layer replica {
+  :where(.stage) {
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(6 * var(--u));
+    }
+  }
+}

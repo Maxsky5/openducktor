@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { TOKENS_FILE } from "@openducktor/theme/blocks";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Button } from "./button";
@@ -27,9 +27,9 @@ const controls: Array<[string, ReactElement]> = [
   ["Slider", createElement(Slider, { value: [50], "aria-label": "Volume" })],
 ];
 
-/** The chroma of the first `--ring` value after the theme selector in the global styles. */
+/** The chroma of the first `--ring` value after the theme selector in the theme tokens. */
 const ringChroma = (themeSelector: ":root," | ".dark {"): number => {
-  const styles = readFileSync(resolve(import.meta.dir, "../../styles.css"), "utf8");
+  const styles = readFileSync(TOKENS_FILE, "utf8");
   const theme = styles.slice(styles.indexOf(themeSelector));
   const chroma = theme.match(/--ring: oklch\([\d.]+ ([\d.]+)/)?.[1];
   if (!chroma) throw new Error(`Expected an oklch --ring value after ${themeSelector}`);

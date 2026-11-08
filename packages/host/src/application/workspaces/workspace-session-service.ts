@@ -180,7 +180,7 @@ export const createWorkspaceSessionService = (
                 return yield* Effect.fail(
                   new HostValidationError({
                     message:
-                      "This chat has no generated title. Send a message first, or enter a name.",
+                      "This session has no generated title. Send a message first, or enter a name.",
                     field: "manualTitle",
                   }),
                 );
@@ -221,7 +221,7 @@ export const createWorkspaceSessionService = (
               if (session.runtimeKind === "codex") {
                 return yield* new HostOperationError({
                   operation: "workspaceSession.rename",
-                  message: `Could not sync this Workspace Session title to Codex. The saved title remains. Reattach this chat or rename it to retry. ${renamed.failure.message}`,
+                  message: `Could not sync this Workspace Session title to Codex. The saved title remains. Reattach this session or rename it to retry. ${renamed.failure.message}`,
                   cause: renamed.failure,
                 });
               }
@@ -289,7 +289,7 @@ export const createWorkspaceSessionService = (
               if (target.kind !== "local_worktree") {
                 return yield* new HostValidationError({
                   field: "removeWorktree",
-                  message: "Cannot remove a repository checkout when archiving a chat.",
+                  message: "Cannot remove a repository checkout when archiving a session.",
                 });
               }
               const config = yield* settings.getRepoConfig(input.workspaceId);
@@ -307,7 +307,7 @@ export const createWorkspaceSessionService = (
                 return yield* new HostValidationError({
                   field: "worktreeConfirmation",
                   message:
-                    "The worktree or branch changed. Reopen Archive chat and confirm the current branch.",
+                    "The worktree or branch changed. Reopen Archive session and confirm the current branch.",
                 });
               }
               target = { ...target, branchName: preview.branchName };
@@ -380,7 +380,7 @@ export const createWorkspaceSessionService = (
                         new HostOperationError({
                           operation: "workspaceSession.archive.persist",
                           message:
-                            "Could not save the archived chat. Retry archiving to finish the operation.",
+                            "Could not save the archived session. Retry archiving to finish the operation.",
                           cause,
                         }),
                     ),

@@ -36,7 +36,7 @@ describe("client connection chat drafts", () => {
 
     const warnings = feedback.shownOf("warning");
     expect(warnings).toHaveLength(2);
-    expect(warnings[0]?.message).toBe("This chat draft is too long to keep on this device");
+    expect(warnings[0]?.message).toBe("This message draft is too long to keep on this device");
     expect(warnings[0]?.options?.description).toBe(
       "The app does not save drafts over 20 KB. Shorten the draft or send it before you close the app.",
     );

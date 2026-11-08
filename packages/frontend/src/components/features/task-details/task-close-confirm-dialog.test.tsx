@@ -83,11 +83,13 @@ describe("TaskCloseConfirmDialog", () => {
     });
 
     expect(
-      screen.getByText("Saved chats work in a removed worktree: “Hi”. Archive these chats first."),
+      screen.getByText(
+        "Saved sessions work in a removed worktree: “Hi”. Archive these sessions first.",
+      ),
     ).toBeDefined();
     expect(
       screen.getByText(
-        "Saved Claude chats keep their native history in a removed worktree: “Fork”. These chats cannot resume after this.",
+        "Saved Claude sessions keep their native history in a removed worktree: “Fork”. These sessions cannot resume after this.",
       ),
     ).toBeDefined();
 

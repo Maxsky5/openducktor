@@ -1,0 +1,120 @@
+/*
+ * Slide changes of the feature tour. The new picture comes in from the side of travel, and the
+ * new text fades in. The first slide of an opening has no direction, so it shows without motion.
+ */
+:root {
+  --tour-slide-dur: 320ms;
+  --tour-slide-distance: 24px;
+  --tour-copy-dur: 220ms;
+  --tour-dot-dur: 300ms;
+}
+
+@keyframes tour-picture-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateX(var(--tour-slide-from));
+  }
+}
+
+@keyframes tour-copy-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.t-tour-picture[data-direction="forward"] {
+  --tour-slide-from: var(--tour-slide-distance);
+  animation: tour-picture-in var(--tour-slide-dur) var(--motion-ease-out) both;
+}
+
+.t-tour-picture[data-direction="backward"] {
+  --tour-slide-from: calc(var(--tour-slide-distance) * -1);
+  animation: tour-picture-in var(--tour-slide-dur) var(--motion-ease-out) both;
+}
+
+.t-tour-copy[data-direction] {
+  animation: tour-copy-in var(--tour-copy-dur) var(--motion-ease-out) both;
+}
+
+.t-tour-dot {
+  transition:
+    width var(--tour-dot-dur) var(--motion-ease-out),
+    background-color var(--tour-dot-dur) var(--motion-ease-out);
+}
+
+/* The shadow of an app window in a picture, as the marketing website draws it. */
+.t-tour-window {
+  box-shadow:
+    0 40px 90px -30px rgb(24 33 58 / 0.32),
+    0 2px 6px rgb(24 33 58 / 0.06);
+}
+
+.dark .t-tour-window {
+  box-shadow:
+    0 40px 90px -30px rgb(0 0 0 / 0.7),
+    0 0 0 1px rgb(255 255 255 / 0.1);
+}
+
+/* The picture area sits on a dot grid. */
+.t-tour-dots {
+  background-image: radial-gradient(
+    color-mix(in oklch, var(--muted-foreground) 24%, transparent) 1px,
+    transparent 1.2px
+  );
+  background-size: 16px 16px;
+}
+
+/* The accent of the markers: the primary color, lighter in dark mode so it reads on dark parts. */
+.t-tour-picture {
+  --t-tour-accent: var(--primary);
+}
+
+.dark .t-tour-picture {
+  --t-tour-accent: color-mix(in oklch, var(--primary), white 30%);
+}
+
+/*
+ * The real session header of a picture marks the title bar of the desktop window: a drag area and,
+ * on Windows and Linux, room for the window controls. A picture is not a title bar.
+ */
+.electron-shell .t-tour-picture .electron-titlebar-safe-area {
+  -webkit-app-region: no-drag;
+}
+
+:is(.electron-platform-win32, .electron-platform-linux)
+  .t-tour-picture
+  .electron-titlebar-safe-area {
+  margin: 0;
+}
+
+/* The selectors match the specificity of the animation rules above, so they replace them. */
+@media (prefers-reduced-motion: reduce) {
+  .t-tour-picture[data-direction],
+  .t-tour-copy[data-direction] {
+    animation: none;
+  }
+
+  .t-tour-dot {
+    transition: none;
+  }
+}
+
+/* A numbered pin of an explainer picture, its leader line, and the dot on its target. */
+.t-tour-pin {
+  background: var(--t-tour-accent);
+  color: white;
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 2px 6px -1px rgb(0 0 0 / 0.35);
+}
+
+.t-tour-pin-line {
+  background: var(--t-tour-accent);
+}
+
+.t-tour-pin-dot {
+  background: var(--t-tour-accent);
+  box-shadow: 0 0 0 2px var(--card);
+}

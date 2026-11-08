@@ -85,7 +85,7 @@ test.each([false, true])(
       expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true");
       expect(view.getByText("Worktree chat")).toBeDefined();
       expect(view.getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(false);
-      const submit = view.getByRole("button", { name: "Archive chat" });
+      const submit = view.getByRole("button", { name: "Archive session" });
       expect(submit.hasAttribute("disabled")).toBe(true);
       fireEvent.submit(submit.closest("form")!);
       expect(requests).toEqual([]);
@@ -101,7 +101,7 @@ test.each([false, true])(
       expect(toggle.getAttribute("aria-checked")).toBe("false");
       if (shared) {
         expect(
-          view.getByText(/saved chats need it for files or history: Child chat/),
+          view.getByText(/saved sessions need it for files or history: Child chat/),
         ).toBeDefined();
         expect(toggle.hasAttribute("disabled")).toBe(true);
       } else {
@@ -149,7 +149,7 @@ test.each([false, true])(
     try {
       expect(view.getByRole("status")).toBeTruthy();
       expect(view.queryByRole("switch")).toBeNull();
-      expect(view.queryByRole("button", { name: "Archive chat" })).toBeNull();
+      expect(view.queryByRole("button", { name: "Archive session" })).toBeNull();
       await waitFor(() => expect(finish).toBeDefined(), SETTLED);
       finish({
         branchName: "feature/chat",
@@ -166,7 +166,7 @@ test.each([false, true])(
       // The final content and buttons appear together, after the minimum loader time.
       expect(performance.now() - startedAt).toBeGreaterThanOrEqual(500);
       expect(view.queryByRole("status")).toBeNull();
-      const submit = view.getByRole("button", { name: "Archive chat" });
+      const submit = view.getByRole("button", { name: "Archive session" });
       expect(submit.hasAttribute("disabled")).toBe(false);
       expect(toggle.getAttribute("aria-checked")).toBe("true");
       expect(view.queryByText(/This worktree has local changes/) !== null).toBe(dirty);
@@ -175,7 +175,7 @@ test.each([false, true])(
       );
       expect(
         view.getByText(
-          /Archiving stops this chat's terminals, development servers, and its running session/,
+          /Archiving stops the terminals, development servers, and running agent of this session/,
         ),
       ).toBeTruthy();
       fireEvent.click(submit);
@@ -219,14 +219,14 @@ test("saved chat history disables worktree removal and still allows archive", as
       expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
     );
     await view.findByText(
-      "This worktree stays because these saved chats need it for files or history: Archived child chat.",
+      "This worktree stays because these saved sessions need it for files or history: Archived child chat.",
       {},
       SETTLED,
     );
     const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
     expect(toggle.hasAttribute("disabled")).toBe(true);
     expect(toggle.getAttribute("aria-checked")).toBe("false");
-    const submit = view.getByRole("button", { name: "Archive chat" });
+    const submit = view.getByRole("button", { name: "Archive session" });
     expect(submit.hasAttribute("disabled")).toBe(false);
     fireEvent.click(submit);
     expect(requests).toEqual([false]);
@@ -273,7 +273,7 @@ test("a task that needs the worktree disables its removal, names the task, and s
     const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
     expect(toggle.hasAttribute("disabled")).toBe(true);
     expect(toggle.getAttribute("aria-checked")).toBe("false");
-    fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Archive session" }));
     expect(requests).toEqual([false]);
   } finally {
     view.unmount();
@@ -316,7 +316,7 @@ test("turning removal off keeps Git resources and Cancel sends no archive reques
     await view.findByText(/This worktree has local changes/, {}, SETTLED);
     expect(
       view.getByText(
-        /Archiving stops this chat's terminals, development servers, and its running session/,
+        /Archiving stops the terminals, development servers, and running agent of this session/,
       ),
     ).toBeTruthy();
     fireEvent.click(view.getByRole("button", { name: "Cancel" }));
@@ -325,7 +325,7 @@ test("turning removal off keeps Git resources and Cancel sends no archive reques
     fireEvent.click(view.getByRole("switch"));
     expect(view.queryByText(/This worktree has local changes/)).toBeNull();
     expect(view.getByText("The worktree and its branch will stay on disk.")).toBeTruthy();
-    fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Archive session" }));
     expect(requests).toEqual([false]);
   } finally {
     view.unmount();
@@ -367,11 +367,11 @@ test("a missing detached worktree can be archived without removal", async () => 
       expect(view.getByRole("dialog").getAttribute("aria-busy")).not.toBe("true"),
     );
     await view.findByText(/No branch is attached/, {}, SETTLED);
-    const submit = view.getByRole("button", { name: "Archive chat" });
+    const submit = view.getByRole("button", { name: "Archive session" });
     expect(submit.hasAttribute("disabled")).toBe(true);
     fireEvent.click(view.getByRole("switch", { name: "Remove worktree and branch" }));
     expect(
-      view.getByText(/Restore the worktree at this path before restoring the chat/),
+      view.getByText(/Restore the worktree at this path before restoring the session/),
     ).toBeTruthy();
     expect(submit.hasAttribute("disabled")).toBe(false);
     fireEvent.click(submit);
@@ -411,7 +411,7 @@ test("a failed saved history check blocks removal but allows keeping the worktre
     const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
     expect(toggle.getAttribute("aria-checked")).toBe("true");
     expect(toggle.hasAttribute("disabled")).toBe(false);
-    const submit = view.getByRole("button", { name: "Archive chat" });
+    const submit = view.getByRole("button", { name: "Archive session" });
     expect(submit.hasAttribute("disabled")).toBe(true);
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-checked")).toBe("false");
@@ -476,7 +476,7 @@ test("archive locks the full form and keeps its error and removal choice visible
     );
     expect(view.getByText("Branch removal failed")).toBeTruthy();
     expect(toggle.getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Archive session" }));
     expect(requests).toEqual([true]);
   } finally {
     view.unmount();

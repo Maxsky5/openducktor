@@ -154,7 +154,7 @@ export function HistoryColumnsHeader({
           })}
           <button
             type="button"
-            className="absolute top-1/2 right-0.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="absolute top-1/2 right-0.5 flex size-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Choose the History columns"
             title="Choose the History columns"
             onClick={openMenu}

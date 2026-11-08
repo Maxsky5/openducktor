@@ -116,7 +116,7 @@ function ToggleIconButton({
           type="button"
           aria-pressed={isActive}
           className={cn(
-            "cursor-pointer p-1",
+            "p-1",
             isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
           onClick={onClick}

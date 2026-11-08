@@ -131,7 +131,7 @@ export function WorkspaceSessionContent({
   const isNarrow = useNarrowWindow();
   const onSelectFile = useCallback((file: TaskExecutionSelectedFile) => {
     const actions = previewRef.current;
-    if (!actions) throw new Error("The file preview is not ready. Open the chat again.");
+    if (!actions) throw new Error("The file preview is not ready. Open the session again.");
     return actions.onSelectFile(file);
   }, []);
   const onFileSaved = refreshAfterChange;
@@ -191,7 +191,7 @@ export function WorkspaceSessionContent({
     onResolveGitConflict,
     conflictAssistanceBlockedReason:
       assistance?.blockedReason ??
-      (assistance ? null : "Wait for the selected chat to load, or reload session data."),
+      (assistance ? null : "Wait for the selected session to load, or reload session data."),
     conflictAssistanceIsStarting: assistance?.isStarting ?? false,
     repoPath: workspace.repoPath,
     workspaceSession,

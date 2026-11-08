@@ -27,12 +27,12 @@ test("names the first reason that blocks a fork", () => {
     sessionForkDisabledReason({ ...base, waitsForMergePublication: true, readOnly: true }),
   ).toBe("Publish or close the local merge before you fork a reply.");
   expect(sessionForkDisabledReason({ ...base, readOnly: true })).toBe(
-    "Reopen this chat before forking a reply.",
+    "Reopen this session before forking a reply.",
   );
   expect(sessionForkDisabledReason({ ...base, error: "The host is offline." })).toBe(
     "The host is offline.",
   );
   expect(sessionForkDisabledReason({ ...base, interactionEnabled: false })).toBe(
-    "Load this chat before forking a reply.",
+    "Load this session before forking a reply.",
   );
 });

@@ -102,7 +102,7 @@ const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneCo
       <div className="flex h-full min-h-0 flex-col">
         {settings.isPending ? (
           <p role="status" className="p-4">
-            Loading chat settings...
+            Loading session settings...
           </p>
         ) : null}
         {settingsError ? (

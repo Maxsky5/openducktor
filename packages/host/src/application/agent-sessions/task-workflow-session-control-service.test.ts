@@ -1343,7 +1343,7 @@ describe("createAgentSessionCommandService", () => {
           sessionScope: workflowStart.sessionScope,
         }),
       ),
-    ).rejects.toThrow("belongs to another task, role, or workspace chat");
+    ).rejects.toThrow("belongs to another task, role, or workspace session");
     expect(runtimeCalls).toBe(0);
   });
 

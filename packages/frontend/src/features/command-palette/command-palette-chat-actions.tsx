@@ -18,7 +18,7 @@ export const paletteChatActions = (
 ): PaletteRowAction[] => {
   const { session } = chat;
   return [
-    chatAction("open", "Open chat", <MessagesSquare />, ["resume", "go to"], handlers.open),
+    chatAction("open", "Open session", <MessagesSquare />, ["resume", "go to"], handlers.open),
     unread
       ? chatAction("read-state", "Mark as read", <MailOpen />, ["read", "seen"], () =>
           handlers.setUnread(false),
@@ -26,7 +26,7 @@ export const paletteChatActions = (
       : chatAction("read-state", "Mark as unread", <Mail />, ["unread", "later"], () =>
           handlers.setUnread(true),
         ),
-    chatAction("rename", "Rename chat", <Pencil />, ["title", "name"], handlers.rename),
+    chatAction("rename", "Rename session", <Pencil />, ["title", "name"], handlers.rename),
     copyAction(
       "copy-working-directory",
       "Copy working directory",
@@ -44,7 +44,13 @@ export const paletteChatActions = (
       handlers.copy,
     ),
     {
-      ...chatAction("archive", "Archive chat", <Archive />, ["remove", "hide"], handlers.archive),
+      ...chatAction(
+        "archive",
+        "Archive session",
+        <Archive />,
+        ["remove", "hide"],
+        handlers.archive,
+      ),
       destructive: true,
     },
   ];

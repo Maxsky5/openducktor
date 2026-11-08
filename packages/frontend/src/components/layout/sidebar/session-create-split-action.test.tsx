@@ -166,10 +166,10 @@ describe("SessionCreateSplitAction", () => {
           .getAllByRole("button")
           .map((button) => button.textContent),
       ).toEqual([
-        "New chat",
+        "New session",
         "Import tasks from GitHub Issues",
-        "Archived chats",
-        "Import chat from an external runtime",
+        "Archived sessions",
+        "Import session from an external runtime",
       ]);
     } finally {
       settings.mockRestore();
@@ -239,9 +239,9 @@ describe("SessionCreateSplitAction", () => {
       renderSplitAction({ provider: issueProvider(), listArchived });
 
       fireEvent.click(screen.getByRole("button", { name: "More actions for openducktor" }));
-      fireEvent.click(await screen.findByRole("button", { name: /Archived chats/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /Archived sessions/ }));
 
-      await screen.findByRole("heading", { name: "Archived chats" });
+      await screen.findByRole("heading", { name: "Archived sessions" });
       await waitFor(() => expect(listArchived).toHaveBeenCalledWith("alpha"));
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
       await waitFor(() =>

@@ -312,10 +312,10 @@ function sameProps(previous: CardProps, next: CardProps): boolean {
 
 const getSessionChipClassName = (isWaitingInput: boolean): string => {
   if (isWaitingInput) {
-    return "border-warning-border bg-warning-surface text-warning-muted hover:border-warning-border hover:bg-warning-surface";
+    return "border-warning-border bg-warning-surface text-warning-surface-foreground hover:border-warning-border hover:bg-warning-surface";
   }
 
-  return "border-info-border bg-info-surface text-info-muted hover:border-info-border hover:bg-info-surface";
+  return "border-info-border bg-info-surface text-info-surface-foreground hover:border-info-border hover:bg-info-surface";
 };
 
 const getSessionStatusTextClassName = (isWaitingInput: boolean): string => {
@@ -450,7 +450,7 @@ function CompactTaskMeta({
               type="button"
               data-kanban-control="type"
               className={cn(
-                "inline-flex size-5 shrink-0 cursor-pointer items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "inline-flex size-5 shrink-0 items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 issueTypeStyle.iconClassName,
               )}
               aria-label={`Issue type: ${issueTypeStyle.label}`}
@@ -467,7 +467,7 @@ function CompactTaskMeta({
               type="button"
               data-kanban-control="priority"
               className={cn(
-                "size-2.5 shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "size-2.5 shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 priorityStyle.dotClassName,
               )}
               aria-label={`Priority: ${priorityStyle.hint}`}
@@ -483,7 +483,7 @@ function CompactTaskMeta({
         type="button"
         data-kanban-control="details"
         aria-label={`Open details for ${task.title}`}
-        className="min-w-0 flex-1 cursor-pointer rounded-sm text-left text-sm font-medium text-foreground outline-none after:absolute after:-inset-px after:z-1 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring"
+        className="min-w-0 flex-1 rounded-sm text-left text-sm font-medium text-foreground outline-none after:absolute after:-inset-px after:z-1 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring"
         title={task.title}
         onClick={() => onOpenDetails(task.id)}
       >
@@ -506,7 +506,7 @@ function NormalTaskIdentity({
       data-kanban-control="details"
       aria-label={`Open details for ${task.title}`}
       title={task.title}
-      className="mb-2 block w-full cursor-pointer rounded-md text-left outline-none after:absolute after:-inset-px after:z-1 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring"
+      className="mb-2 block w-full rounded-md text-left outline-none after:absolute after:-inset-px after:z-1 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring"
       onClick={() => onOpenDetails(task.id)}
     >
       <span className="line-clamp-2 break-words text-sm font-semibold leading-tight text-foreground">

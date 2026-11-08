@@ -46,7 +46,7 @@ function ForkControl({
       }}
       hitSlop={12}
       accessibilityRole="button"
-      accessibilityLabel={pending ? "Forking chat" : "Fork from this reply"}
+      accessibilityLabel={pending ? "Forking session" : "Fork from this reply"}
       accessibilityHint={blocked ?? undefined}
       accessibilityState={{ disabled: pending || blocked !== null, busy: pending }}
       style={[styles.action, blocked ? styles.blocked : null]}

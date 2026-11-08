@@ -327,8 +327,8 @@ function ComposerNotices({
       {composer.settingsLoadError ? (
         <ComposerNotice
           tone="destructive"
-          title="Chat settings could not load"
-          message={`${composer.settingsLoadError.message} Send waits for the chat settings.`}
+          title="Session settings could not load"
+          message={`${composer.settingsLoadError.message} Send waits for the session settings.`}
           action={
             <ComposerTextButton
               label="Retry Settings"

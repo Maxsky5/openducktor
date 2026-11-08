@@ -1,9 +1,10 @@
 ---
 import { ArrowUpRight } from "@lucide/astro";
+import Scene from "@openducktor/product-scenes/astro";
+import { release } from "../content/release";
 import { claim, desktopInstalls, links, nodeVersion } from "../content/site";
 import DownloadActions from "../ui/DownloadActions.astro";
 import GithubMark from "../ui/GithubMark.astro";
-import HeroView from "../views/hero/HeroView.astro";
 import "./Hero.css";
 ---
 
@@ -48,6 +49,6 @@ import "./Hero.css";
     </div>
   </div>
   <div class="hero-visual">
-    <HeroView />
+    <Scene name="hero" options={{ version: release.version }} />
   </div>
 </section>

@@ -54,7 +54,7 @@ function ArtifactsContent({ owner }: { owner: WorkOwner }): ReactElement {
         <EmptyState
           icon="files"
           title="No Artifacts"
-          message="Chats have no artifacts. Open Artifacts from a task."
+          message="This session has no artifacts. Open Artifacts from a task."
         />
       )}
     </>

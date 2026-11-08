@@ -385,7 +385,7 @@ describe("KanbanTaskCard active sessions", () => {
       html.indexOf('aria-label="Open details for Compact card title"'),
     );
     expect(html).toContain(
-      'aria-label="Open details for Compact card title" class="min-w-0 flex-1 cursor-pointer',
+      'aria-label="Open details for Compact card title" class="min-w-0 flex-1 rounded-sm',
     );
   });
 

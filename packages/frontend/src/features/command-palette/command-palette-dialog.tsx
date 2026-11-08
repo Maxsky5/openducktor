@@ -189,7 +189,7 @@ function CommandPaletteView({
       >
         <DialogTitle className="sr-only">Command palette</DialogTitle>
         <DialogDescription className="sr-only">
-          Search actions, tasks, and chats in your workspaces.
+          Search actions, tasks, and sessions in your workspaces.
         </DialogDescription>
         {nav.list.kind === "reply" ? (
           <CommandPaletteReply

@@ -1,6 +1,6 @@
 {
   "extends": "astro/tsconfigs/strict",
-  "include": [".astro/types.d.ts", "**/*"],
+  "include": [".astro/types.d.ts", "**/*", "../../packages/product-scenes/src/astro/*.astro"],
   "exclude": ["dist", "node_modules"],
   "compilerOptions": {
     "noUncheckedIndexedAccess": true,

@@ -536,7 +536,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
         removeWorktree: true,
         worktreeConfirmation: { workingDirectory: external, branchName: "external" },
       }),
-    ).rejects.toThrow("Saved chats work in a removed worktree");
+    ).rejects.toThrow("Saved sessions work in a removed worktree");
     const archived = await h.router.invoke("workspace_session_archive", ref);
 
     expect(archived.archivedAt).not.toBeNull();
@@ -1123,7 +1123,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
           });
           await expect(Effect.runPromise(failingService.archive(archiveInput))).rejects.toThrow(
             failureStage === "archive save"
-              ? "Could not save the archived chat"
+              ? "Could not save the archived session"
               : `Injected ${failureStage} failure`,
           );
           if (failureStage === "branch snapshot save")

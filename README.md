@@ -25,7 +25,7 @@ It uses a workspace-scoped SQLite task store as the task source of truth, orches
 
 ![Builder session with pull request checks and comments](docs/assets/screenshots/agent-studio-pull-request.png)
 
-![Agent chat that creates a task](docs/assets/screenshots/agent-chat-create-task.png)
+![A session that creates a task](docs/assets/screenshots/agent-chat-create-task.png)
 
 ![Agent runtimes settings with sandbox mode](docs/assets/screenshots/settings-agent-runtimes.png)
 

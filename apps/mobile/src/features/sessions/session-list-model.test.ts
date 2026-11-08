@@ -431,10 +431,10 @@ describe("sessionMenuItems", () => {
     ]);
     expect(sessionMenuItems(chatEntry, true).map((item) => item.title)).toEqual([
       "Mark as Read",
-      "Rename Chat",
+      "Rename Session",
       "Copy Working Directory",
       "Copy External Session ID",
-      "Archive Chat",
+      "Archive Session",
     ]);
     expect(sessionMenuItems(task, false).map((item) => [item.id, item.disabled ?? false])).toEqual([
       ["toggle_read", false],

@@ -218,8 +218,8 @@ export const resolveSavedSessionModel = (input: {
       reason: resolved.blockedReason,
       message:
         resolved.blockedReason === "profile"
-          ? "The saved Runtime Profile is unavailable or cannot change in this chat. Refresh the catalog and select a Runtime Profile, or start a new chat."
-          : "No valid model is available for this chat. Refresh the catalog and select a model before sending.",
+          ? "The saved Runtime Profile is unavailable or cannot change in this session. Refresh the catalog and select a Runtime Profile, or start a new session."
+          : "No valid model is available for this session. Refresh the catalog and select a model before sending.",
     };
   if (resolved.repairSelection) return { kind: "repair", selection: resolved.repairSelection };
   return { kind: "keep", selection: resolved.selectedModelSelection };

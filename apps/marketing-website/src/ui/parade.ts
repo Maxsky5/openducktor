@@ -1,7 +1,7 @@
-import { all, must } from "../motion/dom";
-import { gsap } from "../motion/gsap";
-import { watchPlayback, whileMotionAllowed } from "../motion/player";
-import { EASE } from "../motion/tokens";
+import { all, must } from "./dom";
+import { gsap } from "@openducktor/product-scenes/motion/gsap";
+import { watchPlayback, whileMotionAllowed } from "@openducktor/product-scenes/motion/player";
+import { EASE } from "@openducktor/product-scenes/motion/tokens";
 
 /** The parade plays from the moment its top passes 85% of the screen height until it leaves. */
 const PARADE_ZONE = { start: "top 85%", end: "bottom top" };

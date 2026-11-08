@@ -233,7 +233,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           dependencies.updateSession,
         );
         throw new Error(
-          `Session '${externalSessionId}' is no longer available. Reopen the chat to send your draft.`,
+          `Session '${externalSessionId}' is no longer available. Reopen it to send your draft.`,
         );
       }
       rejectSendWhileWaitingForInput(loadedReadySession, dependencies);
@@ -371,7 +371,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           console.error(updateError);
           dependencies.feedback.show(
             "error",
-            `Message sent to '${externalSessionId}', but the chat update failed`,
+            `Message sent to '${externalSessionId}', but the session update failed`,
             {
               description: errorMessage(error),
             },

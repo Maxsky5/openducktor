@@ -61,11 +61,11 @@ describe("worktree owner copy", () => {
         blocking: true,
       },
       {
-        text: "Saved chats work in a removed worktree: “Hi”. Archive these chats first.",
+        text: "Saved sessions work in a removed worktree: “Hi”. Archive these sessions first.",
         blocking: true,
       },
       {
-        text: "Saved Claude chats keep their native history in a removed worktree: “Fork”. These chats cannot resume after this.",
+        text: "Saved Claude sessions keep their native history in a removed worktree: “Fork”. These sessions cannot resume after this.",
         blocking: false,
       },
       { text: historyReadError, blocking: false },
@@ -100,7 +100,7 @@ describe("worktree owner copy", () => {
 
     const blocked = impact(worktreeOwnersRead({ owners: owners({ chats: [chat] }) }));
     expect(buildTaskDeleteConfirmCopy({ id: "task-1", title: null }, blocked).errors).toEqual([
-      "Saved chats work in a removed worktree: “Hi”. Archive these chats first.",
+      "Saved sessions work in a removed worktree: “Hi”. Archive these sessions first.",
     ]);
     expect(confirmButtonState(blocked, operation, labels).disabled).toBe(true);
 
@@ -108,7 +108,7 @@ describe("worktree owner copy", () => {
     const warnedCopy = buildTaskDeleteConfirmCopy({ id: "task-1", title: null }, warned);
     expect(warnedCopy.errors).toEqual([]);
     expect(warnedCopy.warning).toContain(
-      "Saved Claude chats keep their native history in a removed worktree: “Fork”.",
+      "Saved Claude sessions keep their native history in a removed worktree: “Fork”.",
     );
     expect(confirmButtonState(warned, operation, labels).disabled).toBe(false);
   });

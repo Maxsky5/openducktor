@@ -24,12 +24,12 @@ export default function NewChatRoute(): ReactElement {
       <EmptyState
         icon="message-square-off"
         title="Workspace not open"
-        message="Open the workspace on the host, then create the chat from Sessions."
+        message="Open the workspace on the host, then create the session from the Sessions tab."
       />
     );
   }
   return (
-    <SheetScreen title="New chat">
+    <SheetScreen title="New session">
       <Screen background="sheet">{content}</Screen>
     </SheetScreen>
   );

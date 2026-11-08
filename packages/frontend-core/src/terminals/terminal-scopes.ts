@@ -87,7 +87,7 @@ function chatWorkingDirectory(
   if (record.archivedAt !== null) {
     return {
       workingDirectory: null,
-      workingDirectoryError: "This chat is archived. Restore the chat to use terminals.",
+      workingDirectoryError: "This session is archived. Restore it to use terminals.",
     };
   }
   const target = record.executionTarget;
@@ -95,11 +95,11 @@ function chatWorkingDirectory(
     return {
       workingDirectory: null,
       workingDirectoryError:
-        "The worktree of this chat was removed. Restore the chat to create the worktree again.",
+        "The worktree of this session was removed. Restore it to create the worktree again.",
     };
   }
   return {
     workingDirectory: target.workingDirectory,
-    workingDirectoryError: "This chat has no saved directory. Reopen or restore the chat.",
+    workingDirectoryError: "This session has no saved directory. Reopen or restore it.",
   };
 }

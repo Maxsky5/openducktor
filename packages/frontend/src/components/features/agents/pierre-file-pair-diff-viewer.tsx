@@ -1,6 +1,6 @@
-import { getFiletypeFromFileName } from "@pierre/diffs";
+import { type DiffLineAnnotation, getFiletypeFromFileName } from "@pierre/diffs";
 import { MultiFileDiff } from "@pierre/diffs/react";
-import { memo, useMemo, type ComponentProps } from "react";
+import { memo, useMemo, type ComponentProps, type ReactNode } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { PIERRE_DIFF_THEME, PIERRE_HIGHLIGHT_LINE_LIMIT } from "@/lib/diff/pierre-config";
 import { cn } from "@/lib/utils";
@@ -9,7 +9,13 @@ import type { PierreDiffViewer } from "./pierre-diff-viewer";
 type Props = Pick<
   ComponentProps<typeof PierreDiffViewer>,
   "filePath" | "diffStyle" | "diffIndicators" | "heightMode" | "lineOverflow" | "hunkSeparators"
-> & { oldContent: string; newContent: string };
+> & {
+  oldContent: string;
+  newContent: string;
+  /** Rows under diff lines, such as review comments. */
+  lineAnnotations?: DiffLineAnnotation<unknown>[];
+  renderAnnotation?: (annotation: DiffLineAnnotation<unknown>) => ReactNode;
+};
 
 export const PierreFilePairDiffViewer = memo(function PierreFilePairDiffViewer({
   filePath,
@@ -20,6 +26,8 @@ export const PierreFilePairDiffViewer = memo(function PierreFilePairDiffViewer({
   heightMode = "scroll",
   lineOverflow = "wrap",
   hunkSeparators = "line-info",
+  lineAnnotations,
+  renderAnnotation,
 }: Props) {
   const { theme } = useTheme();
   const oldFile = useMemo(
@@ -50,7 +58,13 @@ export const PierreFilePairDiffViewer = memo(function PierreFilePairDiffViewer({
         heightMode === "scroll" && "max-h-[min(50vh,32rem)] overflow-auto",
       )}
     >
-      <MultiFileDiff oldFile={oldFile} newFile={newFile} options={options} />
+      <MultiFileDiff
+        oldFile={oldFile}
+        newFile={newFile}
+        options={options}
+        {...(lineAnnotations ? { lineAnnotations } : {})}
+        {...(renderAnnotation ? { renderAnnotation } : {})}
+      />
     </div>
   );
 });

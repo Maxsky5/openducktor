@@ -197,12 +197,12 @@ test("Fork chat opens and keeps worktree edits while repository defaults load", 
   try {
     const dialog = view.getByRole("dialog");
     expect(dialog.hasAttribute("aria-busy")).toBe(false);
-    expect(view.getByRole("button", { name: "Fork chat" }).hasAttribute("disabled")).toBe(false);
+    expect(view.getByRole("button", { name: "Fork session" }).hasAttribute("disabled")).toBe(false);
     fireEvent.click(view.getByRole("radio", { name: "New worktree" }));
     const name = view.getByRole("textbox", { name: "Worktree name" });
     fireEvent.change(name, { target: { value: "my-fork" } });
     name.focus();
-    expect(view.getByRole("button", { name: "Fork chat" }).hasAttribute("disabled")).toBe(true);
+    expect(view.getByRole("button", { name: "Fork session" }).hasAttribute("disabled")).toBe(true);
     expect(view.getByRole("status").textContent).toBe("Loading branch defaults…");
     await act(async () =>
       config.resolve(
@@ -214,7 +214,9 @@ test("Fork chat opens and keeps worktree edits while repository defaults load", 
       ),
     );
     await waitFor(() =>
-      expect(view.getByRole("button", { name: "Fork chat" }).hasAttribute("disabled")).toBe(false),
+      expect(view.getByRole("button", { name: "Fork session" }).hasAttribute("disabled")).toBe(
+        false,
+      ),
     );
     expect(dialog.hasAttribute("aria-busy")).toBe(false);
     expect(view.getByDisplayValue("my-fork")).toBe(name);
@@ -239,7 +241,7 @@ test("keeps the fork footer in one column so its actions separate", async () => 
   });
   try {
     const cancel = view.getByRole("button", { name: "Cancel" });
-    const submit = view.getByRole("button", { name: "Fork chat" });
+    const submit = view.getByRole("button", { name: "Fork session" });
     const row = cancel.parentElement;
     expect(row).toBe(submit.parentElement);
     const footer = row?.parentElement;
@@ -275,7 +277,7 @@ test("opening a saved failed same-folder fork retains feedback and session inspe
   );
   const { view, connection, closed, completed } = await renderFork(fork);
   try {
-    fireEvent.click(view.getByRole("button", { name: "Fork chat" }));
+    fireEvent.click(view.getByRole("button", { name: "Fork session" }));
     const open = await view.findByRole("button", { name: "Open session" }, { timeout: 800 });
     const original = connection.startupAttempts.getSnapshot()[0];
     if (!original) throw new Error("Fork attempt is missing.");
@@ -398,7 +400,7 @@ test.each([
     });
     live = harness.live;
     try {
-      fireEvent.click(harness.view.getByRole("button", { name: "Fork chat" }));
+      fireEvent.click(harness.view.getByRole("button", { name: "Fork session" }));
       if (operation === "repair")
         fireEvent.click(
           await harness.view.findByRole(
@@ -426,7 +428,7 @@ test.each([
       expect(harness.view.getByRole("dialog")).toBeDefined();
       if (operation === "fork") {
         expect(
-          harness.view.getByRole("button", { name: "Forking chat…" }).hasAttribute("disabled"),
+          harness.view.getByRole("button", { name: "Forking session…" }).hasAttribute("disabled"),
         ).toBe(true);
         expect(
           harness.view.getByRole("radio", { name: "Same folder" }).closest("fieldset")?.disabled,
@@ -481,7 +483,7 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
     expect(view.getByText("/worktrees/source-feature")).toBeDefined();
     expect(view.getByText("source-feature")).toBeDefined();
     expect(view.getByText("odt/source-feature")).toBeDefined();
-    const submit = view.getByRole("button", { name: "Fork chat" });
+    const submit = view.getByRole("button", { name: "Fork session" });
     const form = submit.closest("form");
     await act(async () => {
       fireEvent.click(submit);
@@ -494,7 +496,7 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
         destination: { kind: "same_folder" },
       },
     ]);
-    expect(view.getByRole("button", { name: "Forking chat…" })).toBe(submit);
+    expect(view.getByRole("button", { name: "Forking session…" })).toBe(submit);
     expect(submit.closest("form")).toBe(form);
     expect(submit.hasAttribute("disabled")).toBe(true);
     expect(submit.querySelector("svg")).not.toBeNull();
@@ -504,7 +506,7 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
     expect(view.queryByRole("region", { name: "Session startup details" })).toBeNull();
     expect(view.queryByRole("list", { name: "Session startup steps" })).toBeNull();
     expect(view.queryByText(/\d+ of \d+ steps/)).toBeNull();
-    expect(view.queryByRole("button", { name: "Fork chat" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Fork session" })).toBeNull();
     expect(view.queryByLabelText("Worktree name")).toBeNull();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     expect(view.queryByRole("button", { name: "Close" })).toBeNull();
@@ -515,7 +517,7 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
     });
     expect((await view.findByRole("alert")).textContent).toContain("Reload history");
     fireEvent.click(view.getByRole("button", { name: "Edit choices" }));
-    expect(view.getByRole("button", { name: "Fork chat" }).hasAttribute("disabled")).toBe(false);
+    expect(view.getByRole("button", { name: "Fork session" }).hasAttribute("disabled")).toBe(false);
     expect(completed).toEqual([]);
   } finally {
     view.unmount();
@@ -541,14 +543,14 @@ test("new worktree uses New chat defaults and validation and keeps inputs after 
       view.getByText("Uncommitted changes in the source folder do not go to the new worktree."),
     ).toBeDefined();
     fireEvent.change(name, { target: { value: "../escape" } });
-    expect(view.getByRole("button", { name: "Fork chat" }).hasAttribute("disabled")).toBe(true);
+    expect(view.getByRole("button", { name: "Fork session" }).hasAttribute("disabled")).toBe(true);
     expect(view.getByRole("alert").textContent).toContain(
       "Use letters, numbers, hyphens, or underscores",
     );
     fireEvent.change(name, { target: { value: "retry-fork" } });
     fireEvent.change(branch, { target: { value: "feature/alternate" } });
     await act(async () => {
-      fireEvent.click(view.getByRole("button", { name: "Fork chat" }));
+      fireEvent.click(view.getByRole("button", { name: "Fork session" }));
     });
     expect(calls[0]?.destination).toEqual({
       kind: "new_worktree",
@@ -558,7 +560,9 @@ test("new worktree uses New chat defaults and validation and keeps inputs after 
     expect(view.getByLabelText("Worktree name")).toBe(name);
     expect(view.getByLabelText("Branch name optional")).toBe(branch);
     expect(name.closest("fieldset")?.disabled).toBe(true);
-    expect(view.getByRole("button", { name: "Forking chat…" }).hasAttribute("disabled")).toBe(true);
+    expect(view.getByRole("button", { name: "Forking session…" }).hasAttribute("disabled")).toBe(
+      true,
+    );
     await act(async () => {
       reject(new Error("Claude refused the fork point. Load another reply."));
     });
@@ -566,7 +570,7 @@ test("new worktree uses New chat defaults and validation and keeps inputs after 
     fireEvent.click(view.getByRole("button", { name: "Edit choices" }));
     expect(view.getByDisplayValue("retry-fork")).toBeDefined();
     expect(view.getByDisplayValue("feature/alternate")).toBeDefined();
-    expect(view.getByRole("button", { name: "Fork chat" }).hasAttribute("disabled")).toBe(false);
+    expect(view.getByRole("button", { name: "Fork session" }).hasAttribute("disabled")).toBe(false);
     expect(completed).toEqual([]);
   } finally {
     view.unmount();
@@ -583,7 +587,7 @@ test("a repository-root source starts with an empty worktree name", async () => 
   try {
     fireEvent.click(view.getByRole("radio", { name: "New worktree" }));
     expect(view.getByLabelText("Worktree name").getAttribute("value")).toBe("");
-    expect(view.getByRole("button", { name: "Fork chat" }).hasAttribute("disabled")).toBe(true);
+    expect(view.getByRole("button", { name: "Fork session" }).hasAttribute("disabled")).toBe(true);
   } finally {
     view.unmount();
   }

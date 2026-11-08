@@ -12,7 +12,7 @@ export const acquireWorkspaceSessionTerminalCleanup = (
       (cause) =>
         new HostOperationError({
           operation: "workspaceSession.archive.terminals",
-          message: `Could not stop this chat's terminals: ${cause.message}`,
+          message: `Could not stop this session's terminals: ${cause.message}`,
           cause,
         }),
     ),

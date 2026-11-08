@@ -52,7 +52,7 @@ export const taskDocumentQueryOptions = (
   repoPath: WorkspaceRef,
   taskId: string,
   code: string,
-  readDocument: TaskDocumentReader = connectionHost(queryClient).workflowArtifactGet,
+  readDocument?: TaskDocumentReader,
 ) => {
   const queryKey = documentQueryKeys.document(repoPath, taskId, code);
   return queryOptions({
@@ -63,7 +63,10 @@ export const taskDocumentQueryOptions = (
       }
       const query = queryClient.getQueryCache().find({ queryKey, exact: true });
       const dataUpdateCount = query?.state.dataUpdateCount;
-      const incoming = await readDocument(repoPath, taskId, code);
+      // The host connection is read at fetch time, as in the other host reads. A view that only
+      // shows cached data needs no connection.
+      const read = readDocument ?? connectionHost(queryClient).workflowArtifactGet;
+      const incoming = await read(repoPath, taskId, code);
       if (queryClient.getQueryCache().find({ queryKey, exact: true }) !== query) {
         throw new Error(
           "The task artifact changed while loading. Open it again to load the current artifact.",
