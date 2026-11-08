@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@openducktor/theme": "workspace:*",
-    "gsap": "^3.15.0",
+    "gsap": "^3.15.1",
     "lucide-react": "1.59.0"
   },
   "devDependencies": {
@@ -40,7 +40,7 @@
     "playwright-core": "1.64.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "vite": "^8.3.4"
+    "vite": "^8.3.5"
   },
   "peerDependencies": {
     "react": "^19.3.1",
