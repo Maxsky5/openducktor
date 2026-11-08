@@ -216,7 +216,9 @@ export const beginClaudeGoalRestore = (session: ClaudeGoalSession): Promise<void
       tracking.offset = scan.end;
       return;
     }
-    const { records, end } = await readRecords(path, undefined);
+    // Claude can still write the last line. A start byte reads complete lines only, and the next
+    // read starts at that line.
+    const { records, end } = await readRecords(path, 0);
     tracking.goal = restoreClaudeGoalFromRecords(records);
     tracking.offset = end;
   });

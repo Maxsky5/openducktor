@@ -245,6 +245,22 @@ describe("Claude goal commands", () => {
     expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, end: "met" });
   });
 
+  test("a restore leaves a line that Claude still writes for the next read", async () => {
+    const { session, observe, path, settled } = await createSession([
+      goalRecord("g1", null, { met: false, sentinel: true }),
+    ]);
+    const partial = JSON.stringify(goalRecord("g2", "g1", { met: true }));
+    await appendFile(path, partial.slice(0, 20));
+
+    const restored = await restoreClaudeSessionGoal(session, "2026-11-07T10:00:00.000Z");
+    expect(restored.goal).toEqual({ objective: OBJECTIVE });
+
+    await appendFile(path, `${partial.slice(20)}\n`);
+    observe(result);
+    await settled();
+    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, end: "met" });
+  });
+
   test("a restore that began early serves the later restore with no second read", async () => {
     const { session, append } = await createSession([
       goalRecord("g1", null, { met: false, sentinel: true }),
