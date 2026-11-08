@@ -671,10 +671,7 @@ export class OpencodeSdkAdapter {
    * tools. It takes no system prompt, so the instructions start the prompt.
    */
   async generateText(input: AgentTextGenerationInput): Promise<string> {
-    const { modelId: id, providerId: providerID, variant } = input.model;
-    const model: NonNullable<Parameters<OpenCodeClient["generate"]["text"]>[0]["model"]> = variant
-      ? { id, providerID, variant }
-      : { id, providerID };
+    const model = nativeModelSelection(input.model);
     return nativeRequest(
       { repoPath: input.repoPath },
       "generate text",

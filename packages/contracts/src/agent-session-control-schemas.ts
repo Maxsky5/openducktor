@@ -13,7 +13,7 @@ import {
   agentSessionWorkflowScopeSchema,
 } from "./agent-session-schemas";
 import { skillDescriptorSchema } from "./skill-schemas";
-import { slashCommandDescriptorSchema } from "./slash-command-schemas";
+import { GOAL_SLASH_COMMAND, slashCommandDescriptorSchema } from "./slash-command-schemas";
 import { subagentDescriptorSchema } from "./subagent-schemas";
 import { WORKSPACE_SESSION_MANUAL_TITLE_LIMIT } from "./workspace-session-limits";
 import { agentSessionRecordSchema } from "./session-schemas";
@@ -84,6 +84,12 @@ export const agentSessionUserMessagePartSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 export type AgentSessionUserMessagePart = z.infer<typeof agentSessionUserMessagePartSchema>;
+
+/** The parts of a `/goal <argument>` message. */
+export const goalCommandParts = (argument: string): AgentSessionUserMessagePart[] => [
+  { kind: "slash_command", command: { ...GOAL_SLASH_COMMAND, hints: [] } },
+  { kind: "text", text: ` ${argument}` },
+];
 
 export const agentSessionControlStartInputSchema = z
   .object({

@@ -41,7 +41,8 @@ export const createNodeWorkflowCommandHandlers = ({
   runtimeDefinitionsService: Parameters<typeof previewModels>[2];
   clientVersion: Parameters<typeof previewModels>[3];
   runtimeRegistry: Parameters<typeof createClaudeToolCatalogService>[0]["runtimeRegistry"];
-  adapterRegistry: Parameters<typeof createClaudeToolCatalogService>[0]["adapterRegistry"];
+  adapterRegistry: Parameters<typeof createClaudeToolCatalogService>[0]["adapterRegistry"] &
+    Parameters<typeof createAgentTextGenerationService>[0]["adapterRegistry"];
   taskAssetStagingService: Parameters<typeof createTaskAssetCommandHandlers>[0];
   taskWorktreeService: Parameters<typeof createTaskWorktreeCommandHandlers>[0];
 }) => ({

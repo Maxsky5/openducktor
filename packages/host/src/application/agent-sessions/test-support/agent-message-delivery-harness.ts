@@ -11,7 +11,7 @@ import type {
   AgentSessionUserMessagePart,
   AgentUserMessageDelivery,
 } from "@openducktor/contracts";
-import { GOAL_SLASH_COMMAND } from "@openducktor/contracts";
+import { goalCommandParts } from "@openducktor/contracts";
 import {
   type AgentDeliveryAvailability,
   AgentSessionMessageAcceptanceUnknownError,
@@ -244,10 +244,7 @@ export const createHarness = (steering: AgentDeliveryAvailability = { available:
     submit: (text: string, mode: AgentMessageSubmitInput["mode"] = "default") =>
       submitParts(`submission-${text}`, [{ kind: "text", text }], mode),
     submitGoal: (argument: string) =>
-      submitParts(`submission-goal-${argument}`, [
-        { kind: "slash_command", command: { ...GOAL_SLASH_COMMAND, hints: [] } },
-        { kind: "text", text: ` ${argument}` },
-      ]),
+      submitParts(`submission-goal-${argument}`, goalCommandParts(argument)),
     manage: (action: AgentMessageQueueAction) =>
       Effect.runPromise(service.manage({ ...target, action })),
     runBackground: async () => {

@@ -1056,6 +1056,7 @@ export class CodexAppServerAdapter
   async generateText(runtimeId: string, input: AgentTextGenerationInput): Promise<string> {
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const client = this.runtimeClients.clientForRuntime(runtimeId);
+    await this.models.validate(client, runtimeId, input.model);
     const model = toTransportModelSelection(input.model);
     const { thread } = await client.threadStart({
       cwd: input.repoPath,

@@ -1,6 +1,6 @@
 import {
   type SessionStartGoalDraft,
-  useSessionStartGoalDraft,
+  useSessionStartInstructionDrafts,
 } from "@openducktor/frontend-core/sessions/start/use-session-start-goal-draft";
 import {
   buildSessionStartConfirmDraft,
@@ -16,7 +16,7 @@ import {
 } from "@openducktor/frontend-core/sessions/start/session-start-display";
 import {
   BLANK_KICKOFF_PROMPT_ERROR,
-  useSessionStartKickoffDraft,
+  type SessionStartKickoffDraft,
 } from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
 import { useSessionStartSpeed } from "@openducktor/frontend-core/sessions/start/use-session-start-speed";
 import { type ReactElement, useMemo, useState } from "react";
@@ -191,17 +191,7 @@ export function SessionStartForm({
 }): ReactElement {
   const model = useMemo(() => ({ ...shown, ...reportingChoices(shown, onEdit) }), [onEdit, shown]);
   const speed = useSessionStartSpeed(model);
-  const goal = useSessionStartGoalDraft({
-    requestId: model.requestId,
-    open: model.open,
-    goalMode: model.goalMode,
-  });
-  const kickoff = useSessionStartKickoffDraft({
-    requestId: model.requestId,
-    open: model.open,
-    prompt: model.kickoffPrompt,
-    replacedByGoal: goal.enabled,
-  });
+  const { goal, kickoff } = useSessionStartInstructionDrafts(model);
   const availability = resolveSessionStartAvailability(model, {
     kickoffInvalid: kickoff.invalid,
     goalError: goal.error,
@@ -485,7 +475,7 @@ function KickoffPromptField({
   busy,
   onEdit,
 }: {
-  kickoff: ReturnType<typeof useSessionStartKickoffDraft>;
+  kickoff: SessionStartKickoffDraft;
   busy: boolean;
   onEdit: () => void;
 }): ReactElement {

@@ -22,4 +22,3 @@ export const agentTextGenerationInputSchema = z.strictObject({
 export type AgentTextGenerationInput = z.infer<typeof agentTextGenerationInputSchema>;
 
 export const agentTextGenerationResultSchema = z.strictObject({ text: z.string().trim().min(1) });
-export type AgentTextGenerationResult = z.infer<typeof agentTextGenerationResultSchema>;

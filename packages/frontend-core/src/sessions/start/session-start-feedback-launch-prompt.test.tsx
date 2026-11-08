@@ -136,7 +136,6 @@ describe("a feedback launch that follows an event", () => {
           requestId: "start-1",
           open: true,
           prompt: kickoffPrompt,
-          replacedByGoal: false,
         }).value;
       },
       props,

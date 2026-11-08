@@ -281,7 +281,8 @@ export const createTaskWorkflow = (
   }
   for (const launch of agentSteps.flatMap((step) => step.launchActions)) {
     const placeholder =
-      launch.goal && unsupportedGoalObjectivePlaceholder({ ...launch, goal: launch.goal });
+      launch.goal &&
+      unsupportedGoalObjectivePlaceholder(launch.goal.defaultObjective, launch.context);
     if (placeholder)
       throw new WorkflowEvaluationError(
         "invalid_definition",

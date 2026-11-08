@@ -36,14 +36,11 @@ import {
   type SessionStartModalModel,
   type SessionStartSourceOption,
 } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
-import {
-  type SessionStartKickoffDraft,
-  useSessionStartKickoffDraft,
-} from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
+import type { SessionStartKickoffDraft } from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
 import { useSessionStartSpeed } from "@openducktor/frontend-core/sessions/start/use-session-start-speed";
 import {
   type SessionStartGoalDraft,
-  useSessionStartGoalDraft,
+  useSessionStartInstructionDrafts,
 } from "@openducktor/frontend-core/sessions/start/use-session-start-goal-draft";
 import {
   useStartupDialogAttempt,
@@ -58,17 +55,7 @@ import { cn } from "@/lib/utils";
 
 export function SessionStartModal({ model }: { model: SessionStartModalModel }): ReactElement {
   const { open, title, description, onOpenChange } = model;
-  const goalDraft = useSessionStartGoalDraft({
-    requestId: model.requestId,
-    open,
-    goalMode: model.goalMode,
-  });
-  const kickoffDraft = useSessionStartKickoffDraft({
-    requestId: model.requestId,
-    open,
-    prompt: model.kickoffPrompt,
-    replacedByGoal: goalDraft.enabled,
-  });
+  const { goal: goalDraft, kickoff: kickoffDraft } = useSessionStartInstructionDrafts(model);
   const speed = useSessionStartSpeed(model);
   const startup = useStartupDialogAttempt(
     model.phase.kind === "progress" ? model.phase.startupAttemptId : null,

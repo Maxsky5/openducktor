@@ -740,13 +740,13 @@ export class CodexRuntimeSessionEvents {
       this.applyGoalNotification(event.runtimeId, notification);
       return;
     }
+    const threadId = threadIdFromRuntimeStreamEvent(event);
+    if (threadId && this.textAnswers.observe(event, threadId)) return;
     if (notification?.method === "thread/tokenUsage/updated") {
       this.contextUsage.observeNotification(event.runtimeId, notification);
       this.markSnapshotChanged(event.runtimeId, notification.params.threadId);
     }
     const isServerRequest = isServerRequestStreamEvent(event);
-    const threadId = threadIdFromRuntimeStreamEvent(event);
-    if (threadId && this.textAnswers.observe(event, threadId)) return;
     if (!threadId) {
       if (isServerRequest && event.kind !== "fault") {
         this.emitUnroutableRuntimeServerRequest(event.runtimeId);

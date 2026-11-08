@@ -3,7 +3,7 @@ import {
   type AcceptedAgentUserMessage,
   type AgentSessionControlSendInput,
   acceptedAgentUserMessageSchema,
-  GOAL_SLASH_COMMAND,
+  goalCommandParts,
 } from "@openducktor/contracts";
 import { GOAL_COMMAND_ACCEPTED } from "@openducktor/core";
 import { Effect } from "effect";
@@ -123,10 +123,7 @@ export const createClaudeMessageControls = ({
         workingDirectory: input.workingDirectory,
         externalSessionId: input.externalSessionId,
         sessionScope: input.sessionScope,
-        parts: [
-          { kind: "slash_command", command: { ...GOAL_SLASH_COMMAND, hints: [] } },
-          { kind: "text", text: ` ${command.kind === "set" ? command.objective : "clear"}` },
-        ],
+        parts: goalCommandParts(command.kind === "set" ? command.objective : "clear"),
         delivery: canStartUserTurn(session) ? "new_turn" : "steer",
       };
       if (input.systemPrompt !== undefined) sendInput.systemPrompt = input.systemPrompt;

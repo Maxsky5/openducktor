@@ -11,7 +11,6 @@ describe("useSessionStartKickoffDraft", () => {
       requestId: "one",
       open: true,
       prompt: "Build the task.",
-      replacedByGoal: false,
     } satisfies Props);
     await harness.mount();
     try {
@@ -28,7 +27,6 @@ describe("useSessionStartKickoffDraft", () => {
         requestId: "two",
         open: true,
         prompt: "Review the task.",
-        replacedByGoal: false,
       });
       expect(harness.getLatest()).toMatchObject({
         enabled: false,
@@ -45,7 +43,6 @@ describe("useSessionStartKickoffDraft", () => {
       requestId: "one",
       open: true,
       prompt: " \n ",
-      replacedByGoal: false,
     } satisfies Props);
     await harness.mount();
     try {
@@ -55,19 +52,18 @@ describe("useSessionStartKickoffDraft", () => {
     }
   });
 
-  test("Goal mode replaces the prompt and keeps the custom text for later", async () => {
+  test("keeps the custom text while Goal mode hides the prompt", async () => {
     const props: Props = {
       requestId: "one",
       open: true,
       prompt: "Build the task.",
-      replacedByGoal: false,
     };
     const harness = createHookHarness(useSessionStartKickoffDraft, props);
     await harness.mount();
     try {
       await harness.run((draft) => draft.setEnabled(true));
       await harness.run((draft) => draft.setText(" "));
-      await harness.update({ ...props, replacedByGoal: true });
+      await harness.update({ ...props, prompt: undefined });
       expect(harness.getLatest()).toMatchObject({
         hasPrompt: false,
         invalid: false,

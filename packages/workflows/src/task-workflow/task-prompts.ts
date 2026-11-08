@@ -244,6 +244,7 @@ const checkTemplates = (
   definition: CompiledWorkflowDefinition,
   workflowTemplatesById: ReadonlyMap<string, OwnedPromptTemplate>,
   launchTemplates: ReadonlyMap<string, LaunchTemplate>,
+  goalTemplates: ReadonlyMap<string, string>,
 ): void => {
   const requireTemplate = (id: string, purpose: PromptPurpose, user: string) => {
     const template = workflowTemplatesById.get(id);
@@ -268,7 +269,7 @@ const checkTemplates = (
   for (const [launchActionId, launch] of launchTemplates) {
     requireTemplate(launch.templateId, launch.kind, `launch action "${launchActionId}"`);
   }
-  for (const [launchActionId, templateId] of goalTemplateIds(definition)) {
+  for (const [launchActionId, templateId] of goalTemplates) {
     requireTemplate(templateId, "goal", `the Goal mode of launch action "${launchActionId}"`);
   }
 };
@@ -330,7 +331,8 @@ export const createTaskPrompts = (
   const createsPullRequest = (roleId: string) =>
     rolesById.has(roleId) &&
     (definition.pullRequestRoles.length === 0 || definition.pullRequestRoles.includes(roleId));
-  checkTemplates(definition, workflowTemplatesById, launchTemplates);
+  const goalTemplates = goalTemplateIds(definition);
+  checkTemplates(definition, workflowTemplatesById, launchTemplates, goalTemplates);
   const templateRolesByKey = new Map(
     templates.map((entry) => {
       const templateRoles =
@@ -579,7 +581,7 @@ export const createTaskPrompts = (
       );
     },
     goalPrompt: ({ launchActionId, task, humanFeedback, overrides }) => {
-      const templateId = goalTemplateIds(definition).get(launchActionId);
+      const templateId = goalTemplates.get(launchActionId);
       if (templateId === undefined)
         throw new Error(`Launch action "${launchActionId}" does not offer Goal mode.`);
       return buildPrompt(

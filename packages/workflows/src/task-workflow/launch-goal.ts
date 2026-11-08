@@ -6,12 +6,8 @@ type GoalLaunch = {
   readonly goal?: { readonly defaultObjective: string } | undefined;
 };
 
-const goalObjectivePlaceholders = (launch: GoalLaunch): ReadonlySet<string> =>
-  new Set(
-    launch.context === "human_feedback"
-      ? ["task.id", "task.title", "humanFeedback"]
-      : ["task.id", "task.title"],
-  );
+const TASK_PLACEHOLDERS: ReadonlySet<string> = new Set(["task.id", "task.title"]);
+const FEEDBACK_PLACEHOLDERS: ReadonlySet<string> = new Set([...TASK_PLACEHOLDERS, "humanFeedback"]);
 
 /**
  * The placeholder of a default goal objective that the workflow cannot fill, or `undefined`. A
@@ -19,10 +15,11 @@ const goalObjectivePlaceholders = (launch: GoalLaunch): ReadonlySet<string> =>
  * feedback can also use `{{humanFeedback}}`.
  */
 export const unsupportedGoalObjectivePlaceholder = (
-  launch: GoalLaunch & { readonly goal: { readonly defaultObjective: string } },
+  defaultObjective: string,
+  context: GoalLaunch["context"],
 ): string | undefined => {
-  const allowed = goalObjectivePlaceholders(launch);
-  return extractPromptTemplatePlaceholders(launch.goal.defaultObjective).find(
+  const allowed = context === "human_feedback" ? FEEDBACK_PLACEHOLDERS : TASK_PLACEHOLDERS;
+  return extractPromptTemplatePlaceholders(defaultObjective).find(
     (placeholder) => !allowed.has(placeholder),
   );
 };

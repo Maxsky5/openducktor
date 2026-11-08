@@ -4,7 +4,6 @@ export const BLANK_KICKOFF_PROMPT_ERROR = "Enter a first message.";
 
 /** The kickoff prompt that the user can change before a start. */
 export type SessionStartKickoffDraft = {
-  /** The launch has a kickoff prompt, and Goal mode does not replace it. */
   hasPrompt: boolean;
   enabled: boolean;
   text: string;
@@ -16,19 +15,17 @@ export type SessionStartKickoffDraft = {
 };
 
 /**
- * A new request or a new open resets the draft to the resolved prompt. Goal mode sends the goal
- * instead of the kickoff, so the draft then has no prompt and keeps the text for later.
+ * A new request or a new open resets the draft to the resolved prompt. A prompt change keeps the
+ * text, so a launch that hides its prompt for a while, as Goal mode does, gets the text back.
  */
 export function useSessionStartKickoffDraft({
   requestId,
   open,
   prompt,
-  replacedByGoal,
 }: {
   requestId: string | undefined;
   open: boolean;
   prompt: string | undefined;
-  replacedByGoal: boolean;
 }): SessionStartKickoffDraft {
   const [draft, setDraft] = useState<{
     requestId: string | undefined;
@@ -39,7 +36,7 @@ export function useSessionStartKickoffDraft({
   if (draft.requestId !== requestId || draft.open !== open) {
     setDraft({ requestId, open, enabled: false, text: null });
   }
-  const hasPrompt = !replacedByGoal && Boolean(prompt?.trim());
+  const hasPrompt = Boolean(prompt?.trim());
   let value: string | undefined;
   if (hasPrompt) value = draft.enabled ? (draft.text ?? "") : prompt;
   return {

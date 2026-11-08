@@ -1,16 +1,8 @@
-import type { EffortLevel } from "@anthropic-ai/claude-agent-sdk";
+import { isClaudeEffortLevel } from "./claude-effort";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-messages";
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import { readStringProp } from "./claude-agent-sdk-utils";
-
-const claudeEffortLevels = new Set<string>([
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-] satisfies EffortLevel[]);
 
 export const readHistoryTimestamp = (entry: ClaudeHistoryMessage, now: () => string): string => {
   const timestamp = readStringProp(entry, "timestamp");
@@ -37,7 +29,7 @@ export const readHistoryAssistantModel = (
     runtimeKind: "claude",
   };
   const effort = readStringProp(entry, "perTurnEffort") ?? readStringProp(entry, "effort");
-  if (effort && claudeEffortLevels.has(effort)) selection.variant = effort;
+  if (effort && isClaudeEffortLevel(effort)) selection.variant = effort;
   return selection;
 };
 

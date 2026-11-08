@@ -9,7 +9,7 @@ import {
 const THREAD_ID = "thread/start-runtime-live";
 const input = {
   repoPath: "/repo",
-  model: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5", variant: "low" },
+  model: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5", variant: "medium" },
   instructions: "Write one goal.",
   prompt: "Task: Add goals.",
 } as const;
@@ -75,8 +75,21 @@ test("answers in an ephemeral read-only thread and unsubscribes it", async () =>
     threadId: THREAD_ID,
     input: [{ type: "text", text: "Task: Add goals.", text_elements: [] }],
     model: "gpt-5",
-    effort: "low",
+    effort: "medium",
   });
+});
+
+test("rejects an effort that the model does not offer before it starts a thread", async () => {
+  const stream = createRuntimeStreamSubscription();
+  const harness = createHarness({ subscribeEvents: stream.subscribeEvents });
+  await expect(
+    harness.adapter.generateText("runtime-live", {
+      ...input,
+      model: { ...input.model, variant: "low" },
+    }),
+  ).rejects.toThrow("Codex model 'openai/gpt-5' does not support reasoning effort 'low'.");
+  const calls = harness.transports.get("runtime-live")?.calls ?? [];
+  expect(calls.some(({ method }) => method === "thread/start")).toBe(false);
 });
 
 test("reports a failed turn", async () => {

@@ -47,7 +47,7 @@ export const createAgentRuntimeQueryCommandHandlers = (
         });
         const text = yield* textGeneration.generate(input);
         return yield* Effect.try({
-          try: () => contract.responseSchema.parse({ text: text.trim() }),
+          try: () => contract.responseSchema.parse({ text }),
           catch: (cause) =>
             new HostValidationError({
               field: "text",

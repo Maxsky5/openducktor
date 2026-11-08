@@ -1,8 +1,8 @@
-import type { TaskCard, WorkspaceRef } from "@openducktor/contracts";
+import type { AgentTextGenerationInput, TaskCard, WorkspaceRef } from "@openducktor/contracts";
 import { goalTaskMaterial, type TaskWorkflow } from "@openducktor/workflows";
 import type { QueryClient } from "@tanstack/react-query";
 import { connectionHost } from "../../connection/client-connection";
-import { taskDocumentQueryOptions } from "../../queries/documents";
+import { loadTaskDocumentFromQuery } from "../../queries/documents";
 import { loadEffectivePromptOverrides } from "../../queries/prompt-overrides";
 import type { RuntimeBoundModelSelection } from "../../lib/repo-agent-defaults";
 
@@ -26,7 +26,7 @@ export const generateSessionStartGoal = async ({
 }: {
   queryClient: QueryClient;
   workspace: WorkspaceRef;
-  task: Pick<TaskCard, "id" | "title" | "description" | "issueType" | "status">;
+  task: Pick<TaskCard, "id" | "title" | "description" | "issueType" | "status" | "artifactSummary">;
   taskWorkflow: TaskWorkflow;
   launchActionId: string;
   humanFeedback: string | undefined;
@@ -35,15 +35,14 @@ export const generateSessionStartGoal = async ({
 }): Promise<string> => {
   const [overrides, documents] = await Promise.all([
     loadEffectivePromptOverrides(workspace.workspaceId, queryClient, taskWorkflow),
+    // Only the artifacts that the task has are material.
     Promise.all(
-      taskWorkflow.definition.artifacts.map(async ({ id, label }) => ({
-        label,
-        markdown: (
-          await queryClient.fetchQuery(
-            taskDocumentQueryOptions(queryClient, workspace, task.id, id),
-          )
-        ).markdown,
-      })),
+      taskWorkflow.definition.artifacts
+        .filter(({ id }) => task.artifactSummary[id]?.present)
+        .map(async ({ id, label }) => ({
+          label,
+          markdown: (await loadTaskDocumentFromQuery(queryClient, workspace, task.id, id)).markdown,
+        })),
     ),
   ]);
   const instructions = taskWorkflow.prompts.goalPrompt({
@@ -58,9 +57,7 @@ export const generateSessionStartGoal = async ({
     humanFeedback,
     overrides,
   }).prompt;
-  const generationModel: Parameters<
-    ReturnType<typeof connectionHost>["agentRuntimeGenerateText"]
-  >[0]["model"] = {
+  const generationModel: AgentTextGenerationInput["model"] = {
     runtimeKind: model.runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,

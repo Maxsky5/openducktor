@@ -10,19 +10,17 @@ export const createAgentTextGenerationService = ({
   adapterRegistry,
 }: {
   runtimeRegistry: Pick<RuntimeRegistryPort, "requireReady">;
-  adapterRegistry: Pick<AgentSessionLiveAdapterRegistryPort, "list">;
+  adapterRegistry: Pick<AgentSessionLiveAdapterRegistryPort, "resolveForScope">;
 }): AgentTextGenerationPort => ({
   generate: (input) =>
     Effect.gen(function* () {
       const { runtimeKind } = input.model;
       const runtime = yield* runtimeRegistry.requireReady(runtimeKind);
-      const generation = adapterRegistry
-        .list()
-        .find(
-          (candidate) =>
-            candidate.binding.runtimeId === runtime.runtimeId &&
-            candidate.binding.runtimeKind === runtimeKind,
-        )?.textGeneration;
+      const adapter = yield* adapterRegistry.resolveForScope({
+        repoPath: input.repoPath,
+        runtimeKind,
+      });
+      const generation = adapter.textGeneration;
       if (!generation)
         return yield* new HostOperationError({
           operation: "textGeneration.generate",

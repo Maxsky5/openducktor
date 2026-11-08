@@ -1,7 +1,11 @@
 import { goalObjectiveLengthProblem } from "@openducktor/core";
 import { useState } from "react";
 import { errorMessage } from "../../lib/errors";
-import type { SessionStartGoalMode } from "./session-start-modal-model";
+import type { SessionStartGoalMode, SessionStartModalModel } from "./session-start-modal-model";
+import {
+  type SessionStartKickoffDraft,
+  useSessionStartKickoffDraft,
+} from "./use-session-start-kickoff-draft";
 
 export const BLANK_GOAL_ERROR = "Enter a goal.";
 
@@ -102,4 +106,26 @@ export function useSessionStartGoalDraft({
     setEnabled: (next: boolean) => setDraft((current) => ({ ...current, enabled: next })),
     setText: (next: string) => setDraft((current) => ({ ...current, text: next })),
   };
+}
+
+export type SessionStartInstructionDrafts = {
+  goal: SessionStartGoalDraft;
+  kickoff: SessionStartKickoffDraft;
+};
+
+/** The goal and the first message of a start form. Goal mode sends the goal instead of the message. */
+export function useSessionStartInstructionDrafts(
+  model: Pick<SessionStartModalModel, "requestId" | "open" | "goalMode" | "kickoffPrompt">,
+): SessionStartInstructionDrafts {
+  const goal = useSessionStartGoalDraft({
+    requestId: model.requestId,
+    open: model.open,
+    goalMode: model.goalMode,
+  });
+  const kickoff = useSessionStartKickoffDraft({
+    requestId: model.requestId,
+    open: model.open,
+    prompt: goal.enabled ? undefined : model.kickoffPrompt,
+  });
+  return { goal, kickoff };
 }

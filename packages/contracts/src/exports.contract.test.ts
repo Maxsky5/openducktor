@@ -164,6 +164,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "claudeToolCatalogInputSchema",
   "claudeToolCatalogSchema",
   "agentTextGenerationInputSchema",
+  "goalCommandParts",
   "agentTextGenerationResultSchema",
   "claudePermissionModeSchema",
   "claudePolicyFieldsSchema",

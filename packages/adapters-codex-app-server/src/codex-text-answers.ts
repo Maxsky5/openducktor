@@ -28,6 +28,7 @@ export class CodexTextAnswers {
 
   /** Takes the event of a text generation thread. Returns false for any other thread. */
   observe(event: CodexRuntimeStreamEvent, threadId: string): boolean {
+    if (this.pending.size === 0) return false;
     const key = answerKey(event.runtimeId, threadId);
     const answer = this.pending.get(key);
     if (!answer) return false;

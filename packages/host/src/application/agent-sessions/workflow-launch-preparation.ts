@@ -1,8 +1,7 @@
 import {
   type AgentSessionModelSelection,
   type AgentSessionLiveRef,
-  type AgentSessionUserMessagePart,
-  GOAL_SLASH_COMMAND,
+  goalCommandParts,
   type RepoConfig,
   type WorkflowLaunchDecision,
   type WorkflowLaunchRequest,
@@ -286,11 +285,6 @@ export const prepareWorkflowLaunch = (
       parts,
     };
   });
-
-const goalCommandParts = (objective: string): AgentSessionUserMessagePart[] => [
-  { kind: "slash_command", command: { ...GOAL_SLASH_COMMAND, hints: [] } },
-  { kind: "text", text: ` ${objective}` },
-];
 
 export const isStartupRepair = (
   request: WorkflowLaunchAttemptRequest,

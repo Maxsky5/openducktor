@@ -4,11 +4,7 @@ import { Effect } from "effect";
 import { toHostOperationError } from "../../effect/host-errors";
 import type { AgentTextGenerationPort } from "../../ports/agent-text-generation-port";
 import { buildClaudeAgentSdkBaseOptions } from "./claude-agent-sdk-options";
-
-const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
-type ClaudeEffort = (typeof CLAUDE_EFFORTS)[number];
-const isClaudeEffort = (variant: string): variant is ClaudeEffort =>
-  CLAUDE_EFFORTS.some((effort) => effort === variant);
+import { toClaudeEffort } from "./claude-effort";
 
 export type ClaudeTextQueryFactory = (input: {
   prompt: string;
@@ -31,8 +27,7 @@ export const generateClaudeText = async (
   signal: AbortSignal,
 ): Promise<string> => {
   const { variant } = input.model;
-  if (variant !== undefined && !isClaudeEffort(variant))
-    throw new Error(`Claude does not support effort '${variant}'. Select another effort.`);
+  const effort = variant === undefined ? undefined : toClaudeEffort(variant);
   const abortController = new AbortController();
   signal.addEventListener("abort", () => abortController.abort(), { once: true });
   const options: Options = {
@@ -48,7 +43,7 @@ export const generateClaudeText = async (
     persistSession: false,
     maxTurns: 1,
   };
-  if (variant !== undefined) options.effort = variant;
+  if (effort !== undefined) options.effort = effort;
   const answer = createQuery({ prompt: input.prompt, options });
   try {
     for await (const message of answer) {
