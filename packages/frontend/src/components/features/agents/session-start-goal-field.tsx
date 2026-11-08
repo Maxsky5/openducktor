@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { CssPresenceReveal } from "@/components/ui/css-presence-reveal";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { SessionStartGoalDraft } from "@openducktor/frontend-core/sessions/start/use-session-start-goal-draft";
@@ -14,7 +15,7 @@ export function SessionStartGoalField({
   if (!draft.offered) return null;
   const unavailable = draft.unavailableReason !== null;
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col">
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <Switch
@@ -34,27 +35,25 @@ export function SessionStartGoalField({
           </p>
         ) : null}
       </div>
-      {draft.enabled ? (
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="session-start-goal" className="text-sm font-medium">
-            Goal
-          </label>
-          <Textarea
-            id="session-start-goal"
-            value={draft.text}
-            disabled={disabled}
-            rows={3}
-            aria-invalid={draft.error !== null}
-            aria-describedby={draft.error ? "session-start-goal-error" : undefined}
-            onChange={(event) => draft.setText(event.target.value)}
-          />
-          {draft.error ? (
-            <p id="session-start-goal-error" role="alert" className="text-sm text-destructive">
-              {draft.error}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+      <CssPresenceReveal open={draft.enabled} className="flex flex-col gap-1.5 pt-3">
+        <label htmlFor="session-start-goal" className="text-sm font-medium">
+          Goal
+        </label>
+        <Textarea
+          id="session-start-goal"
+          value={draft.text}
+          disabled={disabled}
+          rows={3}
+          aria-invalid={draft.error !== null}
+          aria-describedby={draft.error ? "session-start-goal-error" : undefined}
+          onChange={(event) => draft.setText(event.target.value)}
+        />
+        {draft.error ? (
+          <p id="session-start-goal-error" role="alert" className="text-sm text-destructive">
+            {draft.error}
+          </p>
+        ) : null}
+      </CssPresenceReveal>
     </div>
   );
 }

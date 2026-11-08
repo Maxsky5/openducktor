@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { Button } from "@/components/ui/button";
+import { CssPresenceReveal } from "@/components/ui/css-presence-reveal";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -38,7 +39,7 @@ export function SessionStartKickoffField({
         </div>
       ) : null}
       {draft.hasPrompt ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <Switch
               id="customize-kickoff"
@@ -50,27 +51,25 @@ export function SessionStartKickoffField({
               Customize first message
             </label>
           </div>
-          {draft.enabled ? (
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="kickoff-prompt" className="text-sm font-medium">
-                First message
-              </label>
-              <Textarea
-                id="kickoff-prompt"
-                value={draft.text}
-                disabled={disabled}
-                rows={8}
-                aria-invalid={draft.invalid}
-                aria-describedby={draft.invalid ? "kickoff-prompt-error" : undefined}
-                onChange={(event) => draft.setText(event.target.value)}
-              />
-              {draft.invalid ? (
-                <p id="kickoff-prompt-error" role="alert" className="text-sm text-destructive">
-                  {BLANK_KICKOFF_PROMPT_ERROR}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
+          <CssPresenceReveal open={draft.enabled} className="flex flex-col gap-1.5 pt-3">
+            <label htmlFor="kickoff-prompt" className="text-sm font-medium">
+              First message
+            </label>
+            <Textarea
+              id="kickoff-prompt"
+              value={draft.text}
+              disabled={disabled}
+              rows={8}
+              aria-invalid={draft.invalid}
+              aria-describedby={draft.invalid ? "kickoff-prompt-error" : undefined}
+              onChange={(event) => draft.setText(event.target.value)}
+            />
+            {draft.invalid ? (
+              <p id="kickoff-prompt-error" role="alert" className="text-sm text-destructive">
+                {BLANK_KICKOFF_PROMPT_ERROR}
+              </p>
+            ) : null}
+          </CssPresenceReveal>
         </div>
       ) : null}
     </>

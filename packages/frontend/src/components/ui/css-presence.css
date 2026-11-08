@@ -43,3 +43,12 @@
     }
   }
 }
+
+/* Form content that a switch shows opens and closes like an accordion. */
+.css-presence-reveal {
+  --presence-enter-dur: 250ms;
+  --presence-exit-dur: 200ms;
+  --presence-ease: var(--motion-ease-out);
+  /* Keep the focus ring of a field visible. */
+  --presence-clip-margin: 4px;
+}

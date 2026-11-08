@@ -5,7 +5,8 @@ import {
 } from "@openducktor/frontend-core/sessions/goals/agent-session-goal-row";
 import type { AgentSessionGoalRowModel } from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
 import { ChevronDown, LoaderCircle, Pause, Play, Target, X } from "lucide-react";
-import { type ReactElement, useId, useState } from "react";
+import { type ReactElement, useId, useLayoutEffect, useRef, useState } from "react";
+import { CssPresenceList, useCssPresence } from "@/components/ui/css-presence";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CardIconButton } from "./agent-chat-queued-message-stack";
 import { cn } from "@/lib/utils";
@@ -28,17 +29,56 @@ const ACTION_ICONS = {
  * The goal of the session on the top edge of the composer. It shows the goal that the runtime
  * reports, with its status, its objective on one line, and the actions of the runtime.
  */
-export function AgentChatGoalRow({ model }: { model: AgentSessionGoalRowModel }): ReactElement {
-  const [expanded, setExpanded] = useState(false);
+export function AgentChatGoalRow({
+  model,
+  sessionKey,
+}: {
+  model: AgentSessionGoalRowModel | null;
+  sessionKey: string | null;
+}): ReactElement {
+  return (
+    // Another chat shows its goal at once. Only later changes animate.
+    <CssPresenceList key={sessionKey ?? "none"}>
+      {model ? [<GoalRowCard key="goal" model={model} />] : []}
+    </CssPresenceList>
+  );
+}
+
+function GoalRowCard({ model }: { model: AgentSessionGoalRowModel }): ReactElement {
+  const { presenceProps } = useCssPresence();
   const objectiveId = useId();
+  const objectiveRef = useRef<HTMLSpanElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  // The ellipsis waits until the objective has closed, so the lines do not jump while it shrinks.
+  const [clamped, setClamped] = useState(true);
+  useLayoutEffect(() => {
+    const objective = objectiveRef.current;
+    if (expanded || !objective) return;
+    let interrupted = false;
+    void Promise.allSettled(objective.getAnimations().map((animation) => animation.finished)).then(
+      () => {
+        if (!interrupted) setClamped(true);
+      },
+    );
+    return () => {
+      interrupted = true;
+    };
+  }, [expanded]);
+
   return (
     <TooltipProvider disableHoverableContent>
-      <section aria-label="Goal" className="relative z-[45] mx-3 -mb-1.5">
+      <section
+        aria-label="Goal"
+        {...presenceProps}
+        className="css-presence goal-row relative z-[45] mx-3"
+      >
         <div className="rounded-t-xl border border-b-0 border-input bg-chat-surface px-3 pt-2 pb-3.5 text-[13px] leading-5 text-muted-foreground shadow-xs">
           <div className="flex items-start gap-2">
             <Target className="mt-[3px] size-3.5 shrink-0" aria-hidden="true" />
             <span className="shrink-0 font-medium text-foreground">Goal</span>
-            <span className={cn("shrink-0 font-medium", TONE_CLASS_NAMES[model.tone])}>
+            <span
+              className={cn("goal-row-status shrink-0 font-medium", TONE_CLASS_NAMES[model.tone])}
+            >
               {model.statusLabel}
             </span>
             <button
@@ -47,22 +87,23 @@ export function AgentChatGoalRow({ model }: { model: AgentSessionGoalRowModel })
               aria-expanded={expanded}
               aria-controls={objectiveId}
               aria-label={expanded ? "Show less of the goal" : "Show the whole goal"}
-              onClick={() => setExpanded((current) => !current)}
+              onClick={() => {
+                if (!expanded) setClamped(false);
+                setExpanded(!expanded);
+              }}
             >
               <span
+                ref={objectiveRef}
                 id={objectiveId}
-                className={cn(
-                  "min-w-0 flex-1 text-foreground/90",
-                  expanded ? "whitespace-pre-wrap break-words" : "truncate",
-                )}
+                className="goal-row-objective min-w-0 flex-1 text-foreground/90"
+                data-expanded={expanded}
+                data-clamped={clamped}
               >
                 {model.objective}
               </span>
               <ChevronDown
-                className={cn(
-                  "mt-[3px] size-3.5 shrink-0 transition-transform duration-150",
-                  expanded && "rotate-180",
-                )}
+                className="goal-row-chevron mt-[3px] size-3.5 shrink-0"
+                data-expanded={expanded}
                 aria-hidden="true"
               />
             </button>

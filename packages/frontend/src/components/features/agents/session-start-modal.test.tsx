@@ -875,7 +875,7 @@ describe("kickoff customization", () => {
       view.unmount();
     },
   );
-  test("keeps edits across toggles and defaults, validates both buttons, resets for a new request", () => {
+  test("keeps edits across toggles and defaults, validates both buttons, resets for a new request", async () => {
     const onConfirm = mock(() => {});
     const model = createModel({ requestId: "one", kickoffPrompt: "Default\ntext", onConfirm });
     const view = render(<SessionStartModal model={model} />);
@@ -905,7 +905,8 @@ describe("kickoff customization", () => {
       screen.getByRole<HTMLButtonElement>("button", { name: "Run in background" }).disabled,
     ).toBe(true);
     view.rerender(<SessionStartModal model={{ ...model, requestId: "two" }} />);
-    expect(screen.queryByLabelText("First message")).toBeNull();
+    // The field closes before it leaves the page.
+    await waitFor(() => expect(screen.queryByLabelText("First message")).toBeNull());
     toggle();
     expect(screen.getByLabelText<HTMLTextAreaElement>("First message").value).toBe("Default\ntext");
     view.unmount();

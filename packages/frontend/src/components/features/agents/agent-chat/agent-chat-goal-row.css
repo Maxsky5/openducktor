@@ -1,0 +1,80 @@
+/*
+ * The goal row sits on the top edge of the composer, like the front card of the message queue.
+ * It rises out of the composer when a goal starts, and it sinks back when the goal is cleared.
+ */
+.goal-row {
+  --presence-enter-dur: var(--queue-open);
+  --presence-exit-dur: var(--queue-close);
+  --presence-ease: var(--queue-ease);
+  /* Keep the shadow of the card visible without adding space. */
+  --presence-clip-margin: 2px;
+  /* The bottom edge slides under the composer. */
+  margin-bottom: calc(var(--queue-card-tuck) * -1);
+  filter: blur(0);
+  transition-property: height, margin-bottom, opacity, filter;
+}
+
+.goal-row[data-presence="exiting"] {
+  margin-bottom: 0;
+  filter: blur(var(--queue-blur));
+}
+
+@starting-style {
+  .goal-row[data-animate-entry="true"] {
+    margin-bottom: 0;
+    filter: blur(var(--queue-blur));
+  }
+}
+
+/* The status and its colour change together when the runtime reports a new state. */
+.goal-row-status {
+  transition: color var(--queue-fade) var(--queue-ease);
+}
+
+/*
+ * The objective shows one line. Expanded, it grows to its whole height. It stays wrapped while it
+ * closes, and it gets its ellipsis only when the height transition ends.
+ */
+.goal-row-objective {
+  interpolate-size: allow-keywords;
+  height: 1lh;
+  overflow: clip;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  transition: height var(--queue-close) var(--queue-ease);
+}
+
+.goal-row-objective[data-expanded="true"] {
+  height: auto;
+  transition-duration: var(--queue-open);
+}
+
+.goal-row-objective[data-clamped="true"] {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.goal-row-chevron {
+  transition: transform var(--queue-close) var(--queue-ease);
+}
+
+.goal-row-chevron[data-expanded="true"] {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goal-row {
+    transition-property: opacity;
+  }
+
+  .goal-row,
+  .goal-row[data-presence="exiting"] {
+    filter: none;
+  }
+
+  .goal-row-objective,
+  .goal-row-chevron {
+    transition: none;
+  }
+}

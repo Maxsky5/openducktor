@@ -624,7 +624,10 @@ function AgentChatComposerFormView({
       {model.messageQueue && !model.isReadOnly ? (
         <AgentChatMessageQueue model={model.messageQueue} composer={model} />
       ) : null}
-      {model.goalRow && !model.isReadOnly ? <AgentChatGoalRow model={model.goalRow} /> : null}
+      <AgentChatGoalRow
+        model={model.isReadOnly ? null : model.goalRow}
+        sessionKey={model.displayedSessionKey}
+      />
       <div
         className={composerCardClassName({
           isWaitingInput,
