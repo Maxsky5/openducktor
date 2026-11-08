@@ -1017,14 +1017,15 @@ export class CodexAppServerAdapter
     accepted: AcceptedAgentUserMessage,
     objective: string,
   ): Promise<void> {
-    const revisionBefore = this.runtimeEvents.goalRevision(session);
+    const { goals } = this.runtimeEvents;
+    const revisionBefore = goals.revision(session.runtimeId, session.threadId);
     try {
       await runCodexGoalCommand(
         this.runtimeClients.clientForRuntime(session.runtimeId),
         session.threadId,
         { kind: "set", objective },
       );
-      this.runtimeEvents.acceptGoalActivation(session, revisionBefore);
+      goals.acceptActivation(session.runtimeId, session.threadId, revisionBefore);
     } catch (cause) {
       const reason = cause instanceof Error ? cause.message : String(cause);
       throw new CodexMessageAcceptedError(
@@ -1046,7 +1047,8 @@ export class CodexAppServerAdapter
     const session = this.requireRegisteredSession(input, "change the goal of");
     await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
     (options.assertCurrent ?? input.workStartGuard?.assertCurrent)?.();
-    const revisionBefore = this.runtimeEvents.goalRevision(session);
+    const { goals } = this.runtimeEvents;
+    const revisionBefore = goals.revision(session.runtimeId, session.threadId);
     await runCodexGoalCommand(
       this.runtimeClients.clientForRuntime(session.runtimeId),
       session.threadId,
@@ -1061,7 +1063,7 @@ export class CodexAppServerAdapter
     markAgentWorkAccepted(input);
     if (
       goalCommandStartsWork(input.command) &&
-      this.runtimeEvents.acceptGoalActivation(session, revisionBefore)
+      goals.acceptActivation(session.runtimeId, session.threadId, revisionBefore)
     ) {
       this.runtimeEvents.waitForGoalTurn(session);
     }
@@ -1074,7 +1076,7 @@ export class CodexAppServerAdapter
    */
   async pauseGoalForStop(input: SessionRef): Promise<void> {
     const session = this.requireRegisteredSession(input, "stop");
-    if (!this.runtimeEvents.mayHaveActiveGoal(session.runtimeId, session.threadId)) return;
+    if (!this.runtimeEvents.goals.mayBeActive(session.runtimeId, session.threadId)) return;
     await pauseCodexGoalForStop(
       this.runtimeClients.clientForRuntime(session.runtimeId),
       session.threadId,
@@ -2016,7 +2018,7 @@ export class CodexAppServerAdapter
     if (session.model) {
       snapshot.model = session.model;
     }
-    const goal = this.runtimeEvents.goal(session.runtimeId, session.threadId);
+    const goal = this.runtimeEvents.goals.goal(session.runtimeId, session.threadId);
     if (goal) {
       snapshot.goal = goal;
     }

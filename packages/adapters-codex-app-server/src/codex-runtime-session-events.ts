@@ -203,7 +203,10 @@ export class CodexRuntimeSessionEvents {
     Map<string, Promise<string | undefined>>
   >();
   private readonly contextUsage: CodexContextUsageTracker;
-  private readonly goals = new CodexGoalState();
+  private readonly goalState = new CodexGoalState();
+  /** The goal reads of the adapter. Only Codex goal notifications change a goal. */
+  readonly goals: Pick<CodexGoalState, "goal" | "mayBeActive" | "revision" | "acceptActivation"> =
+    this.goalState;
   /** The user messages of the current turn of each session, by runtime and thread. */
   private readonly turnMessageIdsByRuntimeId = new Map<string, Map<string, string[]>>();
 
@@ -258,7 +261,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   clearRuntime(runtimeId: string): void {
-    this.goals.clearRuntime(runtimeId);
+    this.goalState.clearRuntime(runtimeId);
     this.turnMessageIdsByRuntimeId.delete(runtimeId);
     this.liveImages.cancel(runtimeId);
     this.imageGenerations.clearRuntime(runtimeId);
@@ -434,7 +437,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   clearSession(externalSessionId: string, runtimeId?: string): void {
-    if (runtimeId !== undefined) this.goals.forgetThread(runtimeId, externalSessionId);
+    if (runtimeId !== undefined) this.goalState.forgetThread(runtimeId, externalSessionId);
     for (const [messageRuntimeId, messageIds] of this.turnMessageIdsByRuntimeId) {
       if (runtimeId === undefined || runtimeId === messageRuntimeId)
         messageIds.delete(externalSessionId);
@@ -516,33 +519,10 @@ export class CodexRuntimeSessionEvents {
     this.deps.pendingInput.bindActiveTurn(externalSessionId, activeTurn);
   }
 
-  /** The goal that Codex last reported for the thread. */
-  goal(runtimeId: string, threadId: string) {
-    return this.goals.goal(runtimeId, threadId);
-  }
-
-  /** The goal is active, or Codex accepted a set or resume whose update has not arrived yet. */
-  mayHaveActiveGoal(runtimeId: string, threadId: string): boolean {
-    return this.goals.mayBeActive(runtimeId, threadId);
-  }
-
-  /** The count of goal updates of the thread, read before a goal request. */
-  goalRevision(session: CodexSessionState): number {
-    return this.goals.revision(session.runtimeId, session.threadId);
-  }
-
-  /**
-   * Records that Codex accepted a set or resume. Returns false when a goal update came after the
-   * request and says that the goal is not active, so Codex starts no goal turn.
-   */
-  acceptGoalActivation(session: CodexSessionState, revisionBefore: number): boolean {
-    return this.goals.acceptActivation(session.runtimeId, session.threadId, revisionBefore);
-  }
-
   /** The session has no running turn and waits for the goal turn that Codex starts by itself. */
   isWaitingForGoalTurn(session: CodexSessionState): boolean {
     return (
-      this.goals.isWaitingForGoalTurn(session.runtimeId, session.threadId) &&
+      this.goalState.isWaitingForGoalTurn(session.runtimeId, session.threadId) &&
       runningTurnOf(this.deps.activeTurnsBySessionId, session.threadId) === null
     );
   }
@@ -558,20 +538,20 @@ export class CodexRuntimeSessionEvents {
   }
 
   private markWaitingForGoalTurn(session: CodexSessionState): void {
-    this.goals.waitForGoalTurn(session.runtimeId, session.threadId);
+    this.goalState.waitForGoalTurn(session.runtimeId, session.threadId);
     this.setSessionLiveStatus(session, { classification: "running" });
   }
 
   /** Ends the wait for a goal turn, for example before Stop. */
   stopWaitingForGoalTurn(session: CodexSessionState): void {
-    if (this.goals.stopWaiting(session.runtimeId, session.threadId)) {
+    if (this.goalState.stopWaiting(session.runtimeId, session.threadId)) {
       this.markSnapshotChanged(session.runtimeId, session.threadId);
     }
   }
 
   private continueGoalAfterTurn(session: CodexSessionState): boolean {
     if (!this.isRetainedSession(session)) return false;
-    if (!this.goals.isActive(session.runtimeId, session.threadId)) return false;
+    if (!this.goalState.isActive(session.runtimeId, session.threadId)) return false;
     this.markWaitingForGoalTurn(session);
     return true;
   }
@@ -580,7 +560,7 @@ export class CodexRuntimeSessionEvents {
     if (!this.isRetainedSession(session)) return;
     this.stopWaitingForGoalTurn(session);
     // Only a goal turn starts without a request of OpenDucktor.
-    if (!this.goals.isActive(session.runtimeId, session.threadId)) return;
+    if (!this.goalState.isActive(session.runtimeId, session.threadId)) return;
     if (this.deps.activeTurnsBySessionId.has(session.threadId) || !session.model) return;
     const turn = createActiveCodexTurn(this.deps.activeTurnsBySessionId, session, session.model);
     turn.turnId = turnId;
@@ -597,14 +577,14 @@ export class CodexRuntimeSessionEvents {
     >,
   ): void {
     const { threadId } = notification.params;
-    this.goals.apply(
+    this.goalState.apply(
       runtimeId,
       threadId,
       notification.method === "thread/goal/updated" ? notification.params.goal : null,
     );
     this.markSnapshotChanged(runtimeId, threadId);
-    if (this.goals.isActive(runtimeId, threadId)) return;
-    if (!this.goals.stopWaiting(runtimeId, threadId)) return;
+    if (this.goalState.isActive(runtimeId, threadId)) return;
+    if (!this.goalState.stopWaiting(runtimeId, threadId)) return;
     // Codex starts no further goal turn, so the waiting session becomes idle.
     const session = this.deps.sessions.get(threadId);
     if (!session || session.runtimeId !== runtimeId) return;
