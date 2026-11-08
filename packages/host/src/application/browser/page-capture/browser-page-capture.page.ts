@@ -4,20 +4,7 @@
  * in the main world of the page, because React keeps its fibers on DOM nodes of that world.
  */
 import { getSource, normalizeFileName } from "bippy/source";
-
-type PageFiberType = {
-  displayName?: string;
-  name?: string;
-  render?: PageFiberType;
-  type?: PageFiberType;
-};
-
-/** A React fiber. Its `type` is a component only for the component work tags. */
-type PageFiber = {
-  tag: number;
-  type: PageFiberType | null;
-  return: PageFiber | null;
-};
+import { componentName, type PageFiber } from "./browser-page-capture-names";
 
 type CapturedElement = {
   tag: string;
@@ -28,8 +15,6 @@ type CapturedElement = {
   source: { path: string; line: number; column: number | null } | null;
 };
 
-/** React work tags of components: function, class, forwardRef, memo, simple memo. */
-const COMPONENT_TAGS = new Set([0, 1, 11, 14, 15]);
 const MAX_CHAIN = 12;
 const MAX_TEXT = 80;
 const MAX_ATTRIBUTE_VALUE = 60;
@@ -42,15 +27,6 @@ const fiberOf = (element: Element): PageFiber | null => {
     }
   }
   return null;
-};
-
-const componentName = (fiber: PageFiber): string | null => {
-  const type = fiber.type;
-  if (!COMPONENT_TAGS.has(fiber.tag) || type === null) {
-    return null;
-  }
-  const inner = type.render ?? type.type ?? type;
-  return type.displayName ?? inner.displayName ?? inner.name ?? type.name ?? null;
 };
 
 /** The names of the components that hold the element, nearest first. */
@@ -92,7 +68,8 @@ const selectorFor = (element: Element): string => {
     );
     current = parent;
   }
-  return parts.join(" > ");
+  // The root element has no parent part, so its own tag selects it.
+  return parts.length > 0 ? parts.join(" > ") : element.localName;
 };
 
 const sourceOf = async (fiber: PageFiber | null): Promise<CapturedElement["source"]> => {
