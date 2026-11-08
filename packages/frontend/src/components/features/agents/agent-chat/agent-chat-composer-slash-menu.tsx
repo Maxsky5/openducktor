@@ -82,10 +82,10 @@ export function AgentChatComposerSlashMenu({
             <Terminal className="size-3.5" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <span className="shrink-0">/{command.trigger}</span>
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-medium text-foreground">
+              <span className="min-w-0 truncate">/{command.trigger}</span>
               {command.hints.length > 0 ? (
-                <span className="min-w-0 truncate font-mono text-xs font-normal text-muted-foreground">
+                <span className="font-mono text-xs font-normal text-muted-foreground">
                   {command.hints.join(" ")}
                 </span>
               ) : null}

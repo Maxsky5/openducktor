@@ -86,17 +86,23 @@ export const createSessionGoalCommands = ({
           message: "A slash command cannot join running work.",
         });
       yield* requireAllowed(content, command);
-      const systemPrompt =
-        command.kind === "set"
-          ? ((yield* turnPreparation.context(content)) ?? content.systemPrompt)
-          : undefined;
       const current = yield* checkPending(content);
-      // A runtime can set a goal inside a running turn. The queue must keep the message instead.
-      if (current.type === "live" && hasForegroundTurn(current.session))
+      // A runtime can set a goal inside a running turn, so the queue keeps the message until the
+      // turn ends. While the goal itself drives the work, a turn always runs, so the command applies
+      // at once, like the goal row actions.
+      if (
+        current.type === "live" &&
+        hasForegroundTurn(current.session) &&
+        current.session.goal?.status !== "active"
+      )
         return yield* new AgentSessionBusyError({
           message: `/${GOAL_SLASH_COMMAND.trigger} waits until the running turn ends.`,
           cause: null,
         });
+      const systemPrompt =
+        command.kind === "set"
+          ? ((yield* turnPreparation.context(content)) ?? content.systemPrompt)
+          : undefined;
       const input = {
         repoPath: content.repoPath,
         runtimeKind: content.runtimeKind,

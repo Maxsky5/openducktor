@@ -38,6 +38,9 @@
  */
 .goal-row-line {
   interpolate-size: allow-keywords;
+  /* A hanging indent: wrapped lines start under the "Goal" label, as the reason text does. */
+  padding-inline-start: 1.25rem;
+  text-indent: -1.25rem;
   height: 1lh;
   overflow: clip;
   overflow-wrap: anywhere;

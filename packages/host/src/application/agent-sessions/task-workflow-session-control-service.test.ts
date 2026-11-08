@@ -7,6 +7,7 @@ import type {
   AgentSessionControlSendInput,
   AgentSessionControlSummary,
   AgentSessionControlUpdateModelInput,
+  AgentSessionGoal,
   AgentSessionRecord,
   AgentWorkflowSessionStartInput,
   AgentSessionControlForkInput,
@@ -1495,7 +1496,11 @@ describe("createAgentSessionCommandService", () => {
     ];
     const createGoalService = (
       goalRules: ControlServiceInput["goalRules"] = allowAllGoalCommands,
-      work: { activity: "idle" | "running"; foregroundTurnActive?: boolean } = {
+      work: {
+        activity: "idle" | "running";
+        foregroundTurnActive?: boolean;
+        goal?: AgentSessionGoal;
+      } = {
         activity: "idle",
       },
     ) => {
@@ -1578,6 +1583,16 @@ describe("createAgentSessionCommandService", () => {
         betweenTurns.service.sendUserMessage({ ...workflowSend, parts: goalParts("pause") }),
       );
       expect(betweenTurns.goalInputs[0]?.command).toEqual({ kind: "pause" });
+
+      // A goal that drives the work always runs a turn, so a goal command applies at once.
+      const goalTurn = createGoalService(allowAllGoalCommands, {
+        activity: "running",
+        goal: { objective: "Ship", status: "active" },
+      });
+      await Effect.runPromise(
+        goalTurn.service.sendUserMessage({ ...workflowSend, parts: goalParts("clear") }),
+      );
+      expect(goalTurn.goalInputs[0]?.command).toEqual({ kind: "clear" });
     });
 
     test("sends no context with a goal action that starts no work", async () => {
