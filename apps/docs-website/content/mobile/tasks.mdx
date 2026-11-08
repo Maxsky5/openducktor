@@ -1,0 +1,97 @@
+---
+icon: SquareKanban
+title: Tasks
+description: Read the board, create and import tasks, start each step of the workflow, and approve or send back the work from your phone.
+---
+
+The **Tasks** tab shows the board of a workspace. Tap a card to open the task.
+
+## Read the board [#board]
+
+<AnnotatedScreenshot
+  id="phone-tasks-board"
+  alt="The Tasks tab of the workspace fieldnotes on the Backlog lane. The lane switcher shows Backlog 4, Spec ready 4, Ready for dev 2, In progress 2, and Blocked 0. Each card shows its title, type, priority, ID, the Start Spec button, and a menu chevron."
+  parts={[
+    { at: "workspace", title: "Workspace", text: "Tap it to choose the workspace. The choice changes only this phone, and the Sessions tab uses it too." },
+    { at: "more-and-search", title: "More and Search", text: "More holds Refresh Tasks and the import of issues. Search finds the cards whose title, ID, or labels contain each word." },
+    { at: "lanes", title: "Lanes", text: "One lane shows at a time. Tap a lane, or swipe the board to the next one. Each lane shows its count." },
+    { at: "filters", title: "Filters", text: "Filter the cards by Labels, Type, and Priority. While a filter is on, a strip shows Clear." },
+    { at: "a-card", title: "A card", text: "The title, the type, the priority, the ID, and the next step, such as Start Spec. The chevron holds the other actions." },
+  ]}
+/>
+
+A card turns blue while an agent works on the task, and amber while it waits for you. In landscape, a lane shows in two columns. On a tablet, the lanes show side by side.
+
+## Create a task [#create-a-task]
+
+<Screenshot id="phone-new-task" alt="The Create task sheet at the Details step, with the Feature type, the title, the priority, Remove worktree on close, the description editor, and the Create task button.">
+
+<Steps>
+<Step>Tap <Action>+</Action> in the tab bar, then <Action>New Task</Action>.</Step>
+<Step>Choose the type: **Feature**, **Bug**, or **Task**.</Step>
+<Step>Type the **Title**. Set the **Priority**, the **Labels**, and **Remove worktree on close**.</Step>
+<Step>Write the **Description** in Markdown. To add a picture, use **Photo library** or **Files**.</Step>
+<Step>Tap <Action>Create task</Action>. The task shows in **Backlog**.</Step>
+</Steps>
+
+</Screenshot>
+
+To import the issues of your Git provider, tap <Action>+</Action>, then <Action>Import</Action>. Select the issues, tap <Action>Review</Action>, set the type, the priority, and the labels of each, then tap <Action>Import</Action>. You set up the Git provider on the desktop. See [Git and pull requests](/git-and-pull-requests/#git-provider).
+
+## Read a task [#task-details]
+
+<AnnotatedScreenshot
+  id="phone-task-details"
+  alt="The task details of Show the notebook count in the sidebar header: the ID, AI review, Task, P2, and Detect PR, then the workflow steps with Builder active, the Edit and Request QA Review buttons, and the Description, Sessions, and Work cards."
+  parts={[
+    { at: "more-actions", title: "More actions", text: "The other steps, and Reset Task, Close Task, Remove Worktree, Unlink PR, and Delete Task." },
+    { at: "summary", title: "Summary", text: "The title, the ID, the status, the type, and the priority. Detect PR links the pull request of the branch." },
+    { at: "workflow-steps", title: "Workflow steps", text: "Spec, Planner, Builder, and QA, with the current step." },
+    { at: "actions", title: "Actions", text: "Edit changes the task fields, the Spec, and the Plan. The main button starts the next step." },
+    { at: "sessions", title: "Sessions", text: "The sessions of the task and their status. Tap one to open it." },
+    { at: "work", title: "Work", text: "Changes, Files, Artifacts, CI Checks, and Terminals. See Review work." },
+  ]}
+/>
+
+The actions work as on the desktop. See [Tasks and workflows](/tasks-and-workflows/).
+
+## Start a step [#start-a-step]
+
+<ProductDemo id="mobile-start-builder" />
+
+Tap the next step on a card, in the task details, or in **Quick actions** of a session. The start sheet of the role opens, such as **Start Builder session**:
+
+- **Session mode**, when the step can continue a session: **Start fresh**, **Reuse existing**, or **Fork existing**.
+- **Existing session**, for **Reuse existing** and **Fork existing**.
+- **Target branch**, **Runtime and model**, **Effort**, and **Speed**.
+- **Customize first message** lets you change the message that starts the agent.
+- **Goal mode**, for the Builder: the agent gets a **Goal** instead of a first message, and works until it is met. <Action>Generate goal</Action> writes the goal for you. See [Work toward a goal](/coding-sessions/#goal-mode).
+
+Tap <Action>Start session</Action> to start and open the session. <Action>Run in background</Action> starts it and keeps you where you are. When the host takes long to prepare the session, a card shows the progress, with <Action>View progress</Action> and <Action>Open session</Action>. If the preparation fails, tap <Action>Retry preparation</Action> or <Action>Edit choices</Action>.
+
+## Approve or send back the work [#approve]
+
+<ProductDemo id="mobile-approve" />
+
+When a task is in <Status of="human_review" />, open **Quick actions** in its session, or use the main action of the task details.
+
+<Screenshot id="phone-approve-task" alt="The Approve task sheet with Direct merge selected, the merge methods Merge commit, Squash, and Rebase, Remove worktree and branch, and the Cancel and Merge locally buttons.">
+
+**Approve Task** opens **Approve task**:
+
+- **Direct merge**: choose **Merge commit**, **Squash**, or **Rebase**, then tap <Action>Merge locally</Action>. Then tap <Action>Push main and mark done</Action>, with the name of your target branch. Without a remote, it is <Action>Mark task done</Action>. <Action>Finish later</Action> keeps the merge on the host until you push.
+- **Pull request**: choose **Write manually** or **Ask Builder**.
+- **Close task**: closes the task and merges no code.
+
+**Remove worktree and branch** decides the cleanup. See [Approve a task](/git-and-pull-requests/#approve-a-task).
+
+**Request Changes** opens **Request changes**. Write **Your feedback** and tap <Action>Request changes</Action>. Then continue a Builder session or start a new one.
+
+</Screenshot>
+
+## Next [#next]
+
+<Cards>
+  <Card title="Review work" href="/mobile/review-work/">Read the changes before you approve.</Card>
+  <Card title="Spec, Plan, Build workflow" href="/tasks-and-workflows/spec-plan-build/">Learn each step of the workflow.</Card>
+</Cards>

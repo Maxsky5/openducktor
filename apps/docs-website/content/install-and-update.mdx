@@ -1,0 +1,107 @@
+---
+icon: Download
+title: Install and update
+description: Install the OpenDucktor desktop app on macOS, Windows, or Linux, or run it in a browser tab with the browser runner.
+---
+
+Install OpenDucktor on the computer that has your Git repositories. The [desktop app](#install) and the [browser runner](#browser-runner) both run the agents on that computer.
+
+## Requirements [#requirements]
+
+- Git 2.41 or later.
+- One [harness](/harnesses/), installed and signed in: OpenCode, Codex, or Claude Code. You can also install it after OpenDucktor.
+
+## Desktop app [#install]
+
+<Tabs items={["macOS", "Windows", "Linux"]}>
+<Tab value="macOS">
+
+For macOS 12 or later, on Apple silicon or Intel. Run this command in a terminal:
+
+```sh title="Terminal"
+curl -fsSL https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.sh | sh
+```
+
+To install with Homebrew, run this command:
+
+```sh title="Terminal"
+brew install --cask Maxsky5/openducktor/openducktor
+```
+
+You can also download the `.dmg` file from [GitHub Releases](https://github.com/Maxsky5/openducktor/releases).
+
+</Tab>
+<Tab value="Windows">
+
+For Windows x64. Run this command in PowerShell:
+
+```powershell title="PowerShell"
+irm https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.ps1 | iex
+```
+
+You can also download the `.exe` file from [GitHub Releases](https://github.com/Maxsky5/openducktor/releases).
+
+</Tab>
+<Tab value="Linux">
+
+For Linux x64. Run this command in a terminal:
+
+```sh title="Terminal"
+curl -fsSL https://raw.githubusercontent.com/Maxsky5/openducktor/main/install.sh | sh
+```
+
+The script installs the AppImage. You can also download the `.AppImage` or `.deb` file from [GitHub Releases](https://github.com/Maxsky5/openducktor/releases).
+
+</Tab>
+</Tabs>
+
+### Update the desktop app [#update-in-app]
+
+OpenDucktor checks for updates when it starts and every 12 hours. When it finds an update, a prompt opens in the lower-right corner of the window. Select <Action>Download Update</Action>, then <Action>Restart to Install</Action>.
+
+<ScreenRow>
+<Screenshot id="update-available" alt="The Update available prompt, from 1.4.0 to 1.5.0, with a Release note link and the Download Update button." />
+<Screenshot id="update-downloaded" alt="The Ready to install prompt, from 1.4.0 to 1.5.0, with a Release note link and the Restart to Install button." />
+</ScreenRow>
+
+To check now, select <Action>Check for Updates...</Action> in the **OpenDucktor** menu on macOS, or in the **Help** menu on Windows and Linux.
+
+With Homebrew, you can also run `brew upgrade --cask openducktor`. The `.deb` package does not update from the app. To update it, install the new `.deb` file from GitHub Releases.
+
+If an install or an update fails, see [Troubleshooting](/troubleshooting/#installation).
+
+## Browser runner [#browser-runner]
+
+The browser runner needs Node.js 24.14 or later. It runs on macOS, Windows, and Linux.
+
+<Steps>
+<Step>
+Run this command in a terminal:
+
+```sh title="Terminal"
+npx @openducktor/web
+```
+</Step>
+<Step>When the terminal shows `OpenDucktor web is ready:`, open `http://localhost:1420/` in your browser.</Step>
+</Steps>
+
+By default, only this computer can connect to the runner. To use OpenDucktor from another device, see [Remote control](/remote-control/). To serve the runner page itself to browsers on other computers, start it with `--host` and `--external-url`. See [Serve the runner on another machine](https://github.com/Maxsky5/openducktor/blob/main/docs/web-runner.md#serve-the-runner-on-another-machine).
+
+If a port is in use, start the runner on other ports. Set `--port` for the web page and `--backend-port` for the local host, for example `npx @openducktor/web --port 1520 --backend-port 14427`. If the runner does not start, see [Troubleshooting](/troubleshooting/#browser).
+
+Each runner keeps its own browser session. Two runners on one computer, with different ports or a different `OPENDUCKTOR_CONFIG_DIR`, do not sign each other out. After you start the runner again, reload its browser page.
+
+### Update the browser runner [#update-browser-runner]
+
+Stop the runner, then start it with `@latest`. Without `@latest`, `npx` can start an old copy from its cache.
+
+```sh title="Terminal"
+npx @openducktor/web@latest
+```
+
+## Next [#next]
+
+<Cards>
+  <Card title="First workspace and task" href="/first-workspace-and-task/">Complete the setup wizard and let the Builder do your first task.</Card>
+  <Card title="Harnesses" href="/harnesses/">Set up OpenCode, Codex, or Claude Code.</Card>
+</Cards>

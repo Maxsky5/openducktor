@@ -1,0 +1,115 @@
+/*
+ * The canvas of the diagrams. It does not pan or zoom. Lines flow from the caller to the part that
+ * it uses, and the lines of a pointed node light up. The figure holds a wide and a phone layout,
+ * and shows the one that fits.
+ */
+.docs-flow {
+  container-type: inline-size;
+}
+
+.docs-flow-narrow {
+  display: none;
+}
+
+@container (width < 640px) {
+  .docs-flow-wide {
+    display: none;
+  }
+
+  .docs-flow-narrow {
+    display: block;
+  }
+}
+
+.docs-flow-canvas {
+  /*
+   * The scale that fits the layout in the article: the figure width over the layout width, at
+   * most 1. CSS cannot divide a length by a length, but the tangent of their angle is their ratio.
+   */
+  --docs-flow-scale: min(1, tan(atan2(100cqi, var(--docs-flow-width))));
+  --xy-edge-stroke: color-mix(in oklch, var(--color-fd-muted-foreground) 70%, transparent);
+  --xy-edge-stroke-width: 1.5;
+  position: relative;
+  width: 100%;
+  margin-inline: auto;
+  /* The box keeps the shape of the layout, so the browser can skip the canvas off screen. */
+  content-visibility: auto;
+}
+
+/*
+ * React Flow stays at zoom 1, and CSS scales its viewport and the labels, so the server HTML has
+ * the right scale before the script runs. React Flow reads this transform to measure the handles.
+ */
+.docs-flow .react-flow__viewport {
+  transform: scale(var(--docs-flow-scale)) !important;
+}
+
+.docs-flow-labels {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--docs-flow-width);
+  transform: scale(var(--docs-flow-scale));
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.docs-flow .react-flow__handle {
+  width: 1px;
+  min-width: 0;
+  height: 1px;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* A label sits over its line, so the line does not cross it. */
+.docs-flow-label {
+  position: absolute;
+  translate: -50% -50%;
+  border-radius: 4px;
+  background: var(--color-fd-background);
+  padding: 1px 4px;
+  color: var(--color-fd-muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.docs-flow-label[data-vertical] {
+  writing-mode: vertical-rl;
+  padding: 4px 1px;
+}
+
+.docs-flow-label[data-kind="reject"] {
+  color: var(--color-rose-500);
+}
+
+.docs-flow .react-flow__edge.docs-flow-edge-reject path {
+  stroke: var(--color-rose-500);
+}
+
+.docs-flow .react-flow__edge.docs-flow-edge-remote path {
+  stroke: color-mix(in oklch, var(--color-fd-primary) 75%, transparent);
+}
+
+.docs-flow .react-flow__edge.docs-flow-edge-still path {
+  stroke-dasharray: none;
+}
+
+.docs-flow .react-flow__edge.is-active path {
+  stroke: var(--color-fd-primary);
+  stroke-width: 2.25;
+}
+
+/* The header button pauses the flow of the lines with the demonstrations. */
+:root[data-motion="paused"] .docs-flow .react-flow__edge.animated path {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs-flow .react-flow__edge.animated path {
+    animation: none;
+  }
+}

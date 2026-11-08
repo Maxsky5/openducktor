@@ -1,0 +1,67 @@
+/*
+ * The lane colors of the board: the Tailwind colors of the lane accents of the app. Any element
+ * with `data-docs-lane` gets its lane color in `--lane`. A lane without a rule keeps the Done color.
+ */
+[data-docs-lane] {
+  --lane: var(--color-emerald-500);
+}
+
+[data-docs-lane="open"] {
+  --lane: var(--color-zinc-400);
+}
+
+[data-docs-lane="spec_ready"] {
+  --lane: var(--color-violet-500);
+}
+
+[data-docs-lane="ready_for_dev"] {
+  --lane: var(--color-sky-500);
+}
+
+[data-docs-lane="in_progress"] {
+  --lane: var(--color-amber-500);
+}
+
+[data-docs-lane="blocked"],
+[data-docs-lane="qa_rejected"] {
+  --lane: var(--color-rose-500);
+}
+
+[data-docs-lane="ai_review"] {
+  --lane: var(--color-indigo-500);
+}
+
+[data-docs-lane="human_review"] {
+  --lane: var(--color-cyan-500);
+}
+
+/* A lane pill. It is inline, not inline-flex, so a period after the pill stays on its line. */
+.docs-lane {
+  display: inline;
+  border: 1px solid color-mix(in srgb, var(--lane) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--lane) 12%, transparent);
+  padding: 0 0.55em;
+  color: var(--color-fd-foreground);
+  font-size: 0.8125em;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: nowrap;
+  vertical-align: 0.06em;
+}
+
+.docs-lane::before {
+  display: inline-block;
+  width: 0.45em;
+  height: 0.45em;
+  margin-right: 0.35em;
+  vertical-align: 0.08em;
+  border-radius: 999px;
+  background: var(--lane);
+  content: "";
+}
+
+/* Table text is smaller, so its pills are a little larger. */
+td .docs-lane {
+  font-size: 0.875em;
+}

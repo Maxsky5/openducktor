@@ -1,0 +1,105 @@
+---
+icon: GitLab
+title: GitLab
+description: Connect a project on GitLab.com or a self-managed GitLab, sign in or add a token, import issues, and follow merge requests.
+---
+
+OpenDucktor calls the GitLab API with an account that you connect. It needs no CLI. GitLab calls a pull request a merge request. OpenDucktor calls it a pull request.
+
+## Before you start [#before-you-start]
+
+Get one of these:
+
+- **A GitLab.com account.** You sign in through your browser. See [Browser sign-in](#browser-sign-in).
+- **An access token with the `api` scope.** It can be a personal, project, or group access token. A self-managed GitLab accepts only a token, and it must run GitLab 17.4 or later.
+
+## Connect the project [#connect]
+
+<AnnotatedScreenshot
+  id="settings-git-gitlab"
+  alt="The GitLab setup card with the status Connect account and the Enabled switch on. Under Project, the Instance URL is https://gitlab.com and the Project path is fieldnotes-app/fieldnotes. Under Account, GitLab sign-in has a Sign in with GitLab button, and Access token has a Create a token in GitLab link, a token field, and Add token."
+  parts={[
+    { at: "status", title: "Status", text: "Shows the next thing to do, then Ready." },
+    { at: "project", title: "Project", text: "The instance URL and the project path. Detect from origin fills both." },
+    { at: "gitlab-sign-in", title: "GitLab sign-in", text: "Browser sign-in. It shows only for GitLab.com." },
+    { at: "access-token", title: "Access token", text: "A token with the api scope. The link opens the token page of your instance." },
+  ]}
+/>
+
+<Steps>
+<Step>Open **Settings**, **Repositories**, your repository, then the **Git** tab. Select **GitLab**.</Step>
+<Step>Select <Action>Detect from origin</Action>. OpenDucktor fills **Instance URL** and **Project path** from the `origin` remote. It finds the host when its name contains `gitlab`, or when you already have an account on that instance. Otherwise, enter the values, for example `https://git.example.com/gitlab` and `group/subgroup/project`.</Step>
+<Step>Connect an account. On GitLab.com, select <Action>Sign in with GitLab</Action>. Or select <Action>Create a token in GitLab</Action>, create a token with the `api` scope, paste it, then select <Action>Add token</Action>.</Step>
+<Step>Select <Action>Save settings</Action>. The repository keeps the link to the account only after the save.</Step>
+</Steps>
+
+### Browser sign-in [#browser-sign-in]
+
+Browser sign-in works only on GitLab.com. You do not paste a token.
+
+<Diagram name="gitlabSignIn" />
+
+<Action>Open GitLab sign-in</Action> opens a GitLab.com page that already has the code. To stop, select <Action>Cancel sign-in</Action>. OpenDucktor renews the token of a browser sign-in by itself.
+
+### One account for each instance [#accounts]
+
+An account belongs to a GitLab instance, not to a repository. Every repository on the instance can use it.
+
+- When the instance has one saved account, a new repository on that instance uses it. With more accounts, you choose one, or select <Action>Use another account</Action>.
+- <Action>Replace token</Action> changes the token for every repository that uses the account.
+- OpenDucktor keeps the token in the secure store of your system. When no repository uses an account anymore, the next save deletes it.
+- Seven days before a token expires, the card shows `The token expires on` a date. Replace the token before that date.
+
+## Import issues [#import]
+
+Select the arrow next to **New task**, then <Action>Import tasks from GitLab issues</Action>.
+
+- The list shows the open issues and incidents of the project, the most recently updated first.
+- Search matches titles. Type `#42` or `42` to find one issue.
+- Each task gets the title, the description, and the labels of its issue as tags. You choose the type and the priority before the import.
+- The task keeps a link to its issue. OpenDucktor does not change the issue.
+
+## Merge requests [#pull-requests]
+
+When you approve a task, you choose who writes the merge request:
+
+- **Ask Builder**: the Builder pushes the branch and creates or updates the merge request with the tools of its shell. OpenDucktor gives it no GitLab tool. Install and sign in to the [GitLab CLI](https://gitlab.com/gitlab-org/cli), `glab`, on your computer, or use **Write manually**.
+- **Write manually**: you enter the title and the description. OpenDucktor pushes the branch and creates the merge request with your GitLab account. If the task has an open merge request, OpenDucktor updates it.
+
+A new merge request is ready for review. An update keeps a draft as a draft.
+
+## Checks and comments [#checks]
+
+The [**CI Checks** tab](/git-and-pull-requests/#ci-checks) reads:
+
+- **Checks**: the jobs of the latest pipeline of the merge request, its trigger jobs, and the external commit statuses. A failed job that is allowed to fail shows as a warning. A manual job shows as an action to take.
+- **[Comments](/git-and-pull-requests/#review-comments)**: the discussions of the merge request, and its approvals as reviews. A `suggestion` block shows as a suggested change on an added line.
+- **Count on the tab**: the discussions that you can resolve and that are not resolved.
+
+## Limits [#limits]
+
+- OpenDucktor supports merge requests inside the project only. A merge request from a fork shows an error.
+- Browser sign-in works only on GitLab.com. A self-managed GitLab needs a token.
+- A self-managed GitLab must run GitLab 17.4 or later.
+- OpenDucktor does not follow redirects. Enter the final URL of your instance.
+- An `http://` instance sends the token without encryption. You must confirm it for that instance.
+- A branch can have one open merge request. With more, OpenDucktor asks you to close the extra ones.
+
+## Problems [#problems]
+
+| The card shows | Fix |
+|---|---|
+| **Link project** | Enter a valid **Instance URL** and **Project path**. |
+| **Connect account** | Sign in, add a token, or choose a saved account of the instance. |
+| **Needs attention** | Read the message, then select its fix: <Action>Replace token</Action>, <Action>Sign in again</Action>, <Action>Use another account</Action>, <Action>Retry</Action>, or <Action>Confirm HTTP</Action>. |
+| `No local Git remote points to the GitLab project` | Your remote uses an SSH host alias. Enter its name in **Project remote**, for example `origin`. |
+| `GitLab limited the request rate.` | Wait, then select <Action>Retry</Action>. |
+
+For more, see [Git providers](/troubleshooting/#git-providers) in Troubleshooting.
+
+## Next [#next]
+
+<Cards>
+  <Card title="Git and pull requests" href="/git-and-pull-requests/">Approve a task and follow its merge request.</Card>
+  <Card title="Git settings" href="/settings-reference/#repository-git-gitlab">Read every GitLab setting.</Card>
+</Cards>

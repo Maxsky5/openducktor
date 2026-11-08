@@ -16,6 +16,7 @@
     "browser:dev": "cd packages/openducktor-web && bun run dev",
     "browser:client": "cd packages/openducktor-web && bun run dev:client",
     "marketing:dev": "bun run --filter @openducktor/marketing-website dev",
+    "docs:dev": "bun run --filter @openducktor/docs-website dev",
     "android": "cd apps/mobile && bun run android",
     "android:release": "cd apps/mobile && bun run android:release",
     "ios": "cd apps/mobile && bun run ios",

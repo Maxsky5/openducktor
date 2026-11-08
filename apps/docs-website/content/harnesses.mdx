@@ -1,0 +1,118 @@
+---
+icon: Cpu
+title: Harnesses
+description: Set up OpenCode, Codex, or Claude Code, see what each one supports, and set what agents can do.
+---
+
+A harness is the coding agent that runs your sessions: OpenCode, Codex, or Claude Code. OpenDucktor uses the [models](/models/) of your sign-in to the harness.
+
+## Install a harness [#install]
+
+Install the harness and sign in to it with its own tool. Then turn it on in OpenDucktor.
+
+| Harness | Minimum version | Install and sign in |
+|---|---|---|
+| OpenCode | 2 or later | [OpenCode documentation](https://opencode.ai/docs) |
+| Codex | With `codex app-server` | [Codex documentation](https://developers.openai.com/codex) |
+| Claude Code | 2.1.306 or later | [Claude Code documentation](https://code.claude.com/docs/en/overview) |
+
+To [steer a message](/coding-sessions/#queue) into a running reply, OpenCode needs 2.0.24 or later and Codex needs 0.106.0 or later.
+
+[Goal mode](/coding-sessions/#goal-mode) needs OpenCode 2.2.1, Codex 0.166.0, or Claude Code 2.1.306 or later. See [Goal mode support](#goals).
+
+To update, run `opencode upgrade` or `claude update`. Update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`.
+
+<Callout type="info" title="Claude subscriptions">To use Claude Code with a Claude subscription, read [Use the Claude Agent SDK with your Claude plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan).</Callout>
+
+## Turn on a harness [#set-up-a-harness]
+
+The setup wizard turns on the harnesses that you choose. Use these steps to turn one on later.
+
+<Steps>
+<Step>Open [**Settings**](/settings-reference/#open-settings), then **Agent runtimes**, then the harness. Settings shows Claude Code as **Claude**.</Step>
+<Step>Turn on **Enabled**. If the harness does not show **Available**, select <Action>Browse</Action> and choose its executable.</Step>
+<Step>Select <Action>Save settings</Action>.</Step>
+</Steps>
+
+<Screenshot id="settings-harnesses" alt="The Agent runtimes section of Settings. OpenCode, Claude, and Codex show Enabled. The OpenCode card shows Available, the Enabled switch, the executable path with Browse, and the version with Check again." />
+
+If the harness shows **Needs attention**, see [Troubleshooting](/troubleshooting/#harness-needs-attention).
+
+## What each harness supports [#capabilities]
+
+All three harnesses run every agent role. Each one supports questions, permission requests, attachments, slash commands, skills, and session forks. They differ in these features:
+
+| Feature | OpenCode | Codex | Claude Code |
+|---|---|---|---|
+| Image generation | No | Yes | No |
+| **Resume** after a turn stops | No | Yes | Yes |
+| [**Speed** choice](/models/) | No | Some models | Some models |
+| [**Agent profile** choice](/models/) | Yes | No | No |
+| Todo list in the session | No | Yes | Yes |
+| Subagents in the background | Yes | No | Yes |
+| Mention a subagent with `@` | Yes | No | No |
+| [Permission replies](/coding-sessions/#answer-a-permission-request) | <Action>Approve once</Action>, <Action>Allow for project</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Approve for session</Action>, <Action>Always allow</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Reject</Action> |
+
+### Goal mode support [#goals]
+
+All three harnesses run [Goal mode](/coding-sessions/#goal-mode). They differ in these points:
+
+| | OpenCode | Codex | Claude Code |
+|---|---|---|---|
+| Minimum version | 2.2.1 | 0.166.0 | 2.1.306 |
+| <Action>Pause goal</Action> and <Action>Resume goal</Action> | Yes | Yes | No. Only <Action>Clear goal</Action>. |
+| <Action>Stop session</Action> during a goal | Stops the turn and pauses the goal | Stops the turn and pauses the goal | Stops the turn and keeps the goal. The row shows **Waiting for your message**. |
+
+With an older harness, the **Goal mode** switch is off and names the version to install. OpenCode runs goals with its goal plugin. If your OpenCode config turns the plugin off, remove `-opencode.goal` from `plugins` in the OpenCode config.
+
+## Control what agents can do [#permissions]
+
+Each harness has its own permission settings in **Agent runtimes**.
+
+<Steps>
+<Step>In **Agent runtimes**, select the harness.</Step>
+<Step>Set the default value of each field. For Claude Code, open the group of the field first. To give one role another value, turn on **Role overrides** for the field.</Step>
+<Step>If the section asks you to confirm reduced protections, turn on the confirmation switch.</Step>
+<Step>Select <Action>Save settings</Action>.</Step>
+</Steps>
+
+<Screenshot id="settings-codex-policy" alt="The Sandbox mode card of the Codex settings. The default is Workspace-write. Role overrides is on, with Spec, Planner, and QA set to Read-only and Builder set to Inherited." />
+
+| Harness | Setting | What it does |
+|---|---|---|
+| OpenCode | [OpenCode permissions](/settings-reference/#harnesses-opencode-permissions) | Allows, asks about, or denies each command, file access, or web fetch. |
+| Codex | [Sandbox mode](/settings-reference/#harnesses-codex-sandbox-mode) | Sets what Codex can change. |
+| Codex | [Approval prompts](/settings-reference/#harnesses-codex-approval-prompts) | Sets when Codex asks you. |
+| Codex | [Prompt reviewer](/settings-reference/#harnesses-codex-prompt-reviewer) | Sets who reviews approval prompts: you or the Codex automatic review. |
+| Codex | [Command network access](/settings-reference/#harnesses-codex-command-network-access) | Lets commands in sandboxed turns use the network. |
+| Claude Code | [Approval mode](/settings-reference/#harnesses-claude-approval-mode) | Sets when Claude Code asks you. |
+| Claude Code | [Bash sandbox](/settings-reference/#harnesses-claude-bash-sandbox) | Runs shell commands in a sandbox. |
+
+The settings apply in this order:
+
+<Diagram name="permissionOrder" />
+
+In a Claude Code list field, such as **Allow rules**, OpenDucktor adds its entries to the native entries.
+
+In Codex, a command in the **Workspace-write** sandbox can change files without a request. To stop the Spec, Planner, and QA roles from changing files with Codex, set their **Sandbox mode** to **Read-only** in **Role overrides**. The Builder cannot use **Read-only**.
+
+OpenCode and Claude Code apply changes to new and forked sessions. Resumed and imported Claude Code sessions use the native Claude settings. Codex applies changes to sessions that start or resume after the save.
+
+<Callout type="warn" title="Reduced protections">
+These settings let agents act without your approval or outside the sandbox:
+
+- Codex **Sandbox mode**: **Danger full access**
+- Codex **Approval prompts**: **Never**
+- Claude Code **Approval mode**: **Bypass permissions**
+- Claude Code **Bash sandbox**: off
+
+Use them only in a repository that you trust.
+</Callout>
+
+## Next [#next]
+
+<Cards>
+  <Card title="Models" href="/models/">Choose the model of each agent role.</Card>
+  <Card title="Settings reference" href="/settings-reference/#harnesses">Read every harness setting.</Card>
+  <Card title="Troubleshooting" href="/troubleshooting/#harnesses">Fix a harness that does not start.</Card>
+</Cards>

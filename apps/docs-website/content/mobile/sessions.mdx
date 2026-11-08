@@ -1,0 +1,127 @@
+---
+icon: MessagesSquare
+title: Sessions
+description: Find the sessions that need you, answer the agents, send and steer messages, and start, fork, or archive sessions from your phone.
+---
+
+The **Sessions** tab lists the sessions of the host. Tap one to open its transcript and its composer.
+
+## The Sessions tab [#sessions-tab]
+
+<AnnotatedScreenshot
+  id="phone-sessions"
+  alt="The Sessions tab. Needs you lists the Spec session Show tag counts in the sidebar, marked Question. Running is empty, and Recent lists 13 sessions."
+  parts={[
+    { at: "session-tools", title: "Session tools", text: "Group sessions by task, Archived Sessions, and Search sessions. Search matches the title, the workspace, the role, the task ID, and the folder." },
+    { at: "needs-you", title: "Needs you", text: "The sessions that wait for your answer. The chip tells why: Question, Permission, or Blocked." },
+    { at: "running", title: "Running", text: "The sessions where an agent works." },
+    { at: "recent", title: "Recent", text: "The other sessions. Tap a section title to fold it." },
+    { at: "a-session", title: "A session", text: "The workspace, the task status, and the time of the last activity, then the role and the title." },
+  ]}
+/>
+
+Pull down to read the list again. With more than one open workspace, a switch above the list shows your workspace or **All workspaces**. **Group sessions by task** is a host setting, so all your clients group the same way.
+
+<Screenshot id="phone-session-row-menu" alt="The Sessions tab with the menu of the session Color-code tags open: Mark as Unread, Copy Working Directory, and Copy External Session ID.">
+
+Long press a row for its menu:
+
+- **Mark as Read** or **Mark as Unread**
+- **Copy Working Directory**
+- **Copy External Session ID**
+- **Rename Session** and **Archive Session**, for a workspace session
+
+To archive a workspace session, you can also swipe its row to the left.
+
+</Screenshot>
+
+## The session screen [#session-screen]
+
+<AnnotatedScreenshot
+  id="phone-session"
+  alt="The Builder session of Show the notebook count in the sidebar header. The header has the back button, the title, and the clock, lightning, and more buttons. Under it, the workflow steps Spec, Planner, Builder, and QA. The transcript ends with the summary of the Builder. The composer shows its placeholder, the paper clip, the model Haiku 5.5 with low effort, the context ring, and the send button."
+  parts={[
+    { at: "title", title: "Title", text: "Tap it to open the task details." },
+    { at: "header-buttons", title: "Header buttons", text: "Task sessions, Quick actions, and Session actions. See the list under the screenshot." },
+    { at: "workflow-steps", title: "Workflow steps", text: "Spec, Planner, Builder, and QA. Tap a step to open its last session, or its start sheet." },
+    { at: "message", title: "Message", text: "Type @ for files and subagents, / for commands, and $ for skills." },
+    { at: "composer-buttons", title: "Composer buttons", text: "Attachments, Message options, Context, and Send. See the list under the screenshot." },
+  ]}
+/>
+
+<IconList>
+<IconItem icon="RotateCcwClock" title="Task sessions">All the sessions of the task. Tap one to open it.</IconItem>
+<IconItem icon="Zap" title="Quick actions">The next steps, such as **Start Builder** or **Approve Task**. A step that is not available tells why.</IconItem>
+<IconItem icon="Ellipsis" title="Session actions">**Task Details**, **Copy Task ID**, the pull request, the subagents, and the [work views](/mobile/review-work/).</IconItem>
+<IconItem icon="Paperclip" title="Attachments">Adds a picture or a file. It is off when the model accepts no attachments.</IconItem>
+<IconItem icon="ChevronsUpDown" title="Message options">The model and its effort. Tap them to set the model, the effort, and, when the runtime offers them, the agent and the speed of your next message.</IconItem>
+<IconItem icon="CircleDashed" title="Context">How full the context of the model is. Tap it for the token counts.</IconItem>
+<IconItem icon="SendHorizontal" title="Send">Sends your message. While the agent works, it queues the message. See [Send and steer messages](#messages).</IconItem>
+</IconList>
+
+A subagent session opens read-only. In landscape, the workflow steps move to a panel at the side.
+
+## Answer the agent [#answer-pending-input]
+
+<ProductDemo id="mobile-needs-you" />
+
+<Screenshot id="phone-question" alt="The Spec session Show tag counts in the sidebar with an Input needed card: Should the sidebar show tags with zero notes? The agent recommends Hide empty tags. The card offers Hide empty tags, Show all tags, Other answer, Reset, and Confirm Answers.">
+
+Tap a session under **Needs you**. It opens at the card that waits for you.
+
+- **Approval required**: read the command, then tap <Action>Approve once</Action>, another approval, or <Action>Reject</Action>. The runtime of the session decides which approvals show. See [Coding sessions](/coding-sessions/#answer-a-permission-request).
+- **Input needed**: tap an answer, or <Action>Other answer</Action>. With more than one question, tap <Action>Next</Action> after each answer, then <Action>Review Answers</Action> and <Action>Confirm Answers</Action>.
+
+A **Blocked** task opens its latest session, or its task details. After your answer, the session moves to **Running**.
+
+</Screenshot>
+
+## Send and steer messages [#messages]
+
+<ProductDemo id="mobile-steer" />
+
+While the agent works, you choose when it reads your message:
+
+- **Send** queues the message. The agent reads it when its turn ends.
+- **Steer**, the lightning button next to **Send**, gives the message to the agent in the running turn.
+- **Queued messages** show above the composer. Tap the stack, then <Action>Steer now</Action>, <Action>Edit</Action>, or <Action>Remove</Action>.
+- <Action>Stop session</Action> stops the turn.
+
+With [Steer messages by default](/settings-reference/#chat-steer-messages-by-default) on the host, **Send** steers and the small button queues.
+
+### Follow a goal [#goal]
+
+When the Builder works in [Goal mode](/coding-sessions/#goal-mode), the goal row shows above the composer: **Goal**, the status, the objective, and icon buttons to pause, resume, or clear the goal. Tap the objective to read the whole goal.
+
+- To set or change a goal, send `/goal` with the objective, or `/goal pause`, `/goal resume`, or `/goal clear`. The message shows a **Goal** chip.
+- While a goal drives the work, your other queued messages wait until the goal stops.
+
+## Start a session [#new-session]
+
+Tap <Action>+</Action> in the tab bar, then <Action>New Session</Action>. A new session is a [workspace session](/workspace-sessions/): it belongs to no task.
+
+<Screenshot id="phone-new-session" alt="The New session sheet with Workspace, Name, Runtime and model, Effort, Custom role, and Work location with Current checkout selected, and the Cancel and Create session buttons.">
+
+<Steps>
+<Step>Choose the **Workspace**. Type a **Name**, or leave it empty for a generated title.</Step>
+<Step>Choose the **Runtime and model** and the **Effort**. A **Custom role** gives the agent the instructions of that role. You add custom roles on the desktop.</Step>
+<Step>Choose the **Work location**: **Current checkout**, **New worktree**, or **Existing worktree**. For **Existing worktree**, choose the **Worktree**. For **New worktree**, choose **Existing branch** or **New branch**, then type the **Worktree name**. **New branch** also takes an optional **Branch name**.</Step>
+<Step>Choose the **Target branch**. **Changes** compares the session with it.</Step>
+<Step>Tap <Action>Create session</Action>.</Step>
+</Steps>
+
+</Screenshot>
+
+## Fork, rename, and archive [#manage]
+
+- **Fork**: tap the fork icon under a reply of the agent, **Fork from this reply**. A workspace session asks where the copy works: **Same folder** or **New worktree**. A task session forks at once.
+- **Rename**: long press a workspace session, then **Rename Session**. Leave the name empty to use the generated title.
+- **Archive**: long press a workspace session, then **Archive Session**. For a session in its own worktree, **Remove worktree and branch** is on by default.
+- **Restore**: tap **Archived Sessions**, the archive button at the top of the **Sessions** tab. Then tap <Action>Restore</Action> next to a session. If its worktree was removed, the restore makes it again from the target branch of the session. An archived session opens read-only, with <Action>Restore Session</Action>.
+
+## Next [#next]
+
+<Cards>
+  <Card title="Tasks" href="/mobile/tasks/">Run the workflow of a task from your phone.</Card>
+  <Card title="Coding sessions" href="/coding-sessions/">Learn the session page of the desktop.</Card>
+</Cards>

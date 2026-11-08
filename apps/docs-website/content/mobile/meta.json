@@ -1,0 +1,6 @@
+{
+  "title": "Mobile",
+  "icon": "Smartphone",
+  "defaultOpen": true,
+  "pages": ["sessions", "tasks", "review-work"]
+}

@@ -1,0 +1,163 @@
+---
+icon: Smartphone
+title: Mobile
+description: Follow and control the agents of your host from an iOS or Android phone. Answer them, steer them, run the task workflow, and review the work.
+---
+
+The mobile app is a client of your [host](/#key-terms). The agents, Git, the files, and the terminals stay on the host. The phone shows them and sends your actions, also while you are away from your desk.
+
+<Cards>
+  <Card title="Sessions" href="/mobile/sessions/">Answer the agents, send and steer messages, and start new sessions.</Card>
+  <Card title="Tasks" href="/mobile/tasks/">Create tasks, start each workflow step, and approve the work.</Card>
+  <Card title="Review work" href="/mobile/review-work/">Read the changes, comment on a diff, and use the terminals.</Card>
+</Cards>
+
+## Get the app [#get-the-app]
+
+The app needs iOS 16.4 or later, or Android 7.0 or later. It is not in the App Store or Google Play yet.
+
+- **iOS**: If the OpenDucktor team invited you, install the app with TestFlight. Other users build the app from source on a Mac with Xcode 26 and CocoaPods.
+- **Android**: If the OpenDucktor team invited you, install the app from Google Play internal testing. Other users install `OpenDucktor-<version>-android.apk` from a [GitHub release](https://github.com/Maxsky5/openducktor/releases) that has one, or build the app from source.
+
+<Accordions>
+<Accordion id="build-from-source" title="Build the app from source">
+
+To build from source, install the tools of the [mobile developer guide](https://github.com/Maxsky5/openducktor/blob/main/apps/mobile/README.md#setup). Then run these commands in the [repository](https://github.com/Maxsky5/openducktor):
+
+<Tabs items={["iOS", "Android"]}>
+<Tab value="iOS">
+
+With the iPhone connected by USB, Developer Mode on, and your Apple account added in Xcode:
+
+```sh
+bun install
+cd apps/mobile
+export OPENDUCKTOR_IOS_BUNDLE_ID=com.example.openducktor
+bun run native
+bun run ios --device --configuration Release
+```
+
+Apple registers a bundle ID to one team. Replace `com.example.openducktor` with an ID of your own. `bun run native` makes the `ios` folder again with this ID. If the last command asks, select the phone and your development team.
+
+</Tab>
+<Tab value="Android">
+
+With the phone connected by USB and USB debugging on:
+
+```sh
+bun install
+bun run android:release
+```
+
+</Tab>
+</Tabs>
+
+</Accordion>
+</Accordions>
+
+On Android, the QR scanner uses Google ML Kit, which sends diagnostics to Google. For what the app stores and sends, see the [mobile privacy policy](https://openducktor.dev/privacy).
+
+<Callout type="warn" title="On Android, uninstall the app before you install it another way">The APK, the Google Play build, and a build from source cannot update each other.</Callout>
+
+## Connect to a host [#connect-to-a-host]
+
+<ProductDemo id="mobile-pair" />
+
+<Steps>
+<Step>On the host, turn on [Remote control](/remote-control/#turn-on). Then select <Action>Add device</Action> and **Scan a QR code**.</Step>
+<Step>In the app, tap <Action>Scan QR code</Action>. The first time, tap <Action>Allow camera</Action>, then allow access. If you denied the camera before, tap <Action>Open settings</Action>, or tap <Action>Enter address</Action>.</Step>
+<Step>Scan the code. The app shows **Connected to host** and opens the **Sessions** tab.</Step>
+</Steps>
+
+On iOS, the first connection to a host on your local network asks for **Local Network** access. Allow it.
+
+To connect without the camera, open the **Enter a code** tab of **Add device** on the host. In the app, type its address in **Host address**, tap <Action>Continue</Action>, and type its six-digit code. The sixth digit connects.
+
+<ScreenRow>
+<Screenshot id="phone-connect" alt="Connect to a host, with Scan QR code, the Host address field, and Continue." />
+<Screenshot id="phone-pair" alt="The pairing step: Connecting to http://192.168.1.9:14328, six empty Pairing code boxes, Connect to host, and the HTTP warning." />
+</ScreenRow>
+
+The phone stays paired when the app or the host restarts. An `http://` address shows `HTTP is not encrypted.` Use it only on a trusted private network, or give the host an HTTPS address. If the app and the host do not work together, the app tells you which one to update. See [Compatibility](/remote-control/#compatibility).
+
+## Find your way [#tabs]
+
+<AnnotatedScreenshot
+  id="phone-create-menu"
+  alt="The tab bar with Sessions, Tasks, the violet create button, Host, and Settings. The create button is open as a close button, and New Task, New Session, and Import fan out above it."
+  parts={[
+    { at: "sessions", title: "Sessions", text: "The sessions that need you, run, or ran recently. Its badge counts the sessions that need you. See Sessions." },
+    { at: "tasks", title: "Tasks", text: "The board of a workspace. See Tasks." },
+    { at: "create", title: "Create", text: "Opens New Task, New Session, and Import, as here. Tap it again to close." },
+    { at: "host", title: "Host", text: "Your hosts and the diagnostics of the connected host." },
+    { at: "settings", title: "Settings", text: "The preferences of this phone." },
+  ]}
+/>
+
+The **Sessions** tab opens first. When you go back to a tab, it shows the last screen that you opened. In landscape, the tabs move to a rail on the left edge.
+
+The app sends no notifications. Check the badge on the **Sessions** tab.
+
+## Hosts [#hosts]
+
+<Screenshot id="phone-host" alt="The Host tab. Current host shows 192.168.1.9 as Connected. Other hosts is empty, with Add host. Health shows the Diagnostics row as Healthy.">
+
+The app connects to one host at a time. The **Host** tab lists your hosts.
+
+- **Add**: tap <Action>+</Action> at the top of the tab.
+- **Switch**: tap a host under **Other hosts**. The work on the other hosts keeps running.
+- **Rename or remove**: open the menu of its row. A removal deletes the data that the app stored for that host, and the unsent drafts. The work on the host continues.
+
+</Screenshot>
+
+<Screenshot id="phone-diagnostics" alt="The Diagnostics screen with the Host group, the Agent runtimes and Tools and services cards, and the Workspace group.">
+
+Tap **Diagnostics** to check the connected host:
+
+- **Agent runtimes**: the runtimes that the host found, and their versions.
+- **Tools and services**: Git, the `PATH`, and the OpenDucktor MCP bridge.
+- **Workspace**: the checks of the selected workspace.
+
+Tap the refresh button to run the checks again.
+
+</Screenshot>
+
+## When the connection drops [#recover-a-connection]
+
+The app reconnects by itself, also when the network changes. In the background, it closes the connection after 60 seconds, and it connects again when you open it.
+
+- While the host is out of reach, a banner shows `Can't reach the host`, `Reconnecting…`, or `You're offline`, with <Action>Retry</Action>. The app shows the last content that it loaded. The controls that change work on the host stay off until the connection is back. You can still write drafts.
+- A screen with no content yet shows **Can't reach your host**, with <Action>Retry connection</Action> and <Action>Choose another host</Action>. Other failures, such as an old host version, show **Connection failed** with the reason.
+- If an action shows **Result unknown**, the connection dropped before the host replied. The host may have run the action, and the app does not send it again. Check the session, task, or terminal before you do it again.
+- If the host removes the phone, the app shows **Pair with host**. Type a new code from **Add device**.
+
+For more, see [Mobile](/troubleshooting/#mobile) in Troubleshooting.
+
+## Settings [#settings]
+
+<Screenshot id="phone-settings" alt="The Settings tab. Appearance shows Theme with System selected. Sessions shows the Show Thinking Messages switch off.">
+
+The **Settings** tab holds only the [preferences of this phone](/settings-reference/#clients):
+
+- **Theme**: **System**, **Light**, or **Dark**.
+- **Show Thinking Messages**: shows the thinking of the agents in the transcript. It is off by default.
+
+You change the settings of the host on the desktop.
+
+</Screenshot>
+
+## What needs the desktop [#limits]
+
+Do these on the desktop app or in the browser runner:
+
+- Open, close, or remove a workspace.
+- Change the settings of the host and of a repository, such as the Git provider, the Kanban lanes, the custom roles, and the repository actions.
+- Use browser tabs and annotations. See [Web pages](/coding-sessions/web-pages/).
+- Stage, commit, or push from the **Changes** view, and edit files. On the phone, the files are read-only.
+
+## Next [#next]
+
+<Cards>
+  <Card title="Sessions" href="/mobile/sessions/">Answer the agents and steer their work.</Card>
+  <Card title="Remote control" href="/remote-control/">Turn on Remote control and pair devices.</Card>
+</Cards>

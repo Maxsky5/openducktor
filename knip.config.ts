@@ -5,6 +5,13 @@ import webKnipConfig from "./packages/openducktor-web/knip.config";
 export default {
   tags: ["-internal"],
   workspaces: {
+    "apps/docs-website": {
+      entry: ["app/**/*.{ts,tsx}", "scripts/*.ts", "tests/*.test.ts", "browser-tests/*.ts"],
+      project: ["**/*.{ts,tsx}"],
+      // Tailwind loads through PostCSS. GSAP comes in through the product scenes, and
+      // scripts/finish-export.ts reads its license notices from this workspace.
+      ignoreDependencies: ["tailwindcss", "gsap"],
+    },
     "apps/marketing-website": {
       project: ["src/**/*.{ts,astro}", "config/**/*.ts", "scripts/**/*.ts"],
     },

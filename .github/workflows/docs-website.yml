@@ -1,0 +1,177 @@
+name: Docs website
+
+# Builds the documentation export, checks it in Chromium, and publishes it to Cloudflare: a preview
+# for each internal pull request to main, and production from main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The workflow runs for every pull request, so a required check always gets a result. This job
+  # skips the other jobs when no input of the site changed.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      required: ${{ steps.filter.outputs.required }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+          # This read-only job needs credentials to fetch the previous SHA of a push.
+          persist-credentials: true
+      - name: Check all changed docs inputs
+        id: filter
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          case "$EVENT_NAME" in
+            workflow_dispatch)
+              echo "required=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+            pull_request)
+              comparison=("$BASE_SHA...$HEAD_SHA")
+              ;;
+            push)
+              if [[ "$BASE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+                BASE_SHA=$(git hash-object -w -t tree /dev/null)
+              else
+                # A force push can leave its previous SHA outside the fetched branch history.
+                git fetch --no-tags origin "$BASE_SHA"
+              fi
+              comparison=("$BASE_SHA" "$HEAD_SHA")
+              ;;
+            *)
+              echo "::error::Unsupported docs workflow event: $EVENT_NAME"
+              exit 1
+              ;;
+          esac
+
+          # Git checks the complete diff, without GitHub's event path-filter file limit. The
+          # demonstrations render the product scenes, which use the theme package, the build
+          # writes its headers with the build tools, and the asset step copies the favicon from
+          # the app.
+          if git diff --quiet --no-renames "${comparison[@]}" -- \
+            apps/docs-website/ \
+            packages/product-scenes/ \
+            packages/theme/ \
+            packages/build-tools/package.json \
+            packages/build-tools/src/static-site.ts \
+            packages/frontend/src/assets/openducktor-mark.svg \
+            .github/actions/ \
+            .github/workflows/docs-website.yml \
+            package.json \
+            bunfig.toml \
+            tsconfig.base.json \
+            bun.lock; then
+            required=false
+          else
+            status=$?
+            if [[ "$status" -ne 1 ]]; then
+              echo "::error::Cannot compare docs inputs. Check that both event commits are available."
+              exit "$status"
+            fi
+            required=true
+          fi
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: changes
+    if: needs.changes.outputs.required == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Unrelated changes must not cancel a build that needs to publish the site.
+    concurrency:
+      group: docs-build-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    env:
+      DOCS_BUILD_TARGET: ${{ github.event_name == 'pull_request' && 'preview' || 'production' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      # The build fails when a page, a section link, the 404 page, the sitemap, or the search index
+      # is missing from the export.
+      - run: bun run --filter @openducktor/docs-website build
+      # A dry run of both Worker configurations against the Cloudflare asset limits.
+      - run: bun run --filter @openducktor/docs-website worker:check
+      - working-directory: apps/docs-website
+        run: |
+          bunx playwright install --with-deps chromium
+          bun run test:browser
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: docs-browser-report
+          path: |
+            apps/docs-website/playwright-report/
+            apps/docs-website/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: docs-site
+          path: apps/docs-website/out/
+          if-no-files-found: error
+          retention-days: 7
+
+  # A separate job keeps the Cloudflare token away from the build scripts. It installs the locked
+  # Wrangler without install scripts and uploads the built files.
+  deploy:
+    needs: build
+    if: >-
+      github.ref == 'refs/heads/main' || (github.event_name == 'pull_request'
+      && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: docs-deploy-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    environment:
+      name: ${{ github.event_name == 'pull_request' && 'docs-preview' || 'docs-production' }}
+      url: ${{ steps.publish.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Wrangler needs Node 22 or later.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: docs-site
+          path: apps/docs-website/out
+      - id: publish
+        working-directory: apps/docs-website
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WRANGLER_SEND_METRICS: 'false'
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler.jsonl
+          PULL: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$PULL" ]; then
+            bunx wrangler deploy --config wrangler.json
+            echo "url=https://doc.openducktor.dev" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A version upload does not apply the preview URL settings of the configuration.
+          bunx wrangler triggers deploy --config wrangler.preview.json
+          bunx wrangler versions upload --config wrangler.preview.json --preview-alias "pr-$PULL"
+          url=$(jq -er 'select(.type == "version-upload") | .preview_alias_url' "$WRANGLER_OUTPUT_FILE_PATH") \
+            || { echo "::error::Cloudflare gave no preview URL. Enable the workers.dev subdomain."; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"

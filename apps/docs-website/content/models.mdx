@@ -1,0 +1,77 @@
+---
+icon: Sparkles
+title: Models
+description: Choose the default model of each agent role, and change the model, effort, or speed of one session.
+---
+
+Each agent role has a default model, and you can change the model, effort, or speed of one session. Each [harness](/harnesses/) lists the models that your harness account can use.
+
+## Set the default models [#role-defaults]
+
+<Steps>
+<Step>Open [**Settings**](/settings-reference/#open-settings), then **Repositories**, your repository, and **Agents**.</Step>
+<Step>Under **Default model**, select a model in **Runtime and model**. Then select the **Effort**, and the **Agent profile** for OpenCode.</Step>
+<Step>Optional: to give a role another model, select it under **Agent defaults by role**.</Step>
+<Step>Select <Action>Save settings</Action>.</Step>
+</Steps>
+
+A role can use a model of another harness. For example, Spec can use Claude Code while the Builder uses Codex.
+
+<ProductDemo id="runtimes" />
+
+## Which model a session uses [#model-choice]
+
+A new task session uses the first model that is set.
+
+<Diagram name="modelChoice" />
+
+- For a fresh session, the start dialog shows the role default, or the **Default model** if the role has none. You can change the model before you start.
+- Under [**Session mode**](/coding-sessions/#start-a-session), **Fork existing** shows the model of the source session. You can change it. <Action>Generate Pull Request</Action> offers **Fork existing**, and forks a Builder session.
+- **Reuse existing** keeps the model of the session that you reuse. You cannot change it.
+- A new [workspace session](/workspace-sessions/) uses the **Default model**.
+- When [Autopilot](/autopilot/) starts a fresh session, it uses these defaults. Without a role default or a **Default model**, Autopilot cannot start the role.
+- If a saved model is no longer available, the start dialog shows no model, and Autopilot cannot start the role. Choose another model.
+- Running sessions keep their model.
+
+## Change the model of one session [#session-model]
+
+<Steps>
+<Step>In the [start dialog](/coding-sessions/#start-a-session), open **Runtime and model**. In the composer of a running session, select the model name under the message box.</Step>
+<Step>Select a model.</Step>
+<Step>If the model supports it, set **Effort** or **Speed** next to the model.</Step>
+</Steps>
+
+<AnnotatedScreenshot
+  id="session-model-picker"
+  alt="The Runtime and model picker. The left column shows the Favorites star and one icon for each harness. The Claude harness is selected and lists its models, each with a star, and Haiku 5.5 is selected."
+  parts={[
+    { at: "favorites", title: "Favorites", text: "The models that you starred, from all harnesses." },
+    { at: "harnesses", title: "Harnesses", text: "One icon for each harness. Select one to see its models." },
+    { at: "search-models", title: "Search models", text: "Searches the models of all harnesses." },
+    { at: "star", title: "Star", text: "Adds the model to Favorites at once, for all workspaces." },
+  ]}
+/>
+
+When you have favorites, the picker opens on them, and each harness list shows them first.
+
+<AnnotatedScreenshot
+  id="session-composer-model"
+  alt="The composer of a running Codex session. Under the message box are the model GPT-6.1-Sol, the Effort low, and the Speed icon, a crossed-out lightning bolt for Standard."
+  parts={[
+    { at: "model", title: "Model", text: "Lists only the models of the harness that runs the session." },
+    { at: "effort", title: "Effort", text: "How much the model thinks before it answers." },
+    { at: "speed", title: "Speed", text: "How fast the model answers. A higher speed can cost more. A crossed-out icon means Standard." },
+  ]}
+/>
+
+**Speed** is available only with Codex and Claude Code. **Agent profile** is an OpenCode setting. The start dialog calls it **Runtime profile**.
+
+**Speed** has no default. A new or forked session starts at **Standard**. A change in the composer applies to the next turn.
+
+## Next [#next]
+
+<Cards>
+  <Card title="Autopilot" href="/autopilot/">Start each agent with its role model.</Card>
+  <Card title="Coding sessions" href="/coding-sessions/">Start a session with its model.</Card>
+  <Card title="Settings reference" href="/settings-reference/#repository-agents">Read every model setting.</Card>
+</Cards>

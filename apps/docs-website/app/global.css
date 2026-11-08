@@ -1,0 +1,295 @@
+@import "tailwindcss";
+/* The color tokens of Fumadocs without a theme. The page sets its own colors below. */
+@import "fumadocs-ui/css/lib/default-colors.css";
+@import "fumadocs-ui/css/preset.css";
+@import "@openducktor/theme/site-palette.css";
+@import "../components/demo/demo.css";
+@import "../components/inline.css";
+@import "../components/lane-pill.css";
+@import "../components/prompt-anatomy.css";
+@import "../components/media.css";
+@import "../components/cards.css";
+@import "../components/search.css";
+
+/* The fonts. `app/layout.tsx` loads them. Its variables add a fallback with the metrics of each font. */
+@theme {
+  --font-sans:
+    "Space Grotesk Variable", var(--font-docs-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    "IBM Plex Mono", var(--font-docs-mono), "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+
+/*
+ * The Fumadocs colors from the page colors of the websites, in both appearances. This rule comes
+ * after the `.dark` rule of the Fumadocs colors, so it replaces it.
+ */
+:root {
+  --color-fd-background: var(--page);
+  --color-fd-foreground: var(--ink);
+  --color-fd-muted: var(--soft);
+  --color-fd-muted-foreground: var(--body-ink);
+  --color-fd-popover: var(--surface);
+  --color-fd-popover-foreground: var(--ink);
+  --color-fd-card: var(--surface);
+  --color-fd-card-foreground: var(--ink);
+  --color-fd-border: var(--line);
+  --color-fd-primary: var(--accent-ink);
+  --color-fd-primary-foreground: var(--button-ink);
+  --color-fd-secondary: var(--page-alt);
+  --color-fd-secondary-foreground: var(--ink);
+  --color-fd-accent: #ece6ff;
+  --color-fd-accent-foreground: #3a00ad;
+  --color-fd-ring: var(--accent);
+  --color-fd-overlay: rgb(25 35 55 / 0.32);
+}
+
+/* In the dark appearance, the cards and the menus have the alternate page color. */
+:root.dark {
+  --color-fd-popover: var(--page-alt);
+  --color-fd-card: var(--page-alt);
+  --color-fd-accent: #241a46;
+  --color-fd-accent-foreground: #d9cfff;
+  --color-fd-overlay: rgb(0 0 0 / 0.5);
+}
+
+html {
+  scrollbar-gutter: stable;
+  font-synthesis: none;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0 !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* A visible neutral focus ring on every real control. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-fd-ring);
+  outline-offset: 2px;
+}
+
+/*
+ * A tab takes focus when it is pressed, and the browser then shows the keyboard ring. The ring
+ * shows only after keyboard input, and it sits inside the tab because the tab list clips it.
+ */
+[role="tab"]:focus-visible {
+  outline-offset: -2px;
+  border-radius: 0.25rem;
+}
+
+:root[data-input="pointer"] [role="tab"]:focus-visible {
+  outline: none;
+}
+
+/* The title and sections receive focus after a navigation. They show no ring. */
+#docs-title:focus,
+#nd-page :is(h2, h3, h4)[tabindex="-1"]:focus {
+  outline: none;
+}
+
+/* Headings stay below the sticky header and the narrow "On this page" bar when a link opens them. */
+#nd-page :is(h2, h3, h4) {
+  scroll-margin-top: calc(var(--fd-docs-row-3, 0px) + 1.5rem);
+}
+
+.docs-skip-link {
+  position: fixed;
+  inset-inline-start: 1rem;
+  top: 0.75rem;
+  z-index: 60;
+  transform: translateY(-200%);
+  border-radius: 0.5rem;
+  background: var(--color-fd-primary);
+  color: var(--color-fd-primary-foreground);
+  padding: 0.5rem 0.875rem;
+  font-weight: 600;
+}
+
+.docs-skip-link:focus {
+  transform: none;
+}
+
+.docs-brand-mark {
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+}
+
+.docs-brand-mark svg {
+  width: 100%;
+  height: 100%;
+}
+
+.docs-brand-name {
+  white-space: nowrap;
+}
+
+.docs-brand-suffix {
+  color: var(--color-fd-muted-foreground);
+  font-weight: 500;
+}
+
+/* The header controls copy the header of the website. */
+.docs-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.25rem;
+  min-width: 2.25rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.5rem;
+  background: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.docs-icon-button:hover {
+  background: var(--color-fd-muted);
+}
+
+.docs-icon-button svg {
+  width: 1.0625rem;
+  height: 1.0625rem;
+}
+
+/* The appearance switch shows the icon of the other appearance, from the first paint. */
+.dark .docs-appearance-light,
+:root:not(.dark) .docs-appearance-dark {
+  display: none;
+}
+
+/* The Install link of the top bar is the main button of the header, as on the website. */
+.docs-install-button {
+  display: inline-flex;
+  align-items: center;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  padding-inline: 0.875rem;
+  color: var(--button-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.docs-install-button:hover {
+  background: color-mix(in srgb, var(--accent), var(--ink) 14%);
+}
+
+/* The navigation: small group labels, then one row with an icon for each page. */
+.docs-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  margin-bottom: 0.25rem;
+  padding-inline: 0.5rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.docs-nav-group:first-child {
+  margin-top: 0;
+}
+
+#nd-sidebar a[data-active] {
+  padding-block: 0.4375rem;
+  color: color-mix(in oklab, var(--color-fd-foreground) 78%, transparent);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+#nd-sidebar a[data-active] svg {
+  color: var(--color-fd-muted-foreground);
+}
+
+#nd-sidebar a[data-active]:hover {
+  background: var(--color-fd-muted);
+  color: var(--color-fd-foreground);
+}
+
+#nd-sidebar a[data-active="true"] {
+  background: var(--color-fd-accent);
+  color: var(--color-fd-accent-foreground);
+  font-weight: 650;
+}
+
+#nd-sidebar a[data-active="true"] svg {
+  color: var(--color-fd-primary);
+}
+
+/* Keys in the text. A demo is not prose, so its own keycaps keep their style. */
+#nd-page .prose :where(kbd):not(:where(.not-prose kbd)) {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.375rem;
+  background: var(--color-fd-secondary);
+  padding: 0.0625rem 0.375rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125em;
+}
+
+/*
+ * Tailwind gives buttons the default cursor. Every real control of the docs shows the pointer. The
+ * copied product UI of the demonstrations keeps the default cursor, because it does not respond.
+ */
+:where(a[href], button, [role="button"], [role="tab"], summary, select, label[for]):not(
+  :disabled,
+  .replica *
+) {
+  cursor: pointer;
+}
+
+/*
+ * Steps: one short action on each line, with a small number badge on the first line of text. The
+ * Fumadocs steps draw large circles on a rail, which suits steps with headings.
+ */
+.docs-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-block: 1.25rem;
+  padding: 0;
+  list-style: none;
+  counter-reset: docs-step;
+}
+
+.docs-step {
+  position: relative;
+  min-height: 1.75rem;
+  margin: 0;
+  padding-inline-start: 2.375rem;
+  counter-increment: docs-step;
+}
+
+.docs-step::before {
+  content: counter(docs-step);
+  position: absolute;
+  top: 0.125rem;
+  inset-inline-start: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid color-mix(in oklch, var(--color-fd-primary) 35%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in oklch, var(--color-fd-primary) 12%, transparent);
+  color: var(--color-fd-primary);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.docs-step > :first-child {
+  margin-top: 0;
+}
+
+.docs-step > :last-child {
+  margin-bottom: 0;
+}

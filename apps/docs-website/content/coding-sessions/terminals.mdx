@@ -1,0 +1,47 @@
+---
+icon: SquareTerminal
+title: Terminals
+description: Run commands in the task worktree, and run repository actions, beside a session.
+---
+
+A terminal runs a shell in the [worktree](/git-and-pull-requests/#task-worktrees) of the task, or in the folder of the workspace session. You can also use the terminals from the [mobile app](/mobile/review-work/#terminals).
+
+## Open a terminal [#open-a-terminal]
+
+Do one of these:
+
+- At the top right, select <Action>Show bottom panel</Action>. An empty bottom panel opens a new terminal.
+- At the end of the panel tabs, select <Action>+</Action>, then <Action>Terminal</Action>.
+- Select a [repository action](/customize-openducktor/#add-repository-actions) in the top bar of the session. It runs in a new terminal in the bottom panel.
+
+A task or a workspace session can have at most 8 terminals.
+
+Screen readers cannot read the text of a terminal.
+
+<ProductDemo id="terminal" />
+
+## When a terminal stops [#terminal-lifetime]
+
+| When | What happens to the terminal |
+|---|---|
+| You open another page, or reload the page | It keeps running. When you come back, it shows again with its output. |
+| You close its tab | It stops. If a command still runs, OpenDucktor asks first. |
+| Its shell exits | Its output stays, with the exit code under it. |
+| You close, reset, or delete the task, archive the workspace session, or OpenDucktor removes the worktree of a merged task | It stops. |
+| OpenDucktor stops | It stops. |
+
+## Restart a command [#restart-a-command]
+
+With zsh, the tab of a running command shows <Action>Restart command</Action>. It sends <kbd>Ctrl</kbd>+<kbd>C</kbd> to the command, then runs it again in the same terminal.
+
+## Setup actions [#setup-actions]
+
+The actions that run when OpenDucktor creates a worktree also run in terminals. Their tabs do not open the bottom panel. To see their output, select <Action>Show bottom panel</Action>. See [Run setup commands](/customize-openducktor/#run-setup-commands).
+
+## Next [#next]
+
+<Cards>
+  <Card title="Web pages" href="/coding-sessions/web-pages/">Open your dev server beside the session and point the agent to a part of it.</Card>
+  <Card title="Actions, worktrees, and prompts" href="/customize-openducktor/">Add repository actions and setup commands.</Card>
+  <Card title="Mobile" href="/mobile/">Use sessions and terminals from your phone.</Card>
+</Cards>

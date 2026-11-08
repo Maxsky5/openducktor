@@ -380,6 +380,15 @@
       }
     },
     {
+      "files": ["apps/docs-website/**/*.ts", "apps/docs-website/**/*.tsx"],
+      "plugins": ["oxc", "react", "typescript", "unicorn"],
+      "rules": {
+        "react/exhaustive-deps": "warn",
+        "react/no-danger": "warn",
+        "react/rules-of-hooks": "warn"
+      }
+    },
+    {
       "files": ["apps/mobile/**/*.ts", "apps/mobile/**/*.tsx"],
       "plugins": ["oxc", "react", "typescript", "unicorn"],
       "rules": {

@@ -1,0 +1,94 @@
+---
+icon: Globe
+title: Web pages
+description: Open your dev server beside a session, let the agents test it in the browser, and point them to the parts to change.
+---
+
+A browser tab shows a web page beside the session, such as your dev server. The agents can use the browser too: they open pages, click, type, and take screenshots to test their work. You point them to the parts of a page to change with annotations.
+
+A task or a workspace session can have at most 8 browser tabs. The popup windows of a page count too.
+
+## Open a web page [#open-a-web-page]
+
+<Steps>
+<Step>At the end of the panel tabs, select <Action>+</Action>, then <Action>Browser</Action>.</Step>
+<Step>Type an address, for example `localhost:5173`, and press <kbd>Enter</kbd>.</Step>
+</Steps>
+
+<ProductDemo id="browser" />
+
+A browser tab opens only `http` and `https` addresses. If you type no scheme, OpenDucktor adds `http://` for `localhost` and private network addresses, and `https://` for all other addresses. The address bar does not search the web.
+
+To open a link of the transcript or a terminal in a browser tab, select the link, then **OpenDucktor browser**. <kbd>Shift</kbd>+<kbd>Cmd</kbd>+click opens it in a new tab directly. On Windows and Linux, use <kbd>Ctrl</kbd>.
+
+## Let the agents use the browser [#share-with-agents]
+
+The agents of the task use the browser with the OpenDucktor browser tools. Each action shows as a **Browser** card in the transcript. On the page, a ring shows where the agent clicks or types, and a dot pulses on the icon of the tab.
+
+<ProductDemo id="agent-browser" />
+
+An agent sees only two kinds of tabs:
+
+- **Its own tabs.** An agent can open a tab by itself. The tab opens at the end of the right panel with the **Agent** badge. You can use it and close it.
+- **The tabs that you share.** To let the agents use one of your tabs, turn on <Action>Share with agents</Action> in its toolbar. The agents cannot see or use your other tabs.
+
+In a tab that it can use, an agent can read the page, click, type, select, scroll, take screenshots, read the console, and answer the dialogs of the page. It cannot upload files, and it cannot close a tab that you share. If you stop sharing a tab, the actions that the agent sent but did not do yet fail.
+
+An agent never sees the permission requests or the certificate warnings of a page. When a page asks for one, you answer it. See [Site permissions](#site-settings).
+
+In the desktop app, all the tabs of a workspace use the same cookies. Sign in to your app once in your own tab, and the agent tabs are signed in too.
+
+<Callout type="warn" title="Agent tabs use your sign-ins">
+The agent tabs use the sign-ins of all the tabs of the workspace, and an agent can open any address. Do not sign in to a site that the agents must not use.
+</Callout>
+
+The agents of the sessions that OpenDucktor starts get the browser tools: Spec, Planner, Builder, QA, and workspace sessions, on OpenCode, Codex, and Claude Code. An [external MCP client](/external-mcp/) does not get them.
+
+## Annotate a page [#annotate]
+
+An annotation is a note on one or more elements of the page. It tells the agent what to change, and the agent gets the elements and a screenshot with your next message.
+
+<Steps>
+<Step>Select <Action>Annotate</Action>.</Step>
+<Step>Select an element of the page. To add or remove more elements, <kbd>Shift</kbd>+click them.</Step>
+<Step>In **Tell the agent what to change**, type your note, then select <Action>Save</Action>.</Step>
+<Step>Send a message to the agent. Your pending annotations go with it.</Step>
+</Steps>
+
+<ProductDemo id="annotate" />
+
+To check your notes before you send them, select <Action>Pending annotations</Action>. A command such as `/compact` does not send them.
+
+OpenDucktor keeps pending annotations only in memory. A reload of the app deletes them.
+
+## Site permissions [#site-settings]
+
+When a site asks for a permission, such as the camera or your location, a bar shows above the page. Your choice applies to this site in all the tabs of the workspace, also the agent tabs. OpenDucktor keeps it until you remove the workspace.
+
+To change a choice, select <Action>Site settings</Action> at the left of the address. It lists the saved choices for **Camera**, **Microphone**, **Location**, **Notifications**, and **Clipboard read**. Select <Action>Reset</Action>, and the site asks again.
+
+## When a page does not show [#page-problems]
+
+| Message | What to do |
+|---|---|
+| **This site cannot show in a tab** | The site does not let other apps show it. Select <Action>Open in browser</Action> to use your system browser. |
+| **This connection is not private** | The certificate of the site is not valid, for example a self-signed certificate of your dev server. If you trust the site, select <Action>Proceed to this site</Action>. OpenDucktor accepts it until you restart the app. |
+| **This app cannot show pages** | The browser runner shows pages only when you open it at `localhost`, `127.0.0.1`, or `[::1]`. See [In the browser runner](#apps). |
+
+## In the browser runner [#apps]
+
+Everything above is for the desktop app. The [browser runner](/install-and-update/#browser-runner) works in another way, because the page shows in your own browser:
+
+- **Your tabs show only on this computer.** A tab shows the page in a frame of the browser runner. This works only when you open the browser runner at `localhost`, `127.0.0.1`, or `[::1]`. At another address, for example from another computer, the tab shows **This app cannot show pages**.
+- **The agents cannot use your tabs.** Your browser shows the page, so the agents cannot reach it. Share with agents, annotations, and site permissions are not available. Your browser shows the permission requests and the developer tools of the page.
+- **Agent tabs are hidden.** The agents still use the browser: they open their pages in a Chrome that runs on the host, without a window. You see their actions only as **Browser** cards in the transcript. Their first use downloads this Chrome, about 200 MB.
+- **Agent tabs do not use your logins.** Their Chrome has its own cookies, so an agent is not signed in to the sites of your tabs.
+
+A client of a [remote host](/remote-control/) and the [mobile app](/mobile/) show no web pages.
+
+## Next [#next]
+
+<Cards>
+  <Card title="Terminals" href="/coding-sessions/terminals/">Run commands in the task worktree.</Card>
+  <Card title="Coding sessions" href="/coding-sessions/">Follow a session and answer the agent.</Card>
+</Cards>

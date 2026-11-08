@@ -1,0 +1,176 @@
+/*
+ * A product demonstration is a scene of `@openducktor/product-scenes` on the page, with a caption
+ * under it. The scene scales with the width of the article. The styles of the scenes pause their
+ * animations while a scene is off screen or paused, and stop them with reduced motion.
+ */
+.docs-demo {
+  container: docs-demo / inline-size;
+  margin-block: 2rem;
+  /* The animated view changes its content size; the page must not scroll with it. */
+  overflow-anchor: none;
+  /* The layers of a scene, such as its toasts, stay inside it and under the sticky page header. */
+  isolation: isolate;
+  /*
+   * A page with five demonstrations has about 4000 elements, so the browser skips the layout and
+   * the paint of each demonstration that is far from the screen. Until a demonstration shows for
+   * the first time, its height is an estimate.
+   */
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 30rem;
+  /* The skip also clips the paint to the figure, so the shadow of the window needs this margin. */
+  overflow-clip-margin: 7rem;
+}
+
+.docs-demo figcaption {
+  margin-top: 0.75rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* The line under the still frame when the animation of the scene does not load. */
+.docs-demo-error {
+  margin-top: 0.75rem;
+  color: var(--color-fd-error);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* The header button pauses and plays all demonstrations. Its icon shows the next action. */
+.docs-motion-control[aria-pressed="true"] .docs-motion-pause,
+.docs-motion-control:not([aria-pressed="true"]) .docs-motion-play {
+  display: none;
+}
+
+/* With reduced motion no demonstration plays, so the header has no pause button from the first paint. */
+@media (prefers-reduced-motion: reduce) {
+  .docs-motion-control {
+    display: none;
+  }
+}
+
+/*
+ * The chapter player of the workflow scene. The package renders its markup, and the page styles
+ * it. Without JavaScript the panels stack under their own headings. The article is narrow, so each
+ * tab shows its number and its name, and the text of the selected step shows above the window.
+ */
+.docs-demo .chapters {
+  display: grid;
+  gap: 1rem;
+}
+
+.docs-demo .chapter-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 4.5rem), 1fr));
+  gap: 0.5rem;
+}
+
+.docs-demo .chapter-tab {
+  /* The part of the step that has played. The chapter player sets it while the step plays. */
+  --progress: 0;
+  position: relative;
+  display: grid;
+  justify-items: start;
+  row-gap: 0.125rem;
+  padding: 0.875rem 0.25rem 0.25rem;
+  border: 0;
+  background: none;
+  color: var(--color-fd-muted-foreground);
+  font: inherit;
+  text-align: left;
+  transition: color 0.25s ease;
+}
+
+.docs-demo .chapter-bar {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--color-fd-border);
+}
+
+.docs-demo .chapter-bar i {
+  display: block;
+  height: 100%;
+  background: var(--color-fd-primary);
+  transform: scaleX(var(--progress));
+  transform-origin: left;
+}
+
+.docs-demo .chapter-tab[data-state="done"] .chapter-bar i {
+  transform: scaleX(1);
+  opacity: 0.45;
+}
+
+.docs-demo .chapter-tab[aria-selected="true"] .chapter-bar i {
+  transform: scaleX(var(--progress));
+}
+
+/* Without motion, or while it waits off screen, the selected step shows a full bar. */
+.docs-demo .chapters:not([data-motion="running"]) [aria-selected="true"] .chapter-bar i {
+  transform: scaleX(1);
+}
+
+.docs-demo .chapter-index {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.docs-demo .chapter-tab strong {
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  transition: color 0.25s ease;
+}
+
+.docs-demo .chapter-tab:hover strong,
+.docs-demo .chapter-tab[aria-selected="true"] strong {
+  color: var(--color-fd-foreground);
+}
+
+.docs-demo .chapter-text {
+  display: none;
+}
+
+.docs-demo .chapter-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.docs-demo .chapter-panel:focus-visible {
+  outline-offset: 4px;
+  border-radius: 0.75rem;
+}
+
+.docs-demo .chapter-heading {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+/* The text keeps the height of the longest step, so the window does not move when a shorter text shows. */
+.docs-demo .chapter-copy {
+  min-height: calc(4 * 1.6em);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+@container docs-demo (width >= 40rem) {
+  .docs-demo .chapter-copy {
+    min-height: calc(2 * 1.6em);
+  }
+}
+
+.docs-demo .chapters[data-tabs] .chapter-heading {
+  display: none;
+}
+
+.docs-demo .chapters:not([data-tabs]) .chapter-copy {
+  min-height: 0;
+}
+
+.docs-demo .chapters:not([data-tabs]) .chapter-panel + .chapter-panel {
+  margin-top: 2rem;
+}

@@ -1,0 +1,80 @@
+---
+icon: Bell
+title: Notifications
+description: Get notified when an agent needs you, fails, or moves a task, in OpenDucktor or from your operating system.
+---
+
+OpenDucktor notifies you when an agent needs you, fails, or moves a task. A notification shows in OpenDucktor, from your operating system, or both.
+
+## Turn on notifications [#turn-on]
+
+<Steps>
+<Step>Open [**Settings**](/settings-reference/#open-settings), then **Notifications**.</Step>
+<Step>Turn on system notifications for your platform. See [System permission](#permission).</Step>
+<Step>Select <Action>Test in-app notification</Action> and <Action>Test system notification</Action>. A test message shows in the corner of OpenDucktor, and one shows from your operating system.</Step>
+</Steps>
+
+<Screenshot id="settings-notifications" alt="The Notifications settings in the browser runner after you allow notifications: System notifications are on, the Test in-app notification and Test system notification buttons, and the Sound and focus options." />
+
+## System permission [#permission]
+
+<Tabs items={["macOS", "Windows", "Linux", "Browser runner"]}>
+<Tab value="macOS">
+
+The section shows **Turn on system notifications**. In step 3, select <Action>Test system notification</Action>, then select **Allow** in the macOS request. If the section shows **System notifications are off**, select <Action>Open system settings</Action> and turn on notifications for OpenDucktor.
+
+</Tab>
+<Tab value="Windows">
+
+The section shows **System notifications are available**. If no test notification shows, select <Action>Open system settings</Action> and turn on notifications for OpenDucktor.
+
+</Tab>
+<Tab value="Linux">
+
+The section shows **System notifications are available**. Linux does not report a permission for each app, so check the notification settings of your desktop. If the section shows **System notifications are unavailable**, your desktop has no notification service. Use **In-app** delivery.
+
+</Tab>
+<Tab value="Browser runner">
+
+Select <Action>Allow notifications</Action>, then allow them in the browser request. If the section shows **System notifications are off**, allow notifications for the site in the browser settings. If the section shows **System notifications are unavailable**, use a current Chrome, Edge, Firefox, or Safari, or use **In-app** delivery.
+
+</Tab>
+</Tabs>
+
+## Where notifications show [#delivery]
+
+Each event uses one **Delivery**: **In-app**, **System**, or **Both**. An in-app message shows in the corner of OpenDucktor for 10 seconds. Select <Action>Open</Action> to go to the session or task.
+
+<Screenshot id="notification-toast" alt='An in-app notification in the corner of OpenDucktor: the role and task, Spec - Pin notebooks to the sidebar, the request "Codex wants to run a shell command: node --version", a close button, and Open.' />
+
+By default, system notifications show only when OpenDucktor does not have focus (**When unfocused**). Sounds do not play while OpenDucktor has focus (**Mute when focused**). To change this, set **System notifications** to **Always** and **Notification sounds** to **Always play**.
+
+## Choose the events [#events]
+
+Each event has a rule. Turn on its **Enabled** switch, then choose its **Delivery** and its **Sound**.
+
+<Screenshot id="settings-notification-rules" alt="The Agent activity rules: Permission request, Question, Session error, Session started, and Session idle, each with a Delivery choice, a Sound menu, and an Enabled switch." />
+
+| Event | When it shows | Default |
+|---|---|---|
+| **Permission request** | An agent asks for a permission. | **Both**, **Open** sound |
+| **Question** | An agent asks you a question. | **Both**, **Open** sound |
+| **Session error** | A session fails. | **Both** |
+| **Session started** | A main session starts. | **In-app** |
+| **Session idle** | The agent finishes its turn and waits for you. | Off (**Both** when you turn it on) |
+| **Spec Ready**, **Ready for Dev**, **In Progress**, **AI Review**, **Human Review** | A task moves to this lane of [Spec, Plan, Build](/tasks-and-workflows/spec-plan-build/#lanes). Each workflow declares its own lane events. | **Both** |
+| **Task Blocked** | The Builder [blocks a task](/tasks-and-workflows/spec-plan-build/#blocked-work). | **Both**, **Open** sound |
+| **Task Closed** | A task moves to **Done**. | **In-app** |
+| **Task not closed** | The pull request of a task merged, but OpenDucktor could not close the task. See [Approve a task](/git-and-pull-requests/#approve-a-task). | **Both** |
+
+Keep **Permission request** and **Question** on, because the agent waits until you reply.
+
+A rule with no sound in the table uses **Use global sound**. It plays the **Default sound**, which is **Success** at 30% volume until you change it.
+
+## Next [#next]
+
+<Cards>
+  <Card title="Coding sessions" href="/coding-sessions/">Answer the questions and permissions of an agent.</Card>
+  <Card title="Autopilot" href="/autopilot/">Let OpenDucktor start the next agent when a task moves.</Card>
+  <Card title="Settings reference" href="/settings-reference/#notifications">Look up each notification setting.</Card>
+</Cards>
