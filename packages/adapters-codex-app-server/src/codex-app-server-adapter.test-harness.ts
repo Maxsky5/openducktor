@@ -421,6 +421,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
   goalError: Error | null = null;
   /** Runs before a goal request answers, like a goal update that Codex sends first. */
   beforeGoalAnswer: (() => Promise<void>) | null = null;
+  beforeSettingsAnswer: (() => Promise<void>) | null = null;
   private turnStartCount = 0;
 
   constructor(
@@ -486,9 +487,11 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           ? { ...result, thread: codexThreadFixture({ id: threadId, status: { type: "idle" } }) }
           : result;
       }
+      case "thread/settings/update":
+        await this.beforeSettingsAnswer?.();
+        return {};
       case "thread/name/set":
       case "thread/compact/start":
-      case "thread/settings/update":
       case "turn/interrupt":
         return {};
       case "thread/unsubscribe":

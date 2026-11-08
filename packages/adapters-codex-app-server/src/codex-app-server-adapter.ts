@@ -1013,17 +1013,21 @@ export class CodexAppServerAdapter
   ): Promise<typeof GOAL_COMMAND_ACCEPTED> {
     const session = this.requireRegisteredSession(input, "change the goal of");
     await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
-    (options.assertCurrent ?? input.workStartGuard?.assertCurrent)?.();
+    const assertCurrent = options.assertCurrent ?? input.workStartGuard?.assertCurrent;
+    assertCurrent?.();
     const { goals } = this.runtimeEvents;
     const revisionBefore = goals.revision(session.runtimeId, session.threadId);
     const client = this.runtimeClients.clientForRuntime(session.runtimeId);
     // Codex starts goal turns itself, so they use the thread settings, not the settings of a
     // `turn/start`. The goal turns then run with the selected model, effort, and speed.
-    if (goalCommandStartsWork(input.command) && session.model)
+    if (goalCommandStartsWork(input.command) && session.model) {
       await client.threadSettingsUpdate({
         threadId: session.threadId,
         ...toTransportModelSelection(session.model),
       });
+      // A Stop during the settings update cancels the goal action before it starts work.
+      assertCurrent?.();
+    }
     // A Stop while Codex has not answered a set or resume still pauses the goal.
     const endActivation = goalCommandStartsWork(input.command)
       ? goals.beginActivation(session.runtimeId, session.threadId)

@@ -171,6 +171,30 @@ describe("CodexAppServerAdapter goals", () => {
     }
   });
 
+  test("does not resume a goal when Stop comes during the settings update", async () => {
+    const session = await startGoalSession();
+    let stopped = false;
+    try {
+      await session.emitGoal({ status: "paused" });
+      session.transport.beforeSettingsAnswer = async () => {
+        stopped = true;
+      };
+      const resuming = session.adapter.controlGoal(
+        { ...session.ref, command: { kind: "resume" } },
+        {
+          assertCurrent: () => {
+            if (stopped) throw new Error("Session launch was canceled.");
+          },
+        },
+      );
+
+      await expect(resuming).rejects.toThrow("Session launch was canceled.");
+      expect(goalCalls(session)).toEqual([]);
+    } finally {
+      session.unsubscribe();
+    }
+  });
+
   test("applies the selected model settings before a goal starts work", async () => {
     const session = await startGoalSession();
     try {
