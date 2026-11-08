@@ -5,6 +5,7 @@ import {
 } from "../../interface/commands/agent-session-live-command-handlers";
 import { createAgentRuntimeQueryCommandHandlers } from "../../interface/commands/agent-runtime-query-command-handlers";
 import { createClaudeToolCatalogService } from "../../application/runtimes/claude-tool-catalog-service";
+import { createAgentTextGenerationService } from "../../application/runtimes/agent-text-generation-service";
 import { createModelCatalogPreviewComposition as previewModels } from "./model-catalog-preview-composition";
 import type { createNodeSessionLaunchControls } from "./node-session-launch-controls";
 import type { createNodeMessageDelivery } from "./node-message-delivery";
@@ -51,6 +52,7 @@ export const createNodeWorkflowCommandHandlers = ({
     taskSessions.agentRuntimeQueries,
     previewModels(defaultPorts, git, runtimeDefinitionsService, clientVersion),
     createClaudeToolCatalogService({ runtimeRegistry, adapterRegistry }),
+    createAgentTextGenerationService({ runtimeRegistry, adapterRegistry }),
   ),
   ...createTaskAssetCommandHandlers(taskAssetStagingService),
   ...createTaskCommandHandlers(taskSessions.taskService),

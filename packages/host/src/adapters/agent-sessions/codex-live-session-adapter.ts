@@ -4,6 +4,7 @@ import { createCodexControlPolicyBinder } from "./codex-control-policy";
 import { createCodexRuntimeTransport } from "./codex-runtime-transport";
 import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import { createCodexImageOperations } from "./codex-image-operations";
+import { createCodexTextGeneration } from "./codex-text-generation";
 import { createCodexImageSettlement } from "./codex-live-session-images";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import {
@@ -209,7 +210,6 @@ export const createCodexLiveSessionAdapterPreparer = ({
       const messageError = (operation: string, input: AgentSessionLiveRef) => (cause: unknown) =>
         toCodexMessageSendError(cause, toCodexLiveSessionRef(input)) ??
         sessionError(operation, input.externalSessionId)(cause);
-
       const goals = createCodexGoalControls({
         controller,
         refreshProjection,
@@ -229,6 +229,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
           refreshProjection,
         ),
         queries: { ...queries, loadRuntimeCatalog },
+        textGeneration: createCodexTextGeneration(controller, runtime.runtimeId),
         ...createCodexImageOperations(controller, sessionError),
         supportsSessionControl: true,
         binding: projection.binding,

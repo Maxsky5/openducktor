@@ -178,6 +178,20 @@ The runtime owns the goal state. OpenDucktor stores no goal data and runs no goa
 - The OpenCode goal plugin `opencode.goal` is not a protected plugin, so a config entry `"-opencode.goal"` in `plugins` turns it off. The goal read then fails with `rpc.unavailable`, and the adapter reports no goal. A `/goal` command fails with `CommandNotFoundError`, and the adapter names the config entry in the reason.
 - The OpenCode goal plugin writes no user message for `/goal <objective>`. It writes a synthetic message with `metadata.source: "goal"`, and only the message that starts a goal has a `description`. The adapter shows that message as the user message `/goal <objective>`, live and in history. It reads the objective from the `<untrusted_objective>` block and undoes the escapes of `&`, `<`, and `>`.
 
+### Text generation
+
+The `agent_runtime_generate_text` host command asks one runtime model for one text. The input names the repository, the model, the instructions, and the prompt. The command returns the final text of the model. Each feature that needs generated text uses this command, with its own instructions.
+
+- The runtime gives the model no tools and keeps no session, so a generation reads only the instructions and the prompt and changes nothing.
+- The caller sends all the material that the model needs in the prompt.
+- An adapter that can generate text sets `textGeneration` on its live session adapter.
+
+| Runtime | Request | No tools and no session |
+| --- | --- | --- |
+| Claude | One `query()` with a string prompt | `tools: []`, `mcpServers: {}`, `strictMcpConfig`, `settingSources: []`, `persistSession: false`, `maxTurns: 1`. The instructions replace the system prompt. |
+| Codex | `thread/start`, then one `turn/start`, then `thread/unsubscribe` | An `ephemeral` thread with `sandbox: "read-only"`, `approvalPolicy: "never"`, and `environments: []`. The instructions are the developer instructions. The thread has no session, so its events go only to the wait for its answer. |
+| OpenCode | `generate.text` | OpenCode makes one stateless model call. It takes no system prompt, so the instructions start the prompt. |
+
 ### History
 
 | Field | Meaning |

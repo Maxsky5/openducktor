@@ -74,6 +74,7 @@ type ControlCall = {
       | "stop"
       | "release"
       | "goal"
+      | "generate"
   ]: {
     operation: Operation;
     input: Parameters<
@@ -88,6 +89,7 @@ type ControlCall = {
         stop: "stopSession";
         release: "releaseSession";
         goal: "controlGoal";
+        generate: "generateText";
       }[Operation]]
     >[0];
   };
@@ -101,7 +103,8 @@ type ControlCall = {
   | "title"
   | "stop"
   | "release"
-  | "goal"];
+  | "goal"
+  | "generate"];
 
 type RuntimeHarness = {
   readonly prepareRuntime: PrepareOpencodeSessionRuntime;
@@ -139,6 +142,10 @@ export const createRuntimeHarness = (
   const sessionSourceReadRepos: string[] = [];
 
   const connection: OpencodeSessionRuntimeConnection = {
+    generateText: async (input) => {
+      controlCalls.push({ operation: "generate", input });
+      return `Generated: ${input.prompt}`;
+    },
     readSessionSources: async (repoPath, roots) => {
       sessionSourceReadCalls += 1;
       sessionSourceReadRepos.push(repoPath);

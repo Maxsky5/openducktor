@@ -63,6 +63,7 @@ A launch action that declares `goal` shows a Goal mode switch in its start form,
 
 - The switch is off each time the form opens. When it is on, the Goal field shows the default goal text of the launch with the task ID, the task title, and any human feedback.
 - Goal mode replaces the first message. When the switch is on, the form hides "Customize first message", and the agent receives only the goal.
+- "Generate goal" asks the repository default model to write the goal from the task description, the workflow artifacts, the human feedback, and the default goal. The result replaces the goal text. Without a default model, the button is off and the form shows why. The generation uses `agent_runtime_generate_text`.
 - Each built-in default goal follows the OpenAI `define-goal` skill. It states the outcome, the checks that prove it, the `build-completed` submit step, the task scope, and when the agent must stop and ask.
 - An empty goal or a goal over 4000 characters disables the start and shows the reason.
 - A runtime without goals, such as OpenCode older than 2.2.1, disables the switch and shows the reason with its update action.

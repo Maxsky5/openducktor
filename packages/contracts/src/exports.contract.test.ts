@@ -163,6 +163,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "claudeToolName",
   "claudeToolCatalogInputSchema",
   "claudeToolCatalogSchema",
+  "agentTextGenerationInputSchema",
+  "agentTextGenerationResultSchema",
   "claudePermissionModeSchema",
   "claudePolicyFieldsSchema",
   "claudeRuntimeConfigSchema",

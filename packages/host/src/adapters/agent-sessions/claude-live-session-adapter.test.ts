@@ -337,6 +337,7 @@ const createHarness = async (
     liveSessionLifecycle,
     service,
     sessionStore,
+    textGeneration: { generate: () => Effect.die("Unexpected text generation") },
     workingDirectoryDependencies: workingDirectoryDependenciesOverride,
   };
   const prepare = createClaudeLiveSessionAdapterPreparer(prepareInput);

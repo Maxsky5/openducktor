@@ -61,6 +61,7 @@ import {
 } from "./codex-subagent-link-state";
 import { createCodexEventMappers } from "./event-mappers";
 import { CodexGoalState } from "./codex-goal-state";
+import { CodexTextAnswers } from "./codex-text-answers";
 import { createActiveCodexTurn, runningTurnOf } from "./codex-turn-lifecycle";
 import type {
   CodexAppServerAdapterOptions,
@@ -204,6 +205,8 @@ export class CodexRuntimeSessionEvents {
   >();
   private readonly contextUsage: CodexContextUsageTracker;
   private readonly goalState = new CodexGoalState();
+  /** The answers of text generation threads, which have no session. */
+  readonly textAnswers = new CodexTextAnswers();
   /** The goal reads of the adapter. Only Codex goal notifications change a goal. */
   readonly goals: Pick<
     CodexGoalState,
@@ -264,6 +267,7 @@ export class CodexRuntimeSessionEvents {
 
   clearRuntime(runtimeId: string): void {
     this.goalState.clearRuntime(runtimeId);
+    this.textAnswers.clearRuntime(runtimeId);
     this.turnMessageIdsByRuntimeId.delete(runtimeId);
     this.liveImages.cancel(runtimeId);
     this.imageGenerations.clearRuntime(runtimeId);
@@ -742,6 +746,7 @@ export class CodexRuntimeSessionEvents {
     }
     const isServerRequest = isServerRequestStreamEvent(event);
     const threadId = threadIdFromRuntimeStreamEvent(event);
+    if (threadId && this.textAnswers.observe(event, threadId)) return;
     if (!threadId) {
       if (isServerRequest && event.kind !== "fault") {
         this.emitUnroutableRuntimeServerRequest(event.runtimeId);

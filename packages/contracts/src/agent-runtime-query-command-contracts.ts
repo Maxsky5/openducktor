@@ -11,6 +11,10 @@ import {
 } from "./agent-engine-schemas";
 import { agentFileReferenceSchema, agentToolPartSchema } from "./agent-session-event-schemas";
 import {
+  agentTextGenerationInputSchema,
+  agentTextGenerationResultSchema,
+} from "./agent-text-generation-schemas";
+import {
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
   agentSessionScopeSchema,
@@ -150,6 +154,11 @@ export const AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS = {
     command: "agent_runtime_claude_tool_catalog",
     inputSchema: claudeToolCatalogInputSchema,
     responseSchema: claudeToolCatalogSchema,
+  },
+  generateText: {
+    command: "agent_runtime_generate_text",
+    inputSchema: agentTextGenerationInputSchema,
+    responseSchema: agentTextGenerationResultSchema,
   },
   previewModels: {
     command: "agent_runtime_preview_models",

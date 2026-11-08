@@ -26,6 +26,7 @@ import type {
 
 export type CodexSessionController = Pick<
   CodexAppServerAdapter,
+  | "generateText"
   | "listSessionMetadataPage"
   | "openExistingSession"
   | "resolveSessionParent"

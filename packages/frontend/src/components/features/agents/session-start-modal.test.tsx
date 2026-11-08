@@ -356,7 +356,11 @@ describe("SessionStartModal", () => {
       createElement(SessionStartModal, {
         model: createModel({
           onConfirm,
-          goalMode: { defaultObjective: 'Implement task T-1 "Goals".', unavailableReason: null },
+          goalMode: {
+            defaultObjective: 'Implement task T-1 "Goals".',
+            unavailableReason: null,
+            generation: { kind: "unavailable", reason: "Set a default model." },
+          },
         }),
       }),
     );
@@ -388,7 +392,11 @@ describe("SessionStartModal", () => {
         model: createModel({
           onConfirm,
           kickoffPrompt: "Implement this task.",
-          goalMode: { defaultObjective: 'Implement task T-1 "Goals".', unavailableReason: null },
+          goalMode: {
+            defaultObjective: 'Implement task T-1 "Goals".',
+            unavailableReason: null,
+            generation: { kind: "unavailable", reason: "Set a default model." },
+          },
         }),
       }),
     );
@@ -409,6 +417,53 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
+  test("Generate goal replaces the goal text with the agent goal", async () => {
+    let finish: (text: string) => void = () => {};
+    const run = mock(() => new Promise<string>((resolve) => (finish = resolve)));
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          goalMode: {
+            defaultObjective: 'Implement task T-1 "Goals".',
+            unavailableReason: null,
+            generation: { kind: "available", run },
+          },
+        }),
+      }),
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Goal mode" }));
+    fireEvent.click(screen.getByRole("button", { name: "Generate goal" }));
+    expect(screen.getByRole("button", { name: "Generating goal…" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    await act(async () => finish("Task T-1 is done when its tests pass."));
+    expect(screen.getByRole("textbox", { name: "Goal" })).toHaveProperty(
+      "value",
+      "Task T-1 is done when its tests pass.",
+    );
+    expect(run).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  test("Generate goal is off with the reason when the repository has no default model", () => {
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          goalMode: {
+            defaultObjective: "Implement it.",
+            unavailableReason: null,
+            generation: { kind: "unavailable", reason: "Set a default model." },
+          },
+        }),
+      }),
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Goal mode" }));
+    expect(screen.getByRole("button", { name: "Generate goal" })).toHaveProperty("disabled", true);
+    expect(screen.getByText("Set a default model.")).toBeTruthy();
+    unmount();
+  });
+
   test("Goal mode stays off with the reason when the runtime has no goals", () => {
     const { unmount } = render(
       createElement(SessionStartModal, {
@@ -416,6 +471,7 @@ describe("SessionStartModal", () => {
           goalMode: {
             defaultObjective: "Implement it.",
             unavailableReason: "Goals need OpenCode 2.2.1 or later. Run `opencode upgrade`.",
+            generation: { kind: "unavailable", reason: "Set a default model." },
           },
         }),
       }),

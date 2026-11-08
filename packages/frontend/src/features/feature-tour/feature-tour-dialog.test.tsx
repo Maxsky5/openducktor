@@ -302,8 +302,8 @@ describe("FeatureTourDialog", () => {
     const view = renderTour();
     try {
       const tour = await openTour();
-      await clickNext(tour, 3);
-      expect(tour.getByText("4 of 8")).toBeDefined();
+      await openStep(tour, "Slide 2: Workspaces hold your work");
+      expect(tour.getByText("2 of 8")).toBeDefined();
       await act(async () => {
         fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
       });

@@ -259,6 +259,9 @@ const createControllerHarness = ({
       options = nextOptions;
       return {
         ...unexpectedNativeRuntimeQueries,
+        generateText: async () => {
+          throw new Error("Unexpected text generation");
+        },
         resolvePendingApproval: () => {
           throw new Error("unexpected pending approval resolution");
         },

@@ -557,7 +557,7 @@ function GoalModeField({
         />
       </View>
       {goal.enabled ? (
-        <Animated.View entering={REVEAL_ENTERING} exiting={REVEAL_EXITING}>
+        <Animated.View entering={REVEAL_ENTERING} exiting={REVEAL_EXITING} style={styles.goalField}>
           <TextField
             label="Goal"
             value={goal.text}
@@ -566,10 +566,26 @@ function GoalModeField({
               goal.setText(text);
             }}
             multiline
-            editable={!busy}
-            error={goal.error}
+            editable={!busy && !goal.generation.running}
+            error={goal.error ?? goal.generation.error}
             style={styles.goalInput}
           />
+          <Button
+            label={goal.generation.running ? "Generating goal…" : "Generate goal"}
+            icon="sparkles"
+            variant="tinted"
+            size="sm"
+            loading={goal.generation.running}
+            disabled={busy || goal.generation.unavailableReason !== null}
+            accessibilityHint={goal.generation.unavailableReason ?? undefined}
+            onPress={() => {
+              onEdit();
+              goal.generation.start();
+            }}
+          />
+          {goal.generation.unavailableReason ? (
+            <Text style={styles.generationNote}>{goal.generation.unavailableReason}</Text>
+          ) : null}
         </Animated.View>
       ) : null}
     </View>
@@ -607,4 +623,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   promptInput: { minHeight: 180, maxHeight: 360, textAlignVertical: "top" },
   goalInput: { minHeight: 88, maxHeight: 240, textAlignVertical: "top" },
+  goalField: { gap: theme.space.sm, alignItems: "stretch" },
+  generationNote: { fontSize: 13, lineHeight: 18, color: theme.desktop.mutedForeground },
 }));

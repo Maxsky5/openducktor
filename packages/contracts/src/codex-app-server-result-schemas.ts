@@ -115,6 +115,10 @@ export type CodexAppServerThreadGoalSetResult = z.output<
   typeof codexAppServerThreadGoalSetResultSchema
 >;
 const codexAppServerThreadGoalClearResultSchema = z.object({ cleared: z.boolean() });
+const codexAppServerThreadUnsubscribeResultSchema = z.object({ status: z.string() });
+export type CodexAppServerThreadUnsubscribeResult = z.output<
+  typeof codexAppServerThreadUnsubscribeResultSchema
+>;
 export type CodexAppServerThreadGoalClearResult = z.output<
   typeof codexAppServerThreadGoalClearResultSchema
 >;
@@ -158,6 +162,7 @@ export type CodexAppServerRequestResultMap = {
   "thread/goal/set": CodexAppServerThreadGoalSetResult;
   "thread/goal/clear": CodexAppServerThreadGoalClearResult;
   "thread/settings/update": CodexAppServerThreadSetNameResult;
+  "thread/unsubscribe": CodexAppServerThreadUnsubscribeResult;
   "thread/turns/list": CodexAppServerThreadTurnsListResponse;
   "skills/list": CodexAppServerSkillsListResponse;
   "turn/start": CodexAppServerTurnStartResult;
@@ -187,6 +192,7 @@ const codexAppServerRequestResultSchemas: CodexAppServerRequestResultSchemaMap =
   "thread/goal/set": codexAppServerThreadGoalSetResultSchema,
   "thread/goal/clear": codexAppServerThreadGoalClearResultSchema,
   "thread/settings/update": codexAppServerEmptyResponseSchema,
+  "thread/unsubscribe": codexAppServerThreadUnsubscribeResultSchema,
   "thread/turns/list": codexAppServerThreadTurnsListResponseSchema,
   "skills/list": codexAppServerSkillsListResponseSchema,
   "turn/start": codexAppServerTurnStartResultSchema,

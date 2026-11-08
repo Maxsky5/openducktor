@@ -1,3 +1,4 @@
+import { createClaudeTextGeneration } from "../../adapters/claude/claude-text-generation";
 import type { WorkflowRolePolicyResolver } from "@openducktor/core";
 import type { ClaudeLaunchPolicyPort } from "../../application/runtimes/claude-launch-policy";
 import type { Effect } from "effect";
@@ -78,6 +79,10 @@ export const createClaudeRuntimeComposition = ({
       liveSessionLifecycle,
       service: createClaudeAgentSdkService(agentSdkServiceInput),
       sessionStore,
+      textGeneration: createClaudeTextGeneration({
+        claudeExecutablePath,
+        processEnv: agentSdkServiceInput.processEnv,
+      }),
       workingDirectoryDependencies,
     })(runtime);
   };

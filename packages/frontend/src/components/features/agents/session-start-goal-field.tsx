@@ -1,4 +1,6 @@
+import { LoaderCircle, Sparkles } from "lucide-react";
 import type { JSX } from "react";
+import { Button } from "@/components/ui/button";
 import { CssPresenceReveal } from "@/components/ui/css-presence-reveal";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +16,7 @@ export function SessionStartGoalField({
 }): JSX.Element | null {
   if (!draft.offered) return null;
   const unavailable = draft.unavailableReason !== null;
+  const { generation } = draft;
   return (
     <div className="flex flex-col">
       <div className="flex flex-col gap-1">
@@ -36,16 +39,43 @@ export function SessionStartGoalField({
         ) : null}
       </div>
       <CssPresenceReveal open={draft.enabled} className="flex flex-col gap-1.5 pt-3">
-        <label htmlFor="session-start-goal" className="text-sm font-medium">
-          Goal
-        </label>
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor="session-start-goal" className="text-sm font-medium">
+            Goal
+          </label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={disabled || generation.running || generation.unavailableReason !== null}
+            aria-describedby={
+              generation.unavailableReason ? "session-start-goal-generation-unavailable" : undefined
+            }
+            onClick={generation.start}
+          >
+            {generation.running ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
+              <Sparkles className="size-4" />
+            )}
+            {generation.running ? "Generating goal…" : "Generate goal"}
+          </Button>
+        </div>
         <p id="session-start-goal-hint" className="text-sm text-muted-foreground">
           The agent gets this goal instead of a first message, and works until the goal is met.
         </p>
+        {generation.unavailableReason ? (
+          <p
+            id="session-start-goal-generation-unavailable"
+            className="text-sm text-muted-foreground"
+          >
+            {generation.unavailableReason}
+          </p>
+        ) : null}
         <Textarea
           id="session-start-goal"
           value={draft.text}
-          disabled={disabled}
+          disabled={disabled || generation.running}
           rows={11}
           aria-invalid={draft.error !== null}
           aria-describedby={
@@ -58,6 +88,11 @@ export function SessionStartGoalField({
         {draft.error ? (
           <p id="session-start-goal-error" role="alert" className="text-sm text-destructive">
             {draft.error}
+          </p>
+        ) : null}
+        {generation.error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {generation.error}
           </p>
         ) : null}
       </CssPresenceReveal>

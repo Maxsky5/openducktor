@@ -24,6 +24,7 @@ import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentGeneratedImageSource } from "@openducktor/core";
 import { CodexGeneratedImageResolver } from "./codex-generated-image-resolver";
 import {
+  type AgentTextGenerationInput,
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
   type AgentSessionLiveSnapshot,
@@ -1041,6 +1042,39 @@ export class CodexAppServerAdapter
       this.runtimeEvents.waitForGoalTurn(session);
     }
     return GOAL_COMMAND_ACCEPTED;
+  }
+
+  /**
+   * One model answer in an ephemeral thread: Codex keeps no session, the sandbox is read-only, no
+   * environment is open, and no approval can come. The thread has no OpenDucktor session, so its
+   * events go only to the answer wait.
+   */
+  async generateText(runtimeId: string, input: AgentTextGenerationInput): Promise<string> {
+    await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+    const client = this.runtimeClients.clientForRuntime(runtimeId);
+    const model = toTransportModelSelection(input.model);
+    const { thread } = await client.threadStart({
+      cwd: input.repoPath,
+      model: model.model,
+      ephemeral: true,
+      approvalPolicy: "never",
+      sandbox: "read-only",
+      environments: [],
+      developerInstructions: input.instructions,
+    });
+    const { textAnswers } = this.runtimeEvents;
+    const answer = textAnswers.wait(runtimeId, thread.id);
+    try {
+      await client.turnStart({
+        threadId: thread.id,
+        input: [{ type: "text", text: input.prompt, text_elements: [] }],
+        ...model,
+      });
+      return await answer;
+    } finally {
+      textAnswers.forget(runtimeId, thread.id);
+      await client.threadUnsubscribe({ threadId: thread.id });
+    }
   }
 
   /**

@@ -1,3 +1,4 @@
+import type { AgentTextGenerationPort } from "../../ports/agent-text-generation-port";
 import type { OpencodeSessionRuntimeConnection } from "@openducktor/adapters-opencode-sdk";
 import {
   type AcceptedAgentInput,
@@ -74,13 +75,17 @@ const toOpenCodeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUser
   };
 };
 
+type OpenCodeSessionControls = AgentSessionControlAdapterPort & {
+  readonly textGeneration: AgentTextGenerationPort;
+};
+
 export const createOpenCodeSessionControlAdapter = ({
   runtime,
   connection,
   state,
   serializeRuntime,
   commit,
-}: CreateOpenCodeSessionControlAdapterInput): AgentSessionControlAdapterPort => {
+}: CreateOpenCodeSessionControlAdapterInput): OpenCodeSessionControls => {
   const sendGate = createSerialGate();
 
   const runSummary = (
@@ -167,7 +172,14 @@ export const createOpenCodeSessionControlAdapter = ({
     return request;
   };
 
-  const controls: AgentSessionControlAdapterPort = {
+  const controls: OpenCodeSessionControls = {
+    textGeneration: {
+      generate: (input) =>
+        Effect.tryPromise({
+          try: () => connection.generateText(input),
+          catch: (cause) => toHostOperationError(cause, "opencode-live-session.generate-text"),
+        }),
+    },
     startSession: (input) => {
       const request: Parameters<typeof connection.startSession>[0] = {
         repoPath: input.repoPath,

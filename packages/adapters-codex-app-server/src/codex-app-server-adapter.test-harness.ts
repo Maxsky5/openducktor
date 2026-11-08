@@ -491,6 +491,8 @@ export class RecordingTransport implements CodexJsonRpcTransport {
       case "thread/settings/update":
       case "turn/interrupt":
         return {};
+      case "thread/unsubscribe":
+        return { status: "unsubscribed" };
       case "thread/goal/set":
         if (this.goalError) throw this.goalError;
         await this.beforeGoalAnswer?.();

@@ -16,6 +16,7 @@ import {
   isManualSessionCompactionSlashCommand,
   type AgentSessionScope,
   type AgentSessionControlUpdateTitleInput,
+  type AgentTextGenerationInput,
 } from "@openducktor/contracts";
 import {
   AgentSessionMessageAcceptanceUnknownError,
@@ -663,6 +664,28 @@ export class OpencodeSdkAdapter {
       if (!submitted) throw new AgentSessionMessageRefusedError(cause);
       throw cause;
     });
+  }
+
+  /**
+   * One stateless model answer. OpenCode `generate.text` keeps no session and gives the model no
+   * tools. It takes no system prompt, so the instructions start the prompt.
+   */
+  async generateText(input: AgentTextGenerationInput): Promise<string> {
+    const { modelId: id, providerId: providerID, variant } = input.model;
+    const model: NonNullable<Parameters<OpenCodeClient["generate"]["text"]>[0]["model"]> = variant
+      ? { id, providerID, variant }
+      : { id, providerID };
+    return nativeRequest(
+      { repoPath: input.repoPath },
+      "generate text",
+      async () =>
+        (
+          await this.client.generate.text({
+            prompt: `${input.instructions}\n\n${input.prompt}`,
+            model,
+          })
+        ).text,
+    );
   }
 
   /**

@@ -78,6 +78,7 @@ export const createClaudeLiveSessionAdapterPreparer =
     liveSessionLifecycle,
     service,
     sessionStore,
+    textGeneration,
     workingDirectoryDependencies,
   }: CreateClaudeLiveSessionAdapterPreparerInput): ClaudeRuntimeSessionAdapterPreparer =>
   (runtimeInput) =>
@@ -238,6 +239,7 @@ export const createClaudeLiveSessionAdapterPreparer =
 
       const adapter: AgentSessionRuntimeAdapterPort = {
         claudeToolCatalog: { load: (input) => service.loadToolCatalog(input) },
+        textGeneration,
         sessionImport: createClaudeSessionImportAdapter(
           service,
           runtime.runtimeId,

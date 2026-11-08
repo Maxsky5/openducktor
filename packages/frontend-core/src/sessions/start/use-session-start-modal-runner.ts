@@ -1,3 +1,9 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { repoDefaultModelSelectionFor } from "../session-start-selection";
+import {
+  GOAL_GENERATION_NEEDS_DEFAULT_MODEL,
+  generateSessionStartGoal,
+} from "./session-start-goal-generation";
 import { launchGoalObjective, supportsTaskTargetBranchSelection } from "@openducktor/workflows";
 import type { GitBranch, RuntimeKind } from "@openducktor/contracts";
 import type { AgentDeliveryAvailability, AgentModelSelection } from "@openducktor/core";
@@ -90,6 +96,7 @@ export function useSessionStartModalRunner({
   onBackgroundTransfer?: ((attemptId: string) => void) | undefined;
 }): SessionStartModalRunnerResult {
   const { feedback, startupAttempts } = useClientConnection();
+  const queryClient = useQueryClient();
   const scopeRef = useRef(scopeKey);
   const pendingRunRef = useRef<PendingModalRun | null>(null);
   const startupAttemptId =
@@ -165,11 +172,27 @@ export function useSessionStartModalRunner({
       intent.kickoff?.request.humanFeedback,
     );
     if (defaultObjective === undefined) return undefined;
+    const model = repoDefaultModelSelectionFor(repoSettings);
     return {
       defaultObjective,
+      generation:
+        model && workspaceId && workspaceRepoPath
+          ? {
+              kind: "available",
+              run: () =>
+                generateSessionStartGoal({
+                  queryClient,
+                  workspace: { workspaceId, repoPath: workspaceRepoPath },
+                  task,
+                  taskWorkflow: intent.taskWorkflow,
+                  defaultObjective,
+                  model,
+                }),
+            }
+          : { kind: "unavailable", reason: GOAL_GENERATION_NEEDS_DEFAULT_MODEL },
       unavailableReason: goalModeUnavailableReason(goalAvailability),
     };
-  }, [goalAvailability, intent]);
+  }, [goalAvailability, intent, queryClient, repoSettings, workspaceId, workspaceRepoPath]);
 
   const handleRetryRuntimeDefinitions = useCallback((): void => {
     void retryRuntimeDefinitions().catch((error) => {

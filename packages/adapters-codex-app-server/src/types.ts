@@ -34,6 +34,8 @@ import type {
   CodexAppServerThreadGoalClearResult,
   CodexAppServerThreadGoalSetParams,
   CodexAppServerThreadSettingsUpdateParams,
+  CodexAppServerThreadUnsubscribeParams,
+  CodexAppServerThreadUnsubscribeResult,
   CodexAppServerThreadGoalSetResult,
   CodexAppServerThreadForkParams,
   CodexAppServerThreadListParams,
@@ -204,6 +206,9 @@ export type CodexAppServerClient = {
   threadGoalClear(
     params: CodexAppServerThreadGoalClearParams,
   ): Promise<CodexAppServerThreadGoalClearResult>;
+  threadUnsubscribe(
+    params: CodexAppServerThreadUnsubscribeParams,
+  ): Promise<CodexAppServerThreadUnsubscribeResult>;
   threadSettingsUpdate(
     params: CodexAppServerThreadSettingsUpdateParams,
   ): Promise<CodexAppServerThreadSetNameResult>;

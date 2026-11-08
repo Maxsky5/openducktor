@@ -42,6 +42,10 @@ export type SessionStartGoalMode = {
   defaultObjective: string;
   /** Why the selected runtime cannot use Goal mode, or null. */
   unavailableReason: string | null;
+  /** An agent writes the goal from the task with the repository default model. */
+  generation:
+    | { kind: "available"; run: () => Promise<string> }
+    | { kind: "unavailable"; reason: string };
 };
 
 /** The state and handlers that a session start view shows. */
