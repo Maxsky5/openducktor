@@ -7,12 +7,12 @@ import {
   type AgentSessionUserMessagePart,
   acceptedAgentInputSchema,
   agentSessionTranscriptEventSchema,
-  GOAL_COMMAND_ACCEPTED,
 } from "@openducktor/contracts";
-import type {
-  AgentSessionSummary,
-  AgentSessionTitleUpdateResult,
-  AgentUserMessagePart,
+import {
+  type AgentSessionSummary,
+  type AgentSessionTitleUpdateResult,
+  type AgentUserMessagePart,
+  GOAL_COMMAND_ACCEPTED,
 } from "@openducktor/core";
 import { Effect } from "effect";
 import {

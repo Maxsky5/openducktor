@@ -52,6 +52,7 @@ import {
 } from "./agent-message-session-conditions";
 import { createQueueRegistry } from "./agent-message-queue-registry";
 import {
+  endsWithoutTurn,
   type SendOutcome,
   sendOutcome,
   reconcileAcceptedOutcome,
@@ -86,11 +87,6 @@ export type AgentMessageDeliveryDependencies = {
   readonly runInBackground: (effect: Effect.Effect<void>) => void;
   readonly now: () => string;
 };
-
-/** An accepted command that ends no turn, such as `/goal pause`, releases the queue at once. */
-const endsWithoutTurn = (outcome: Extract<SendOutcome, { kind: "accepted" }>): boolean =>
-  outcome.acceptedMessage.type === "command_accepted" &&
-  outcome.acceptedMessage.startsTurn === false;
 
 /** A steer can also find that steering cannot take the message while work runs. */
 type SteerOutcome = SendOutcome | { readonly kind: "blocked"; readonly error: HostValidationError };
@@ -230,7 +226,11 @@ export const createAgentMessageDeliveryService = (
       else if (outcome.kind === "busy") head.state = "queued";
       else failEntry(queue, head, outcome);
       publish(queue);
-      settle(queue, completedTurns, outcome.kind === "accepted" && endsWithoutTurn(outcome));
+      settle(
+        queue,
+        completedTurns,
+        outcome.kind === "accepted" && endsWithoutTurn(head.content.parts, outcome),
+      );
     });
 
   /** Retains an uncertain message at the front of its queue and blocks repeat delivery. */
@@ -275,7 +275,7 @@ export const createAgentMessageDeliveryService = (
         case "accepted":
           // A message that the agent received ends a pause that has no messages left.
           if (endPauseIfEmpty(queue)) publish(queue);
-          settle(queue, completedTurns, endsWithoutTurn(outcome));
+          settle(queue, completedTurns, endsWithoutTurn(content.parts, outcome));
           return { kind: "accepted", acceptedMessage: outcome.acceptedMessage } as const;
         case "busy": {
           // This message came before any message that queued while it was in flight.

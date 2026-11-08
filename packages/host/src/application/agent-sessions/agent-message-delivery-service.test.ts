@@ -157,7 +157,7 @@ describe("agent message delivery: submit and drain", () => {
     const harness = createHarness();
     harness.outcomes.push("busy");
     await harness.submit("first");
-    await harness.submit("pause");
+    await harness.submitGoal("pause");
     await harness.submit("second");
 
     harness.idle();
@@ -172,7 +172,7 @@ describe("agent message delivery: submit and drain", () => {
     expect(harness.sentTexts()).toEqual([
       "first:new_turn",
       "first:new_turn",
-      "pause:new_turn",
+      "/goal:new_turn",
       "second:new_turn",
     ]);
     expect(harness.service.listQueues("/repo")).toEqual([]);

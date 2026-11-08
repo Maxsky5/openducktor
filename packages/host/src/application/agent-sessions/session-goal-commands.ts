@@ -116,15 +116,7 @@ export const createSessionGoalCommands = ({
       return yield* deliverWithOwner(
         owner,
         content,
-        (guard) =>
-          runtime.controlGoal(input, guard).pipe(
-            // Pause and clear end no turn, so the queue can send its next message at once.
-            Effect.map((native) =>
-              native.type === "command_accepted"
-                ? { ...native, startsTurn: goalCommandStartsWork(command) }
-                : native,
-            ),
-          ),
+        (guard) => runtime.controlGoal(input, guard),
         options?.onSent,
       );
     });

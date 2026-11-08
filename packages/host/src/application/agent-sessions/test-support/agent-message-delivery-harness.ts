@@ -198,11 +198,7 @@ export const createHarness = (steering: AgentDeliveryAvailability = { available:
         const result = outcomes.shift() ?? "accept";
         if (result === "accept") return Effect.succeed(accepted(input));
         if (result === "command_without_turn")
-          return Effect.succeed({
-            type: "command_accepted" as const,
-            commandName: "goal",
-            startsTurn: false,
-          });
+          return Effect.succeed({ type: "command_accepted" as const, commandName: "goal" });
         return Effect.fail(sendFailure(result, input));
       }),
     steeringAvailability: () => Effect.succeed(steering),

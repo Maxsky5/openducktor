@@ -1,4 +1,6 @@
-import type { AcceptedAgentInput } from "@openducktor/contracts";
+import type { AcceptedAgentInput, AgentSessionUserMessagePart } from "@openducktor/contracts";
+import { goalCommandStartsWork } from "@openducktor/core";
+import { classifySessionMessageSystemCommand } from "./session-message-system-command";
 import { Effect } from "effect";
 import type { HostError } from "../../effect/host-errors";
 import {
@@ -74,3 +76,13 @@ export const sendOutcome = (
       return { kind: "refused", error };
     },
   }).pipe(Effect.map(reconcileAcceptedOutcome));
+
+/** An accepted goal command that starts no work, such as `/goal pause`, releases the queue at once. */
+export const endsWithoutTurn = (
+  parts: AgentSessionUserMessagePart[],
+  outcome: Extract<SendOutcome, { kind: "accepted" }>,
+): boolean => {
+  if (outcome.acceptedMessage.type !== "command_accepted") return false;
+  const invocation = classifySessionMessageSystemCommand(parts);
+  return invocation.kind === "goal" && !goalCommandStartsWork(invocation.command);
+};

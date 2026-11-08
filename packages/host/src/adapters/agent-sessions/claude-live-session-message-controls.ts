@@ -3,9 +3,9 @@ import {
   type AcceptedAgentUserMessage,
   type AgentSessionControlSendInput,
   acceptedAgentUserMessageSchema,
-  GOAL_COMMAND_ACCEPTED,
   GOAL_SLASH_COMMAND,
 } from "@openducktor/contracts";
+import { GOAL_COMMAND_ACCEPTED } from "@openducktor/core";
 import { Effect } from "effect";
 import {
   type HostError,

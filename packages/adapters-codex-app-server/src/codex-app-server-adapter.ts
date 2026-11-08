@@ -1,11 +1,10 @@
-import { InterruptedTurnResumeError } from "@openducktor/core";
+import { GOAL_COMMAND_ACCEPTED, InterruptedTurnResumeError } from "@openducktor/core";
 import {
   assertAgentWorkStartCurrent,
   goalCommandStartsWork,
   markAgentWorkIssued,
   markAgentWorkAccepted,
 } from "@openducktor/core";
-import { GOAL_COMMAND_ACCEPTED } from "@openducktor/contracts";
 import { listCodexSessionMetadataPage, getCodexSessionMetadata } from "./codex-session-metadata";
 import type { RuntimeSessionImportSource } from "@openducktor/core";
 import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";

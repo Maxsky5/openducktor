@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor } from "@openducktor/contracts";
+import type { AcceptedAgentInput, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentDeliveryAvailability } from "./agent-message-delivery";
 import type { AgentSessionGoalCommand } from "./agent-system-slash-commands";
 import { compareRuntimeVersion } from "./runtime-version";
@@ -50,6 +50,12 @@ export const goalCommandBlockedReason = (
   }
   return null;
 };
+
+/** What a runtime adapter returns when it accepts a goal action. */
+export const GOAL_COMMAND_ACCEPTED = {
+  type: "command_accepted",
+  commandName: "goal",
+} as const satisfies Extract<AcceptedAgentInput, { type: "command_accepted" }>;
 
 /** A goal command that starts agent work ends with a turn end. The other commands end at once. */
 export const goalCommandStartsWork = (command: AgentSessionGoalCommand): boolean =>
