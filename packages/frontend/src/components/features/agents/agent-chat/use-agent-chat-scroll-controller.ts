@@ -257,7 +257,9 @@ export function useAgentChatScrollController({
       isPointerPressedRef.current = false;
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      if (event.target !== container) return;
+
       const hasDraggedUp = isPointerPressedRef.current && hasMovedUpFromBottom();
       const isMovingUp = container.scrollTop < lastScrollTopRef.current;
       lastScrollTopRef.current = container.scrollTop;
@@ -287,7 +289,8 @@ export function useAgentChatScrollController({
     container.addEventListener(REVEAL_ELEMENT_EVENT, handleRevealElement);
     container.addEventListener("pointerdown", handlePointerDown, { passive: true });
     container.addEventListener("touchstart", handleTouchStart, { passive: true });
-    container.addEventListener("scroll", handleScroll, { passive: true });
+    // Classify user input before the row window decides whether to preload.
+    container.addEventListener("scroll", handleScroll, { capture: true, passive: true });
     ownerDocument.addEventListener("keydown", handleDocumentKeyDown);
     ownerDocument.addEventListener("pointerdown", handleDocumentPointerDown, {
       capture: true,
@@ -310,7 +313,7 @@ export function useAgentChatScrollController({
       container.removeEventListener(REVEAL_ELEMENT_EVENT, handleRevealElement);
       container.removeEventListener("pointerdown", handlePointerDown);
       container.removeEventListener("touchstart", handleTouchStart);
-      container.removeEventListener("scroll", handleScroll);
+      container.removeEventListener("scroll", handleScroll, { capture: true });
       ownerDocument.removeEventListener("keydown", handleDocumentKeyDown);
       ownerDocument.removeEventListener("pointerdown", handleDocumentPointerDown, {
         capture: true,

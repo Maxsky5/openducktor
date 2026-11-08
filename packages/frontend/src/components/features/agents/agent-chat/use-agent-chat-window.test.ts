@@ -2528,6 +2528,52 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("keeps the latest row window when a taller viewport clamps its pinned scroll position", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 6);
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true, rowHeightPx: 100 },
+    );
+    const container = harness.messagesContainerRef.current;
+    if (!container) throw new Error("Expected messages container");
+
+    try {
+      await animationFrameDriver.flushFrames();
+      const initialRows = harness.getLatestResult().visibleRows;
+      const preloadRow = initialRows[AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT];
+      const lastRow = initialRows.at(-1);
+      if (!preloadRow || !lastRow) throw new Error("Expected mounted transcript rows");
+      expect(readRowElement(container, preloadRow.key).getBoundingClientRect().bottom).toBeLessThan(
+        0,
+      );
+      const previousScrollTop = container.scrollTop;
+
+      Object.defineProperty(container, "clientHeight", { configurable: true, value: 1200 });
+      expect(container.scrollTop).toBeLessThan(previousScrollTop);
+      expect(readRowTop(container, preloadRow.key)).toBeGreaterThan(0);
+      expect(readRowTop(container, preloadRow.key)).toBeLessThan(container.clientHeight);
+      await act(async () => {
+        await dispatchScroll(container);
+        triggerResizeObservers(container);
+      });
+      await animationFrameDriver.flushFrames();
+
+      expect(harness.getLatestResult().visibleRows).toEqual(initialRows);
+      expect(harness.getLatestResult().windowStart).toBe(rows.length - AGENT_CHAT_ROW_WINDOW_SIZE);
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+      expect(readRowElement(container, lastRow.key).getBoundingClientRect().bottom).toBe(
+        container.clientHeight,
+      );
+      expect(harness.getLatestResult().isNearBottom).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps the reading position when the chat area shrinks after the user scrolls up", async () => {
     const { harness, container } = await mountPinnedTranscript();
 
@@ -2604,6 +2650,56 @@ describe("useAgentChatWindow", () => {
     expect(harness.getLatestResult().isNearBottom).toBe(false);
 
     await harness.unmount();
+  });
+
+  test("the first upward pointer scroll preloads older rows and keeps the reading position", async () => {
+    const rows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 6);
+    const extraContentHeightPx = { current: 0 };
+    const harness = await mountHarness(
+      {
+        rows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true, extraContentHeightPx },
+    );
+    const container = harness.messagesContainerRef.current;
+    if (!container) throw new Error("Expected messages container");
+
+    try {
+      const anchorRow =
+        harness.getLatestResult().visibleRows[AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT];
+      if (!anchorRow) throw new Error("Expected mounted anchor row");
+      const innerScrollArea = document.createElement("div");
+      container.appendChild(innerScrollArea);
+      let anchorTop = 0;
+      await act(async () => {
+        await dispatchPointerDown(container);
+        container.scrollTop = AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT * ROW_HEIGHT_PX;
+        anchorTop = readRowTop(container, anchorRow.key);
+        // A nested scroll can arrive before the viewport's pending scroll event.
+        innerScrollArea.dispatchEvent(new Event("scroll"));
+        expect(container.style.overflowAnchor).toBe("none");
+        expect(harness.getLatestResult().windowStart).toBe(
+          rows.length - AGENT_CHAT_ROW_WINDOW_SIZE,
+        );
+        await dispatchScroll(container);
+        await dispatchPointerUp();
+      });
+      await animationFrameDriver.flushFrames();
+
+      expect(harness.getLatestResult().windowStart).toBe(
+        rows.length - AGENT_CHAT_ROW_WINDOW_SIZE * 2,
+      );
+      expect(harness.getLatestResult().visibleRows).toHaveLength(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
+      expect(readRowTop(container, anchorRow.key)).toBe(anchorTop);
+      const readingScrollTop = container.scrollTop;
+      await growContent(extraContentHeightPx);
+      expect(container.scrollTop).toBe(readingScrollTop);
+      expect(harness.getLatestResult().isNearBottom).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("stops following content growth after an upward touch drag", async () => {

@@ -470,9 +470,11 @@ export function useAgentChatRowWindow({
     const handleScroll = () => {
       rereadRowAnchor();
 
-      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
       const previousScrollTop = lastScrollTopRef.current;
       lastScrollTopRef.current = container.scrollTop;
+      if (isFollowingLatestWindow() && rangeRef.current.endRowExclusive === rows.length) return;
+
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
       const isScrollingUp = container.scrollTop < previousScrollTop;
       const isScrollingDown = container.scrollTop > previousScrollTop;
       const isNearTop = container.scrollTop <= CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX;
@@ -493,7 +495,14 @@ export function useAgentChatRowWindow({
     lastScrollTopRef.current = container.scrollTop;
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [expandAfter, expandBefore, rereadRowAnchor, messagesContainerRef]);
+  }, [
+    expandAfter,
+    expandBefore,
+    isFollowingLatestWindow,
+    rereadRowAnchor,
+    messagesContainerRef,
+    rows.length,
+  ]);
 
   const effectiveRange = clampRange(range, rows.length);
   const effectiveStartRow = effectiveRange.startRow;
