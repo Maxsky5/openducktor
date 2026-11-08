@@ -372,7 +372,7 @@ describe("useAgentStudioSendTarget", () => {
     await harness.mount();
     await harness.run(async (state) => {
       await expect(state.onSend(createCompactReusablePromptDraft(), "default")).rejects.toThrow(
-        "/compact is reserved for manual session compaction.",
+        "/compact is a reserved system slash command.",
       );
     });
 

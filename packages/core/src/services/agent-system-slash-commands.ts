@@ -28,6 +28,14 @@ const RESERVED_SYSTEM_SLASH_COMMANDS = [
   { descriptor: GOAL_SLASH_COMMAND, matches: isGoalSlashCommand },
 ] as const;
 
+/** Only OpenDucktor provides these triggers, so no runtime or prompt command can use them. */
+export const RESERVED_SYSTEM_SLASH_COMMAND_TRIGGERS: ReadonlySet<string> = new Set(
+  RESERVED_SYSTEM_SLASH_COMMANDS.map(({ descriptor }) => descriptor.trigger),
+);
+
+export const reservedSystemSlashCommandMessage = (trigger: string): string =>
+  `/${trigger} is a reserved system slash command.`;
+
 const isReservedLookalike = (command: SlashCommandDescriptor): boolean =>
   RESERVED_SYSTEM_SLASH_COMMANDS.some(
     ({ descriptor, matches }) =>
@@ -72,7 +80,7 @@ export const classifySystemSlashCommandInvocation = (
   );
   const reservedLookalike = slashCommands.find(isReservedLookalike);
   if (reservedLookalike) {
-    throw new Error(`/${reservedLookalike.trigger} is a reserved system slash command.`);
+    throw new Error(reservedSystemSlashCommandMessage(reservedLookalike.trigger));
   }
   if (slashCommands.some(isGoalSlashCommand)) {
     if (slashCommands.length !== 1) {

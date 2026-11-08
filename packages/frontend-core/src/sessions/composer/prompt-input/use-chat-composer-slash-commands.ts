@@ -1,15 +1,15 @@
 import {
   GOAL_SLASH_COMMAND,
   isManualSessionCompactionSlashCommand,
-  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   type ReusablePrompt,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import type {
-  AgentRuntimeCatalog,
-  AgentSlashCommand,
-  AgentSlashCommandCatalog,
-  RuntimeWorkingDirectoryRef,
+import {
+  type AgentRuntimeCatalog,
+  type AgentSlashCommand,
+  type AgentSlashCommandCatalog,
+  RESERVED_SYSTEM_SLASH_COMMAND_TRIGGERS,
+  type RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,12 +21,6 @@ import {
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
 
-/** Only OpenDucktor can provide these triggers, so no runtime or prompt command can use them. */
-const RESERVED_SYSTEM_TRIGGERS = new Set<string>([
-  MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger,
-  GOAL_SLASH_COMMAND.trigger,
-]);
-
 /**
  * Merges the menu commands. `/compact` comes from the runtime catalog and `/goal` from the
  * composer, so `systemSlashCommands` holds OpenDucktor commands that no runtime catalog lists.
@@ -37,7 +31,7 @@ export const mergeSlashCommands = (
   systemSlashCommands: AgentSlashCommand[] = [],
 ): AgentSlashCommand[] => {
   const isReserved = (command: AgentSlashCommand) =>
-    RESERVED_SYSTEM_TRIGGERS.has(command.trigger.toLowerCase());
+    RESERVED_SYSTEM_SLASH_COMMAND_TRIGGERS.has(command.trigger.toLowerCase());
   const systemCommands = [
     ...runtimeSlashCommands.filter(isManualSessionCompactionSlashCommand),
     ...systemSlashCommands,

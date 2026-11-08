@@ -20,7 +20,7 @@ const REUSABLE_PROMPT_COMMAND = toReusablePromptSlashCommand(PROMPT);
 
 describe("agent chat reusable prompts", () => {
   test.each([
-    ["compact", "/compact is reserved for manual session compaction."],
+    ["compact", "/compact is a reserved system slash command."],
     ["Goal", "/goal is a reserved system slash command."],
   ])("refuses a saved prompt named %s before it expands", (name, message) => {
     const prompt = { ...PROMPT, name };
