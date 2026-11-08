@@ -191,6 +191,7 @@ export type RegisterElectronBrowserIpcInput = {
       tabId: string,
       input: {
         visible: boolean;
+        covered?: boolean | undefined;
         bounds?: ElectronBrowserSurfaceBounds | undefined;
       },
     ): Effect.Effect<void, BrowserEngineError>;
@@ -306,6 +307,7 @@ export const registerElectronBrowserIpc = ({
     await runElectronEffect(
       engine.setSurface(event.sender.id, parsed.tabId, {
         visible: parsed.visible,
+        covered: parsed.covered,
         bounds:
           parsed.bounds === undefined
             ? undefined

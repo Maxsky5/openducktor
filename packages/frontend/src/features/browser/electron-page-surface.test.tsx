@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import type { ElectronBrowserBridge } from "@/lib/shell-bridge";
 import { createBrowserFocusRegistry } from "./browser-focus-registry";
 import { ElectronPageSurface } from "./electron-page-surface";
@@ -68,34 +68,56 @@ describe("ElectronPageSurface", () => {
       expect(setSurface).toHaveBeenCalledWith({
         tabId: TAB_ID,
         visible: true,
+        covered: false,
         bounds: { x: 12, y: 24, width: 640, height: 480 },
       }),
     );
     expect(capturePage).not.toHaveBeenCalled();
   });
 
-  test("turns a page into its snapshot under a host overlay, and keeps it until the page is back", async () => {
+  test("covers the page after its snapshot painted, and keeps the snapshot until the page is back", async () => {
     const { bridge, setSurface, capturePage } = createBridge();
     let placed = (): void => {};
+    let snapshotShownWhenCovered = false;
     setSurface.mockImplementation(async (input) => {
-      if (input.visible) {
+      if (input.covered === true) {
+        snapshotShownWhenCovered =
+          document.querySelector("[data-testid=browser-page-snapshot]") !== null;
+      }
+      if (input.visible && input.covered !== true) {
         await new Promise<void>((resolve) => {
           placed = resolve;
         });
       }
     });
-    const { queryByTestId, rerenderSurface } = renderSurface(bridge, placement(true), true);
+    const { getByTestId, queryByTestId, rerenderSurface } = renderSurface(
+      bridge,
+      placement(true),
+      true,
+    );
+    const bounds = { x: 12, y: 24, width: 640, height: 480 };
 
     await act(async () => {});
+    await act(async () => {
+      fireEvent.load(getByTestId("browser-page-snapshot"));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
     expect(capturePage).toHaveBeenCalledTimes(1);
-    expect(setSurface).toHaveBeenLastCalledWith({ tabId: TAB_ID, visible: false });
-    expect(queryByTestId("browser-page-snapshot")).not.toBeNull();
+    // The page made way only after its snapshot showed in its place.
+    expect(snapshotShownWhenCovered).toBe(true);
+    expect(setSurface).toHaveBeenLastCalledWith({
+      tabId: TAB_ID,
+      visible: true,
+      covered: true,
+      bounds,
+    });
 
     rerenderSurface(placement(true), false);
     expect(setSurface).toHaveBeenLastCalledWith({
       tabId: TAB_ID,
       visible: true,
-      bounds: { x: 12, y: 24, width: 640, height: 480 },
+      covered: false,
+      bounds,
     });
     expect(queryByTestId("browser-page-snapshot")).not.toBeNull();
 
@@ -119,6 +141,7 @@ describe("ElectronPageSurface", () => {
       expect(setSurface).toHaveBeenLastCalledWith({
         tabId: TAB_ID,
         visible: true,
+        covered: false,
         bounds: { x: 12, y: 24, width: 640, height: 480 },
       }),
     );

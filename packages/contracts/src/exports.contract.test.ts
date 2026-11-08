@@ -1032,7 +1032,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "browserNodeRefSchema",
   "browserPermissionDecisionSchema",
   "browserPermissionKindSchema",
-  "browserPickedElementSchema",
   "browserPickerSetRequestSchema",
   "browserPromptAnswerRequestSchema",
   "browserSitePermissionsRequestSchema",

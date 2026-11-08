@@ -43,25 +43,7 @@ const hostWorldMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("anchor_boxes"),
     boxes: z.array(z.object({ annotationId: z.string(), box: browserBoxSchema.nullable() })),
   }),
-  z.object({
-    type: z.literal("picker_hover"),
-    x: z.number(),
-    y: z.number(),
-  }),
-  z.object({
-    type: z.literal("picker_pick"),
-    x: z.number(),
-    y: z.number(),
-    shiftKey: z.boolean(),
-  }),
-  z.object({ type: z.literal("picker_cancel") }),
 ]);
-
-/** A picker message of the page script. The host resolves the element under the point. */
-export type BrowserPagePickerMessage = Extract<
-  z.infer<typeof hostWorldMessageSchema>,
-  { type: "picker_hover" | "picker_pick" | "picker_cancel" }
->;
 
 const selectedTextSchema = z.string().nullable();
 
@@ -81,10 +63,6 @@ export type BrowserHostTabSessionInput = {
   /** Forks a background job that the browser service owns. */
   runJob(job: Effect.Effect<void>): void;
   onAnchorBoxes(boxes: BrowserAnchorBoxes): void;
-  /** The page script reported a picker point, a pick, or a cancel. */
-  onPickerMessage(message: BrowserPagePickerMessage): void;
-  /** The isolated world of a new document is ready, so the host can draw its page furniture. */
-  onHostWorldReady(): void;
   /** The main frame committed a document. `failedUrl` names the load of an error page. */
   onNavigated(failedUrl: string | null): void;
 };
@@ -179,11 +157,6 @@ export const startBrowserHostTabSession = (
           return;
         case "anchor_boxes":
           input.onAnchorBoxes(message.boxes);
-          return;
-        case "picker_hover":
-        case "picker_pick":
-        case "picker_cancel":
-          input.onPickerMessage(message);
           return;
       }
     };
@@ -289,7 +262,6 @@ export const startBrowserHostTabSession = (
           if (context.name === BROWSER_HOST_WORLD && context.auxData?.frameId === mainFrameId) {
             hostWorldContextId = context.id;
             resendAnchors(context.id);
-            input.onHostWorldReady();
           }
           return;
         }
@@ -338,7 +310,7 @@ export const startBrowserHostTabSession = (
     });
     yield* setup.pipe(Effect.tapError(() => Effect.sync(unsubscribe)));
 
-    const evaluateInPage = (
+    const evaluateInHostWorld = (
       expression: string,
     ): Effect.Effect<JSONType | undefined, BrowserServiceError> =>
       Effect.gen(function* () {
@@ -388,9 +360,9 @@ export const startBrowserHostTabSession = (
       noteNavigation: (navigation) => {
         lastNavigation = navigation;
       },
-      evaluate: evaluateInPage,
+      evaluate: evaluateInHostWorld,
       readSelectedText: () =>
-        evaluateInPage("globalThis.__odtSelectedText()").pipe(
+        evaluateInHostWorld("globalThis.__odtSelectedText()").pipe(
           Effect.flatMap((value) => {
             const parsed = selectedTextSchema.safeParse(value);
             return parsed.success
@@ -407,10 +379,10 @@ export const startBrowserHostTabSession = (
         ),
       setAnchors: (next) => {
         anchors = next;
-        return evaluateInPage(anchorsExpression()).pipe(Effect.asVoid);
+        return evaluateInHostWorld(anchorsExpression()).pipe(Effect.asVoid);
       },
       revealAnchor: (annotationId) =>
-        evaluateInPage(`globalThis.__odtRevealAnchor(${JSON.stringify(annotationId)})`).pipe(
+        evaluateInHostWorld(`globalThis.__odtRevealAnchor(${JSON.stringify(annotationId)})`).pipe(
           Effect.asVoid,
         ),
       close: unsubscribe,

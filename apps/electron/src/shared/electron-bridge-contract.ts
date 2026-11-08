@@ -97,6 +97,8 @@ export const electronBrowserSendRequestSchema = z.strictObject({
 export const electronBrowserSetSurfaceRequestSchema = z.strictObject({
   tabId: browserTabIdSchema,
   visible: z.boolean(),
+  /** A host overlay covers the shown page, so the page keeps drawing but shows no pixel. */
+  covered: z.boolean().optional(),
   bounds: z
     .strictObject({
       x: z.number(),

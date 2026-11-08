@@ -111,11 +111,43 @@ describe("Electron browser engine pages", () => {
       ),
     );
     expect(harness.viewPort.placed).toEqual([
-      { view, windowId: MAIN_WINDOW_ID, box: { x: 10, y: 20, width: 800, height: 600 } },
+      {
+        view,
+        windowId: MAIN_WINDOW_ID,
+        box: { x: 10, y: 20, width: 800, height: 600 },
+        covered: false,
+      },
     ]);
 
     await Effect.runPromise(harness.engine.setSurface(MAIN_WINDOW_ID, TAB_ID, surface(false)));
     expect(harness.viewPort.placeOf(view)).toBe("detached");
+  });
+
+  test("keeps a covered page in its window, and gives it the focus only when it shows", async () => {
+    const harness = createEngineHarness();
+    await createTab(harness);
+    const view = harness.view();
+    const box = { x: 10, y: 20, width: 800, height: 600 };
+    await Effect.runPromise(
+      harness.engine.setSurface(MAIN_WINDOW_ID, TAB_ID, {
+        visible: true,
+        covered: true,
+        bounds: box,
+      }),
+    );
+    await Effect.runPromise(harness.engine.focusPage(MAIN_WINDOW_ID, TAB_ID));
+
+    expect(harness.viewPort.placed.at(-1)).toEqual({
+      view,
+      windowId: MAIN_WINDOW_ID,
+      box,
+      covered: true,
+    });
+    expect(harness.page().focused).toBe(0);
+    await Effect.runPromise(harness.engine.setSurface(MAIN_WINDOW_ID, TAB_ID, surface(true, box)));
+
+    expect(harness.viewPort.placed.at(-1)?.covered).toBe(false);
+    expect(harness.page().focused).toBe(1);
   });
 
   test("detaches the pages of a window that has no renderer", async () => {
@@ -185,7 +217,7 @@ describe("Electron browser engine pages", () => {
     const harness = createEngineHarness();
     await createTab(harness);
     expect(await Effect.runPromise(harness.engine.capturePage(TAB_ID))).toBe(
-      "data:image/jpeg;base64,AAAA",
+      "data:image/png;base64,AAAA",
     );
     const missing = await Effect.runPromiseExit(harness.engine.capturePage("missing"));
     expect(Exit.isFailure(missing) && JSON.stringify(missing.cause)).toContain("tab_not_found");

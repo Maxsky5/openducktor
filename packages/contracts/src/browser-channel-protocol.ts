@@ -3,13 +3,15 @@ import { browserForwardedShortcutIdSchema } from "./browser-shortcuts";
 import {
   browserBoxSchema,
   browserFailureSchema,
-  browserPickedElementSchema,
+  browserNodeRefSchema,
   browserTabIdSchema,
 } from "./browser-tab-schemas";
 import { withMaxUtf16Length } from "./string-schemas";
 
 /** The largest encoded message, in bytes, in each direction. */
 const BROWSER_CHANNEL_MAX_MESSAGE_BYTES = 256 * 1024;
+
+const coordinateSchema = z.number();
 
 const browserAnnotationAnchorSchema = z.strictObject({
   annotationId: z.string().min(1).max(128),
@@ -24,6 +26,14 @@ export type BrowserAnnotationAnchor = z.infer<typeof browserAnnotationAnchorSche
 
 const browserClientMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({
+    type: z.literal("picker_hover"),
+    tabId: browserTabIdSchema,
+    x: coordinateSchema,
+    y: coordinateSchema,
+    /** The width of the page area in the pixels of `x` and `y`, which can differ from the page. */
+    width: z.number().positive(),
+  }),
+  z.strictObject({
     type: z.literal("anchors"),
     tabId: browserTabIdSchema,
     anchors: z.array(browserAnnotationAnchorSchema).max(200),
@@ -34,25 +44,23 @@ const browserClientMessageSchema = z.discriminatedUnion("type", [
     tabId: browserTabIdSchema,
     annotationId: browserAnnotationAnchorSchema.shape.annotationId,
   }),
-  /** Stops the picker after the user saved or canceled the selection comment. */
-  z.strictObject({
-    type: z.literal("picker_clear"),
-    tabId: browserTabIdSchema,
-  }),
 ]);
 export type BrowserClientMessage = z.infer<typeof browserClientMessageSchema>;
 
 const browserServerMessageSchema = z.discriminatedUnion("type", [
-  /** The elements that the user picked in the page, after each pick and each clear. */
+  /** The element at the point of a `picker_hover`, which names the same point and pixels. */
   z.strictObject({
-    type: z.literal("picker_selection"),
+    type: z.literal("picker_target"),
     tabId: browserTabIdSchema,
-    selection: z.array(browserPickedElementSchema),
-  }),
-  /** The page ended the picker, for example with Escape. */
-  z.strictObject({
-    type: z.literal("picker_off"),
-    tabId: browserTabIdSchema,
+    x: coordinateSchema,
+    y: coordinateSchema,
+    target: z
+      .strictObject({
+        nodeRef: browserNodeRefSchema,
+        box: browserBoxSchema,
+        label: z.string().min(1),
+      })
+      .nullable(),
   }),
   z.strictObject({
     type: z.literal("anchor_boxes"),

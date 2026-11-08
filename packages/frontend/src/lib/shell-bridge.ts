@@ -41,10 +41,14 @@ export type ElectronBrowserBridge = {
     onStateChange: (state: BrowserChannelState) => void,
     onFailure: (failure: BrowserFailure) => void,
   ): Promise<BrowserChannelConnection>;
-  /** Places the page in its window, or moves it out of every window while no panel shows it. */
+  /**
+   * Places the page in its window, or moves it out of every window while no panel shows it. A
+   * covered page keeps its place and keeps drawing, but the user cannot see it.
+   */
   setSurface(input: {
     tabId: string;
     visible: boolean;
+    covered?: boolean;
     bounds?: { x: number; y: number; width: number; height: number };
   }): Promise<void>;
   /** Gives the page the keyboard focus after a user navigation. */

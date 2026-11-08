@@ -57,20 +57,21 @@ type ViewportClip = z.infer<typeof viewportClipRequestSchema>["clip"];
 type CssViewport = z.infer<typeof layoutMetricsSchema>["cssVisualViewport"];
 
 /**
- * A JPEG data URL of the page as it shows. A CDP screenshot draws the page at once, while
+ * A PNG data URL of the page as it shows. A CDP screenshot draws the page at once, while
  * `webContents.capturePage` can fail with `UnknownVizError` until the view has painted a frame.
+ * The snapshot replaces the live page under an overlay, so it is lossless: a JPEG would change
+ * the text and the colors that the user sees.
  */
 export const capturePageImage = async (
   connection: Pick<CdpConnection, "request">,
-  quality: number,
 ): Promise<string> => {
   const { data } = screenshotResultSchema.parse(
-    await connection.request("Page.captureScreenshot", { format: "jpeg", quality }, ""),
+    await connection.request("Page.captureScreenshot", { format: "png" }, ""),
   );
   if (data.length === 0) {
     throw new Error("The page snapshot is empty.");
   }
-  return `data:image/jpeg;base64,${data}`;
+  return `data:image/png;base64,${data}`;
 };
 
 /**

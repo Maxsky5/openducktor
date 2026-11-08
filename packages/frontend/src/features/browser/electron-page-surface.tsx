@@ -4,7 +4,7 @@ import type { BrowserFocusRegistry } from "./browser-focus-registry";
 import { reportBrowserFailure } from "./browser-page-replacement";
 import type { BrowserSurfacePlacement } from "./use-browser-surface-placement";
 
-/** Undefined while the snapshot of a hidden page is not ready. Null when it failed. */
+/** Undefined while the snapshot of a covered page is not ready. Null when it failed. */
 type PageSnapshot = string | null | undefined;
 
 type ElectronPageSurfaceProps = {
@@ -17,11 +17,12 @@ type ElectronPageSurfaceProps = {
 
 /**
  * The native page view of one browser tab. The host draws the page, so the browser layer only
- * says where the page shows and when a host overlay needs its place.
+ * says where the page shows and when a host overlay covers it.
  *
- * While an overlay opens, the page keeps its place for a moment, then turns into its last
- * snapshot. The snapshot keeps the page visible to the user under the overlay, and the page view
- * moves out of the window until the overlay closes. The snapshot stays until the page is back.
+ * A native page draws above every element of the window. While an overlay covers the page, the
+ * surface shows a snapshot of the page in its place, and the host keeps the live page drawing
+ * where the user cannot see it. The page is covered only after the snapshot painted, and the
+ * snapshot leaves only after the live page is back, so the user never sees a gap.
  */
 export function ElectronPageSurface({
   bridge,
@@ -31,9 +32,10 @@ export function ElectronPageSurface({
   tabId,
 }: ElectronPageSurfaceProps): ReactElement | null {
   const [snapshot, setSnapshot] = useState<PageSnapshot>(undefined);
-  const frozen = placement.visible && occluded;
-  // Keep the page in place until its snapshot is ready, so the overlay does not flash a gap.
-  const waitingForSnapshot = frozen && snapshot === undefined;
+  /** The snapshot image painted, so the live page can make way for it. */
+  const [snapshotPainted, setSnapshotPainted] = useState(false);
+  const covering = placement.visible && occluded;
+  const snapshotReady = snapshot === null || (snapshot !== undefined && snapshotPainted);
 
   useEffect(
     () =>
@@ -46,7 +48,9 @@ export function ElectronPageSurface({
   );
 
   useEffect(() => {
-    if (!frozen) return;
+    if (!covering) return;
+    // An older snapshot can still show while the live page returns. The new one must paint first.
+    setSnapshotPainted(false);
     let cancelled = false;
     bridge.capturePage(tabId).then(
       (url) => {
@@ -61,7 +65,7 @@ export function ElectronPageSurface({
     return () => {
       cancelled = true;
     };
-  }, [bridge, frozen, tabId]);
+  }, [bridge, covering, tabId]);
 
   // A native page outlives its React component, so an unmounted surface gives up its place. A tab
   // that closes first has no place left, and a component that unmounts cannot show a failure.
@@ -75,25 +79,20 @@ export function ElectronPageSurface({
   useEffect(() => {
     if (!placement.visible) {
       setSnapshot(undefined);
+      setSnapshotPainted(false);
       void bridge
         .setSurface({ tabId, visible: false })
         .catch(reportBrowserFailure("Could not place the browser page"));
       return;
     }
-    if (waitingForSnapshot) return;
-    if (frozen) {
-      void bridge
-        .setSurface({ tabId, visible: false })
-        .catch(reportBrowserFailure("Could not place the browser page"));
-      return;
-    }
-    // The native page shows over the snapshot when the host places it. Removing the snapshot
-    // before then would show an empty slot for a frame.
+    // The live page keeps its place until its snapshot painted, so the overlay never shows a gap.
+    if (covering && !snapshotReady) return;
     let cancelled = false;
     bridge
       .setSurface({
         tabId,
         visible: true,
+        covered: covering,
         bounds: {
           x: placement.left,
           y: placement.top,
@@ -102,21 +101,24 @@ export function ElectronPageSurface({
         },
       })
       .then(() => {
-        if (!cancelled) setSnapshot(undefined);
+        // The live page shows over the snapshot when the host places it, so the snapshot can go.
+        if (cancelled || covering) return;
+        setSnapshot(undefined);
+        setSnapshotPainted(false);
       }, reportBrowserFailure("Could not place the browser page"));
     return () => {
       cancelled = true;
     };
   }, [
     bridge,
-    frozen,
+    covering,
     placement.height,
     placement.left,
     placement.top,
     placement.visible,
     placement.width,
+    snapshotReady,
     tabId,
-    waitingForSnapshot,
   ]);
 
   return snapshot === undefined || snapshot === null ? null : (
@@ -127,6 +129,8 @@ export function ElectronPageSurface({
       data-testid="browser-page-snapshot"
       draggable={false}
       src={snapshot}
+      // The next frame shows the loaded image, and only then the live page can make way for it.
+      onLoad={() => requestAnimationFrame(() => setSnapshotPainted(true))}
     />
   );
 }

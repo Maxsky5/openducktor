@@ -60,7 +60,13 @@ const createSender = (id = 7, zoomFactor = 1) => {
   };
 };
 
-const picked: BrowserClientMessage = { type: "picker_clear", tabId: TAB_ID };
+const hover: BrowserClientMessage = {
+  type: "picker_hover",
+  tabId: TAB_ID,
+  x: 1,
+  y: 2,
+  width: 400,
+};
 
 describe("Electron browser IPC controller", () => {
   test("connects one host client for each renderer client and routes frames", async () => {
@@ -73,13 +79,19 @@ describe("Electron browser IPC controller", () => {
     controller.connect(sender, "client-a");
     controller.connect(sender, "client-a");
     await Effect.runPromise(
-      controller.handleFrame(sender, "client-a", encodeBrowserChannelMessage(picked)),
+      controller.handleFrame(sender, "client-a", encodeBrowserChannelMessage(hover)),
     );
 
     expect([...service.sessions.keys()]).toEqual(["electron:7:client-a"]);
-    expect(service.handled).toEqual([{ clientId: "electron:7:client-a", message: picked }]);
+    expect(service.handled).toEqual([{ clientId: "electron:7:client-a", message: hover }]);
 
-    const reply: BrowserServerMessage = { type: "picker_off", tabId: TAB_ID };
+    const reply: BrowserServerMessage = {
+      type: "picker_target",
+      tabId: TAB_ID,
+      x: 1,
+      y: 2,
+      target: null,
+    };
     service.sessions.get("electron:7:client-a")?.send(reply);
     expect(sent).toHaveLength(1);
     expect(sent[0]?.clientId).toBe("client-a");
@@ -94,7 +106,7 @@ describe("Electron browser IPC controller", () => {
     });
     const { sender } = createSender();
     const unconnected = await Effect.runPromiseExit(
-      controller.handleFrame(sender, "client-a", encodeBrowserChannelMessage(picked)),
+      controller.handleFrame(sender, "client-a", encodeBrowserChannelMessage(hover)),
     );
     expect(JSON.stringify(unconnected)).toContain("not connected");
     controller.connect(sender, "client-a");

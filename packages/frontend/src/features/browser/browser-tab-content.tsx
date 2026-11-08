@@ -36,6 +36,7 @@ import { BrowserSiteMenuContainer } from "./browser-site-menu-container";
 import { browserSurfaceKey } from "./browser-surface-registry";
 import { BrowserTabPromptBars, BrowserTabPromptOverlays } from "./browser-tab-prompts";
 import { BrowserDownloadsMenu } from "./components/browser-downloads-menu";
+import { BrowserPickerOverlay } from "./components/browser-picker-overlay";
 import { BrowserToolbar, BrowserToolbarPlaceholder } from "./components/browser-toolbar";
 import { type BrowserAnchors, useBrowserAnchors } from "./use-browser-anchors";
 import { useBrowserPicker } from "./use-browser-picker";
@@ -91,7 +92,7 @@ function ElectronTabContent({
   const engine = useBrowserEngineState();
   const overlayHost = useBrowserOverlayHost(runtime.overlays, browserSurfaceKey(entry.tabId));
   const { live } = tab;
-  const picker = useBrowserPicker(channel, entry.tabId, live, isShown);
+  const picker = useBrowserPicker(channel, entry.tabId, live);
   // A browser tab owner is also the owner of its pending annotations.
   const { ownerKey, annotations } = useBrowserAnnotations(tab.owner);
   const anchors = useBrowserAnchors(channel, entry.tabId, live, tab.url, annotations);
@@ -153,12 +154,20 @@ function ElectronTabContent({
         }
       />
       {overlayHost && replacement === null
-        ? // oxlint-disable-next-line architecture/require-page-occluder -- The comment box and the dialog prompt mark themselves.
+        ? // oxlint-disable-next-line architecture/require-page-occluder -- The picker, the comment box, and the dialog prompt mark themselves.
           createPortal(
             <>
-              {/* The comment box hides the native page, so it waits until the picker stops.
-                  Otherwise the first pick would block the Shift-clicks that follow it. */}
-              {!picker.state.active && picker.state.selection.length > 0 && ownerKey !== null ? (
+              {/* While the picker is on, the page shows as its snapshot under the picker. */}
+              {picker.state.active ? (
+                <BrowserPickerOverlay
+                  target={picker.state.target}
+                  selected={picker.state.selection.map((element) => element.box)}
+                  onPointerMove={picker.hover}
+                  onPick={picker.pick}
+                  onCancel={picker.stop}
+                />
+              ) : null}
+              {picker.state.selection.length > 0 && ownerKey !== null ? (
                 <BrowserSelectionCommentBox
                   tabId={entry.tabId}
                   ownerKey={ownerKey}

@@ -76,33 +76,6 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
     runJob,
     // The hub needs the tab service. A page reports anchor boxes only after this setup ends.
     onAnchorBoxes: (tabId, boxes) => hub.sendAnchorBoxes(tabId, boxes),
-    onPickerMessage: (tabId, message) =>
-      runJob(
-        picker.handlePageMessage(tabId, message).pipe(
-          Effect.tap((result) =>
-            Effect.sync(() => {
-              if (result.kind === "selection") {
-                hub.broadcast({ type: "picker_selection", tabId, selection: result.selection });
-              } else if (result.kind === "cancelled") {
-                hub.broadcast({ type: "picker_off", tabId });
-              }
-            }),
-          ),
-          Effect.catch((cause) =>
-            Effect.sync(() => input.reportFailure("browser.picker.page_message", cause)),
-          ),
-        ),
-      ),
-    onHostWorldReady: (tabId) =>
-      runJob(
-        picker
-          .restore(tabId)
-          .pipe(
-            Effect.catch((cause) =>
-              Effect.sync(() => input.reportFailure("browser.picker.restore", cause)),
-            ),
-          ),
-      ),
   });
   const engineEvents = createBrowserEngineEvents({
     engine,
@@ -118,7 +91,6 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
     registry,
     requireLive: tabs.requireLive,
     stageImage: input.stageImage,
-    reportFailure: input.reportFailure,
   });
   const hub = createBrowserClientHub({ tabs, picker });
   const pages = createBrowserAgentPages({

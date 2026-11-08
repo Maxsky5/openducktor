@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   type BrowserAnnotationCapture,
   type BrowserClientMessage,
@@ -348,30 +348,37 @@ describe("BrowserTabContent", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Annotate" }));
     await waitFor(() => expect(pickerSet).toHaveBeenCalledWith({ tabId: TAB_ID, enabled: true }));
-
-    // The page script resolves the pick and the host reports the selection to the window.
-    act(() =>
-      channel.receive({
-        type: "picker_selection",
-        tabId: TAB_ID,
-        selection: [
-          { nodeRef: "7", box: { x: 10, y: 20, width: 80, height: 30 }, label: "button" },
-        ],
-      }),
-    );
-    // The comment box hides the native page, so it waits until the picker stops.
+    const picker = await screen.findByTestId("browser-picker-overlay");
+    spyOn(picker, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 400, 300));
+    const target = (nodeRef: string, x: number) =>
+      act(() =>
+        channel.receive({
+          type: "picker_target",
+          tabId: TAB_ID,
+          x,
+          y: 40,
+          target: { nodeRef, box: { x: 10, y: 20, width: 80, height: 30 }, label: "button" },
+        }),
+      );
+    // The pointer moved on from the last element that the host found, and the click comes first.
+    target("node-6", 15);
+    fireEvent.click(picker, { clientX: 30, clientY: 40 });
+    expect(channel.sent.at(-1)).toEqual({
+      type: "picker_hover",
+      tabId: TAB_ID,
+      x: 30,
+      y: 40,
+      width: 400,
+    });
     expect(screen.queryByRole("textbox", { name: "Annotation comment" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Annotate" }));
-    await waitFor(() =>
-      expect(pickerSet).toHaveBeenLastCalledWith({ tabId: TAB_ID, enabled: false }),
-    );
+    target("node-7", 30);
     fireEvent.change(await screen.findByRole("textbox", { name: "Annotation comment" }), {
       target: { value: "Make it blue" },
     });
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() =>
-      expect(annotationCapture).toHaveBeenCalledWith({ tabId: TAB_ID, nodeRefs: ["7"] }),
+      expect(annotationCapture).toHaveBeenCalledWith({ tabId: TAB_ID, nodeRefs: ["node-7"] }),
     );
     await waitFor(() =>
       expect(
@@ -380,71 +387,6 @@ describe("BrowserTabContent", () => {
           .map((annotation) => annotation.comment),
       ).toEqual(["Make it blue"]),
     );
-    expect(channel.sent).toContainEqual({ type: "picker_clear", tabId: TAB_ID });
-    overlayHost.remove();
-  });
-
-  test("stops annotating on Escape while the toolbar keeps the focus", async () => {
-    const { electronRuntime, pickerSet } = renderTab(
-      createBrowserTabSummaryFixture({ tabId: TAB_ID }),
-    );
-    await waitFor(() => expect(electronRuntime().channel.status()).toBe("connected"));
-
-    fireEvent.click(screen.getByRole("button", { name: "Annotate" }));
-    await waitFor(() => expect(pickerSet).toHaveBeenCalledWith({ tabId: TAB_ID, enabled: true }));
-
-    fireEvent.keyDown(window, { key: "Escape" });
-
-    await waitFor(() =>
-      expect(pickerSet).toHaveBeenLastCalledWith({ tabId: TAB_ID, enabled: false }),
-    );
-  });
-
-  test("leaves Escape to the tab that the user shows", async () => {
-    const { electronRuntime, pickerSet, setShown } = renderTab(
-      createBrowserTabSummaryFixture({ tabId: TAB_ID }),
-      READY,
-      { shown: false },
-    );
-    await waitFor(() => expect(electronRuntime().channel.status()).toBe("connected"));
-
-    fireEvent.click(screen.getByRole("button", { name: "Annotate" }));
-    await waitFor(() => expect(pickerSet).toHaveBeenCalledWith({ tabId: TAB_ID, enabled: true }));
-
-    fireEvent.keyDown(window, { key: "Escape" });
-    expect(pickerSet).not.toHaveBeenCalledWith({ tabId: TAB_ID, enabled: false });
-
-    setShown(true);
-    fireEvent.keyDown(window, { key: "Escape" });
-    await waitFor(() =>
-      expect(pickerSet).toHaveBeenLastCalledWith({ tabId: TAB_ID, enabled: false }),
-    );
-  });
-
-  test("keeps the picked elements when Escape comes from the page", async () => {
-    const { electronRuntime, channel } = renderTab(
-      createBrowserTabSummaryFixture({ tabId: TAB_ID }),
-    );
-    await waitFor(() => expect(electronRuntime().channel.status()).toBe("connected"));
-    const overlayHost = document.createElement("div");
-    document.body.append(overlayHost);
-    act(() => {
-      electronRuntime().overlays.register(browserSurfaceKey(TAB_ID), overlayHost);
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Annotate" }));
-    act(() =>
-      channel.receive({
-        type: "picker_selection",
-        tabId: TAB_ID,
-        selection: [
-          { nodeRef: "7", box: { x: 10, y: 20, width: 80, height: 30 }, label: "button" },
-        ],
-      }),
-    );
-    act(() => channel.receive({ type: "picker_off", tabId: TAB_ID }));
-
-    expect(await screen.findByRole("textbox", { name: "Annotation comment" })).toBeTruthy();
     overlayHost.remove();
   });
 });

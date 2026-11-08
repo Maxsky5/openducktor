@@ -10,12 +10,14 @@ export type ElectronViewBox = {
   readonly height: number;
 };
 
-/** The content view parent of a `WebContentsView`. A `BrowserWindow` and the keeper window have one. */
+/** A window that holds page views. A `BrowserWindow` and the keeper window are owners. */
 export type ElectronViewOwner = {
   readonly contentView: {
-    addChildView(view: electron.WebContentsView): void;
-    removeChildView(view: electron.WebContentsView): void;
+    addChildView(view: electron.View): void;
+    removeChildView(view: electron.View): void;
   };
+  /** The width and the height of the content view. */
+  getContentSize(): number[];
   isDestroyed(): boolean;
 };
 
@@ -33,14 +35,27 @@ export type ElectronBrowserView = {
  * a capture needs a page that no panel shows, the port keeps it visible in the keeper window: one
  * pixel, no opacity, no focus, no pointer. An idle page that no panel shows stays detached, so it
  * costs no frames, like a background tab of a browser.
+ *
+ * Each page view sits in a container view. A page that a host overlay covers keeps its window and
+ * its size, while its container shrinks to the last pixel of the window, which the window corner
+ * hides. The page stays visible to Chromium, so it keeps drawing and fires no visibility change,
+ * and it shows again at once when the overlay closes.
  */
 export type ElectronBrowserViewPort = {
   /** Remembers the window of an OpenDucktor renderer, so the engine can place views in it. */
   registerWindow(windowId: number, window: ElectronViewOwner): void;
   unregisterWindow(windowId: number): void;
   create(partition: string): ElectronBrowserView;
-  /** Shows the view in the window at the box, or returns false when the window is gone. */
-  showInWindow(view: ElectronBrowserView, windowId: number, box: ElectronViewBox): boolean;
+  /**
+   * Shows the view in the window at the box, or returns false when the window is gone. A covered
+   * view keeps the size of the box but shows no pixel the user can see.
+   */
+  showInWindow(
+    view: ElectronBrowserView,
+    windowId: number,
+    box: ElectronViewBox,
+    covered: boolean,
+  ): boolean;
   /** Keeps the view visible in the keeper window, which no user sees or reaches. */
   keepInKeeper(view: ElectronBrowserView): void;
   /** Removes the view from its window, so its page stops drawing until it shows again. */
@@ -82,7 +97,26 @@ export const keeperWindowOptions = (
 
 type Placement = {
   readonly owner: ElectronViewOwner;
+};
+
+/** A page view and the container that clips it. */
+type Frame = {
   readonly native: electron.WebContentsView;
+  readonly container: electron.View;
+};
+
+/** The size of a box, at the origin of its container. */
+const pageBounds = (box: ElectronViewBox): ElectronViewBox => ({
+  x: 0,
+  y: 0,
+  width: box.width,
+  height: box.height,
+});
+
+/** The last pixel of the window, which its rounded corner hides. */
+const hiddenPixel = (owner: ElectronViewOwner): ElectronViewBox => {
+  const [width = 1, height = 1] = owner.getContentSize();
+  return { x: width - 1, y: height - 1, width: 1, height: 1 };
 };
 
 /**
@@ -113,6 +147,16 @@ export const createElectronBrowserViewPort = (): ElectronBrowserViewPort => {
     return window;
   };
 
+  const frames = new Map<ElectronBrowserView, Frame>();
+
+  const frameOf = (view: ElectronBrowserView): Frame => {
+    const frame = frames.get(view);
+    if (frame === undefined) {
+      throw new Error("The view port did not create this page view.");
+    }
+    return frame;
+  };
+
   const unplace = (view: ElectronBrowserView): void => {
     const current = placements.get(view);
     if (current === undefined) {
@@ -120,22 +164,20 @@ export const createElectronBrowserViewPort = (): ElectronBrowserViewPort => {
     }
     // A closed window destroys its content view, but the page view outlives it.
     if (!current.owner.isDestroyed()) {
-      current.owner.contentView.removeChildView(current.native);
+      current.owner.contentView.removeChildView(frameOf(view).container);
     }
     placements.delete(view);
   };
 
-  const place = (view: ElectronBrowserView, owner: ElectronViewOwner): electron.WebContentsView => {
-    const current = placements.get(view);
-    if (current?.owner === owner) {
-      return current.native;
+  const place = (view: ElectronBrowserView, owner: ElectronViewOwner): Frame => {
+    const frame = frameOf(view);
+    if (placements.get(view)?.owner === owner) {
+      return frame;
     }
     unplace(view);
-    // SAFETY: this port creates each `ElectronBrowserView` as a `WebContentsView`.
-    const native = view as electron.WebContentsView;
-    owner.contentView.addChildView(native);
-    placements.set(view, { owner, native });
-    return native;
+    owner.contentView.addChildView(frame.container);
+    placements.set(view, { owner });
+    return frame;
   };
 
   return {
@@ -146,7 +188,7 @@ export const createElectronBrowserViewPort = (): ElectronBrowserViewPort => {
       windows.delete(windowId);
     },
     create(partition) {
-      const view = new electron.WebContentsView({
+      const native = new electron.WebContentsView({
         webPreferences: {
           ...HARDENED_GUEST_PREFERENCES,
           partition,
@@ -154,28 +196,32 @@ export const createElectronBrowserViewPort = (): ElectronBrowserViewPort => {
           focusOnNavigation: false,
         },
       });
-      view.setBackgroundColor("#ffffff");
-      view.setBounds(DEFAULT_VIEW_BOX);
-      view.setVisible(false);
-      return view;
+      native.setBackgroundColor("#ffffff");
+      native.setBounds(DEFAULT_VIEW_BOX);
+      const container = new electron.View();
+      container.addChildView(native);
+      container.setBounds(DEFAULT_VIEW_BOX);
+      frames.set(native, { native, container });
+      return native;
     },
-    showInWindow(view, windowId, box) {
+    showInWindow(view, windowId, box, covered) {
       const window = windows.get(windowId);
       if (window === undefined || window.isDestroyed()) {
         return false;
       }
-      const native = place(view, window);
-      native.setBounds(box);
-      native.setVisible(true);
+      const { native, container } = place(view, window);
+      native.setBounds(pageBounds(box));
+      container.setBounds(covered ? hiddenPixel(window) : box);
       return true;
     },
     keepInKeeper(view) {
-      const native = place(view, keeperWindow());
-      native.setVisible(true);
+      const { native, container } = place(view, keeperWindow());
+      container.setBounds(pageBounds(native.getBounds()));
     },
     detach: unplace,
     close(view) {
       unplace(view);
+      frames.delete(view);
       if (!view.webContents.isDestroyed()) {
         view.webContents.close();
       }

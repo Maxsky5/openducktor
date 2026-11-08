@@ -237,7 +237,12 @@ export class FakeView implements ElectronBrowserView {
 /** The view port of a test: it records each placement instead of showing a window. */
 export class FakeViewPort implements ElectronBrowserViewPort {
   readonly views: FakeView[] = [];
-  readonly placed: Array<{ view: FakeView; windowId: number; box: ElectronViewBox }> = [];
+  readonly placed: Array<{
+    view: FakeView;
+    windowId: number;
+    box: ElectronViewBox;
+    covered: boolean;
+  }> = [];
   readonly kept: FakeView[] = [];
   /** Each placement change of a view, in order: a window id, `"keeper"`, or `"detached"`. */
   readonly moves: Array<{ view: FakeView; to: number | "keeper" | "detached" }> = [];
@@ -260,10 +265,15 @@ export class FakeViewPort implements ElectronBrowserViewPort {
     return view;
   }
 
-  showInWindow(view: ElectronBrowserView, windowId: number, box: ElectronViewBox): boolean {
+  showInWindow(
+    view: ElectronBrowserView,
+    windowId: number,
+    box: ElectronViewBox,
+    covered: boolean,
+  ): boolean {
     // SAFETY: the engine places only views that this port created, which are FakeView values.
     const own = view as FakeView;
-    this.placed.push({ view: own, windowId, box });
+    this.placed.push({ view: own, windowId, box, covered });
     this.moves.push({ view: own, to: windowId });
     return true;
   }

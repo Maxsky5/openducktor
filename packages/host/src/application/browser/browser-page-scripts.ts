@@ -7,7 +7,7 @@ export const BROWSER_HOST_BINDING = "__openducktorHost";
 
 /**
  * Reports the title, the icon link, and the boxes of annotated elements. It draws the markers of
- * the annotations, the picker, and the agent marker in a closed shadow root over the page, because
+ * the annotations and the agent marker in a closed shadow root over the page, because
  * a native page view draws above every element of the OpenDucktor window.
  */
 export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
@@ -52,13 +52,16 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
   overlayHost.style.setProperty("position", "fixed", "important");
   overlayHost.style.setProperty("inset", "0", "important");
   overlayHost.style.setProperty("pointer-events", "none", "important");
+  // The picker hit test also finds elements with \`pointer-events: none\`, but never hidden ones.
+  // Only the markers inside show, so the picker never finds the overlay.
+  overlayHost.style.setProperty("visibility", "hidden", "important");
   overlayHost.style.setProperty("z-index", "2147483647", "important");
   overlayHost.style.setProperty("overflow", "hidden", "important");
   // A top-layer element, such as a modal dialog or a popover of the page, paints above any
   // z-index. A manual popover puts the overlay in the same top layer, so draw above those too.
   overlayHost.setAttribute("popover", "manual");
   // A modal dialog of the page makes every node outside it inert, so the overlay lives in the
-  // last open modal dialog. Otherwise the markers and the picker capture layer get no input.
+  // last open modal dialog. Otherwise the markers get no input.
   const overlayParent = () => {
     const modals = document.querySelectorAll("dialog:modal");
     return modals[modals.length - 1] ?? document.documentElement;
@@ -77,7 +80,7 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
     document.addEventListener("DOMContentLoaded", raiseOverlay, { once: true });
   }
   // A page that opens a dialog or a popover after the overlay takes the top layer gains the top
-  // layer above the overlay. Raise the overlay again so the picker and the markers stay above. A
+  // layer above the overlay. Raise the overlay again so the markers stay above. A
   // dialog that closes gives the overlay back to the document or to the modal dialog under it.
   addEventListener("toggle", (event) => {
     if (event.target !== overlayHost) raiseOverlay();
@@ -90,147 +93,16 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
   layer.style.setProperty("overflow", "hidden", "important");
   overlay.appendChild(layer);
 
-  /* A transparent layer captures every pointer of the top frame, also over an iframe. */
-  const pickerCapture = document.createElement("div");
-  pickerCapture.style.setProperty("position", "absolute", "important");
-  pickerCapture.style.setProperty("inset", "0", "important");
-  pickerCapture.style.setProperty("pointer-events", "none", "important");
-  pickerCapture.style.setProperty("cursor", "crosshair", "important");
-  overlay.appendChild(pickerCapture);
-
-  const boxElement = () => {
-    const element = document.createElement("div");
-    element.style.setProperty("position", "absolute", "important");
-    element.style.setProperty("pointer-events", "none", "important");
-    element.style.setProperty("box-sizing", "border-box", "important");
-    return element;
-  };
-  const setBox = (element, box) => {
-    element.style.setProperty("left", box.x + "px", "important");
-    element.style.setProperty("top", box.y + "px", "important");
-    element.style.setProperty("width", box.width + "px", "important");
-    element.style.setProperty("height", box.height + "px", "important");
-  };
-
-  /* Picker. */
-  const pickerTarget = boxElement();
-  pickerTarget.style.setProperty("border", "1px solid #0ea5e9", "important");
-  pickerTarget.style.setProperty("background", "rgba(56, 189, 248, 0.25)", "important");
-  pickerTarget.style.setProperty("border-radius", "2px", "important");
-  pickerTarget.hidden = true;
-  layer.appendChild(pickerTarget);
-  const pickerLabel = document.createElement("span");
-  pickerLabel.style.setProperty("position", "absolute", "important");
-  pickerLabel.style.setProperty("left", "0", "important");
-  pickerLabel.style.setProperty("max-width", "16rem", "important");
-  pickerLabel.style.setProperty("overflow", "hidden", "important");
-  pickerLabel.style.setProperty("text-overflow", "ellipsis", "important");
-  pickerLabel.style.setProperty("white-space", "nowrap", "important");
-  pickerLabel.style.setProperty("border-radius", "2px", "important");
-  pickerLabel.style.setProperty("background", "#7dd3fc", "important");
-  pickerLabel.style.setProperty("padding", "0 6px", "important");
-  pickerLabel.style.setProperty("color", "#0a0a0a", "important");
-  pickerLabel.style.setProperty("font", "500 11px/20px system-ui, sans-serif", "important");
-  pickerTarget.appendChild(pickerLabel);
-  const selectionLayer = document.createElement("div");
-  selectionLayer.style.setProperty("position", "absolute", "important");
-  selectionLayer.style.setProperty("inset", "0", "important");
-  selectionLayer.style.setProperty("pointer-events", "none", "important");
-  layer.appendChild(selectionLayer);
-
-  let pickerActive = false;
-  let hoverFrame = 0;
-  let hoverPoint = null;
-  const flushHover = () => {
-    hoverFrame = 0;
-    if (!pickerActive || hoverPoint === null) return;
-    const point = hoverPoint;
-    hoverPoint = null;
-    send({ type: "picker_hover", x: point.x, y: point.y });
-  };
-  const onPointerMove = (event) => {
-    if (!pickerActive) return;
-    hoverPoint = { x: event.clientX, y: event.clientY };
-    if (hoverFrame === 0) hoverFrame = requestAnimationFrame(flushHover);
-  };
-  const stopPageEvent = (event) => {
-    if (!pickerActive) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  };
-  const onPick = (event) => {
-    if (!pickerActive) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    send({ type: "picker_pick", x: event.clientX, y: event.clientY, shiftKey: event.shiftKey });
-  };
-  const onPickerKey = (event) => {
-    if (!pickerActive || event.key !== "Escape") return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    send({ type: "picker_cancel" });
-  };
-  const pickerListeners = [
-    ["pointermove", onPointerMove, true],
-    ["pointerdown", stopPageEvent, true],
-    ["mousedown", stopPageEvent, true],
-    ["click", onPick, true],
-    ["dblclick", stopPageEvent, true],
-    ["contextmenu", stopPageEvent, true],
-    ["keydown", onPickerKey, true],
-  ];
-  const syncPickerListeners = () => {
-    for (const [name, listener, capture] of pickerListeners) {
-      if (pickerActive) addEventListener(name, listener, capture);
-      else removeEventListener(name, listener, capture);
-    }
-  };
-
-  globalThis.__odtPickerActive = (active) => {
-    if (pickerActive === active) return;
-    pickerActive = active;
-    if (active) raiseOverlay();
-    syncPickerListeners();
-    // The capture layer keeps the pointers that would go to an iframe. The hit test hides it, and
-    // the markers ignore pointer events, so Chromium finds the page element under the pointer.
-    pickerCapture.style.setProperty("pointer-events", active ? "auto" : "none", "important");
-    for (const marker of markers.values()) {
-      marker.style.setProperty("pointer-events", active ? "none" : "auto", "important");
-    }
-    if (!active) {
-      hoverPoint = null;
-      pickerTarget.hidden = true;
-      selectionLayer.replaceChildren();
-    }
-  };
-  globalThis.__odtPickerHitTest = (hidden) => {
-    // Only the transparent capture layer hides. The highlight and the markers stay visible.
-    pickerCapture.style.setProperty("visibility", hidden ? "hidden" : "visible", "important");
-  };
-  globalThis.__odtPickerTarget = (target) => {
-    if (!pickerActive || !target) {
-      pickerTarget.hidden = true;
-      return;
-    }
-    pickerTarget.hidden = false;
-    setBox(pickerTarget, target.box);
-    pickerLabel.textContent = target.label;
-    pickerLabel.style.setProperty("top", target.box.y >= 21 ? "-21px" : "0", "important");
-  };
-  globalThis.__odtPickerSelection = (boxes) => {
-    if (!pickerActive) return;
-    const elements = boxes.map((box) => {
-      const element = boxElement();
-      element.style.setProperty("border-radius", "2px", "important");
-      element.style.setProperty("background", "rgba(56, 189, 248, 0.15)", "important");
-      element.style.setProperty("outline", "2px solid #0284c7", "important");
-      setBox(element, box);
-      return element;
-    });
-    selectionLayer.replaceChildren(...elements);
-  };
-
   /* Annotation markers. */
+  let pickerActive = false;
+  // The markers hide while the picker is on, so a pick never finds a marker.
+  const markerVisibility = () => (pickerActive ? "hidden" : "visible");
+  globalThis.__odtPickerActive = (active) => {
+    pickerActive = active;
+    for (const marker of markers.values()) {
+      marker.style.setProperty("visibility", markerVisibility(), "important");
+    }
+  };
   let anchors = [];
   let anchorFrame = 0;
   let lastAnchorReport = "";
@@ -244,7 +116,8 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
     marker.textContent = String(number);
     marker.setAttribute("aria-label", "Annotation " + number);
     marker.style.setProperty("position", "absolute", "important");
-    marker.style.setProperty("pointer-events", pickerActive ? "none" : "auto", "important");
+    marker.style.setProperty("visibility", markerVisibility(), "important");
+    marker.style.setProperty("pointer-events", "auto", "important");
     marker.style.setProperty("cursor", "pointer", "important");
     marker.style.setProperty("box-sizing", "border-box", "important");
     marker.style.setProperty("width", "20px", "important");
@@ -347,6 +220,7 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
     raiseOverlay();
     const marker = document.createElement("span");
     marker.setAttribute("aria-hidden", "true");
+    marker.style.setProperty("visibility", "visible", "important");
     marker.style.setProperty("position", "absolute", "important");
     marker.style.setProperty("left", x + "px", "important");
     marker.style.setProperty("top", y + "px", "important");

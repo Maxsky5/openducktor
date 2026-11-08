@@ -34,7 +34,7 @@ flowchart TD
 | Path | Holds |
 |---|---|
 | `packages/contracts/src/browser-tab-schemas.ts` | Tab summary, prompts, engine state, host commands, and the `openducktor://browser-event` payload |
-| `packages/contracts/src/browser-channel-protocol.ts` | Messages of the Electron browser channel: picker selection, annotation anchors, and forwarded shortcuts |
+| `packages/contracts/src/browser-channel-protocol.ts` | Messages of the Electron browser channel: picker hover and target, annotation anchors, and forwarded shortcuts |
 | `packages/host/src/application/browser/` | Tab registry and service, engine events, prompts, site permissions, CDP proxy, agent tools, picker, and annotation capture |
 | `packages/frontend-core/src/browser/` | Tab store. It subscribes to browser events first, then reads the tab list, and keeps the higher revision of each tab. |
 | `packages/frontend/src/features/browser/` | Browser layer, page surfaces, tab view, browser channel client, and tab coordinator |
@@ -96,8 +96,10 @@ A close failure stops the deletion or the archive, like a terminal stop failure.
 - A detached view produces no compositor frames, so a screenshot would wait for a frame that never comes. While a wake hold is open, the engine therefore keeps a hidden view drawing in a one-pixel invisible keeper window. Each agent action, each DevTools connection, and each page screenshot or snapshot takes a wake hold.
 - The keeper shows nothing, ignores the pointer, and never takes the keyboard focus. When the last OpenDucktor window closes, the engine ends its pages and closes the keeper, so the app can quit.
 - The engine state view, the load error, the certificate warning, and the popup window placeholder replace the page. The page surface then hides, so it never covers them.
-- A native page view draws above every element of the OpenDucktor window. The page script therefore draws the picker highlight, the annotation markers, and the agent marker in a closed shadow root inside the page. The shadow host is a manual popover, so it shares the top layer of the page and paints above modal dialogs and page popovers, which no `z-index` reaches. The page raises the overlay again when it opens a new top-layer element. A modal dialog of the page makes every node outside it inert, so the shadow host moves into the last open modal dialog and moves back when the dialog closes or leaves the document.
-- A host overlay, such as a dialog, a menu, or the selection comment box, marks its content with `data-page-occluder`. The lint rule `architecture/require-page-occluder` requires this mark in each portal of `packages/frontend`. While an overlay box covers a page, the browser layer hides that native page and shows a snapshot in its place, so the overlay stays visible. The snapshot stays until the page is back in its place. An overlay elsewhere on the window leaves the page as it is.
+- A native page view draws above every element of the OpenDucktor window. The page script therefore draws the annotation markers and the agent marker in a closed shadow root inside the page. The shadow host is a manual popover, so it shares the top layer of the page and paints above modal dialogs and page popovers, which no `z-index` reaches. The page raises the overlay again when it opens a new top-layer element. A modal dialog of the page makes every node outside it inert, so the shadow host moves into the last open modal dialog and moves back when the dialog closes or leaves the document.
+- A host overlay, such as a dialog, a menu, or the selection comment box, marks its content with `data-page-occluder`. The lint rule `architecture/require-page-occluder` requires this mark in each portal of `packages/frontend`. While an overlay box covers a page, the browser layer shows a lossless snapshot of the page in its place, so the overlay stays visible. An overlay elsewhere on the window leaves the page as it is.
+- A covered page keeps its window and its size. Only its container view shrinks to the last pixel of the window, which the window corner hides. The page therefore keeps drawing and fires no visibility change, and it shows again at once when the overlay closes.
+- The page makes way only after its snapshot painted, and the snapshot leaves only after the page is back, so the user sees no gap.
 
 The tab coordinator applies each host tab change to the layout of its owner, also when no page shows that owner:
 
@@ -236,9 +238,9 @@ Electron shows these prompts in the tab. In the web runner, the browser of the u
 
 ## Annotations
 
-The picker runs in the isolated world of the page. The page reports the pointer point, the host calls `DOM.getNodeForLocation`, and the page script draws the highlight and the selection. While the picker is on, CSS animations and transitions pause.
+The picker injects no highlight script. The client sends the pointer position and the width of the page area, the host scales the point to page pixels and calls `DOM.getNodeForLocation`, and the overlay draws the highlight. While the picker is on, CSS animations and transitions pause, and the annotation markers of the page ignore the pointer.
 
-A transparent layer in the top frame captures the pointers that would go to an iframe. The host hides this layer for the hit test, so the hit test finds the page element and not the picker overlay. While the picker is on, the highlight, the selection, and the annotation markers ignore pointer events, so a pick never selects them.
+In Electron, the picker overlay and the selection comment box mark themselves with `data-page-occluder`. The page therefore shows as its snapshot while the user picks elements and writes the comment.
 
 `browser_annotation_capture` reads the page URL and title, the selected text, and for each element its tag, short text, opening tag, CSS selector, accessible role and name, React component chain, and source location.
 

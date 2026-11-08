@@ -18,7 +18,7 @@ const MAX_RECONNECT_DELAY_MS = 2_000;
  * The browser channel of an Electron window. It reconnects after a lost connection with a short
  * backoff, and `stop` ends it until the next `connect`, so a remounted provider can start it again.
  * The channel drops a message while it is not connected. The owners of anchors send them again
- * when the channel connects, and a picker message for a lost connection has no page to reach.
+ * when the channel connects, and a picker hover for a lost connection has no page to reach.
  */
 export const createBrowserChannel = (bridge: Pick<ElectronBrowserBridge, "connect">) => {
   let connection: BrowserChannelConnection | null = null;

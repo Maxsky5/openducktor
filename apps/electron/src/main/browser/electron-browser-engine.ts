@@ -37,9 +37,6 @@ import {
   permissionOrigin,
 } from "./electron-browser-session";
 
-/** The quality of a page snapshot that shows under a host overlay. */
-const PAGE_SNAPSHOT_JPEG_QUALITY = 80;
-
 export type ElectronBrowserEngineInput = {
   platform: string;
   viewPort: ElectronBrowserViewPort;
@@ -77,11 +74,16 @@ export type ElectronBrowserEngine = BrowserEnginePort & {
   setSurface(
     senderId: number,
     tabId: string,
-    input: { readonly visible: boolean; readonly bounds?: ElectronViewBox | undefined },
+    input: {
+      readonly visible: boolean;
+      /** A host overlay covers the shown page. It keeps drawing, but the user cannot see it. */
+      readonly covered?: boolean | undefined;
+      readonly bounds?: ElectronViewBox | undefined;
+    },
   ): Effect.Effect<void, BrowserEngineError>;
   /** Gives the keyboard focus to a page that the user asked for. */
   focusPage(senderId: number, tabId: string): Effect.Effect<void, BrowserEngineError>;
-  /** A JPEG data URL of the page as it shows, for a snapshot under a host overlay. */
+  /** A PNG data URL of the page as it shows, for a snapshot under a host overlay. */
   capturePage(tabId: string): Effect.Effect<string, BrowserEngineError>;
   hasLiveTab(tabId: string): boolean;
   /** Handles the app `certificate-error` event. Returns true when the page belongs to a tab. */
@@ -184,6 +186,7 @@ export const createElectronBrowserEngine = (
       view: null,
       viewWindowId: null,
       viewBox: DEFAULT_VIEW_BOX,
+      viewCovered: false,
       focusOnShow: false,
       wakeHolds: 0,
       permissionRequests: new Set(),
@@ -206,8 +209,8 @@ export const createElectronBrowserEngine = (
       return;
     }
     if (tab.viewWindowId !== null) {
-      if (input.viewPort.showInWindow(view, tab.viewWindowId, tab.viewBox)) {
-        if (tab.focusOnShow) {
+      if (input.viewPort.showInWindow(view, tab.viewWindowId, tab.viewBox, tab.viewCovered)) {
+        if (tab.focusOnShow && !tab.viewCovered) {
           tab.focusOnShow = false;
           view.webContents.focus();
         }
@@ -570,6 +573,7 @@ export const createElectronBrowserEngine = (
         const tab = yield* surfaceOf(senderId, tabId, "electron.browser.set_surface");
         if (!surface.visible) {
           tab.viewWindowId = null;
+          tab.viewCovered = false;
           tab.focusOnShow = false;
           applyView(tab);
           return;
@@ -590,6 +594,7 @@ export const createElectronBrowserEngine = (
           height: Math.round(bounds.height),
         };
         tab.viewWindowId = senderId;
+        tab.viewCovered = surface.covered === true;
         applyView(tab);
       }),
     focusPage: (senderId, tabId) =>
@@ -603,8 +608,8 @@ export const createElectronBrowserEngine = (
             tabId,
           });
         }
-        if (tab.viewWindowId !== senderId) {
-          // An overlay can hide the page when a dialog closes and asks for the focus again. Keep
+        if (tab.viewWindowId !== senderId || tab.viewCovered) {
+          // An overlay can cover the page when a dialog closes and asks for the focus again. Keep
           // the request until the page shows, so the dialog close does not lose the focus.
           tab.focusOnShow = true;
           return;
@@ -618,7 +623,7 @@ export const createElectronBrowserEngine = (
           whileAwake(
             tabId,
             Effect.tryPromise({
-              try: () => capturePageImage(connection, PAGE_SNAPSHOT_JPEG_QUALITY),
+              try: () => capturePageImage(connection),
               catch: (cause) =>
                 new BrowserEngineError({
                   code: "operation_failed",

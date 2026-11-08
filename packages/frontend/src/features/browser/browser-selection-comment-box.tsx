@@ -1,4 +1,4 @@
-import type { BrowserPickedElement } from "@openducktor/contracts";
+import type { BrowserPickedElement } from "./use-browser-picker";
 import type { ReactElement } from "react";
 import {
   type BrowserAnnotationChanges,

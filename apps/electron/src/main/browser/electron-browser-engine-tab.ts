@@ -20,6 +20,8 @@ export type EngineTab = {
   viewWindowId: number | null;
   /** The last box of a shown view, so a view that returns keeps its size. */
   viewBox: ElectronViewBox;
+  /** A host overlay covers the shown view, so the user sees its snapshot in its place. */
+  viewCovered: boolean;
   /** A user focus request that waits for the page to show again. */
   focusOnShow: boolean;
   wakeHolds: number;

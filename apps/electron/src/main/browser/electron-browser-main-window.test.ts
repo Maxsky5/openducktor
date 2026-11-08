@@ -8,6 +8,7 @@ import { cancelableEvent } from "./electron-browser-engine.test-support";
 type FakeMainWindow = EventEmitter & {
   webContents: EventEmitter & { readonly id: number; isDestroyed(): boolean };
   contentView: ElectronViewOwner["contentView"];
+  getContentSize(): number[];
   isDestroyed(): boolean;
 };
 
@@ -26,6 +27,7 @@ const fakeMainWindow = (): FakeMainWindow => {
     addChildView: () => {},
     removeChildView: () => {},
   };
+  window.getContentSize = () => [1200, 800];
   window.isDestroyed = () => false;
   return window;
 };
