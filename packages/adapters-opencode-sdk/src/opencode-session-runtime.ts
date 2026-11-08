@@ -1121,7 +1121,7 @@ export const createPrepareOpencodeSessionRuntime =
               "use goals",
               "unsupported_operation",
               goals.reason,
-              "Update OpenCode, then restart it from Diagnostics.",
+              OPENCODE_RUNTIME_DESCRIPTOR.updateAction,
             ),
           );
         const sessionID = goalInput.externalSessionId;
