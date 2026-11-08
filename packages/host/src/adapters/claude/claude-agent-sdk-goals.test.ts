@@ -206,6 +206,19 @@ describe("Claude goal commands", () => {
     expect(forgetEndedClaudeGoal(session, "2026-11-07T10:00:01.000Z")?.goal).toBeNull();
   });
 
+  test("a re-attach of a retained session keeps its ended goal", async () => {
+    const { session, observe, append, settled } = await createSession([
+      goalRecord("g1", null, { met: false, sentinel: true }),
+    ]);
+    await restoreClaudeSessionGoal(session, "2026-11-07T10:00:00.000Z");
+    await append(goalRecord("g2", "g1", { met: true }));
+    observe(result);
+    await settled();
+
+    const restored = await restoreClaudeSessionGoal(session, "2026-11-07T10:00:01.000Z");
+    expect(restored.goal).toEqual({ objective: OBJECTIVE, ended: true });
+  });
+
   test("a clear that OpenDucktor did not send ends the goal", async () => {
     const { session, observe, append, settled } = await createSession([
       goalRecord("g1", null, { met: false, sentinel: true }),

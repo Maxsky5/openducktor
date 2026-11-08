@@ -237,6 +237,7 @@ const createHarness = async (
     Effect.die(new Error("Unexpected import"));
   let failNextMutationAfterApply = false;
   let failMutationEventType: string | undefined;
+  let mutationsBeforeFailure = 0;
   let mutationBarrier: MutationBarrier | undefined;
   startSessionImpl = () => {
     eventHub.emit(session, {
@@ -318,7 +319,8 @@ const createHarness = async (
                     (change) =>
                       change.type === "transcript_event" &&
                       change.event.type === failMutationEventType,
-                  ))
+                  )) &&
+                mutationsBeforeFailure-- <= 0
               ) {
                 failNextMutationAfterApply = false;
                 return Effect.fail(
@@ -373,9 +375,11 @@ const createHarness = async (
       mutationBarrier = barrier;
       return barrier;
     },
-    failNextMutationAfterStateApply: (eventType?: string) => {
+    /** `skip` lets that many earlier mutations succeed first. */
+    failNextMutationAfterStateApply: (eventType?: string, skip = 0) => {
       failNextMutationAfterApply = true;
       failMutationEventType = eventType;
+      mutationsBeforeFailure = skip;
     },
     setPrepareApprovalReply: (implementation: ClaudeAgentSdkService["prepareApprovalReply"]) => {
       prepareApprovalReplyImpl = implementation;
@@ -877,7 +881,8 @@ describe("Claude host live-session adapter", () => {
         Effect.as({ ...summary, status: "running" as const }),
       ),
     );
-    harness.failNextMutationAfterStateApply();
+    // The goal restore commits first, and the summary commit after it fails.
+    harness.failNextMutationAfterStateApply(undefined, 1);
 
     const failure = await Effect.runPromise(
       Effect.flip(

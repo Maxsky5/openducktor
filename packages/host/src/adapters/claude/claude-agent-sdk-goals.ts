@@ -192,6 +192,12 @@ export const restoreClaudeSessionGoal = async (
   session: ClaudeGoalSession,
   timestamp: string,
 ): Promise<ClaudeGoalEvent> => {
+  // A retained context already tracks the goal, also an ended one that a new scan would drop.
+  if (session.goalTracking) {
+    const tracked = session.goalTracking;
+    await tracked.reads;
+    return goalEvent(session, timestamp, tracked.goal);
+  }
   const tracking = trackingOf(session);
   const read = tracking.reads.then(async () => {
     const path = await transcriptPath(session);

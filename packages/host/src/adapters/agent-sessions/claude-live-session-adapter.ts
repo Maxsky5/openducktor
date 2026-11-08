@@ -191,6 +191,11 @@ export const createClaudeLiveSessionAdapterPreparer =
           ),
         );
 
+      // The restored goal lands before the summary, so a re-attached session never shows a
+      // snapshot without its goal.
+      const restoreGoalBeforeSummary =
+        (repoPath: string) => (summary: { readonly externalSessionId: string }) =>
+          messages.restoreGoal(repoPath, summary.externalSessionId);
       const { runSummary, runTitleUpdate, runClosure } = createClaudeControlRunner({
         runControlMutation: eventCoordinator.runControlMutation,
         runSessionClosure: eventCoordinator.runSessionClosure,
@@ -337,20 +342,19 @@ export const createClaudeLiveSessionAdapterPreparer =
                 "claude-live-session.resume-session",
                 input.repoPath,
                 () =>
-                  service.resumeSession(
-                    {
-                      ...toClaudeResumeInput(input),
-                      workStartGuard: input.workStartGuard,
-                      onWorkIssued: input.onWorkIssued,
-                      onWorkAccepted: input.onWorkAccepted,
-                    },
-                    runtime.runtimeId,
-                  ),
+                  service
+                    .resumeSession(
+                      {
+                        ...toClaudeResumeInput(input),
+                        workStartGuard: input.workStartGuard,
+                        onWorkIssued: input.onWorkIssued,
+                        onWorkAccepted: input.onWorkAccepted,
+                      },
+                      runtime.runtimeId,
+                    )
+                    .pipe(Effect.tap(restoreGoalBeforeSummary(input.repoPath))),
                 { keepActivity: true },
               ),
-            ),
-            Effect.tap((summary) =>
-              messages.restoreGoal(input.repoPath, summary.externalSessionId),
             ),
           ),
         continueInterruptedTurn: (input) =>
@@ -361,22 +365,21 @@ export const createClaudeLiveSessionAdapterPreparer =
             return requireSessionWorkingDirectory(input, "continue-interrupted-turn").pipe(
               Effect.flatMap(() =>
                 runSummary(operation, input.repoPath, () =>
-                  service.continueInterruptedTurn(
-                    {
-                      ...toClaudeContinueInput(input),
-                      workStartGuard: input.workStartGuard,
-                      onWorkIssued: input.onWorkIssued,
-                      onWorkAccepted: input.onWorkAccepted,
-                    },
-                    runtime.runtimeId,
-                    () => {
-                      continuationAdmitted = true;
-                    },
-                  ),
+                  service
+                    .continueInterruptedTurn(
+                      {
+                        ...toClaudeContinueInput(input),
+                        workStartGuard: input.workStartGuard,
+                        onWorkIssued: input.onWorkIssued,
+                        onWorkAccepted: input.onWorkAccepted,
+                      },
+                      runtime.runtimeId,
+                      () => {
+                        continuationAdmitted = true;
+                      },
+                    )
+                    .pipe(Effect.tap(restoreGoalBeforeSummary(input.repoPath))),
                 ),
-              ),
-              Effect.tap((summary) =>
-                messages.restoreGoal(input.repoPath, summary.externalSessionId),
               ),
               Effect.mapError((cause) =>
                 continuationAdmitted
@@ -417,13 +420,13 @@ export const createClaudeLiveSessionAdapterPreparer =
                         },
                         runtime.runtimeId,
                       )
-                      .pipe(Effect.map(capture)),
+                      .pipe(
+                        Effect.map(capture),
+                        Effect.tap(restoreGoalBeforeSummary(input.repoPath)),
+                      ),
                   { sessionScope: input.sessionScope },
                 ),
               ),
-            ),
-            Effect.tap((summary) =>
-              messages.restoreGoal(input.repoPath, summary.externalSessionId),
             ),
           ),
         sendUserMessage: (input, options) =>
