@@ -1,6 +1,6 @@
 import { launchGoalObjective, supportsTaskTargetBranchSelection } from "@openducktor/workflows";
 import type { GitBranch, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
+import type { AgentDeliveryAvailability, AgentModelSelection } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
 import type { SessionStartGoalMode, SessionStartModalModel } from "./session-start-modal-model";
@@ -166,12 +166,7 @@ export function useSessionStartModalRunner({
     if (defaultObjective === undefined) return undefined;
     return {
       defaultObjective,
-      unavailableReason:
-        goalAvailability === null
-          ? "Choose a model to use Goal mode."
-          : goalAvailability.available
-            ? null
-            : goalAvailability.reason,
+      unavailableReason: goalModeUnavailableReason(goalAvailability),
     };
   }, [goalAvailability, intent]);
 
@@ -641,6 +636,15 @@ export const requireSourceSessionRuntimeKind = (
   }
 
   throw new Error("Reusable session is missing a runtime kind.");
+};
+
+/** Why the selected runtime cannot use Goal mode, or null. Without a runtime, none is chosen. */
+const goalModeUnavailableReason = (
+  availability: AgentDeliveryAvailability | null,
+): string | null => {
+  if (availability === null) return "Choose a model to use Goal mode.";
+  if (availability.available) return null;
+  return availability.reason;
 };
 
 const buildLaunchFields = (input: SessionStartDecisionInput): LaunchFields => {
