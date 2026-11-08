@@ -30,6 +30,7 @@ import { LoaderSpinner } from "@/ui/loader-spinner";
 import { ReferenceChip, type ReferenceChipProps } from "@/features/session/reference-chip";
 import { type AppTheme, motion, touchSlop } from "@/theme/tokens";
 import { Icon, type IconName } from "@/ui/icon";
+import { CardIconButton } from "./card-icon-button";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { ATTACHMENT_KIND_ICONS, type AttachmentPickers } from "./composer-attachments";
@@ -508,44 +509,6 @@ function QueuedAttachmentChip({
 }
 
 /**
- * The desktop card action: a ghost 24-point square with a muted 14-point icon. A pending action
- * shows a spinner in place of its icon.
- */
-export function CardIconButton({
-  icon,
-  accessibilityLabel,
-  disabled,
-  pending = false,
-  onPress,
-}: {
-  icon: IconName;
-  accessibilityLabel: string;
-  disabled: boolean;
-  pending?: boolean;
-  onPress: () => void;
-}): ReactElement {
-  const theme = useAppTheme();
-  return (
-    <Touchable
-      feedback="opacity"
-      onPress={onPress}
-      disabled={disabled}
-      hitSlop={touchSlop(24)}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled, busy: pending }}
-      style={styles.cardButton}
-    >
-      {pending ? (
-        <LoaderSpinner size={14} color={theme.desktop.mutedForeground} />
-      ) : (
-        <Icon name={icon} size={14} colorValue={theme.desktop.mutedForeground} />
-      )}
-    </Touchable>
-  );
-}
-
-/**
  * A message that the user edits. On desktop its editor opens below the stack; the phone shows the
  * message here and edits it in a sheet.
  */
@@ -733,14 +696,6 @@ const styles = StyleSheet.create((theme, rt) => ({
     alignItems: "center",
     gap: 2 * touchSlop(24),
     marginVertical: -2,
-  },
-  cardButton: {
-    width: 24,
-    height: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.radius.md,
-    borderCurve: "continuous",
   },
   editing: {
     gap: theme.space.xs,

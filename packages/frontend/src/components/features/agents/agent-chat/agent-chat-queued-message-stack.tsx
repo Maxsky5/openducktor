@@ -4,6 +4,7 @@ import {
   isGoalSlashCommand,
 } from "@openducktor/contracts";
 import { shouldInsertSyntheticSpaceBeforePart } from "@openducktor/core";
+import { CardIconButton } from "./agent-chat-card-icon-button";
 import { AgentChatGoalChip } from "./agent-chat-goal-chip";
 import {
   AlertCircle,
@@ -27,7 +28,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { Button } from "@/components/ui/button";
 import { CssPresenceList, useCssPresence } from "@/components/ui/css-presence";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -458,45 +458,5 @@ function QueuedMessageActions({
         <Trash2 className="size-3.5" aria-hidden="true" />
       </CardIconButton>
     </div>
-  );
-}
-
-/** An icon button whose tooltip names its action. A disabled button explains why. */
-export function CardIconButton({
-  label,
-  hint = label,
-  describedBy,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  describedBy?: string | undefined;
-  disabled: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}): ReactElement {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {/* A disabled button gets no pointer events, so the wrapper shows the tooltip. */}
-        <span className="inline-flex">
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-6 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label={label}
-            aria-describedby={describedBy}
-            disabled={disabled}
-            onClick={onClick}
-          >
-            {children}
-          </Button>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top">{hint}</TooltipContent>
-    </Tooltip>
   );
 }

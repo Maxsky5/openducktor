@@ -10,7 +10,7 @@ import { Icon, type IconName } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { goalActionsOpen, goalToneColor, pressGoalAction } from "./goal-row-state";
-import { CardIconButton } from "./message-queue-panel";
+import { CardIconButton } from "./card-icon-button";
 
 /** The desktop `-mb-1.5`: the row tucks under the composer card. */
 const TUCK = 6;

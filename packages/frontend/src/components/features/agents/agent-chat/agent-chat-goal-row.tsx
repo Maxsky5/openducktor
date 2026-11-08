@@ -20,7 +20,7 @@ import {
 import { type ReactElement, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { afterTransitions, CssPresenceList, useCssPresence } from "@/components/ui/css-presence";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { CardIconButton } from "./agent-chat-queued-message-stack";
+import { CardIconButton } from "./agent-chat-card-icon-button";
 import { cn } from "@/lib/utils";
 
 const TONE_CLASS_NAMES = {
