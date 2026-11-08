@@ -15,6 +15,7 @@ import type {
 import { Deferred, Effect, Exit, Fiber } from "effect";
 import { z } from "zod";
 import { HostOperationError } from "../../effect/host-errors";
+import { AgentSessionBusyError } from "../../ports/agent-session-send-error";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { allowAllGoalCommands } from "../../test-support/service-test-doubles";
 import { GOAL_SLASH_COMMAND } from "@openducktor/contracts";
@@ -1494,12 +1495,28 @@ describe("createAgentSessionCommandService", () => {
     ];
     const createGoalService = (
       goalRules: ControlServiceInput["goalRules"] = allowAllGoalCommands,
+      work: { activity: "idle" | "running"; foregroundTurnActive?: boolean } = {
+        activity: "idle",
+      },
     ) => {
       const goalInputs: Parameters<ControlServiceInput["runtime"]["controlGoal"]>[0][] = [];
       const service = createAgentSessionCommandService({
         ...createControlDeps(),
         goalRules,
         runtime: {
+          read: (ref) =>
+            Effect.succeed({
+              type: "live" as const,
+              session: {
+                ref,
+                title: "Session",
+                startedAt: "2026-10-13T12:00:00Z",
+                pendingApprovals: [],
+                pendingQuestions: [],
+                contextUsage: null,
+                ...work,
+              },
+            }),
           startSession: () => Effect.die(new Error("unexpected start")),
           resumeSession: () => Effect.die(new Error("unexpected resume")),
           continueInterruptedTurn: () => Effect.die(new Error("unexpected continue")),
@@ -1542,6 +1559,25 @@ describe("createAgentSessionCommandService", () => {
           submissionId: "submission-1",
         },
       ]);
+    });
+
+    test("a goal message waits in the queue while a turn runs, but not between goal turns", async () => {
+      const running = createGoalService(allowAllGoalCommands, { activity: "running" });
+      const refused = await Effect.runPromise(
+        Effect.flip(running.service.sendUserMessage({ ...workflowSend, parts: goalParts("Ship") })),
+      );
+      // The delivery service reads a busy cause and queues the message.
+      expect(refused.cause).toBeInstanceOf(AgentSessionBusyError);
+      expect(running.goalInputs).toEqual([]);
+
+      const betweenTurns = createGoalService(allowAllGoalCommands, {
+        activity: "running",
+        foregroundTurnActive: false,
+      });
+      await Effect.runPromise(
+        betweenTurns.service.sendUserMessage({ ...workflowSend, parts: goalParts("pause") }),
+      );
+      expect(betweenTurns.goalInputs[0]?.command).toEqual({ kind: "pause" });
     });
 
     test("sends no context with a goal action that starts no work", async () => {

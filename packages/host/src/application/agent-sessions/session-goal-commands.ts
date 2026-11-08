@@ -1,10 +1,14 @@
-import type {
-  AgentSessionGoalControlInput,
-  AgentSessionLiveRef,
-  AgentSessionScope,
-  AgentSessionUserMessagePart,
+import {
+  type AgentSessionGoalControlInput,
+  type AgentSessionLiveRef,
+  type AgentSessionScope,
+  type AgentSessionUserMessagePart,
+  GOAL_SLASH_COMMAND,
 } from "@openducktor/contracts";
 import { type AgentSessionGoalCommand, goalCommandStartsWork } from "@openducktor/core";
+import { AgentSessionBusyError } from "../../ports/agent-session-send-error";
+import type { createSessionCommandReadiness } from "./session-command-readiness";
+import { hasForegroundTurn } from "./session-foreground-readiness";
 import { classifySessionMessageSystemCommand } from "./session-message-system-command";
 import { Effect } from "effect";
 import {
@@ -38,7 +42,7 @@ export const createSessionGoalCommands = ({
   owner: ReturnType<typeof createSessionOperationOwner>;
   runtime: Pick<AgentSessionLiveStateService, "controlGoal">;
   turnPreparation: Pick<ReturnType<typeof createSessionTurnPreparation>, "context">;
-  checkPending: (ref: AgentSessionLiveRef) => Effect.Effect<unknown, HostError>;
+  checkPending: ReturnType<typeof createSessionCommandReadiness>["checkPending"];
   canonicalizeRepoPath: (repoPath: string) => Effect.Effect<string, HostError>;
   policyFor: (scope: AgentSessionScope) => AgentSessionOperationPolicy;
 }) => {
@@ -86,7 +90,13 @@ export const createSessionGoalCommands = ({
         command.kind === "set"
           ? ((yield* turnPreparation.context(content)) ?? content.systemPrompt)
           : undefined;
-      yield* checkPending(content);
+      const current = yield* checkPending(content);
+      // A runtime can set a goal inside a running turn. The queue must keep the message instead.
+      if (current.type === "live" && hasForegroundTurn(current.session))
+        return yield* new AgentSessionBusyError({
+          message: `/${GOAL_SLASH_COMMAND.trigger} waits until the running turn ends.`,
+          cause: null,
+        });
       const input = {
         repoPath: content.repoPath,
         runtimeKind: content.runtimeKind,
