@@ -16,24 +16,24 @@
     "worker:check": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --config wrangler.json && WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --config wrangler.preview.json"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.9",
+    "@astrojs/check": "^0.9.12",
     "@fontsource-variable/space-grotesk": "^5.3.0",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@happy-dom/global-registrator": "^21.0.4",
-    "@lucide/astro": "^1.59.0",
+    "@lucide/astro": "^1.69.0",
     "@openducktor/product-scenes": "workspace:*",
     "@playwright/test": "^1.64.1",
-    "@types/bun": "^1.4.3",
+    "@types/bun": "^1.4.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "astro": "^7.4.0",
+    "astro": "^7.4.5",
     "prettier": "^3.9.10",
     "prettier-plugin-astro": "^0.14.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "sharp": "^0.35.4",
     "typescript": "^6.0.0",
-    "wrangler": "4.151.1",
+    "wrangler": "4.158.0",
     "zod": "^4.6.7"
   }
 }
