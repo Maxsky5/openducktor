@@ -33,43 +33,69 @@ const panelElement = (): HTMLElement => {
   return panel;
 };
 
-/** Gives the panel a size transition, as the split CSS does during a move. */
-const withSizeTransition = (run: () => void): void => {
-  // SAFETY: the split reads only `transitionDuration` from the computed style.
-  const style = spyOn(window, "getComputedStyle").mockReturnValue({
-    transitionDuration: "0.2s",
-  } as CSSStyleDeclaration);
+type Slide = { end: () => void };
+
+/** Runs the slide that the split CSS starts on the moving panel content, until `end` stops it. */
+const withSlide = (run: (slide: Slide) => void): void => {
+  let isRunning = true;
+  const transition = new Animation();
+  const animations = spyOn(HTMLElement.prototype, "getAnimations").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return isRunning && this.dataset.moving ? [transition] : [];
+  });
   try {
-    run();
+    run({
+      end: () => {
+        isRunning = false;
+      },
+    });
   } finally {
-    style.mockRestore();
+    animations.mockRestore();
   }
+};
+
+/** Runs `run` with laid-out panels and a running slide. */
+const withLaidOutSlide = (run: (slide: Slide) => void): void => {
+  const removePanelLayout = installPanelLayout();
+  try {
+    withSlide(run);
+  } finally {
+    removePanelLayout();
+  }
+};
+
+const contentElement = (): HTMLElement => {
+  const content = document.querySelector<HTMLElement>('[data-slot="session-panel-content"]');
+  if (!content) throw new Error("Expected the panel content.");
+  return content;
+};
+
+const dispatchSlideEvent = (type: "transitionend" | "transitioncancel"): void => {
+  act(() => {
+    contentElement().dispatchEvent(new Event(type));
+  });
 };
 
 describe("SessionPanelSplit", () => {
   test("shows its open size after its view hid during a close and the panel opened", () => {
-    const removePanelLayout = installPanelLayout();
-    try {
-      withSizeTransition(() => {
-        const inView = (isHidden: boolean, presence: PanelPresence) => (
-          <div hidden={isHidden}>{renderSplit(presence, () => {})}</div>
-        );
-        const view = render(inView(false, "open"));
-        view.rerender(inView(false, "closing"));
-        // The view hides during the slide, so the panel ends its close while hidden.
-        view.rerender(inView(true, "closed"));
-        // Another view opens the shared right panel.
-        view.rerender(inView(true, "open"));
-        view.rerender(inView(false, "open"));
+    withLaidOutSlide(() => {
+      const inView = (isHidden: boolean, presence: PanelPresence) => (
+        <div hidden={isHidden}>{renderSplit(presence, () => {})}</div>
+      );
+      const view = render(inView(false, "open"));
+      view.rerender(inView(false, "closing"));
+      // The view hides during the slide, so the panel ends its close while hidden.
+      view.rerender(inView(true, "closed"));
+      // Another view opens the shared right panel.
+      view.rerender(inView(true, "open"));
+      view.rerender(inView(false, "open"));
 
-        expect(panelElement().style.flexGrow).toBe(String(sizes.panel));
-      });
-    } finally {
-      removePanelLayout();
-    }
+      expect(panelElement().style.flexGrow).toBe(String(sizes.panel));
+    });
   });
 
-  test("ends a move at once when no size transition runs, as with reduced motion", () => {
+  test("ends a move at once when no slide runs, as with reduced motion", () => {
     const onSettled = mock(() => {});
     const view = render(renderSplit("closed", onSettled));
     expect(screen.queryByText("Panel content")).toBeNull();
@@ -80,30 +106,70 @@ describe("SessionPanelSplit", () => {
     expect(onSettled).toHaveBeenCalledTimes(1);
   });
 
-  test("moves the main area and the panel together until the size transition ends", () => {
-    withSizeTransition(() => {
+  test("gives the panel its open size at once and slides its content in", () => {
+    withLaidOutSlide((slide) => {
       const onSettled = mock(() => {});
       const view = render(renderSplit("closed", onSettled));
 
       view.rerender(renderSplit("opening", onSettled));
 
-      const group = panelElement().parentElement;
-      const content = screen.getByText("Panel content").parentElement;
-      expect(group?.dataset.panelMotion).toBe("opening");
-      expect(content?.dataset.moving).toBe("opening");
-      expect(content?.hasAttribute("inert")).toBe(false);
+      expect(panelElement().style.flexGrow).toBe(String(sizes.panel));
+      expect(contentElement().dataset.moving).toBe("opening");
+      expect(contentElement().hasAttribute("inert")).toBe(false);
+      expect(screen.getByRole("separator").hidden).toBe(false);
       expect(onSettled).not.toHaveBeenCalled();
 
-      act(() => {
-        panelElement().dispatchEvent(new Event("transitionend"));
-      });
+      slide.end();
+      dispatchSlideEvent("transitionend");
 
       expect(onSettled).toHaveBeenCalledTimes(1);
     });
   });
 
+  test("gives the main area the panel space at once and slides the content out over it", () => {
+    withLaidOutSlide((slide) => {
+      const onSettled = mock(() => {});
+      const view = render(renderSplit("open", onSettled));
+
+      view.rerender(renderSplit("closing", onSettled));
+
+      expect(panelElement().style.flexGrow).toBe("0");
+      expect(panelElement().firstElementChild?.getAttribute("style")).toContain(
+        "overflow: visible",
+      );
+      expect(contentElement().dataset.moving).toBe("closing");
+      expect(contentElement().hasAttribute("inert")).toBe(true);
+      expect(screen.getByRole("separator", { hidden: true }).hidden).toBe(true);
+      expect(onSettled).not.toHaveBeenCalled();
+
+      slide.end();
+      dispatchSlideEvent("transitionend");
+      expect(onSettled).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  test("waits for the reversed slide when the panel opens again during its close", () => {
+    withLaidOutSlide((slide) => {
+      const onSettled = mock(() => {});
+      const view = render(renderSplit("open", onSettled));
+      view.rerender(renderSplit("closing", onSettled));
+
+      view.rerender(renderSplit("opening", onSettled));
+      // The open replaces the close slide, so the close slide reports a cancel.
+      dispatchSlideEvent("transitioncancel");
+
+      expect(contentElement().dataset.moving).toBe("opening");
+      expect(panelElement().style.flexGrow).toBe(String(sizes.panel));
+      expect(onSettled).not.toHaveBeenCalled();
+
+      slide.end();
+      dispatchSlideEvent("transitionend");
+      expect(onSettled).toHaveBeenCalledTimes(1);
+    });
+  });
+
   test("ends a hide at once when a drag already made the panel zero wide", () => {
-    withSizeTransition(() => {
+    withSlide(() => {
       const onSettled = mock(() => {});
       // The test DOM has no layout, so the panel is zero wide.
       const view = render(renderSplit("open", onSettled));
@@ -111,7 +177,7 @@ describe("SessionPanelSplit", () => {
       view.rerender(renderSplit("closing", onSettled));
 
       expect(onSettled).toHaveBeenCalledTimes(1);
-      expect(screen.getByText("Panel content").parentElement?.hasAttribute("inert")).toBe(true);
+      expect(contentElement().hasAttribute("inert")).toBe(true);
     });
   });
 
@@ -122,7 +188,7 @@ describe("SessionPanelSplit", () => {
 
     view.rerender(renderSplit("open", onSettled));
 
-    expect(panelElement().parentElement?.dataset.panelMotion).toBeUndefined();
+    expect(contentElement().dataset.moving).toBeUndefined();
     expect(screen.getByRole("separator")).toBeDefined();
     expect(onSettled).not.toHaveBeenCalled();
   });
