@@ -104,9 +104,11 @@ export type ClaudeGoalCommand =
 type PendingGoalCommand = ClaudeGoalCommand & {
   /** The text of the goal command reply, which carries the refusal reason. */
   output?: string;
-  replied: boolean;
-  /** A set that ended with no model turn reads the transcript before it reports a refusal. */
-  checking: boolean;
+  /**
+   * `sent`: Claude has not replied. `replied`: the reply came. `checking`: a set ended with no model
+   * turn, and the transcript read runs before the refusal.
+   */
+  phase: "sent" | "replied" | "checking";
   readonly settle: (error?: Error) => void;
 };
 
@@ -329,8 +331,8 @@ export const observeClaudeGoalFrame = ({
       ? goalCommandReplySchema.safeParse(message)
       : null;
   if (reply?.success) {
-    if (!pending || pending.replied) return;
-    pending.replied = true;
+    if (pending?.phase !== "sent") return;
+    pending.phase = "replied";
     pending.output = textFromContentBlocks(reply.data.message.content).trim();
     if (pending.kind === "clear") {
       publishGoal(session, tracking, null, emit, now);
@@ -348,7 +350,7 @@ export const observeClaudeGoalFrame = ({
       if (tracking.pending) tracking.pending.settle(error);
       else onFailure(error);
     });
-  if (pending?.kind === "set" && pending.replied && !pending.checking) {
+  if (pending?.kind === "set" && pending.phase === "replied") {
     if (isTurnFrame(message)) {
       publishGoal(session, tracking, { objective: pending.objective, ended: false }, emit, now);
       tracking.clearsSent = 0;
@@ -356,7 +358,7 @@ export const observeClaudeGoalFrame = ({
       return;
     }
     if (message.type === "result") {
-      pending.checking = true;
+      pending.phase = "checking";
       void read().then(() =>
         pending.settle(
           new HostValidationError({
@@ -393,8 +395,7 @@ export const beginClaudeGoalCommand = (
   const { promise, resolve, reject } = Promise.withResolvers<void>();
   const pending: PendingGoalCommand = {
     ...command,
-    replied: false,
-    checking: false,
+    phase: "sent",
     settle: (error) => {
       if (tracking.pending !== pending) return;
       tracking.pending = null;
