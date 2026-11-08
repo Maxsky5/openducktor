@@ -15,7 +15,7 @@ import type {
 const port = parentPort;
 if (!port) throw new Error("The Claude transcript parser must run in a worker thread.");
 // SAFETY: The private pool supplies these options through the worker constructor.
-const options = workerData as ClaudeTranscriptWorkerOptions;
+const { mode } = workerData as ClaudeTranscriptWorkerOptions;
 const maxRecordBytes = 2 * 1024 * 1024;
 
 port.on("message", (request: ClaudeTranscriptWorkerRequest) => {
@@ -37,7 +37,7 @@ port.on("message", (request: ClaudeTranscriptWorkerRequest) => {
         throw new Error("A Claude transcript worker record exceeds 2 MiB of source bytes.");
       }
       reason = "unexpected";
-      const reader = createClaudeTranscriptJsonReader(options);
+      const reader = createClaudeTranscriptJsonReader(mode);
       reader.write(source.toString("utf8", start, end));
       const result = reader.finish();
       if (result.kind !== "complete") {

@@ -10,10 +10,9 @@ import {
   isClaudeTranscriptSummaryTextPath,
   retainClaudeTranscriptRecord,
   retainParsedClaudeTranscriptRecord,
-  isClaudeTranscriptProjection,
-  selectClaudeTranscriptProjectionPath,
+  claudeTranscriptReadModePathSelectors,
   type ClaudeTranscriptPath,
-  type ClaudeTranscriptProjection,
+  type ClaudeTranscriptReadMode,
 } from "./claude-transcript-retention";
 
 export class ClaudeTranscriptJsonError extends Error {
@@ -173,7 +172,7 @@ const createJsonLexicalCheck = () => {
 };
 
 const createStreamingClaudeTranscriptJsonReader = (
-  options: ClaudeTranscriptProjection = {},
+  mode: ClaudeTranscriptReadMode = "history",
   hints: { collect?: TypeHints; known?: ReadonlyMap<number, ClaudeProtocolValue | undefined> } = {},
 ) => {
   // SAFETY: stream-json 3.6.0 exports this synchronous tokenizer; its declaration only lists the async wrapper.
@@ -184,7 +183,7 @@ const createStreamingClaudeTranscriptJsonReader = (
   };
   const tokenize = jsonParser({ packValues: false });
   const checkLexical = createJsonLexicalCheck();
-  const selectPath = selectClaudeTranscriptProjectionPath(options);
+  const selectPath = claudeTranscriptReadModePathSelectors[mode];
   const stack: Frame[] = [];
   let root: ClaudeProtocolObject = {};
   let complete = false;
@@ -290,7 +289,7 @@ const createStreamingClaudeTranscriptJsonReader = (
         scalar = undefined;
         if (!selected) break;
         if (
-          options.summaryOnly &&
+          mode === "summary" &&
           token.name === "startString" &&
           isClaudeTranscriptSummaryTextPath(path)
         ) {
@@ -360,7 +359,7 @@ const createStreamingClaudeTranscriptJsonReader = (
       if (!hasInput) return null;
       consume(none);
       if (!complete || stack.length !== 0) throw new ClaudeTranscriptJsonError("incomplete");
-      return isClaudeTranscriptProjection(options) ? root : retainClaudeTranscriptRecord(root);
+      return mode !== "history" ? root : retainClaudeTranscriptRecord(root);
     },
   };
 };
@@ -375,7 +374,7 @@ export type ClaudeTranscriptJsonReader = {
 };
 
 const createClaudeTranscriptJsonPass = (
-  options: ClaudeTranscriptProjection = {},
+  mode: ClaudeTranscriptReadMode = "history",
   replay?: { types: TypeHints; digest: string },
 ): ClaudeTranscriptJsonReader => {
   let chunks: string[] = [];
@@ -383,7 +382,7 @@ const createClaudeTranscriptJsonPass = (
   let types: TypeHints | undefined;
   let digest: Hash | undefined = replay ? createHash("sha256") : undefined;
   let streaming = replay
-    ? createStreamingClaudeTranscriptJsonReader(options, { known: replay.types })
+    ? createStreamingClaudeTranscriptJsonReader(mode, { known: replay.types })
     : undefined;
   let finished = false;
   return {
@@ -401,7 +400,7 @@ const createClaudeTranscriptJsonPass = (
         return;
       }
       types = new Map();
-      streaming = createStreamingClaudeTranscriptJsonReader(options, { collect: types });
+      streaming = createStreamingClaudeTranscriptJsonReader(mode, { collect: types });
       digest = createHash("sha256");
       for (const buffered of chunks) {
         digest.update(buffered, "utf16le");
@@ -421,7 +420,7 @@ const createClaudeTranscriptJsonPass = (
         return types
           ? {
               kind: "replay",
-              reader: createClaudeTranscriptJsonPass(options, { types, digest: checksum }),
+              reader: createClaudeTranscriptJsonPass(mode, { types, digest: checksum }),
             }
           : { kind: "complete", record };
       }
@@ -434,7 +433,7 @@ const createClaudeTranscriptJsonPass = (
         value = JSON.parse(source) as ClaudeProtocolValue;
       } catch (cause) {
         // Use the tokenizer's error classification without accepting another parse result.
-        const classifier = createStreamingClaudeTranscriptJsonReader(options);
+        const classifier = createStreamingClaudeTranscriptJsonReader(mode);
         classifier.write(source);
         classifier.finish();
         throw new ClaudeTranscriptJsonError("malformed", cause);
@@ -443,7 +442,7 @@ const createClaudeTranscriptJsonPass = (
       if (value === null || typeof value !== "object" || Array.isArray(value))
         throw new ClaudeTranscriptJsonError("record");
       try {
-        return { kind: "complete", record: retainParsedClaudeTranscriptRecord(value, options) };
+        return { kind: "complete", record: retainParsedClaudeTranscriptRecord(value, mode) };
       } catch (cause) {
         if (cause instanceof ClaudeTranscriptDepthError)
           throw new ClaudeTranscriptJsonError("record", cause);
@@ -454,5 +453,5 @@ const createClaudeTranscriptJsonPass = (
 };
 
 export const createClaudeTranscriptJsonReader = (
-  options: ClaudeTranscriptProjection = {},
-): ClaudeTranscriptJsonReader => createClaudeTranscriptJsonPass(options);
+  mode: ClaudeTranscriptReadMode = "history",
+): ClaudeTranscriptJsonReader => createClaudeTranscriptJsonPass(mode);

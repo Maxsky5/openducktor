@@ -9,10 +9,8 @@ import {
   createClaudeTranscriptWorkerPool,
   type ClaudeTranscriptWorkerPool,
 } from "./claude-transcript-worker-pool";
-import type {
-  ClaudeTranscriptWorkerBatch,
-  ClaudeTranscriptWorkerOptions,
-} from "./claude-transcript-worker-protocol";
+import type { ClaudeTranscriptReadMode } from "./claude-transcript-retention";
+import type { ClaudeTranscriptWorkerBatch } from "./claude-transcript-worker-protocol";
 
 type ReadFailure = HostOperationError | AgentRuntimeQueryError;
 export type ClaudeTranscriptSerialRecord = {
@@ -43,10 +41,10 @@ export const scanClaudeTranscriptInWorkers = (
   size: number,
   consume: (records: readonly ClaudeProtocolObject[]) => Effect.Effect<void, ReadFailure>,
   createSerialRecord: (start: number, line: number) => ClaudeTranscriptSerialRecord,
-  options: ClaudeTranscriptWorkerOptions,
+  mode: ClaudeTranscriptReadMode,
 ): Effect.Effect<void, ReadFailure> =>
   Effect.acquireUseRelease(
-    createClaudeTranscriptWorkerPool(options),
+    createClaudeTranscriptWorkerPool({ mode }),
     (pool) => scan(file, path, size, consume, createSerialRecord, pool),
     (pool) =>
       Effect.tryPromise({

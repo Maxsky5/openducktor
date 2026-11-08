@@ -156,24 +156,8 @@ export const selectClaudeTranscriptGoalPath = (path: ClaudeTranscriptPath): bool
   );
 };
 
-/** A projection keeps only some fields of each record. Without one, a read keeps history fields. */
-export type ClaudeTranscriptProjection = {
-  metadataOnly?: boolean;
-  summaryOnly?: boolean;
-  goalOnly?: boolean;
-};
-
-export const isClaudeTranscriptProjection = (options: ClaudeTranscriptProjection): boolean =>
-  options.metadataOnly === true || options.summaryOnly === true || options.goalOnly === true;
-
-export const selectClaudeTranscriptProjectionPath = (
-  options: ClaudeTranscriptProjection,
-): ((path: ClaudeTranscriptPath) => boolean) => {
-  if (options.metadataOnly) return selectClaudeTranscriptMetadataPath;
-  if (options.summaryOnly) return selectClaudeTranscriptSummaryPath;
-  if (options.goalOnly) return selectClaudeTranscriptGoalPath;
-  return selectClaudeTranscriptPath;
-};
+/** A read mode other than `history` keeps only some fields of each record. */
+export type ClaudeTranscriptReadMode = "history" | "scope" | "summary" | "goal";
 
 export const isClaudeTranscriptSummaryTextPath = (path: ClaudeTranscriptPath): boolean =>
   path[0] === "message" &&
@@ -239,6 +223,13 @@ export const selectClaudeTranscriptPath = (path: ClaudeTranscriptPath): boolean 
   if (!isMessageBlock(path) || path.length === 3) return true;
   return selectContentBlockPath(path);
 };
+
+export const claudeTranscriptReadModePathSelectors = {
+  history: selectClaudeTranscriptPath,
+  scope: selectClaudeTranscriptMetadataPath,
+  summary: selectClaudeTranscriptSummaryPath,
+  goal: selectClaudeTranscriptGoalPath,
+} satisfies Record<ClaudeTranscriptReadMode, (path: ClaudeTranscriptPath) => boolean>;
 
 export const claudeTranscriptStringLimit = (
   path: ClaudeTranscriptPath,
@@ -315,9 +306,9 @@ export const retainClaudeTranscriptRecord = (
 
 export const retainParsedClaudeTranscriptRecord = (
   record: ClaudeProtocolObject,
-  options: ClaudeTranscriptProjection = {},
+  mode: ClaudeTranscriptReadMode = "history",
 ): ClaudeProtocolObject | null => {
-  const select = selectClaudeTranscriptProjectionPath(options);
+  const select = claudeTranscriptReadModePathSelectors[mode];
   const checkDepth = (value: ClaudeProtocolValue, depth: number): void => {
     // eslint-disable-next-line anti-slop/no-runtime-typeof -- JSON.parse already validates this JSON value.
     if (value === null || typeof value !== "object") return;
@@ -339,7 +330,7 @@ export const retainParsedClaudeTranscriptRecord = (
     }
     // eslint-disable-next-line anti-slop/no-runtime-typeof -- JSON.parse already validates this JSON value.
     if (typeof value === "string") {
-      if (options.summaryOnly && isClaudeTranscriptSummaryTextPath(path))
+      if (mode === "summary" && isClaudeTranscriptSummaryTextPath(path))
         return value.trim().length > 0 ? "x" : "";
       const limit = claudeTranscriptStringLimit(path, parent);
       if (limit === undefined) return value;
@@ -377,5 +368,5 @@ export const retainParsedClaudeTranscriptRecord = (
   };
   // SAFETY: The selected root is an object, and retention preserves its container kind.
   const retained = retain(record, [], undefined) as ClaudeProtocolObject;
-  return isClaudeTranscriptProjection(options) ? retained : retainClaudeTranscriptRecord(retained);
+  return mode !== "history" ? retained : retainClaudeTranscriptRecord(retained);
 };

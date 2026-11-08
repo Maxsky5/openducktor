@@ -123,10 +123,10 @@ test("worker transport keeps full tool input and JSON-owned keys while capping o
   }
 });
 
-test.each(["metadataOnly", "summaryOnly"] as const)(
+test.each(["scope", "summary"] as const)(
   "transcript workers apply the %s retention policy",
   async (mode) => {
-    const pool = await Effect.runPromise(createClaudeTranscriptWorkerPool({ [mode]: true }));
+    const pool = await Effect.runPromise(createClaudeTranscriptWorkerPool({ mode }));
     try {
       const input = batch(
         `${JSON.stringify({
@@ -139,7 +139,7 @@ test.each(["metadataOnly", "summaryOnly"] as const)(
       const result = await pool.slots[0]!.parse(input.buffer, input.byteLength);
       const expected = { type: "assistant", sessionId: "session-1", uuid: "assistant-1" };
       expect(result.records).toEqual([
-        mode === "metadataOnly"
+        mode === "scope"
           ? expected
           : { ...expected, message: { content: [{ type: "text", text: "x" }] } },
       ]);

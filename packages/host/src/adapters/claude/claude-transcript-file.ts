@@ -13,6 +13,7 @@ import {
   type ClaudeTranscriptJsonReader,
 } from "./claude-transcript-json";
 import { scanClaudeTranscriptInWorkers } from "./claude-transcript-parallel-scan";
+import type { ClaudeTranscriptReadMode } from "./claude-transcript-retention";
 
 export const CLAUDE_TRANSCRIPT_MISSING_MESSAGE =
   "The selected Claude session is unavailable. Check its history on the host.";
@@ -94,7 +95,7 @@ export const scanClaudeTranscriptBatches = (
   path: string,
   consume: (records: readonly ClaudeProtocolObject[]) => Effect.Effect<void, ReadFailure>,
   options: {
-    mode?: "history" | "scope" | "summary" | "goal";
+    mode?: ClaudeTranscriptReadMode;
     /**
      * `startByte` reads from a line start and leaves a last line without a line feed unread.
      * `onEnd` then gets the offset after the last line that the read consumed.
@@ -109,11 +110,7 @@ export const scanClaudeTranscriptBatches = (
     (file) =>
       Effect.gen(function* () {
         const { range } = options;
-        const projection = {
-          metadataOnly: options.mode === "scope",
-          summaryOnly: options.mode === "summary",
-          goalOnly: options.mode === "goal",
-        };
+        const mode = options.mode ?? "history";
         const stat = yield* readFileStat(file, path);
         const size = Number(stat.size);
         const decoder = new StringDecoder("utf8");
@@ -123,7 +120,7 @@ export const scanClaudeTranscriptBatches = (
         let skipPartialLine = position > 0 && !completeLinesOnly;
         let line = 1;
         let recordStart = position;
-        let reader = createClaudeTranscriptJsonReader(projection);
+        let reader = createClaudeTranscriptJsonReader(mode);
         let hasRecord = false;
         type Entry = {
           pass: ReturnType<ClaudeTranscriptJsonReader["finish"]>;
@@ -183,7 +180,7 @@ export const scanClaudeTranscriptBatches = (
             consume,
             (start, line) => {
               const decoder = new StringDecoder("utf8");
-              const reader = createClaudeTranscriptJsonReader(projection);
+              const reader = createClaudeTranscriptJsonReader(mode);
               return {
                 write: (bytes) => {
                   const text = decoder.write(bytes);
@@ -199,7 +196,7 @@ export const scanClaudeTranscriptBatches = (
                   }),
               };
             },
-            projection,
+            mode,
           );
           options.onEnd?.(size);
           if (options.onReadSnapshot) {
@@ -247,7 +244,7 @@ export const scanClaudeTranscriptBatches = (
                     false,
                   );
                   entries.push({ pass, start: recordStart, end: chunkStart + index, line });
-                  reader = createClaudeTranscriptJsonReader(projection);
+                  reader = createClaudeTranscriptJsonReader(mode);
                   hasRecord = false;
                   line++;
                   start = index + 1;

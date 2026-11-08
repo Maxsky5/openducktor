@@ -11,9 +11,9 @@ import {
 } from "./claude-transcript-json";
 
 const createClaudeTranscriptJsonReader = (
-  options: Parameters<typeof createProductionReader>[0] = {},
+  mode: Parameters<typeof createProductionReader>[0] = "history",
 ) => {
-  const reader = createProductionReader(options);
+  const reader = createProductionReader(mode);
   const chunks: string[] = [];
   return {
     write: (chunk: string): void => {
@@ -447,7 +447,7 @@ describe("Claude transcript JSON reader", () => {
   });
 
   test("reads session scope without collecting conversation or tool payloads", () => {
-    const reader = createClaudeTranscriptJsonReader({ metadataOnly: true });
+    const reader = createClaudeTranscriptJsonReader("scope");
     reader.write('{"type":"user","sessionId":"session-1","cwd":"/repo","message":{"content":"');
     const chunk = "x".repeat(8192);
     for (let index = 0; index < 4096; index++) reader.write(chunk);
@@ -461,7 +461,7 @@ describe("Claude transcript JSON reader", () => {
   });
 
   test("reads child completion and graph metadata without tool inputs, outputs, or media", () => {
-    const reader = createClaudeTranscriptJsonReader({ summaryOnly: true });
+    const reader = createClaudeTranscriptJsonReader("summary");
     reader.write(
       JSON.stringify({
         type: "assistant",
@@ -541,7 +541,7 @@ describe("Claude transcript JSON reader", () => {
   test.each([false, true])(
     "summarizes chunked whitespace text with a late non-space: %s",
     (hasText) => {
-      const reader = createClaudeTranscriptJsonReader({ summaryOnly: true });
+      const reader = createClaudeTranscriptJsonReader("summary");
       reader.write('{"type":"assistant","message":{"content":[{"type":"text","text":"');
       const chunk = " \u00a0\u2009\u2028\ufeff".repeat(1638);
       for (let index = 0; index < 1024; index++) reader.write(chunk);
@@ -599,7 +599,7 @@ describe("Claude transcript JSON reader", () => {
   test("retains native relocation records in history and scope-only reads", () => {
     const record = { type: "relocated", relocatedCwd: "/moved" };
     expect(readRecord(record)).toEqual(record);
-    const reader = createClaudeTranscriptJsonReader({ metadataOnly: true });
+    const reader = createClaudeTranscriptJsonReader("scope");
     reader.write(JSON.stringify(record));
     expect(reader.finish()).toEqual(record);
   });
