@@ -15,7 +15,13 @@ import { AttachmentPreview } from "./attachment-preview";
 type ReferenceNode = Extract<UserMessageContentNode, { kind: "reference" }>;
 
 /** The desktop `renderUserMessageReferenceChip`: a file, skill, or subagent chip in the text. */
-function InlineReference({ node }: { node: ReferenceNode }): ReactElement {
+function InlineReference({
+  node,
+  alignWithText,
+}: {
+  node: ReferenceNode;
+  alignWithText: boolean;
+}): ReactElement {
   const { part } = node;
   const chip =
     part.kind === "skill_mention" ? (
@@ -27,7 +33,7 @@ function InlineReference({ node }: { node: ReferenceNode }): ReactElement {
     );
   return (
     <View
-      style={styles.reference}
+      style={[styles.reference, alignWithText ? styles.referenceWithText : null]}
       accessible
       accessibilityLabel={`Reference ${userMessageReferenceLabel(part)}`}
     >
@@ -56,6 +62,8 @@ export const UserMessageRow = memo(function UserMessageRow({
     () => buildUserMessageContent(message),
     [message],
   );
+  const hasText =
+    nodes?.some((node) => node.kind === "text" && node.text.trim().length > 0) ?? false;
   const hasBubble = nodes !== null || attachments.length > 0;
   return (
     <View style={styles.row}>
@@ -67,7 +75,7 @@ export const UserMessageRow = memo(function UserMessageRow({
                 node.kind === "text" ? (
                   <NativeText key={node.key}>{node.text}</NativeText>
                 ) : (
-                  <InlineReference key={node.key} node={node} />
+                  <InlineReference key={node.key} node={node} alignWithText={hasText} />
                 ),
               )}
             </Text>
@@ -111,7 +119,7 @@ function MessageMeta({
   );
 }
 
-const styles = StyleSheet.create((theme) => ({
+const styles = StyleSheet.create((theme, rt) => ({
   // The desktop row `pt-4` and article `mb-4 ml-auto max-w-[80%] items-end`.
   row: {
     alignItems: "flex-end",
@@ -141,8 +149,10 @@ const styles = StyleSheet.create((theme) => ({
     lineHeight: 24,
     color: theme.desktop.foreground,
   },
-  // The desktop `mx-1 align-middle` around a chip.
-  reference: { marginHorizontal: theme.space.xs, marginBottom: -6 },
+  reference: { marginHorizontal: theme.space.xs },
+  // A 16-point placeholder aligns the 24-point capsule with the 15-point message text.
+  // Follow half the 12-point label growth when the system text size changes.
+  referenceWithText: { height: 16 + 6 * (rt.fontScale - 1) },
   attachments: {
     flexDirection: "row",
     flexWrap: "wrap",
