@@ -32,6 +32,7 @@ import type {
 import { RegularToolMessage } from "./agent-chat-regular-tool-message";
 import { AgentChatTaskTool } from "./agent-chat-task-tool";
 import { renderUserMessageReferenceChip } from "./agent-chat-user-message-reference-chip";
+import { AgentChatGoalChip } from "./agent-chat-goal-chip";
 import {
   buildUserMessageContent,
   readUserMessageText,
@@ -136,13 +137,12 @@ const renderUserMessageInlineContent = (
 
   return (
     <AgentChatTranscriptProse className="leading-6">
-      {nodes.map((node) =>
-        node.kind === "text" ? (
-          <Fragment key={node.key}>{node.text}</Fragment>
-        ) : (
-          renderUserMessageReferenceChip(node.part, node.key)
-        ),
-      )}
+      {nodes.map((node) => {
+        if (node.kind === "text") return <Fragment key={node.key}>{node.text}</Fragment>;
+        if (node.kind === "goal_command")
+          return <AgentChatGoalChip key={node.key} className="mr-1.5" />;
+        return renderUserMessageReferenceChip(node.part, node.key);
+      })}
     </AgentChatTranscriptProse>
   );
 };

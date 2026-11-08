@@ -1,7 +1,8 @@
-import type {
-  AgentMessageQueueAction,
-  AgentQueuedMessage,
-  AgentSessionUserMessagePart,
+import {
+  type AgentMessageQueueAction,
+  type AgentQueuedMessage,
+  type AgentSessionUserMessagePart,
+  isGoalSlashCommand,
 } from "@openducktor/contracts";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
@@ -455,7 +456,11 @@ const inlinePart = (part: AgentSessionUserMessagePart): ReactNode => {
     case "text":
       return part.text;
     case "slash_command":
-      return `/${part.command.trigger}`;
+      return isGoalSlashCommand(part.command) ? (
+        <InlineChip kind="goal" label="Goal" />
+      ) : (
+        `/${part.command.trigger}`
+      );
     case "file_reference":
       return <InlineChip kind="file" label={part.file.name} fileKind={part.file.kind} />;
     case "skill_mention":

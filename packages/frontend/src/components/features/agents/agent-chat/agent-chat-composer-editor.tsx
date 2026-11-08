@@ -1,4 +1,9 @@
-import type { AgentMessageSubmitMode } from "@openducktor/contracts";
+import { type AgentMessageSubmitMode, isGoalSlashCommand } from "@openducktor/contracts";
+import {
+  AGENT_CHAT_GOAL_CHIP_CLASS_NAME,
+  AGENT_CHAT_GOAL_CHIP_LABEL,
+  getAgentChatGoalIconMarkup,
+} from "./agent-chat-goal-chip-markup";
 import type {
   AgentFileSearchResult,
   AgentSkillReference,
@@ -209,6 +214,12 @@ const buildComposerContentMarkup = (segments: AgentChatComposerSegments): string
 
       if (segment.kind === "subagent_reference") {
         return buildComposerSubagentReferenceChipMarkup(segment.subagent, segment.id);
+      }
+
+      if (segment.kind === "slash_command" && isGoalSlashCommand(segment.command)) {
+        return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segment.id)}" data-segment-id="${escapeHtml(segment.id)}" class="${escapeHtml(
+          cn(AGENT_CHAT_GOAL_CHIP_CLASS_NAME, "mx-0.5 mr-2"),
+        )}">${getAgentChatGoalIconMarkup()}${escapeHtml(AGENT_CHAT_GOAL_CHIP_LABEL)}</span>`;
       }
 
       if (segment.kind === "slash_command") {

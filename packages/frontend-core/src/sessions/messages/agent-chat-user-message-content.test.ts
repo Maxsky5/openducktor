@@ -118,3 +118,18 @@ describe("user message summary", () => {
     expect(summaryOf("", [])).toBe("");
   });
 });
+
+describe("goal command node", () => {
+  test("shows a leading /goal as a goal node before the objective", () => {
+    expect(nodesOf("/goal tell me some poems", [])).toEqual([
+      { kind: "goal_command", key: "goal-command" },
+      { kind: "text", key: "text", text: "tell me some poems" },
+    ]);
+    expect(nodesOf("/goal", [])).toEqual([{ kind: "goal_command", key: "goal-command" }]);
+  });
+
+  test("keeps other text that only starts like /goal", () => {
+    expect(nodesOf("/goals are fun", [])?.map((node) => node.kind)).toEqual(["text"]);
+    expect(nodesOf("Set a /goal", [])?.map((node) => node.kind)).toEqual(["text"]);
+  });
+});

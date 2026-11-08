@@ -1,4 +1,9 @@
-import type { AgentQueuedMessage, AgentSessionUserMessagePart } from "@openducktor/contracts";
+import {
+  type AgentQueuedMessage,
+  type AgentSessionUserMessagePart,
+  isGoalSlashCommand,
+} from "@openducktor/contracts";
+import { AgentChatGoalChip } from "./agent-chat-goal-chip";
 import {
   AlertCircle,
   AlertTriangle,
@@ -298,6 +303,9 @@ const renderInlinePart = (
   if (isUserMessageReferencePart(part)) {
     return renderUserMessageReferenceChip(part, key, "compact");
   }
+  if (part.kind === "slash_command" && isGoalSlashCommand(part.command)) {
+    return <AgentChatGoalChip key={key} className="mr-1 h-5 gap-1 px-2 text-[11px] align-middle" />;
+  }
   return <span key={key}>{part.kind === "text" ? part.text : `/${part.command.trigger}`}</span>;
 };
 
@@ -315,9 +323,11 @@ function QueuedMessageBody({
   let previousInline: AgentSessionUserMessagePart | null = null;
   for (const { key, part } of keyedParts(parts)) {
     if (part.kind !== "attachment") {
-      // A command and its argument read as "/goal Ship", as in the transcript.
+      // A command and its argument read as "/review main", as in the transcript. The goal chip
+      // has its own space after it.
       if (
         previousInline?.kind === "slash_command" &&
+        !isGoalSlashCommand(previousInline.command) &&
         part.kind === "text" &&
         !/^\s/.test(part.text)
       )
