@@ -463,46 +463,41 @@ export function useAgentChatRowWindow({
     }
   }, [messagesContainerRef]);
 
+  const handleScroll = useEffectEvent((container: HTMLDivElement): void => {
+    rereadRowAnchor();
+
+    const previousScrollTop = lastScrollTopRef.current;
+    lastScrollTopRef.current = container.scrollTop;
+    if (isFollowingLatestWindow() && rangeRef.current.endRowExclusive === rows.length) return;
+
+    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    const isScrollingUp = container.scrollTop < previousScrollTop;
+    const isScrollingDown = container.scrollTop > previousScrollTop;
+    const isNearTop = container.scrollTop <= CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX;
+    const isNearBottom = maxScrollTop - container.scrollTop <= CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX;
+    const shouldPreloadBefore = isNearTop || (isScrollingUp && isMountedRowNearStart(container));
+    const shouldPreloadAfter = isNearBottom || (isScrollingDown && isMountedRowNearEnd(container));
+
+    if (shouldPreloadBefore && expandBefore()) {
+      return;
+    }
+
+    if (shouldPreloadAfter) {
+      expandAfter();
+    }
+  });
+
+  // The listener lives once per container. A streamed row then does not read the scroll position,
+  // which would lay out the page before its paint.
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    const handleScroll = () => {
-      rereadRowAnchor();
-
-      const previousScrollTop = lastScrollTopRef.current;
-      lastScrollTopRef.current = container.scrollTop;
-      if (isFollowingLatestWindow() && rangeRef.current.endRowExclusive === rows.length) return;
-
-      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-      const isScrollingUp = container.scrollTop < previousScrollTop;
-      const isScrollingDown = container.scrollTop > previousScrollTop;
-      const isNearTop = container.scrollTop <= CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX;
-      const isNearBottom = maxScrollTop - container.scrollTop <= CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX;
-      const shouldPreloadBefore = isNearTop || (isScrollingUp && isMountedRowNearStart(container));
-      const shouldPreloadAfter =
-        isNearBottom || (isScrollingDown && isMountedRowNearEnd(container));
-
-      if (shouldPreloadBefore && expandBefore()) {
-        return;
-      }
-
-      if (shouldPreloadAfter) {
-        expandAfter();
-      }
-    };
-
+    const onScroll = (): void => handleScroll(container);
     lastScrollTopRef.current = container.scrollTop;
-    container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, [
-    expandAfter,
-    expandBefore,
-    isFollowingLatestWindow,
-    rereadRowAnchor,
-    messagesContainerRef,
-    rows.length,
-  ]);
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [messagesContainerRef]);
 
   const effectiveRange = clampRange(range, rows.length);
   const effectiveStartRow = effectiveRange.startRow;
