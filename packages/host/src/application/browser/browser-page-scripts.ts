@@ -57,27 +57,30 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
   // A top-layer element, such as a modal dialog or a popover of the page, paints above any
   // z-index. A manual popover puts the overlay in the same top layer, so draw above those too.
   overlayHost.setAttribute("popover", "manual");
-  const showOverlay = () => {
-    try { overlayHost.showPopover(); } catch (error) {}
+  // A modal dialog of the page makes every node outside it inert, so the overlay lives in the
+  // last open modal dialog. Otherwise the markers and the picker capture layer get no input.
+  const overlayParent = () => {
+    const modals = document.querySelectorAll("dialog:modal");
+    return modals[modals.length - 1] ?? document.documentElement;
   };
   const raiseOverlay = () => {
-    if (!overlayHost.isConnected) return;
+    const parent = overlayParent();
+    if (!parent) return;
+    // A move hides the popover. The overlay shows again after the move.
+    if (overlayHost.parentNode !== parent) parent.appendChild(overlayHost);
     try { overlayHost.hidePopover(); } catch (error) {}
-    showOverlay();
-  };
-  const attachOverlay = () => {
-    document.documentElement.appendChild(overlayHost);
-    showOverlay();
+    try { overlayHost.showPopover(); } catch (error) {}
   };
   if (document.documentElement) {
-    attachOverlay();
+    raiseOverlay();
   } else {
-    document.addEventListener("DOMContentLoaded", attachOverlay, { once: true });
+    document.addEventListener("DOMContentLoaded", raiseOverlay, { once: true });
   }
   // A page that opens a dialog or a popover after the overlay takes the top layer gains the top
-  // layer above the overlay. Raise the overlay again so the picker and the markers stay above.
+  // layer above the overlay. Raise the overlay again so the picker and the markers stay above. A
+  // dialog that closes gives the overlay back to the document or to the modal dialog under it.
   addEventListener("toggle", (event) => {
-    if (event.target !== overlayHost && event.newState === "open") raiseOverlay();
+    if (event.target !== overlayHost) raiseOverlay();
   }, true);
   const overlay = overlayHost.attachShadow({ mode: "closed" });
   const layer = document.createElement("div");
@@ -309,7 +312,11 @@ export const BROWSER_HOST_WORLD_SCRIPT = `(() => {
   };
   addEventListener("scroll", scheduleAnchors, { capture: true, passive: true });
   addEventListener("resize", scheduleAnchors, { passive: true });
-  new MutationObserver(scheduleAnchors).observe(document, { subtree: true, childList: true, attributes: true });
+  new MutationObserver(() => {
+    // A page that removes its open modal dialog removes the overlay with it.
+    if (!overlayHost.isConnected) raiseOverlay();
+    scheduleAnchors();
+  }).observe(document, { subtree: true, childList: true, attributes: true });
   globalThis.__odtSetAnchors = (next) => {
     anchors = next;
     raiseOverlay();
