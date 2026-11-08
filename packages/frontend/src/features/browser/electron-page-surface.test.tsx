@@ -74,8 +74,16 @@ describe("ElectronPageSurface", () => {
     expect(capturePage).not.toHaveBeenCalled();
   });
 
-  test("turns a page into its snapshot under a host overlay, then shows it again", async () => {
+  test("turns a page into its snapshot under a host overlay, and keeps it until the page is back", async () => {
     const { bridge, setSurface, capturePage } = createBridge();
+    let placed = (): void => {};
+    setSurface.mockImplementation(async (input) => {
+      if (input.visible) {
+        await new Promise<void>((resolve) => {
+          placed = resolve;
+        });
+      }
+    });
     const { queryByTestId, rerenderSurface } = renderSurface(bridge, placement(true), true);
 
     await waitFor(() =>
@@ -85,38 +93,11 @@ describe("ElectronPageSurface", () => {
     expect(queryByTestId("browser-page-snapshot")).not.toBeNull();
 
     rerenderSurface(placement(true), false);
-    await waitFor(() =>
-      expect(setSurface).toHaveBeenLastCalledWith({
-        tabId: TAB_ID,
-        visible: true,
-        bounds: { x: 12, y: 24, width: 640, height: 480 },
-      }),
-    );
-    expect(queryByTestId("browser-page-snapshot")).toBeNull();
-  });
-
-  test("keeps the snapshot until the page is back in its window", async () => {
-    const { bridge, setSurface } = createBridge();
-    let placed = (): void => {};
-    // Only a shown page waits for the test, so a late hide does not take its place.
-    setSurface.mockImplementation(async (input) => {
-      if (input.visible) {
-        await new Promise<void>((resolve) => {
-          placed = resolve;
-        });
-      }
+    expect(setSurface).toHaveBeenLastCalledWith({
+      tabId: TAB_ID,
+      visible: true,
+      bounds: { x: 12, y: 24, width: 640, height: 480 },
     });
-    const { queryByTestId, rerenderSurface } = renderSurface(bridge, placement(true), true);
-    await waitFor(() => expect(queryByTestId("browser-page-snapshot")).not.toBeNull());
-
-    rerenderSurface(placement(true), false);
-    await waitFor(() =>
-      expect(setSurface).toHaveBeenLastCalledWith({
-        tabId: TAB_ID,
-        visible: true,
-        bounds: { x: 12, y: 24, width: 640, height: 480 },
-      }),
-    );
     expect(queryByTestId("browser-page-snapshot")).not.toBeNull();
 
     placed();

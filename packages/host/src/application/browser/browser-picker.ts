@@ -8,6 +8,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
+import { createSerialGate } from "../../effect/serial-gate";
 import type {
   BrowserEngineError,
   BrowserEnginePort,
@@ -94,6 +95,8 @@ export const createBrowserPicker = ({
   reportFailure,
 }: BrowserPickerInput) => {
   const enabledTabs = new Set<string>();
+  /** One lookup at a time for each tab, because each hit test hides and shows the same layer. */
+  const lookups = createSerialGate();
   /** The picked elements of each tab. The page draws them and the client shows the comment box. */
   const selections = new Map<string, BrowserPickedElement[]>();
 
@@ -160,7 +163,7 @@ export const createBrowserPicker = ({
     });
 
   /** The element under a point in CSS pixels of the viewport, with its box and label. */
-  const targetAt = (tabId: string, x: number, y: number, operation: string) =>
+  const findTarget = (tabId: string, x: number, y: number, operation: string) =>
     Effect.gen(function* () {
       const host = yield* requireLive(tabId, operation);
       const cdp = cdpFor(host.session, tabId, operation);
@@ -219,15 +222,8 @@ export const createBrowserPicker = ({
         },
       };
     });
-
-  /** Draws the element under a point, or no highlight when no element is there. */
-  const hover = (tabId: string, x: number, y: number) =>
-    Effect.gen(function* () {
-      const { host, target } = yield* targetAt(tabId, x, y, "browser.picker.hover");
-      // The picker can turn off while the lookup runs, so a late hover must not draw again.
-      if (!enabledTabs.has(tabId)) return;
-      yield* evaluate(host, targetExpression(target));
-    });
+  const targetAt = (tabId: string, x: number, y: number, operation: string) =>
+    lookups.run(tabId, findTarget(tabId, x, y, operation));
 
   /** Runs one picker message of the page and returns what the client must follow. */
   const handlePageMessage = (
@@ -244,7 +240,10 @@ export const createBrowserPicker = ({
         return { kind: "cancelled" };
       }
       if (message.type === "picker_hover") {
-        yield* hover(tabId, message.x, message.y);
+        const operation = "browser.picker.hover";
+        const { host, target } = yield* targetAt(tabId, message.x, message.y, operation);
+        // The picker can turn off while the lookup runs, so a late hover must not draw again.
+        if (enabledTabs.has(tabId)) yield* evaluate(host, targetExpression(target));
         return { kind: "none" };
       }
 

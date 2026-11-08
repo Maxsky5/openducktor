@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { BrowserPickedElement } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
-import { CdpCommandError, type CdpSession } from "../../ports/browser-engine-port";
+import { CdpCommandError, type CdpPayload, type CdpSession } from "../../ports/browser-engine-port";
 import type { BrowserHostTabSession } from "./browser-host-tab-session";
 import { createBrowserPicker, nextPickerSelection } from "./browser-picker";
 import { BrowserServiceError } from "./browser-service-error";
@@ -24,9 +24,14 @@ const createHarness = (
     failEval?: (expression: string) => boolean;
     /** Returns true for a CDP command that fails. */
     failCommand?: (method: string) => boolean;
+    /** Makes each hit test take this long, so two lookups can overlap. */
+    hitTestDelay?: number;
   } = {},
 ) => {
   const log: string[] = [];
+  /** Whether the pointer capture layer was hidden when each hit test answered. */
+  const captureHiddenAtHitTest: boolean[] = [];
+  let captureHidden = false;
   const hitTests: unknown[] = [];
   const reported: Array<[string, unknown]> = [];
   const session: CdpSession = {
@@ -39,7 +44,11 @@ const createHarness = (
           new CdpCommandError({ message: `The page refused ${method}.`, cause: null }),
         );
       }
-      return Effect.sync(() => {
+      const delay =
+        method === "DOM.getNodeForLocation" && options.hitTestDelay !== undefined
+          ? Effect.sleep(options.hitTestDelay)
+          : Effect.void;
+      const answer = Effect.sync((): CdpPayload => {
         log.push(`command:${method}`);
         switch (method) {
           case "Page.getLayoutMetrics":
@@ -49,6 +58,7 @@ const createHarness = (
           case "DOM.getNodeForLocation":
             options.duringHitTest?.();
             hitTests.push(params);
+            captureHiddenAtHitTest.push(captureHidden);
             return { backendNodeId: 42 };
           case "DOM.getBoxModel":
             return { model: { border: [10, 20, 90, 20, 90, 50, 10, 50] } };
@@ -60,6 +70,7 @@ const createHarness = (
             return {};
         }
       });
+      return Effect.andThen(delay, answer);
     },
     subscribe: () => () => {},
     onDetached: () => () => {},
@@ -81,6 +92,8 @@ const createHarness = (
           )
         : Effect.sync(() => {
             log.push(`eval:${expression}`);
+            if (expression === "globalThis.__odtPickerHitTest(true)") captureHidden = true;
+            if (expression === "globalThis.__odtPickerHitTest(false)") captureHidden = false;
             return undefined;
           }),
     readSelectedText: () => Effect.succeed(null),
@@ -95,10 +108,27 @@ const createHarness = (
     stageImage: () => Effect.die("unused"),
     reportFailure: (operation, cause) => reported.push([operation, cause]),
   });
-  return { picker, log, hitTests, reported };
+  return { picker, log, hitTests, reported, captureHiddenAtHitTest };
 };
 
 describe("browser picker", () => {
+  test("hit-tests one point at a time, so a hover cannot show the capture layer during a pick", async () => {
+    const { picker, captureHiddenAtHitTest } = createHarness({ hitTestDelay: 5 });
+    await run(picker.setEnabled(TAB_ID, true));
+
+    await run(
+      Effect.all(
+        [
+          picker.handlePageMessage(TAB_ID, { type: "picker_hover", x: 10, y: 10 }),
+          picker.handlePageMessage(TAB_ID, { type: "picker_pick", x: 100, y: 50, shiftKey: false }),
+        ],
+        { concurrency: "unbounded" },
+      ),
+    );
+
+    expect(captureHiddenAtHitTest).toEqual([true, true]);
+  });
+
   test("hides the pointer capture for the hit test and shows it again", async () => {
     const { picker, log, hitTests } = createHarness();
     await run(picker.setEnabled(TAB_ID, true));
