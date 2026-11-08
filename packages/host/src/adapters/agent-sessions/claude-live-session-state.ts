@@ -251,7 +251,7 @@ export const createClaudeLiveSessionState = () => {
     if (event.type === "session_goal_updated") {
       // A restore reads the goal before the resume summary admits the session again.
       // A restored goal can arrive before the resume ends the retirement, so the goal stays.
-      goals.set(key, event.goal);
+      goals.set(key, event.goal, event.clearing === true);
       if (retiredSessionKeys.has(key)) return [];
       const current = readSnapshot(ref);
       return current ? commitSnapshot(current) : [];

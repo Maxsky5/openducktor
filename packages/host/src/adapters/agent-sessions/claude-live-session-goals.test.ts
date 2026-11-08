@@ -20,16 +20,29 @@ const snapshot: AgentSessionLiveSnapshot = {
 
 describe("createClaudeGoalProjection", () => {
   test.each([
-    [undefined, "ended"],
-    ["met", "complete"],
-    ["failed", "blocked"],
-  ] as const)("shows an ended goal with outcome %s as %s", (outcome, status) => {
+    [undefined, "idle", "waiting_for_message"],
+    [undefined, "running", "active"],
+    ["met", "running", "complete"],
+    ["failed", "idle", "blocked"],
+    ["stopped", "idle", "ended"],
+  ] as const)("shows a goal with end %s in a %s session as %s", (end, activity, status) => {
     const goals = createClaudeGoalProjection();
-    const goal: ClaudeNativeGoal = outcome
-      ? { objective: "Ship", ended: true, outcome }
-      : { objective: "Ship", ended: true };
+    const goal: ClaudeNativeGoal = end ? { objective: "Ship", end } : { objective: "Ship" };
     goals.set("key", goal);
 
-    expect(goals.project("key", snapshot).goal).toEqual({ objective: "Ship", status });
+    expect(goals.project("key", { ...snapshot, activity }).goal).toEqual({
+      objective: "Ship",
+      status,
+    });
+  });
+
+  test("keeps a clearing goal waiting while the clear turn runs", () => {
+    const goals = createClaudeGoalProjection();
+    goals.set("key", { objective: "Ship" }, true);
+
+    expect(goals.project("key", { ...snapshot, activity: "running" }).goal).toEqual({
+      objective: "Ship",
+      status: "waiting_for_message",
+    });
   });
 });

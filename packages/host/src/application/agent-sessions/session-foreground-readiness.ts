@@ -12,6 +12,10 @@ export const hasForegroundTurn = (session: AgentSessionLiveSnapshot): boolean =>
   session.foregroundTurnActive ??
   (session.activity === "running" || session.activity === "retrying");
 
+/** An active goal drives the work, so the runtime starts each next turn by itself. */
+export const isGoalDrivingWork = (session: AgentSessionLiveSnapshot): boolean =>
+  session.goal?.status === "active" && session.activity !== "idle";
+
 export const hasBlockingInput = (session: AgentSessionLiveSnapshot): boolean =>
   session.activity === "waiting_for_permission" ||
   session.activity === "waiting_for_question" ||

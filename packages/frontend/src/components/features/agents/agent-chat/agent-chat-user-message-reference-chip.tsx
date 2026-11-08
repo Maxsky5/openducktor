@@ -8,7 +8,7 @@ import { AgentChatSubagentReferenceChip } from "./agent-chat-subagent-reference-
 /** The transcript size, or a smaller one that fits a single line of the message queue. */
 export type UserMessageReferenceChipSize = "default" | "compact";
 
-const referenceChipClassName = (size: UserMessageReferenceChipSize): string =>
+export const referenceChipClassName = (size: UserMessageReferenceChipSize): string =>
   cn("mx-1 max-w-full align-middle", size === "compact" && "h-5 gap-1 px-2 text-[11px]");
 
 /** Shows a reference of a user message, in the transcript and in the message queue. */

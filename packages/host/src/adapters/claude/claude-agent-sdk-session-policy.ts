@@ -41,6 +41,11 @@ export type ClaudeSessionLaunchInput = {
    * fail the attach, because the next attach can retry it.
    */
   reconcileTitle?: boolean;
+  /**
+   * Reads the goal that Claude restores from the transcript as soon as the session exists, so the
+   * read runs while Claude starts.
+   */
+  restoreGoal?: boolean;
   startedMessage: string;
   title?: string;
 };
@@ -97,6 +102,7 @@ export const resumedClaudeSessionLaunch = (
       }
     : sessionPresentation("Resumed", scope)),
   options: { resume: externalSessionId },
+  restoreGoal: true,
 });
 
 /**
@@ -111,6 +117,7 @@ export const continuedClaudeSessionLaunch = (
   ...sessionPresentation("Continued", scope),
   options: { resume: externalSessionId },
   resumeInterruptedTurn: true,
+  restoreGoal: true,
 });
 
 export const forkedClaudeSessionLaunch = (

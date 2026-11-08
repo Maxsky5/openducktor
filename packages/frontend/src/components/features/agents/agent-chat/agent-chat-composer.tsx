@@ -185,7 +185,6 @@ export function AgentChatComposer({
     composerEditorRef,
     displayedSessionKey,
     isComposerInputDisabled,
-    isSubmitting,
   });
 
   const reportSendError = useCallback((failure: ComposerFailure): void => {
@@ -712,12 +711,10 @@ function useAgentChatComposerFocus({
   composerEditorRef,
   displayedSessionKey,
   isComposerInputDisabled,
-  isSubmitting,
 }: {
   composerEditorRef: AgentChatComposerModel["composerEditorRef"];
   displayedSessionKey: string | null;
   isComposerInputDisabled: boolean;
-  isSubmitting: boolean;
 }): () => void {
   const composerAutofocusStateRef = useRef<ReturnType<typeof createComposerAutofocusState> | null>(
     null,
@@ -776,13 +773,7 @@ function useAgentChatComposerFocus({
             waitAnchor: activeElement,
           }
         : autofocusResult.nextState;
-  }, [
-    displayedSessionKey,
-    isComposerInputDisabled,
-    isFocusInsideComposer,
-    isSubmitting,
-    focusComposerEditor,
-  ]);
+  }, [displayedSessionKey, isComposerInputDisabled, isFocusInsideComposer, focusComposerEditor]);
 
   return scheduleComposerFocus;
 }

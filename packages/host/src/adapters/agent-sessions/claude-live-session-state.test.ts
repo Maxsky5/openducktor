@@ -7,7 +7,11 @@ import { handleClaudeSdkMessage } from "../claude/claude-agent-sdk-events";
 import { snapshotForClaudeSession } from "../claude/claude-agent-sdk-session-shape";
 import { emptyClaudeQuery } from "../claude/claude-agent-sdk-session-io.test-support";
 import { claudeSdkMessageFixture } from "../claude/claude-agent-sdk-test-messages";
-import type { ClaudeSession, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import type {
+  ClaudeNativeGoal,
+  ClaudeSession,
+  ClaudeSessionContext,
+} from "../claude/claude-agent-sdk-types";
 import { createClaudeLiveSessionState } from "./claude-live-session-state";
 
 const summary = {
@@ -68,14 +72,14 @@ describe("Claude host live-session state", () => {
     const state = createClaudeLiveSessionState();
     state.applyControlSummary("/repo", summary);
     const timestamp = "2026-11-07T10:00:00.000Z";
-    const goal = (value: { objective: string; ended: boolean } | null) =>
+    const goal = (value: ClaudeNativeGoal | null) =>
       state.applyEvent(session, {
         type: "session_goal_updated",
         externalSessionId: ref.externalSessionId,
         timestamp,
         goal: value,
       });
-    goal({ objective: "Ship it", ended: false });
+    goal({ objective: "Ship it" });
     expect(state.listSnapshots()[0]?.goal).toEqual({
       objective: "Ship it",
       status: "waiting_for_message",
@@ -90,7 +94,7 @@ describe("Claude host live-session state", () => {
     // A control summary rebuilds the snapshot and keeps the goal.
     state.applyControlSummary("/repo", summary, { keepActivity: true });
     expect(state.listSnapshots()[0]?.goal?.status).toBe("active");
-    goal({ objective: "Ship it", ended: true });
+    goal({ objective: "Ship it", end: "stopped" });
     expect(state.listSnapshots()[0]?.goal).toEqual({ objective: "Ship it", status: "ended" });
     goal(null);
     expect(state.listSnapshots()[0]?.goal).toBeUndefined();
@@ -104,7 +108,7 @@ describe("Claude host live-session state", () => {
       type: "session_goal_updated",
       externalSessionId: ref.externalSessionId,
       timestamp: "2026-11-07T10:00:00.000Z",
-      goal: { objective: "Ship it", ended: false },
+      goal: { objective: "Ship it" },
     });
     expect(state.listSnapshots()).toEqual([]);
     state.applyControlSummary("/repo", summary);

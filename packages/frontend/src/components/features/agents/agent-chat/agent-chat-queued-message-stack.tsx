@@ -3,6 +3,7 @@ import {
   type AgentSessionUserMessagePart,
   isGoalSlashCommand,
 } from "@openducktor/contracts";
+import { shouldInsertSyntheticSpaceBeforePart } from "@openducktor/core";
 import { AgentChatGoalChip } from "./agent-chat-goal-chip";
 import {
   AlertCircle,
@@ -304,7 +305,7 @@ const renderInlinePart = (
     return renderUserMessageReferenceChip(part, key, "compact");
   }
   if (part.kind === "slash_command" && isGoalSlashCommand(part.command)) {
-    return <AgentChatGoalChip key={key} className="mr-1 h-5 gap-1 px-2 text-[11px] align-middle" />;
+    return <AgentChatGoalChip key={key} size="compact" />;
   }
   return <span key={key}>{part.kind === "text" ? part.text : `/${part.command.trigger}`}</span>;
 };
@@ -323,13 +324,12 @@ function QueuedMessageBody({
   let previousInline: AgentSessionUserMessagePart | null = null;
   for (const { key, part } of keyedParts(parts)) {
     if (part.kind !== "attachment") {
-      // A command and its argument read as "/review main", as in the transcript. The goal chip
-      // has its own space after it.
+      // A command and its argument read as "/review main", as the runtime reads them. Chips have
+      // their own space around them.
       if (
         previousInline?.kind === "slash_command" &&
         !isGoalSlashCommand(previousInline.command) &&
-        part.kind === "text" &&
-        !/^\s/.test(part.text)
+        shouldInsertSyntheticSpaceBeforePart(previousInline, part)
       )
         inline.push(" ");
       inline.push(renderInlinePart(key, part));

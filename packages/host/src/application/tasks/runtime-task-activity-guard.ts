@@ -283,19 +283,21 @@ export const createRuntimeTaskActivityGuard = ({
         const { liveSessions, ownedSnapshots } = yield* collectOwnedSessions(input, operation);
         // A release does not end a goal, and Codex continues an active goal on an idle thread.
         // So each session with an active goal first gets the user Stop, which pauses the goal.
-        for (const snapshot of ownedSnapshots) {
-          if (snapshot.goal?.status !== "active") continue;
-          yield* sessionService.stopSession(snapshot.ref).pipe(
-            Effect.mapError(
-              (cause) =>
-                new HostOperationError({
-                  operation,
-                  message: `Cannot stop session ${snapshot.ref.externalSessionId}, which has an active goal, so no task session was released: ${cause.message}`,
-                  cause,
-                }),
+        yield* Effect.forEach(
+          ownedSnapshots.filter((snapshot) => snapshot.goal?.status === "active"),
+          (snapshot) =>
+            sessionService.stopSession(snapshot.ref).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new HostOperationError({
+                    operation,
+                    message: `Cannot stop session ${snapshot.ref.externalSessionId}, which has an active goal, so no task session was released: ${cause.message}`,
+                    cause,
+                  }),
+              ),
             ),
-          );
-        }
+          { concurrency: "unbounded", discard: true },
+        );
         const stoppedSessionCount = yield* stopLiveSessionRecords(
           runtimeRegistry,
           sessionService,

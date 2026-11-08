@@ -64,22 +64,25 @@ export type CreateClaudeAgentSdkServiceInput = {
 };
 
 /**
- * A goal that Claude reports. `ended`: Claude ended it, and the next message does not continue it.
- * `outcome` tells why: Claude met the goal, or found it impossible. An ended goal without an outcome
- * stopped for another reason, such as an unrecoverable error.
+ * A goal that Claude reports. No `end`: the goal is set, and the next message continues it.
+ * `met`: Claude met the goal. `failed`: Claude found it impossible. `stopped`: Claude ended it for
+ * another reason, such as an unrecoverable error.
  */
 export type ClaudeNativeGoal = {
   readonly objective: string;
-  readonly ended: boolean;
-  readonly outcome?: "met" | "failed";
+  readonly end?: "met" | "failed" | "stopped";
 };
 
-/** The adapter read a new goal state of the session from its transcript. `null`: no goal. */
+/**
+ * The adapter read a new goal state of the session. `null`: no goal. `clearing`: OpenDucktor sent
+ * `/goal clear`, and Claude has not replied yet.
+ */
 export type ClaudeGoalEvent = {
   readonly type: "session_goal_updated";
   readonly externalSessionId: string;
   readonly timestamp: string;
   readonly goal: ClaudeNativeGoal | null;
+  readonly clearing?: true;
 };
 
 export type ClaudeAgentSdkEvent = AgentEvent & { readonly statusUnavailable?: true };

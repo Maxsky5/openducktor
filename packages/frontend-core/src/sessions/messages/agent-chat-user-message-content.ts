@@ -1,4 +1,7 @@
-import { type AgentSessionUserMessagePart, GOAL_SLASH_COMMAND } from "@openducktor/contracts";
+import {
+  type AgentSessionUserMessagePart,
+  textAfterLeadingGoalCommand,
+} from "@openducktor/contracts";
 import type { AgentUserMessageDisplayPart } from "@openducktor/core";
 import type { AgentChatMessage } from "../../types/agent-orchestrator";
 
@@ -39,8 +42,6 @@ export type UserMessageContentNode =
   | { kind: "reference"; key: string; part: DisplayReferencePart }
   | { kind: "goal_command"; key: string };
 
-const GOAL_COMMAND_PREFIX = new RegExp(`^/${GOAL_SLASH_COMMAND.trigger}(?=\\s|$)\\s*`, "i");
-
 /**
  * Every runtime reports a `/goal` message as text, live and in history, so the chat finds the
  * command at the start of the text.
@@ -48,12 +49,12 @@ const GOAL_COMMAND_PREFIX = new RegExp(`^/${GOAL_SLASH_COMMAND.trigger}(?=\\s|$)
 const withGoalCommandNode = (
   nodes: UserMessageContentNode[] | null,
 ): UserMessageContentNode[] | null => {
-  const [first, ...rest] = nodes ?? [];
-  if (first?.kind !== "text") return nodes;
-  const match = GOAL_COMMAND_PREFIX.exec(first.text);
-  if (!match) return nodes;
-  const objective = first.text.slice(match[0].length);
+  const first = nodes?.[0];
+  if (!nodes || first?.kind !== "text") return nodes;
+  const objective = textAfterLeadingGoalCommand(first.text);
+  if (objective === null) return nodes;
   const goal: UserMessageContentNode = { kind: "goal_command", key: "goal-command" };
+  const rest = nodes.slice(1);
   return objective.length > 0 ? [goal, { ...first, text: objective }, ...rest] : [goal, ...rest];
 };
 

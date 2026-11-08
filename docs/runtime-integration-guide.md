@@ -171,6 +171,7 @@ The runtime owns the goal state. OpenDucktor stores no goal data and runs no goa
 
 - Claude answers a refused `/goal <condition>` with text alone, and starts a model turn only after it sets the goal. The first model frame after the command reply therefore confirms a set. Claude writes its transcript on a 100 ms timer, so the adapter does not wait for the `goal_status` record before it confirms.
 - A Claude `goal_status` record with `met: true` reports a met goal, so the row shows `complete`. A record with `failed: true` reports an impossible goal, so the row shows `blocked`. A goal that ends for another reason, such as an unrecoverable error, shows `ended`.
+- Claude runs a `/goal clear` as a command turn that does not work on the goal. Until that clear ends, the Claude adapter shows the goal as `waiting_for_message`, not `active`. Claude `controlGoal` writes this status itself.
 - Codex marks the goal `blocked` when a turn fails, so the session goes idle. After an interrupt that did not pause the goal, Codex starts the next goal turn when the thread is idle.
 - A release does not end a goal. Before task cleanup releases its sessions, it sends Stop to each session with an active goal. If a Stop fails, the cleanup releases no session.
 - The OpenCode goal plugin `opencode.goal` is not a protected plugin, so a config entry `"-opencode.goal"` in `plugins` turns it off. The goal read then fails with `rpc.unavailable`, and the adapter reports no goal. A `/goal` command fails with `CommandNotFoundError`, and the adapter names the config entry in the reason.

@@ -11,6 +11,23 @@ import {
 
 const AnimationReadyContext = createContext<boolean | null>(null);
 
+/**
+ * Runs `done` when the CSS transitions of the element end. The returned cleanup cancels it, for
+ * example when a new state interrupts the transitions. getAnimations flushes the new CSS state,
+ * including an interrupted entrance.
+ */
+export const afterTransitions = (element: Element, done: () => void): (() => void) => {
+  let interrupted = false;
+  void Promise.allSettled(element.getAnimations().map((animation) => animation.finished)).then(
+    () => {
+      if (!interrupted) done();
+    },
+  );
+  return () => {
+    interrupted = true;
+  };
+};
+
 /** The initial read appears at once. Later additions reveal, also in an empty list. */
 export function CssPresenceList({
   children,
@@ -53,15 +70,7 @@ export function useCssPresence() {
   useLayoutEffect(() => {
     const element = elementRef.current;
     if (isPresent || !element) return;
-    // getAnimations flushes the new CSS state, including an interrupted entrance.
-    const transitions = element.getAnimations();
-    let interrupted = false;
-    void Promise.allSettled(transitions.map((animation) => animation.finished)).then(() => {
-      if (!interrupted) safeToRemove?.();
-    });
-    return () => {
-      interrupted = true;
-    };
+    return afterTransitions(element, () => safeToRemove?.());
   }, [isPresent, safeToRemove]);
 
   return {

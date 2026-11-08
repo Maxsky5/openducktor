@@ -30,6 +30,7 @@ import type {
   AgentSessionRuntimeAdapterPort,
 } from "../../ports/agent-session-live-adapter-port";
 import { createClaudeMessageControls } from "./claude-live-session-message-controls";
+import { beginClaudeGoalRestore } from "../claude/claude-agent-sdk-goals";
 import { parseClaudeTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import type {
@@ -191,11 +192,18 @@ export const createClaudeLiveSessionAdapterPreparer =
           ),
         );
 
-      // The restored goal lands before the summary, so a re-attached session never shows a
-      // snapshot without its goal.
-      const restoreGoalBeforeSummary =
-        (repoPath: string) => (summary: { readonly externalSessionId: string }) =>
-          messages.restoreGoal(repoPath, summary.externalSessionId);
+      // A resume or continuation publishes the restored goal before its summary, so a re-attached
+      // session never shows a snapshot without its goal. The transcript read runs outside the
+      // serial lane: a retained session reads it before the resume, and a new session reads it
+      // while Claude starts. A fork reads it after its summary.
+      const restoreGoal = (repoPath: string) => (summary: { readonly externalSessionId: string }) =>
+        messages.restoreGoal(repoPath, summary.externalSessionId);
+      // `restoreGoal` reports a failed read.
+      const readRetainedGoal = (externalSessionId: string) =>
+        Effect.promise(async () => {
+          const retained = sessionStore.get(externalSessionId);
+          if (retained) await beginClaudeGoalRestore(retained).catch(() => {});
+        });
       const { runSummary, runTitleUpdate, runClosure } = createClaudeControlRunner({
         runControlMutation: eventCoordinator.runControlMutation,
         runSessionClosure: eventCoordinator.runSessionClosure,
@@ -337,6 +345,7 @@ export const createClaudeLiveSessionAdapterPreparer =
           ),
         resumeSession: (input) =>
           requireSessionWorkingDirectory(input, "resume-session").pipe(
+            Effect.andThen(readRetainedGoal(input.externalSessionId)),
             Effect.flatMap(() =>
               runSummary(
                 "claude-live-session.resume-session",
@@ -352,7 +361,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                       },
                       runtime.runtimeId,
                     )
-                    .pipe(Effect.tap(restoreGoalBeforeSummary(input.repoPath))),
+                    .pipe(Effect.tap(restoreGoal(input.repoPath))),
                 { keepActivity: true },
               ),
             ),
@@ -378,7 +387,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                         continuationAdmitted = true;
                       },
                     )
-                    .pipe(Effect.tap(restoreGoalBeforeSummary(input.repoPath))),
+                    .pipe(Effect.tap(restoreGoal(input.repoPath))),
                 ),
               ),
               Effect.mapError((cause) =>
@@ -420,12 +429,9 @@ export const createClaudeLiveSessionAdapterPreparer =
                         },
                         runtime.runtimeId,
                       )
-                      .pipe(
-                        Effect.map(capture),
-                        Effect.tap(restoreGoalBeforeSummary(input.repoPath)),
-                      ),
+                      .pipe(Effect.map(capture)),
                   { sessionScope: input.sessionScope },
-                ),
+                ).pipe(Effect.tap(restoreGoal(input.repoPath))),
               ),
             ),
           ),

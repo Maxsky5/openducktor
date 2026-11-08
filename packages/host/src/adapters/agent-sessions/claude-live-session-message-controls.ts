@@ -22,6 +22,7 @@ import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
 import {
   beginClaudeGoalCommand,
   type ClaudeGoalCommand,
+  currentClaudeGoalEvent,
   forgetEndedClaudeGoal,
   restoreClaudeSessionGoal,
 } from "../claude/claude-agent-sdk-goals";
@@ -102,7 +103,8 @@ export const createClaudeMessageControls = ({
   /**
    * Sends a Claude `/goal` command and waits until Claude reports its outcome. Claude never runs
    * a slash command inside a running turn, so a clear during a turn uses priority `now`, which
-   * stops the turn and then clears the goal.
+   * stops the turn and then clears the goal. The goal shows as clearing until the clear ends, so
+   * the command turn of the clear does not show it as active.
    */
   const runGoalCommand = (
     input: GoalTarget,
@@ -134,7 +136,10 @@ export const createClaudeMessageControls = ({
         () => null,
         (cause: unknown) => cause,
       );
-      yield* Effect.gen(function* () {
+      const publishCurrentGoal = () =>
+        publishGoal(session, currentClaudeGoalEvent(session, new Date().toISOString()));
+      const result = yield* Effect.gen(function* () {
+        if (command.kind === "clear") yield* publishCurrentGoal();
         yield* sendAndPublish(sendInput, options);
         const failure = yield* Effect.promise(() => outcome);
         if (failure === null) return;
@@ -148,7 +153,11 @@ export const createClaudeMessageControls = ({
       }).pipe(
         // A failed or interrupted send ends the wait. After an outcome, cancel does nothing.
         Effect.ensuring(Effect.sync(wait.cancel)),
+        Effect.exit,
       );
+      // A failed clear keeps the goal, which is no longer clearing.
+      if (command.kind === "clear") yield* publishCurrentGoal();
+      return yield* result;
     });
 
   return {

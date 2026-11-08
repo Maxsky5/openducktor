@@ -492,6 +492,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "isCodexAppServerPermissionRequestMethod",
   "isManualSessionCompactionSlashCommand",
   "isGoalSlashCommand",
+  "textAfterLeadingGoalCommand",
   "isSameAgentModelFavorite",
   "parseCodexAppServerClientRequest",
   "parseCodexAppServerRequestResult",

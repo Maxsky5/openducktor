@@ -18,7 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { type ReactElement, type RefObject, useLayoutEffect, useRef, useState } from "react";
-import { CssPresenceList, useCssPresence } from "@/components/ui/css-presence";
+import { afterTransitions, CssPresenceList, useCssPresence } from "@/components/ui/css-presence";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CardIconButton } from "./agent-chat-queued-message-stack";
 import { cn } from "@/lib/utils";
@@ -77,15 +77,7 @@ function GoalRowCard({ model }: { model: AgentSessionGoalRowModel }): ReactEleme
   useLayoutEffect(() => {
     const line = lineRef.current;
     if (expanded || !line) return;
-    let interrupted = false;
-    void Promise.allSettled(line.getAnimations().map((animation) => animation.finished)).then(
-      () => {
-        if (!interrupted) setClamped(true);
-      },
-    );
-    return () => {
-      interrupted = true;
-    };
+    return afterTransitions(line, () => setClamped(true));
   }, [expanded]);
   const truncated = useIsTruncated(lineRef, clamped, `${model.statusLabel} ${model.objective}`);
   const expandable = expanded || truncated;
@@ -173,15 +165,20 @@ function useIsTruncated(
   text: string,
 ): boolean {
   const [truncated, setTruncated] = useState(false);
+  // One observer per clamped line follows width changes.
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element || !clamped) return;
-    const measure = () => setTruncated(element.scrollWidth > element.clientWidth);
-    measure();
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(() =>
+      setTruncated(element.scrollWidth > element.clientWidth),
+    );
     observer.observe(element);
     return () => observer.disconnect();
-    // A new text can cut the line without a size change.
+  }, [clamped, ref]);
+  // A new text can cut the line without a size change.
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element && clamped) setTruncated(element.scrollWidth > element.clientWidth);
   }, [clamped, ref, text]);
   return truncated;
 }

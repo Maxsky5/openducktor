@@ -1,11 +1,6 @@
-import { badgeVariants } from "@/components/ui/badge-variants";
-import { cn } from "@/lib/utils";
-
 /** The goal chip of a `/goal` message, in the composer and in the transcript. */
-export const AGENT_CHAT_GOAL_CHIP_CLASS_NAME = cn(
-  badgeVariants({ variant: "secondary" }),
-  "inline-flex h-6 items-center gap-1 rounded-full border border-info-border bg-info-surface px-2.5 text-xs font-medium text-info-surface-foreground align-middle",
-);
+export const AGENT_CHAT_GOAL_CHIP_CLASS_NAME =
+  "inline-flex h-6 items-center gap-1 rounded-full border border-info-border bg-info-surface px-2.5 text-xs font-medium text-info-surface-foreground align-middle";
 
 export const AGENT_CHAT_GOAL_CHIP_LABEL = "Goal";
 

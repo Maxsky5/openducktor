@@ -169,6 +169,11 @@ const otherSessionRef = {
   externalSessionId: "session-2",
 };
 
+const hasTranscriptEvent =
+  (eventType: string) =>
+  (changes: readonly AgentSessionLiveAdapterChange[]): boolean =>
+    changes.some((change) => change.type === "transcript_event" && change.event.type === eventType);
+
 const sessionsById = new Map([
   [session.externalSessionId, session],
   [otherSession.externalSessionId, otherSession],
@@ -235,9 +240,8 @@ const createHarness = async (
   let disposeImpl: ClaudeAgentSdkService["dispose"] = () => Effect.void;
   let inspectSessionForImportImpl: ClaudeAgentSdkService["inspectSessionForImport"] = () =>
     Effect.die(new Error("Unexpected import"));
-  let failNextMutationAfterApply = false;
-  let failMutationEventType: string | undefined;
-  let mutationsBeforeFailure = 0;
+  let failingMutation: ((changes: readonly AgentSessionLiveAdapterChange[]) => boolean) | null =
+    null;
   let mutationBarrier: MutationBarrier | undefined;
   startSessionImpl = () => {
     eventHub.emit(session, {
@@ -312,17 +316,8 @@ const createHarness = async (
         return waitForBarrier.pipe(
           Effect.andThen(
             Effect.flatMap(mutation, ({ value, changes: mutationChanges }) => {
-              if (
-                failNextMutationAfterApply &&
-                (failMutationEventType === undefined ||
-                  mutationChanges.some(
-                    (change) =>
-                      change.type === "transcript_event" &&
-                      change.event.type === failMutationEventType,
-                  )) &&
-                mutationsBeforeFailure-- <= 0
-              ) {
-                failNextMutationAfterApply = false;
+              if (failingMutation?.(mutationChanges)) {
+                failingMutation = null;
                 return Effect.fail(
                   new HostOperationError({
                     operation: "test.publish",
@@ -375,11 +370,11 @@ const createHarness = async (
       mutationBarrier = barrier;
       return barrier;
     },
-    /** `skip` lets that many earlier mutations succeed first. */
-    failNextMutationAfterStateApply: (eventType?: string, skip = 0) => {
-      failNextMutationAfterApply = true;
-      failMutationEventType = eventType;
-      mutationsBeforeFailure = skip;
+    /** Fails the next mutation whose changes match, or the next mutation without `matches`. */
+    failNextMutationAfterStateApply: (
+      matches: (changes: readonly AgentSessionLiveAdapterChange[]) => boolean = () => true,
+    ) => {
+      failingMutation = matches;
     },
     setPrepareApprovalReply: (implementation: ClaudeAgentSdkService["prepareApprovalReply"]) => {
       prepareApprovalReplyImpl = implementation;
@@ -881,8 +876,12 @@ describe("Claude host live-session adapter", () => {
         Effect.as({ ...summary, status: "running" as const }),
       ),
     );
-    // The goal restore commits first, and the summary commit after it fails.
-    harness.failNextMutationAfterStateApply(undefined, 1);
+    // The goal restore commits first. The summary commit, which retains the running session, fails.
+    harness.failNextMutationAfterStateApply((changes) =>
+      changes.some(
+        (change) => change.type === "session_upsert" && change.snapshot.activity === "running",
+      ),
+    );
 
     const failure = await Effect.runPromise(
       Effect.flip(
@@ -973,7 +972,7 @@ describe("Claude host live-session adapter", () => {
           };
         }),
       );
-      harness.failNextMutationAfterStateApply(eventType);
+      harness.failNextMutationAfterStateApply(hasTranscriptEvent(eventType));
       const result = await Effect.runPromise(
         Effect.result(
           harness.adapter.sendUserMessage({
@@ -2389,7 +2388,7 @@ describe("Claude host live-session adapter", () => {
       const harness = await createHarness();
       await startBothSessions(harness);
       harness.changes.splice(0);
-      harness.failNextMutationAfterStateApply("session_started");
+      harness.failNextMutationAfterStateApply(hasTranscriptEvent("session_started"));
 
       harness.eventHub.emit(otherSession, {
         type: "session_started",
@@ -2683,6 +2682,55 @@ describe("Claude host live-session adapter goals", () => {
       },
     ]);
     expect(await snapshotGoal()).toBeUndefined();
+  });
+
+  test("reads the goal of a retained session before the resume call", async () => {
+    const { harness, goalSession, snapshotGoal } = await goalHarness([setRecord]);
+    let goalAtCall: unknown;
+    harness.setResumeSession(() =>
+      Effect.sync(() => {
+        goalAtCall = goalSession.goalTracking?.goal;
+        return summary;
+      }),
+    );
+    await Effect.runPromise(
+      harness.adapter.resumeSession({
+        ...startInput,
+        resumeMode: "reattach",
+        externalSessionId: "session-1",
+      }),
+    );
+    expect(goalAtCall).toEqual({ objective: OBJECTIVE });
+    expect(await snapshotGoal()).toEqual({ objective: OBJECTIVE, status: "waiting_for_message" });
+  });
+
+  test("keeps a goal waiting while its /goal clear turn runs", async () => {
+    const { harness, goalSession, reply, accept } = await goalHarness([setRecord]);
+    await Effect.runPromise(
+      harness.adapter.resumeSession({
+        ...startInput,
+        resumeMode: "reattach",
+        externalSessionId: "session-1",
+      }),
+    );
+    harness.setSendUserMessage(() => {
+      harness.eventHub.emit(goalSession, {
+        type: "session_status",
+        externalSessionId: goalSession.externalSessionId,
+        timestamp: "2026-11-07T10:00:00.500Z",
+        status: { type: "busy", message: null },
+      });
+      setTimeout(() => reply("clear", `Goal cleared: ${OBJECTIVE}`), 0);
+      return accept("clear-1", "/goal clear");
+    });
+    harness.changes.splice(0);
+    await Effect.runPromise(harness.adapter.controlGoal(goalInput({ kind: "clear" })));
+
+    const goalSnapshots = harness.changes.flatMap((change) =>
+      change.type === "session_upsert" && change.snapshot.goal ? [change.snapshot] : [],
+    );
+    expect(goalSnapshots.some((snapshot) => snapshot.activity !== "idle")).toBe(true);
+    expect(goalSnapshots.map((snapshot) => snapshot.goal?.status)).not.toContain("active");
   });
 
   test("removes an ended goal without a native command", async () => {

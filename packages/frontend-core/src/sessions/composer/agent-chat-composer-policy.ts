@@ -11,6 +11,7 @@ import type { SpeedControlModel } from "../model-selection/use-speed-control";
 import {
   draftSteerBlockedReason,
   hasForegroundTurn,
+  hasOngoingWork,
   steersRunningTurn,
 } from "../send/agent-chat-steering";
 import type {
@@ -211,10 +212,7 @@ const queuePlaceholderParts = (
 ): string[] => {
   const queueKey = primaryMode === "default" ? "Enter" : steerShortcutLabel;
   const steerKey = primaryMode === "steer" ? "Enter" : steerShortcutLabel;
-  // While an active goal drives the work, the runtime starts each next turn by itself, so a turn
-  // end between goal turns does not change the hints.
-  const turnActive =
-    hasForegroundTurn(model) || (model.isSessionWorking && model.goalRow?.status === "active");
+  const turnActive = hasOngoingWork(model);
   if (turnActive && model.steerBlockedReason) return [`${queueKey} to queue`];
   const hasQueuedMessages = (model.messageQueue?.queue?.entries.length ?? 0) > 0;
   if (!turnActive && !hasQueuedMessages) return [];

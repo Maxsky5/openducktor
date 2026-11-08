@@ -6,6 +6,7 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
 import {
   beginClaudeGoalCommand,
+  beginClaudeGoalRestore,
   forgetEndedClaudeGoal,
   observeClaudeGoalFrame,
   restoreClaudeGoalFromRecords,
@@ -52,7 +53,7 @@ describe("restoreClaudeGoalFromRecords", () => {
         goalRecord("g2", "a1", { met: false }),
         message("user", "u2", "g2"),
       ]),
-    ).toEqual({ objective: OBJECTIVE, ended: false });
+    ).toEqual({ objective: OBJECTIVE });
   });
 
   test.each([
@@ -144,10 +145,8 @@ describe("Claude goal commands", () => {
     observe(goalReply(OBJECTIVE, `Goal set: ${OBJECTIVE}`));
     observe(modelFrame);
     await wait.outcome;
-    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, ended: false });
-    expect(events).toEqual([
-      expect.objectContaining({ goal: { objective: OBJECTIVE, ended: false } }),
-    ]);
+    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE });
+    expect(events).toEqual([expect.objectContaining({ goal: { objective: OBJECTIVE } })]);
 
     // The record that Claude writes later changes nothing.
     await append(goalRecord("g1", "u1", { met: false, sentinel: true }));
@@ -175,7 +174,7 @@ describe("Claude goal commands", () => {
     await append(goalRecord("g1", null, { met: false, sentinel: true }));
     observe({ type: "result", subtype: "error_during_execution" });
     await wait.outcome;
-    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, ended: false });
+    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE });
   });
 
   test("a clear settles at its reply and removes the goal", async () => {
@@ -202,7 +201,7 @@ describe("Claude goal commands", () => {
     await append(goalRecord("g2", "g1", { met: true }));
     observe(result);
     await settled();
-    expect(events.at(-1)?.goal).toEqual({ objective: OBJECTIVE, ended: true, outcome: "met" });
+    expect(events.at(-1)?.goal).toEqual({ objective: OBJECTIVE, end: "met" });
     expect(forgetEndedClaudeGoal(session, "2026-11-07T10:00:01.000Z")?.goal).toBeNull();
   });
 
@@ -216,7 +215,7 @@ describe("Claude goal commands", () => {
     await settled();
 
     const restored = await restoreClaudeSessionGoal(session, "2026-11-07T10:00:01.000Z");
-    expect(restored.goal).toEqual({ objective: OBJECTIVE, ended: true, outcome: "met" });
+    expect(restored.goal).toEqual({ objective: OBJECTIVE, end: "met" });
   });
 
   test("a clear that OpenDucktor did not send ends the goal", async () => {
@@ -227,7 +226,7 @@ describe("Claude goal commands", () => {
     await append(goalRecord("g2", "g1", { met: true, sentinel: true }));
     observe(result);
     await settled();
-    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, ended: true });
+    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, end: "stopped" });
   });
 
   test("a live read leaves a line that Claude still writes for the next read", async () => {
@@ -239,15 +238,34 @@ describe("Claude goal commands", () => {
     await appendFile(path, partial.slice(0, 20));
     observe(result);
     await settled();
-    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, ended: false });
+    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE });
     await appendFile(path, `${partial.slice(20)}\n`);
     observe(result);
     await settled();
-    expect(session.goalTracking?.goal ?? null).toEqual({
-      objective: OBJECTIVE,
-      ended: true,
-      outcome: "met",
-    });
+    expect(session.goalTracking?.goal ?? null).toEqual({ objective: OBJECTIVE, end: "met" });
+  });
+
+  test("a restore that began early serves the later restore with no second read", async () => {
+    const { session, append } = await createSession([
+      goalRecord("g1", null, { met: false, sentinel: true }),
+    ]);
+    await beginClaudeGoalRestore(session);
+    await append(goalRecord("g2", "g1", { met: true }));
+
+    const restored = await restoreClaudeSessionGoal(session, "2026-11-07T10:00:00.000Z");
+    expect(restored.goal).toEqual({ objective: OBJECTIVE });
+  });
+
+  test("a restore that began early reports its failed read to the later restore", async () => {
+    const { session, path } = await createSession();
+    const otherProject = join(path, "..", "..", "-other");
+    await mkdir(otherProject);
+    await writeFile(join(otherProject, `${SESSION_ID}.jsonl`), "");
+    void beginClaudeGoalRestore(session);
+
+    await expect(restoreClaudeSessionGoal(session, "2026-11-07T10:00:00.000Z")).rejects.toThrow(
+      "Multiple Claude transcripts have this session ID.",
+    );
   });
 
   test("refuses a second goal action while one runs", async () => {

@@ -1,4 +1,8 @@
-import { GOAL_SLASH_COMMAND, type RuntimeDescriptor } from "@openducktor/contracts";
+import {
+  GOAL_SLASH_COMMAND,
+  type RuntimeDescriptor,
+  textAfterLeadingGoalCommand,
+} from "@openducktor/contracts";
 import {
   type AgentUserMessagePart,
   classifySystemSlashCommandInvocation,
@@ -28,8 +32,6 @@ export const assertGoalCommandAllowed = (
   if (reason) throw new Error(reason);
 };
 
-const TYPED_GOAL_COMMAND = new RegExp(`^\\s*/${GOAL_SLASH_COMMAND.trigger}(?=\\s|$)`, "i");
-
 /**
  * A typed or pasted `/goal …` is the system command, as if the user picked it in the menu. Without
  * goals, the text goes to the runtime unchanged.
@@ -41,14 +43,17 @@ export const promoteTypedGoalCommand = (
 ): AgentChatComposerDraft => {
   const [first, ...rest] = draft.segments;
   if (first?.kind !== "text" || !runtimeDescriptor) return draft;
-  const match = TYPED_GOAL_COMMAND.exec(first.text);
-  if (!match || !resolveRuntimeGoalAvailability(runtimeDescriptor, runtimeVersion).available)
+  const objective = textAfterLeadingGoalCommand(first.text);
+  if (
+    objective === null ||
+    !resolveRuntimeGoalAvailability(runtimeDescriptor, runtimeVersion).available
+  )
     return draft;
   return {
     ...draft,
     segments: [
       createSlashCommandSegment({ ...GOAL_SLASH_COMMAND, hints: [...GOAL_SLASH_COMMAND.hints] }),
-      createTextSegment(first.text.slice(match[0].length)),
+      createTextSegment(objective),
       ...rest,
     ],
   };

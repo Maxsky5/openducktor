@@ -139,8 +139,7 @@ const renderUserMessageInlineContent = (
     <AgentChatTranscriptProse className="leading-6">
       {nodes.map((node) => {
         if (node.kind === "text") return <Fragment key={node.key}>{node.text}</Fragment>;
-        if (node.kind === "goal_command")
-          return <AgentChatGoalChip key={node.key} className="mr-1.5" />;
+        if (node.kind === "goal_command") return <AgentChatGoalChip key={node.key} />;
         return renderUserMessageReferenceChip(node.part, node.key);
       })}
     </AgentChatTranscriptProse>

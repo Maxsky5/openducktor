@@ -23,7 +23,7 @@ import {
   findRunningTurnMessage,
 } from "@openducktor/frontend-core/sessions/model-selection/model-selection-options";
 import { useAgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
-import { hasForegroundTurn } from "@openducktor/frontend-core/sessions/send/agent-chat-steering";
+import { hasOngoingWork } from "@openducktor/frontend-core/sessions/send/agent-chat-steering";
 import {
   useAgentChatSend,
   type AgentChatSendTarget,
@@ -315,9 +315,10 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     fieldText,
     primaryMode,
     secondaryMode: secondaryModeFor(
-      hasForegroundTurn({
+      hasOngoingWork({
         foregroundTurnActive: facts.foregroundTurnActive,
         isSessionWorking: facts.isWorking,
+        goalRow,
       }),
       primaryMode,
     ),

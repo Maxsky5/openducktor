@@ -1,6 +1,7 @@
 import type {
   AgentMessageSubmitMode,
   AgentQueuedMessage,
+  AgentSessionGoalStatus,
   AgentSessionUserMessagePart,
 } from "@openducktor/contracts";
 import {
@@ -34,6 +35,17 @@ export const steersRunningTurn = (mode: AgentMessageSubmitMode, turnActive: bool
 export const hasForegroundTurn = (
   context: Pick<QueuedMessageSteerContext, "foregroundTurnActive" | "isSessionWorking">,
 ): boolean => context.foregroundTurnActive ?? context.isSessionWorking;
+
+/**
+ * The session runs a turn, or an active goal drives the work and the runtime starts each next turn
+ * by itself. The queue and steer choices then stay the same between two goal turns.
+ */
+export const hasOngoingWork = (
+  context: Pick<QueuedMessageSteerContext, "foregroundTurnActive" | "isSessionWorking"> & {
+    goalRow?: { readonly status: AgentSessionGoalStatus } | null | undefined;
+  },
+): boolean =>
+  hasForegroundTurn(context) || (context.isSessionWorking && context.goalRow?.status === "active");
 
 /** A reusable prompt becomes text before it is sent, so only native commands block steering. */
 export const draftSteerBlockedReason = (

@@ -12,7 +12,11 @@ import {
   SESSION_LEFT_RUNTIME_REASON,
 } from "./agent-message-queue-model";
 import { classifySessionMessageSystemCommand } from "./session-message-system-command";
-import { hasForegroundTurn, hasBlockingInput } from "./session-foreground-readiness";
+import {
+  hasBlockingInput,
+  hasForegroundTurn,
+  isGoalDrivingWork,
+} from "./session-foreground-readiness";
 
 /** A live change that matters to the queue of its session. */
 export type QueueSignal =
@@ -70,8 +74,7 @@ export const createSessionConditions = () => {
         else unavailable.delete(key);
         if (hasForegroundTurn(envelope.session)) working.add(key);
         else working.delete(key);
-        if (envelope.session.goal?.status === "active" && envelope.session.activity !== "idle")
-          goalDriven.add(key);
+        if (isGoalDrivingWork(envelope.session)) goalDriven.add(key);
         else goalDriven.delete(key);
         if (hasBlockingInput(envelope.session)) {
           blockedOnInput.add(key);

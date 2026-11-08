@@ -14,6 +14,7 @@ import {
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { createClaudeNativeProcessSpawner } from "./claude-agent-sdk-native-process";
 import { getClaudeCodeCompatibilityError } from "./claude-code-compatibility";
+import { beginClaudeGoalRestore } from "./claude-agent-sdk-goals";
 import { consumeClaudeSession } from "./claude-agent-sdk-session-io";
 import { toSessionError } from "./claude-agent-sdk-session-lifecycle";
 import {
@@ -106,6 +107,8 @@ export const createClaudeAgentSdkSession = async ({
   if (sessionInput.parentExternalSessionId) {
     sessionContext.parentExternalSessionId = sessionInput.parentExternalSessionId;
   }
+  // The live adapter waits for this read and reports its failure.
+  if (sessionInput.restoreGoal) void beginClaudeGoalRestore(sessionContext);
   let sdkQuery: ReturnType<typeof query>;
   try {
     const sessionOptions: CreateClaudeAgentSdkSessionInput["sessionInput"]["options"] & {

@@ -18,7 +18,7 @@ describe("promoteTypedGoalCommand", () => {
 
     expect(draft.segments).toMatchObject([
       { kind: "slash_command", command: { id: "system:goal" } },
-      { kind: "text", text: " Ship the feature" },
+      { kind: "text", text: "Ship the feature" },
     ]);
   });
 

@@ -88,7 +88,7 @@ export const restoreClaudeGoalFromRecords = (
     if (!entry) return null;
     if (entry.goal) {
       return entry.goal.kind === "set" || entry.goal.kind === "not_met"
-        ? { objective: entry.goal.objective, ended: false }
+        ? { objective: entry.goal.objective }
         : null;
     }
     current = entry.parentUuid;
@@ -121,6 +121,8 @@ export type ClaudeGoalTracking = {
   pending: PendingGoalCommand | null;
   /** `/goal clear` commands that OpenDucktor sent and whose record it has not read yet. */
   clearsSent: number;
+  /** The read of the goal that Claude restores from the transcript. It rejects when the read failed. */
+  restore: Promise<void>;
 };
 
 type ClaudeGoalSession = Pick<ClaudeSessionContext, "externalSessionId" | "goalTracking"> & {
@@ -135,6 +137,7 @@ const trackingOf = (session: ClaudeGoalSession): ClaudeGoalTracking => {
     reads: Promise.resolve(),
     pending: null,
     clearsSent: 0,
+    restore: Promise.resolve(),
   };
   return session.goalTracking;
 };
@@ -177,27 +180,32 @@ const goalEvent = (
   session: ClaudeGoalSession,
   timestamp: string,
   goal: ClaudeNativeGoal | null,
-): ClaudeGoalEvent => ({
-  type: "session_goal_updated",
-  externalSessionId: session.externalSessionId,
-  timestamp,
-  goal,
-});
+): ClaudeGoalEvent => {
+  const event: ClaudeGoalEvent = {
+    type: "session_goal_updated",
+    externalSessionId: session.externalSessionId,
+    timestamp,
+    goal,
+  };
+  return goal && session.goalTracking?.pending?.kind === "clear"
+    ? { ...event, clearing: true }
+    : event;
+};
 
-/**
- * Reads the goal that Claude restores for the session from its whole transcript, and moves the
- * live read position to the end of that transcript. It returns the event that publishes the goal.
- */
-export const restoreClaudeSessionGoal = async (
+/** The event that publishes the goal that the adapter tracks for the session now. */
+export const currentClaudeGoalEvent = (
   session: ClaudeGoalSession,
   timestamp: string,
-): Promise<ClaudeGoalEvent> => {
-  // A retained context already tracks the goal, also an ended one that a new scan would drop.
-  if (session.goalTracking) {
-    const tracked = session.goalTracking;
-    await tracked.reads;
-    return goalEvent(session, timestamp, tracked.goal);
-  }
+): ClaudeGoalEvent => goalEvent(session, timestamp, session.goalTracking?.goal ?? null);
+
+/**
+ * Starts to read the goal that Claude restores for the session from its whole transcript, and
+ * moves the live read position to the end of that transcript. A session that already tracks its
+ * goal keeps it, also an ended goal that a new read would drop. The returned Promise settles
+ * with the read.
+ */
+export const beginClaudeGoalRestore = (session: ClaudeGoalSession): Promise<void> => {
+  if (session.goalTracking) return session.goalTracking.restore;
   const tracking = trackingOf(session);
   const read = tracking.reads.then(async () => {
     const path = await transcriptPath(session);
@@ -213,8 +221,18 @@ export const restoreClaudeSessionGoal = async (
     tracking.offset = end;
   });
   tracking.reads = read.catch(() => {});
-  await read;
-  return goalEvent(session, timestamp, tracking.goal);
+  tracking.restore = read;
+  return read;
+};
+
+/** Waits for the restored goal of the session, and returns the event that publishes it. */
+export const restoreClaudeSessionGoal = async (
+  session: ClaudeGoalSession,
+  timestamp: string,
+): Promise<ClaudeGoalEvent> => {
+  await beginClaudeGoalRestore(session);
+  await session.goalTracking?.reads;
+  return currentClaudeGoalEvent(session, timestamp);
 };
 
 /** Sets the goal of the session and publishes it when it changed. */
@@ -232,27 +250,23 @@ const publishGoal = (
 
 const sameGoal = (left: ClaudeNativeGoal | null, right: ClaudeNativeGoal | null): boolean =>
   left === right ||
-  (left !== null &&
-    right !== null &&
-    left.objective === right.objective &&
-    left.ended === right.ended &&
-    left.outcome === right.outcome);
+  (left !== null && right !== null && left.objective === right.objective && left.end === right.end);
 
 const applyRecord = (tracking: ClaudeGoalTracking, record: ClaudeGoalRecord): void => {
   const { objective } = record;
   switch (record.kind) {
     case "set":
-      tracking.goal = { objective, ended: false };
+      tracking.goal = { objective };
       tracking.clearsSent = 0;
       if (tracking.pending?.kind === "set" && tracking.pending.objective === objective)
         tracking.pending.settle();
       return;
     case "not_met":
-      tracking.goal = { objective, ended: false };
+      tracking.goal = { objective };
       return;
     case "met":
     case "failed":
-      tracking.goal = { objective, ended: true, outcome: record.kind };
+      tracking.goal = { objective, end: record.kind };
       return;
     case "clear":
       if (tracking.clearsSent > 0) {
@@ -260,7 +274,7 @@ const applyRecord = (tracking: ClaudeGoalTracking, record: ClaudeGoalRecord): vo
         tracking.goal = null;
       } else {
         // Claude clears a goal by itself only after an unrecoverable error.
-        tracking.goal = { objective, ended: true };
+        tracking.goal = { objective, end: "stopped" };
       }
   }
 };
@@ -359,7 +373,7 @@ export const observeClaudeGoalFrame = ({
     });
   if (pending?.kind === "set" && pending.phase === "replied") {
     if (isTurnFrame(message)) {
-      publishGoal(session, tracking, { objective: pending.objective, ended: false }, emit, now);
+      publishGoal(session, tracking, { objective: pending.objective }, emit, now);
       tracking.clearsSent = 0;
       pending.settle();
       return;
@@ -377,7 +391,7 @@ export const observeClaudeGoalFrame = ({
       return;
     }
   }
-  if (message.type === "result" && tracking.goal && !tracking.goal.ended) void read();
+  if (message.type === "result" && tracking.goal && !tracking.goal.end) void read();
 };
 
 /**
@@ -427,7 +441,7 @@ export const forgetEndedClaudeGoal = (
   timestamp: string,
 ): ClaudeGoalEvent | null => {
   const tracking = session.goalTracking;
-  if (!tracking?.goal?.ended) return null;
+  if (!tracking?.goal?.end) return null;
   tracking.goal = null;
   return goalEvent(session, timestamp, null);
 };

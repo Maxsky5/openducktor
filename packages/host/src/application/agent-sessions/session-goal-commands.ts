@@ -8,7 +8,7 @@ import {
 import { type AgentSessionGoalCommand, goalCommandStartsWork } from "@openducktor/core";
 import { AgentSessionBusyError } from "../../ports/agent-session-send-error";
 import type { createSessionCommandReadiness } from "./session-command-readiness";
-import { hasForegroundTurn } from "./session-foreground-readiness";
+import { hasForegroundTurn, isGoalDrivingWork } from "./session-foreground-readiness";
 import { classifySessionMessageSystemCommand } from "./session-message-system-command";
 import { Effect } from "effect";
 import {
@@ -93,7 +93,7 @@ export const createSessionGoalCommands = ({
       if (
         current.type === "live" &&
         hasForegroundTurn(current.session) &&
-        current.session.goal?.status !== "active"
+        !isGoalDrivingWork(current.session)
       )
         return yield* new AgentSessionBusyError({
           message: `/${GOAL_SLASH_COMMAND.trigger} waits until the running turn ends.`,

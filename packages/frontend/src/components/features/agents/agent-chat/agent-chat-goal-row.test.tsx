@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AgentSessionGoalRowModel } from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
+import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
 import { AgentChatGoalRow } from "./agent-chat-goal-row";
 
 const rowModel = (overrides: Partial<AgentSessionGoalRowModel> = {}): AgentSessionGoalRowModel => ({
@@ -36,6 +37,10 @@ describe("AgentChatGoalRow", () => {
     // The test DOM has no layout, so the line reports that it cuts its text.
     const scrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth");
     Object.defineProperty(HTMLElement.prototype, "scrollWidth", { configurable: true, value: 500 });
+    const restore = restoreAfterTestBody(() => {
+      if (scrollWidth) Object.defineProperty(HTMLElement.prototype, "scrollWidth", scrollWidth);
+      else Reflect.deleteProperty(HTMLElement.prototype, "scrollWidth");
+    });
     try {
       render(
         <AgentChatGoalRow
@@ -57,8 +62,7 @@ describe("AgentChatGoalRow", () => {
       fireEvent.click(toggle);
       await waitFor(() => expect(line.dataset.clamped).toBe("true"));
     } finally {
-      if (scrollWidth) Object.defineProperty(HTMLElement.prototype, "scrollWidth", scrollWidth);
-      else Reflect.deleteProperty(HTMLElement.prototype, "scrollWidth");
+      restore();
     }
   });
 
