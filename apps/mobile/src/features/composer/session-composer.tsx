@@ -117,7 +117,7 @@ function SessionComposerView({ composer }: { composer: SessionComposerModel }): 
   );
   const attachmentPickers = useAttachmentPickers({
     pickers,
-    enabled: composer.canInteract && !policy.isComposerInputDisabled && !policy.isSubmitting,
+    enabled: composer.canInteract && !policy.isComposerInputDisabled,
     onAdd: editor.addAttachments,
   });
 

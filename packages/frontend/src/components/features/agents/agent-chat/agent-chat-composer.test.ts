@@ -495,6 +495,28 @@ describe("AgentChatComposer", () => {
           ? `@ for files; / for commands; Enter to send now; ${steerShortcutLabel()} to queue`
           : `@ for files; / for commands; Enter to queue; ${steerShortcutLabel()} to send now`,
       ],
+      [
+        "the gap between two goal turns with queued messages",
+        {
+          isSessionWorking: true,
+          foregroundTurnActive: false,
+          messageQueue: queuedFollowUp,
+          goalRow: {
+            objective: "Ship",
+            status: "active",
+            statusLabel: "Active",
+            tone: "info",
+            detail: null,
+            actions: ["pause", "clear"],
+            pendingAction: null,
+            error: null,
+            onAction: () => {},
+          },
+        },
+        steerMessagesByDefault
+          ? `@ for files; / for commands; Enter to steer; ${steerShortcutLabel()} to queue`
+          : `@ for files; / for commands; Enter to queue; ${steerShortcutLabel()} to steer`,
+      ],
       ["an idle session without queued messages", {}, "@ for files; / for commands"],
     ])("names the queue keys in the placeholder for %s", (_name, overrides, placeholder) => {
       // The queued message list reads its edit drafts from the host connection.
@@ -518,6 +540,18 @@ describe("AgentChatComposer", () => {
       expect(html.includes("Queued follow-up")).toBe(overrides.messageQueue !== undefined);
     });
   }
+
+  test("keeps the editor open while a send waits for the turn to start", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: { ...buildModel(), isSending: true, isSessionWorking: false },
+      }),
+    );
+
+    const editor = readComposerCard(html).querySelector('[aria-label="Message composer"]');
+    expect(editor?.getAttribute("contenteditable")).toBe("true");
+    expect(editor?.getAttribute("aria-disabled")).toBe("false");
+  });
 
   test("disables send when input is blank", () => {
     const html = renderToStaticMarkup(

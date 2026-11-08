@@ -119,7 +119,8 @@ export function AgentChatComposer({
     settingsReady,
     steerShortcutLabel: steerShortcutLabel(),
   });
-  const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled || isSubmitting;
+  // A send clears the draft at once, so the user can write the next message while it runs.
+  const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled;
 
   const handleDraftChange = useCallback(
     (nextDraft: AgentChatComposerDraft) => {
@@ -660,7 +661,7 @@ function AgentChatComposerFormView({
             onDraftChange={onDraftChange}
             onAddFiles={onAddFiles}
             placeholder={composerPlaceholder}
-            disabled={isComposerInputDisabled || isSubmitting}
+            disabled={isComposerInputDisabled}
             editorRef={composerEditorRef}
             onEditorInput={onComposerEditorInput}
             onSend={onSend}
@@ -757,7 +758,7 @@ function useAgentChatComposerFocus({
     }
 
     const composerAutofocusState = composerAutofocusStateRef.current;
-    const isComposerInteractive = !isComposerInputDisabled && !isSubmitting;
+    const isComposerInteractive = !isComposerInputDisabled;
     const activeElement = globalThis.document?.activeElement ?? null;
     const focusInsideComposer = isFocusInsideComposer(activeElement);
 
