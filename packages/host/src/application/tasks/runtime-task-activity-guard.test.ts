@@ -10,7 +10,8 @@ const createRuntimeTaskActivityGuard = (
     Parameters<typeof createEffectRuntimeTaskActivityGuard>[0],
     "sessionService" | "settingsConfig" | "readSessionRootRefs"
   > & {
-    sessionService?: Pick<AgentSessionLiveStateService, "list" | "releaseSession">;
+    sessionService?: Pick<AgentSessionLiveStateService, "list" | "releaseSession"> &
+      Partial<Pick<AgentSessionLiveStateService, "stopSession">>;
     pathExists?: (path: string) => boolean;
     readSessionRootRefs?: Parameters<
       typeof createEffectRuntimeTaskActivityGuard
@@ -39,9 +40,11 @@ const createRuntimeTaskActivityGuard = (
     settingsConfig: {
       pathExists: (path) => Effect.succeed(input.pathExists?.(path) ?? true),
     },
-    sessionService: input.sessionService ?? {
+    sessionService: {
       list: () => Effect.succeed([]),
       releaseSession: () => Effect.void,
+      stopSession: () => Effect.die(new Error("unexpected live session stop")),
+      ...input.sessionService,
     },
   });
 const registry = ({
@@ -426,6 +429,61 @@ describe("createRuntimeTaskActivityGuard", () => {
       ),
     ).resolves.toEqual({ stoppedSessionCount: 0 });
     expect(releaseCalls).toEqual(["external-build-session"]);
+  });
+  test("stops an idle session with an active goal before cleanup releases it", async () => {
+    const calls: string[] = [];
+    const goalSession: AgentSessionLiveSnapshot = {
+      ...snapshot(),
+      goal: { objective: "Ship it", status: "active" },
+    };
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry(),
+      sessionService: {
+        list: () => Effect.succeed([goalSession]),
+        stopSession: (ref) => Effect.sync(() => void calls.push(`stop ${ref.externalSessionId}`)),
+        releaseSession: (ref) =>
+          Effect.sync(() => void calls.push(`release ${ref.externalSessionId}`)),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        guard.cleanupTaskSessions({
+          repoPath: "/repo",
+          taskSessions: [{ taskId: "task-1", sessions: [session()] }],
+        }),
+      ),
+    ).resolves.toEqual({ stoppedSessionCount: 0 });
+    expect(calls).toEqual(["stop external-build-session", "release external-build-session"]);
+  });
+  test("releases no session when the stop of a session with an active goal fails", async () => {
+    const releaseCalls: string[] = [];
+    const stopCalls: string[] = [];
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry({ liveSessions: new Set(["external-build-session"]), stopCalls }),
+      sessionService: {
+        list: () =>
+          Effect.succeed([{ ...snapshot(), goal: { objective: "Ship it", status: "active" } }]),
+        stopSession: () =>
+          Effect.fail(
+            new HostOperationError({ operation: "test.stop", message: "Codex refused the pause" }),
+          ),
+        releaseSession: (ref) => Effect.sync(() => void releaseCalls.push(ref.externalSessionId)),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        guard.cleanupTaskSessions({
+          repoPath: "/repo",
+          taskSessions: [{ taskId: "task-1", sessions: [session()] }],
+        }),
+      ),
+    ).rejects.toThrow(
+      "Cannot stop session external-build-session, which has an active goal, so no task session was released: Codex refused the pause",
+    );
+    expect(stopCalls).toEqual([]);
+    expect(releaseCalls).toEqual([]);
   });
   test("probes a retained session even when its worktree is missing", async () => {
     const probeCalls: unknown[] = [];
