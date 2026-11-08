@@ -35,8 +35,9 @@ import { FeatureTourDialogHost } from "@/features/feature-tour/feature-tour-dial
 import { SettingsModal, SettingsModalProvider } from "./settings-modal";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 
-// The tour host loads the dialog lazily. Load it here, so no test pays for the first load.
-await import("@/features/feature-tour/feature-tour-dialog");
+// The tour host loads the dialog and its scenes lazily. Load both here, so no test pays for the
+// first load.
+await (await import("@/features/feature-tour/feature-tour-dialog-loader")).loadFeatureTourDialog();
 
 for (const shared of [true, false]) {
   test(`${shared ? "shared" : "local"} settings opens and reopens cached settings without a loader`, async () => {
@@ -207,7 +208,8 @@ test("Show tour hands the focus from Settings to the tour and back to the opener
     await waitFor(() => expect(within(document.body).queryByRole("dialog")).toBeNull(), {
       timeout: 500,
     });
-    expect(document.activeElement).toBe(trigger);
+    // Compare by identity: a failed element match prints the whole DOM tree.
+    expect(document.activeElement === trigger).toBe(true);
     expect(triggerFocus).toHaveBeenCalledTimes(1);
   } finally {
     settings.unmount();
