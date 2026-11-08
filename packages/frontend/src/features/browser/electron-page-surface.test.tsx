@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { render, waitFor } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import type { ElectronBrowserBridge } from "@/lib/shell-bridge";
 import { createBrowserFocusRegistry } from "./browser-focus-registry";
 import { ElectronPageSurface } from "./electron-page-surface";
@@ -86,10 +86,9 @@ describe("ElectronPageSurface", () => {
     });
     const { queryByTestId, rerenderSurface } = renderSurface(bridge, placement(true), true);
 
-    await waitFor(() =>
-      expect(setSurface).toHaveBeenLastCalledWith({ tabId: TAB_ID, visible: false }),
-    );
+    await act(async () => {});
     expect(capturePage).toHaveBeenCalledTimes(1);
+    expect(setSurface).toHaveBeenLastCalledWith({ tabId: TAB_ID, visible: false });
     expect(queryByTestId("browser-page-snapshot")).not.toBeNull();
 
     rerenderSurface(placement(true), false);
@@ -100,8 +99,8 @@ describe("ElectronPageSurface", () => {
     });
     expect(queryByTestId("browser-page-snapshot")).not.toBeNull();
 
-    placed();
-    await waitFor(() => expect(queryByTestId("browser-page-snapshot")).toBeNull());
+    await act(async () => placed());
+    expect(queryByTestId("browser-page-snapshot")).toBeNull();
   });
 
   test("keeps a page out of every window while no panel shows it", async () => {
