@@ -82,6 +82,7 @@ export const RegularToolMessage = ({
                 className="rounded border border-border bg-card"
                 summaryClassName="cursor-pointer px-2 py-1 text-xs font-medium text-foreground"
                 bodyClassName="space-y-2 px-2 pb-2 text-[11px] text-foreground"
+                visible={detailsOpen}
               />
             ) : null}
             {hasError && meta.error ? (

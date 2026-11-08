@@ -1,4 +1,5 @@
 import type { GitFileDiff } from "@openducktor/contracts";
+import { PIERRE_HIGHLIGHT_LINE_LIMIT } from "@/lib/diff/pierre-config";
 
 type DiffPreloadEntry = {
   file: string;
@@ -22,6 +23,10 @@ export const buildDiffPreloadEntries = (
   for (const fileDiff of fileDiffs) {
     if (next.length >= limit) {
       break;
+    }
+    // Reject large changes before the preloader parses their patches on the UI thread.
+    if (Math.max(fileDiff.additions, fileDiff.deletions) > PIERRE_HIGHLIGHT_LINE_LIMIT) {
+      continue;
     }
     if (fileDiff.diff.trim().length === 0) {
       continue;

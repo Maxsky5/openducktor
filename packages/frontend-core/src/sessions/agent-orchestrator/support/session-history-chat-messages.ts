@@ -208,7 +208,7 @@ export const historyToChatMessages = (
       message.role === "assistant" && isFinalAssistantHistoryMessage(message);
     const completedAtMs = Date.parse(message.timestamp);
     const activityStartedAtMs =
-      isFinalAssistantMessage && !Number.isNaN(completedAtMs)
+      isFinalAssistantMessage && message.durationMs === undefined && !Number.isNaN(completedAtMs)
         ? mergeTurnActivityTimestamp(
             readAssistantActivityStartedAtMsFromMessages({
               messages: next,

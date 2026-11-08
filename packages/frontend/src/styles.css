@@ -513,6 +513,11 @@ body:has([data-separator="active"]) [data-browser-surface] {
   stroke-width: var(--odt-border-ray-stroke-width);
 }
 
+.xterm .live-region {
+  /* Keep announcements from wrapping inside xterm's one-pixel hidden container. */
+  white-space: pre;
+}
+
 .odt-terminal-links .xterm-screen.xterm-cursor-pointer {
   cursor: text;
 }

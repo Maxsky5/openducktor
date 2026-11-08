@@ -53,6 +53,7 @@ export function StartupActionOutput({
           screenReaderMode: false,
           scrollOnUserInput: false,
         }),
+        report,
       );
     } catch (cause) {
       report(cause);
@@ -70,7 +71,7 @@ export function StartupActionOutput({
     };
     const scrollSubscription = terminal.onScroll(rememberPosition);
     const sequencer = createTerminalOutputSequencer({
-      write: (bytes, parsed) => terminal.write(bytes, parsed),
+      write: binding.write,
       onConsumed: (sequenceEnd) => {
         if (!disposed) void controller.acknowledge(terminalId, sequenceEnd).catch(report);
       },

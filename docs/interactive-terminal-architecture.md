@@ -186,7 +186,21 @@ The frontend gets the platform from the host and applies terminal shortcuts. It 
 
 Image paste sends the terminal's native paste control so a compatible TUI can read the OS clipboard. Image drag and drop stages each image, asks the host for shell-safe paths, and pastes those paths into xterm. It does not send image bytes through the terminal protocol.
 
-Drag and drop accepts at most eight images, 20 MiB each, and 40 MiB total. An interaction error does not replace the terminal screen. xterm or WebGL startup failure blocks that emulator and appears in its body.
+Drag and drop accepts at most eight images, 20 MiB each, and 40 MiB total. An interaction error does not replace the terminal screen. An xterm startup failure blocks that emulator and appears in its body.
+
+## Rendering
+
+Desktop terminals and startup output use the official WebGL addon through the shared xterm binding. With GPU rendering active, the binding splits binary output into 16 KiB parser writes. Only the final write receives the parsed callback, so restore barriers and output acknowledgements keep their existing order. Standard rendering keeps one write per payload because splitting its writes increases intermediate screen redraws.
+
+A GPU initialization failure shows an actionable error and keeps output available with the standard renderer. Before the binding admits output, it releases the partial GPU context and replaces the failed emulator with one clean standard emulator. It does not retry GPU initialization. A later GPU context loss shows an error and returns the same emulator to standard rendering, preserving its output and transport. Binding disposal releases the GPU context through public DOM APIs.
+
+### Automatic announcements
+
+xterm limits automatic screen-reader announcements by line feeds. A TUI can redraw with cursor controls and produce no line feeds, so its hidden announcement history can grow without that limit. The shared binding retains at most 8,192 UTF-16 code units of that history without splitting a surrogate pair. It adds a newline and xterm's localized `Terminal.strings.tooMuchOutput` notice when the history reaches the limit. Further updates keep that prefix and notice until a native keypress or focus loss starts a new budget.
+
+While the viewport is shown, the native assertive live region and accessible row tree remain available. Terminal output, scrollback, input, selection, and copying keep their existing behavior. The hidden live region uses `white-space: pre` to avoid wrapping text in its one-pixel box. The binding attaches the announcement observer after it chooses the final emulator and removes the observer and input listeners on disposal or failed setup.
+
+The retained viewport combines the existing `TerminalLayer` visibility with the existing `documentVisibility` owner, separately from input readiness. When the viewport or its document hides, the binding removes its announcement subscriptions and disables the public `screenReaderMode` option. This disposes xterm's pending speech text while output continues to update the same emulator and buffer. On reveal, the binding enables the option and binds a new announcement budget to the new native live region. The accessible rows show the current buffer without replaying hidden automatic speech. A shown read-only viewport in a visible document keeps screen-reader mode enabled.
 
 ## Viewport
 

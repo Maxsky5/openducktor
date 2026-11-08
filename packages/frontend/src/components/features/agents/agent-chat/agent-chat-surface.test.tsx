@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import {
   createChatSettingsFixture,
   createAgentSessionFixture,
@@ -30,12 +30,13 @@ test("keeps expanded tool output when returning to a session in another workspac
     await waitFor(() => expect(view.container.querySelector("details.group")).not.toBeNull(), {
       timeout: 500,
     });
-    const details = view.container.querySelector<HTMLDetailsElement>("details.group")!;
-    act(() => {
-      details.open = true;
-    });
     const container = alpha.thread.messagesContainerRef.current!;
+    const details = openDetails(container);
+    const output = openDetails(container, "Output");
     view.rerender(<AgentChatSurface model={beta} />);
+    const betaContainer = beta.thread.messagesContainerRef.current!;
+    openDetails(betaContainer);
+    openDetails(betaContainer, "Output");
     await waitFor(
       () =>
         expect(beta.thread.messagesContainerRef.current?.textContent).toContain("Output of /beta"),
@@ -45,6 +46,8 @@ test("keeps expanded tool output when returning to a session in another workspac
     expect(alpha.thread.messagesContainerRef.current === container).toBe(true);
     expect(details.isConnected).toBe(true);
     expect(details.open).toBe(true);
+    expect(output.isConnected).toBe(true);
+    expect(output.open).toBe(true);
     expect(container.textContent).toContain("Output of /alpha");
     expect(container.textContent).toContain("2.0s");
     expect(container.textContent).not.toContain("Output of /beta");
@@ -70,10 +73,7 @@ test("keeps an expanded tool open and shows its completed result after a hidden 
   );
   const view = render(content(alpha));
   try {
-    const details = view.container.querySelector<HTMLDetailsElement>("details.group")!;
-    act(() => {
-      details.open = true;
-    });
+    const details = openDetails(alpha.thread.messagesContainerRef.current!);
     view.rerender(content(beta));
     const completed = model("/alpha");
     const result = completed.thread.transcript.session!.messages.items[0]!;
@@ -95,21 +95,38 @@ test("keeps an expanded tool open and shows its completed result after a hidden 
       },
     };
     view.rerender(content(completed));
+    const container = completed.thread.messagesContainerRef.current!;
     await waitFor(
       () =>
-        expect(completed.thread.messagesContainerRef.current?.textContent).toContain(
-          "Output of /alpha",
-        ),
+        expect(
+          [...container.querySelectorAll("summary")].some(
+            (summary) => summary.textContent === "Output",
+          ),
+        ).toBe(true),
       { timeout: 500 },
     );
+    openDetails(container, "Output");
     expect(details.isConnected).toBe(true);
     expect(details.open).toBe(true);
+    expect(container.textContent).toContain("Output of /alpha");
     expect(completed.thread.messagesContainerRef.current?.textContent).toContain("2.0s");
   } finally {
     view.unmount();
     driver.restore();
   }
 });
+
+function openDetails(container: HTMLElement, label?: string): HTMLDetailsElement {
+  const details = [...container.querySelectorAll("details")].find(
+    (element) => label === undefined || element.querySelector("summary")?.textContent === label,
+  );
+  if (!details) throw new Error("The tool row has no details.");
+  act(() => {
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+  });
+  return details;
+}
 
 test("bounds retained transcripts and evicts the least recently visited session", async () => {
   const sessions = Array.from({ length: 7 }, (_, i) => model(`/repo/${i}`));
