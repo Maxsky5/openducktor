@@ -67,8 +67,11 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await Promise.all(routers.splice(0).map((router) => router.dispose()));
+  // Windows can lock a file of a closed database for a short time after the host stops.
   await Promise.all(
-    configDirectories.splice(0).map((root) => rm(root, { force: true, recursive: true })),
+    configDirectories
+      .splice(0)
+      .map((root) => rm(root, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 })),
   );
 });
 

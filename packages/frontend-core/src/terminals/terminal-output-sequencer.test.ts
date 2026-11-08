@@ -91,6 +91,35 @@ describe("createTerminalOutputSequencer", () => {
     expect(finished).toEqual([false]);
   });
 
+  test("keeps the parsed position when a detach cancels a waiting restore", async () => {
+    const parser = createParser();
+    const written: number[] = [];
+    const sequencer = createTerminalOutputSequencer({
+      write: (payload, parsed) => {
+        written.push(payload.byteLength);
+        parser.write(payload, parsed);
+      },
+      onConsumed: () => undefined,
+    });
+    void sequencer.enqueue(outputFrame(0, 10), new Uint8Array(10));
+    const restored = sequencer.restore(
+      40,
+      new Uint8Array(4),
+      () => undefined,
+      () => undefined,
+    );
+    sequencer.detach();
+    parser.parse();
+    await restored;
+
+    // The next attachment replays from the last ACK. xterm never got the restore.
+    const replayed = sequencer.enqueue(outputFrame(10, 20), new Uint8Array(10));
+    parser.parse();
+    await replayed;
+
+    expect(written).toEqual([10, 10]);
+  });
+
   test("sends the ACK of a hidden first screen before the detach frame", async () => {
     const terminalId = "terminal-1";
     const sent: string[] = [];

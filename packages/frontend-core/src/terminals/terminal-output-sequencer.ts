@@ -120,7 +120,6 @@ export const createTerminalOutputSequencer = ({
       finish: (completed: boolean) => void,
     ): Promise<void> {
       const restoreEpoch = ++epoch;
-      submittedSequence = sequence;
       const restored = lastWrite
         .then(async () => {
           // A detach or a later restore can replace this restore before it starts. The caller
@@ -128,6 +127,9 @@ export const createTerminalOutputSequencer = ({
           let completed = false;
           try {
             if (disposed || restoreEpoch !== epoch) return;
+            // Later output waits for this restore, so xterm holds the bytes up to `sequence` only
+            // when the restore runs.
+            submittedSequence = sequence;
             prepare();
             await new Promise<void>((resolve) => write(payload, resolve));
             completed = !disposed && restoreEpoch === epoch;
