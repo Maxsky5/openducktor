@@ -14,7 +14,6 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type { AgentSessionSendOptions } from "../../ports/agent-session-live-adapter-port";
-import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
 import type {
   AgentSessionOperationPolicy,
@@ -22,6 +21,7 @@ import type {
 } from "./agent-session-operation-policy";
 import type { SessionGoalRules } from "./session-goal-rules";
 import type { createSessionOperationOwner } from "./session-operation-owner";
+import { deliverWithOwner } from "./session-owner-delivery";
 import type { createSessionTurnPreparation } from "./session-turn-preparation";
 
 /** The `/goal` messages and the goal row actions of the session command service. */
@@ -87,35 +87,30 @@ export const createSessionGoalCommands = ({
           ? ((yield* turnPreparation.context(content)) ?? content.systemPrompt)
           : undefined;
       yield* checkPending(content);
-      const guarded = yield* owner.options();
-      const native = yield* runtime.controlGoal(
-        {
-          repoPath: content.repoPath,
-          runtimeKind: content.runtimeKind,
-          workingDirectory: content.workingDirectory,
-          externalSessionId: content.externalSessionId,
-          sessionScope: content.sessionScope,
-          command,
-          systemPrompt,
-          submissionId: content.submissionId,
-        },
-        {
-          assertCurrent: guarded.assertCurrent,
-          onSent: () => {
-            guarded.onSent();
-            options?.onSent?.();
-          },
-        },
+      const input = {
+        repoPath: content.repoPath,
+        runtimeKind: content.runtimeKind,
+        workingDirectory: content.workingDirectory,
+        externalSessionId: content.externalSessionId,
+        sessionScope: content.sessionScope,
+        command,
+        systemPrompt,
+        submissionId: content.submissionId,
+      };
+      return yield* deliverWithOwner(
+        owner,
+        content,
+        (guard) =>
+          runtime.controlGoal(input, guard).pipe(
+            // Pause and clear end no turn, so the queue can send its next message at once.
+            Effect.map((native) =>
+              native.type === "command_accepted"
+                ? { ...native, startsTurn: goalCommandStartsWork(command) }
+                : native,
+            ),
+          ),
+        options?.onSent,
       );
-      // Pause and clear end no turn, so the queue can send its next message at once.
-      const accepted =
-        native.type === "command_accepted"
-          ? { ...native, startsTurn: goalCommandStartsWork(command) }
-          : native;
-      yield* owner
-        .accepted(accepted)
-        .pipe(Effect.mapError(messageAcceptedFailure(content, accepted, "record_message")));
-      return accepted;
     });
 
   /**

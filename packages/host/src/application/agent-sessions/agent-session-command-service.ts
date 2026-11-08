@@ -25,6 +25,7 @@ import { createTaskWorkflowSessionPolicy } from "./task-workflow-session-policy"
 import { resumeAndSaveSession } from "./session-resume";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
 import { createSessionOperationOwner } from "./session-operation-owner";
+import { deliverWithOwner } from "./session-owner-delivery";
 import { resolveOwnedSessionRoot } from "./session-owner-resolution";
 import type { createSessionTurnPreparation } from "./session-turn-preparation";
 import { hasForegroundTurn } from "./session-foreground-readiness";
@@ -414,18 +415,12 @@ export const createAgentSessionCommandService = ({
                 .map((question) => question.requestId);
               if (questionIds.length > 0) request.resolvedQuestionRequestIds = questionIds;
             }
-            const guarded = yield* owner.options();
-            const accepted = yield* runtime.sendUserMessage(request, {
-              assertCurrent: guarded.assertCurrent,
-              onSent: () => {
-                guarded.onSent();
-                options?.onSent?.();
-              },
-              goal: options?.goal,
-            });
-            yield* owner
-              .accepted(accepted)
-              .pipe(Effect.mapError(messageAcceptedFailure(ref, accepted, "record_message")));
+            const accepted = yield* deliverWithOwner(
+              owner,
+              ref,
+              (guard) => runtime.sendUserMessage(request, { ...guard, goal: options?.goal }),
+              options?.onSent,
+            );
             if (accepted.type === "command_accepted") return accepted;
             yield* policy
               .recordAcceptedMessage(ref, accepted)
