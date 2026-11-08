@@ -1,0 +1,103 @@
+@layer replica {
+  :where(.stage) {
+    /* AgentChatComposerMenuRow: flex gap-3 px-3 py-2, with bg-selected-surface on the active row. */
+    .cm-row {
+      display: flex;
+      flex-shrink: 0;
+      gap: calc(12 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+    }
+    .cm-row[data-active] {
+      background: var(--selected-surface);
+    }
+    .cm-row-icon {
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+      margin-top: calc(2 * var(--u));
+      border-radius: 50%;
+      background: var(--muted);
+      color: var(--muted-foreground);
+    }
+    .cm-row-icon .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* The skill icon: bg-purple-100 text-purple-700, dark:bg-purple-950/50 dark:text-purple-200. */
+    .cm-row-icon[data-tone="skill"] {
+      background: var(--purple-100);
+      color: var(--purple-700);
+    }
+    :where([data-theme="dark"]) & .cm-row-icon[data-tone="skill"] {
+      background: color-mix(in oklab, var(--purple-950) 50%, transparent);
+      color: var(--purple-200);
+    }
+    .cm-row-text {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-width: 0;
+    }
+    /* flex flex-wrap items-center gap-x-2 gap-y-0.5: the hints of a command wrap to their own line
+       in a narrow menu. */
+    .cm-row-name {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(2 * var(--u)) calc(8 * var(--u));
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* The source badge: rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide. */
+    .cm-row-name small {
+      padding: calc(2 * var(--u)) calc(8 * var(--u));
+      border-radius: 999px;
+      background: var(--muted);
+      color: var(--muted-foreground);
+      font-size: calc(10 * var(--u));
+      font-weight: 400;
+      letter-spacing: 0.025em;
+      line-height: calc(15 * var(--u));
+      text-transform: uppercase;
+    }
+    /* The hints: font-mono text-xs font-normal text-muted-foreground. The name line wraps, so a
+       narrow menu puts the hints on their own line (flex-wrap gap-x-2 gap-y-0.5). */
+    .cm-row-hint {
+      color: var(--muted-foreground);
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+      font-weight: 400;
+      line-height: calc(16 * var(--u));
+    }
+    .cm-row-detail,
+    .cm-row-desc {
+      overflow: hidden;
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .cm-row-detail {
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cm-row-desc {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    .cm-row-chevron {
+      flex: none;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      margin-top: calc(2 * var(--u));
+      color: var(--muted-foreground);
+    }
+  }
+}

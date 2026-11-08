@@ -1,0 +1,9 @@
+@layer views {
+  :where(.stage) {
+    /* Needs you: the shared layout of MobileStage.tsx. The card of the request keeps its corners
+       while it closes. */
+    .mob-pending > .mob-request[data-resizing] {
+      overflow: hidden;
+    }
+  }
+}

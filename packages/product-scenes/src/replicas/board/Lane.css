@@ -2,9 +2,9 @@
   :where(.stage) {
     /* The status colors of task-status-presentation.ts. Each lane status sets its hue below. */
     .lane {
-      --lane-border: color-mix(in oklch, var(--lane-200) 90%, transparent);
-      --lane-surface: color-mix(in oklch, var(--lane-50) 55%, transparent);
-      --lane-head: color-mix(in oklch, var(--lane-50) 75%, transparent);
+      --lane-border: color-mix(in oklab, var(--lane-200) 90%, transparent);
+      --lane-surface: color-mix(in oklab, var(--lane-50) 55%, transparent);
+      --lane-head: color-mix(in oklab, var(--lane-50) 75%, transparent);
       --lane-count-border: var(--lane-300);
       --lane-count-ink: var(--lane-700);
       --lane-empty-border: var(--lane-300);
@@ -21,9 +21,9 @@
       box-shadow: var(--shadow-sm);
     }
     :where([data-theme="dark"]) & .lane {
-      --lane-border: color-mix(in oklch, var(--lane-800) 60%, transparent);
-      --lane-surface: color-mix(in oklch, var(--lane-950) 30%, transparent);
-      --lane-head: color-mix(in oklch, var(--lane-950) 40%, transparent);
+      --lane-border: color-mix(in oklab, var(--lane-800) 60%, transparent);
+      --lane-surface: color-mix(in oklab, var(--lane-950) 30%, transparent);
+      --lane-head: color-mix(in oklab, var(--lane-950) 40%, transparent);
       --lane-count-border: var(--lane-700);
       --lane-count-ink: var(--lane-300);
       --lane-empty-border: var(--lane-800);
@@ -31,14 +31,14 @@
     }
     /* The Backlog lane has one set of classes for both themes in task-status-presentation.ts. */
     .lane[data-lane="open"] {
-      --lane-border: color-mix(in oklch, var(--border) 90%, transparent);
-      --lane-surface: color-mix(in oklch, var(--muted) 60%, transparent);
-      --lane-head: color-mix(in oklch, var(--muted) 80%, transparent);
+      --lane-border: color-mix(in oklab, var(--border) 90%, transparent);
+      --lane-surface: color-mix(in oklab, var(--muted) 60%, transparent);
+      --lane-head: color-mix(in oklab, var(--muted) 80%, transparent);
       --lane-count-border: var(--input);
       --lane-count-ink: var(--foreground);
       --lane-empty-border: var(--input);
       --lane-empty-ink: var(--muted-foreground);
-      --lane-500: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
+      --lane-500: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
     }
     .lane[data-lane="spec_ready"] {
       --lane-50: var(--violet-50);
@@ -111,7 +111,7 @@
       height: calc(72 * var(--u));
       flex: 0 0 auto;
       padding: calc(16 * var(--u)) calc(16 * var(--u)) calc(12 * var(--u));
-      border-bottom: calc(1 * var(--u)) solid color-mix(in oklch, var(--border) 80%, transparent);
+      border-bottom: calc(1 * var(--u)) solid color-mix(in oklab, var(--border) 80%, transparent);
       background: var(--lane-head);
     }
     .lane-accent {
@@ -172,7 +172,7 @@
       padding: 0 calc(16 * var(--u));
       border: calc(1 * var(--u)) dashed var(--lane-empty-border);
       border-radius: calc(16 * var(--u));
-      background: color-mix(in oklch, var(--card) 80%, transparent);
+      background: color-mix(in oklab, var(--card) 80%, transparent);
       color: var(--lane-empty-ink);
       text-align: center;
       animation: lane-empty-in 0.3s ease-out;

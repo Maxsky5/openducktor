@@ -5,6 +5,7 @@ import {
   Archive,
   Bug,
   ChevronRight,
+  CircleCheckBig,
   Columns3,
   Copy,
   Download,
@@ -60,6 +61,7 @@ const LUCIDE = {
   "panel-right-open": PanelRightOpen,
   copy: Copy,
   "rotate-ccw": RotateCcw,
+  "circle-check-big": CircleCheckBig,
   "trash-2": Trash,
   reply: Reply,
 } satisfies Record<PaletteIcon, LucideIcon>;

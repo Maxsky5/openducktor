@@ -19,6 +19,10 @@
       --shadow-sm: 0 1px 3px 0 rgb(15 23 42 / 0.1), 0 1px 2px -1px rgb(15 23 42 / 0.1);
       --shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.1), 0 2px 4px -2px rgb(15 23 42 / 0.1);
       --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+      /* shadow-xl of a dialog or a sheet, in design pixels. */
+      --shadow-xl:
+        0 calc(20 * var(--u)) calc(25 * var(--u)) calc(-5 * var(--u)) rgb(0 0 0 / 0.1),
+        0 calc(8 * var(--u)) calc(10 * var(--u)) calc(-6 * var(--u)) rgb(0 0 0 / 0.1);
       /* A product window, and a sheet or a pane of the settings, over the page. In the dark theme, a
          thin light ring takes the place of the contact shadow. */
       --shadow-window:

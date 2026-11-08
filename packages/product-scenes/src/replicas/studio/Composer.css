@@ -1,5 +1,20 @@
 @layer replica {
   :where(.stage) {
+    /* Bottom stack: pending questions and approvals dock above the composer. */
+    .st-stack {
+      display: grid;
+      flex: 0 0 auto;
+      gap: calc(8 * var(--u));
+      padding: calc(12 * var(--u)) calc(16 * var(--u)) 0;
+    }
+    @container stage (width <= 500px) {
+      .st-stack {
+        padding: calc(10 * var(--u)) calc(12 * var(--u)) 0;
+      }
+    }
+    .st-stack:empty {
+      display: none;
+    }
     /* Composer */
     .st-composer {
       flex: 0 0 auto;
@@ -30,17 +45,42 @@
       position: relative;
       min-height: calc(44 * var(--u));
       padding: calc(10 * var(--u)) calc(12 * var(--u));
-      color: var(--muted-foreground);
+      color: var(--foreground);
       font-size: calc(15 * var(--u));
       line-height: calc(24 * var(--u));
     }
+    /* The placeholder stays on one line and truncates, as in agent-chat-composer-editor.tsx. */
     .st-editor .when-ready {
       position: absolute;
       top: calc(10 * var(--u));
+      right: calc(12 * var(--u));
       left: calc(12 * var(--u));
+      overflow: hidden;
+      color: var(--muted-foreground);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* While the agent works, the placeholder adds the queue keys of agent-chat-composer-policy.ts. */
+    .st-editor .when-working {
+      display: none;
+    }
+    .st-box[data-activity="working"] .st-editor .when-working {
+      display: inline;
     }
     .st-editor[data-draft] .when-ready {
       display: none;
+    }
+    /* The draft that a scene types, over the placeholder. */
+    .st-draft-text {
+      position: relative;
+      z-index: 1;
+      display: block;
+      min-height: calc(24 * var(--u));
+      color: var(--foreground);
+      white-space: pre-wrap;
+    }
+    .st-draft-text .typed::after {
+      height: calc(18 * var(--u));
     }
     .st-editor .when-waiting,
     .st-box[data-activity="waiting"] .st-editor .when-ready {
@@ -48,24 +88,41 @@
     }
     .st-box[data-activity="waiting"] .st-editor .when-waiting {
       display: inline;
+      color: var(--muted-foreground);
     }
     /* The editor is disabled while a request waits, so its placeholder fades. */
     .st-box[data-activity="waiting"] .st-editor {
       opacity: 0.6;
     }
+    /* The controls wrap in a narrow pane, as in AgentChatComposerControls: the right group moves
+       to its own line at the right, and it never leaves the card. */
     .st-controls {
       display: flex;
+      flex-wrap: wrap;
       align-items: flex-end;
-      justify-content: space-between;
       gap: calc(8 * var(--u));
       padding: calc(4 * var(--u)) calc(8 * var(--u)) calc(8 * var(--u));
     }
     .st-controls > span {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
+    }
+    .st-controls > span:first-child {
+      flex: 1 1 auto;
+      min-width: 0;
       gap: calc(4 * var(--u));
     }
     .st-controls > span:last-child {
+      justify-content: flex-end;
+      gap: calc(4 * var(--u)) calc(12 * var(--u));
+      max-width: 100%;
+      margin-left: auto;
+    }
+    .st-actions {
+      display: flex;
+      flex-shrink: 0;
+      align-items: center;
       gap: calc(6 * var(--u));
     }
     /* The attach button and the selectors stay quiet next to the draft. */
@@ -93,8 +150,9 @@
       width: calc(16 * var(--u));
       height: calc(16 * var(--u));
     }
-    /* The label keeps 8 pixels on its right, so it sits 16 pixels from ChevronsUpDown. */
-    .st-chip > span {
+    /* The Combobox value of the effort keeps 8 pixels on its right, so it sits 16 pixels from
+       ChevronsUpDown. The label of the model picker has no padding. */
+    .st-chip:is(.effort, .agent) > span {
       padding-right: calc(8 * var(--u));
     }
     .st-chip > .lucide:last-child {
@@ -112,10 +170,10 @@
     .st-speed[data-speed="fast"] {
       color: var(--speed-fast);
     }
-    .st-chip.effort {
+    .st-chip:is(.effort, .agent) {
       padding-left: calc(28 * var(--u));
     }
-    .st-chip.effort > .lucide:first-child {
+    .st-chip:is(.effort, .agent) > .lucide:first-child {
       position: absolute;
       left: calc(8 * var(--u));
     }
@@ -126,7 +184,6 @@
       align-items: center;
       gap: calc(6 * var(--u));
       height: calc(28 * var(--u));
-      margin-right: calc(6 * var(--u));
       padding: 0 calc(6 * var(--u));
       border-radius: calc(12 * var(--u));
     }
@@ -151,7 +208,8 @@
       font-weight: 500;
       font-variant-numeric: tabular-nums;
     }
-    /* Send is disabled until the draft has text or pending review comments. */
+    /* Send is disabled until the draft has text or pending items, as in
+       agent-chat-composer-policy.ts. A running agent does not change it. */
     .st-send {
       position: relative;
       display: grid;
@@ -165,7 +223,8 @@
       opacity: 0.5;
       transition: opacity 200ms;
     }
-    .st-send[data-ready] {
+    .st-send[data-ready],
+    .st-send:has(.st-send-badge:not(:empty)) {
       opacity: 1;
     }
     .st-send-badge {
@@ -184,6 +243,11 @@
       font-size: calc(10 * var(--u));
       font-weight: 600;
       line-height: 1;
+    }
+    /* Each group of pending items keeps its color: amber for review comments, sky for browser
+       annotations, as agent-chat-composer-pending-items.tsx colors them. */
+    .st-send-badge[data-tone="annotations"] {
+      background: var(--sky-300);
     }
     .st-send-badge:empty {
       display: none;
@@ -216,6 +280,16 @@
     }
     .st-box:not([data-activity="working"]) > .st-ray {
       display: none;
+    }
+    /* A phone stage keeps the main controls of the composer and a narrower margin. */
+    @container stage (width <= 500px) {
+      .st-attach,
+      .st-chip.effort {
+        display: none;
+      }
+      .st-composer {
+        padding: calc(10 * var(--u)) calc(12 * var(--u)) calc(12 * var(--u));
+      }
     }
   }
 }

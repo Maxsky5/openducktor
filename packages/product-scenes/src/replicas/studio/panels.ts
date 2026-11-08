@@ -1,11 +1,12 @@
-// The right panel of a task session: the Document, Diffs, and CI Checks tabs of panel-tab-kinds.ts,
-// with DocumentPanel.tsx, GitPanel.tsx, and ChecksPanel.tsx.
-import { all, data, must } from "../../motion/dom";
+// The right panel of a task session: the Artifacts, Diffs, and CI Checks tabs of panel-tab-kinds.ts,
+// with ArtifactPanel.tsx, GitPanel.tsx, and ChecksPanel.tsx.
+import { all, must } from "../../motion/dom";
 import { designPixel, growIn, pop, riseIn } from "../../motion/effects";
 import type { Scene } from "../../motion/scene";
 import { countTo } from "../../motion/text";
-import type { DocumentLabels, GitFile, PanelId } from "./model";
+import type { ArtifactLabels, GitFile, PanelId } from "./model";
 import { filesLabel } from "../format";
+import { selectTab } from "./side-panels";
 
 export type Checks = "passing" | "pending";
 
@@ -20,15 +21,11 @@ function lineTotals(files: readonly GitFile[]): { add: number; del: number } {
 /** The controller of the right panel of the window `root`. */
 export function studioPanels(scene: Scene, root: HTMLElement) {
   const body = must(root, "[data-panel-body]");
-  const panel = (id: PanelId): HTMLElement => must(body, `:scope > [data-panel="${id}"]`);
+  const panel = (id: PanelId): HTMLElement => must(body, `[data-panel="${id}"]`);
   const strip = must(root, '[data-strip="right"]');
   const tab = (id: PanelId): HTMLElement => must(strip, `[data-ptab="${id}"]`);
 
-  const setPanel = (id: PanelId): void => {
-    for (const item of all(strip, "[data-ptab]"))
-      item.toggleAttribute("data-active", data(item, "ptab") === id);
-    body.dataset.activePanel = id;
-  };
+  const setPanel = (id: PanelId): void => selectTab(strip, body, id);
   /** The CI Checks tab shows only when the task has a pull request. */
   const setTab = (id: PanelId, shown: boolean): void => {
     tab(id).hidden = !shown;
@@ -39,32 +36,39 @@ export function studioPanels(scene: Scene, root: HTMLElement) {
     if (shown) scene.run(pop(tab(id), 1.12));
   };
 
-  // Document tab.
+  // Artifacts tab.
   const view = (): HTMLElement => panel("document");
-  const setDocument = (labels: DocumentLabels, filled: boolean): void => {
+  const setArtifact = (labels: ArtifactLabels, filled: boolean): void => {
     const element = view();
-    element.dataset.document = filled ? "filled" : "empty";
-    must(element, "[data-doc-title]").textContent = labels.title;
-    must(element, "[data-doc-empty]").textContent = labels.empty;
-    must(element, "[data-updated]").textContent = filled ? labels.updated : "Not set";
+    element.dataset.artifact = filled ? "filled" : "empty";
+    must(element, "[data-artifact-title]").textContent = labels.title;
+    must(element, "[data-artifact-empty]").textContent = labels.empty;
+    must(element, "[data-artifact-edit]").hidden = !labels.editable;
+    const verdict = must(element, "[data-artifact-verdict]");
+    verdict.textContent = labels.verdict ?? "";
+    verdict.hidden = !labels.verdict;
   };
-  /** Moves the document content out of the panel. Returns it, so a later step can put it back. */
-  const takeDocument = (): HTMLElement => {
+  /** Moves the artifact content out of the panel. Returns it, so a later step can put it back. */
+  const takeArtifact = (): HTMLElement => {
     const holder = document.createElement("div");
-    holder.append(...must(view(), "[data-doc]").childNodes);
+    holder.append(...must(view(), "[data-artifact-content]").childNodes);
     return holder;
   };
-  const putDocument = (holder: HTMLElement): void => {
-    must(view(), "[data-doc]").replaceChildren(...holder.childNodes);
+  const putArtifact = (holder: HTMLElement): void => {
+    must(view(), "[data-artifact-content]").replaceChildren(...holder.childNodes);
   };
-  /** The agent saves the document: the panel fills block by block. */
-  const fill = (updated: string, at: number): void =>
+  /** The agent saves the artifact: the panel fills block by block. */
+  const fill = (at: number): void =>
     scene.at(at, () => {
       const element = view();
-      element.dataset.document = "filled";
-      must(element, "[data-updated]").textContent = updated;
+      element.dataset.artifact = "filled";
       scene.run(
-        riseIn(all(element, "[data-doc] [data-prose] > *"), 6 * designPixel(root), 0.35, 0.05),
+        riseIn(
+          all(element, "[data-artifact-content] [data-prose] > *"),
+          6 * designPixel(root),
+          0.35,
+          0.05,
+        ),
       );
     });
 
@@ -76,13 +80,20 @@ export function studioPanels(scene: Scene, root: HTMLElement) {
     element.textContent = `${prefix}${value}`;
     element.hidden = value === 0;
   };
+  /** The push badge counts the same commits as the count ahead of the target. */
+  const pushBadge = (): HTMLElement => must(git(), '[data-git-action="push"] [data-badge]');
   const setAhead = (commits: number): void => {
-    for (const element of all(git(), "[data-ahead], [data-push]")) setCount(element, "", commits);
+    const element = git();
+    must(element, "[data-ahead]").textContent = `${commits}`;
+    must(element, "[data-counts]").hidden =
+      commits === 0 && must(element, "[data-behind]").textContent === "0";
+    setCount(pushBadge(), "", commits);
   };
   const ahead = (commits: number, at: number): void =>
     scene.at(at, () => {
       setAhead(commits);
-      for (const element of all(git(), "[data-ahead], [data-push]")) scene.run(pop(element, 1.35));
+      for (const element of [must(git(), "[data-counts]"), pushBadge()])
+        scene.run(pop(element, 1.35));
     });
   const setFile = (file: GitFile): void => {
     must(fileItem(file.path), "[data-add]").textContent = `+${file.add}`;
@@ -113,6 +124,7 @@ export function studioPanels(scene: Scene, root: HTMLElement) {
     element.dataset.git = "empty";
     for (const item of all(element, "[data-file]")) item.hidden = true;
     must(element, "[data-file-count]").textContent = filesLabel(0);
+    must(element, "[data-branch-count]").hidden = true;
     setTotals([]);
   };
   /** A file appears in the Diffs tab in path order. */
@@ -125,12 +137,19 @@ export function studioPanels(scene: Scene, root: HTMLElement) {
       scene.run(growIn(item, 0.35));
       const shown = all(element, "[data-file]:not([hidden])").length;
       must(element, "[data-file-count]").textContent = filesLabel(shown);
+      const count = must(element, "[data-branch-count]");
+      count.textContent = `${shown}`;
+      count.hidden = false;
     });
 
   // CI Checks tab.
+  /** Every check gets the same state. */
   const setChecks = (state: Checks, updated: string): void => {
     const element = panel("ci_checks");
+    const rows = all(element, "[data-check]");
     element.dataset.checks = state;
+    for (const row of rows) row.dataset.state = state === "passing" ? "success" : "pending";
+    must(element, "[data-checks-summary]").textContent = `${rows.length} ${state}`;
     must(element, "[data-checks-updated]").textContent = updated;
     must(root, "[data-ci]").dataset.checks = state;
   };
@@ -142,9 +161,9 @@ export function studioPanels(scene: Scene, root: HTMLElement) {
     setPanel,
     setTab,
     showTab,
-    setDocument,
-    takeDocument,
-    putDocument,
+    setArtifact,
+    takeArtifact,
+    putArtifact,
     fill,
     git,
     fileItem,

@@ -6,7 +6,7 @@ import { Toast } from "../../replicas/shell/Toast";
 import { ToastStack } from "../../replicas/shell/ToastStack";
 import { ChecksPanel } from "../../replicas/studio/ChecksPanel";
 import { DiffView } from "../../replicas/studio/DiffView";
-import { DocumentPanel } from "../../replicas/studio/DocumentPanel";
+import { ArtifactPanel } from "../../replicas/studio/ArtifactPanel";
 import { GitPanel } from "../../replicas/studio/GitPanel";
 import { PullRequestLink } from "../../replicas/studio/PullRequestLink";
 import { ReviewComment } from "../../replicas/studio/ReviewComment";
@@ -16,12 +16,13 @@ import { ApprovalCard } from "../../replicas/transcript/ApprovalCard";
 import { QuestionCard } from "../../replicas/transcript/QuestionCard";
 import { Transcript } from "../../replicas/transcript/Transcript";
 import { workflowNotification } from "../../replicas/vocabulary";
+import { SPEC_QUESTIONS } from "../../sample/question";
 import {
   BUILD_FILES,
   BUILDER_FIX_SESSION,
   BUILDER_SESSION,
   CI_CHECKS,
-  DOCUMENTS,
+  ARTIFACTS,
   FIXED_FILES,
   FIXED_HOOK_LINES,
   FRAMES,
@@ -34,11 +35,11 @@ import {
 import { TASKS } from "../../sample/tasks";
 import { storySessions } from "../../sample/transcripts";
 import type { BuildTemplate } from "./build";
-import { PlanDocument, QaReport, SpecDocument } from "./documents";
+import { PlanDocument, QaReport, SpecDocument } from "../../replicas/studio/StoryDocuments";
 import type { PlanTemplate } from "./plan";
 import type { QaTemplate } from "./qa";
 import type { ReviewTemplate } from "./review";
-import { type ChapterId, REVIEW_FILES, SPEC_QUESTIONS } from "./sample";
+import { type ChapterId, REVIEW_FILES } from "./sample";
 import type { SpecTemplate } from "./spec";
 
 /** The stage and the stock of one step. */
@@ -61,11 +62,13 @@ function SpecStage(): ReactElement {
   return (
     <StudioWindow
       frame={FRAMES.spec}
-      panel={
-        <DocumentPanel labels={DOCUMENTS.spec}>
-          <SpecDocument />
-        </DocumentPanel>
-      }
+      panels={{
+        document: (
+          <ArtifactPanel labels={ARTIFACTS.spec}>
+            <SpecDocument />
+          </ArtifactPanel>
+        ),
+      }}
     >
       <Transcript sessions={storySessions([{ id: "spec", turns: 1 }])} shown="spec" />
     </StudioWindow>
@@ -90,11 +93,13 @@ function PlanStage(): ReactElement {
   return (
     <StudioWindow
       frame={FRAMES.plan}
-      panel={
-        <DocumentPanel labels={DOCUMENTS.plan}>
-          <PlanDocument />
-        </DocumentPanel>
-      }
+      panels={{
+        document: (
+          <ArtifactPanel labels={ARTIFACTS.plan}>
+            <PlanDocument />
+          </ArtifactPanel>
+        ),
+      }}
     >
       <Transcript
         sessions={storySessions([
@@ -110,17 +115,13 @@ function PlanStage(): ReactElement {
 function PlanStock(): ReactElement {
   return (
     <StepStock>
-      <Stock name={"spec-document" satisfies PlanTemplate}>
+      <Stock name={"spec-artifact" satisfies PlanTemplate}>
         <div>
           <SpecDocument />
         </div>
       </Stock>
       <Stock name={"planner-dialog" satisfies PlanTemplate}>
-        <StartDialog
-          role="Planner"
-          description="Start a fresh session for Planner."
-          session={PLANNER_SESSION}
-        />
+        <StartDialog role="Planner" session={PLANNER_SESSION} />
       </Stock>
     </StepStock>
   );
@@ -129,20 +130,20 @@ function PlanStock(): ReactElement {
 /**
  * Build: the Builder committed the change, and the Git panel lists the branch changes. The scene
  * starts on the Planner session, opens the start dialog, and asks for the commit approval. The
- * Builder role has no document, so the Document tab goes away.
+ * Builder role saves no artifact, so the session opens the Diffs tab.
  */
 function BuildStage(): ReactElement {
   return (
     <StudioWindow
       frame={FRAMES.build}
-      panel={
-        <>
-          <DocumentPanel labels={DOCUMENTS.plan}>
+      panels={{
+        document: (
+          <ArtifactPanel labels={ARTIFACTS.plan}>
             <PlanDocument />
-          </DocumentPanel>
-          <GitPanel files={BUILD_FILES} ahead={1} />
-        </>
-      }
+          </ArtifactPanel>
+        ),
+        diffs: <GitPanel files={BUILD_FILES} ahead={1} />,
+      }}
     >
       <Transcript
         sessions={storySessions([
@@ -159,12 +160,7 @@ function BuildStock(): ReactElement {
   return (
     <StepStock>
       <Stock name={"builder-dialog" satisfies BuildTemplate}>
-        <StartDialog
-          role="Builder"
-          description="Start a fresh session for Start Implementation."
-          session={BUILDER_SESSION}
-          target="origin/main"
-        />
+        <StartDialog role="Builder" session={BUILDER_SESSION} target="origin/main" goal />
       </Stock>
       <Stock name={"approval" satisfies BuildTemplate}>
         <ApprovalCard
@@ -185,14 +181,14 @@ function QaStage(): ReactElement {
   return (
     <StudioWindow
       frame={FRAMES.qa}
-      panel={
-        <>
-          <DocumentPanel labels={DOCUMENTS.qa}>
+      panels={{
+        document: (
+          <ArtifactPanel labels={ARTIFACTS.qa}>
             <QaReport />
-          </DocumentPanel>
-          <GitPanel files={FIXED_FILES} ahead={2} />
-        </>
-      }
+          </ArtifactPanel>
+        ),
+        diffs: <GitPanel files={FIXED_FILES} ahead={2} />,
+      }}
     >
       <Transcript
         sessions={storySessions([
@@ -209,21 +205,16 @@ function QaStock(): ReactElement {
   return (
     <StepStock>
       <Stock name={"qa-dialog" satisfies QaTemplate}>
-        <StartDialog
-          role="QA"
-          description="Choose how to start fresh or reuse an existing session for QA Review."
-          session={QA_SESSION}
-          modes={["fresh", "reuse"]}
-        />
+        <StartDialog role="QA" session={QA_SESSION} modes={["fresh", "reuse"]} />
       </Stock>
       <Stock name={"fix-dialog" satisfies QaTemplate}>
         <StartDialog
           role="Builder"
-          description="Choose how to start fresh or reuse an existing session for Fix QA Rejection."
           session={BUILDER_FIX_SESSION}
           modes={["fresh", "reuse"]}
           mode="reuse"
           existing="Builder #1"
+          goal
         />
       </Stock>
     </StepStock>
@@ -240,16 +231,23 @@ function ReviewStage(): ReactElement {
     <StudioWindow
       frame={FRAMES.review}
       pr={<PullRequestLink number={42} merged />}
-      panel={
-        <>
+      panels={{
+        diffs: (
           <GitPanel
             files={REVIEW_FILES}
             ahead={3}
+            pullRequest
             diff={<DiffView lines={REVIEWED_HOOK_LINES} kind="add" />}
           />
-          <ChecksPanel title={PR_TITLE} updated="10:26:35 AM" checks={CI_CHECKS} state="passing" />
-        </>
-      }
+        ),
+        ci_checks: (
+          <ChecksPanel
+            title={PR_TITLE}
+            updated="10:26:35 AM"
+            checks={CI_CHECKS.map((name) => ({ name, state: "success" }))}
+          />
+        ),
+      }}
       overlay={<ToastStack />}
     >
       <Transcript sessions={storySessions([{ id: "build", turns: 4 }])} shown="build" />
@@ -272,7 +270,6 @@ function ReviewStock(): ReactElement {
       <Stock name={"pr-dialog" satisfies ReviewTemplate}>
         <StartDialog
           role="Builder"
-          description="Choose how to reuse an existing session or fork an existing session for Generate Pull Request."
           session={BUILDER_FIX_SESSION}
           modes={["reuse", "fork"]}
           mode="reuse"

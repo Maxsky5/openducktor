@@ -1,0 +1,168 @@
+@layer replica {
+  :where(.stage) {
+    /* The header of the Diffs tab: git-info-header.tsx, git-header-actions.tsx, and
+       git-panel-tabs.tsx. */
+    .gh {
+      display: flex;
+      flex-direction: column;
+      flex: 0 0 auto;
+    }
+    /* The branch row: h-10 px-2 gap-1. */
+    .gh-branches {
+      display: flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+      height: calc(40 * var(--u));
+      padding: 0 calc(8 * var(--u));
+    }
+    /* BRANCH_CHIP_CLASS_NAME: h-7 gap-1.5 rounded-md px-1.5 font-mono text-xs. */
+    .gh-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+      height: calc(28 * var(--u));
+      padding: 0 calc(6 * var(--u));
+      border-radius: calc(8 * var(--u));
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+    }
+    .gh-chip .lucide {
+      flex: 0 0 auto;
+      color: var(--muted-foreground);
+    }
+    .gh-chip > span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .gh-current {
+      flex: 0 1 auto;
+    }
+    /* The target is often short, so it keeps its name, and the current branch shortens. */
+    .gh-target {
+      flex: 0 0 auto;
+      max-width: 45%;
+    }
+    .gh-target .lucide:last-child {
+      opacity: 0.6;
+    }
+    .gh-to {
+      flex: 0 0 auto;
+      color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+    }
+    /* ComparisonCounts: font-mono text-[11px], emerald ahead and rose behind. */
+    .gh-counts {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      font-family: var(--mono);
+      font-size: calc(11 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    .gh-counts > span {
+      display: inline-flex;
+      align-items: center;
+    }
+    .gh-counts .lucide {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+    }
+    .gh [data-tone="ahead"] {
+      color: var(--emerald-600);
+    }
+    .gh [data-tone="behind"] {
+      color: var(--rose-600);
+    }
+    :where([data-theme="dark"]) & .gh [data-tone="ahead"] {
+      color: var(--emerald-400);
+    }
+    :where([data-theme="dark"]) & .gh [data-tone="behind"] {
+      color: var(--rose-400);
+    }
+    /* The action row: border-y px-1 py-1 gap-0.5, with ghost icon buttons of 36 pixels. */
+    .gh-actions {
+      display: flex;
+      align-items: center;
+      gap: calc(2 * var(--u));
+      padding: calc(4 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .gh-action {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border-radius: calc(8 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .gh-badge {
+      position: absolute;
+      top: calc(4 * var(--u));
+      right: calc(4 * var(--u));
+      font-size: calc(11 * var(--u));
+      font-weight: 700;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    /* Detect PR: a small ghost button at the end of the row. */
+    .gh-detect {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      height: calc(32 * var(--u));
+      margin-left: auto;
+      padding: 0 calc(12 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+    }
+    /* The tabs: h-9 border-b px-1 gap-0.5, with a primary line under the active tab. */
+    .gh-tabs {
+      display: flex;
+      gap: calc(2 * var(--u));
+      height: calc(36 * var(--u));
+      padding: 0 calc(4 * var(--u));
+      overflow: hidden;
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .gh-tab {
+      position: relative;
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      padding: 0 calc(10 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .gh-tab[data-active] {
+      color: var(--foreground);
+    }
+    .gh-tab[data-active]::after {
+      position: absolute;
+      right: calc(6 * var(--u));
+      bottom: 0;
+      left: calc(6 * var(--u));
+      height: calc(2 * var(--u));
+      border-radius: 999px;
+      background: var(--primary);
+      content: "";
+    }
+    .gh-count {
+      padding: 0 calc(6 * var(--u));
+      border-radius: 999px;
+      background: var(--muted);
+      color: var(--muted-foreground);
+      font-size: calc(10 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+  }
+}

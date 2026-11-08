@@ -2,7 +2,7 @@
 // templates. The view renders the templates, and the timeline clones them by name. The prompts,
 // tasks, and model are fictional.
 import type { NavEntry } from "../../replicas/shell/nav";
-import { type Notification, sessionNotification } from "../../replicas/vocabulary";
+import type { StartupStep } from "../../replicas/studio/StartupProgress";
 import { NAV_SESSIONS } from "../../sample/nav";
 import type { Session } from "../../sample/sessions";
 import type { ChatTask } from "../../replicas/tasks/model";
@@ -28,22 +28,6 @@ export const CHAT_SESSION = {
 
 /** The context use after the task search, in percent of the window. */
 export const SEARCH_USED = 4.8;
-
-/** Custom reusable prompts whose trigger matches the typed query, in catalog order. */
-export const COMMANDS = [
-  {
-    trigger: "tasks-from-request",
-    description: "Split a request into tasks that each fit in one pull request.",
-  },
-  {
-    trigger: "tasks-from-bug",
-    description: "Write a bug task with the steps to reproduce and the expected result.",
-  },
-  {
-    trigger: "tasks-cleanup",
-    description: "Find duplicate and stale tasks in the backlog.",
-  },
-];
 
 /** The slash query that the visitor types. It matches the three custom prompts. */
 export const QUERY = "/tasks-";
@@ -98,8 +82,19 @@ export const CHAT_ENTRY = {
 /** The Builder session of the menu task in the sidebar. */
 export const BUILDER = NAV_SESSIONS["menu-build"];
 
-/** The notification of the Builder that starts in the background. */
-export const STARTED: Notification = sessionNotification("Builder", MENU_TASK.title);
+/** The origin of the startup notification of the Builder: the repository and the task. */
+export const ORIGIN = `${WORKSPACE} · ${taskId(MENU_TASK.id)}`;
 
-/** The task details, the start dialog of the Builder, and its notification. */
-export type ChatTemplate = "sheet" | "builder-dialog" | "toast-started";
+/**
+ * The startup steps of the Builder: a new task worktree on a new branch from the remote target
+ * origin/main, without copied files or worktree actions. The worktree and the upstream steps have
+ * details.
+ */
+export const STEPS: readonly StartupStep[] = [
+  { id: "checkout", label: "Create task worktree", details: true },
+  { id: "upstream", label: "Set branch upstream", details: true },
+  { id: "session", label: "Start session", details: false },
+];
+
+/** The task details and the start dialog of the Builder. */
+export type ChatTemplate = "sheet" | "builder-dialog";

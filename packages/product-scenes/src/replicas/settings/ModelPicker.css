@@ -25,7 +25,7 @@
       gap: calc(4 * var(--u));
       padding: calc(8 * var(--u));
       border-right: calc(1 * var(--u)) solid var(--border);
-      background: color-mix(in oklch, var(--muted) 40%, transparent);
+      background: color-mix(in oklab, var(--muted) 40%, transparent);
     }
     .mp-rail-button {
       display: grid;
@@ -60,7 +60,7 @@
       padding: 0 calc(12 * var(--u));
       border: calc(1 * var(--u)) solid var(--ring);
       border-radius: calc(10 * var(--u));
-      box-shadow: 0 0 0 calc(3 * var(--u)) color-mix(in oklch, var(--ring) 50%, transparent);
+      box-shadow: 0 0 0 calc(3 * var(--u)) color-mix(in oklab, var(--ring) 50%, transparent);
       color: var(--muted-foreground);
       font-size: calc(14 * var(--u));
     }

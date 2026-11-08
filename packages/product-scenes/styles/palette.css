@@ -11,11 +11,15 @@
       --violet-800: oklch(43.2% 0.232 292.759);
       --violet-950: oklch(28.3% 0.141 291.089);
       --sky-50: oklch(97.7% 0.013 236.62);
+      --sky-100: oklch(95.1% 0.026 236.824);
       --sky-200: oklch(90.1% 0.058 230.902);
       --sky-300: oklch(82.8% 0.111 230.318);
+      --sky-400: oklch(74.6% 0.16 232.661);
       --sky-500: oklch(68.5% 0.169 237.323);
+      --sky-600: oklch(58.8% 0.158 241.966);
       --sky-700: oklch(50% 0.134 242.749);
       --sky-800: oklch(44.3% 0.11 240.79);
+      --sky-900: oklch(39.1% 0.09 240.876);
       --sky-950: oklch(29.3% 0.066 243.157);
       --amber-50: oklch(98.7% 0.022 95.277);
       --amber-200: oklch(92.4% 0.12 95.746);
@@ -74,6 +78,12 @@
       --yellow-600: oklch(68.1% 0.162 75.834);
       --rose-400: oklch(71.2% 0.194 13.428);
       --gray-300: oklch(87.2% 0.01 258.338);
+      --neutral-950: oklch(14.5% 0 0);
+      --purple-100: oklch(94.6% 0.033 307.174);
+      --purple-200: oklch(90.2% 0.063 306.703);
+      --purple-700: oklch(49.6% 0.265 301.924);
+      --purple-800: oklch(43.8% 0.218 303.724);
+      --purple-950: oklch(29.1% 0.149 302.717);
       /* The Tailwind names that the speed tokens of the product theme read. */
       --color-amber-400: oklch(82.8% 0.189 84.429);
       --color-amber-600: oklch(66.6% 0.179 58.318);

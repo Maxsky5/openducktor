@@ -1,0 +1,61 @@
+@layer replica {
+  :where(.stage) {
+    /* The desktop row: 16 points above and under, at the trailing edge. */
+    .mob-message {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      padding: calc(16 * var(--u)) 0;
+    }
+    /* UserMessageBubble: a 16 point corner with a small corner at the tail. */
+    .mob-message-bubble {
+      max-width: 80%;
+      padding: calc(8 * var(--u)) calc(14 * var(--u));
+      border-radius: calc(16 * var(--u)) calc(16 * var(--u)) calc(8 * var(--u));
+      background: var(--chat-surface);
+      color: var(--foreground);
+      box-shadow: var(--m-shadow-raised);
+      font-size: calc(15 * var(--u));
+      line-height: calc(24 * var(--u));
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .mob-message[data-unread] .mob-message-bubble {
+      outline: calc(1 * var(--u)) dashed var(--pending-border);
+      outline-offset: calc(-1 * var(--u));
+      background: var(--pending-surface);
+      box-shadow: none;
+    }
+    .mob-message-meta {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      margin-top: calc(4 * var(--u));
+      padding: 0 calc(4 * var(--u));
+    }
+    /* The Unread pill: 10.5 point semibold capitals in the pending colors. */
+    .mob-message-unread {
+      display: none;
+      padding: calc(1 * var(--u)) calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--pending-border);
+      border-radius: 999px;
+      background: var(--pending-surface);
+      color: var(--pending-surface-foreground);
+      font-size: calc(10.5 * var(--u));
+      font-weight: 600;
+      line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.5 * var(--u));
+      text-transform: uppercase;
+    }
+    .mob-message[data-unread] .mob-message-unread {
+      display: block;
+    }
+    .mob-message-time {
+      color: var(--muted-foreground);
+      font-size: calc(11.5 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+  }
+}

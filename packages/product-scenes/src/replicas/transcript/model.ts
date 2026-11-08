@@ -2,6 +2,12 @@
 
 export type ToolKind = "read" | "search" | "bash" | "tool";
 
+/**
+ * The icon of an ODT tool card: a saved document, a review verdict, a workflow event, or a pull
+ * request. Sources: agent-chat-artifact-tool-message.tsx and agent-chat-tool-icon.tsx.
+ */
+export type WorkflowIcon = "document" | "review_failed" | "workflow" | "pull_request";
+
 /** One answer of an answered request_user_input row. */
 export type Answer = { prompt: string; answer: string };
 
@@ -18,7 +24,17 @@ export type Row =
       time: string;
       answers?: readonly Answer[];
     }
-  | { kind: "workflow"; id: string; name: string; duration: string; time: string }
+  | {
+      kind: "workflow";
+      id: string;
+      /** The title of the ODT tool card, as agent-chat-workflow-tool-message.tsx shows it. */
+      title: string;
+      icon: WorkflowIcon;
+      /** The pull request that a completed odt_set_pull_request call saved. */
+      pr?: number;
+      duration: string;
+      time: string;
+    }
   | { kind: "patch"; id: string; path: string; change: "A" | "M"; add: number; del: number }
   | {
       kind: "agent";

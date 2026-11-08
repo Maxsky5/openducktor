@@ -1,0 +1,9 @@
+@layer views {
+  :where(.stage) {
+    /* Comment on a diff: the shared layout of MobileStage.tsx. The comment card keeps its corners
+       while it grows. */
+    .mob-diff-comment[data-resizing] {
+      overflow: hidden;
+    }
+  }
+}

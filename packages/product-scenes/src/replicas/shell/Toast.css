@@ -9,13 +9,13 @@
       padding-right: calc(44 * var(--u));
       border: calc(1 * var(--u)) solid var(--border);
       border-radius: calc(8 * var(--u));
-      background: color-mix(in oklch, var(--card) 95%, transparent);
+      background: color-mix(in oklab, var(--card) 95%, transparent);
       color: var(--foreground);
       box-shadow:
         0 calc(20 * var(--u)) calc(25 * var(--u)) calc(-5 * var(--u))
-          color-mix(in oklch, var(--foreground) 10%, transparent),
+          color-mix(in oklab, var(--foreground) 10%, transparent),
         0 calc(8 * var(--u)) calc(10 * var(--u)) calc(-6 * var(--u))
-          color-mix(in oklch, var(--foreground) 10%, transparent);
+          color-mix(in oklab, var(--foreground) 10%, transparent);
       backdrop-filter: blur(calc(8 * var(--u)));
       line-height: 1.43;
     }

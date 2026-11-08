@@ -1,0 +1,102 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * A session page with a browser tab: the top bar, the chat column, and the right panel. The
+     * window keeps one height. The right panel is wider than the 37% of agents-page-layout.tsx, as
+     * after a resize, so the page in the browser tab stays readable. The chat column keeps room for
+     * the composer controls and the stop button on one row.
+     */
+    .bs-window {
+      --design-width: 1040;
+      display: flex;
+      flex-direction: column;
+      height: calc(512 * var(--u));
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(14 * var(--u));
+      background: var(--card);
+      box-shadow: var(--shadow-window);
+    }
+    .bs-area {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+    .bs-chat {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+    }
+    .bs-panel {
+      display: flex;
+      flex: 0 0 calc(460 * var(--u));
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+      background: var(--card);
+    }
+    .bs-body {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+    }
+    .bs-view {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+    .bs-view[hidden] {
+      display: none;
+    }
+    /* Back to workspace and the shell show only in the bottom panel of a narrow window. */
+    .bs-back,
+    .bs-panel [data-ptab="shell"],
+    .bs-panel [data-tab-view="shell"] {
+      display: none;
+    }
+    .bs-back {
+      flex: 0 0 auto;
+    }
+    /*
+     * A phone stage shows a narrower and taller window. A narrow window shows one panel at a time,
+     * as use-narrow-window.ts does: the bottom panel fills the page, and the chat hides under it.
+     */
+    @container stage (width <= 500px) {
+      .bs-window {
+        --design-width: 440;
+        height: calc(520 * var(--u));
+      }
+      .bs-window .bs-handle,
+      .bs-window [data-toggle="right"],
+      .bs-panel :is([data-ptab="document"], [data-ptab="diffs"], [data-ptab="files"]) {
+        display: none;
+      }
+      .bs-back {
+        display: inline-flex;
+      }
+      .bs-panel [data-ptab="shell"] {
+        display: inline-flex;
+      }
+      .bs-panel [data-tab-view="shell"] {
+        display: block;
+      }
+      .bs-panel {
+        flex: 1 1 auto;
+      }
+      .bs-window[data-shows="panel"] .bs-chat,
+      .bs-window[data-shows="chat"] .bs-panel {
+        display: none;
+      }
+      /* The bottom panel shows, so its toggle shows the close icon. */
+      .bs-window[data-shows="panel"] [data-toggle="bottom"] {
+        color: var(--foreground);
+      }
+      .bs-window[data-shows="panel"] [data-toggle="bottom"] .when-closed {
+        display: none;
+      }
+      .bs-window[data-shows="panel"] [data-toggle="bottom"] .when-open {
+        display: block;
+      }
+    }
+  }
+}

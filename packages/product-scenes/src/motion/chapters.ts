@@ -1,11 +1,10 @@
 import { all, data, must } from "./dom";
-import { type Frame, showFrame, takeFrame } from "./frame";
+import { type Frame, fadeOut, showFrame, takeFrame } from "./frame";
 import { gsap } from "./gsap";
 import { checkLength, createPlayback } from "./playback";
 import { type PlayZone, watchPlayback, whileMotionAllowed } from "./player";
 import { isPausedByVisitor } from "./preference";
 import { createScene, type SceneBuilder } from "./scene";
-import { ScrollTrigger } from "./scroll";
 import { tabState, targetIndex } from "./tabs";
 import { EASE } from "./tokens";
 
@@ -28,7 +27,7 @@ const STEP_FADE = 0.6;
  * The chapter player plays from the moment its top passes 75% of the screen height until its
  * bottom passes 25%.
  */
-const CHAPTER_ZONE: PlayZone = { start: "top 75%", end: "bottom 25%" };
+const CHAPTER_ZONE: PlayZone = { top: 25, bottom: 25 };
 
 function chapterOf(
   tab: HTMLButtonElement,
@@ -48,12 +47,13 @@ function chapterOf(
  * A tab list of product scenes. Without JavaScript the panels stay stacked under their own
  * headings. With JavaScript the tabs select one panel. When motion is allowed, each chapter
  * plays while the player is on screen and shows its progress in its tab. The next chapter
- * opens after the hold. A tab click restarts that chapter.
+ * opens after the hold. A tab click restarts that chapter. Returns the function that stops the
+ * player and removes its listeners, for a host that removes the view, such as React.
  */
 export function mountChapters(
   root: HTMLElement,
   builders: ReadonlyMap<string, SceneBuilder<string>>,
-): void {
+): () => void {
   const tablist = must(root, '[role="tablist"]');
   const chapters = all(tablist, '[role="tab"]', HTMLButtonElement).map((tab) =>
     chapterOf(tab, root, builders),
@@ -65,7 +65,6 @@ export function mountChapters(
   let start: ((chapter: Chapter, last?: Frame) => void) | undefined;
 
   const select = (chapter: Chapter, focus: boolean): void => {
-    const height = root.offsetHeight;
     // The chapters follow one task, so a chapter starts where the chapter before it ends. The
     // last frame of the chapter before cross fades into the first frame of the next chapter.
     // The frame leaves its panel before the panel hides, so it keeps its scroll offsets. The
@@ -82,33 +81,36 @@ export function mountChapters(
       item.tab.style.setProperty("--progress", "0");
     });
     if (focus) chapter.tab.focus();
-    // On a narrow screen, a chapter text can take one more line. The sections below then move,
-    // so their triggers measure their positions again.
-    if (root.offsetHeight !== height) ScrollTrigger.refresh();
     start?.(chapter, last);
   };
 
+  const listeners = new AbortController();
+  const { signal } = listeners;
   for (const chapter of chapters) {
     chapter.panel.setAttribute("role", "tabpanel");
     chapter.panel.setAttribute("aria-labelledby", chapter.tab.id);
     chapter.panel.tabIndex = 0;
-    chapter.tab.addEventListener("click", () => select(chapter, false));
+    chapter.tab.addEventListener("click", () => select(chapter, false), { signal });
   }
-  tablist.addEventListener("keydown", (event) => {
-    const index = targetIndex(event.key, chapters.indexOf(current), chapters.length - 1);
-    const target = index === undefined ? undefined : chapters[index];
-    if (!target) return;
-    event.preventDefault();
-    select(target, true);
-  });
+  tablist.addEventListener(
+    "keydown",
+    (event) => {
+      const index = targetIndex(event.key, chapters.indexOf(current), chapters.length - 1);
+      const target = index === undefined ? undefined : chapters[index];
+      if (!target) return;
+      event.preventDefault();
+      select(target, true);
+    },
+    { signal },
+  );
 
   // The tabs replace the stacked panels of the page without JavaScript.
   tablist.hidden = false;
   root.dataset.tabs = "";
   select(first, false);
 
-  whileMotionAllowed(() => {
-    const playback = createPlayback(STEP_FADE);
+  const stopMotion = whileMotionAllowed(() => {
+    const playback = createPlayback((cover, done) => fadeOut(cover, STEP_FADE, done));
     start = (chapter, frame) => {
       const last = frame ? showFrame(frame, chapter.stage) : undefined;
       for (const item of chapters) item.stage.innerHTML = item.markup;
@@ -149,7 +151,15 @@ export function mountChapters(
       for (const chapter of chapters) {
         chapter.stage.innerHTML = chapter.markup;
         chapter.tab.style.removeProperty("--progress");
+        // A tab click starts the fade of the chapter text out of the media context.
+        const copy = must(chapter.panel, "[data-chapter-copy]");
+        gsap.killTweensOf(copy);
+        gsap.set(copy, { clearProps: "opacity,visibility" });
       }
     };
   });
+  return () => {
+    stopMotion();
+    listeners.abort();
+  };
 }

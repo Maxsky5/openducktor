@@ -1,0 +1,128 @@
+@layer replica {
+  :where(.stage) {
+    /* ChoiceSection: a section label over its choices, 12 points apart. */
+    .mob-approve-section {
+      display: grid;
+      gap: calc(12 * var(--u));
+    }
+    /* CodeText: subhead text with the branch in the mono font. */
+    .mob-approve-code {
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+    .mob-approve-code[data-strong] {
+      color: var(--foreground);
+    }
+    .mob-approve-code code {
+      color: var(--foreground);
+      font-family: var(--mono);
+      font-size: calc(13 * var(--u));
+      line-height: calc(19 * var(--u));
+    }
+    .mob-approve-muted {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+    .mob-panel .mob-approve-muted {
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+      letter-spacing: 0;
+    }
+    /* The plain small Button "Worktree details" with its trailing chevron. */
+    .mob-approve-link {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-height: calc(32 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      color: var(--m-tint);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-approve-link .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+
+    /* TonePanel, info: a tinted card with an icon tile, the title, and the body. */
+    .mob-approve-tone {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(16 * var(--u));
+      padding: calc(20 * var(--u));
+      border: calc(1 * var(--u)) solid var(--info-border);
+      border-radius: calc(16 * var(--u));
+      background: var(--info-surface);
+    }
+    .mob-approve-tone-icon {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(40 * var(--u));
+      height: calc(40 * var(--u));
+      border: calc(1 * var(--u)) solid color-mix(in oklab, var(--info-border) 60%, transparent);
+      border-radius: calc(12 * var(--u));
+      background: color-mix(in oklab, var(--card) 70%, transparent);
+      color: var(--info-muted);
+    }
+    .mob-approve-tone-icon .lucide {
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+    }
+    .mob-approve-tone-text {
+      display: grid;
+      flex: 1;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+      color: var(--info-surface-foreground);
+    }
+    .mob-approve-tone-text b {
+      font-size: calc(13 * var(--u));
+      font-weight: 600;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-approve-tone-text .mob-approve-code {
+      color: var(--info-surface-foreground);
+    }
+    .mob-approve-step {
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 600;
+      line-height: calc(18 * var(--u));
+    }
+    /* BranchBox: a muted box with its label and the branch in the mono font. */
+    .mob-approve-branch {
+      display: grid;
+      gap: calc(8 * var(--u));
+      padding: calc(16 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: color-mix(in oklab, var(--muted) 40%, transparent);
+    }
+    .mob-approve-branch code {
+      color: var(--foreground);
+      font-family: var(--mono);
+      font-size: calc(13 * var(--u));
+      line-height: calc(19 * var(--u));
+    }
+    .mob-approve-arrow {
+      justify-self: center;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-approve-preview {
+      display: grid;
+      gap: calc(2 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+  }
+}

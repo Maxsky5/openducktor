@@ -1,0 +1,338 @@
+@layer replica {
+  :where(.stage) {
+    .mob-changes-body {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+      min-height: 0;
+      overflow: hidden;
+      padding-top: calc(8 * var(--u));
+    }
+    /* The branch card: two 40 point lines in a 12 point card. */
+    .mob-branch-card {
+      margin: 0 calc(16 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      box-shadow: var(--m-shadow-card);
+    }
+    .mob-branch-line {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(40 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-branch-line + .mob-branch-line {
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    .mob-branch-line > .lucide {
+      flex: 0 0 auto;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .mob-branch-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--foreground);
+      font-family: var(--mono);
+      font-size: calc(13 * var(--u));
+      line-height: calc(19 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-branch-upstream,
+    .mob-branch-ahead {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+    }
+    .mob-branch-upstream .lucide {
+      width: calc(13 * var(--u));
+      height: calc(13 * var(--u));
+    }
+    .mob-branch-ahead {
+      gap: calc(1 * var(--u));
+      color: var(--git-ahead);
+      font-family: var(--mono);
+      font-size: calc(11.5 * var(--u));
+      font-weight: 400;
+    }
+    .mob-branch-ahead .lucide {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+    }
+    /* The pending comments card, with Send at its end. */
+    .mob-pending-comments {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      margin: 0 calc(16 * var(--u));
+      padding: calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+    }
+    .mob-pending-comments-text {
+      display: grid;
+      flex: 1;
+      gap: calc(2 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .mob-pending-comments-title {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+    .mob-pending-comments-title strong {
+      font-weight: 600;
+    }
+    /* The scope tabs share the width, with the primary underline under the selected tab. */
+    .mob-scope-tabs {
+      position: relative;
+      display: flex;
+      flex: 0 0 auto;
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .mob-scope-tab {
+      display: flex;
+      flex: 1 1 0;
+      align-items: center;
+      justify-content: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+      min-height: calc(44 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+      white-space: nowrap;
+    }
+    .mob-scope-tabs[data-scope="uncommitted"] [data-scope-tab="uncommitted"],
+    .mob-scope-tabs[data-scope="target"] [data-scope-tab="target"] {
+      color: var(--foreground);
+      font-weight: 600;
+    }
+    .mob-scope-count {
+      min-width: calc(18 * var(--u));
+      padding: 0 calc(6 * var(--u));
+      border-radius: 999px;
+      background: var(--muted);
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      line-height: calc(14 * var(--u));
+      text-align: center;
+    }
+    .mob-scope-indicator {
+      position: absolute;
+      bottom: calc(-1 * var(--u));
+      left: calc(6 * var(--u));
+      width: calc(50% - 12 * var(--u));
+      height: calc(2 * var(--u));
+      border-radius: calc(1 * var(--u));
+      background: var(--primary);
+      transition: transform 0.2s ease-out;
+    }
+    .mob-scope-tabs[data-scope="target"] .mob-scope-indicator {
+      transform: translateX(calc(100% + 12 * var(--u)));
+    }
+    .mob-changes:has([data-scope="uncommitted"]) [data-scope-panel="target"],
+    .mob-changes:has([data-scope="target"]) [data-scope-panel="uncommitted"] {
+      display: none;
+    }
+    /* The empty scope: the Git folder icon in a 48 point circle and one quiet line. */
+    .mob-changes-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      padding: calc(48 * var(--u)) calc(24 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .mob-changes-empty > span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(48 * var(--u));
+      height: calc(48 * var(--u));
+      border-radius: 50%;
+      background: var(--m-chip-fill);
+    }
+    .mob-changes-empty .lucide {
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+    }
+    .mob-changes-list {
+      margin-top: calc(-12 * var(--u));
+    }
+    .mob-changes-totals {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(44 * var(--u));
+      padding: 0 calc(16 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--diff-divider);
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .mob-changes-totals > span:first-child {
+      flex: 1;
+    }
+    .mob-changes-totals [data-sign="add"] {
+      color: var(--git-total-add);
+    }
+    .mob-changes-totals [data-sign="del"] {
+      color: var(--git-total-del);
+    }
+    .mob-changes-toggle {
+      display: flex;
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--diff-divider);
+      border-radius: calc(8 * var(--u));
+    }
+    .mob-changes-toggle > span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(34 * var(--u));
+      height: calc(28 * var(--u));
+    }
+    .mob-changes-toggle > [data-active] {
+      background: var(--muted);
+      color: var(--foreground);
+    }
+    .mob-changes-toggle .lucide {
+      width: calc(15 * var(--u));
+      height: calc(15 * var(--u));
+    }
+    /* A folder or file row of the tree: 44 points, indented 14 points for each level. */
+    .mob-change-row {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(44 * var(--u));
+      padding: 0 calc(12 * var(--u)) 0 calc((12 + 14 * var(--depth)) * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--diff-divider);
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+    .mob-change-row[data-kind="directory"] {
+      padding-right: calc(16 * var(--u));
+    }
+    .mob-change-row > .lucide {
+      flex: 0 0 auto;
+      width: calc(13 * var(--u));
+      height: calc(13 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-change-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-change-row[data-kind="directory"] .mob-change-name {
+      flex: 0 1 auto;
+    }
+    .mob-change-row[data-kind="file"] .mob-change-name {
+      font-weight: 500;
+    }
+    /* The file count of a folder: caption2 digits on the fillStrong pill of changes-rows.tsx. */
+    .mob-change-files {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: calc(18 * var(--u));
+      margin-right: auto;
+      padding: calc(1 * var(--u)) calc(6 * var(--u));
+      border-radius: 999px;
+      background: var(--m-fill-strong);
+      color: var(--m-secondary);
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      line-height: calc(14 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    .mob-change-row > .mob-change-status {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+    }
+    .mob-change-status[data-change="added"] {
+      color: var(--git-added);
+    }
+    .mob-change-status[data-change="modified"] {
+      color: var(--git-modified);
+    }
+    .mob-change-open,
+    .mob-change-row[data-expanded="true"] .mob-change-closed,
+    .mob-change-row:not([data-expanded="true"]) .mob-change-more {
+      display: none;
+    }
+    .mob-change-row[data-expanded="true"] .mob-change-open {
+      display: block;
+    }
+    .mob-change-comments {
+      display: flex;
+      align-items: center;
+      gap: calc(3 * var(--u));
+      padding: calc(1 * var(--u)) calc(7 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: 999px;
+      background: var(--muted);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      line-height: calc(14 * var(--u));
+    }
+    .mob-change-comments .lucide {
+      width: calc(11 * var(--u));
+      height: calc(11 * var(--u));
+    }
+    .mob-change-more {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      margin: calc(-8 * var(--u)) calc(-8 * var(--u)) calc(-8 * var(--u)) 0;
+      color: var(--m-secondary);
+    }
+    .mob-change-more .lucide {
+      width: calc(18 * var(--u));
+      height: calc(18 * var(--u));
+    }
+    .mob-changes-diff-end {
+      display: block;
+      height: calc(8 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--diff-divider);
+      background: var(--pierre-page, var(--card));
+    }
+    .mob-changes-hint {
+      padding: calc(16 * var(--u)) calc(16 * var(--u)) 0;
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      text-align: center;
+    }
+  }
+}

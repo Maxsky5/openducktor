@@ -30,9 +30,6 @@
       flex: 1;
       min-height: 0;
     }
-    .st-handle {
-      background: var(--card);
-    }
     .st-panel {
       display: flex;
       flex: 1;
@@ -40,29 +37,20 @@
       min-width: 0;
       background: var(--card);
     }
-    /* Bottom stack: pending questions and approvals dock above the composer. */
-    .st-stack {
-      display: grid;
-      flex: 0 0 auto;
-      gap: calc(8 * var(--u));
-      padding: calc(12 * var(--u)) calc(16 * var(--u)) 0;
-    }
-    .st-stack:empty {
-      display: none;
-    }
-    /* The panel body shows the panel of the selected tab. */
-    .st-panel-body:not([data-active-panel="document"]) > [data-panel="document"],
-    .st-panel-body:not([data-active-panel="diffs"]) > [data-panel="diffs"],
-    .st-panel-body:not([data-active-panel="ci_checks"]) > [data-panel="ci_checks"] {
-      display: none;
-    }
     .st-panel-body {
       display: flex;
       flex: 1;
       flex-direction: column;
       min-height: 0;
     }
-    .st-panel-body > [data-panel] {
+    /* The panel body shows the view of the selected tab. */
+    .st-view {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .st-view > [data-panel] {
       flex: 1;
       min-height: 0;
     }

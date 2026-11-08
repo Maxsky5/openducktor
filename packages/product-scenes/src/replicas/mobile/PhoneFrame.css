@@ -1,0 +1,123 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * The phone of the mobile replicas. One design pixel is one dp. The tokens copy the
+     * semantic colors of apps/mobile/src/theme/colors.ts and the shadows of tokens.ts: the app
+     * takes the desktop theme, and the slate palette for its secondary text.
+     */
+    .mob-phone {
+      --m-status: 25;
+      --m-secondary: oklch(44.6% 0.043 257.281);
+      --m-quaternary: oklch(70.4% 0.04 256.788);
+      --m-fill-strong: oklch(92.9% 0.013 255.508);
+      --m-tint: var(--primary);
+      --m-red: var(--rose-500);
+      --m-scrim: rgb(2 6 24 / 0.4);
+      --m-chip-fill: color-mix(in oklab, var(--muted) 60%, transparent);
+      --m-inset-fill: color-mix(in oklab, var(--muted) 30%, transparent);
+      --m-shadow-card: 0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(15 23 42 / 0.05);
+      --m-shadow-raised:
+        0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(15 23 42 / 0.04),
+        0 calc(4 * var(--u)) calc(16 * var(--u)) calc(-4 * var(--u)) rgb(15 23 42 / 0.12);
+      --m-shadow-overlay: 0 calc(16 * var(--u)) calc(40 * var(--u)) calc(-12 * var(--u))
+        rgb(15 23 42 / 0.28);
+      --m-shadow-primary:
+        0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(81 0 255 / 0.2),
+        0 calc(4 * var(--u)) calc(12 * var(--u)) calc(-4 * var(--u)) rgb(81 0 255 / 0.45);
+      position: relative;
+      flex: 0 0 auto;
+      width: calc(429 * var(--u));
+      height: calc(932 * var(--u));
+      padding: calc(9 * var(--u));
+      border-radius: calc(42 * var(--u));
+      background: #0d0d10;
+      box-shadow:
+        inset 0 0 0 calc(1.5 * var(--u)) #3a3a40,
+        inset 0 0 0 calc(3 * var(--u)) #141418,
+        var(--shadow-window);
+      font-size: calc(15 * var(--u));
+      line-height: calc(22 * var(--u));
+    }
+    :where([data-theme="dark"]) & .mob-phone {
+      --m-secondary: oklch(86.9% 0.022 252.894);
+      --m-quaternary: oklch(44.6% 0.043 257.281);
+      --m-fill-strong: oklch(37.2% 0.044 257.287);
+      --m-tint: var(--violet-400);
+      --m-red: var(--rose-400);
+      --m-scrim: rgb(0 0 0 / 0.65);
+      --m-shadow-card: none;
+      --m-shadow-raised:
+        0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(0 0 0 / 0.25),
+        0 calc(4 * var(--u)) calc(16 * var(--u)) calc(-4 * var(--u)) rgb(0 0 0 / 0.4);
+      --m-shadow-overlay: 0 calc(16 * var(--u)) calc(40 * var(--u)) calc(-12 * var(--u))
+        rgb(0 0 0 / 0.7);
+      --m-shadow-primary: 0 calc(4 * var(--u)) calc(14 * var(--u)) calc(-4 * var(--u))
+        rgb(81 0 255 / 0.6);
+      box-shadow:
+        inset 0 0 0 calc(1.5 * var(--u)) #4a4a52,
+        inset 0 0 0 calc(3 * var(--u)) #141418,
+        var(--shadow-window);
+    }
+    /* The display: 411 by 914 dp, as the Android emulator of the screenshots, with the corner
+       radius of the glass. */
+    .mob-display {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      border-radius: calc(33 * var(--u));
+      background: var(--chat-background);
+      isolation: isolate;
+    }
+    /* The Android status bar: the time in the system font at the left, the icons at the right. */
+    .mob-status {
+      position: absolute;
+      inset: 0 0 auto;
+      z-index: 40;
+      height: calc(var(--m-status) * var(--u));
+      color: #000;
+      pointer-events: none;
+    }
+    .mob-clock {
+      position: absolute;
+      top: calc(2 * var(--u));
+      left: calc(16.6 * var(--u));
+      font-family: Roboto, "Google Sans", system-ui, sans-serif;
+      font-size: calc(14.4 * var(--u));
+      font-weight: 400;
+      line-height: calc(18 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+    .mob-system {
+      position: absolute;
+      top: calc(5.1 * var(--u));
+      right: calc(28.1 * var(--u));
+      width: calc(49.2 * var(--u));
+      height: calc(13.2 * var(--u));
+    }
+    :where([data-theme="dark"]) & .mob-status,
+    .mob-display[data-bar="light"] .mob-status {
+      color: #fff;
+    }
+    /* A layer of the display: one screen of the app. screens.ts slides it in and out. */
+    .mob-screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding-top: calc(var(--m-status) * var(--u));
+      background: var(--chat-background);
+      color: var(--foreground);
+    }
+    .mob-screen[data-background="sidebar"] {
+      background: var(--sidebar);
+    }
+    .mob-screen[data-background="camera"] {
+      background: #0b0d12;
+    }
+    .mob-screen[data-layer="over"] {
+      z-index: 2;
+    }
+  }
+}

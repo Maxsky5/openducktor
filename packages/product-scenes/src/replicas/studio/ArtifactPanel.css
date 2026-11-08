@@ -1,0 +1,80 @@
+@layer replica {
+  :where(.stage) {
+    .st-artifact {
+      display: flex;
+      flex-direction: column;
+    }
+    /* The header of an open artifact: h-10 px-3 gap-2, the name in text-sm font-medium. */
+    .st-artifact-head {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(40 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .st-artifact-title {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .st-artifact-tools {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(4 * var(--u));
+    }
+    /* The icon buttons of the header: ghost buttons in size-7. */
+    .st-artifact-button {
+      flex: 0 0 auto;
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+      color: var(--foreground);
+    }
+    /* The preview: overflow-auto p-4. */
+    .st-artifact-content {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      padding: calc(16 * var(--u));
+    }
+    /* The absent artifact: a p-3 body with a py-3 status line. */
+    .st-artifact-empty {
+      flex: 1;
+      padding: calc(24 * var(--u)) calc(12 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+    }
+    /* The footer: px-3 py-2, the metadata in text-xs with gap-x-2. */
+    .st-artifact-foot {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* The verdict: a danger badge, px-2.5 py-0.5 text-xs font-medium. */
+    .st-artifact-verdict {
+      padding: calc(2 * var(--u)) calc(10 * var(--u));
+      border-radius: 999px;
+      background: var(--destructive-surface);
+      color: var(--destructive-surface-foreground);
+      font-weight: 500;
+    }
+    .st-artifact[data-artifact="empty"] .st-artifact-tools,
+    .st-artifact[data-artifact="empty"] .st-artifact-content,
+    .st-artifact[data-artifact="empty"] .st-artifact-foot,
+    .st-artifact[data-artifact="filled"] .st-artifact-empty {
+      display: none;
+    }
+  }
+}

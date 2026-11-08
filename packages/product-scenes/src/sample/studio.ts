@@ -1,5 +1,5 @@
 // Shared values of the session window replica. The model names are fictional.
-import type { DocumentLabels, GitFile, StudioFrame } from "../replicas/studio/model";
+import type { ArtifactLabels, GitFile, StudioFrame } from "../replicas/studio/model";
 import type { Session } from "./sessions";
 import { settled, studioNav } from "./studio-nav";
 import { taskId } from "./workspace";
@@ -23,30 +23,31 @@ export const BUILDER_REVIEW_SESSION = { ...BUILDER_SESSION, used: 41.8 } satisfi
 export const BUILDER_PR_SESSION = { ...BUILDER_SESSION, used: 47.3 } satisfies Session;
 export const QA_SESSION = { ...ASTRA, effort: "high", used: 17.9 } satisfies Session;
 
-/** The documents of the Document tab, from use-agent-studio-page-model-builders.ts, and the sample save times. */
-export const DOCUMENTS = {
+/** The workflow artifacts of the Artifacts tab, with the labels of the built-in workflow. */
+export const ARTIFACTS = {
   spec: {
     title: "Specification",
-    empty: "No spec document yet.",
-    updated: "Sep 27, 09:42 AM",
+    empty: "Specification has not been created yet.",
+    editable: true,
   },
   plan: {
     title: "Implementation Plan",
-    empty: "No implementation plan yet.",
-    updated: "Sep 27, 09:45 AM",
+    empty: "Implementation Plan has not been created yet.",
+    editable: true,
   },
   qa: {
     title: "QA Report",
-    empty: "No QA report yet.",
-    updated: "Sep 27, 09:52 AM",
+    empty: "QA Report has not been created yet.",
+    editable: false,
+    verdict: "Rejected",
   },
-} satisfies Record<string, DocumentLabels>;
+} satisfies Record<string, ArtifactLabels>;
 
 /** Line 10 of the hook, where the review comment goes. */
 const MODIFIER_CHECK = "      if (!modifier || event.shiftKey) return;";
 
 /** The hook as the Builder first writes it. */
-const HOOK_LINES = [
+export const HOOK_LINES = [
   'import { useEffect } from "react";',
   "",
   'const isMac = navigator.platform.startsWith("Mac");',
@@ -131,7 +132,7 @@ export function fileOf(files: readonly GitFile[], path: string): GitFile {
 
 export const TASK_ID = taskId("k3x9");
 
-/** Kickoff prompt samples from packages/workflows/src/builtin/spec-plan-build/agent-prompts.ts. */
+/** Kickoff prompt samples from packages/workflows/src/builtin/spec-plan-build/prompt-templates.ts. */
 export const KICKOFF = {
   spec: `Write the specification for this task and save it with odt_set_task_artifact and code spec. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,
   planner: `Write the implementation plan for this task and save it with odt_set_task_artifact and code plan. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,

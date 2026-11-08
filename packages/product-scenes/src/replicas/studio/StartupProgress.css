@@ -1,0 +1,102 @@
+@layer replica {
+  :where(.stage) {
+    /* The body of the progress: px-4 py-3, with the trace as flex flex-col gap-3. */
+    .su {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+      padding: calc(12 * var(--u)) calc(16 * var(--u));
+    }
+    /* The origin and the count: text-xs text-muted-foreground, with tabular numbers. */
+    .su-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .su-count {
+      font-variant-numeric: tabular-nums;
+    }
+    .su-steps {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+      margin: 0 calc(-8 * var(--u));
+    }
+    /* A row: the trace line with min-h-9 px-2 py-1.5, then the chevron column. A running row has
+       bg-info-surface, and its title has font-medium text-info-surface-foreground. A pending row
+       has opacity-60. A completed title has text-foreground. */
+    .su-step {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(36 * var(--u));
+      padding: calc(6 * var(--u)) calc(8 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+    }
+    .su-step[data-state="pending"] > :not(.su-chevron) {
+      opacity: 0.6;
+    }
+    .su-step[data-state="running"] {
+      background: var(--info-surface);
+      color: var(--info-surface-foreground);
+      font-weight: 500;
+    }
+    .su-step[data-state="completed"] {
+      color: var(--foreground);
+    }
+    /* The icon: size-5 rounded-full with a size-3.5 icon. A running icon spins on bg-info-surface,
+       and a completed icon has bg-success-surface text-success-icon. */
+    .su-icon {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+      border-radius: 50%;
+    }
+    .su-icon > svg {
+      grid-area: 1 / 1;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .su-step[data-state="completed"] > .su-icon {
+      background: var(--success-surface);
+      color: var(--success-icon);
+    }
+    .su-step[data-state="running"] > .su-icon {
+      background: var(--info-surface);
+    }
+    .su-label {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* The state label: text-[11px] text-muted-foreground/70. A completed step shows none. */
+    .su-step > small {
+      color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+      font-size: calc(11 * var(--u));
+      font-weight: 400;
+      font-variant-numeric: tabular-nums;
+    }
+    .su-step:not([data-state="pending"]) .su-pending,
+    .su-step:not([data-state="running"]) .su-running,
+    .su-step:not([data-state="completed"]) .su-completed {
+      display: none;
+    }
+    .su-chevron {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: calc(16 * var(--u));
+      color: var(--muted-foreground);
+    }
+  }
+}

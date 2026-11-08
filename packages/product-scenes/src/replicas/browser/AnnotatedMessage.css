@@ -1,0 +1,110 @@
+@layer replica {
+  :where(.stage) {
+    /* The bubble of UserMessageBubble: rounded-xl rounded-br-sm px-3.5 py-2 bg-chat-surface
+       shadow-chat. It keeps the width of the other user bubbles of the replica. */
+    .am-bubble {
+      max-width: 80%;
+      padding: calc(8 * var(--u)) calc(14 * var(--u));
+      border-radius: calc(16 * var(--u)) calc(16 * var(--u)) calc(8 * var(--u)) calc(16 * var(--u));
+      background: var(--chat-surface);
+      box-shadow: var(--chat-shadow);
+      color: var(--foreground);
+    }
+    .st-user .am-text {
+      max-width: none;
+      padding: 0;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+    }
+    /* The annotations: flex flex-wrap gap-1.5, mt-2 after the text. */
+    .am-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(6 * var(--u));
+      margin-top: calc(8 * var(--u));
+      list-style: none;
+    }
+    /* A chip: inline-flex h-6 max-w-64 gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5
+       text-xs font-medium text-sky-900, or border-sky-800 bg-sky-950/50 text-sky-100 in dark. */
+    .am-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      max-width: calc(256 * var(--u));
+      height: calc(24 * var(--u));
+      padding: 0 calc(10 * var(--u));
+      border: calc(1 * var(--u)) solid var(--sky-200);
+      border-radius: 999px;
+      background: var(--sky-50);
+      color: var(--sky-900);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+    }
+    :where([data-theme="dark"]) & .am-chip {
+      border-color: var(--sky-800);
+      background: color-mix(in oklab, var(--sky-950) 50%, transparent);
+      color: var(--sky-100);
+    }
+    .am-chip .lucide {
+      flex: 0 0 auto;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .am-chip span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* The attachments: flex flex-wrap items-center gap-2 mt-2 mb-1. */
+    .am-files {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      margin: calc(8 * var(--u)) 0 calc(4 * var(--u));
+    }
+    /* An image chip in w-32: flex flex-col overflow-hidden rounded-lg border border-border bg-card. */
+    .am-file {
+      display: flex;
+      flex-direction: column;
+      width: calc(128 * var(--u));
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+    }
+    /* The preview: flex h-24 items-center justify-center overflow-hidden bg-muted, with the image in
+       object-cover. The screenshot is a page in the light colors of the site. */
+    .am-thumb {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: calc(96 * var(--u));
+      overflow: hidden;
+      background: #fff;
+    }
+    /* The name: flex items-center gap-2 px-3 py-2, an icon in size-4, and the name in text-xs. */
+    .am-name {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      color: var(--foreground);
+      font-size: calc(12 * var(--u));
+    }
+    .am-name .lucide {
+      flex: 0 0 auto;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .am-name span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+}

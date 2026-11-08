@@ -1,0 +1,49 @@
+@layer replica {
+  :where(.stage) {
+    /* ApprovalDetails: footnote lines, the title in callout medium, and muted lines. */
+    .mob-approval {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: calc(4 * var(--u));
+      color: var(--foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+    .mob-approval-title {
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+      letter-spacing: 0;
+    }
+    .mob-approval-muted {
+      color: var(--muted-foreground);
+    }
+    /* The working directory on one line: the start of the path shrinks and ends with an
+       ellipsis, and its last two folders stay. */
+    .mob-approval-path {
+      display: flex;
+      color: var(--muted-foreground);
+      white-space: nowrap;
+    }
+    .mob-approval-path > span:first-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mob-approval-path > span:last-child {
+      flex: 0 0 auto;
+    }
+    .mob-replies {
+      display: flex;
+      gap: calc(8 * var(--u));
+      padding-top: calc(4 * var(--u));
+    }
+    .mob-replies[data-stack="row"] > .mob-reply {
+      flex: 1 1 0;
+    }
+    .mob-replies[data-stack="column"] {
+      flex-direction: column;
+    }
+  }
+}

@@ -1,0 +1,136 @@
+@layer replica {
+  :where(.stage) {
+    /* The row is a flow root, so the my-2 margins of the card stay inside it. */
+    .st-action-row {
+      display: flow-root;
+      font-size: calc(14 * var(--u));
+    }
+    /* ActionToolCard: my-2 rounded-lg border px-3 py-2 shadow-sm, border-border bg-card. */
+    .st-action {
+      min-width: 0;
+      margin: calc(8 * var(--u)) 0;
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+    }
+    /* The texts share one baseline, so the small label sits on the line of the title. */
+    .st-action-summary {
+      display: flex;
+      align-items: baseline;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    .st-action-icon.lucide {
+      flex-shrink: 0;
+      align-self: center;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+    }
+    /* text-[11px] font-semibold uppercase tracking-wide text-muted-foreground. */
+    .st-action-label {
+      flex-shrink: 0;
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      letter-spacing: 0.025em;
+      text-transform: uppercase;
+    }
+    /* min-w-0 truncate text-sm font-medium text-foreground. */
+    .st-action-title {
+      min-width: 0;
+      margin: 0;
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* The Screenshot button: rounded-full border bg-muted/60 px-2 py-0.5 text-[11px] font-medium,
+       with an ImageIcon in size-3. */
+    .st-action-shot {
+      display: inline-flex;
+      flex-shrink: 0;
+      align-self: center;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      padding: calc(2 * var(--u)) calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: 999px;
+      background: color-mix(in oklab, var(--muted) 60%, transparent);
+      color: var(--foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+    }
+    /* A running call has no result yet, so it has no screenshot. */
+    [data-running] > .st-action-shot {
+      display: none;
+    }
+    /* ToolMessageTiming: ml-auto inline-flex shrink-0 items-center gap-2 text-[11px]. */
+    .st-action-time {
+      display: inline-flex;
+      flex-shrink: 0;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      margin-left: auto;
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    /* The three bars of a running call, in place of its duration. */
+    .st-action-running {
+      display: none;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+      gap: calc(2 * var(--u));
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+    }
+    [data-running] .st-action-running {
+      display: inline-flex;
+    }
+    [data-running] .st-action-duration {
+      display: none;
+    }
+    .st-action-running > span {
+      width: calc(2 * var(--u));
+      height: calc(10 * var(--u));
+      border-radius: calc(1 * var(--u));
+      background-color: currentColor;
+      opacity: 0.45;
+      transform: scaleY(0.4);
+      animation: st-action-running 1200ms cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    }
+    .st-action-running > span:nth-child(2) {
+      animation-delay: 120ms;
+    }
+    .st-action-running > span:nth-child(3) {
+      animation-delay: 240ms;
+    }
+    .st-action-chevron.lucide {
+      flex-shrink: 0;
+      align-self: center;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+    }
+  }
+  @keyframes st-action-running {
+    0%,
+    45%,
+    100% {
+      opacity: 0.45;
+      transform: scaleY(0.4);
+    }
+    15% {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+  }
+}

@@ -1,0 +1,108 @@
+@layer replica {
+  :where(.stage) {
+    /* The card of request-card.tsx: rounded 16, an outline, and the card shadow. */
+    .mob-request {
+      --request-line: var(--input);
+      min-width: 0;
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(16 * var(--u));
+      background: var(--card);
+      box-shadow: var(--m-shadow-card);
+    }
+    .mob-request[data-kind="permission"] {
+      --request-line: var(--warning-border);
+      border-color: var(--warning-border);
+      background: var(--warning-surface);
+    }
+    .mob-request-head {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(44 * var(--u));
+      padding: calc(6 * var(--u)) calc(12 * var(--u));
+    }
+    .mob-request-text {
+      display: grid;
+      flex: 1;
+      min-width: 0;
+    }
+    .mob-request-title {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 600;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-request-title .lucide {
+      color: var(--muted-foreground);
+    }
+    .mob-request[data-kind="permission"] .mob-request-title .lucide {
+      color: var(--warning-muted);
+    }
+    .mob-request-description {
+      overflow: hidden;
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-request-status {
+      flex: 0 0 auto;
+      color: var(--foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      line-height: calc(14 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    .mob-request[data-kind="permission"] .mob-request-status {
+      color: var(--muted-foreground);
+    }
+    .mob-request-chevron.lucide {
+      color: var(--foreground);
+    }
+    .mob-request-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: calc(8 * var(--u));
+      padding: calc(10 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--request-line);
+    }
+    /* A reply button of session-button.tsx: 36 points high, rounded 10, 13 point medium text. */
+    .mob-reply {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(6 * var(--u));
+      min-height: calc(36 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+      white-space: nowrap;
+    }
+    .mob-reply[data-variant="default"] {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: var(--primary-foreground);
+      box-shadow: var(--m-shadow-card);
+    }
+    .mob-reply[data-variant="destructive"] {
+      border-color: var(--destructive);
+      background: var(--destructive);
+      color: var(--destructive-foreground);
+      box-shadow: var(--m-shadow-card);
+    }
+    .mob-reply .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+  }
+}

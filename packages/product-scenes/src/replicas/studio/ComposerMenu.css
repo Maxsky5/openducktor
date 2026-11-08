@@ -1,0 +1,48 @@
+@layer replica {
+  :where(.stage) {
+    /* agent-chat-composer-menu.tsx: absolute bottom-full left-0 z-20 mb-2 w-full max-w-md
+       rounded-xl border bg-popover shadow-lg. It shows while it has data-open. */
+    .cm-menu {
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      z-index: 20;
+      display: none;
+      flex-direction: column;
+      width: 100%;
+      max-width: calc(448 * var(--u));
+      margin-bottom: calc(8 * var(--u));
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow: var(--shadow-lg);
+    }
+    .cm-menu[data-open] {
+      display: flex;
+    }
+    /* The label and the place of the active row: border-b px-3 py-2 text-xs
+       text-muted-foreground. */
+    .cm-menu-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .cm-menu-head b {
+      font-weight: 500;
+    }
+    /* The list shows 16rem of rows and hides the rest, as its scroll area does. */
+    .cm-menu-list {
+      display: flex;
+      flex-direction: column;
+      max-height: calc(256 * var(--u));
+      overflow: hidden;
+    }
+  }
+}

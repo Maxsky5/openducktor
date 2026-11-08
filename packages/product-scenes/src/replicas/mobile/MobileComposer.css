@@ -1,0 +1,206 @@
+@layer replica {
+  :where(.stage) {
+    /* The composer sits on the bottom edge of the session with the 8 dp edge padding. Android
+       gives no bottom inset. */
+    .mob-composer {
+      flex: 0 0 auto;
+      padding: calc(4 * var(--u)) calc(12 * var(--u)) calc(8 * var(--u));
+      background: var(--chat-background);
+    }
+    /* The card has no border: its chat surface and shadow set it apart from the transcript. */
+    .mob-composer-card {
+      position: relative;
+      border-radius: calc(16 * var(--u));
+      background: var(--chat-surface);
+      box-shadow: var(--m-shadow-raised);
+    }
+    /* `.odt-waiting-input-card`: a warning outline and a warning glow. */
+    .mob-composer-card[data-activity="waiting"] {
+      box-shadow:
+        0 0 0 calc(1 * var(--u)) var(--warning-border),
+        0 0 0 calc(2 * var(--u)) color-mix(in oklab, var(--warning-border) 72%, transparent),
+        0 0 calc(18 * var(--u)) color-mix(in oklab, var(--warning-ring) 30%, transparent);
+    }
+    .mob-composer-ray rect {
+      rx: calc(16 * var(--u));
+      stroke: var(--runtime-accent);
+      stroke-width: calc(2.6 * var(--u));
+      stroke-dasharray: 12 88;
+      animation-duration: 3s;
+    }
+    .mob-composer-card:not([data-activity="working"]) > .mob-composer-ray {
+      display: none;
+    }
+    /* The field: 16 points on a 22 point line, 12 and 10 points of padding. */
+    .mob-composer-field {
+      padding: calc(10 * var(--u)) calc(12 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(16 * var(--u));
+      line-height: calc(22 * var(--u));
+    }
+    .mob-composer-hint[data-for="waiting"],
+    .mob-composer-card[data-activity="waiting"] .mob-composer-hint[data-for="ready"] {
+      display: none;
+    }
+    .mob-composer-card[data-activity="waiting"] .mob-composer-hint[data-for="waiting"] {
+      display: inline;
+    }
+    .mob-composer-bar {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      padding: calc(4 * var(--u)) calc(8 * var(--u)) calc(8 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-composer-quiet {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+    }
+    .mob-composer-quiet .lucide {
+      width: calc(18 * var(--u));
+      height: calc(18 * var(--u));
+    }
+    /* QuietSelector: the runtime mark, the model, the effort, and the up and down chevrons. */
+    .mob-composer-model {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+      min-height: calc(28 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+    .mob-composer-model-name {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-composer-effort {
+      flex: 0 0 auto;
+    }
+    .mob-composer-model .lucide {
+      flex: 0 0 auto;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* The context ring of context-usage-indicator.tsx: 16 points, the used share in green. */
+    .mob-composer-ring {
+      flex: 0 0 auto;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      margin: 0 calc(6 * var(--u));
+      transform: rotate(-90deg);
+    }
+    .mob-composer-ring circle {
+      fill: none;
+      stroke: color-mix(in oklab, var(--foreground) 15%, transparent);
+      stroke-width: 2;
+    }
+    .mob-composer-ring circle:last-child {
+      stroke: var(--success-accent);
+      stroke-dasharray: var(--used) 100;
+      stroke-linecap: round;
+    }
+    .mob-composer-stop,
+    .mob-composer-send {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      border-radius: calc(12 * var(--u));
+    }
+    /* Stop: a red square with a filled square. It shows while the agent works. */
+    .mob-composer-stop {
+      display: none;
+      background: var(--destructive);
+    }
+    .mob-composer-card[data-activity="working"] .mob-composer-stop {
+      display: flex;
+    }
+    .mob-composer-stop i {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+      border-radius: calc(2 * var(--u));
+      background: var(--destructive-foreground);
+    }
+    /* Send stays closed and dimmed without a draft. */
+    .mob-composer-send {
+      background: var(--primary);
+      color: var(--primary-foreground);
+      box-shadow: var(--m-shadow-card);
+      opacity: 0.45;
+    }
+    .mob-composer-send .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+  }
+}
+@layer replica {
+  :where(.stage) {
+    /* A draft: the typed text replaces the placeholder, and Send opens. */
+    .mob-composer-typed {
+      color: var(--foreground);
+      white-space: pre-wrap;
+    }
+    .mob-composer-typed:empty,
+    .mob-composer-card[data-draft] .mob-composer-hint {
+      display: none;
+    }
+    .mob-composer-card[data-draft] .mob-composer-send,
+    .mob-composer-card[data-comments] .mob-composer-send {
+      opacity: 1;
+    }
+    /* GhostIconButton: Steer or Queue for one message, while a turn runs and the field has text. */
+    .mob-composer-secondary {
+      display: none;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      border-radius: calc(12 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-composer-card[data-activity="working"][data-draft] .mob-composer-secondary {
+      display: flex;
+    }
+    .mob-composer-secondary .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* The count of the pending review comments on the corner of Send: amber-300 with a card ring. */
+    .mob-composer-card:not([data-comments]) .mob-composer-count {
+      display: none;
+    }
+    .mob-composer-count {
+      position: absolute;
+      right: 0;
+      bottom: calc(28 * var(--u));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+      padding: 0 calc(4 * var(--u));
+      border: calc(2 * var(--u)) solid var(--card);
+      border-radius: 999px;
+      background: var(--amber-300);
+      color: oklch(12.9% 0.042 264.695);
+      font-size: calc(10 * var(--u));
+      font-weight: 600;
+      line-height: calc(12 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+  }
+}

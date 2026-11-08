@@ -1,0 +1,270 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * The lane colors of buildLanes in apps/mobile/src/theme/tokens.ts. A light lane has the 50
+     * wash of its family, the 200 outline, the 500 accent, and the 700 text. A dark lane has the
+     * 950 wash at half strength, the 800 outline, the 400 accent, and the 300 text. The neutral
+     * lane takes the muted wash, the border, the slate accent, and the secondary text. The board
+     * wash mixes the light wash 70 % into the canvas, or the dark accent 7 %.
+     */
+    .mob-phone {
+      --indigo-400: oklch(67.3% 0.182 276.935);
+      --indigo-600: oklch(51.1% 0.262 276.966);
+      --cyan-400: oklch(78.9% 0.154 211.53);
+      --cyan-600: oklch(60.9% 0.126 221.723);
+      --amber-600: oklch(66.6% 0.179 58.318);
+      --orange-400: oklch(75% 0.183 55.934);
+      --orange-600: oklch(64.6% 0.222 41.116);
+      --slate-400: oklch(70.4% 0.04 256.788);
+      --slate-500: oklch(55.4% 0.046 257.417);
+    }
+    .mob-phone [data-tone] {
+      --lane-soft: var(--muted);
+      --lane-border: var(--border);
+      --lane-accent: var(--slate-400);
+      --lane-text: var(--m-secondary);
+      --lane-wash: var(--chat-background);
+    }
+    .mob-phone [data-tone="pending"] {
+      --lane-soft: var(--violet-50);
+      --lane-border: var(--violet-200);
+      --lane-accent: var(--violet-500);
+      --lane-text: var(--violet-700);
+    }
+    .mob-phone [data-tone="info"] {
+      --lane-soft: var(--sky-50);
+      --lane-border: var(--sky-200);
+      --lane-accent: var(--sky-500);
+      --lane-text: var(--sky-700);
+    }
+    .mob-phone [data-tone="warning"] {
+      --lane-soft: var(--amber-50);
+      --lane-border: var(--amber-200);
+      --lane-accent: var(--amber-500);
+      --lane-text: var(--amber-700);
+    }
+    .mob-phone [data-tone="destructive"] {
+      --lane-soft: var(--rose-50);
+      --lane-border: var(--rose-200);
+      --lane-accent: var(--rose-500);
+      --lane-text: var(--rose-700);
+    }
+    .mob-phone [data-tone="review"] {
+      --lane-soft: var(--indigo-50);
+      --lane-border: var(--indigo-200);
+      --lane-accent: var(--indigo-500);
+      --lane-text: var(--indigo-700);
+    }
+    .mob-phone [data-tone="approval"] {
+      --lane-soft: var(--cyan-50);
+      --lane-border: var(--cyan-200);
+      --lane-accent: var(--cyan-500);
+      --lane-text: var(--cyan-700);
+    }
+    .mob-phone [data-tone="success"] {
+      --lane-soft: var(--emerald-50);
+      --lane-border: var(--emerald-200);
+      --lane-accent: var(--emerald-500);
+      --lane-text: var(--emerald-700);
+    }
+    .mob-phone [data-tone]:not([data-tone="neutral"]) {
+      --lane-wash: color-mix(in srgb, var(--lane-soft) 70%, var(--chat-background));
+    }
+    :where([data-theme="dark"]) & .mob-phone [data-tone] {
+      --lane-accent: var(--slate-500);
+    }
+    :where([data-theme="dark"]) & .mob-phone [data-tone="pending"] {
+      --lane-border: var(--violet-800);
+      --lane-accent: var(--violet-400);
+      --lane-text: var(--violet-300);
+    }
+    :where([data-theme="dark"]) & .mob-phone [data-tone="info"] {
+      --lane-border: var(--sky-800);
+      --lane-accent: var(--sky-400);
+      --lane-text: var(--sky-300);
+    }
+    :where([data-theme="dark"]) & .mob-phone [data-tone="warning"] {
+      --lane-border: var(--amber-800);
+      --lane-accent: var(--amber-400);
+      --lane-text: var(--amber-300);
+    }
+    :where([data-theme="dark"]) & .mob-phone [data-tone="destructive"] {
+      --lane-border: var(--rose-800);
+      --lane-accent: var(--rose-400);
+      --lane-text: var(--rose-300);
+    }
+    :where([data-theme="dark"]) & .mob-phone [data-tone="review"] {
+      --lane-border: var(--indigo-800);
+      --lane-accent: var(--indigo-400);
+      --lane-text: var(--indigo-300);
+    }
+    :where([data-theme="dark"]) & .mob-phone [data-tone="approval"] {
+      --lane-border: var(--cyan-800);
+      --lane-accent: var(--cyan-400);
+      --lane-text: var(--cyan-300);
+    }
+    :where([data-theme="dark"]) & .mob-phone [data-tone="success"] {
+      --lane-border: var(--emerald-800);
+      --lane-accent: var(--emerald-400);
+      --lane-text: var(--emerald-300);
+    }
+    :where([data-theme="dark"]) & .mob-phone [data-tone]:not([data-tone="neutral"]) {
+      --lane-wash: color-mix(in srgb, var(--lane-accent) 7%, var(--chat-background));
+    }
+
+    /* The switcher: the rail of cells, then the title row, over a hairline. */
+    .mob-lanes {
+      flex: 0 0 auto;
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .mob-lane-scroll {
+      overflow: hidden;
+    }
+    .mob-lane-rail {
+      position: relative;
+      display: flex;
+      width: calc((8 * 96 + 16) * var(--u));
+      padding: calc(6 * var(--u)) calc(8 * var(--u)) 0;
+      transform: translateX(calc(-1 * var(--rail-scroll) * var(--u)));
+    }
+    .mob-lane-pill {
+      position: absolute;
+      top: calc(6 * var(--u));
+      left: calc(8 * var(--u));
+      width: calc(96 * var(--u));
+      height: calc(50 * var(--u));
+      border: calc(1 * var(--u)) solid var(--lane-border);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+      box-shadow: var(--m-shadow-raised);
+      transform: translateX(calc(var(--lane-progress) * 96 * var(--u)));
+      transition: border-color 0.25s;
+    }
+    .mob-lane-cell {
+      position: relative;
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: calc(3 * var(--u));
+      height: calc(50 * var(--u));
+    }
+    .mob-lane-count {
+      color: var(--lane-text);
+      font-size: calc(13 * var(--u));
+      font-weight: 600;
+      line-height: calc(18 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    .mob-lane-cell[data-empty] .mob-lane-count {
+      color: var(--muted-foreground);
+    }
+    .mob-lane-bar {
+      width: calc(16 * var(--u));
+      height: calc(3 * var(--u));
+      border-radius: calc(2 * var(--u));
+      background: var(--lane-accent);
+    }
+    .mob-lane-cell[data-empty] .mob-lane-bar {
+      opacity: 0.35;
+    }
+    .mob-lane-label {
+      padding: 0 calc(1 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(10 * var(--u));
+      font-weight: 500;
+      line-height: calc(13 * var(--u));
+      white-space: nowrap;
+    }
+    .mob-lane-cell[data-selected] .mob-lane-label {
+      color: var(--foreground);
+    }
+
+    /* The title row: the stacked lane titles, then the Filters button. */
+    .mob-lane-head {
+      display: flex;
+      align-items: center;
+      min-height: calc(38 * var(--u));
+    }
+    .mob-lane-titles {
+      position: relative;
+      flex: 1;
+      align-self: stretch;
+      overflow: hidden;
+    }
+    /* A title fades out by 0.7 of a page and slides 36 points for each page. */
+    .mob-lane-title {
+      --lane-offset: calc(var(--lane-index) - var(--lane-progress));
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      padding: 0 calc(16 * var(--u));
+      opacity: clamp(0, calc(1 - max(var(--lane-offset), -1 * var(--lane-offset)) / 0.7), 1);
+      transform: translateX(calc(var(--lane-offset) * 36 * var(--u)));
+    }
+    .mob-lane-title-bar {
+      flex: 0 0 auto;
+      width: calc(14 * var(--u));
+      height: calc(6 * var(--u));
+      border-radius: calc(3 * var(--u));
+      background: var(--lane-accent);
+    }
+    .mob-lane-title-text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 600;
+      line-height: calc(18 * var(--u));
+      letter-spacing: calc(0.8 * var(--u));
+      text-transform: uppercase;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* LaneCount: a capsule of the lane colors with "3 tasks". */
+    .mob-lane-total {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      min-width: calc(24 * var(--u));
+      min-height: calc(24 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--lane-border);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--lane-text);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.2 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    /* BoardFilterButton without a filter: a dashed outline. */
+    .mob-lane-filters {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-height: calc(28 * var(--u));
+      margin-right: calc(16 * var(--u));
+      padding: 0 calc(10 * var(--u));
+      border: calc(1 * var(--u)) dashed var(--input);
+      border-radius: calc(8 * var(--u));
+      background: var(--card);
+      color: var(--foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+    .mob-lane-filters .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+    }
+  }
+}

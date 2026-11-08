@@ -1,0 +1,76 @@
+@layer replica {
+  :where(.stage) {
+    /* The track: 32 points high under the 20 point space of the drag label. The thumb sits 2.4
+       points inside the edge, and the fill reaches past it to the edge of the shell. */
+    .mob-slider {
+      --slider-tick-color: rgb(0 0 0 / 0.176);
+      --slider-from: #006aff;
+      --slider-to: #0059d4;
+      --slider-under: #66a6ff;
+      --slider-room: calc(100% - 32 * var(--u));
+      display: block;
+      padding-top: calc(20 * var(--u));
+    }
+    .mob-slider[data-fill="standard"] {
+      --slider-from: var(--slate-400);
+      --slider-to: var(--slate-500);
+      --slider-under: oklch(92.9% 0.013 255.508);
+    }
+    :where([data-theme="dark"]) & .mob-slider {
+      --slider-tick-color: rgb(255 255 255 / 0.256);
+    }
+    .mob-slider-shell {
+      position: relative;
+      display: block;
+      height: calc(32 * var(--u));
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid rgb(0 0 0 / 0.084);
+      border-radius: calc(16 * var(--u));
+      background: linear-gradient(180deg, rgb(230 230 232 / 0.504), rgb(232 232 233 / 0.357));
+    }
+    :where([data-theme="dark"]) & .mob-slider-shell {
+      border-color: rgb(255 255 255 / 0.08);
+      background: linear-gradient(180deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.1));
+    }
+    .mob-slider-fill {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: calc(var(--slider-at) * var(--slider-room) + 32 * var(--u));
+      border-radius: calc(16 * var(--u));
+      background: linear-gradient(90deg, var(--slider-from), var(--slider-to));
+    }
+    .mob-slider-tick {
+      position: absolute;
+      top: 50%;
+      left: calc(16 * var(--u) + var(--slider-tick) * var(--slider-room));
+      width: calc(1.5 * var(--u));
+      height: calc((4.8 + var(--slider-tick) * 4.8) * var(--u));
+      border-radius: calc(1 * var(--u));
+      background: var(--slider-tick-color);
+      transform: translate(-50%, -50%);
+    }
+    .mob-slider-tick[data-under] {
+      background: var(--slider-under);
+    }
+    .mob-slider-thumb {
+      position: absolute;
+      top: calc(1.4 * var(--u));
+      left: calc(1.4 * var(--u) + var(--slider-at) * var(--slider-room));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(27.2 * var(--u));
+      height: calc(27.2 * var(--u));
+      border-radius: 50%;
+      background: linear-gradient(180deg, #fff, #f5f5f5);
+      box-shadow: 0 calc(1 * var(--u)) calc(1 * var(--u)) rgb(0 0 0 / 0.1);
+    }
+    .mob-slider-thumb .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--slate-500);
+    }
+  }
+}

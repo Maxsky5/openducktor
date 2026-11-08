@@ -1,0 +1,117 @@
+@layer replica {
+  :where(.stage) {
+    /* The phone and the steps share the stage. The design width keeps the phone at the same
+       scale in each layout of the documentation: the 429 dp phone takes about the same part of
+       the stage in each layout. */
+    .mob-stage {
+      --design-width: 1120;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(48 * var(--u));
+      padding: calc(24 * var(--u)) calc(16 * var(--u));
+    }
+    .mob-stage[data-layout="split"] {
+      --design-width: 1185;
+      gap: calc(56 * var(--u));
+    }
+    .mob-stage[data-layout="phone"] {
+      --design-width: 470;
+    }
+    .mob-stage-lead {
+      flex: 0 0 auto;
+      align-self: stretch;
+      display: flex;
+      align-items: center;
+    }
+    .mob-stage-phone {
+      flex: 0 0 auto;
+    }
+    /* The numbered steps: the current step is a card, and the done steps show a check. */
+    .mob-steps {
+      display: grid;
+      flex: 0 1 calc(340 * var(--u));
+      gap: calc(8 * var(--u));
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .mob-step {
+      display: grid;
+      grid-template-columns: calc(28 * var(--u)) minmax(0, 1fr);
+      align-items: start;
+      gap: calc(12 * var(--u));
+      padding: calc(12 * var(--u)) calc(14 * var(--u));
+      border: calc(1 * var(--u)) solid transparent;
+      border-radius: calc(14 * var(--u));
+      color: var(--muted-foreground);
+      transition:
+        background-color 0.3s,
+        border-color 0.3s,
+        color 0.3s;
+    }
+    .mob-step[data-state="current"] {
+      border-color: var(--border);
+      background: var(--card);
+      color: var(--foreground);
+      box-shadow: var(--shadow-md);
+    }
+    .mob-step-number {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: 50%;
+      background: var(--card);
+      font-size: calc(13 * var(--u));
+      font-weight: 600;
+      transition:
+        background-color 0.3s,
+        border-color 0.3s,
+        color 0.3s;
+    }
+    .mob-step-number .lucide {
+      display: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .mob-step[data-state="current"] .mob-step-number {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: var(--primary-foreground);
+    }
+    .mob-step[data-state="done"] .mob-step-number {
+      border-color: var(--success-border);
+      background: var(--success-surface);
+      color: var(--success-icon);
+    }
+    .mob-step[data-state="done"] .mob-step-number span {
+      display: none;
+    }
+    .mob-step[data-state="done"] .mob-step-number .lucide {
+      display: block;
+    }
+    .mob-step-text {
+      padding-top: calc(3 * var(--u));
+      font-size: calc(15 * var(--u));
+      line-height: calc(22 * var(--u));
+    }
+    .mob-step[data-state="current"] .mob-step-text {
+      font-weight: 500;
+    }
+    /* A phone stage shows only the phone. */
+    @container stage (width <= 500px) {
+      .mob-stage,
+      .mob-stage[data-layout] {
+        --design-width: 470;
+        padding: calc(12 * var(--u)) calc(18 * var(--u));
+      }
+      .mob-steps,
+      .mob-stage-lead {
+        display: none;
+      }
+    }
+  }
+}

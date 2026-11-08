@@ -1,0 +1,106 @@
+@layer replica {
+  :where(.stage) {
+    /* The native stack header of Android: a 56 dp toolbar in the color of its screen. The title
+       has the semibold 17 dp style of stack-theme.ts. */
+    .mob-header {
+      position: relative;
+      z-index: 3;
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      height: calc(56 * var(--u));
+      padding: 0 calc(10 * var(--u)) 0 calc(16 * var(--u));
+      color: var(--foreground);
+    }
+    .mob-header-title {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      font-size: calc(17 * var(--u));
+      font-weight: 600;
+      line-height: calc(22 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* A plain IconButton: a 40 point touch area around a 22 point icon. */
+    .mob-header-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(40 * var(--u));
+      height: calc(40 * var(--u));
+    }
+    .mob-header-icon .lucide {
+      width: calc(22 * var(--u));
+      height: calc(22 * var(--u));
+    }
+    .mob-header[data-kind="session"] {
+      gap: calc(8 * var(--u));
+      padding: 0 calc(16 * var(--u)) 0 calc(8 * var(--u));
+    }
+    .mob-header-back {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(44 * var(--u));
+      height: calc(44 * var(--u));
+    }
+    .mob-header-back .lucide {
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+    }
+    /* Android starts the title 72 dp from the start edge, after the back control. */
+    .mob-header-center {
+      display: flex;
+      flex: 1;
+      min-width: 0;
+      padding-left: calc(12 * var(--u));
+    }
+    /* The title of session-header-title.tsx, at most as wide as titleMaxWidth gives on Android:
+       the width of the phone less 72 dp, 48 dp for each of the three actions, and 8 dp. */
+    .mob-header-task {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      max-width: calc(187 * var(--u));
+      min-width: 0;
+    }
+    .mob-header-task-text {
+      min-width: 0;
+      overflow: hidden;
+      font-size: calc(15 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-header-task .lucide {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-header-actions {
+      display: flex;
+      flex: 0 0 auto;
+      gap: calc(8 * var(--u));
+    }
+    /* The outline IconButton: a 36 point card square with an 18 point icon. */
+    .mob-outline-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+      box-shadow: var(--m-shadow-card);
+    }
+    .mob-outline-icon .lucide {
+      width: calc(18 * var(--u));
+      height: calc(18 * var(--u));
+    }
+  }
+}

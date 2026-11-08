@@ -3,14 +3,14 @@ import type { SceneBuilder } from "../../motion/scene";
 import { boardOf, setActivity, swapIn } from "../../replicas/board/cards";
 import { commandPalette } from "../../replicas/palette/command-palette";
 import { pointer } from "../../replicas/shell/cursor";
+import { keystrokes } from "../../replicas/shell/keystrokes";
 import { sessionList } from "../../replicas/shell/nav-list";
-import { notify } from "../../replicas/shell/notify";
+import { startupToast } from "../../replicas/shell/startup-toast";
 import { startDialog } from "../../replicas/studio/start-dialog";
 import { answerHere } from "../../replicas/transcript/reply";
 import { QUERY, SEARCH_TARGET, WAITING_TASK } from "../../sample/palette";
 import { WAITING_QUESTION } from "../../sample/question";
 import { TASKS } from "../../sample/tasks";
-import { keystrokes } from "./keystrokes";
 import { PALETTE_NAV, type PaletteTemplate } from "./sample";
 
 /**
@@ -54,7 +54,8 @@ export const build: SceneBuilder<PaletteTemplate> = (scene) => {
   keys.press(["↵"], run, run + 0.6);
   palette.close(run + 0.05);
 
-  // 3. The start dialog opens. The Planner runs in the background, and the board stays.
+  // 3. The start dialog opens. Run in background closes it, and the board stays. The startup
+  // notification shows the Planner until it is ready.
   const dialog = scene.template("planner-dialog");
   const planning = startDialog(scene, root, cursor, dialog, run + 0.15, "background") - 0.1;
   cursor.hide(planning);
@@ -62,7 +63,9 @@ export const build: SceneBuilder<PaletteTemplate> = (scene) => {
   scene.at(planning, () => setActivity(card(SEARCH_TARGET), "working"));
   sessions.hide("titles-spec", planning);
   sessions.update("titles-planner", planning);
-  notify(scene, must(root, "[data-toasts]"), "toast-started", planning + 0.2, 3);
+  const toast = startupToast(scene, must(root, "[data-toasts]"), scene.template("toast-startup"));
+  toast.show(planning);
+  toast.ready(planning + 0.9);
   swapIn(scene, actions(SEARCH_TARGET), "planner-running", planning + 0.9);
 
   // 4. Command K again. The Builder that waits comes first, and Tab opens its reply.

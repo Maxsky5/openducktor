@@ -1,0 +1,16 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * Import session: the window is taller than the other scenes of the documentation, so the list
+     * of the dialog shows two rows between the search and the footer.
+     */
+    .im-window {
+      --window-height: 660;
+    }
+    @container stage (width <= 500px) {
+      .im-window {
+        --window-height: 720;
+      }
+    }
+  }
+}

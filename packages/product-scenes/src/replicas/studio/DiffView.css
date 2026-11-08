@@ -99,7 +99,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: color-mix(in oklch, var(--diff-add) 32%, transparent);
+      background: color-mix(in oklab, var(--diff-add) 32%, transparent);
       pointer-events: none;
       animation: line-flash 1.6s ease-out forwards;
     }

@@ -1,0 +1,89 @@
+@layer replica {
+  :where(.stage) {
+    /* A patch in the unified style of @pierre/diffs, with the colors of the pierre-light and
+       pierre-dark themes. The diff fills its box, and long lines wrap. */
+    .pd-diff {
+      --diff-add: #18a46c;
+      --diff-del: #d52c36;
+      --diff-number: #595959;
+      --diff-line-mix: 88%;
+      --diff-number-mix: 91%;
+      --syntax-keyword: #cf222e;
+      --syntax-string: #0a3069;
+      --syntax-function: #8250df;
+      --syntax-constant: #0550ae;
+      --syntax-comment: #6e7781;
+      background: var(--card);
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+      line-height: 1.5;
+    }
+    :where([data-theme="dark"]) & .pd-diff {
+      --diff-add: #07c480;
+      --diff-del: #ff2e3f;
+      --diff-number: #8f9aab;
+      --diff-line-mix: 80%;
+      --diff-number-mix: 85%;
+      --syntax-keyword: #ff7b72;
+      --syntax-string: #a5d6ff;
+      --syntax-function: #d2a8ff;
+      --syntax-constant: #79c0ff;
+      --syntax-comment: #8b949e;
+    }
+    /* The number column: 2ch on the left, 3ch of digits, 1ch on the right, and a 2 pixel gap.
+       Each line has its own grid, so the digits have a fixed width. */
+    .pd-line {
+      --line-tone: var(--card);
+      position: relative;
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+    }
+    .pd-line[data-kind="add"] {
+      --line-tone: var(--diff-add);
+    }
+    .pd-line[data-kind="del"] {
+      --line-tone: var(--diff-del);
+    }
+    .pd-line > span {
+      position: relative;
+      box-sizing: content-box;
+      width: 3ch;
+      padding: 0 1ch 0 2ch;
+      border-right: calc(2 * var(--u)) solid var(--card);
+      color: var(--diff-number);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .pd-line > code {
+      padding: 0 1ch;
+      font: inherit;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .pd-line:not([data-kind="ctx"]) > span {
+      background: color-mix(in lab, var(--card) var(--diff-number-mix), var(--line-tone));
+      color: var(--line-tone);
+    }
+    .pd-line:not([data-kind="ctx"]) > code {
+      background: color-mix(in lab, var(--card) var(--diff-line-mix), var(--line-tone));
+    }
+    /* The bar of a changed line on the left edge: solid for an addition, dotted for a deletion. */
+    .pd-line:not([data-kind="ctx"]) > span::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: calc(4 * var(--u));
+      background: var(--diff-add);
+    }
+    .pd-line[data-kind="del"] > span::before {
+      background: linear-gradient(
+        0deg,
+        color-mix(in lab, var(--card) var(--diff-line-mix), var(--diff-del)) 50%,
+        var(--diff-del) 50%
+      );
+      background-size: calc(2 * var(--u)) calc(2 * var(--u));
+    }
+  }
+}

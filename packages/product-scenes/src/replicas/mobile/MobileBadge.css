@@ -1,0 +1,96 @@
+@layer replica {
+  :where(.stage) {
+    /* The badge of apps/mobile/src/ui/badge.tsx in the tones of theme/tokens.ts: a light theme
+       badge has the 50 wash, the 200 outline, and the 700 text of its family. A dark theme badge
+       has the 950 wash at half strength, the 800 outline, and the 300 text. */
+    .mob-badge {
+      --tone: var(--muted);
+      --tone-border: var(--border);
+      --tone-text: var(--m-secondary);
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      min-height: calc(22 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--tone-border);
+      border-radius: 999px;
+      background: var(--tone);
+      color: var(--tone-text);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.2 * var(--u));
+      white-space: nowrap;
+    }
+    .mob-badge[data-status="spec_ready"] {
+      --tone: var(--violet-50);
+      --tone-border: var(--violet-200);
+      --tone-text: var(--violet-700);
+    }
+    .mob-badge[data-status="ready_for_dev"] {
+      --tone: var(--sky-50);
+      --tone-border: var(--sky-200);
+      --tone-text: var(--sky-700);
+    }
+    .mob-badge[data-status="in_progress"] {
+      --tone: var(--amber-50);
+      --tone-border: var(--amber-200);
+      --tone-text: var(--amber-700);
+    }
+    .mob-badge[data-status="blocked"] {
+      --tone: var(--rose-50);
+      --tone-border: var(--rose-200);
+      --tone-text: var(--rose-700);
+    }
+    .mob-badge[data-status="ai_review"] {
+      --tone: var(--indigo-50);
+      --tone-border: var(--indigo-200);
+      --tone-text: var(--indigo-700);
+    }
+    .mob-badge[data-status="human_review"] {
+      --tone: var(--cyan-50);
+      --tone-border: var(--cyan-200);
+      --tone-text: var(--cyan-700);
+    }
+    .mob-badge[data-status="closed"] {
+      --tone: var(--emerald-50);
+      --tone-border: var(--emerald-200);
+      --tone-text: var(--emerald-700);
+    }
+    :where([data-theme="dark"]) & .mob-badge[data-status="spec_ready"] {
+      --tone: color-mix(in oklab, var(--violet-950) 50%, transparent);
+      --tone-border: var(--violet-800);
+      --tone-text: var(--violet-300);
+    }
+    :where([data-theme="dark"]) & .mob-badge[data-status="ready_for_dev"] {
+      --tone: color-mix(in oklab, var(--sky-950) 50%, transparent);
+      --tone-border: var(--sky-800);
+      --tone-text: var(--sky-300);
+    }
+    :where([data-theme="dark"]) & .mob-badge[data-status="in_progress"] {
+      --tone: color-mix(in oklab, var(--amber-950) 50%, transparent);
+      --tone-border: var(--amber-800);
+      --tone-text: var(--amber-300);
+    }
+    :where([data-theme="dark"]) & .mob-badge[data-status="blocked"] {
+      --tone: color-mix(in oklab, var(--rose-950) 50%, transparent);
+      --tone-border: var(--rose-800);
+      --tone-text: var(--rose-300);
+    }
+    :where([data-theme="dark"]) & .mob-badge[data-status="ai_review"] {
+      --tone: color-mix(in oklab, var(--indigo-950) 50%, transparent);
+      --tone-border: var(--indigo-800);
+      --tone-text: var(--indigo-300);
+    }
+    :where([data-theme="dark"]) & .mob-badge[data-status="human_review"] {
+      --tone: color-mix(in oklab, var(--cyan-950) 50%, transparent);
+      --tone-border: var(--cyan-800);
+      --tone-text: var(--cyan-300);
+    }
+    :where([data-theme="dark"]) & .mob-badge[data-status="closed"] {
+      --tone: color-mix(in oklab, var(--emerald-950) 50%, transparent);
+      --tone-border: var(--emerald-800);
+      --tone-text: var(--emerald-300);
+    }
+  }
+}

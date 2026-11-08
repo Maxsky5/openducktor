@@ -1,7 +1,7 @@
 @layer replica {
   :where(.stage) {
     /* The CI Checks indicator of task-execution-ci-tab-indicator.tsx: a 6 pixel dot on the top
-       right of the icon, sky while the checks run and emerald when they pass. */
+       right of the icon: sky while the checks run, rose when one fails, and emerald when they pass. */
     .ci-dot {
       position: absolute;
       top: calc(-2 * var(--u));
@@ -14,6 +14,30 @@
     }
     .ci-dot[data-checks="passing"] {
       background: var(--emerald-500);
+    }
+    .ci-dot[data-checks="failing"] {
+      background: var(--rose-500);
+    }
+    /* The count of the open review threads: a warning pill of 14 pixels on the top left of the
+       icon, with text-[9px] font-semibold. */
+    .ci-threads {
+      position: absolute;
+      top: calc(-8 * var(--u));
+      left: calc(-8 * var(--u));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      padding: 0 calc(4 * var(--u));
+      border-radius: 999px;
+      background: var(--warning-surface);
+      box-shadow: 0 0 0 calc(1 * var(--u)) var(--card);
+      color: var(--warning-surface-foreground);
+      font-size: calc(9 * var(--u));
+      font-style: normal;
+      font-weight: 600;
+      line-height: 1;
     }
   }
 }

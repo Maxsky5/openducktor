@@ -1,0 +1,140 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * Terminals: the session page cropped to the top bar, the chat column, and the side panels. The
+     * window keeps one height. The bottom panel takes its height from the chat column, and the chat
+     * keeps its newest rows over the panel. The right panel takes its width from the chat column.
+     */
+    .tv-window {
+      --design-width: 880;
+      display: flex;
+      flex-direction: column;
+      height: calc(470 * var(--u));
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(14 * var(--u));
+      background: var(--card);
+      box-shadow: var(--shadow-window);
+    }
+    .tv-panel {
+      flex: 0 0 calc(250 * var(--u));
+    }
+    /* The right panel takes 37% of the row, as RIGHT_PANEL_SIZES in agents-page-layout.tsx. Its
+       content keeps its open width at the right edge, so a panel that opens shows it from the right. */
+    .tv-window .tpage-right {
+      flex-basis: 37%;
+      align-items: flex-end;
+      overflow: hidden;
+    }
+    .tv-right-content {
+      width: 100%;
+    }
+    .tv-right-body {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .tv-view {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* The drag preview of session-panels-root.tsx: h-7 max-w-48 rounded-md border bg-card/80 px-2
+       text-xs shadow-md. It moves under the pointer. */
+    .tv-drag {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 25;
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      max-width: calc(192 * var(--u));
+      height: calc(28 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: color-mix(in oklab, var(--card) 80%, transparent);
+      box-shadow: var(--shadow-md);
+      color: var(--foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      white-space: nowrap;
+      backdrop-filter: blur(calc(1 * var(--u)));
+    }
+    .tv-drag .lucide {
+      flex: 0 0 auto;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .tv-drag > span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* The content fills the panel, so a long output scrolls in the terminal and not over the tabs. */
+    .tv-panel .bp-content {
+      height: 100%;
+    }
+    /* The terminal wraps a long line at the edge of the screen, as xterm does. */
+    .tv-term {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    /* A short output starts at the top. A long output keeps its newest line at the bottom. */
+    .tv-rows {
+      margin-bottom: auto;
+    }
+    /* The block cursor of xterm: one cell in the foreground color. */
+    .tv-caret {
+      display: inline-block;
+      width: 0.6em;
+      height: 1.35em;
+      background: var(--terminal-foreground);
+      vertical-align: top;
+    }
+    /* The restart button of terminal-restart-button.tsx: a ghost icon button at the end of the strip. */
+    .tv-restart {
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+      margin-left: auto;
+      color: var(--muted-foreground);
+    }
+    .tv-restart .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* The Enter key shows over the chat, so it covers neither the top bar nor the terminal. */
+    :where([data-scene="terminal"]) & .key-hud[data-keys] {
+      top: 16%;
+    }
+    /*
+     * A phone stage shows a narrower window with a taller terminal. A narrow window shows one panel
+     * at a time, as use-narrow-window.ts does, so the phone stage has no right panel and no drag.
+     */
+    @container stage (width <= 500px) {
+      .tv-window .tpage-right,
+      .tv-window [data-right-handle],
+      .tv-window [data-toggle="right"] {
+        display: none;
+      }
+      .tv-window {
+        --design-width: 440;
+        height: calc(600 * var(--u));
+      }
+      .tv-panel {
+        flex-basis: calc(370 * var(--u));
+      }
+      :where([data-scene="terminal"]) & .key-hud[data-keys] {
+        top: 8%;
+      }
+    }
+  }
+}

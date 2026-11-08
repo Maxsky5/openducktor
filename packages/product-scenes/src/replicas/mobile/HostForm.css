@@ -1,0 +1,216 @@
+@layer replica {
+  :where(.stage) {
+    .mob-host-form,
+    .mob-host-address,
+    .mob-host-pairing {
+      display: grid;
+      gap: calc(16 * var(--u));
+    }
+    /* The step that does not show leaves the form. */
+    .mob-host-form[data-host-step="address"] :is(.mob-host-pairing, [data-for="pairing"]),
+    .mob-host-form[data-host-step="pairing"] :is(.mob-host-address, [data-for="address"]) {
+      display: none;
+    }
+    .mob-host-muted {
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+    /* The hint of TextField: footnote text. */
+    .mob-host-muted.mob-field-hint {
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+    .mob-host-secondary {
+      color: var(--m-secondary);
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+    /* The scan card: the desktop launcher card in its active colors. */
+    .mob-scan {
+      display: flex;
+      align-items: center;
+      gap: calc(14 * var(--u));
+      padding: calc(14 * var(--u)) calc(16 * var(--u)) calc(14 * var(--u)) calc(14 * var(--u));
+      border: calc(1 * var(--u)) solid color-mix(in oklab, var(--selected-accent) 40%, transparent);
+      border-radius: calc(16 * var(--u));
+      background: color-mix(in oklab, var(--muted) 20%, transparent);
+    }
+    .mob-scan-tile {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(40 * var(--u));
+      height: calc(40 * var(--u));
+      border: calc(1 * var(--u)) solid color-mix(in oklab, var(--selected-accent) 30%, transparent);
+      border-radius: calc(12 * var(--u));
+      background: var(--muted);
+      color: var(--selected-accent);
+    }
+    .mob-scan-tile .lucide {
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+    }
+    .mob-scan-text {
+      display: grid;
+      flex: 1;
+      gap: calc(2 * var(--u));
+      min-width: 0;
+    }
+    .mob-scan-title {
+      font-size: calc(15 * var(--u));
+      font-weight: 500;
+      line-height: calc(22 * var(--u));
+    }
+    .mob-scan-arrow {
+      color: var(--muted-foreground);
+    }
+    .mob-divider {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+      white-space: nowrap;
+    }
+    .mob-divider i {
+      flex: 1;
+      height: calc(1 * var(--u));
+      background: var(--border);
+    }
+    /* TextField of ui/fields.tsx: the label, the 48 point field, and the hint. */
+    .mob-field {
+      display: grid;
+      gap: calc(8 * var(--u));
+    }
+    .mob-field-label {
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-field-input {
+      display: flex;
+      align-items: center;
+      min-height: calc(48 * var(--u));
+      padding: 0 calc(14 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      color: var(--m-quaternary);
+      font-family: var(--mono);
+      font-size: calc(15 * var(--u));
+    }
+    /* The pairing step. */
+    .mob-host-destination {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      padding: calc(12 * var(--u));
+      border-radius: calc(12 * var(--u));
+      background: var(--m-inset-fill);
+    }
+    .mob-host-destination-text {
+      display: grid;
+      flex: 1;
+      min-width: 0;
+    }
+    .mob-host-destination .mob-host-muted {
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .mob-host-mono {
+      font-family: var(--mono);
+      font-size: calc(11.5 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* Change: a plain small Button. It is disabled while the form connects, at half opacity. */
+    .mob-host-change {
+      padding: 0 calc(12 * var(--u));
+      color: var(--m-tint);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      opacity: 0.5;
+    }
+    /* PairingCodeInput: six 56 point slots in two groups. */
+    .mob-code {
+      display: flex;
+      gap: calc(6 * var(--u));
+    }
+    .mob-code-slot {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      min-height: calc(56 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      font-size: calc(26 * var(--u));
+      line-height: calc(34 * var(--u));
+    }
+    .mob-code-slot[data-group] {
+      margin-left: calc(6 * var(--u));
+    }
+    .mob-host-actions {
+      display: flex;
+      gap: calc(8 * var(--u));
+      padding-top: calc(4 * var(--u));
+    }
+    /* Button of ui/button.tsx at size lg: 48 points, rounded 12, 15 point medium text. */
+    .mob-button {
+      display: flex;
+      flex: 1 1 0;
+      align-items: center;
+      justify-content: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+      min-height: calc(48 * var(--u));
+      padding: 0 calc(20 * var(--u));
+      border: calc(1 * var(--u)) solid transparent;
+      border-radius: calc(12 * var(--u));
+      font-size: calc(15 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+      white-space: nowrap;
+    }
+    .mob-button[data-variant="filled"] {
+      background: var(--primary);
+      color: var(--primary-foreground);
+      box-shadow: var(--m-shadow-primary);
+    }
+    .mob-button[data-variant="outline"] {
+      border-color: var(--input);
+      background: var(--card);
+      color: var(--foreground);
+    }
+    .mob-button[data-disabled] {
+      opacity: 0.45;
+    }
+    .mob-host-notice {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(44 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .mob-host-notice > .lucide:first-child {
+      width: calc(15 * var(--u));
+      height: calc(15 * var(--u));
+    }
+    .mob-host-notice span {
+      flex: 1;
+    }
+    .mob-host-notice-chevron.lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+  }
+}

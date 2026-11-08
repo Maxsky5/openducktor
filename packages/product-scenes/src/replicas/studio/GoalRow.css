@@ -1,0 +1,174 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * The goal row of agent-chat-goal-row.tsx and agent-chat-goal-row.css in design pixels. It sits
+     * on the top edge of the composer, like the front card of the message queue: mx-3, and its
+     * bottom edge slides 6 pixels under the composer card. goal-row.ts raises it out of the composer.
+     */
+    .gr {
+      --gr-open: 350ms;
+      --gr-close: 250ms;
+      --gr-fade: 150ms;
+      --gr-ease: cubic-bezier(0.22, 1, 0.36, 1);
+      --gr-tone: var(--muted-foreground);
+      position: relative;
+      z-index: 45;
+      margin: 0 calc(12 * var(--u)) calc(-6 * var(--u));
+      /* css-presence: the row clips its content while it rises, and keeps its shadow. */
+      overflow: clip;
+      overflow-clip-margin: calc(2 * var(--u));
+    }
+    /* The composer card covers the tucked edge (z-50). The composer keeps these layers to itself,
+       so a dialog over the window covers them. */
+    .gr + .st-box {
+      z-index: 50;
+    }
+    .st-composer:has(> .gr) {
+      isolation: isolate;
+    }
+    /* The preflight of the desktop app shows every svg as a block. The status icon is inline. */
+    :where(.gr) svg {
+      display: block;
+    }
+    /* rounded-t-xl border border-b-0 border-input bg-chat-surface px-3 pt-2 pb-3.5 text-[13px]
+       leading-5 text-muted-foreground shadow-xs. */
+    .gr-card {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(4 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u)) calc(14 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-bottom: 0;
+      border-radius: calc(16 * var(--u)) calc(16 * var(--u)) 0 0;
+      background: var(--chat-surface);
+      box-shadow: var(--shadow-xs);
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    /* The tone of the status: text-info-muted, text-warning-muted, text-success-muted, and
+       text-destructive-muted. */
+    .gr[data-tone="info"] {
+      --gr-tone: var(--info-muted);
+    }
+    .gr[data-tone="warning"] {
+      --gr-tone: var(--warning-muted);
+    }
+    .gr[data-tone="success"] {
+      --gr-tone: var(--success-muted);
+    }
+    .gr[data-tone="danger"] {
+      --gr-tone: var(--destructive-muted);
+    }
+    .gr-toggle {
+      display: flex;
+      flex: 1;
+      align-items: flex-start;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+      border-radius: calc(8 * var(--u));
+    }
+    /*
+     * The status and the objective share one line, with a hanging indent under the label. Open,
+     * the line grows to its whole height. It stays wrapped while it closes, and the scene gives it
+     * the ellipsis when the height transition ends.
+     */
+    .gr-line {
+      interpolate-size: allow-keywords;
+      flex: 1;
+      min-width: 0;
+      height: calc(20 * var(--u));
+      padding-inline-start: calc(20 * var(--u));
+      overflow: clip;
+      overflow-wrap: anywhere;
+      text-indent: calc(-20 * var(--u));
+      white-space: pre-wrap;
+      transition: height var(--gr-close) var(--gr-ease);
+    }
+    .gr-line[data-expanded="true"] {
+      height: auto;
+      transition-duration: var(--gr-open);
+    }
+    .gr-line[data-clamped="true"] {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* The icon of the status: mr-1.5 inline-block size-3.5, 3 pixels under the base line. */
+    :where(.gr) .gr-icon {
+      display: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      margin-right: calc(6 * var(--u));
+      color: var(--gr-tone);
+      vertical-align: calc(-3 * var(--u));
+      transition: color var(--gr-fade) var(--gr-ease);
+    }
+    :where(.gr[data-icon="target"]) .gr-icon[data-icon="target"],
+    :where(.gr[data-icon="pause"]) .gr-icon[data-icon="pause"],
+    :where(.gr[data-icon="alert"]) .gr-icon[data-icon="alert"],
+    :where(.gr[data-icon="check"]) .gr-icon[data-icon="check"],
+    :where(.gr[data-icon="dashed"]) .gr-icon[data-icon="dashed"] {
+      display: inline-block;
+    }
+    .gr-label {
+      color: var(--foreground);
+      font-weight: 500;
+    }
+    .gr-status {
+      margin-left: calc(4 * var(--u));
+      color: var(--gr-tone);
+      font-weight: 500;
+      transition: color var(--gr-fade) var(--gr-ease);
+    }
+    .gr-objective {
+      margin-left: calc(4 * var(--u));
+      color: color-mix(in oklab, var(--foreground) 90%, transparent);
+    }
+    .gr-chevron {
+      flex: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      margin-top: calc(3 * var(--u));
+      transition: transform var(--gr-close) var(--gr-ease);
+    }
+    .gr-chevron[data-expanded="true"] {
+      transform: rotate(180deg);
+    }
+    /* CardIconButton: size-6 rounded-md ghost buttons with a 14 pixel icon. */
+    .gr-actions {
+      display: flex;
+      flex-shrink: 0;
+      align-items: center;
+      gap: calc(2 * var(--u));
+      margin: calc(-2 * var(--u)) 0;
+    }
+    .gr-action {
+      display: none;
+      place-items: center;
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .gr-action[data-hover] {
+      background: var(--muted);
+      color: var(--foreground);
+    }
+    .gr-action .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* Pause shows while the goal is active, and Resume while it waits. Clear always shows. */
+    .gr-action[data-goal-action="clear"],
+    .gr[data-pausable][data-status="active"] .gr-action[data-goal-action="pause"],
+    .gr[data-pausable]:is(
+        [data-status="paused"],
+        [data-status="blocked"],
+        [data-status="limit_reached"]
+      )
+      .gr-action[data-goal-action="resume"] {
+      display: grid;
+    }
+  }
+}

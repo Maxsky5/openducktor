@@ -11,10 +11,34 @@
       opacity: 0;
       filter: drop-shadow(0 calc(2 * var(--u)) calc(3 * var(--u)) rgb(0 0 0 / 0.3));
     }
-    .cursor path {
+    .cursor {
+      overflow: visible;
+    }
+    .cursor .cursor-arrow {
       fill: #0f172a;
       stroke: #fff;
       stroke-width: 1.5;
+    }
+    /* The system crosshair of the element picker, centered on the tip of the arrow: thin dark
+       lines with a white edge, open in the middle. */
+    .cursor .cursor-cross {
+      display: none;
+      fill: none;
+      stroke-linecap: square;
+    }
+    .cursor .cursor-cross-halo {
+      stroke: #fff;
+      stroke-width: 3;
+    }
+    .cursor .cursor-cross-line {
+      stroke: #0f172a;
+      stroke-width: 1.2;
+    }
+    .cursor[data-shape="crosshair"] .cursor-arrow {
+      display: none;
+    }
+    .cursor[data-shape="crosshair"] .cursor-cross {
+      display: inline;
     }
     .click-ring {
       position: absolute;

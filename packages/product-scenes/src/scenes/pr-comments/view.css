@@ -1,0 +1,24 @@
+@layer views {
+  :where(.stage) {
+    /* PR comments: the cropped session page of SessionPage.tsx. The right panel is wider than in
+       the CI Checks scene, so the code of a thread keeps more of each line. The checks and the
+       comments scroll under the head of the tab. A phone stage shows only the panel. */
+    .pc-window {
+      --design-width: 960;
+      height: calc(540 * var(--u));
+    }
+    .pc-window .tpage-right {
+      flex-basis: 46%;
+    }
+    .pc-window .st-checks {
+      flex: 1;
+      min-height: 0;
+    }
+    @container stage (width <= 500px) {
+      .pc-window {
+        --design-width: 440;
+        height: calc(620 * var(--u));
+      }
+    }
+  }
+}

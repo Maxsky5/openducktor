@@ -22,6 +22,8 @@ export type Scene<Template extends string = never> = {
    * reports later, such as a size change, which has no time on the timeline.
    */
   runNow: (animation: gsap.core.Animation) => void;
+  /** Seconds from the playhead to the end of the scene. A change that `runNow` adds fits in them. */
+  timeLeft: () => number;
   /** Clones the template of the view named `name`. */
   template: (name: Template) => HTMLElement;
   /** Finds the stock element of the template of the view named `name`. */
@@ -68,6 +70,7 @@ export function createScene(
     runNow: (animation) => {
       timeline.add(animation, timeline.time());
     },
+    timeLeft: () => Math.max(0, timeline.duration() - timeline.time()),
     template: (name) => cloneTemplate(templateOf(name)),
     templateOf,
     endAt: (time) => {

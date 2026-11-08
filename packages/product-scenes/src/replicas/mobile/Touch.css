@@ -1,0 +1,23 @@
+@layer replica {
+  :where(.stage) {
+    .mob-touch {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 50;
+      width: calc(44 * var(--u));
+      height: calc(44 * var(--u));
+      margin: calc(-22 * var(--u)) 0 0 calc(-22 * var(--u));
+      border: calc(1.5 * var(--u)) solid rgb(255 255 255 / 0.7);
+      border-radius: 50%;
+      background: rgb(120 124 134 / 0.45);
+      box-shadow: 0 calc(2 * var(--u)) calc(8 * var(--u)) rgb(0 0 0 / 0.25);
+      pointer-events: none;
+      opacity: 0;
+    }
+    /* A framed scene shows no touch. The scene still moves it. */
+    :where([data-framed]) & .mob-touch {
+      display: none;
+    }
+  }
+}

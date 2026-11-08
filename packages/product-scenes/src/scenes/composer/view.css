@@ -1,0 +1,30 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * The composer of a task session on Claude Code, with no sidebar and no header, so the draft
+     * and its menus show at a readable scale. The window keeps one height for the whole scene. The
+     * transcript above the composer leaves room for the tallest menu.
+     */
+    .composer-window {
+      --design-width: 760;
+      flex: none;
+      height: calc(520 * var(--u));
+    }
+    .composer-window .app-body {
+      padding-top: calc(34 * var(--u));
+      background: var(--card);
+    }
+    .cv-column {
+      flex: 1;
+      min-height: 0;
+    }
+    /* A phone stage shows a narrower window. The composer and the transcript take their phone
+       rules from their replicas. */
+    @container stage (width <= 500px) {
+      .composer-window {
+        --design-width: 400;
+        height: calc(650 * var(--u));
+      }
+    }
+  }
+}

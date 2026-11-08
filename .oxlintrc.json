@@ -237,6 +237,31 @@
       }
     },
     {
+      "files": [
+        "packages/product-scenes/src/scenes/**/*.ts",
+        "packages/product-scenes/src/scenes/**/*.tsx"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "../**",
+                  "!../../replicas/**",
+                  "!../../sample/**",
+                  "!../../motion/**",
+                  "!../../frame/**"
+                ],
+                "message": "A scene imports only its own folder and src/replicas, src/sample, src/motion, or src/frame. Move shared code out of the other scene."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["packages/frontend/src/**/*.ts", "packages/frontend/src/**/*.tsx"],
       "rules": {
         "no-restricted-imports": [

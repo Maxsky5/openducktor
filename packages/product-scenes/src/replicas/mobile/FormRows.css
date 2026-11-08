@@ -1,0 +1,294 @@
+@layer replica {
+  :where(.stage) {
+    .mob-phone {
+      --m-border-strong: var(--input);
+    }
+    :where([data-theme="dark"]) & .mob-phone {
+      --m-border-strong: oklch(44.6% 0.043 257.281);
+    }
+    .mob-field {
+      display: grid;
+      gap: calc(8 * var(--u));
+    }
+    .mob-field-label {
+      display: flex;
+      align-items: baseline;
+      gap: calc(8 * var(--u));
+      color: var(--m-secondary);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-field-label > span {
+      flex: 1;
+      min-width: 0;
+    }
+    .mob-field-label b {
+      flex: 0 1 auto;
+      color: var(--foreground);
+      font-weight: 500;
+    }
+    .mob-field-hint {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+    .mob-section-label {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 600;
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.8 * var(--u));
+      text-transform: uppercase;
+    }
+
+    /* SelectTrigger: the height and the outline of a text field. */
+    .mob-select {
+      display: flex;
+      align-items: center;
+      gap: calc(10 * var(--u));
+      min-height: calc(50 * var(--u));
+      padding: calc(8 * var(--u)) calc(14 * var(--u));
+      border: calc(1 * var(--u)) solid var(--m-border-strong);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+    }
+    .mob-select > .lucide:first-child {
+      flex: 0 0 auto;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-select > .runtime-logo {
+      flex: 0 0 auto;
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+    }
+    .mob-select-text {
+      display: grid;
+      flex: 1;
+      gap: calc(1 * var(--u));
+      min-width: 0;
+    }
+    .mob-select-value {
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(15 * var(--u));
+      line-height: calc(22 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-select[data-mono] .mob-select-value {
+      font-family: var(--mono);
+      font-size: calc(14 * var(--u));
+      line-height: calc(19 * var(--u));
+    }
+    .mob-select-detail {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+    .mob-select-chevrons {
+      flex: 0 0 auto;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+    }
+
+    /* SegmentedControl: a muted well, with the thumb 3 points inside its edge. */
+    .mob-segments {
+      position: relative;
+      display: flex;
+      padding: calc(3 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--muted);
+    }
+    .mob-segments-thumb {
+      position: absolute;
+      top: calc(3 * var(--u));
+      bottom: calc(3 * var(--u));
+      left: calc(3 * var(--u));
+      width: calc((100% - 6 * var(--u)) / var(--segment-count));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(10 * var(--u));
+      background: var(--segmented-selected);
+      box-shadow: var(--m-shadow-card);
+      transform: translateX(calc(var(--segment-index) * 100%));
+      transition: transform 0.24s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .mob-segment {
+      position: relative;
+      display: flex;
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(34 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+      white-space: nowrap;
+      transition: color 0.24s;
+    }
+    .mob-segment[data-selected] {
+      color: var(--foreground);
+    }
+
+    /* OptionCard, info variant: the sky card and check circle of the approval choices. */
+    .mob-option {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(12 * var(--u));
+      padding: calc(16 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: var(--card);
+      transition:
+        background-color 0.18s,
+        border-color 0.18s;
+    }
+    .mob-option[data-selected] {
+      border-color: var(--info-border);
+      background: var(--info-surface);
+    }
+    .mob-option-text {
+      display: grid;
+      flex: 1;
+      gap: calc(2 * var(--u));
+      min-width: 0;
+    }
+    .mob-option-text b {
+      color: var(--foreground);
+      font-size: calc(15 * var(--u));
+      font-weight: 600;
+      line-height: calc(22 * var(--u));
+    }
+    .mob-option-text span {
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+    .mob-option-check {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: 50%;
+      background: var(--card);
+      color: var(--info-muted);
+    }
+    .mob-option[data-selected] .mob-option-check {
+      border-color: var(--info-border);
+      background: var(--info-surface);
+    }
+    .mob-option-check .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      opacity: 0;
+    }
+    .mob-option[data-selected] .mob-option-check .lucide {
+      opacity: 1;
+    }
+
+    /* FormPanel: the rounded-2xl border panel. */
+    .mob-panel {
+      display: grid;
+      gap: calc(12 * var(--u));
+      padding: calc(16 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: var(--card);
+    }
+    .mob-panel[data-muted] {
+      background: color-mix(in oklab, var(--muted) 30%, transparent);
+    }
+
+    /* TextField, multiline. */
+    .mob-textarea-label {
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-textarea {
+      display: block;
+      min-height: calc(112 * var(--u));
+      padding: calc(12 * var(--u)) calc(14 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      color: var(--foreground);
+      font-size: calc(16 * var(--u));
+      line-height: calc(22 * var(--u));
+    }
+
+    /* The switch: a 46 by 28 point track with a 22 point thumb. */
+    .mob-toggle {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      width: calc(46 * var(--u));
+      height: calc(28 * var(--u));
+      padding: calc(3 * var(--u));
+      border-radius: calc(14 * var(--u));
+      background: var(--input);
+      transition: background-color 0.24s;
+    }
+    .mob-toggle[data-on] {
+      background: var(--switch-checked);
+    }
+    .mob-toggle i {
+      width: calc(22 * var(--u));
+      height: calc(22 * var(--u));
+      border-radius: 50%;
+      background: var(--switch-thumb);
+      box-shadow: 0 calc(1 * var(--u)) calc(3 * var(--u)) rgb(15 23 42 / 0.25);
+      transition: transform 0.24s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .mob-toggle[data-on] i {
+      transform: translateX(calc(18 * var(--u)));
+    }
+    .mob-switch-card {
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+    }
+    .mob-switch-row {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      min-height: calc(52 * var(--u));
+      padding: calc(8 * var(--u)) calc(16 * var(--u));
+      background: var(--card);
+    }
+    .mob-switch-text {
+      display: grid;
+      flex: 1;
+      gap: calc(2 * var(--u));
+      min-width: 0;
+    }
+    .mob-switch-text b {
+      color: var(--foreground);
+      font-size: calc(15 * var(--u));
+      font-weight: 500;
+      line-height: calc(22 * var(--u));
+    }
+    .mob-switch-text span {
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+    .mob-switch-details {
+      display: grid;
+      gap: calc(8 * var(--u));
+      padding: 0 calc(12 * var(--u)) calc(12 * var(--u));
+    }
+  }
+}

@@ -55,15 +55,45 @@ function render(item: HTMLElement, entry: NavEntry): void {
   if (commands) commands.hidden = !entry.commands;
 }
 
-/** The session list of the sidebar in `root`, and the steps that change it. */
-export function sessionList(scene: Scene, root: HTMLElement) {
+/** The parts that a session list adds to the list of the sidebar. */
+export type SessionListHooks = {
+  /** Shows the badges that count the entries. The default shows the badges of the workspace rail. */
+  badges?: (entries: readonly NavEntry[], animate: boolean) => void;
+  /** Shows more of the state of `entry` on its element. */
+  render?: (item: HTMLElement, entry: NavEntry) => void;
+};
+
+/** Shows the badges of each workspace tile of the rail in `root`. A badge that turns on pops. */
+function workspaceBadges(scene: Scene, root: HTMLElement): Required<SessionListHooks>["badges"] {
+  return (entries, animate) => {
+    for (const { name } of WORKSPACES) {
+      const badges = railBadges(entries, name);
+      for (const kind of ["input", "running"] as const) {
+        const badge = must(root, `[data-rail-tile="${name}"] [data-rail-badge="${kind}"]`);
+        if (badge.hidden !== badges[kind]) continue;
+        badge.hidden = !badges[kind];
+        if (animate && badges[kind]) scene.run(pop(badge, 1.5));
+      }
+    }
+  };
+}
+
+/**
+ * The session list in `root`, such as the sidebar, and the steps that change it. The scenes find
+ * its parts only in `root`.
+ */
+export function sessionList(scene: Scene, root: HTMLElement, hooks: SessionListHooks = {}) {
   const entries = new Map<string, NavEntry>();
   const element = (id: string): HTMLElement => must(root, `[data-nav-entry="${id}"]`);
   const list = (group: NavGroupId): HTMLElement => must(root, `[data-nav-list="${group}"]`);
   const known = (id: string): NavEntry => {
     const entry = entries.get(id);
-    if (!entry) throw new Error(`The sidebar has no session ${id}.`);
+    if (!entry) throw new Error(`The session list has no session ${id}.`);
     return entry;
+  };
+  const show = (item: HTMLElement, entry: NavEntry): void => {
+    render(item, entry);
+    hooks.render?.(item, entry);
   };
 
   /** Counts the entries of each group. A changed count pops, and Recent hides when it is empty. */
@@ -78,18 +108,8 @@ export function sessionList(scene: Scene, root: HTMLElement) {
     }
   };
 
-  /** Shows the badges of each workspace tile. A badge that turns on pops. */
-  const showBadges = (animate: boolean): void => {
-    for (const { name } of WORKSPACES) {
-      const badges = railBadges([...entries.values()], name);
-      for (const kind of ["input", "running"] as const) {
-        const badge = must(root, `[data-rail-tile="${name}"] [data-rail-badge="${kind}"]`);
-        if (badge.hidden !== badges[kind]) continue;
-        badge.hidden = !badges[kind];
-        if (animate && badges[kind]) scene.run(pop(badge, 1.5));
-      }
-    }
-  };
+  const badges = hooks.badges ?? workspaceBadges(scene, root);
+  const showBadges = (animate: boolean): void => badges([...entries.values()], animate);
 
   /**
    * Build time: shows `data` in their groups, in their order, with their state. A later entry and
@@ -103,7 +123,7 @@ export function sessionList(scene: Scene, root: HTMLElement) {
       const item = element(entry.id);
       item.hidden = Boolean(entry.later);
       list(navGroup(entry)).append(item);
-      render(item, entry);
+      show(item, entry);
     }
     recount(false);
     showBadges(false);
@@ -131,7 +151,7 @@ export function sessionList(scene: Scene, root: HTMLElement) {
       const stays = !item.hidden && item.parentElement === group;
       if (!item.hidden && !stays) closeCopy(item);
       item.hidden = false;
-      render(item, entry);
+      show(item, entry);
       if (!stays) {
         group.prepend(item);
         scene.run(growIn(item, 0.4));
@@ -157,5 +177,8 @@ export function sessionList(scene: Scene, root: HTMLElement) {
       showBadges(true);
     });
 
-  return { place, update, hide };
+  /** The row of the entry `id`, for a click or a tap. */
+  const row = (id: string): HTMLElement => must(element(id), "[data-nav-row]");
+
+  return { place, update, hide, row };
 }

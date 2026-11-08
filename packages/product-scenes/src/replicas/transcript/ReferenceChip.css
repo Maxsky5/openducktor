@@ -1,0 +1,81 @@
+@layer replica {
+  :where(.stage) {
+    /* The secondary badge with the chip classes: inline-flex h-6 items-center gap-1.5 rounded-full
+       border px-2.5 text-xs font-medium. */
+    .ref-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      max-width: 100%;
+      height: calc(24 * var(--u));
+      padding: 0 calc(10 * var(--u));
+      border: calc(1 * var(--u)) solid transparent;
+      border-radius: 999px;
+      background: var(--secondary);
+      color: var(--secondary-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    .ref-chip > span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ref-chip .lucide {
+      flex: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* A slash command: bg-yellow-300 dark:bg-yellow-600. */
+    .ref-chip[data-kind="slash"] {
+      background: var(--yellow-300);
+    }
+    :where([data-theme="dark"]) & .ref-chip[data-kind="slash"] {
+      background: var(--yellow-600);
+    }
+    /* A file: bg-sky-200 dark:bg-sky-800. */
+    .ref-chip[data-kind="file"] {
+      background: var(--sky-200);
+    }
+    :where([data-theme="dark"]) & .ref-chip[data-kind="file"] {
+      background: var(--sky-800);
+    }
+    /* A skill: border-purple-200 bg-purple-100 text-purple-800, and in the dark theme
+       border-purple-800 bg-purple-950/50 text-purple-200. */
+    .ref-chip[data-kind="skill"] {
+      border-color: var(--purple-200);
+      background: var(--purple-100);
+      color: var(--purple-800);
+    }
+    :where([data-theme="dark"]) & .ref-chip[data-kind="skill"] {
+      border-color: var(--purple-800);
+      background: color-mix(in oklab, var(--purple-950) 50%, transparent);
+      color: var(--purple-200);
+    }
+    /* The goal: gap-1 border-info-border bg-info-surface text-info-surface-foreground. */
+    .ref-chip[data-kind="goal"] {
+      gap: calc(4 * var(--u));
+      border-color: var(--info-border);
+      background: var(--info-surface);
+      color: var(--info-surface-foreground);
+    }
+    /* In the draft, a chip keeps 8 pixels before the next text (mr-2), and a slash command or a
+       skill 2 pixels before it (mx-0.5). */
+    .st-editor .ref-chip {
+      margin: 0 calc(8 * var(--u)) 0 0;
+    }
+    .st-editor .ref-chip:not([data-kind="file"]) {
+      margin-left: calc(2 * var(--u));
+    }
+    /* In a sent message, each chip keeps 4 pixels on both sides (mx-1). */
+    .st-user .ref-chip {
+      margin: 0 calc(4 * var(--u));
+    }
+    /* The goal chip starts the message, so it has no space before it (ml-0). */
+    .st-user .ref-chip[data-kind="goal"] {
+      margin-left: 0;
+    }
+  }
+}

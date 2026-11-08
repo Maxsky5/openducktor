@@ -1,0 +1,95 @@
+@layer replica {
+  :where(.stage) {
+    /* The launcher: h-full overflow-y-auto bg-card p-4, and a grid of
+       repeat(auto-fill, minmax(15rem, 1fr)) with gap-3. */
+    .pl {
+      height: 100%;
+      padding: calc(16 * var(--u));
+      overflow: hidden;
+      background: var(--card);
+    }
+    .pl-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(calc(240 * var(--u)), 1fr));
+      gap: calc(12 * var(--u));
+      list-style: none;
+    }
+    /* A card: relative flex items-center gap-3.5 rounded-xl border border-border bg-muted/20 py-3.5
+       pr-10 pl-3.5. On hover it has border-selected-accent/40 and bg-muted/50. */
+    .pl-card {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: calc(14 * var(--u));
+      padding: calc(14 * var(--u)) calc(40 * var(--u)) calc(14 * var(--u)) calc(14 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(14 * var(--u));
+      background: color-mix(in oklab, var(--muted) 20%, transparent);
+      transition:
+        background-color 150ms ease-out,
+        border-color 150ms ease-out;
+    }
+    .pl-card[data-hover] {
+      border-color: color-mix(in oklab, var(--selected-accent) 40%, transparent);
+      background: color-mix(in oklab, var(--muted) 50%, transparent);
+    }
+    /* The icon box: size-10 rounded-lg bg-muted text-muted-foreground ring-1 ring-border ring-inset,
+       with an icon in size-5. On hover it has text-selected-accent and ring-selected-accent/30. */
+    .pl-icon {
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
+      width: calc(40 * var(--u));
+      height: calc(40 * var(--u));
+      border-radius: calc(10 * var(--u));
+      background: var(--muted);
+      box-shadow: inset 0 0 0 calc(1 * var(--u)) var(--border);
+      color: var(--muted-foreground);
+      transition: color 150ms;
+    }
+    .pl-card[data-hover] .pl-icon {
+      box-shadow: inset 0 0 0 calc(1 * var(--u))
+        color-mix(in oklab, var(--selected-accent) 30%, transparent);
+      color: var(--selected-accent);
+    }
+    .pl-icon .lucide {
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+    }
+    .pl-text {
+      display: flex;
+      flex-direction: column;
+      gap: calc(2 * var(--u));
+      min-width: 0;
+    }
+    /* The label in text-sm font-medium, and the description in text-xs leading-relaxed. */
+    .pl-label {
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .pl-description {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: 1.625;
+    }
+    /* The arrow: absolute right-3.5 size-4, shown and moved in on hover. */
+    .pl-arrow.lucide {
+      position: absolute;
+      right: calc(14 * var(--u));
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+      opacity: 0;
+      translate: calc(-4 * var(--u)) 0;
+      transition:
+        opacity 150ms ease-out,
+        translate 150ms ease-out;
+    }
+    .pl-card[data-hover] .pl-arrow.lucide {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+}

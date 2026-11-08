@@ -49,6 +49,7 @@ export type PaletteIcon =
   | "panel-right-open"
   | "copy"
   | "rotate-ccw"
+  | "circle-check-big"
   | "trash-2"
   | "reply";
 
@@ -213,21 +214,44 @@ export const SEARCH_ROWS: readonly PaletteRow[] = [
   { kind: "action", id: "refresh", label: "Refresh tasks", icon: "refresh-ccw", ...inFieldnotes },
 ];
 
+/**
+ * The task actions that need no session: the core Close Task, then the task commands. The core
+ * Reset Task and Delete Task are destructive, so they come last.
+ */
+const TASK_ACTIONS: readonly PaletteAction[] = [
+  { kind: "action", id: "close", label: "Close Task", icon: "circle-check-big" },
+  { kind: "action", id: "edit", label: "Edit Task", icon: "pencil" },
+  { kind: "action", id: "details", label: "Open Task Details", icon: "panel-right-open" },
+  { kind: "action", id: "copy", label: "Copy Task ID", icon: "copy" },
+];
+const RESET_TASK: PaletteAction = {
+  kind: "action",
+  id: "reset",
+  label: "Reset Task",
+  icon: "rotate-ccw",
+  destructive: true,
+};
+const DELETE_TASK: PaletteAction = {
+  kind: "action",
+  id: "delete",
+  label: "Delete Task",
+  icon: "trash-2",
+  destructive: true,
+};
+
 /** The task actions of the searched task, in the order of command-palette-task-model.tsx. */
 export const TARGET_ACTIONS: readonly PaletteAction[] = [
   { kind: "action", id: "latest", label: "Open latest session", icon: "history", detail: "Spec" },
   { kind: "action", id: "session-spec", label: "Open Spec session", role: "spec" },
   { kind: "action", id: "start-planner", label: "Start Planner", role: "planner" },
-  { kind: "action", id: "edit", label: "Edit task", icon: "pencil" },
-  { kind: "action", id: "details", label: "Open task details", icon: "panel-right-open" },
-  { kind: "action", id: "copy", label: "Copy task ID", icon: "copy" },
-  { kind: "action", id: "reset", label: "Reset Task", icon: "rotate-ccw", destructive: true },
-  { kind: "action", id: "delete", label: "Delete task", icon: "trash-2", destructive: true },
+  ...TASK_ACTIONS,
+  RESET_TASK,
+  DELETE_TASK,
 ];
 
 /**
  * The task actions of the waiting task. The reply comes first. A task with a live session lists
- * no action that starts another session.
+ * no action that starts another session. Reset Implementation is a destructive workflow action.
  */
 export const WAITING_ACTIONS: readonly PaletteAction[] = [
   { kind: "action", id: "reply", label: "Reply to question", icon: "reply" },
@@ -239,7 +263,14 @@ export const WAITING_ACTIONS: readonly PaletteAction[] = [
     detail: "Builder",
   },
   { kind: "action", id: "session-build", label: "Open Builder session", role: "build" },
-  { kind: "action", id: "edit", label: "Edit task", icon: "pencil" },
-  { kind: "action", id: "details", label: "Open task details", icon: "panel-right-open" },
-  { kind: "action", id: "copy", label: "Copy task ID", icon: "copy" },
+  ...TASK_ACTIONS,
+  {
+    kind: "action",
+    id: "reset-implementation",
+    label: "Reset Implementation",
+    icon: "rotate-ccw",
+    destructive: true,
+  },
+  RESET_TASK,
+  DELETE_TASK,
 ];

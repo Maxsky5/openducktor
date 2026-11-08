@@ -10,22 +10,26 @@
       background: rgb(0 0 0 / 0.45);
       backdrop-filter: blur(calc(4 * var(--u)));
     }
+    /* DialogContent: at most the height of the window less 2rem. The dialog scrolls, and its
+       header and its footer stay (sticky top-0 and bottom-0). */
     .st-dialog {
       position: relative;
       display: flex;
       flex-direction: column;
       width: calc(672 * var(--u));
+      max-height: calc(100% - 32 * var(--u));
+      overflow-y: auto;
+      scrollbar-width: none;
       padding: calc(24 * var(--u));
       border: calc(1 * var(--u)) solid var(--border);
       border-radius: calc(16 * var(--u));
       background: var(--popover);
       color: var(--popover-foreground);
-      box-shadow:
-        0 calc(20 * var(--u)) calc(25 * var(--u)) calc(-5 * var(--u)) rgb(0 0 0 / 0.1),
-        0 calc(8 * var(--u)) calc(10 * var(--u)) calc(-6 * var(--u)) rgb(0 0 0 / 0.1);
+      box-shadow: var(--shadow-xl);
     }
     .st-dialog-close {
       position: absolute;
+      z-index: 20;
       top: calc(16 * var(--u));
       right: calc(16 * var(--u));
       display: grid;
@@ -34,13 +38,19 @@
       color: var(--muted-foreground);
     }
     .st-dialog-head {
+      position: sticky;
+      top: 0;
+      z-index: 10;
       display: grid;
+      flex: none;
       gap: calc(6 * var(--u));
+      background: var(--popover);
     }
+    /* DialogTitle: text-lg font-semibold leading-6. */
     .st-dialog-head b {
       font-size: calc(18 * var(--u));
       font-weight: 600;
-      line-height: calc(28 * var(--u));
+      line-height: calc(24 * var(--u));
     }
     .st-dialog-head p {
       color: var(--muted-foreground);
@@ -56,7 +66,8 @@
       display: grid;
       gap: calc(6 * var(--u));
     }
-    .st-field > b {
+    .st-field > b,
+    .st-label {
       font-size: calc(14 * var(--u));
       font-weight: 500;
       line-height: calc(20 * var(--u));
@@ -81,12 +92,67 @@
     .st-switch-row .ui-switch {
       box-shadow: none;
     }
-    .st-dialog-foot {
+    /* The goal and the first message share one block. The field after the Goal mode switch keeps
+       pt-5, and it closes with that space while Goal mode is on. */
+    .st-instructions {
       display: flex;
+      flex-direction: column;
+    }
+    .st-kickoff {
+      overflow: clip;
+    }
+    .st-kickoff[data-after-goal] {
+      padding-top: calc(20 * var(--u));
+    }
+    /* The startup progress: max-w-lg p-0 overflow-hidden, at least 18rem tall. The header has px-4
+       py-3 and a border, and its description is only for screen readers. The form leaves. */
+    .st-progress {
+      display: none;
+    }
+    .st-dialog[data-progress] {
+      width: calc(512 * var(--u));
+      min-height: min(calc(288 * var(--u)), 100%);
+      padding: 0;
+      overflow: hidden;
+    }
+    .st-dialog[data-progress] > .st-dialog-head {
+      padding: calc(12 * var(--u)) calc(16 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .st-dialog[data-progress] > :is(.st-dialog-close, .st-dialog-body, .st-dialog-foot),
+    .st-dialog[data-progress] > .st-dialog-head p {
+      display: none;
+    }
+    .st-dialog[data-progress] > .st-progress {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    /* The footer of the pending startup: min-h-13 border-t px-4 py-2, with Continue in background
+       at the right. */
+    .st-progress-foot {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      min-height: calc(52 * var(--u));
+      padding: calc(8 * var(--u)) calc(16 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    .st-progress-foot .ui-button {
+      gap: calc(8 * var(--u));
+    }
+    .st-dialog-foot {
+      position: sticky;
+      bottom: 0;
+      z-index: 10;
+      display: flex;
+      flex: none;
       align-items: center;
       justify-content: space-between;
       padding-top: calc(20 * var(--u));
       border-top: calc(1 * var(--u)) solid var(--border);
+      background: var(--popover);
     }
     /* Effort and Speed share a cell: flex items-end gap-2, and Speed is w-36. */
     .st-field-pair {
@@ -107,9 +173,14 @@
       align-items: center;
       gap: calc(8 * var(--u));
     }
+    /* Button: gap-2, and an icon with data-icon="inline-start". */
+    .st-dialog-foot .ui-button {
+      gap: calc(8 * var(--u));
+    }
     /* A narrow stage shows a smaller dialog with one field in each row. */
     @container stage (width <= 699px) {
-      .st-dialog {
+      .st-dialog,
+      .st-dialog[data-progress] {
         width: calc(408 * var(--u));
         padding: calc(20 * var(--u));
       }
@@ -118,6 +189,17 @@
       }
       .st-modes > .ui-segment {
         font-size: calc(13 * var(--u));
+      }
+      /* Below the sm breakpoint, the footer stacks its buttons with min-h-11: Start session on top,
+         then Run in background, then Cancel. */
+      .st-dialog-foot,
+      .st-dialog-actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+        gap: calc(8 * var(--u));
+      }
+      .st-dialog-foot .ui-button {
+        height: calc(44 * var(--u));
       }
     }
   }

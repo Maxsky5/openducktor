@@ -80,7 +80,7 @@
       gap: calc(12 * var(--u));
       padding: calc(6 * var(--u)) calc(16 * var(--u));
       border-top: calc(1 * var(--u)) solid var(--border);
-      background: color-mix(in oklch, var(--muted) 30%, transparent);
+      background: color-mix(in oklab, var(--muted) 30%, transparent);
       color: var(--muted-foreground);
       font-size: calc(10 * var(--u));
       line-height: calc(16 * var(--u));

@@ -4,13 +4,10 @@
 // features/session-panels in packages/frontend/src. The sidebar is collapsed, so the session has
 // room, and it groups the sessions by task. The History icon of the product is RotateCcwClock in
 // Lucide 1.
-import { ChevronDown, Copy, RotateCcwClock, SquareArrowOutUpRight, Zap } from "lucide-react";
+import { RotateCcwClock, Zap } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
-import { TASKS } from "../../sample/tasks";
-import { taskId } from "../../sample/workspace";
 import { OPEN_IN_TERMINAL } from "../../sample/worktree";
 import { classes } from "../classes";
-import { flag } from "../flag";
 import { AppWindow } from "../shell/AppWindow";
 import { Pointer } from "../shell/Pointer";
 import { Thread } from "../transcript/Thread";
@@ -18,12 +15,12 @@ import { ResizeHandle } from "../ui/ResizeHandle";
 import { WAITING } from "../vocabulary";
 import { ChatColumn } from "./ChatColumn";
 import { Composer } from "./Composer";
-import type { StudioFrame } from "./model";
+import type { PanelId, StudioFrame } from "./model";
 import { OpenInMenu } from "./OpenInMenu";
 import { PanelTabs } from "./PanelTabs";
 import { PanelToggles } from "./PanelToggles";
 import { RepoActions } from "./RepoActions";
-import { SessionHeader } from "./SessionHeader";
+import { SessionHeader, SplitAction, TaskTitle } from "./SessionHeader";
 import { WorkflowRail } from "./WorkflowRail";
 import "./StudioWindow.css";
 
@@ -36,12 +33,14 @@ type StudioWindowProps = {
   pr?: ReactNode;
   /** The Open In group of the top bar. The default opens the worktree in Terminal. */
   openIn?: ReactNode;
-  /** The panels of the right panel. */
-  panel?: ReactNode;
+  /** The view of each tab of the right panel. The view of `frame.panel` shows. */
+  panels?: Partial<Record<PanelId, ReactNode>>;
   /** The bottom panel. When it is present, the bottom panel toggle is pressed. */
   bottom?: ReactNode;
   /** The parts over the window, under the pointer, such as a dialog. */
   overlay?: ReactNode;
+  /** The goal row on the top edge of the composer. */
+  goal?: ReactNode;
   className?: string;
 };
 
@@ -51,36 +50,14 @@ function StudioHeader({
   openIn,
   bottom,
 }: Pick<StudioWindowProps, "frame" | "pr" | "openIn"> & { bottom: boolean }): ReactElement {
-  const title = (
-    <>
-      <span className="sh-name">
-        <span>{TASKS.k3x9.title}</span>
-        <SquareArrowOutUpRight className="i12" />
-      </span>
-      <span className="sh-id">
-        <code>{taskId("k3x9")}</code>
-        <span>
-          <Copy className="i12" />
-        </span>
-      </span>
-    </>
-  );
   return (
-    <SessionHeader title={title}>
+    <SessionHeader title={<TaskTitle task="k3x9" />}>
       {pr}
       <RepoActions />
       <span className="sh-icon sh-hide-narrow">
         <RotateCcwClock />
       </span>
-      <span className="sh-split" data-disabled={flag(frame.actionDisabled)} data-split="">
-        <span className="sh-split-main" data-quick-action="">
-          <Zap />
-          <span data-action="">{frame.action}</span>
-        </span>
-        <span className="sh-split-menu">
-          <ChevronDown />
-        </span>
-      </span>
+      <SplitAction icon={Zap} label={frame.action} disabled={frame.actionDisabled} quickAction />
       {openIn ?? <OpenInMenu tool={OPEN_IN_TERMINAL} appIcon />}
       <PanelToggles bottom={bottom} />
     </SessionHeader>
@@ -92,9 +69,10 @@ export function StudioWindow({
   children,
   pr,
   openIn,
-  panel,
+  panels = {},
   bottom,
   overlay,
+  goal,
   className,
 }: StudioWindowProps): ReactElement {
   return (
@@ -120,7 +98,11 @@ export function StudioWindow({
             <ChatColumn>
               <Thread>{children}</Thread>
               <div className="st-stack" data-stack="" />
-              <Composer session={frame.session} commentCount>
+              <Composer
+                session={frame.session}
+                sendBadge={{ kind: "comments", count: 0 }}
+                goal={goal}
+              >
                 <span className="when-waiting" data-waiting="">
                   {WAITING.question}
                 </span>
@@ -129,9 +111,13 @@ export function StudioWindow({
           </div>
           <ResizeHandle orientation="vertical" className="st-handle" />
           <div className="st-panel">
-            <PanelTabs frame={frame} />
-            <div className="st-panel-body" data-panel-body="" data-active-panel={frame.panel}>
-              {panel}
+            <PanelTabs active={frame.panel} checks={{ hidden: !frame.checksTab }} />
+            <div className="st-panel-body" data-panel-body="">
+              {Object.entries(panels).map(([id, view]) => (
+                <div className="st-view" data-tab-view={id} hidden={id !== frame.panel} key={id}>
+                  {view}
+                </div>
+              ))}
             </div>
           </div>
         </div>

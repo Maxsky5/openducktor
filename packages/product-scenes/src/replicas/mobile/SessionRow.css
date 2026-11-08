@@ -1,0 +1,124 @@
+@layer replica {
+  :where(.stage) {
+    /* A row of session-row.tsx: 16 point screen margins, 3 points above and under the card. */
+    .mob-row-cell {
+      display: block;
+      padding: calc(3 * var(--u)) calc(16 * var(--u));
+      list-style: none;
+    }
+    .mob-row {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+      padding: calc(10 * var(--u)) calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--sidebar-border);
+      border-radius: calc(12 * var(--u));
+      background: var(--sidebar);
+      box-shadow: var(--m-shadow-card);
+    }
+    .mob-row[data-surface="attention"] {
+      border-color: var(--warning-border);
+      background: var(--warning-surface);
+    }
+    .mob-row[data-surface="running"] {
+      border-color: var(--info-border);
+      background: var(--info-surface);
+    }
+    .mob-row-line {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    .mob-row-mark {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(18 * var(--u));
+    }
+    .mob-row .mob-dot {
+      width: calc(9 * var(--u));
+      height: calc(9 * var(--u));
+    }
+    .mob-row-ws {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--sidebar-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* The attention chip of RowMetadata: Question, Permission, or Blocked. */
+    .mob-chip {
+      flex: 0 0 auto;
+      padding: calc(2 * var(--u)) calc(6 * var(--u));
+      border: calc(1 * var(--u)) solid var(--warning-border);
+      border-radius: calc(6 * var(--u));
+      background: var(--warning-surface);
+      color: var(--warning-muted);
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.2 * var(--u));
+    }
+    .mob-row-time {
+      flex: 0 0 auto;
+      color: var(--sidebar-foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.2 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    /* The role icon in the color of the workflow tone, or the muted sidebar color. */
+    .mob-row-icon {
+      color: var(--sidebar-muted-foreground);
+    }
+    .mob-row-icon .lucide {
+      width: calc(17 * var(--u));
+      height: calc(17 * var(--u));
+    }
+    .mob-row-icon[data-tone="in_progress"] {
+      color: var(--info-muted);
+    }
+    .mob-row-icon[data-tone="done"] {
+      color: var(--success-icon);
+    }
+    .mob-row-icon[data-tone="available"] {
+      color: var(--foreground);
+    }
+    .mob-row-icon[data-tone="rejected"] {
+      color: var(--rejected-muted);
+    }
+    .mob-row-icon[data-tone="waiting_input"] {
+      color: var(--warning-muted);
+    }
+    .mob-row-title {
+      display: -webkit-box;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(15 * var(--u));
+      font-weight: 500;
+      line-height: calc(22 * var(--u));
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    .mob-row[data-title="attention"] .mob-row-title {
+      color: var(--warning-muted);
+    }
+    .mob-row[data-title="read"] .mob-row-title {
+      color: var(--sidebar-read-foreground);
+    }
+    .mob-row .runtime-logo {
+      width: calc(15 * var(--u));
+      height: calc(15 * var(--u));
+    }
+  }
+}

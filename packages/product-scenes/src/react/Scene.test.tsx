@@ -1,20 +1,28 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import type { PageSceneProps } from "./PageScene";
+import { testObserver } from "../test-support/test-observer";
 
 // The scene modules load GSAP and React DOM, so they load after the browser globals exist. The
 // first load of a module can exceed the test budget on a loaded runner, so the views and the
-// timelines that the tests show load once here.
+// timelines that the tests show load once here. React DOM and GSAP keep the timers of the first
+// browser globals, so the tests of both React hosts share one set of globals in this file.
 const loadModules = () =>
   Promise.all([
     import("react"),
     import("react-dom/client"),
     import("./Scene"),
     import("../motion/gsap"),
+    import("./PageScene"),
+    import("../motion/preference"),
+    import("react-dom/server"),
     // The tests read the modules above by position. The modules below only load early.
     import("../scenes/autopilot/timeline"),
     import("../scenes/autopilot/view"),
     import("../scenes/hero/view"),
     import("../scenes/hero/timeline"),
+    import("../scenes/workflow/timeline"),
+    import("../scenes/workflow/view"),
   ]);
 let modules: Awaited<ReturnType<typeof loadModules>>;
 
@@ -182,6 +190,195 @@ describe("Scene", () => {
     } finally {
       host.unmount();
       container.remove();
+    }
+  });
+});
+
+/** A page scene in its own container, the markup of the server, and the unmount. */
+type RenderedScene = { container: HTMLElement; html: string; unmount: () => void };
+
+/** Renders the page scene of `props` as a server does, then hydrates it in a new container. */
+function renderScene(props: PageSceneProps): RenderedScene {
+  const [{ createElement }, { hydrateRoot }, , , { PageScene }, , { renderToString }] = modules;
+  const element = createElement(PageScene, {
+    ...props,
+    failure: null,
+    stylesheet: (sheet) => `/scenes/${sheet}.css`,
+  });
+  const html = renderToString(element);
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  document.body.append(container);
+  const host = hydrateRoot(container, element);
+  return {
+    html,
+    container,
+    unmount: () => {
+      host.unmount();
+      container.remove();
+    },
+  };
+}
+
+/** Makes the visitor ask for reduced motion. Returns the function that restores the setting. */
+function reduceMotion(): () => void {
+  const [, , , , , { MOTION_QUERY }] = modules;
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (query) =>
+    matchMedia.call(window, query === MOTION_QUERY ? "(prefers-reduced-motion: reduce)" : query);
+  return () => {
+    window.matchMedia = matchMedia;
+  };
+}
+
+let Observer: ReturnType<typeof testObserver>;
+
+/** True while an observer watches `view`, such as the player that waits for the view. */
+const watched = (view: Element): boolean =>
+  Array.from(Observer.live).some((observer) => observer.targets.has(view));
+
+/** Reports to the observers that watch `view` that it comes near the screen. */
+async function nearScreen(view: () => HTMLElement | null): Promise<HTMLElement> {
+  await waitFor(() => {
+    const element = view();
+    return element !== null && watched(element);
+  });
+  const element = view();
+  if (!element) throw new Error("The view did not render.");
+  Observer.report(element, true);
+  return element;
+}
+
+const tabs = (root: HTMLElement): HTMLButtonElement[] =>
+  Array.from(root.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+const shownPanels = (root: HTMLElement): HTMLElement[] =>
+  Array.from(root.querySelectorAll<HTMLElement>("[data-chapter-panel]")).filter(
+    (panel) => !panel.hidden,
+  );
+
+describe("PageScene", () => {
+  let native: typeof IntersectionObserver;
+  beforeAll(() => {
+    native = globalThis.IntersectionObserver;
+    Observer = testObserver();
+    globalThis.IntersectionObserver = Observer;
+  });
+  afterAll(() => {
+    globalThis.IntersectionObserver = native;
+  });
+
+  test("a chapter player shows its tabs, one chapter at a time, and the unmount stops it", async () => {
+    const [, , , { gsap }] = modules;
+    const tweensBefore = gsap.globalTimeline.getChildren().length;
+    const { container, unmount } = renderScene({ name: "workflow" });
+    let mounted = true;
+    try {
+      const chapters = (): HTMLElement | null =>
+        container.querySelector<HTMLElement>('[data-chapters="workflow"]');
+      // Without scripts, and until the view comes near the screen, the panels of the server stack
+      // under their headings.
+      await waitFor(() => {
+        const view = chapters();
+        return view !== null && watched(view);
+      });
+      expect(container.querySelector('[role="tablist"]')?.hasAttribute("hidden")).toBe(true);
+      expect(shownPanels(container)).toHaveLength(5);
+      const root = await nearScreen(chapters);
+      await waitFor(() => root.hasAttribute("data-motion"));
+      expect(root.querySelector('[role="tablist"]')?.hasAttribute("hidden")).toBe(false);
+      expect(root.hasAttribute("data-tabs")).toBe(true);
+      expect(shownPanels(root).map((panel) => panel.dataset.chapterPanel)).toEqual(["spec"]);
+      // The browser reports no play zone yet, so the player waits.
+      expect(root.dataset.motion).toBe("paused");
+      expect(gsap.globalTimeline.getChildren().length).toBeGreaterThan(tweensBefore);
+
+      const qa = tabs(root).find((tab) => tab.dataset.chapter === "qa");
+      qa?.click();
+      expect(qa?.getAttribute("aria-selected")).toBe("true");
+      expect(shownPanels(root).map((panel) => panel.dataset.chapterPanel)).toEqual(["qa"]);
+      qa?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      expect(shownPanels(root).map((panel) => panel.dataset.chapterPanel)).toEqual(["review"]);
+      expect(document.activeElement).toBe(tabs(root).at(-1) ?? null);
+
+      unmount();
+      mounted = false;
+      expect(gsap.globalTimeline.getChildren().length).toBe(tweensBefore);
+      expect(root.dataset.motion).toBeUndefined();
+      // The unmount removes the listeners of the tabs.
+      tabs(root)[0]?.click();
+      expect(shownPanels(root).map((panel) => panel.dataset.chapterPanel)).toEqual(["review"]);
+    } finally {
+      if (mounted) unmount();
+    }
+  });
+
+  test("with reduced motion, the tabs still select a chapter and nothing plays", async () => {
+    const [, , , { gsap }] = modules;
+    const restoreMotion = reduceMotion();
+    const tweensBefore = gsap.globalTimeline.getChildren().length;
+    const { container, unmount } = renderScene({ name: "workflow" });
+    try {
+      // The tabs need the chapter player, so it loads with reduced motion too.
+      await nearScreen(() => container.querySelector<HTMLElement>('[data-chapters="workflow"]'));
+      const root = (): HTMLElement | null =>
+        container.querySelector<HTMLElement>('[data-chapters="workflow"][data-tabs]');
+      await waitFor(() => root() !== null);
+      const chapters = root();
+      if (!chapters) throw new Error("The workflow view did not render.");
+      expect(chapters.hasAttribute("data-motion")).toBe(false);
+      tabs(chapters)[1]?.click();
+      expect(shownPanels(chapters).map((panel) => panel.dataset.chapterPanel)).toEqual(["plan"]);
+      expect(gsap.globalTimeline.getChildren().length).toBe(tweensBefore);
+    } finally {
+      unmount();
+      restoreMotion();
+    }
+  });
+
+  test("a loop scene waits for its play zone, and the unmount puts back the static frame", async () => {
+    const [, , , { gsap }] = modules;
+    const tweensBefore = gsap.globalTimeline.getChildren().length;
+    const { container, html, unmount } = renderScene({ name: "autopilot" });
+    let mounted = true;
+    try {
+      const root = await nearScreen(() =>
+        container.querySelector<HTMLElement>('[data-scene="autopilot"]'),
+      );
+      await waitFor(() => root.hasAttribute("data-motion"));
+      expect(root.dataset.motion).toBe("paused");
+      expect(gsap.globalTimeline.getChildren().length).toBeGreaterThan(tweensBefore);
+
+      unmount();
+      mounted = false;
+      expect(root.dataset.motion).toBeUndefined();
+      expect(gsap.globalTimeline.getChildren().length).toBe(tweensBefore);
+      // The stage holds the static frame of the server again.
+      const server = document.createElement("div");
+      server.innerHTML = html;
+      expect(root.querySelector("[data-stage]")?.innerHTML).toBe(
+        server.querySelector("[data-stage]")?.innerHTML,
+      );
+    } finally {
+      if (mounted) unmount();
+    }
+  });
+
+  test("with reduced motion, a loop scene keeps its static frame and loads nothing", async () => {
+    const [, , , { gsap }] = modules;
+    const restoreMotion = reduceMotion();
+    const tweensBefore = gsap.globalTimeline.getChildren().length;
+    const { container, unmount } = renderScene({ name: "hero", options: { version: null } });
+    try {
+      const root = container.querySelector<HTMLElement>('[data-scene="hero"]');
+      if (!root) throw new Error("The hero view did not render.");
+      // The effects of the hydration run, and no observer waits for the view.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(watched(root)).toBe(false);
+      expect(root.hasAttribute("data-motion")).toBe(false);
+      expect(gsap.globalTimeline.getChildren().length).toBe(tweensBefore);
+    } finally {
+      unmount();
+      restoreMotion();
     }
   });
 });

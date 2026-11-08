@@ -1,0 +1,66 @@
+@layer replica {
+  :where(.stage) {
+    /* The menu covers the screens under the status bar. */
+    .mob-menu-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 30;
+    }
+    /* scrimSoft of theme/colors.ts. */
+    .mob-menu-scrim {
+      position: absolute;
+      inset: 0;
+      background: rgb(2 6 24 / 0.06);
+    }
+    :where([data-theme="dark"]) & .mob-menu-scrim {
+      background: rgb(0 0 0 / 0.25);
+    }
+    /* The card: a 12 point corner, the border, the surface, the overlay shadow, and 6 points of
+       padding. */
+    .mob-menu {
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: flex;
+      flex-direction: column;
+      width: calc(248 * var(--u));
+      padding: calc(6 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      color: var(--foreground);
+      box-shadow: var(--m-shadow-overlay);
+    }
+    /* The title: caption2 in tertiary capitals, on one line. */
+    .mob-menu-title {
+      overflow: hidden;
+      padding: calc(8 * var(--u)) calc(10 * var(--u)) calc(10 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.8 * var(--u));
+      text-transform: uppercase;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* An action: a 44 point row, a 17 point secondary icon, and the medium body text. */
+    .mob-menu-item {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      min-height: calc(44 * var(--u));
+      padding: 0 calc(10 * var(--u));
+      border-radius: calc(10 * var(--u));
+      font-size: calc(15 * var(--u));
+      font-weight: 500;
+      line-height: calc(22 * var(--u));
+    }
+    .mob-menu-item .lucide {
+      flex: 0 0 auto;
+      width: calc(17 * var(--u));
+      height: calc(17 * var(--u));
+      color: var(--m-secondary);
+    }
+  }
+}

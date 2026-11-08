@@ -16,9 +16,6 @@
       overflow: hidden;
       background: var(--card);
     }
-    .bp-handle {
-      background: var(--card);
-    }
     .bp-content {
       display: flex;
       flex: 1 0 auto;

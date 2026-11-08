@@ -33,7 +33,7 @@
     }
     :where([data-theme="dark"]) & .badge[data-tone="bug"] {
       border-color: var(--rose-800);
-      background: color-mix(in oklch, var(--rose-950) 50%, transparent);
+      background: color-mix(in oklab, var(--rose-950) 50%, transparent);
       color: var(--rose-300);
     }
     .badge[data-tone="feature"],
@@ -45,7 +45,7 @@
     :where([data-theme="dark"]) & .badge[data-tone="feature"],
     :where([data-theme="dark"]) & .badge[data-tone="p3"] {
       border-color: var(--sky-800);
-      background: color-mix(in oklch, var(--sky-950) 50%, transparent);
+      background: color-mix(in oklab, var(--sky-950) 50%, transparent);
       color: var(--sky-300);
     }
     .badge[data-tone="p1"] {
@@ -55,7 +55,7 @@
     }
     :where([data-theme="dark"]) & .badge[data-tone="p1"] {
       border-color: var(--orange-800);
-      background: color-mix(in oklch, var(--orange-950) 50%, transparent);
+      background: color-mix(in oklab, var(--orange-950) 50%, transparent);
       color: var(--orange-300);
     }
     .badge[data-tone="p2"] {
@@ -65,7 +65,7 @@
     }
     :where([data-theme="dark"]) & .badge[data-tone="p2"] {
       border-color: var(--amber-800);
-      background: color-mix(in oklch, var(--amber-950) 50%, transparent);
+      background: color-mix(in oklab, var(--amber-950) 50%, transparent);
       color: var(--amber-300);
     }
     .badge[data-tone="p1"] i {

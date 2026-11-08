@@ -1,0 +1,58 @@
+@layer replica {
+  :where(.stage) {
+    /* The toast starts 70 points under the top safe area, so it never covers a header control. */
+    .mob-toast {
+      --accent: var(--success-accent);
+      position: absolute;
+      top: calc((var(--m-status) + 70) * var(--u));
+      left: calc(12 * var(--u));
+      right: calc(12 * var(--u));
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      padding: calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: var(--card);
+      box-shadow: var(--m-shadow-overlay);
+    }
+    .mob-toast[data-kind="info"] {
+      --accent: var(--info-accent);
+    }
+    .mob-toast[data-kind="warning"] {
+      --accent: var(--warning-accent);
+    }
+    .mob-toast[data-kind="error"] {
+      --accent: var(--destructive-accent);
+    }
+    .mob-toast-icon {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      border-radius: 50%;
+      background: color-mix(in oklab, var(--accent) 12%, transparent);
+      color: var(--accent);
+    }
+    .mob-toast-body {
+      display: grid;
+      flex: 1;
+      gap: calc(2 * var(--u));
+      min-width: 0;
+    }
+    .mob-toast-body strong {
+      color: var(--foreground);
+      font-size: calc(15 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    .mob-toast-body span {
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+  }
+}

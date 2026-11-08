@@ -7,7 +7,7 @@
       overflow: hidden;
       border: calc(1 * var(--u)) solid var(--border);
       border-radius: calc(12 * var(--u));
-      background: color-mix(in oklch, var(--card) 70%, transparent);
+      background: color-mix(in oklab, var(--card) 70%, transparent);
       box-shadow: var(--shadow-sm);
     }
     .ch-task-head {

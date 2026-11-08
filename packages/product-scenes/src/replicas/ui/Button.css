@@ -22,6 +22,12 @@
       padding: 0 calc(12 * var(--u));
       font-size: calc(12 * var(--u));
     }
+    /* Size xs: h-6 px-2 text-xs. */
+    .ui-button[data-size="xs"] {
+      height: calc(24 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      font-size: calc(12 * var(--u));
+    }
     /* Size icon: size-9. */
     .ui-button[data-size="icon"] {
       width: calc(36 * var(--u));
@@ -49,7 +55,7 @@
       box-shadow: var(--shadow-sm);
     }
     .ui-button[data-variant="secondary"] {
-      background: color-mix(in oklch, var(--secondary) 70%, transparent);
+      background: color-mix(in oklab, var(--secondary) 70%, transparent);
       color: var(--secondary-foreground);
     }
     .ui-button[data-variant="accent"] {

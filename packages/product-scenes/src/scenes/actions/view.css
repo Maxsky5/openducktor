@@ -20,15 +20,6 @@
         min-height: calc(760 * var(--u));
       }
     }
-    /* The actions view keeps both branches in one row from 460px. */
-    @container stage (width >= 460px) {
-      .actions-studio .st-branches {
-        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-      }
-      .actions-studio .st-arrow {
-        display: grid;
-      }
-    }
     /*
      * A narrow stage keeps the repository actions and the Open In menu, which the scene uses. The
      * quick action gives them its place, so the task title stays readable.

@@ -1,54 +1,62 @@
 // A workspace chat on the session page: the top bar of workspace-session-header.tsx, and the agent
 // chat surface with its composer, slash menu, and task tools. The right panel is hidden. The
-// templates hold the task details of a new task, the start dialog of its Builder, and the
-// notification of the start. Sources: packages/frontend/src/pages/workspace-sessions and
+// templates hold the task details of a new task and the start dialog of its Builder. The last
+// frame shows the startup notification of the ready Builder. Sources: packages/frontend/src/pages/workspace-sessions and
 // packages/frontend/src/components/features/agents/agent-chat.
-import { Archive, Bot, ChevronDown, ChevronRight, Folder, Terminal } from "lucide-react";
+import { Bot, ChevronRight, Terminal } from "lucide-react";
 import type { ReactElement } from "react";
 import { SceneFrame, type SceneViewProps } from "../../frame/SceneFrame";
 import { Stock } from "../../frame/Stock";
 import { flag } from "../../replicas/flag";
 import { AppWindow } from "../../replicas/shell/AppWindow";
 import { Pointer } from "../../replicas/shell/Pointer";
-import { Toast } from "../../replicas/shell/Toast";
+import { StartupToast } from "../../replicas/shell/StartupToast";
 import { ToastStack } from "../../replicas/shell/ToastStack";
 import { ChatColumn } from "../../replicas/studio/ChatColumn";
-import { Composer } from "../../replicas/studio/Composer";
-import { OpenInMenu } from "../../replicas/studio/OpenInMenu";
-import { PanelToggles } from "../../replicas/studio/PanelToggles";
+import { Composer, ComposerDraft } from "../../replicas/studio/Composer";
 import { RepoActions } from "../../replicas/studio/RepoActions";
-import { SessionHeader } from "../../replicas/studio/SessionHeader";
 import { StartDialog } from "../../replicas/studio/StartDialog";
+import { WorkspaceSessionHeader } from "../../replicas/studio/WorkspaceSessionHeader";
 import { TaskSheet } from "../../replicas/tasks/TaskSheet";
 import { AgentText } from "../../replicas/transcript/AgentText";
 import { TaskResult } from "../../replicas/transcript/TaskResult";
 import { Thread } from "../../replicas/transcript/Thread";
 import { ToolRow } from "../../replicas/transcript/ToolRow";
 import { UserMessage } from "../../replicas/transcript/UserMessage";
+import { COMMANDS } from "../../sample/commands";
 import { signature } from "../../sample/sessions";
 import { BUILDER_SESSION } from "../../sample/studio";
 import { studioNav } from "../../sample/studio-nav";
 import { taskId } from "../../sample/workspace";
-import { OPEN_IN_TERMINAL } from "../../sample/worktree";
 import {
   BUILDER,
   CHAT,
   CHAT_ENTRY,
   CHAT_SESSION,
   type ChatTemplate,
-  COMMANDS,
   CREATED_TASKS,
   EXISTING,
   MENU_TASK,
   MESSAGE,
+  ORIGIN,
   SEARCH,
-  STARTED,
+  STEPS,
 } from "./sample";
 import "./view.css";
 
+/** The options of the chat scene. */
+export type ChatOptions = {
+  /**
+   * The window is short, such as on a page of the documentation. The transcript then follows the
+   * stream, and its first rows leave at the top. The website shows the full window, so the still
+   * frame of reduced motion shows the request too.
+   */
+  compact: boolean;
+};
+
 /**
  * The last frame: the turn ended, and the chat settled at the top of Recent. The Builder of the
- * new task runs at the top of Running.
+ * new task runs at the top of Running, and its startup notification shows it ready.
  */
 const NAV = [BUILDER, ...studioNav({ ...CHAT_ENTRY, time: "now", selected: true })];
 
@@ -61,14 +69,11 @@ function ChatStock(): ReactElement {
       <Stock name={"builder-dialog" satisfies ChatTemplate}>
         <StartDialog
           role="Builder"
-          description="Start a fresh session for Start Implementation."
           session={BUILDER_SESSION}
           target="origin/main"
           background
+          goal
         />
-      </Stock>
-      <Stock name={"toast-started" satisfies ChatTemplate}>
-        <Toast {...STARTED} />
       </Stock>
     </>
   );
@@ -77,32 +82,12 @@ function ChatStock(): ReactElement {
 /** The top bar of the chat: its title, the chat actions, Open In, and the panel toggles. */
 function ChatHeader(): ReactElement {
   return (
-    <SessionHeader
-      title={
-        <span className="sh-name">
-          <span>{CHAT.title}</span>
-        </span>
-      }
-    >
+    <WorkspaceSessionHeader title={CHAT.title}>
       <RepoActions />
       <span className="sh-icon">
         <Bot className="i14" />
       </span>
-      <span className="sh-icon">
-        <Folder />
-      </span>
-      <span className="sh-split">
-        <span className="sh-split-main">
-          <Archive />
-          <span>Archive</span>
-        </span>
-        <span className="sh-split-menu">
-          <ChevronDown />
-        </span>
-      </span>
-      <OpenInMenu tool={OPEN_IN_TERMINAL} appIcon />
-      <PanelToggles right={false} />
-    </SessionHeader>
+    </WorkspaceSessionHeader>
   );
 }
 
@@ -173,12 +158,15 @@ function ChatThread(): ReactElement {
   );
 }
 
-export function ChatView(props: SceneViewProps): ReactElement {
+export function ChatView({
+  options: { compact },
+  ...props
+}: SceneViewProps & { options: ChatOptions }): ReactElement {
   return (
     <SceneFrame
       {...props}
       name="chat"
-      alt="A session outside a task, with the Product planner role on Claude Code. The visitor types /tasks- and picks the reusable prompt /tasks-from-request, then adds the request Export notebooks to Markdown and PDF. The agent searches the tasks for export and finds the Markdown export task. Then it creates the two tasks that are missing: a PDF export and an Export item in the notebook menu. The visitor opens the menu task from its card, and its details slide in over the session. The visitor clicks Start Builder and runs the Builder in the background. The session stays on screen, and the new Builder session shows in the Running group of the sidebar."
+      alt="A session outside a task, with the Product planner role on Claude Code. The visitor types /tasks- and picks the reusable prompt /tasks-from-request, then adds the request Export notebooks to Markdown and PDF. The agent searches the tasks for export and finds the Markdown export task. Then it creates the two tasks that are missing: a PDF export and an Export item in the notebook menu. The visitor opens the menu task from its card, and its details slide in over the session. The visitor clicks Start Builder and selects Run in background. The dialog closes, and a notification shows the startup steps of the Builder: Create task worktree, Set branch upstream, and Start session. The session stays on screen. The notification shows Builder session ready, and the new Builder session shows in the Running group of the sidebar."
       stock={<ChatStock />}
     >
       <AppWindow
@@ -186,21 +174,23 @@ export function ChatView(props: SceneViewProps): ReactElement {
         keys={props.keys}
         className="chat-window"
         data-runtime={CHAT_SESSION.runtime}
+        data-compact={flag(compact)}
         overlay={<Pointer />}
       >
         <ChatHeader />
         <ChatColumn className="ch-column">
           <ChatThread />
           <Composer session={CHAT_SESSION} menu={<SlashMenu />}>
-            <span className="ch-draft">
+            <ComposerDraft>
               <span className="ch-chip" hidden data-chip="">
                 {`/${COMMANDS[0]?.trigger}`}
               </span>
-              <span className="typed" data-typed="" />
-            </span>
+            </ComposerDraft>
           </Composer>
         </ChatColumn>
-        <ToastStack />
+        <ToastStack>
+          <StartupToast role="Builder" origin={ORIGIN} steps={STEPS} ready />
+        </ToastStack>
       </AppWindow>
     </SceneFrame>
   );

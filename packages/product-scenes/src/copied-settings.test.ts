@@ -9,6 +9,7 @@ import {
   STATUS_LABELS,
   WORKFLOW_SECTION,
 } from "./scenes/prompts/sample";
+import { importProduct } from "./test-support/product-source";
 
 type PromptTemplate = {
   label: string;
@@ -30,28 +31,27 @@ type PromptSettings = {
   }[];
 };
 
-// The imports are dynamic, so the type check of this package does not check the product source.
-const source = (path: string): string => new URL(`../../${path}`, import.meta.url).href;
 // SAFETY: settings-modal-constants.ts exports these values, and a missing export fails the test.
-const { SETTINGS_SECTIONS, WORKFLOW_PROMPTS_DESCRIPTION } = (await import(
-  source("frontend/src/components/features/settings/settings-modal-constants.ts")
-)) as { SETTINGS_SECTIONS: readonly { label: string }[]; WORKFLOW_PROMPTS_DESCRIPTION: string };
+const { SETTINGS_SECTIONS, WORKFLOW_PROMPTS_DESCRIPTION } = await importProduct<{
+  SETTINGS_SECTIONS: readonly { label: string }[];
+  WORKFLOW_PROMPTS_DESCRIPTION: string;
+}>("packages/frontend/src/components/features/settings/settings-modal-constants.ts");
 // SAFETY: settings-prompt-layers.ts exports these labels, and a missing export fails the test.
-const { PROMPT_STATUS_LABELS } = (await import(
-  source("frontend/src/components/features/settings/settings-prompt-layers.ts")
-)) as { PROMPT_STATUS_LABELS: Record<string, string> };
+const { PROMPT_STATUS_LABELS } = await importProduct<{
+  PROMPT_STATUS_LABELS: Record<string, string>;
+}>("packages/frontend/src/components/features/settings/settings-prompt-layers.ts");
 // SAFETY: prompt-layers.ts exports these labels, and a missing export fails the test.
-const { PROMPT_LAYER_LABELS } = (await import(
-  source("workflows/src/task-workflow/prompt-layers.ts")
-)) as { PROMPT_LAYER_LABELS: Record<string, string> };
+const { PROMPT_LAYER_LABELS } = await importProduct<{
+  PROMPT_LAYER_LABELS: Record<string, string>;
+}>("packages/workflows/src/task-workflow/prompt-layers.ts");
 // SAFETY: workflow-prompt-settings.ts exports this function, and a missing export fails the test.
-const { workflowPromptSettings } = (await import(
-  source("frontend-core/src/queries/workflow-prompt-settings.ts")
-)) as { workflowPromptSettings: (catalog: CompiledCatalog) => PromptSettings };
+const { workflowPromptSettings } = await importProduct<{
+  workflowPromptSettings: (catalog: CompiledCatalog) => PromptSettings;
+}>("packages/frontend-core/src/queries/workflow-prompt-settings.ts");
 // SAFETY: workflow-fixtures.ts exports the compiled built-in catalog.
-const { builtinCompiledCatalogFixture } = (await import(
-  source("frontend-core/src/test-support/workflow-fixtures.ts")
-)) as { builtinCompiledCatalogFixture: CompiledCatalog };
+const { builtinCompiledCatalogFixture } = await importProduct<{
+  builtinCompiledCatalogFixture: CompiledCatalog;
+}>("packages/frontend-core/src/test-support/workflow-fixtures.ts");
 
 const prompts = workflowPromptSettings(builtinCompiledCatalogFixture);
 

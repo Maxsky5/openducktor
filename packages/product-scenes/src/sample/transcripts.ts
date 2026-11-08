@@ -71,7 +71,14 @@ const TURNS = {
         },
       ],
     },
-    { kind: "workflow", id: "set-spec", name: "set_spec", duration: "41ms", time: "09:42:03 AM" },
+    {
+      kind: "workflow",
+      id: "set-spec",
+      title: "Set Spec",
+      icon: "document",
+      duration: "41ms",
+      time: "09:42:03 AM",
+    },
     {
       kind: "agent",
       id: "final",
@@ -90,7 +97,14 @@ const TURNS = {
     read("read-shell", "src/app/app-shell.tsx", "9ms", "09:44:12 AM"),
     read("read-keymap", "src/app/keymap.ts", "7ms", "09:44:13 AM"),
     read("read-dialog", "src/search/search-dialog.tsx", "11ms", "09:44:15 AM"),
-    { kind: "workflow", id: "set-plan", name: "set_plan", duration: "52ms", time: "09:45:31 AM" },
+    {
+      kind: "workflow",
+      id: "set-plan",
+      title: "Set Plan",
+      icon: "document",
+      duration: "52ms",
+      time: "09:45:31 AM",
+    },
     {
       kind: "agent",
       id: "final",
@@ -119,7 +133,8 @@ const TURNS = {
     {
       kind: "workflow",
       id: "completed",
-      name: "apply_workflow_event",
+      title: "Build Completed",
+      icon: "workflow",
       duration: "38ms",
       time: "09:49:05 AM",
     },
@@ -143,7 +158,8 @@ const TURNS = {
     {
       kind: "workflow",
       id: "rejected",
-      name: "qa_rejected",
+      title: "Reject QA",
+      icon: "review_failed",
       duration: "45ms",
       time: "09:52:48 AM",
     },
@@ -173,7 +189,8 @@ const TURNS = {
     {
       kind: "workflow",
       id: "completed",
-      name: "apply_workflow_event",
+      title: "Build Completed",
+      icon: "workflow",
       duration: "36ms",
       time: "09:55:23 AM",
     },
@@ -218,7 +235,9 @@ const TURNS = {
     {
       kind: "workflow",
       id: "set",
-      name: "set_pull_request",
+      title: "Set Pull Request",
+      icon: "pull_request",
+      pr: 42,
       duration: "52ms",
       time: "10:24:44 AM",
     },

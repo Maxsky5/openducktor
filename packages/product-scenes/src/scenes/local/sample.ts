@@ -35,7 +35,7 @@ export const RUNTIMES: readonly DiagCheck[] = [
     id: "claude",
     runtime: "claude",
     title: "Claude",
-    value: "2.1.301 (Claude Code)",
+    value: "2.1.316 (Claude Code)",
     details: [{ value: "/Users/sam/.local/bin/claude", path: true }],
     status: READY,
     restart: true,

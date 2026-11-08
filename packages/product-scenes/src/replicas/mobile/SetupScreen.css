@@ -1,0 +1,66 @@
+@layer replica {
+  :where(.stage) {
+    /* The setup screen: 16 point margins, 28 points between the header and the card. */
+    .mob-setup {
+      display: grid;
+      align-content: start;
+      gap: calc(28 * var(--u));
+      padding: calc(12 * var(--u)) calc(16 * var(--u)) 0;
+    }
+    .mob-brand {
+      display: flex;
+      align-items: center;
+      gap: calc(10 * var(--u));
+      padding: 0 calc(4 * var(--u));
+    }
+    /* The app icon: the OpenDucktor mark in a rounded violet square. */
+    .mob-brand-mark {
+      flex: 0 0 auto;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      border-radius: calc(8 * var(--u));
+      background: url("../shell/openducktor-mark.svg") center / cover no-repeat;
+    }
+    .mob-brand-name {
+      flex: 1;
+      font-size: calc(16 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+      letter-spacing: calc(-0.3 * var(--u));
+    }
+    .mob-setup-card {
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: var(--card);
+      box-shadow: var(--m-shadow-card);
+    }
+    .mob-setup-head {
+      display: grid;
+      gap: calc(12 * var(--u));
+      padding: calc(28 * var(--u)) calc(20 * var(--u)) 0;
+    }
+    .mob-setup-title {
+      font-size: calc(24 * var(--u));
+      font-weight: 600;
+      line-height: calc(30 * var(--u));
+      letter-spacing: calc(-0.5 * var(--u));
+    }
+    .mob-setup-description {
+      color: color-mix(in oklab, var(--foreground) 70%, transparent);
+      font-size: calc(14 * var(--u));
+      line-height: calc(22 * var(--u));
+    }
+    /* AppVersionFooter: footnote text in the tertiary color, centered under the card. */
+    .mob-setup-version {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+      text-align: center;
+      padding-top: calc(8 * var(--u));
+    }
+    .mob-setup-content {
+      padding: calc(24 * var(--u)) calc(20 * var(--u)) calc(28 * var(--u));
+    }
+  }
+}

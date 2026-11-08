@@ -1,0 +1,218 @@
+@layer replica {
+  :where(.stage) {
+    /* A comment card of task-execution-ci-comment-card.tsx: rounded-md border bg-card. */
+    .cc-card {
+      min-width: 0;
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+    }
+    .cc-card[hidden] {
+      display: none;
+    }
+    .cc-card > header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: stretch;
+    }
+    /* The toggle: the avatar, the author line and the thread line, and the chevron. */
+    .cc-toggle {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: calc(10 * var(--u));
+      min-width: 0;
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+    }
+    /* The avatar: size-7 rounded-full. The scene draws the initial of the author in place of the
+       picture that the provider gives. */
+    .cc-avatar {
+      display: grid;
+      place-items: center;
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+      border-radius: 50%;
+      background: var(--violet-500);
+      color: #fff;
+      font-size: calc(12 * var(--u));
+      font-weight: 600;
+    }
+    .cc-card[data-bot] .cc-avatar {
+      background: var(--rose-500);
+    }
+    .cc-meta {
+      min-width: 0;
+    }
+    .cc-line,
+    .cc-thread {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      line-height: 1.5;
+    }
+    .cc-line {
+      gap: calc(6 * var(--u));
+    }
+    .cc-line b {
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cc-line small {
+      flex-shrink: 0;
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      white-space: nowrap;
+    }
+    .cc-thread {
+      gap: calc(8 * var(--u));
+      margin-top: calc(4 * var(--u));
+    }
+    /* A badge of components/ui/badge.tsx with px-2 py-0 text-[10px]. The Bot badge has px-1.5. */
+    .cc-badge {
+      display: inline-flex;
+      flex-shrink: 0;
+      align-items: center;
+      padding: 0 calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid transparent;
+      border-radius: 999px;
+      font-size: calc(10 * var(--u));
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .cc-badge.cc-bot {
+      flex-shrink: 1;
+      padding: 0 calc(6 * var(--u));
+    }
+    .cc-badge[data-variant="secondary"] {
+      background: var(--secondary);
+      color: var(--secondary-foreground);
+    }
+    .cc-badge[data-variant="success"] {
+      background: var(--success-surface);
+      color: var(--success-surface-foreground);
+    }
+    .cc-badge[data-variant="warning"] {
+      background: var(--warning-surface);
+      color: var(--warning-surface-foreground);
+    }
+    .cc-badge[data-variant="danger"] {
+      background: var(--destructive-surface);
+      color: var(--destructive-surface-foreground);
+    }
+    .cc-badge[data-variant="outline"] {
+      border-color: var(--input);
+      color: var(--foreground);
+    }
+    /* The place in the code: the start of a long path hides first. */
+    .cc-location {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--muted-foreground);
+      font-family: var(--mono);
+      font-size: calc(11 * var(--u));
+      text-align: left;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cc-chevron {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .cc-toggle[data-open] .cc-chevron {
+      transform: rotate(90deg);
+    }
+    /* Open comment or Open review: a 24 pixel icon button, with pr-3 on its column. */
+    .cc-open {
+      display: flex;
+      align-items: center;
+      padding-right: calc(12 * var(--u));
+    }
+    .cc-open > span {
+      display: grid;
+      place-items: center;
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .cc-patch {
+      min-width: 0;
+      overflow: hidden;
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    /* The Markdown body in the compact variant of markdown-renderer: 13 pixels, leading-relaxed. */
+    .cc-body {
+      min-width: 0;
+      padding: calc(4 * var(--u)) calc(12 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      line-height: 1.625;
+      overflow-wrap: break-word;
+    }
+    .cc-body p {
+      margin: calc(4 * var(--u)) 0;
+    }
+    .cc-body code {
+      padding: 0 calc(4 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--rose-600);
+      font-family: var(--mono);
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+    }
+    :where([data-theme="dark"]) & .cc-body code {
+      color: var(--rose-400);
+    }
+    /* A suggested change: an info box with a header and the diff of the suggestion. */
+    .cc-suggestion {
+      min-width: 0;
+      padding: calc(12 * var(--u));
+      border-top: calc(1 * var(--u)) solid color-mix(in oklab, var(--info-border) 70%, transparent);
+      background: color-mix(in oklab, var(--info-surface) 40%, transparent);
+    }
+    .cc-suggestion > div {
+      min-width: 0;
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--info-border);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+    }
+    .cc-suggestion header {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      height: calc(32 * var(--u));
+      padding: 0 calc(10 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--info-border);
+      background: var(--info-surface);
+    }
+    .cc-suggestion header .lucide {
+      flex-shrink: 0;
+      color: var(--info-muted);
+    }
+    .cc-suggestion header b {
+      overflow: hidden;
+      color: var(--info-surface-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 600;
+      line-height: calc(16 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cc-suggestion header small {
+      flex-shrink: 0;
+      margin-left: auto;
+      color: var(--info-muted);
+      font-size: calc(10 * var(--u));
+      font-weight: 500;
+    }
+  }
+}

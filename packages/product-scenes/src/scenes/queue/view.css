@@ -1,0 +1,45 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * Queued messages: the chat column of a Builder session, cropped to the transcript and the
+     * composer. The panel keeps one height for the whole scene, and the transcript follows the
+     * stream, so a new row moves the older rows up.
+     */
+    .qv-panel {
+      --design-width: 640;
+      display: flex;
+      flex-direction: column;
+      height: calc(470 * var(--u));
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(14 * var(--u));
+      background: var(--card);
+      box-shadow: var(--shadow-window);
+    }
+    /* A framed scene: the panel fills the frame of the host, as a framed window does. */
+    :where([data-framed]) & > .qv-panel {
+      height: 100%;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    /* The column keeps the layers of the stack and the composer under the pointer. */
+    .qv-column {
+      flex: 1;
+      min-height: 0;
+      isolation: isolate;
+    }
+    /* The keys show over the transcript, so they cover neither the stack nor the composer. */
+    .qv-panel ~ .key-hud {
+      top: 30%;
+    }
+    /* A phone stage shows a narrower column. The composer and the transcript take their phone
+       rules from their replicas. */
+    @container stage (width <= 500px) {
+      .qv-panel {
+        --design-width: 400;
+        height: calc(520 * var(--u));
+      }
+    }
+  }
+}

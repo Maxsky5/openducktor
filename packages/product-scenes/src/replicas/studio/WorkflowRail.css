@@ -33,7 +33,7 @@
       font-size: calc(14 * var(--u));
       font-weight: 500;
       white-space: nowrap;
-      --ring: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
+      --ring: color-mix(in oklab, var(--muted-foreground) 50%, transparent);
     }
     .st-step[data-tone="in_progress"] {
       border-color: var(--info-border);
@@ -96,7 +96,7 @@
       color: var(--success-accent);
     }
     .st-link {
-      color: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+      color: color-mix(in oklab, var(--muted-foreground) 40%, transparent);
     }
     .st-link[data-tone="done"] {
       color: var(--success-ring);
@@ -111,7 +111,7 @@
       color: var(--rejected-ring);
     }
     .st-link[data-tone="blocked"] {
-      color: color-mix(in oklch, var(--muted-foreground) 20%, transparent);
+      color: color-mix(in oklab, var(--muted-foreground) 20%, transparent);
     }
     .st-step-icon {
       width: calc(16 * var(--u));

@@ -1,0 +1,77 @@
+@layer replica {
+  :where(.stage) {
+    /* The fieldset: its legend has mb-2 text-sm font-medium. The radio group is grid gap-3, with
+       one column for each card from the sm breakpoint. */
+    .wl-legend {
+      display: block;
+      margin-bottom: calc(8 * var(--u));
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .wl-options {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: calc(12 * var(--u));
+    }
+    /* Two cards make two columns from the sm breakpoint. */
+    .wl-options[data-columns="2"] {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    /* An outline button: grid grid-cols-[auto_minmax(0,1fr)_auto] content-start gap-x-3 gap-y-1
+       p-3 text-left, with border-input, or dark:border-muted-foreground/60. The selected card has
+       border-primary bg-accent, or dark:border-selected-accent dark:bg-selected-surface. */
+    .wl-option {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-content: start;
+      column-gap: calc(12 * var(--u));
+      row-gap: calc(4 * var(--u));
+      padding: calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    :where([data-theme="dark"]) & .wl-option {
+      border-color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
+    }
+    .wl-option[data-selected] {
+      border-color: var(--primary);
+      background: var(--accent);
+    }
+    :where([data-theme="dark"]) & .wl-option[data-selected] {
+      border-color: var(--selected-accent);
+      background: var(--selected-surface);
+    }
+    .wl-option > svg {
+      margin-top: calc(2 * var(--u));
+    }
+    /* Only the selected card shows its check. */
+    .wl-option:not([data-selected]) > .wl-check {
+      display: none;
+    }
+    /* The description: col-start-2 col-end-4 text-xs font-normal text-foreground/70, or /80 in
+       the dark theme. */
+    .wl-description {
+      grid-column: 2 / 4;
+      color: color-mix(in oklab, var(--foreground) 70%, transparent);
+      font-size: calc(12 * var(--u));
+      font-weight: 400;
+      line-height: calc(16 * var(--u));
+    }
+    :where([data-theme="dark"]) & .wl-description {
+      color: color-mix(in oklab, var(--foreground) 80%, transparent);
+    }
+    /* Below the sm breakpoint, the cards make one column. */
+    @container stage (width <= 699px) {
+      .wl-options,
+      .wl-options[data-columns="2"] {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  }
+}

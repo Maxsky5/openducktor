@@ -1,9 +1,14 @@
 // The playback core that every player shares: how a new frame takes over from the last one, and
-// the check of the length of a scene. It loads no ScrollTrigger, so a host that controls its scenes
+// the check of the length of a scene. It watches no play zone, so a host that controls its scenes
 // can use it.
-import { fadeOut } from "./frame";
 
-/** The animation of a player: a cross fade from the last frame, then the timeline of the scene. */
+/**
+ * How the last frame of a player gives way to the next frame: a paused animation of `cover`
+ * that calls `done` at its end. A kill before the end leaves the next frame as it was.
+ */
+export type FrameFade = (cover: HTMLElement, done: () => void) => gsap.core.Animation;
+
+/** The animation of a player: a fade from the last frame, then the timeline of the scene. */
 export type Playback = {
   /** Plays `timeline` when the view runs, after `cover` fades out. */
   start: (timeline: gsap.core.Timeline, cover?: HTMLElement) => void;
@@ -11,11 +16,11 @@ export type Playback = {
   stop: () => void;
 };
 
-export function createPlayback(fade: number): Playback {
+export function createPlayback(fade: FrameFade): Playback {
   let running = false;
   let timeline: gsap.core.Timeline | undefined;
   let cover: HTMLElement | undefined;
-  let fading: gsap.core.Tween | undefined;
+  let fading: gsap.core.Animation | undefined;
   const clearFade = (): void => {
     fading?.kill();
     cover?.remove();
@@ -41,11 +46,12 @@ export function createPlayback(fade: number): Playback {
       timeline = next;
       if (frame) {
         cover = frame;
-        fading = fadeOut(frame, fade, () => {
+        const done = (): void => {
           cover = undefined;
           fading = undefined;
           sync(running);
-        });
+        };
+        fading = fade(frame, done);
       }
       sync(running);
     },

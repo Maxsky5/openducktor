@@ -1,6 +1,7 @@
 @layer replica {
   :where(.stage) {
-    /* CI Checks panel: task-execution-ci-checks-content.tsx. The scene flips data-checks. */
+    /* CI Checks panel: task-execution-ci-checks-content.tsx. A scene changes data-checks of the
+       panel and data-state of each row. */
     .st-checks {
       display: flex;
       flex-direction: column;
@@ -26,8 +27,30 @@
       color: var(--muted-foreground);
       font-size: calc(11 * var(--u));
     }
+    /* The Refresh CI checks button: a ghost icon button of 24 pixels. It spins while it reads. */
+    .st-checks-refresh {
+      display: grid;
+      place-items: center;
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      border-radius: calc(8 * var(--u));
+    }
+    .st-checks-refresh[data-spinning] .lucide {
+      animation: spin 0.8s linear infinite;
+    }
+    /* The scroll area under the head. It scrolls only when a view gives the panel a height. */
+    .st-checks-body {
+      min-height: 0;
+      overflow: hidden;
+    }
     .st-checks-list {
       border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .st-checks-list[data-closed] .st-checks-rows {
+      display: none;
+    }
+    .st-checks-list[data-closed] .st-checks-chevron {
+      transform: none;
     }
     .st-checks-sum {
       display: flex;
@@ -35,9 +58,19 @@
       gap: calc(8 * var(--u));
       padding: calc(10 * var(--u)) calc(16 * var(--u));
     }
-    .st-checks-sum > .lucide:first-child {
+    /* The sections are open, so their chevrons point down. */
+    .st-checks-chevron {
       width: calc(14 * var(--u));
       height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+      transform: rotate(90deg);
+    }
+    .st-checks-sum > .lucide.tone,
+    .st-comments-icon {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+    }
+    .st-comments-icon {
       color: var(--muted-foreground);
     }
     .st-checks-sum b {
@@ -48,30 +81,55 @@
       font-size: calc(12 * var(--u));
       font-weight: 500;
     }
-    .st-checks-badge {
-      margin-left: auto;
+    .st-checks-badge,
+    .st-comments-count {
       padding: calc(2 * var(--u)) calc(10 * var(--u));
       border-radius: 999px;
       font-size: calc(12 * var(--u));
       font-weight: 500;
     }
+    .st-checks-badge {
+      margin-left: auto;
+    }
+    .st-comments-count {
+      background: var(--secondary);
+      color: var(--secondary-foreground);
+    }
     [data-checks="passing"] .st-checks-badge {
       background: var(--success-surface);
       color: var(--success-surface-foreground);
+    }
+    [data-checks="failing"] .st-checks-badge {
+      background: var(--destructive-surface);
+      color: var(--destructive-surface-foreground);
     }
     [data-checks="pending"] .st-checks-badge {
       background: var(--info-surface);
       color: var(--info-surface-foreground);
     }
-    [data-checks="passing"] .tone {
+    [data-checks="passing"] .st-checks-sum .tone {
       color: var(--success-muted);
     }
-    [data-checks="pending"] .tone {
+    [data-checks="failing"] .st-checks-sum .tone {
+      color: var(--destructive-muted);
+    }
+    [data-checks="pending"] .st-checks-sum .tone {
       color: var(--info-muted);
     }
-    [data-checks="passing"] .when-pending,
-    [data-checks="pending"] .when-done {
+    .st-checks-badge > span {
       display: none;
+    }
+    [data-checks="passing"] .st-checks-badge > .when-passing,
+    [data-checks="failing"] .st-checks-badge > .when-failing,
+    [data-checks="pending"] .st-checks-badge > .when-pending {
+      display: inline;
+    }
+    .st-checks-rows {
+      border-top: calc(1 * var(--u)) solid var(--border);
+      background: color-mix(in oklab, var(--card) 40%, transparent);
+    }
+    .st-check-item + .st-check-item {
+      border-top: calc(1 * var(--u)) solid var(--border);
     }
     .st-check {
       display: grid;
@@ -79,8 +137,6 @@
       align-items: center;
       gap: calc(8 * var(--u));
       padding: calc(8 * var(--u)) calc(16 * var(--u));
-      border-top: calc(1 * var(--u)) solid var(--border);
-      background: color-mix(in oklch, var(--card) 40%, transparent);
     }
     .st-check > .lucide {
       color: var(--muted-foreground);
@@ -89,10 +145,22 @@
       width: calc(16 * var(--u));
       height: calc(16 * var(--u));
     }
-    [data-checks="passing"] .st-check > .lucide.tone {
+    .st-check-item[data-open] .st-check-chevron {
+      transform: rotate(90deg);
+    }
+    /* Each row shows the icon and the label of its own state. */
+    .st-check-item:not([data-state="success"]) .when-success,
+    .st-check-item:not([data-state="failure"]) .when-failure,
+    .st-check-item:not([data-state="pending"]) .when-pending {
+      display: none;
+    }
+    .st-check-item[data-state="success"] .st-check .tone {
       color: var(--success-muted);
     }
-    [data-checks="pending"] .st-check > .lucide.tone {
+    .st-check-item[data-state="failure"] .st-check .tone {
+      color: var(--destructive-muted);
+    }
+    .st-check-item[data-state="pending"] .st-check .tone {
       color: var(--info-muted);
     }
     .st-check b {
@@ -112,6 +180,38 @@
       place-items: center;
       width: calc(24 * var(--u));
       height: calc(24 * var(--u));
+      color: var(--muted-foreground);
+    }
+    /* The rows of an open check: pl-14 pb-3 text-xs, with a 5.5rem label column. */
+    .st-check-info {
+      display: none;
+      grid-template-columns: calc(88 * var(--u)) minmax(0, 1fr);
+      gap: calc(4 * var(--u)) calc(12 * var(--u));
+      margin: 0;
+      padding: 0 calc(16 * var(--u)) calc(12 * var(--u)) calc(56 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .st-check-item[data-open] .st-check-info {
+      display: grid;
+    }
+    .st-check-info dd {
+      min-width: 0;
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+    .st-check-info dd:nth-of-type(-n + 2) {
+      color: var(--foreground);
+    }
+    .st-comments {
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .st-comments-empty {
+      margin: 0;
+      padding: calc(16 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
     }
   }
 }

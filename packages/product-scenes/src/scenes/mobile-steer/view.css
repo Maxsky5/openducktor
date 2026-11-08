@@ -1,0 +1,8 @@
+@layer views {
+  :where(.stage) {
+    /* Steer: the shared layout of MobileStage.tsx. */
+    .mob-queue[data-resizing] {
+      overflow: hidden;
+    }
+  }
+}

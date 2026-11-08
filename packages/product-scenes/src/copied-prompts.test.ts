@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { KICKOFF, TASK_ID } from "./sample/studio";
 import { QA_KICKOFF } from "./scenes/prompts/sample";
+import { importProduct } from "./test-support/product-source";
 
 type BuiltinPrompt = {
   id: string;
@@ -8,15 +9,10 @@ type BuiltinPrompt = {
   template: string;
 };
 
-// The import is dynamic, so the type check of this package does not check the product source.
-const promptsModule = new URL(
-  "../../workflows/src/builtin/spec-plan-build/agent-prompts.ts",
-  import.meta.url,
-).href;
 // SAFETY: The product returns records with these prompt fields.
-const { listSpecPlanBuildPromptTemplates } = (await import(promptsModule)) as {
+const { listSpecPlanBuildPromptTemplates } = await importProduct<{
   listSpecPlanBuildPromptTemplates: () => BuiltinPrompt[];
-};
+}>("packages/workflows/src/builtin/spec-plan-build/agent-prompts.ts");
 const prompts = listSpecPlanBuildPromptTemplates();
 
 /** The built-in workflow prompt with its placeholders. */

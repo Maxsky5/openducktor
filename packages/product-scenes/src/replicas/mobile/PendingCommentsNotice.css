@@ -1,0 +1,32 @@
+@layer replica {
+  :where(.stage) {
+    /* One muted 11 point line at the top of the composer card, with the underlined View link. */
+    .mob-comments-notice {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(6 * var(--u));
+      padding: calc(10 * var(--u)) calc(12 * var(--u)) 0;
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      line-height: calc(15 * var(--u));
+    }
+    /* The notice shows while the composer card has pending comments. */
+    .mob-composer-card:not([data-comments]) .mob-comments-notice {
+      display: none;
+    }
+    .mob-comments-notice .lucide {
+      flex: 0 0 auto;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .mob-comments-notice span {
+      flex: 1;
+      min-width: 0;
+    }
+    .mob-comments-notice strong {
+      color: var(--foreground);
+      font-weight: 500;
+      text-decoration: underline;
+    }
+  }
+}

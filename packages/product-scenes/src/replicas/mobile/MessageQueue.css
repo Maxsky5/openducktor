@@ -1,0 +1,90 @@
+@layer replica {
+  :where(.stage) {
+    /* The stack sits 12 points inside the composer edges, and the front card tucks 6 points under
+       the composer card. */
+    .mob-queue {
+      margin: 0 calc(12 * var(--u)) calc(-6 * var(--u));
+    }
+    /* The card: a 16 point corner, a dashed input outline, the chat surface, and 13 point muted
+       text on a 20 point line. The gap holds the touch area of the first action. */
+    .mob-queue-card {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(10 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u)) calc(14 * var(--u));
+      border: calc(1 * var(--u)) dashed var(--input);
+      border-radius: calc(16 * var(--u));
+      background: var(--chat-surface);
+      box-shadow: var(--m-shadow-card);
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .mob-queue-glyph {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      height: calc(20 * var(--u));
+      margin-right: calc(-2 * var(--u));
+    }
+    .mob-queue-glyph .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .mob-queue-busy,
+    .mob-queue-card[data-state="steering"] .mob-queue-wait {
+      display: none;
+    }
+    .mob-queue-card[data-state="steering"] .mob-queue-busy {
+      display: block;
+    }
+    /* A closed card shows one line. An open card shows up to six. */
+    .mob-queue-text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-queue-card[data-spread="true"] .mob-queue-text {
+      display: -webkit-box;
+      white-space: normal;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 6;
+    }
+    /* The trailing label: 11 point medium text on the first line. */
+    .mob-queue-status {
+      display: none;
+      flex: 0 0 auto;
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .mob-queue-card[data-state="queued"][data-spread="false"] .mob-queue-status[data-for="queued"],
+    .mob-queue-card[data-state="steering"] .mob-queue-status[data-for="steering"] {
+      display: block;
+    }
+    /* The actions of an open card: ghost 24 point squares with a muted 14 point icon. */
+    .mob-queue-actions {
+      display: none;
+      flex: 0 0 auto;
+      gap: calc(20 * var(--u));
+      margin: calc(-2 * var(--u)) 0;
+    }
+    .mob-queue-card[data-state="queued"][data-spread="true"] .mob-queue-actions {
+      display: flex;
+    }
+    .mob-queue-action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      border-radius: calc(10 * var(--u));
+    }
+    .mob-queue-action .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+  }
+}
