@@ -33,6 +33,7 @@ import type {
   CodexAppServerThreadGoalClearParams,
   CodexAppServerThreadGoalClearResult,
   CodexAppServerThreadGoalSetParams,
+  CodexAppServerThreadSettingsUpdateParams,
   CodexAppServerThreadGoalSetResult,
   CodexAppServerThreadForkParams,
   CodexAppServerThreadListParams,
@@ -203,6 +204,9 @@ export type CodexAppServerClient = {
   threadGoalClear(
     params: CodexAppServerThreadGoalClearParams,
   ): Promise<CodexAppServerThreadGoalClearResult>;
+  threadSettingsUpdate(
+    params: CodexAppServerThreadSettingsUpdateParams,
+  ): Promise<CodexAppServerThreadSetNameResult>;
   turnStart(params: CodexTurnStartParams): Promise<CodexTurnStartResult>;
   turnSteer(params: CodexTurnSteerParams): Promise<CodexTurnSteerResult>;
   turnInterrupt(params: CodexTurnInterruptParams): Promise<CodexAppServerTurnInterruptResult>;

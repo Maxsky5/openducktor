@@ -54,6 +54,9 @@ export const createCodexAppServerClient = (
     async threadGoalClear(params) {
       return requestCodex(transport, { method: "thread/goal/clear", params });
     },
+    async threadSettingsUpdate(params) {
+      return requestCodex(transport, { method: "thread/settings/update", params });
+    },
     async threadResume(params: CodexThreadResumeParams) {
       return requestCodex(transport, { method: "thread/resume", params });
     },

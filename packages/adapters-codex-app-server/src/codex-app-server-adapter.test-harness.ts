@@ -488,6 +488,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
       }
       case "thread/name/set":
       case "thread/compact/start":
+      case "thread/settings/update":
       case "turn/interrupt":
         return {};
       case "thread/goal/set":

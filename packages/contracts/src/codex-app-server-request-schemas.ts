@@ -453,6 +453,13 @@ export const codexAppServerRequestParamsSchemas = {
     threadId: z.string(),
     origin: threadGoalMutationOriginSchema.nullable().optional(),
   }),
+  /** The settings of turns that Codex starts later, such as goal turns. */
+  "thread/settings/update": z.strictObject({
+    threadId: z.string(),
+    model: nullableString,
+    serviceTier: nullableString,
+    effort: codexAppServerReasoningEffortSchema.nullable().optional(),
+  }),
   "thread/turns/list": z.strictObject({
     threadId: z.string(),
     cursor: nullableString,
@@ -553,6 +560,10 @@ export const codexAppServerClientRequestSchema = z.discriminatedUnion("method", 
     params: codexAppServerRequestParamsSchemas["thread/goal/clear"],
   }),
   z.strictObject({
+    method: z.literal("thread/settings/update"),
+    params: codexAppServerRequestParamsSchemas["thread/settings/update"],
+  }),
+  z.strictObject({
     method: z.literal("thread/turns/list"),
     params: codexAppServerRequestParamsSchemas["thread/turns/list"],
   }),
@@ -620,6 +631,8 @@ export type CodexAppServerThreadCompactStartParams =
 export type CodexAppServerThreadGoalSetParams = CodexAppServerRequestParamsMap["thread/goal/set"];
 export type CodexAppServerThreadGoalClearParams =
   CodexAppServerRequestParamsMap["thread/goal/clear"];
+export type CodexAppServerThreadSettingsUpdateParams =
+  CodexAppServerRequestParamsMap["thread/settings/update"];
 export type CodexAppServerThreadGoalStatus = z.output<typeof codexAppServerThreadGoalStatusSchema>;
 export type CodexAppServerThreadListParams = CodexAppServerRequestParamsMap["thread/list"];
 export type CodexAppServerThreadLoadedListParams =

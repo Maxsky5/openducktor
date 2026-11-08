@@ -171,6 +171,34 @@ describe("CodexAppServerAdapter goals", () => {
     }
   });
 
+  test("applies the selected model settings before a goal starts work", async () => {
+    const session = await startGoalSession();
+    try {
+      await session.adapter.controlGoal({
+        ...session.ref,
+        command: { kind: "set", objective: "Fix the flaky tests" },
+      });
+      await session.adapter.controlGoal({ ...session.ref, command: { kind: "pause" } });
+
+      const calls = session.transport.calls.filter(
+        ({ method }) => method === "thread/settings/update" || method.startsWith("thread/goal/"),
+      );
+      expect(calls.map(({ method }) => method)).toEqual([
+        "thread/settings/update",
+        "thread/goal/set",
+        "thread/goal/set",
+      ]);
+      expect(calls[0]?.params).toEqual({
+        threadId: THREAD_ID,
+        model: "gpt-5",
+        serviceTier: null,
+        effort: "medium",
+      });
+    } finally {
+      session.unsubscribe();
+    }
+  });
+
   test("runs goal actions of the user with the native goal requests", async () => {
     const session = await startGoalSession();
     const onSent: string[] = [];

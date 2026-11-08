@@ -157,6 +157,7 @@ export type CodexAppServerRequestResultMap = {
   "thread/compact/start": CodexAppServerThreadCompactStartResult;
   "thread/goal/set": CodexAppServerThreadGoalSetResult;
   "thread/goal/clear": CodexAppServerThreadGoalClearResult;
+  "thread/settings/update": CodexAppServerThreadSetNameResult;
   "thread/turns/list": CodexAppServerThreadTurnsListResponse;
   "skills/list": CodexAppServerSkillsListResponse;
   "turn/start": CodexAppServerTurnStartResult;
@@ -185,6 +186,7 @@ const codexAppServerRequestResultSchemas: CodexAppServerRequestResultSchemaMap =
   "thread/compact/start": codexAppServerEmptyResponseSchema,
   "thread/goal/set": codexAppServerThreadGoalSetResultSchema,
   "thread/goal/clear": codexAppServerThreadGoalClearResultSchema,
+  "thread/settings/update": codexAppServerEmptyResponseSchema,
   "thread/turns/list": codexAppServerThreadTurnsListResponseSchema,
   "skills/list": codexAppServerSkillsListResponseSchema,
   "turn/start": codexAppServerTurnStartResultSchema,
