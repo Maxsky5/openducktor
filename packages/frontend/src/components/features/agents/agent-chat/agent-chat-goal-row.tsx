@@ -18,7 +18,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { type ReactElement, type RefObject, useLayoutEffect, useRef, useState } from "react";
-import { afterTransitions, CssPresenceList, useCssPresence } from "@/components/ui/css-presence";
+import { CssPresenceList, useCssPresence } from "@/components/ui/css-presence";
+import { afterTransitions } from "@/components/ui/css-transitions";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CardIconButton } from "./agent-chat-card-icon-button";
 import { cn } from "@/lib/utils";

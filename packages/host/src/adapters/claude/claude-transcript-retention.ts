@@ -92,7 +92,7 @@ const metadataFields = new Set([
   "parentUuid",
 ]);
 
-export const selectClaudeTranscriptMetadataPath = (path: ClaudeTranscriptPath): boolean =>
+const selectClaudeTranscriptMetadataPath = (path: ClaudeTranscriptPath): boolean =>
   path.length === 0 ||
   (metadataFields.has(String(path[0])) &&
     (path[0] !== "relocated" || path.length === 1 || path[1] === "relocatedCwd"));
@@ -113,7 +113,7 @@ const summaryFields = new Set([
 const summaryMessageFields = new Set(["id", "stop_reason", "content"]);
 const summaryBlockFields = new Set(["type", "id", "tool_use_id", "text"]);
 
-export const selectClaudeTranscriptSummaryPath = (path: ClaudeTranscriptPath): boolean => {
+const selectClaudeTranscriptSummaryPath = (path: ClaudeTranscriptPath): boolean => {
   if (path.length === 0) return true;
   if (summaryFields.has(String(path[0]))) return path.length === 1;
   if (path[0] === "supersedes" || path[0] === "retracted_message_uuids")
@@ -147,7 +147,7 @@ const goalFields = new Set(["type", "subtype", "uuid", "parentUuid", "isSidechai
 const goalAttachmentFields = new Set(["type", "met", "failed", "sentinel", "condition"]);
 
 /** Keeps the graph fields and the `goal_status` attachment fields of a record. */
-export const selectClaudeTranscriptGoalPath = (path: ClaudeTranscriptPath): boolean => {
+const selectClaudeTranscriptGoalPath = (path: ClaudeTranscriptPath): boolean => {
   if (path.length === 0) return true;
   if (goalFields.has(String(path[0]))) return path.length === 1;
   return (
@@ -203,7 +203,7 @@ const selectContentBlockPath = (path: ClaudeTranscriptPath): boolean => {
   return true;
 };
 
-export const selectClaudeTranscriptPath = (path: ClaudeTranscriptPath): boolean => {
+const selectClaudeTranscriptPath = (path: ClaudeTranscriptPath): boolean => {
   if (path.length === 0) return true;
   if (!rootFields.has(String(path[0]))) return false;
   if (path[0] === "origin") return path.length === 1 || path[1] === "kind";

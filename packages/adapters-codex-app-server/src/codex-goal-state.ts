@@ -1,7 +1,7 @@
 import type { AgentSessionGoal, CodexAppServerThreadGoal } from "@openducktor/contracts";
 
 /** The OpenDucktor goal of a native Codex goal. */
-export const toAgentSessionGoal = (goal: CodexAppServerThreadGoal): AgentSessionGoal => ({
+const toAgentSessionGoal = (goal: CodexAppServerThreadGoal): AgentSessionGoal => ({
   objective: goal.objective,
   status:
     goal.status === "usageLimited" || goal.status === "budgetLimited"
