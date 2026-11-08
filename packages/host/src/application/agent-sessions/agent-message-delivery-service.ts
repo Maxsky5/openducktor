@@ -266,7 +266,7 @@ export const createAgentMessageDeliveryService = (
   const submitDefault = (content: SubmittedContent, options?: AgentSessionSendOptions) =>
     Effect.gen(function* () {
       const queue = queueFor(content);
-      if (queue.entries.length > 0 || queue.sendingNewTurn) {
+      if (conditions.holdsInQueue(queue, content.parts)) {
         return yield* enqueue(queue, content, "last", options);
       }
       const completedTurns = queue.completedTurns;
