@@ -64,6 +64,8 @@ jobs:
             apps/marketing-website/ \
             packages/product-scenes/ \
             packages/theme/ \
+            packages/build-tools/package.json \
+            packages/build-tools/src/static-site.ts \
             packages/openducktor-web/package.json \
             .github/actions/ \
             .github/workflows/ci.yml \

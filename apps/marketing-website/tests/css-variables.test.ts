@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url";
 const SOURCE = fileURLToPath(new URL("../src", import.meta.url));
 /** The product scenes define the replica tokens, which the views of the site also read. */
 const SCENES = fileURLToPath(new URL("../../../packages/product-scenes", import.meta.url));
+/** The theme package defines the page colors that the site shares with the documentation. */
+const PALETTE = fileURLToPath(
+  new URL("../../../packages/theme/src/site-palette.css", import.meta.url),
+);
 
 function files(directory: string, extensions: string[]): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -24,7 +28,7 @@ function captures(text: string, pattern: RegExp): string[] {
 /** The custom properties that a stylesheet declares, or that markup and scripts set by name. */
 function definitions(): Set<string> {
   const names = new Set<string>();
-  for (const path of [...files(SOURCE, [".css"]), ...files(SCENES, [".css"])]) {
+  for (const path of [...files(SOURCE, [".css"]), ...files(SCENES, [".css"]), PALETTE]) {
     const css = readFileSync(path, "utf8");
     for (const name of captures(css, /(--[\w-]+)\s*:/g)) names.add(name);
     for (const name of captures(css, /@property\s+(--[\w-]+)/g)) names.add(name);

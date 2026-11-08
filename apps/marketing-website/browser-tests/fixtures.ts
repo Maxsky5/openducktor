@@ -3,8 +3,22 @@ import { commands } from "../src/content/site";
 
 export { expect };
 
-/** Each test starts on the home page, in the theme of its project. */
-export const test = base.extend({
+export const test = base.extend<{ securityPolicy: void }>({
+  /** Fails each test in which a page breaks a rule of the Content-Security-Policy of `_headers`. */
+  securityPolicy: [
+    async ({ context }, use) => {
+      const violations: string[] = [];
+      context.on("console", (message) => {
+        if (message.type() === "error" && message.text().includes("Content Security Policy")) {
+          violations.push(message.text());
+        }
+      });
+      await use();
+      expect(violations).toEqual([]);
+    },
+    { auto: true },
+  ],
+  /** Each test starts on the home page, in the theme of its project. */
   page: async ({ page, javaScriptEnabled }, use, testInfo) => {
     await page.goto("/");
     if (javaScriptEnabled && testInfo.project.name.endsWith("dark")) {

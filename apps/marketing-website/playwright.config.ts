@@ -19,7 +19,8 @@ export default defineConfig({
     { name: "phone-dark", use: { viewport: { width: 320, height: 740 }, colorScheme: "dark" } },
   ],
   webServer: {
-    command: `bun run preview -- --ignore-lock --host 127.0.0.1 --port ${PORT}`,
+    // The local Workers runtime serves `dist/` with its `_headers`, as Cloudflare does.
+    command: `WRANGLER_SEND_METRICS=false wrangler dev --config wrangler.json --local --ip 127.0.0.1 --port ${PORT}`,
     url: ORIGIN,
     reuseExistingServer: false,
   },

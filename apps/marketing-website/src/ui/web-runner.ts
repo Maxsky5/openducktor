@@ -6,7 +6,7 @@ import { typeText } from "@openducktor/product-scenes/motion/text";
 const TYPING_SPEED = 44;
 
 /** The terminal types while its top is above 80% of the screen height and its bottom below 20%. */
-const TERMINAL_ZONE = { start: "top 80%", end: "bottom 20%" };
+const TERMINAL_ZONE = { top: 20, bottom: 20 };
 
 /**
  * The browser version terminal types its command once, when the visitor reaches it. Then the

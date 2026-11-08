@@ -4,15 +4,19 @@ import webRunner from "../../../../packages/openducktor-web/package.json" with {
 export const REPOSITORY = "Maxsky5/openducktor";
 const github = `https://github.com/${REPOSITORY}`;
 
+/** The public documentation. The site links its guides there. */
+const docs = "https://doc.openducktor.dev";
+
 export const links = {
   github,
+  docs: `${docs}/`,
   latest: `${github}/releases/latest`,
   releases: `${github}/releases`,
   issues: `${github}/issues`,
   license: `${github}/blob/main/LICENSE`,
-  installation: `${github}/blob/main/docs/installation.md`,
-  webRunner: `${github}/blob/main/docs/web-runner.md`,
-  mcp: `${github}/blob/main/docs/external-mcp.md`,
+  installation: `${docs}/install-and-update/`,
+  webRunner: `${docs}/install-and-update/#browser-runner`,
+  mcp: `${docs}/external-mcp/`,
 } as const;
 /** The claim of the site. The opening heading shows it on two lines. */
 export const claim = ["Open-source mission control", "for coding agents"] as const;
