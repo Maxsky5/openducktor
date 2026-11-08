@@ -1,6 +1,7 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { z } from "zod";
+import type { AgentSessionGoalCommand } from "@openducktor/core";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
@@ -97,9 +98,7 @@ export const restoreClaudeGoalFromRecords = (
 };
 
 /** The goal commands that Claude runs. Claude cannot pause or resume a goal. */
-export type ClaudeGoalCommand =
-  | { readonly kind: "set"; readonly objective: string }
-  | { readonly kind: "clear" };
+export type ClaudeGoalCommand = Extract<AgentSessionGoalCommand, { kind: "set" | "clear" }>;
 
 type PendingGoalCommand = ClaudeGoalCommand & {
   /** The text of the goal command reply, which carries the refusal reason. */
@@ -126,7 +125,7 @@ export type ClaudeGoalTracking = {
 };
 
 type ClaudeGoalSession = Pick<ClaudeSessionContext, "externalSessionId" | "goalTracking"> & {
-  readonly transcriptEnvironment?: NodeJS.ProcessEnv | undefined;
+  readonly transcriptEnvironment: NodeJS.ProcessEnv;
 };
 
 const trackingOf = (session: ClaudeGoalSession): ClaudeGoalTracking => {
@@ -145,7 +144,7 @@ const trackingOf = (session: ClaudeGoalSession): ClaudeGoalTracking => {
 const transcriptPath = async (session: ClaudeGoalSession): Promise<string | null> => {
   const tracking = trackingOf(session);
   tracking.path ??= await findClaudeRootTranscript(
-    session.transcriptEnvironment ?? process.env,
+    session.transcriptEnvironment,
     session.externalSessionId,
   );
   return tracking.path;

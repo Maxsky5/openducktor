@@ -141,6 +141,7 @@ describe("Claude native termination", () => {
     store.set(session);
     try {
       await consumeClaudeSession({
+        emitGoal: () => {},
         session,
         sessionStore: store,
         now: () => "2026-10-23T00:00:00.000Z",

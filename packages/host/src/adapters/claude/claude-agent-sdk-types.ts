@@ -204,7 +204,7 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     /** The goal state that the adapter read. It exists after a restore or a goal command. */
     goalTracking?: import("./claude-agent-sdk-goals").ClaudeGoalTracking;
     /** The environment of the Claude process, which locates its transcript. */
-    transcriptEnvironment?: NodeJS.ProcessEnv;
+    transcriptEnvironment: NodeJS.ProcessEnv;
   };
 
 export type ClaudeSessionContext = Omit<ClaudeSession, "query">;

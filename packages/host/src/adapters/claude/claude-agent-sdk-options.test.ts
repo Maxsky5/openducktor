@@ -38,6 +38,7 @@ import type {
 
 const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
   acceptedUserMessages: [],
+  transcriptEnvironment: {},
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
   activity: "idle",

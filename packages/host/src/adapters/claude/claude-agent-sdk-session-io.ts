@@ -135,7 +135,7 @@ export const applyClaudeSessionModel = async (
 export const consumeClaudeSession = (input: {
   emit: ClaudeAgentSdkEventEmitter;
   /** Receives the goal changes that the adapter reads from the transcript. */
-  emitGoal?: (session: ClaudeSessionContext, event: ClaudeGoalEvent) => void;
+  emitGoal: (session: ClaudeSessionContext, event: ClaudeGoalEvent) => void;
   now: () => string;
   onBackgroundFailure: CreateClaudeAgentSdkServiceInput["onBackgroundFailure"];
   onContinuationAdmission?: () => void;
@@ -185,7 +185,7 @@ export const consumeClaudeSession = (input: {
           session,
           message,
           now,
-          emit: (event) => input.emitGoal?.(session, event),
+          emit: (event) => input.emitGoal(session, event),
           onFailure: (error) => Effect.runFork(onBackgroundFailure(error)),
         });
         if (shouldRefreshClaudeContextUsageForMessage(message)) {

@@ -103,6 +103,7 @@ describe("Claude tool input lifecycle", () => {
     const sessionStore = createClaudeAgentSdkSessionStore();
     sessionStore.set(session);
     await consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       now: () => timestamp,
@@ -146,6 +147,7 @@ describe("Claude tool input lifecycle", () => {
     const sessionStore = createClaudeAgentSdkSessionStore();
     sessionStore.set(session);
     await consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       now: () => timestamp,

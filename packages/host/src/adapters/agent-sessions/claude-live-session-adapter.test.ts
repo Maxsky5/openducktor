@@ -463,6 +463,7 @@ describe("Claude host live-session adapter", () => {
     await sent.promise;
     expect(current.pendingUserMessageAdmissions.size).toBe(1);
     await consumeClaudeSession({
+      emitGoal: () => {},
       emit: harness.eventHub.emit,
       now: () => "2026-10-23T00:00:01.000Z",
       onBackgroundFailure: ignoreClaudeBackgroundFailure,
@@ -546,6 +547,7 @@ describe("Claude host live-session adapter", () => {
       await entered.promise;
       try {
         await consumeClaudeSession({
+          emitGoal: () => {},
           emit: harness.eventHub.emit,
           now: () => "2026-10-24T16:00:00.000Z",
           onBackgroundFailure: ignoreClaudeBackgroundFailure,

@@ -63,6 +63,7 @@ export const createNonAdmittingClaudeSession = (
   overrides: Partial<ClaudeSession> = {},
 ): ClaudeSession => ({
   acceptedUserMessages: [],
+  transcriptEnvironment: {},
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
   activity: "idle",
