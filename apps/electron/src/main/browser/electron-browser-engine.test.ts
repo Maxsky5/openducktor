@@ -297,7 +297,7 @@ describe("Electron browser engine pages", () => {
     expect(guest.debugger.sent.some((command) => command.method === "Page.reload")).toBe(false);
   });
 
-  test("captures a screenshot through the page CDP session as a viewport clip", async () => {
+  test("captures a screenshot through the page CDP session", async () => {
     const harness = createEngineHarness();
     await createTab(harness);
     const guest = harness.page();
@@ -306,12 +306,7 @@ describe("Electron browser engine pages", () => {
 
     expect(guest.debugger.sent.at(-1)).toEqual({
       method: "Page.captureScreenshot",
-      params: {
-        format: "png",
-        quality: 80,
-        clip: { x: 0, y: 0, width: 800, height: 600, scale: 1 },
-        captureBeyondViewport: false,
-      },
+      params: { format: "png" },
       sessionId: undefined,
     });
   });
