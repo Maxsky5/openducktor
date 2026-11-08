@@ -24,6 +24,12 @@ type CdpProxyClientKind = "agent" | "devtools";
 export type CdpProxyClient = {
   /** One command from the client. */
   receive(message: CdpClientMessage): void;
+  /**
+   * Makes the page behave as focused, so agent input does not need the window focus. Chromium
+   * keeps an emulated page drawing at full speed, also while no panel shows it, so an agent turns
+   * it on only while one of its actions runs.
+   */
+  emulateFocus(enabled: boolean): Effect.Effect<void, BrowserServiceError>;
   close(): Effect.Effect<void>;
 };
 
@@ -132,6 +138,12 @@ export const openCdpProxyClient = (
       }
       if (request.method === "Page.reload") {
         reloadPage(request);
+        return;
+      }
+      // The proxy turns focus emulation on for each agent action. Playwright asks for it once when
+      // it connects, and that would keep the page drawing while no action runs.
+      if (input.kind === "agent" && request.method === "Emulation.setFocusEmulationEnabled") {
+        reply(request, {});
         return;
       }
       // Only the page session captures through the engine. A child session is a frame.
@@ -292,25 +304,22 @@ export const openCdpProxyClient = (
       }),
     );
 
-    if (input.kind === "agent") {
-      // Agent input must not need the window focus, so the page behaves as focused for this client.
-      yield* session.send("Emulation.setFocusEmulationEnabled", { enabled: true }).pipe(
-        Effect.tapError(() => Scope.close(scope, Exit.void)),
-        Effect.mapError(
-          (cause) =>
-            new BrowserServiceError({
-              code: "browser_engine_error",
-              operation: "browser.cdp_proxy.open",
-              message: `Could not prepare the page for agent input: ${cause.message}`,
-              tabId: input.tabId,
-              cause,
-            }),
-        ),
-      );
-    }
-
     return {
       receive,
+      emulateFocus: (enabled) =>
+        session.send("Emulation.setFocusEmulationEnabled", { enabled }).pipe(
+          Effect.asVoid,
+          Effect.mapError(
+            (cause) =>
+              new BrowserServiceError({
+                code: "browser_engine_error",
+                operation: "browser.cdp_proxy.emulate_focus",
+                message: `Could not prepare the page for agent input: ${cause.message}`,
+                tabId: input.tabId,
+                cause,
+              }),
+          ),
+        ),
       close: () =>
         Effect.suspend(() => {
           closed = true;

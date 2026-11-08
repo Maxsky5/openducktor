@@ -191,6 +191,7 @@ Every CDP client except the host session of a tab goes through the proxy. Each c
 - A `devtools` client is the DevTools of one Electron browser tab. It reaches only that tab and its child targets.
 - No client can reach other targets, call `Browser` methods other than `getVersion`, override certificate errors, or navigate to schemes other than `http` and `https`.
 - Agent clients also cannot set file input files, answer JS dialogs through CDP, bring the page to the front, close the page, use `Fetch`, or use `Emulation` other than focus emulation.
+- The proxy turns on focus emulation for the page only while an agent action runs, so agent input does not need the window focus. Chromium keeps an emulated page drawing at full speed, also while no panel shows it. The proxy therefore answers the focus emulation request of an agent client, such as the one that Playwright sends when it connects, without sending it to the page.
 - Chromium looks up a `targetId` in the whole browser. The proxy therefore refuses a `targetId` other than the tab and the child targets that the client attached.
 - A client gets replies and events in the order that the browser sent them.
 

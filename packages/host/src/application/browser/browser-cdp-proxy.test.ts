@@ -8,6 +8,7 @@ import { tabId } from "./test-support/browser-service-harness";
 /** A tab session whose commands wait until the test answers them. */
 const fakeTabSession = () => {
   const pending: Array<{ method: string; params: CdpPayload | undefined; answer: () => void }> = [];
+  const sends: Array<[string, CdpPayload | undefined]> = [];
   let listener: (event: CdpEvent) => void = () => {};
   const session: CdpSession = {
     sessionId: "S1",
@@ -16,7 +17,10 @@ const fakeTabSession = () => {
       new Promise<CdpPayload>((resolve) => {
         pending.push({ method, params, answer: () => resolve({}) });
       }),
-    send: () => Effect.succeed({}),
+    send: (method, params) => {
+      sends.push([method, params]);
+      return Effect.succeed({});
+    },
     subscribe: (next) => {
       listener = next;
       return () => {};
@@ -24,7 +28,7 @@ const fakeTabSession = () => {
     onDetached: () => () => {},
     ownsSession: () => true,
   };
-  return { session, pending, emit: (event: CdpEvent) => listener(event) };
+  return { session, pending, sends, emit: (event: CdpEvent) => listener(event) };
 };
 
 const openClient = async (kind: CdpProxyClientInput["kind"]) => {
@@ -55,6 +59,40 @@ const openClient = async (kind: CdpProxyClientInput["kind"]) => {
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("openCdpProxyClient", () => {
+  test("emulates page focus for an agent only when it asks, not when its client connects", async () => {
+    const { client, pending, sends, sent } = await openClient("agent");
+
+    client.receive({
+      id: 1,
+      method: "Emulation.setFocusEmulationEnabled",
+      params: { enabled: true },
+      sessionId: "S1",
+    });
+    await flush();
+    expect(sent).toContainEqual({ id: 1, result: {}, sessionId: "S1" });
+    expect(pending).toEqual([]);
+    expect(sends).toEqual([]);
+
+    await Effect.runPromise(client.emulateFocus(true));
+    await Effect.runPromise(client.emulateFocus(false));
+    expect(sends).toEqual([
+      ["Emulation.setFocusEmulationEnabled", { enabled: true }],
+      ["Emulation.setFocusEmulationEnabled", { enabled: false }],
+    ]);
+  });
+
+  test("forwards the focus emulation of DevTools to the page", async () => {
+    const { client, pending } = await openClient("devtools");
+
+    client.receive({
+      id: 1,
+      method: "Emulation.setFocusEmulationEnabled",
+      params: { enabled: true },
+    });
+
+    expect(pending.map(({ method }) => method)).toEqual(["Emulation.setFocusEmulationEnabled"]);
+  });
+
   test("sends agent text input to the page as it comes, with no extra press", async () => {
     const { client, pending } = await openClient("agent");
 

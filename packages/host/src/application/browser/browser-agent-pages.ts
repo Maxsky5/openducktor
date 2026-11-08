@@ -11,7 +11,11 @@ import { openCdpProxyClient } from "./browser-cdp-proxy";
 import { BrowserServiceError } from "./browser-service-error";
 import type { BrowserTabRegistry } from "./browser-tab-registry";
 
-type AgentPage = { page: BrowserAutomationPage; close: Effect.Effect<void> };
+type AgentPage = {
+  page: BrowserAutomationPage;
+  emulateFocus(enabled: boolean): Effect.Effect<void, BrowserServiceError>;
+  close: Effect.Effect<void>;
+};
 
 /** A dialog or file chooser. It blocks the page until someone answers it. */
 type BlockingPrompt = Extract<BrowserPrompt, { kind: "dialog" | "file_chooser" }>;
@@ -42,11 +46,11 @@ export const createBrowserAgentPages = ({
   const setActive = (tabId: string, agentActive: boolean): void =>
     registry.update(tabId, (summary) => ({ ...summary, agentActive }));
 
-  const connect = (tabId: string): Effect.Effect<BrowserAutomationPage, BrowserServiceError> =>
+  const connect = (tabId: string): Effect.Effect<AgentPage, BrowserServiceError> =>
     Effect.gen(function* () {
       const existing = pages.get(tabId);
       if (existing) {
-        return existing.page;
+        return existing;
       }
       let receiver: ((message: BrowserAutomationMessage) => void) | null = null;
       let closeReceiver: ((reason: string) => void) | null = null;
@@ -87,8 +91,13 @@ export const createBrowserAgentPages = ({
               }),
           ),
         );
-      pages.set(tabId, { page, close: page.close().pipe(Effect.andThen(proxy.close())) });
-      return page;
+      const agentPage: AgentPage = {
+        page,
+        emulateFocus: proxy.emulateFocus,
+        close: page.close().pipe(Effect.andThen(proxy.close())),
+      };
+      pages.set(tabId, agentPage);
+      return agentPage;
     });
 
   const disconnect = (tabId: string): Effect.Effect<void> =>
@@ -184,13 +193,29 @@ export const createBrowserAgentPages = ({
       .pipe(Effect.raceFirst(whenStopped));
   };
 
-  /** Runs an agent action with the page client of the tab. The client never takes the window focus. */
+  /**
+   * Runs an agent action with the page client of the tab. The client never takes the window focus:
+   * the page behaves as focused only while the action runs. A failed release means that the page
+   * session ended, which ends its focus emulation too.
+   */
   const act = <A>(
     tabId: string,
     check: Effect.Effect<void, BrowserServiceError>,
     action: (page: BrowserAutomationPage) => Effect.Effect<A, BrowserServiceError>,
   ): Effect.Effect<BrowserAgentActionOutcome<A>, BrowserServiceError> =>
-    run(tabId, check, connect(tabId).pipe(Effect.flatMap(action)));
+    run(
+      tabId,
+      check,
+      connect(tabId).pipe(
+        Effect.flatMap((agentPage) =>
+          Effect.scoped(
+            Effect.acquireRelease(agentPage.emulateFocus(true), () =>
+              Effect.ignore(agentPage.emulateFocus(false)),
+            ).pipe(Effect.andThen(action(agentPage.page))),
+          ),
+        ),
+      ),
+    );
 
   return {
     act,
