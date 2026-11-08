@@ -1,6 +1,13 @@
 import "@xterm/xterm/css/xterm.css";
 import type { AppPlatform, TerminalFailure, TerminalLifecycle } from "@openducktor/contracts";
-import { type ReactElement, useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  type ReactElement,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
@@ -13,6 +20,7 @@ type TerminalViewportProps = {
   controller: TerminalTransportController;
   platform: AppPlatform | undefined;
   active: boolean;
+  shown: boolean;
   focusRequest: number;
   onAttention: (message: string | null) => void;
   onLifecycle: (lifecycle: TerminalLifecycle, exit: string | null) => void;
@@ -25,6 +33,7 @@ export function TerminalViewport({
   controller,
   platform,
   active,
+  shown,
   focusRequest,
   onAttention,
   onLifecycle,
@@ -40,6 +49,7 @@ export function TerminalViewport({
   const [isImageDragActive, setIsImageDragActive] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const isActive = useEffectEvent(() => active);
+  const isShown = useEffectEvent(() => shown);
 
   useEffect(() => {
     platformRef.current = platform;
@@ -63,6 +73,7 @@ export function TerminalViewport({
         terminalId,
         controller,
         isActive,
+        isShown,
         getPlatform: () => platformRef.current,
         stageFile: stageAttachment,
         preparePathInput: async (paths) => {
@@ -93,6 +104,10 @@ export function TerminalViewport({
       if (interactionToastShown) toast.dismiss(interactionToastId);
     };
   }, [controller, host, stageAttachment, terminalId]);
+
+  useLayoutEffect(() => {
+    mountRef.current?.setShown(shown);
+  }, [shown]);
 
   useEffect(() => {
     if (!active || !isHydrated) return;

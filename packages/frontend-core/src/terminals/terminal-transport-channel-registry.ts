@@ -2,9 +2,16 @@ import type { TerminalServerMessage } from "@openducktor/contracts";
 
 export type TerminalFrameListener = (message: TerminalServerMessage, payload: Uint8Array) => void;
 
+type TerminalGrid = { columns: number; rows: number };
+
 type TerminalChannel = {
   listeners: Set<TerminalFrameListener>;
   consumedSequence: number | null;
+  /**
+   * The last grid that this client sent. After a detach or a reconnect, another client can have
+   * changed the host grid, so each attach sends this grid again.
+   */
+  grid: TerminalGrid | null;
   operationQueue: Promise<void> | null;
   isClosing: boolean;
   discardQueuedOperations: boolean;
@@ -24,6 +31,7 @@ export const createTerminalTransportChannelRegistry = () => {
     const channel: TerminalChannel = {
       listeners: new Set(),
       consumedSequence: null,
+      grid: null,
       operationQueue: null,
       isClosing: false,
       discardQueuedOperations: false,
@@ -36,6 +44,7 @@ export const createTerminalTransportChannelRegistry = () => {
     if (
       channel.listeners.size === 0 &&
       channel.consumedSequence === null &&
+      channel.grid === null &&
       channel.operationQueue === null &&
       !channel.isClosing &&
       !channel.discardQueuedOperations
@@ -88,6 +97,12 @@ export const createTerminalTransportChannelRegistry = () => {
       channel.consumedSequence = sequenceEnd;
       return true;
     },
+    grid(terminalId: string): TerminalGrid | null {
+      return channels.get(terminalId)?.grid ?? null;
+    },
+    setGrid(terminalId: string, grid: TerminalGrid): void {
+      getOrCreate(terminalId).grid = grid;
+    },
     enqueue(terminalId: string, operation: () => Promise<void>): Promise<void> {
       const channel = getOrCreate(terminalId);
       const run = (): Promise<void> =>
@@ -120,6 +135,7 @@ export const createTerminalTransportChannelRegistry = () => {
       const channel = getOrCreate(terminalId);
       channel.isClosing = channel.listeners.size > 0;
       channel.consumedSequence = null;
+      channel.grid = null;
       channel.discardQueuedOperations = channel.operationQueue !== null;
       forgetIfUnused(terminalId, channel);
     },
@@ -127,6 +143,7 @@ export const createTerminalTransportChannelRegistry = () => {
       const channel = channels.get(terminalId);
       if (!channel || channel.listeners.size > 1) return;
       channel.consumedSequence = null;
+      channel.grid = null;
       forgetIfUnused(terminalId, channel);
     },
     clear(): void {

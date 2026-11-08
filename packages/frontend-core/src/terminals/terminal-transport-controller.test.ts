@@ -405,7 +405,88 @@ describe("createTerminalTransportController", () => {
     await controller.dispose();
   });
 
-  test("forgets the grid of a terminal when its last listener leaves", async () => {
+  test("sends the last grid again when a detached terminal attaches again", async () => {
+    const sent: string[] = [];
+    const bridge: TerminalBridge = {
+      connect: async (_onFrame, onStateChange) => {
+        onStateChange("connected");
+        return {
+          send: async (frame) => {
+            sent.push(decodeTerminalProtocolFrame(frame).message.type);
+          },
+          close: () => undefined,
+        };
+      },
+    };
+    const controller = createTerminalTransportController(bridge, () => undefined);
+    await controller.connect();
+    const unsubscribe = controller.subscribe(terminalId, () => undefined);
+    await controller.resize(terminalId, 80, 24);
+    unsubscribe();
+    controller.subscribe(terminalId, () => undefined);
+    await Bun.sleep(10);
+
+    expect(sent).toEqual(["attach", "resize", "detach", "attach", "resize"]);
+    await controller.dispose();
+  });
+
+  test("drops output of an earlier attachment until the new snapshot arrives", async () => {
+    let receive: (frame: Uint8Array) => void = () => undefined;
+    const bridge: TerminalBridge = {
+      connect: async (onFrame, onStateChange) => {
+        receive = onFrame;
+        onStateChange("connected");
+        return { send: async () => undefined, close: () => undefined };
+      },
+    };
+    const controller = createTerminalTransportController(bridge, () => undefined);
+    await controller.connect();
+    const output = (sequenceStart: number, sequenceEnd: number) =>
+      receive(
+        encodeTerminalProtocolFrame({
+          message: {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "output",
+            terminalId,
+            sequenceStart,
+            sequenceEnd,
+            replay: false,
+          },
+          payload: new Uint8Array(sequenceEnd - sequenceStart),
+        }),
+      );
+    const snapshot = (snapshotSequenceEnd: number) =>
+      receive(
+        encodeTerminalProtocolFrame({
+          message: {
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "snapshot",
+            terminalId,
+            earliestRetainedSequence: 0,
+            snapshotSequenceEnd,
+            lifecycle: "running",
+            title: "Shell",
+            complete: true,
+          },
+          payload: new Uint8Array(),
+        }),
+      );
+    controller.subscribe(terminalId, () => undefined)();
+    const received: string[] = [];
+    controller.subscribe(terminalId, (message) => {
+      received.push(message.type === "output" ? `output:${message.sequenceStart}` : message.type);
+    });
+
+    // The host sent this output before it handled the detach.
+    output(10, 20);
+    snapshot(20);
+    output(20, 30);
+
+    expect(received).toEqual(["snapshot", "output:20"]);
+    await controller.dispose();
+  });
+
+  test("forgets the grid of a terminal when its emulator is released", async () => {
     const sentByConnection: string[][] = [];
     const stateListeners: Array<(state: "connected" | "disconnected") => void> = [];
     const bridge: TerminalBridge = {
@@ -426,6 +507,7 @@ describe("createTerminalTransportController", () => {
     await controller.connect();
     const unsubscribe = controller.subscribe(terminalId, () => undefined);
     await controller.resize(terminalId, 80, 24);
+    controller.releaseEmulator(terminalId);
     unsubscribe();
     controller.subscribe(terminalId, () => undefined);
 
@@ -969,7 +1051,25 @@ describe("createTerminalTransportController", () => {
     await controller.connect();
     const emitFrame = receive;
     const outputs: number[][] = [];
-    controller.subscribe(terminalId, (_message, payload) => outputs.push([...payload]));
+    controller.subscribe(terminalId, (message, payload) => {
+      if (message.type === "output") outputs.push([...payload]);
+    });
+    // The host sends the snapshot of an attachment before its output.
+    emitFrame(
+      encodeTerminalProtocolFrame({
+        message: {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "snapshot",
+          terminalId,
+          earliestRetainedSequence: 0,
+          snapshotSequenceEnd: 0,
+          lifecycle: "running",
+          title: "Shell",
+          complete: true,
+        },
+        payload: new Uint8Array(),
+      }),
+    );
     emitFrame(
       encodeTerminalProtocolFrame({
         message: {

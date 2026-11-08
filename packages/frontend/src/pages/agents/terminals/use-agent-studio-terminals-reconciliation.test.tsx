@@ -322,6 +322,7 @@ describe("useAgentStudioTerminals reconciliation", () => {
           activate: (focus) => {
             activations.push({ terminalId: input.terminalId, focus });
           },
+          setShown: () => undefined,
           dispose: () => undefined,
         };
       },
@@ -372,6 +373,7 @@ describe("useAgentStudioTerminals reconciliation", () => {
         input.onHydrated();
         return {
           activate: () => undefined,
+          setShown: () => undefined,
           dispose: () => {
             probe.disposals += 1;
           },

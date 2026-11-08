@@ -48,6 +48,31 @@ const createController = () => {
   return { controller, listeners };
 };
 
+/** Mounts a viewport with inert callbacks. A failed interaction fails the test. */
+const mountTestViewport = (
+  input: Pick<Parameters<typeof mountTerminalViewport>[0], "container" | "controller"> &
+    Partial<Parameters<typeof mountTerminalViewport>[0]>,
+): TerminalViewportMount =>
+  mountTerminalViewport({
+    terminalId: "terminal-1",
+    isActive: () => false,
+    isShown: () => true,
+    getPlatform: () => "darwin",
+    stageFile: async () => "/tmp/image.png",
+    preparePathInput: async () => "/tmp/image.png",
+    writeClipboard: async () => undefined,
+    onAttention: () => undefined,
+    onLifecycle: () => undefined,
+    onForgotten: () => undefined,
+    onTitleChange: () => undefined,
+    onHydrated: () => undefined,
+    onImageDragActiveChange: () => undefined,
+    onInteractionFailure: (_title, cause) => {
+      throw cause;
+    },
+    ...input,
+  });
+
 const sendStaleBuffer = (listener: TerminalFrameListener, terminalId: string): void => {
   const payload = new TextEncoder().encode(
     `${terminalId} stale log\r\n`.repeat(STALE_BUFFER_LINES),
@@ -171,24 +196,10 @@ describe("retained terminal rendering", () => {
     };
     let mount: TerminalViewportMount | null = null;
     try {
-      mount = mountTerminalViewport({
+      mount = mountTestViewport({
         container,
-        terminalId: "terminal-1",
         controller,
         isActive: () => true,
-        getPlatform: () => "darwin",
-        stageFile: async () => "/tmp/image.png",
-        preparePathInput: async () => "/tmp/image.png",
-        writeClipboard: async () => undefined,
-        onAttention: () => undefined,
-        onLifecycle: () => undefined,
-        onForgotten: () => undefined,
-        onTitleChange: () => undefined,
-        onHydrated: () => undefined,
-        onImageDragActiveChange: () => undefined,
-        onInteractionFailure: (_title, cause) => {
-          throw cause;
-        },
       });
       lightweight.binding.fitAddon.fit.mockImplementation(() => {
         lightweight.binding.terminal.resize(120, 40);
@@ -202,6 +213,126 @@ describe("retained terminal rendering", () => {
       expect(operations).toEqual(["resize:120x40", "input:3"]);
     } finally {
       globalThis.ResizeObserver = nativeResizeObserver;
+      mount?.dispose();
+      container.remove();
+      createBinding.mockRestore();
+    }
+  });
+
+  test("reads the first screen of a hidden terminal, then takes output only while it shows", async () => {
+    const lightweight = createLightweightBinding();
+    const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(
+      // SAFETY: the fake terminal implements every binding method used by this mount test.
+      () => Object.assign(Object.create(null), lightweight.binding) as TerminalBinding,
+    );
+    const { controller, listeners } = createController();
+    const transport: string[] = [];
+    controller.acknowledge = async (_terminalId, sequenceEnd) => {
+      transport.push(`ack:${sequenceEnd}`);
+    };
+    const subscribe = controller.subscribe;
+    controller.subscribe = (terminalId, listener) => {
+      const unsubscribe = subscribe(terminalId, listener);
+      return () => {
+        transport.push("detach");
+        unsubscribe();
+      };
+    };
+    const container = document.createElement("div");
+    document.body.append(container);
+    let mount: TerminalViewportMount | null = null;
+    try {
+      mount = mountTestViewport({
+        container,
+        controller,
+        isShown: () => false,
+      });
+      const listener = listeners.get("terminal-1");
+      if (!listener) throw new Error("Expected the hidden terminal to read its first screen.");
+      sendStaleBuffer(listener, "terminal-1");
+      for (const parsed of lightweight.parsedCallbacks) parsed();
+
+      expect(listeners.has("terminal-1")).toBe(false);
+      // The parsed first screen sends its ACK before the detach, so a show replays nothing.
+      const screenBytes = new TextEncoder().encode(
+        "terminal-1 stale log\r\n".repeat(STALE_BUFFER_LINES),
+      ).byteLength;
+      expect(transport).toEqual([`ack:${screenBytes}`, "detach"]);
+
+      mount.setShown(true);
+      await Bun.sleep(0);
+      expect(listeners.has("terminal-1")).toBe(true);
+
+      mount.setShown(false);
+      expect(listeners.has("terminal-1")).toBe(false);
+    } finally {
+      mount?.dispose();
+      container.remove();
+      createBinding.mockRestore();
+    }
+  });
+
+  test("sends no ACK for output of an ended attachment and skips its bytes in the replay", async () => {
+    const lightweight = createLightweightBinding();
+    const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(
+      // SAFETY: the fake terminal implements every binding method used by this mount test.
+      () => Object.assign(Object.create(null), lightweight.binding) as TerminalBinding,
+    );
+    const { controller, listeners } = createController();
+    const acknowledge = spyOn(controller, "acknowledge");
+    const container = document.createElement("div");
+    document.body.append(container);
+    const output = (sequenceEnd: number, text: string) =>
+      [
+        {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "output",
+          terminalId: "terminal-1",
+          sequenceStart: 0,
+          sequenceEnd,
+          replay: true,
+        },
+        new TextEncoder().encode(text),
+      ] as const;
+    let mount: TerminalViewportMount | null = null;
+    try {
+      mount = mountTestViewport({
+        container,
+        controller,
+      });
+      const firstListener = listeners.get("terminal-1");
+      if (!firstListener) throw new Error("Expected the shown terminal to attach.");
+      firstListener(
+        {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "snapshot",
+          terminalId: "terminal-1",
+          earliestRetainedSequence: 0,
+          snapshotSequenceEnd: 0,
+          lifecycle: "running",
+          title: "Shell",
+          complete: true,
+        },
+        new Uint8Array(),
+      );
+      firstListener(...output(3, "abc"));
+      // The terminal hides before xterm parses the output of the first attachment.
+      mount.setShown(false);
+      for (const parsed of lightweight.parsedCallbacks.splice(0)) parsed();
+      await Bun.sleep(0);
+      expect(acknowledge).not.toHaveBeenCalled();
+
+      mount.setShown(true);
+      const secondListener = listeners.get("terminal-1");
+      if (!secondListener) throw new Error("Expected the shown terminal to attach again.");
+      // The host replays from the last ACK, so the replay repeats bytes that xterm has already.
+      secondListener(...output(5, "abcde"));
+      for (const parsed of lightweight.parsedCallbacks.splice(0)) parsed();
+      await Bun.sleep(0);
+
+      expect(lightweight.readOutput()).toBe("abcde");
+      expect(acknowledge.mock.calls).toEqual([["terminal-1", 5]]);
+    } finally {
       mount?.dispose();
       container.remove();
       createBinding.mockRestore();
@@ -225,21 +356,11 @@ describe("retained terminal rendering", () => {
     document.body.append(container);
     let mount: TerminalViewportMount | null = null;
     try {
-      mount = mountTerminalViewport({
+      mount = mountTestViewport({
         container,
-        terminalId: "terminal-1",
         controller,
         isActive: () => true,
-        getPlatform: () => "darwin",
-        stageFile: async () => "/tmp/image.png",
-        preparePathInput: async () => "/tmp/image.png",
-        writeClipboard: async () => undefined,
-        onAttention: () => undefined,
         onLifecycle: (lifecycle) => lifecycles.push(lifecycle),
-        onForgotten: () => undefined,
-        onTitleChange: () => undefined,
-        onHydrated: () => undefined,
-        onImageDragActiveChange: () => undefined,
         onInteractionFailure: (_title, cause) => failures.push(cause),
       });
       lightweight.sendInput("ls\r");
@@ -313,24 +434,11 @@ describe("retained terminal rendering", () => {
     let mount: TerminalViewportMount | null = null;
     try {
       try {
-        mount = mountTerminalViewport({
+        mount = mountTestViewport({
           container,
           terminalId: "terminal-hidden-task",
           controller,
           isActive: () => active,
-          getPlatform: () => "darwin",
-          stageFile: async () => "/tmp/image.png",
-          preparePathInput: async () => "/tmp/image.png",
-          writeClipboard: async () => undefined,
-          onAttention: () => undefined,
-          onLifecycle: () => undefined,
-          onForgotten: () => undefined,
-          onTitleChange: () => undefined,
-          onHydrated: () => undefined,
-          onImageDragActiveChange: () => undefined,
-          onInteractionFailure: (_title, cause) => {
-            throw cause;
-          },
         });
       } finally {
         globalThis.ResizeObserver = nativeResizeObserver;
@@ -409,24 +517,10 @@ describe("retained terminal rendering", () => {
     };
     let mount: TerminalViewportMount;
     try {
-      mount = mountTerminalViewport({
+      mount = mountTestViewport({
         container,
-        terminalId: "terminal-1",
         controller,
         isActive: () => true,
-        getPlatform: () => "darwin",
-        stageFile: async () => "/tmp/image.png",
-        preparePathInput: async () => "/tmp/image.png",
-        writeClipboard: async () => undefined,
-        onAttention: () => undefined,
-        onLifecycle: () => undefined,
-        onForgotten: () => undefined,
-        onTitleChange: () => undefined,
-        onHydrated: () => undefined,
-        onImageDragActiveChange: () => undefined,
-        onInteractionFailure: (_title, cause) => {
-          throw cause;
-        },
       });
     } finally {
       globalThis.ResizeObserver = nativeResizeObserver;
@@ -508,24 +602,15 @@ describe("retained terminal rendering", () => {
           clientWidth: { value: 800 },
         });
         document.body.append(container);
-        const mount = mountTerminalViewport({
+        const mount = mountTestViewport({
           container,
           terminalId,
           controller,
           isActive: () => activeTerminalIds.has(terminalId),
-          getPlatform: () => "darwin",
-          stageFile: async () => "/tmp/image.png",
-          preparePathInput: async () => "/tmp/image.png",
-          writeClipboard: async () => undefined,
-          onAttention: () => undefined,
-          onLifecycle: () => undefined,
-          onForgotten: () => undefined,
-          onTitleChange: () => undefined,
           onHydrated: () => {
             hydratedTerminalIds.add(terminalId);
             if (hydratedTerminalIds.size === PRODUCTION_TERMINAL_MOUNT_COUNT) finishHydration();
           },
-          onImageDragActiveChange: () => undefined,
           onInteractionFailure: () => undefined,
         });
         retained.push({ container, mount, terminalId });
@@ -605,21 +690,12 @@ describe("retained terminal rendering", () => {
         const hydrated = new Promise<void>((resolve) => {
           finishHydration = resolve;
         });
-        const mount = mountTerminalViewport({
+        const mount = mountTestViewport({
           container,
           terminalId,
           controller,
           isActive: () => activeTerminalId === terminalId,
-          getPlatform: () => "darwin",
-          stageFile: async () => "/tmp/image.png",
-          preparePathInput: async () => "/tmp/image.png",
-          writeClipboard: async () => undefined,
-          onAttention: () => undefined,
-          onLifecycle: () => undefined,
-          onForgotten: () => undefined,
-          onTitleChange: () => undefined,
           onHydrated: finishHydration,
-          onImageDragActiveChange: () => undefined,
           onInteractionFailure: (title, cause) => {
             // Happy DOM has no GPU. The reported standard renderer remains usable.
             if (title !== "Terminal renderer failed") throw cause;
@@ -663,24 +739,16 @@ describe("retained terminal rendering", () => {
     const preparationFinished = new Promise<void>((resolve) => {
       finishPreparation = resolve;
     });
-    const mount = mountTerminalViewport({
+    const mount = mountTestViewport({
       container,
       terminalId: "terminal-image-drop",
       controller,
       isActive: () => active,
-      getPlatform: () => "darwin",
       stageFile: () => stagedPath,
       preparePathInput: async () => {
         finishPreparation();
         return "/tmp/image.png";
       },
-      writeClipboard: async () => undefined,
-      onAttention: () => undefined,
-      onLifecycle: () => undefined,
-      onForgotten: () => undefined,
-      onTitleChange: () => undefined,
-      onHydrated: () => undefined,
-      onImageDragActiveChange: () => undefined,
       onInteractionFailure: () => undefined,
     });
 

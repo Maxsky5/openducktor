@@ -35,7 +35,7 @@ test("offers Retry and Dismiss for a discovery failure and Dismiss for a transpo
   expect(markup).toContain('aria-label="Dismiss terminal transport error"');
 });
 
-test("keeps a hidden read-only terminal's screen and transport while it takes output", async () => {
+test("detaches a hidden terminal and catches it up when it shows again", async () => {
   const terminalId = "read-only-terminal";
   const tab: TerminalTab = {
     tabId: terminalId,
@@ -119,9 +119,10 @@ test("keeps a hidden read-only terminal's screen and transport while it takes ou
 
     view.rerender(content(false));
     expect(view.container.querySelector(".xterm-screen") === screen).toBe(true);
+    await waitFor(() => expect(sentTypes).toContain("detach"));
 
-    const payload = new TextEncoder().encode("output received while hidden");
-    await act(async () => {
+    const payload = new TextEncoder().encode("output after the reveal");
+    const sendOutput = () =>
       receive(
         encodeTerminalProtocolFrame({
           message: {
@@ -135,15 +136,15 @@ test("keeps a hidden read-only terminal's screen and transport while it takes ou
           payload,
         }),
       );
-    });
-    await waitFor(() => expect(sentTypes).toContain("ack"));
+    // A hidden terminal takes no output, so it parses and acknowledges nothing.
+    await act(async () => sendOutput());
+    expect(sentTypes).not.toContain("ack");
 
     view.rerender(content(true));
+    await waitFor(() => expect(sentTypes).toEqual(["attach", "detach", "attach"]));
+    await act(async () => sendOutput());
+    await waitFor(() => expect(sentTypes).toContain("ack"));
     expect(view.container.querySelector(".xterm-screen") === screen).toBe(true);
-    // Screen-reader mode stays off, so output never updates an accessible row tree.
-    expect(view.container.querySelectorAll(".xterm-accessibility")).toHaveLength(0);
-    expect(sentTypes.filter((type) => type === "attach")).toHaveLength(1);
-    expect(sentTypes).not.toContain("detach");
     expect(view.container.contains(document.activeElement)).toBe(false);
   } finally {
     view.unmount();

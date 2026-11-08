@@ -865,7 +865,7 @@ test("chat terminal viewports drop the least recent chat with its pane", async (
   // Each xterm adds 790 style rules, and happy-dom checks all of them on each style read.
   const mount = spyOn(terminalMount, "mountTerminalViewport").mockImplementation((input) => {
     input.onHydrated();
-    return { activate: () => undefined, setVisible: () => undefined, dispose: () => undefined };
+    return { activate: () => undefined, setShown: () => undefined, dispose: () => undefined };
   });
   const hostClient = createChatTerminalClient();
   chatStub.mockImplementation(({ workspace, record }) => (
