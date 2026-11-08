@@ -84,14 +84,15 @@ export function AgentChatComposerSlashMenu({
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-medium text-foreground">
               <span className="min-w-0 truncate">/{command.trigger}</span>
-              {command.hints.length > 0 ? (
-                <span className="font-mono text-xs font-normal text-muted-foreground">
-                  {command.hints.join(" ")}
-                </span>
-              ) : null}
               {command.source ? (
                 <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
                   {command.source}
+                </span>
+              ) : null}
+              {/* The hint wraps to its own line when the menu is narrow. */}
+              {command.hints.length > 0 ? (
+                <span className="font-mono text-xs font-normal text-muted-foreground">
+                  {command.hints.join(" ")}
                 </span>
               ) : null}
             </span>
